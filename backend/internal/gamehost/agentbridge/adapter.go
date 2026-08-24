@@ -18,17 +18,12 @@ import (
 
 const defaultToolTimeout = 30 * time.Second
 
-type RequiredCompanionPreparer interface {
-	PrepareRequired(ctx context.Context, extensionID, gameRoot, gameVersion string) error
-}
-
 type RuntimeAdapter struct {
-	plugins    *registry.Registry
-	runtimes   *ghruntime.Manager
-	topology   *ghruntime.TopologyStore
-	control    ipc.ControlPlane
-	sessions   *SessionRegistry
-	companions RequiredCompanionPreparer
+	plugins  *registry.Registry
+	runtimes *ghruntime.Manager
+	topology *ghruntime.TopologyStore
+	control  ipc.ControlPlane
+	sessions *SessionRegistry
 }
 
 func NewRuntimeAdapter(plugins *registry.Registry, runtimes *ghruntime.Manager, topology *ghruntime.TopologyStore, control ipc.ControlPlane) (*RuntimeAdapter, error) {
@@ -36,13 +31,6 @@ func NewRuntimeAdapter(plugins *registry.Registry, runtimes *ghruntime.Manager, 
 		return nil, fmt.Errorf("game agent bridge: plugin registry, runtime manager, topology store and control plane are required")
 	}
 	return &RuntimeAdapter{plugins: plugins, runtimes: runtimes, topology: topology, control: control, sessions: NewSessionRegistry()}, nil
-}
-
-func (a *RuntimeAdapter) SetCompanionPreparer(preparer RequiredCompanionPreparer) {
-	if a == nil {
-		return
-	}
-	a.companions = preparer
 }
 
 func (a *RuntimeAdapter) Supports(binding capability.RuntimeBinding) bool {
@@ -56,19 +44,15 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 	}
 	method := strings.TrimSpace(binding.HandlerName)
 	if err := protocol.ValidatePluginMethod(method); err != nil {
-		return failure(invocation.InvocationID, toolID, capability.ErrorCodeInvalidInput, "invalid game plugin RPC method", err)
+		return failure(invocation.InvocationID, toolID, capability.ErrorCodeInvalidInput, "invalid plugin RPC method", err)
 	}
 	peer, err := a.resolvePeer(ctx, binding)
 	if err != nil {
-		return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "game runtime is unavailable", err)
+		return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "plugin runtime is unavailable", err)
 	}
-	if err := a.prepareSessionCompanions(ctx, method, peer, input); err != nil {
-		return failure(invocation.InvocationID, toolID, capability.ErrorCodeExecutionFailed, "prepare required game companion artifacts", err)
-	}
-
 	requestID := invocation.InvocationID
 	if strings.TrimSpace(requestID) == "" {
-		requestID = "game-tool-" + uuid.NewString()
+		requestID = "plugin-tool-" + uuid.NewString()
 	}
 	var payload any
 	if len(input) > 0 {
@@ -76,7 +60,7 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 	}
 	envelope, err := protocol.NewRequestWithRoute(requestID, method, payload, string(peer.RuntimeID), string(peer.PluginID), string(peer.ServiceID))
 	if err != nil {
-		return failure(invocation.InvocationID, toolID, capability.ErrorCodeInvalidInput, "build game plugin request", err)
+		return failure(invocation.InvocationID, toolID, capability.ErrorCodeInvalidInput, "build plugin request", err)
 	}
 	if peer.Generation > 0 {
 		envelope.Generation = uint64(peer.Generation)
@@ -94,16 +78,16 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 			result.ToolID = toolID
 			return result
 		}
-		return failure(invocation.InvocationID, toolID, capability.ErrorCodeConnectionLost, "game plugin RPC failed", err)
+		return failure(invocation.InvocationID, toolID, capability.ErrorCodeConnectionLost, "plugin RPC failed", err)
 	}
 	if response == nil {
-		return failure(invocation.InvocationID, toolID, capability.ErrorCodeInvalidResult, "game plugin returned an empty response", nil)
+		return failure(invocation.InvocationID, toolID, capability.ErrorCodeInvalidResult, "plugin returned an empty response", nil)
 	}
 	if response.Error != nil {
 		return failure(invocation.InvocationID, toolID, capability.ErrorCodeExecutionFailed, response.Error.Message, fmt.Errorf("%s", response.Error.Code))
 	}
 
-	a.trackGameSession(method, peer, invocation, input, response.Payload)
+	a.bindInvocationContext(peer, invocation)
 
 	result := capability.NewToolSuccessResult(invocation.InvocationID, toolID)
 	result.RuntimeID = string(peer.RuntimeID)
@@ -111,31 +95,11 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 	result.Structured = append(json.RawMessage(nil), response.Payload...)
 	result.DurationMS = time.Since(started).Milliseconds()
 	result.Metadata = map[string]any{
-		"gamePluginId": string(peer.PluginID),
-		"serviceId":    string(peer.ServiceID),
-		"rpcMethod":    method,
+		"pluginId":  string(peer.PluginID),
+		"serviceId": string(peer.ServiceID),
+		"rpcMethod": method,
 	}
 	return result
-}
-
-func (a *RuntimeAdapter) prepareSessionCompanions(ctx context.Context, method string, peer ipc.Peer, input json.RawMessage) error {
-	if a == nil || a.companions == nil || method != protocol.MethodGameSessionOpen {
-		return nil
-	}
-	var req protocol.GameSessionOpenRequest
-	if len(input) > 0 {
-		if err := json.Unmarshal(input, &req); err != nil {
-			return fmt.Errorf("decode game session open request: %w", err)
-		}
-	}
-	if !req.ShouldAutoInstallCompanions() {
-		return nil
-	}
-	plugin, err := a.plugins.Get(ctx, peer.PluginID)
-	if err != nil {
-		return fmt.Errorf("resolve game plugin descriptor: %w", err)
-	}
-	return a.companions.PrepareRequired(ctx, plugin.ExtensionID, strings.TrimSpace(req.GameRoot), strings.TrimSpace(req.GameVersion))
 }
 
 func (a *RuntimeAdapter) SessionRegistry() *SessionRegistry {
@@ -145,49 +109,16 @@ func (a *RuntimeAdapter) SessionRegistry() *SessionRegistry {
 	return a.sessions
 }
 
-func (a *RuntimeAdapter) trackGameSession(method string, peer ipc.Peer, invocation capability.ToolInvocationContext, input, output json.RawMessage) {
+func (a *RuntimeAdapter) bindInvocationContext(peer ipc.Peer, invocation capability.ToolInvocationContext) {
 	if a == nil || a.sessions == nil {
 		return
 	}
-	switch method {
-	case protocol.MethodGameSessionOpen:
-		var session protocol.GameSession
-		if err := json.Unmarshal(output, &session); err != nil || strings.TrimSpace(session.ID) == "" {
-			return
-		}
-		a.sessions.Bind(SessionScope{
-			GameSessionID:  session.ID,
-			PluginID:       peer.PluginID,
-			RuntimeID:      peer.RuntimeID,
-			ServiceID:      peer.ServiceID,
-			UserID:         invocation.UserID,
-			CharacterID:    firstNonEmpty(session.CharacterID, invocation.CharacterID),
-			ConversationID: invocation.ConversationID,
-			Channel:        invocation.Channel,
-			HostSessionID:  invocation.SessionID,
-		})
-	case protocol.MethodGameSessionClose:
-		var payload struct {
-			SessionID string `json:"sessionId"`
-			ID        string `json:"id"`
-		}
-		if err := json.Unmarshal(input, &payload); err != nil {
-			return
-		}
-		sessionID := firstNonEmpty(payload.SessionID, payload.ID)
-		if sessionID != "" {
-			a.sessions.Remove(peer.RuntimeID, sessionID)
-		}
-	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
+	a.sessions.Bind(SessionScope{
+		PluginID: peer.PluginID, RuntimeID: peer.RuntimeID, ServiceID: peer.ServiceID,
+		UserID: invocation.UserID, CharacterID: invocation.CharacterID,
+		ConversationID: invocation.ConversationID, Channel: invocation.Channel,
+		HostSessionID: invocation.SessionID,
+	})
 }
 
 func (a *RuntimeAdapter) Health(ctx context.Context, binding capability.RuntimeBinding) capability.HealthStatus {
@@ -237,7 +168,7 @@ func (a *RuntimeAdapter) resolvePeer(ctx context.Context, binding capability.Run
 		}
 	}
 	if serviceID == "" {
-		return ipc.Peer{}, fmt.Errorf("no executable game service is available")
+		return ipc.Peer{}, fmt.Errorf("no executable plugin service is available")
 	}
 	generation, err := a.runtimes.GetCurrentGeneration(runtimeID)
 	if err != nil {
@@ -250,23 +181,23 @@ func (a *RuntimeAdapter) resolvePeer(ctx context.Context, binding capability.Run
 }
 
 func (a *RuntimeAdapter) resolvePlugin(ctx context.Context, binding capability.RuntimeBinding) (ghdomain.PluginDescriptor, error) {
-	pluginID := metadataString(binding.Metadata, "gamePluginId")
+	pluginID := metadataString(binding.Metadata, "pluginId")
 	if pluginID != "" {
 		return a.plugins.Get(ctx, ghdomain.PluginID(pluginID))
 	}
 	extensionID := metadataString(binding.Metadata, "extensionId")
 	if extensionID == "" {
-		return ghdomain.PluginDescriptor{}, fmt.Errorf("game_host binding requires metadata.extensionId or metadata.gamePluginId")
+		return ghdomain.PluginDescriptor{}, fmt.Errorf("game_host binding requires metadata.extensionId or metadata.pluginId")
 	}
 	plugins, err := a.plugins.ListByExtension(ctx, extensionID)
 	if err != nil {
 		return ghdomain.PluginDescriptor{}, err
 	}
 	if len(plugins) == 0 {
-		return ghdomain.PluginDescriptor{}, fmt.Errorf("no enabled game plugin for extension %s", extensionID)
+		return ghdomain.PluginDescriptor{}, fmt.Errorf("no enabled game-host plugin for extension %s", extensionID)
 	}
 	if len(plugins) > 1 {
-		return ghdomain.PluginDescriptor{}, fmt.Errorf("extension %s exposes multiple game plugins; metadata.gamePluginId is required", extensionID)
+		return ghdomain.PluginDescriptor{}, fmt.Errorf("extension %s exposes multiple game-host plugins; metadata.pluginId is required", extensionID)
 	}
 	return plugins[0], nil
 }
@@ -303,7 +234,7 @@ func (a *RuntimeAdapter) resolveRuntime(ctx context.Context, binding capability.
 	if candidate != nil {
 		return candidate.ID, nil
 	}
-	return "", fmt.Errorf("no runtime found for game plugin %s", pluginID)
+	return "", fmt.Errorf("no runtime found for plugin %s", pluginID)
 }
 
 func metadataString(metadata map[string]any, key string) string {

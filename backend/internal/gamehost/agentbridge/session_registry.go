@@ -7,17 +7,20 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
+// SessionScope binds an opaque plugin session (when supplied by the plugin) or
+// the runtime default route to the host interaction context. GameHost never
+// interprets the session identifier or any game-specific state.
 type SessionScope struct {
-	GameSessionID  string
-	PluginID       domain.PluginID
-	RuntimeID      domain.RuntimeInstanceID
-	ServiceID      domain.ServiceID
-	UserID         string
-	CharacterID    string
-	ConversationID string
-	Channel        string
-	HostSessionID  string
-	UpdatedAt      time.Time
+	PluginSessionID string
+	PluginID        domain.PluginID
+	RuntimeID       domain.RuntimeInstanceID
+	ServiceID       domain.ServiceID
+	UserID          string
+	CharacterID     string
+	ConversationID  string
+	Channel         string
+	HostSessionID   string
+	UpdatedAt       time.Time
 }
 
 type SessionRegistry struct {
@@ -29,12 +32,12 @@ func NewSessionRegistry() *SessionRegistry {
 	return &SessionRegistry{sessions: make(map[string]SessionScope)}
 }
 
-func sessionKey(runtimeID domain.RuntimeInstanceID, gameSessionID string) string {
-	return string(runtimeID) + "\x00" + gameSessionID
+func sessionKey(runtimeID domain.RuntimeInstanceID, pluginSessionID string) string {
+	return string(runtimeID) + "\x00" + pluginSessionID
 }
 
 func (r *SessionRegistry) Bind(scope SessionScope) {
-	if r == nil || scope.RuntimeID == "" || scope.GameSessionID == "" {
+	if r == nil || scope.RuntimeID == "" {
 		return
 	}
 	if scope.UpdatedAt.IsZero() {
@@ -42,26 +45,33 @@ func (r *SessionRegistry) Bind(scope SessionScope) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.sessions[sessionKey(scope.RuntimeID, scope.GameSessionID)] = scope
+	r.sessions[sessionKey(scope.RuntimeID, scope.PluginSessionID)] = scope
 }
 
-func (r *SessionRegistry) Resolve(runtimeID domain.RuntimeInstanceID, gameSessionID string) (SessionScope, bool) {
+// Resolve first checks an exact opaque plugin session and then falls back to
+// the runtime default context established by the latest tool invocation.
+func (r *SessionRegistry) Resolve(runtimeID domain.RuntimeInstanceID, pluginSessionID string) (SessionScope, bool) {
 	if r == nil {
 		return SessionScope{}, false
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	scope, ok := r.sessions[sessionKey(runtimeID, gameSessionID)]
+	if pluginSessionID != "" {
+		if scope, ok := r.sessions[sessionKey(runtimeID, pluginSessionID)]; ok {
+			return scope, true
+		}
+	}
+	scope, ok := r.sessions[sessionKey(runtimeID, "")]
 	return scope, ok
 }
 
-func (r *SessionRegistry) Remove(runtimeID domain.RuntimeInstanceID, gameSessionID string) {
+func (r *SessionRegistry) Remove(runtimeID domain.RuntimeInstanceID, pluginSessionID string) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.sessions, sessionKey(runtimeID, gameSessionID))
+	delete(r.sessions, sessionKey(runtimeID, pluginSessionID))
 }
 
 func (r *SessionRegistry) RemoveRuntime(runtimeID domain.RuntimeInstanceID) {

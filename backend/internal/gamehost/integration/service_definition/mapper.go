@@ -94,13 +94,10 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 			CleanupChildren: true,
 			RemoveTempDir:   false,
 		},
-		Limits: trusted_service.ServiceResourceLimits{
-			MaxMemoryMB:        512,
-			MaxCPUPercent:      50,
-			MaxFileDescriptors: 1024,
-			MaxDiskMB:          1024,
-			MaxSubprocesses:    8,
-		},
+		// Do not publish nominal limits that the current platform supervisor does
+		// not enforce. Community plugins are separately blocked unless the process
+		// manager reports complete CPU/memory/filesystem/network isolation.
+		Limits:            trusted_service.ServiceResourceLimits{},
 		Network:           resolveNetworkPolicy(view.Network),
 		ManifestHash:      computeManifestHash(view),
 		DefinitionVersion: 2,
@@ -216,12 +213,9 @@ func resolveNetworkPolicy(policy trusted_service.ServiceNetworkPolicy) trusted_s
 		policy.AllowedPorts = append([]int(nil), policy.AllowedPorts...)
 		return policy
 	}
-	// Legacy definitions did not declare a game network policy. Preserve their
-	// historical behavior while new game plugins opt into enforceable policy.
-	return trusted_service.ServiceNetworkPolicy{
-		AllowOutbound:  true,
-		AllowedDomains: []string{"localhost", "127.0.0.1"},
-	}
+	// Missing network policy is deny-by-default. A plugin must explicitly request
+	// loopback or unrestricted access; unsupported policies never degrade open.
+	return trusted_service.ServiceNetworkPolicy{Mode: "none", Enforce: true}
 }
 
 func CanonicalizeEnv(env map[string]string) []string {

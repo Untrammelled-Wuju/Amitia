@@ -28,10 +28,15 @@ type ControlSinkRegisterResult struct {
 
 type EffectSinkFactory func(runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID, sinkID string) ControlEffectSink
 
+type SinkDeclarationProvider interface {
+	DescriptorControlSinks(pluginID string) ([]domain.ControlSinkDeclaration, error)
+}
+
 type ControlHandler struct {
-	gate             *PluginOutputGate
-	sinkRegistry     *ControlSinkRegistry
-	effectSinkFactory EffectSinkFactory
+	gate                *PluginOutputGate
+	sinkRegistry        *ControlSinkRegistry
+	effectSinkFactory   EffectSinkFactory
+	declarationProvider SinkDeclarationProvider
 }
 
 func NewControlHandler(gate *PluginOutputGate, sinkRegistry *ControlSinkRegistry) *ControlHandler {
@@ -43,10 +48,17 @@ func NewControlHandler(gate *PluginOutputGate, sinkRegistry *ControlSinkRegistry
 
 func NewControlHandlerWithEffectFactory(gate *PluginOutputGate, sinkRegistry *ControlSinkRegistry, factory EffectSinkFactory) *ControlHandler {
 	return &ControlHandler{
-		gate:             gate,
-		sinkRegistry:     sinkRegistry,
+		gate:              gate,
+		sinkRegistry:      sinkRegistry,
 		effectSinkFactory: factory,
 	}
+}
+
+func (h *ControlHandler) SetSinkDeclarationProvider(provider SinkDeclarationProvider) {
+	if h == nil {
+		return
+	}
+	h.declarationProvider = provider
 }
 
 func (h *ControlHandler) RegisterHandlers(registry rpc.HandlerRegistry) error {
@@ -189,6 +201,23 @@ func (h *ControlHandler) handleSinkRegister(ctx context.Context, request rpc.RPC
 				Message: "sink service id must match trusted request identity",
 			},
 		}, nil
+	}
+
+	if h.declarationProvider != nil {
+		declared, err := h.declarationProvider.DescriptorControlSinks(string(request.PluginID))
+		if err != nil {
+			return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: string(domain.ErrInternal), Message: "failed to load declared control sinks"}}, nil
+		}
+		allowed := false
+		for _, declaration := range declared {
+			if declaration.ID == input.SinkID && declaration.ServiceID == request.ServiceID && declaration.Kind == input.Kind {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: string(domain.ErrPermissionDenied), Message: "control sink is not declared by the installed package"}}, nil
+		}
 	}
 
 	sink := ControlSinkDescriptor{

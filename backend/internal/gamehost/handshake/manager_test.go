@@ -42,8 +42,8 @@ func (f *fakeRuntimeValidator) ServiceBelongsToRuntime(runtimeID, serviceID, plu
 }
 
 type fakeDescriptorProvider struct {
-	caps  map[string][]string
-	chs   map[string][]string
+	caps map[string][]string
+	chs  map[string][]string
 }
 
 func newFakeDescriptorProvider() *fakeDescriptorProvider {
@@ -62,8 +62,13 @@ func (f *fakeDescriptorProvider) DescriptorCapabilities(pluginID string) ([]stri
 	return f.caps[pluginID], nil
 }
 
-func (f *fakeDescriptorProvider) DescriptorChannels(pluginID string) ([]string, error) {
+func (f *fakeDescriptorProvider) DescriptorChannels(pluginID, serviceID string) ([]string, error) {
+	_ = serviceID
 	return f.chs[pluginID], nil
+}
+
+func (f *fakeDescriptorProvider) DescriptorControlSinks(pluginID string) ([]domain.ControlSinkDeclaration, error) {
+	return nil, nil
 }
 
 func (f *fakeDescriptorProvider) HasCapability(pluginID, capability string) bool {
@@ -91,10 +96,10 @@ func newTestHandshakeManager() (*handshake.HandshakeManager, *rpc.NamespaceRegis
 			domain.CapabilityBinaryStreaming,
 			domain.CapabilityHostAPI,
 		},
-		NamespaceAdapter:    adapter,
-		ChannelAdvertiser:   advertiser,
-		RuntimeValidator:    valid,
-		PreReadyAllowlist:   nil,
+		NamespaceAdapter:  adapter,
+		ChannelAdvertiser: advertiser,
+		RuntimeValidator:  valid,
+		PreReadyAllowlist: nil,
 	})
 
 	return mgr, &validator

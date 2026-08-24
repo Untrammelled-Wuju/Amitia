@@ -178,7 +178,7 @@ func (m *RequestLifecycleManager) HandleIncomingResponse(
 			upstreamResponse.PluginID = string(correlation.UpstreamPeer.PluginID)
 			upstreamResponse.RuntimeID = string(correlation.UpstreamPeer.RuntimeID)
 			upstreamResponse.ServiceID = string(correlation.UpstreamPeer.ServiceID)
-			upstreamResponse.Generation = correlation.UpstreamPeer.Generation
+			upstreamResponse.Generation = envelopeGeneration(correlation.UpstreamPeer.Generation)
 			return cp.Send(context.Background(), correlation.UpstreamPeer, upstreamResponse)
 		}
 		return nil

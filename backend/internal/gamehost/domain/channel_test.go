@@ -4,13 +4,13 @@ import "testing"
 
 func TestChannelDescriptorValid(t *testing.T) {
 	cases := []ChannelDescriptor{
-		{ID: ChannelID("events"), Kind: ChannelKindEvent},
-		{ID: ChannelID("state"), Kind: ChannelKindState},
-		{ID: ChannelID("logs"), Kind: ChannelKindLog},
-		{ID: ChannelID("metrics"), Kind: ChannelKindMetric},
-		{ID: ChannelID("frames"), Kind: ChannelKindBinary},
-		{ID: ChannelID("custom"), Kind: ChannelKindCustom},
-		{ID: ChannelID("schemaed"), Kind: ChannelKindState, SchemaID: "schema-v1"},
+		{ID: ChannelID("events"), ServiceID: ServiceID("svc"), Kind: ChannelKindEvent},
+		{ID: ChannelID("state"), ServiceID: ServiceID("svc"), Kind: ChannelKindState},
+		{ID: ChannelID("logs"), ServiceID: ServiceID("svc"), Kind: ChannelKindLog},
+		{ID: ChannelID("metrics"), ServiceID: ServiceID("svc"), Kind: ChannelKindMetric},
+		{ID: ChannelID("frames"), ServiceID: ServiceID("svc"), Kind: ChannelKindBinary},
+		{ID: ChannelID("custom"), ServiceID: ServiceID("svc"), Kind: ChannelKindCustom},
+		{ID: ChannelID("schemaed"), ServiceID: ServiceID("svc"), Kind: ChannelKindState, SchemaID: "schema-v1"},
 	}
 
 	for _, ch := range cases {
@@ -24,8 +24,9 @@ func TestChannelDescriptorValid(t *testing.T) {
 
 func TestChannelDescriptorRejectsEmptyID(t *testing.T) {
 	ch := ChannelDescriptor{
-		ID:   ChannelID(""),
-		Kind: ChannelKindEvent,
+		ID:        ChannelID(""),
+		ServiceID: ServiceID("svc"),
+		Kind:      ChannelKindEvent,
 	}
 
 	err := ch.Validate()
@@ -39,8 +40,9 @@ func TestChannelDescriptorRejectsEmptyID(t *testing.T) {
 
 func TestChannelDescriptorRejectsInvalidKind(t *testing.T) {
 	ch := ChannelDescriptor{
-		ID:   ChannelID("test"),
-		Kind: ChannelKind("invalid_kind"),
+		ID:        ChannelID("test"),
+		ServiceID: ServiceID("svc"),
+		Kind:      ChannelKind("invalid_kind"),
 	}
 
 	err := ch.Validate()
@@ -54,8 +56,9 @@ func TestChannelDescriptorRejectsInvalidKind(t *testing.T) {
 
 func TestChannelDescriptorRejectsControlCharactersInID(t *testing.T) {
 	ch := ChannelDescriptor{
-		ID:   ChannelID("bad\x00id"),
-		Kind: ChannelKindEvent,
+		ID:        ChannelID("bad\x00id"),
+		ServiceID: ServiceID("svc"),
+		Kind:      ChannelKindEvent,
 	}
 
 	err := ch.Validate()
@@ -67,9 +70,10 @@ func TestChannelDescriptorRejectsControlCharactersInID(t *testing.T) {
 func TestChannelDescriptorRejectsTooLongSchemaID(t *testing.T) {
 	longSchema := make([]byte, 300)
 	ch := ChannelDescriptor{
-		ID:       ChannelID("test"),
-		Kind:     ChannelKindState,
-		SchemaID: string(longSchema),
+		ID:        ChannelID("test"),
+		ServiceID: ServiceID("svc"),
+		Kind:      ChannelKindState,
+		SchemaID:  string(longSchema),
 	}
 
 	err := ch.Validate()
@@ -80,8 +84,9 @@ func TestChannelDescriptorRejectsTooLongSchemaID(t *testing.T) {
 
 func TestChannelDescriptorWithMetadata(t *testing.T) {
 	ch := ChannelDescriptor{
-		ID:   ChannelID("events"),
-		Kind: ChannelKindEvent,
+		ID:        ChannelID("events"),
+		ServiceID: ServiceID("svc"),
+		Kind:      ChannelKindEvent,
 		Metadata: map[string]string{
 			"rate": "100ms",
 		},
@@ -94,8 +99,9 @@ func TestChannelDescriptorWithMetadata(t *testing.T) {
 
 func TestChannelDescriptorRejectsInvalidMetadata(t *testing.T) {
 	ch := ChannelDescriptor{
-		ID:   ChannelID("events"),
-		Kind: ChannelKindEvent,
+		ID:        ChannelID("events"),
+		ServiceID: ServiceID("svc"),
+		Kind:      ChannelKindEvent,
 		Metadata: map[string]string{
 			"": "empty key",
 		},

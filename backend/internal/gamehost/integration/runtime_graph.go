@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	kernelsecret "github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	"github.com/u-ai/backend/internal/gamehost/channel"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
 	"github.com/u-ai/backend/internal/gamehost/registry"
@@ -56,6 +57,7 @@ type RuntimeGraphProvisioner struct {
 	nodeResolver       script_host.NodeEnvironmentResolver
 	generationResolver InstalledGenerationResolver
 	runtimeExecutor    ghruntime.RuntimeExecutor
+	channelReconciler  *channel.Reconciler
 }
 
 type RuntimeGraphProvisionerOptions struct {
@@ -70,6 +72,7 @@ type RuntimeGraphProvisionerOptions struct {
 	ExtensionRoot      string
 	NodeResolver       script_host.NodeEnvironmentResolver
 	GenerationResolver InstalledGenerationResolver
+	ChannelReconciler  *channel.Reconciler
 }
 
 func NewRuntimeGraphProvisioner(opts RuntimeGraphProvisionerOptions) (*RuntimeGraphProvisioner, error) {
@@ -106,6 +109,7 @@ func NewRuntimeGraphProvisioner(opts RuntimeGraphProvisionerOptions) (*RuntimeGr
 		extensionRoot:      opts.ExtensionRoot,
 		nodeResolver:       opts.NodeResolver,
 		generationResolver: opts.GenerationResolver,
+		channelReconciler:  opts.ChannelReconciler,
 	}, nil
 }
 
@@ -175,6 +179,11 @@ func (p *RuntimeGraphProvisioner) pruneOrphanRuntimes(ctx context.Context, desir
 				return fmt.Errorf("cleanup orphan runtime %s: %w", runtimeRef.ID, err)
 			}
 		}
+		if p.channelReconciler != nil {
+			if _, err := p.channelReconciler.ReconcileRuntimeChannels(ctx, runtimeRef.ID, nil); err != nil {
+				return fmt.Errorf("remove orphan runtime channels %s: %w", runtimeRef.ID, err)
+			}
+		}
 		if p.secretRegistrar != nil {
 			p.secretRegistrar.RemoveRuntimeStartupManifests(string(runtimeRef.ID))
 		}
@@ -196,9 +205,9 @@ func (p *RuntimeGraphProvisioner) pruneOrphanRuntimes(ctx context.Context, desir
 }
 
 func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp KernelGamePlugin) error {
-	bootService, err := p.buildBootService(ctx, kp)
+	bootServices, err := p.buildBootServices(ctx, kp)
 	if err != nil {
-		return fmt.Errorf("build boot service: %w", err)
+		return fmt.Errorf("build plugin services: %w", err)
 	}
 
 	descriptor, err := p.mapper.ToDescriptor(ctx, kp.Extension, kp.Contribution)
@@ -211,62 +220,67 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 		return fmt.Errorf("ensure primary runtime: %w", err)
 	}
 
-	metadata := map[string]string{"protocol": bootService.Protocol}
-	svcView := service_definition.ServiceRuntimeView{
-		ExtensionID:      string(kp.Extension.ID),
-		ModuleID:         bootService.ModuleID,
-		RuntimeType:      bootService.RuntimeType,
-		Name:             bootService.Name,
-		Description:      bootService.Name,
-		PublisherID:      kp.Extension.Publisher.PublisherID,
-		PublisherTrust:   kp.Extension.Publisher.TrustLevel,
-		EntryPoint:       bootService.EntryPoint,
-		ExecutablePath:   bootService.ExecutablePath,
-		ExecutableSHA256: bootService.ExecutableSHA256,
-		Arguments:        bootService.Arguments,
-		IntegrityValue:   bootService.IntegrityValue,
-		Dependencies:     bootService.Dependencies,
-		Env:              bootService.Env,
-		Metadata:         metadata,
-		Network:          bootService.Network,
-		Enabled:          true,
+	definitionIDs := make(map[ghdomain.ServiceID]string, len(bootServices))
+	for _, bootService := range bootServices {
+		metadata := map[string]string{"protocol": bootService.Protocol, "logicalServiceId": string(bootService.ID)}
+		svcView := service_definition.ServiceRuntimeView{
+			ExtensionID:      string(kp.Extension.ID),
+			ModuleID:         bootService.ModuleID,
+			RuntimeType:      bootService.RuntimeType,
+			Name:             bootService.Name,
+			Description:      bootService.Name,
+			PublisherID:      kp.Extension.Publisher.PublisherID,
+			PublisherTrust:   kp.Extension.Publisher.TrustLevel,
+			EntryPoint:       bootService.EntryPoint,
+			ExecutablePath:   bootService.ExecutablePath,
+			ExecutableSHA256: bootService.ExecutableSHA256,
+			Arguments:        bootService.Arguments,
+			IntegrityValue:   bootService.IntegrityValue,
+			Dependencies:     bootService.Dependencies,
+			Env:              bootService.Env,
+			Metadata:         metadata,
+			Network:          bootService.Network,
+			Enabled:          true,
+		}
+
+		definitionID := svcView.ToDefinitionID()
+		def, mapErr := p.definitionMapper.MapToDefinition(svcView)
+		if mapErr != nil {
+			return fmt.Errorf("map service %s to definition: %w", bootService.ID, mapErr)
+		}
+		if p.supervisor.HasDefinition(definitionID) {
+			existing, getErr := p.supervisor.GetDefinition(definitionID)
+			if getErr != nil {
+				return fmt.Errorf("read existing definition %s: %w", definitionID, getErr)
+			}
+			if existing.ManifestHash != def.ManifestHash {
+				if err := p.supervisor.Unregister(definitionID); err != nil {
+					return fmt.Errorf("replace stale definition %s: %w", definitionID, err)
+				}
+				if err := p.supervisor.Register(def); err != nil {
+					return fmt.Errorf("register replacement definition %s: %w", definitionID, err)
+				}
+			}
+		} else if err := p.supervisor.Register(def); err != nil {
+			return fmt.Errorf("register definition %s: %w", definitionID, err)
+		}
+		definitionIDs[bootService.ID] = definitionID
 	}
 
-	definitionID := svcView.ToDefinitionID()
-	def, err := p.definitionMapper.MapToDefinition(svcView)
-	if err != nil {
-		return fmt.Errorf("map to definition: %w", err)
-	}
-	if p.supervisor.HasDefinition(definitionID) {
-		existing, getErr := p.supervisor.GetDefinition(definitionID)
-		if getErr != nil {
-			return fmt.Errorf("read existing definition: %w", getErr)
-		}
-		if existing.ManifestHash != def.ManifestHash {
-			if err := p.supervisor.Unregister(definitionID); err != nil {
-				return fmt.Errorf("replace stale definition: %w", err)
-			}
-			if err := p.supervisor.Register(def); err != nil {
-				return fmt.Errorf("register replacement definition: %w", err)
-			}
-		}
-	} else if err := p.supervisor.Register(def); err != nil {
-		return fmt.Errorf("register definition: %w", err)
-	}
-
-	bootServiceID := bootService.ID
-	descriptor.Services = append(descriptor.Services, ghdomain.ServiceDescriptor{
-		ID:       bootServiceID,
-		Name:     bootService.Name,
-		Kind:     ghdomain.ServiceKindProcess,
-		Required: true,
-	})
-	definitionIDs := map[ghdomain.ServiceID]string{bootServiceID: definitionID}
 	if err := p.topologyStore.PutRuntimeGraph(runtime, descriptor, definitionIDs); err != nil {
 		return fmt.Errorf("put runtime graph: %w", err)
 	}
-	if err := p.topologyStore.BindModuleID(runtime.ID, bootServiceID, bootService.ModuleID); err != nil {
-		return fmt.Errorf("bind runtime module: %w", err)
+	for _, bootService := range bootServices {
+		if err := p.topologyStore.BindModuleID(runtime.ID, bootService.ID, bootService.ModuleID); err != nil {
+			return fmt.Errorf("bind runtime module for service %s: %w", bootService.ID, err)
+		}
+	}
+
+	if p.channelReconciler != nil {
+		inputs := buildChannelMappingInputs(descriptor, runtime.ID)
+		if _, err := p.channelReconciler.ReconcileRuntimeChannels(ctx, runtime.ID, inputs); err != nil {
+			return fmt.Errorf("reconcile runtime channels: %w", err)
+		}
 	}
 
 	if p.secretRegistrar != nil {
@@ -284,6 +298,37 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 		}
 	}
 	return nil
+}
+
+func buildChannelMappingInputs(descriptor ghdomain.PluginDescriptor, runtimeID ghdomain.RuntimeInstanceID) []channel.ChannelMappingInput {
+	byService := make(map[ghdomain.ServiceID][]gameprotocol.ChannelDescriptor)
+	for _, declared := range descriptor.Channels {
+		metadata := make(map[string]json.RawMessage, len(declared.Metadata))
+		for key, value := range declared.Metadata {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				continue
+			}
+			metadata[key] = encoded
+		}
+		byService[declared.ServiceID] = append(byService[declared.ServiceID], gameprotocol.ChannelDescriptor{
+			ID:        gameprotocol.ChannelID(declared.ID),
+			Kind:      gameprotocol.ChannelKind(declared.Kind),
+			SchemaID:  declared.SchemaID,
+			Direction: gameprotocol.ChannelDirectionPluginToHost,
+			Metadata:  metadata,
+		})
+	}
+	inputs := make([]channel.ChannelMappingInput, 0, len(byService))
+	for serviceID, descriptors := range byService {
+		inputs = append(inputs, channel.ChannelMappingInput{
+			PluginID:    descriptor.ID,
+			RuntimeID:   runtimeID,
+			ServiceID:   serviceID,
+			Descriptors: descriptors,
+		})
+	}
+	return inputs
 }
 
 type topologyServiceView struct {
@@ -341,11 +386,13 @@ func (p *RuntimeGraphProvisioner) extractSecretManifestGrouped(kp KernelGamePlug
 }
 
 func buildGameNetworkPolicy(spec *gameprotocol.GameNetworkPolicy, permissions []string) (trusted_service.ServiceNetworkPolicy, error) {
-	if spec == nil || strings.TrimSpace(spec.Mode) == "" {
-		return trusted_service.ServiceNetworkPolicy{}, nil
+	// Game plugins are deny-by-default. Omitting network policy is equivalent to
+	// an enforced no-network policy; there is no legacy unrestricted fallback.
+	mode := "none"
+	if spec != nil && strings.TrimSpace(spec.Mode) != "" {
+		mode = strings.ToLower(strings.TrimSpace(spec.Mode))
 	}
-	mode := strings.ToLower(strings.TrimSpace(spec.Mode))
-	policy := trusted_service.ServiceNetworkPolicy{Mode: mode, Enforce: true, AuditAll: spec.AuditAll, RequireProxy: spec.RequireProxy}
+	policy := trusted_service.ServiceNetworkPolicy{Mode: mode, Enforce: true}
 	switch mode {
 	case "none":
 		return policy, nil
@@ -358,14 +405,6 @@ func buildGameNetworkPolicy(spec *gameprotocol.GameNetworkPolicy, permissions []
 			return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("unrestricted outbound network requires service.network.request")
 		}
 		policy.AllowOutbound = true
-		return policy, nil
-	case "restricted":
-		if !containsString(permissions, "service.network.request") {
-			return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("restricted outbound network requires service.network.request")
-		}
-		policy.AllowOutbound = true
-		policy.AllowedDomains = append([]string(nil), spec.AllowedDomains...)
-		policy.AllowedPorts = append([]int(nil), spec.AllowedPorts...)
 		return policy, nil
 	default:
 		return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("unsupported mode %q", mode)
@@ -398,16 +437,55 @@ type bootServiceInfo struct {
 }
 
 func (p *RuntimeGraphProvisioner) buildBootService(ctx context.Context, kp KernelGamePlugin) (bootServiceInfo, error) {
-	gameSpec, err := gameprotocol.ParseGamePluginSpec(kp.Contribution.Definition)
+	services, err := p.buildBootServices(ctx, kp)
 	if err != nil {
-		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: parse game plugin spec: %w", kp.Extension.ID, kp.Contribution.ID, err)
+		return bootServiceInfo{}, err
 	}
-	if err := gameSpec.Validate(); err != nil {
-		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: validate game plugin spec: %w", kp.Extension.ID, kp.Contribution.ID, err)
+	if len(services) != 1 {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s declares %d services; use buildBootServices", kp.Extension.ID, kp.Contribution.ID, len(services))
 	}
-	runtimeModuleID, ok := kp.Contribution.Definition["runtimeModuleId"].(string)
-	if !ok || strings.TrimSpace(runtimeModuleID) == "" {
-		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: runtimeModuleId is required", kp.Extension.ID, kp.Contribution.ID)
+	return services[0], nil
+}
+
+func (p *RuntimeGraphProvisioner) buildBootServices(ctx context.Context, kp KernelGamePlugin) ([]bootServiceInfo, error) {
+	spec, err := gameprotocol.ParseGamePluginSpec(kp.Contribution.Definition)
+	if err != nil {
+		return nil, fmt.Errorf("plugin %s/%s: parse game plugin spec: %w", kp.Extension.ID, kp.Contribution.ID, err)
+	}
+	if err := spec.Validate(); err != nil {
+		return nil, fmt.Errorf("plugin %s/%s: validate game plugin spec: %w", kp.Extension.ID, kp.Contribution.ID, err)
+	}
+	if len(spec.Services) == 0 {
+		service, err := p.buildBootServiceFor(ctx, kp, spec, spec.RuntimeModuleID, "", "")
+		if err != nil {
+			return nil, err
+		}
+		return []bootServiceInfo{service}, nil
+	}
+	seenModules := make(map[string]struct{}, len(spec.Services))
+	services := make([]bootServiceInfo, 0, len(spec.Services))
+	for _, declared := range spec.Services {
+		if strings.TrimSpace(declared.Kind) != "" && strings.TrimSpace(declared.Kind) != "process" {
+			return nil, fmt.Errorf("plugin %s/%s: external service %q is not executable by the process runtime graph", kp.Extension.ID, kp.Contribution.ID, declared.ID)
+		}
+		moduleID := strings.TrimSpace(declared.ModuleID)
+		if _, duplicate := seenModules[moduleID]; duplicate {
+			return nil, fmt.Errorf("plugin %s/%s: process services must use distinct runtime modules; duplicate module %q", kp.Extension.ID, kp.Contribution.ID, moduleID)
+		}
+		seenModules[moduleID] = struct{}{}
+		service, err := p.buildBootServiceFor(ctx, kp, spec, moduleID, strings.TrimSpace(declared.ID), strings.TrimSpace(declared.Name))
+		if err != nil {
+			return nil, err
+		}
+		services = append(services, service)
+	}
+	return services, nil
+}
+
+func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp KernelGamePlugin, gameSpec gameprotocol.PluginHostSpec, runtimeModuleID, serviceIDOverride, nameOverride string) (bootServiceInfo, error) {
+	runtimeModuleID = strings.TrimSpace(runtimeModuleID)
+	if runtimeModuleID == "" {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: runtime module id is required", kp.Extension.ID, kp.Contribution.ID)
 	}
 	module, found := kp.Extension.FindModule(kerneldomain.ModuleID(runtimeModuleID))
 	if !found || module.Runtime == nil {
@@ -417,24 +495,24 @@ func (p *RuntimeGraphProvisioner) buildBootService(ctx context.Context, kp Kerne
 		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point is required", kp.Extension.ID, kp.Contribution.ID)
 	}
 
-	name := kp.Contribution.Name.Default
+	name := strings.TrimSpace(nameOverride)
 	if name == "" {
-		name = kp.Extension.Name.Default
+		name = module.Name.Default
+	}
+	if name == "" {
+		name = kp.Contribution.Name.Default
 	}
 	if name == "" {
 		name = string(kp.Contribution.ID)
 	}
-	serviceID := module.Runtime.ServiceID
+	serviceID := strings.TrimSpace(serviceIDOverride)
+	if serviceID == "" {
+		serviceID = strings.TrimSpace(module.Runtime.ServiceID)
+	}
 	if serviceID == "" {
 		serviceID = string(module.ID)
 	}
-	protocolVersion := gameprotocol.ProtocolVersion
-	if raw, ok := kp.Contribution.Definition["protocolVersion"].(string); ok && strings.TrimSpace(raw) != "" {
-		protocolVersion = strings.TrimSpace(raw)
-	}
-	if protocolVersion != gameprotocol.ProtocolVersion {
-		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: unsupported protocolVersion %q", kp.Extension.ID, kp.Contribution.ID, protocolVersion)
-	}
+	protocolVersion := gameSpec.ProtocolVersion
 
 	networkPolicy, err := buildGameNetworkPolicy(gameSpec.Network, kp.Contribution.RequiredPermissions)
 	if err != nil {

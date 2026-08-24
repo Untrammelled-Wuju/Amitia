@@ -31,9 +31,10 @@ var validChannelKinds = map[ChannelKind]struct{}{
 }
 
 type ChannelDescriptor struct {
-	ID       ChannelID
-	Kind     ChannelKind
-	SchemaID string
+	ID        ChannelID
+	ServiceID ServiceID
+	Kind      ChannelKind
+	SchemaID  string
 
 	Metadata map[string]string
 }
@@ -41,6 +42,9 @@ type ChannelDescriptor struct {
 func (c ChannelDescriptor) Validate() error {
 	if c.ID == "" {
 		return NewHostError(ErrInvalidArgument, "channel id must not be empty")
+	}
+	if c.ServiceID == "" {
+		return NewHostError(ErrInvalidArgument, "channel service id must not be empty")
 	}
 	if _, ok := validChannelKinds[c.Kind]; !ok {
 		return NewHostErrorWithCause(ErrInvalidArgument, "invalid channel kind",

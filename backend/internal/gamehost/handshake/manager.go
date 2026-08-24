@@ -21,8 +21,8 @@ type HandshakeManager struct {
 	runtimeValidator     RuntimeValidator
 	descriptorProvider   DescriptorProvider
 
-	timeout     int64
-	hostCaps    []domain.Capability
+	timeout  int64
+	hostCaps []domain.Capability
 
 	allowlist []string
 }
@@ -43,8 +43,8 @@ func NewHandshakeManager(config HandshakeManagerConfig) *HandshakeManager {
 	cn := NewCapabilityNegotiator(config.HostCapabilities)
 
 	return &HandshakeManager{
-		states:              make(map[string]*stateCell),
-		snapshots:           make(map[string]*HandshakeSnapshot),
+		states:               make(map[string]*stateCell),
+		snapshots:            make(map[string]*HandshakeSnapshot),
 		protocolNegotiator:   pn,
 		capabilityNegotiator: cn,
 		namespaceAdapter:     config.NamespaceAdapter,
@@ -174,6 +174,10 @@ func (m *HandshakeManager) process(
 		return nil, err
 	}
 
+	if err := validateDeclaredSinks(m.descriptorProvider, string(peer.PluginID), hello.Sinks); err != nil {
+		return nil, err
+	}
+
 	negotiatedProtocol, err := m.protocolNegotiator.Negotiate(hello.SupportedProtocols)
 	if err != nil {
 		return nil, err
@@ -214,7 +218,7 @@ func (m *HandshakeManager) process(
 	}
 
 	if m.channelAdvertiser != nil {
-		if err := m.channelAdvertiser.ValidateChannelAdvertisement(string(peer.PluginID), hello.Channels); err != nil {
+		if err := m.channelAdvertiser.ValidateChannelAdvertisement(string(peer.PluginID), string(peer.ServiceID), hello.Channels); err != nil {
 			return nil, err
 		}
 	}
@@ -321,17 +325,24 @@ func (m *HandshakeManager) SetHostCapabilities(caps []domain.Capability) {
 }
 
 func (m *HandshakeManager) descriptorCaps(pluginID domain.PluginID) []domain.Capability {
-	if m.descriptorProvider != nil {
-		caps, err := m.descriptorProvider.DescriptorCapabilities(string(pluginID))
-		if err == nil && len(caps) > 0 {
-			result := make([]domain.Capability, 0, len(caps))
-			for _, c := range caps {
-				result = append(result, domain.Capability(c))
-			}
-			return result
+	// Package declarations are the authorization boundary for host features.
+	// Missing/unreadable declarations must fail closed rather than inheriting the
+	// complete host feature set.
+	if m.descriptorProvider == nil {
+		return nil
+	}
+	caps, err := m.descriptorProvider.DescriptorCapabilities(string(pluginID))
+	if err != nil || len(caps) == 0 {
+		return nil
+	}
+	result := make([]domain.Capability, 0, len(caps))
+	for _, c := range caps {
+		feature := domain.Capability(c)
+		if domain.ValidateCapability(feature) == nil {
+			result = append(result, feature)
 		}
 	}
-	return m.hostCaps
+	return result
 }
 
 func (m *HandshakeManager) getStateCell(connID string) *stateCell {

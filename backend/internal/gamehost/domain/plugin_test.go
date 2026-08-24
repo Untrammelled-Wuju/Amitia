@@ -38,8 +38,9 @@ func TestPluginDescriptorConstruction(t *testing.T) {
 		},
 		Channels: []ChannelDescriptor{
 			{
-				ID:   ChannelID("events"),
-				Kind: ChannelKindEvent,
+				ID:        ChannelID("events"),
+				ServiceID: ServiceID("main-service"),
+				Kind:      ChannelKindEvent,
 			},
 		},
 		Metadata: map[string]string{
@@ -102,9 +103,10 @@ func TestServiceDependsOn(t *testing.T) {
 
 func TestChannelDescriptorDoesNotInterpretSchema(t *testing.T) {
 	ch := ChannelDescriptor{
-		ID:       ChannelID("metrics"),
-		Kind:     ChannelKindMetric,
-		SchemaID: "metric-schema-v1",
+		ID:        ChannelID("metrics"),
+		ServiceID: ServiceID("main-service"),
+		Kind:      ChannelKindMetric,
+		SchemaID:  "metric-schema-v1",
 	}
 
 	if ch.SchemaID != "metric-schema-v1" {
