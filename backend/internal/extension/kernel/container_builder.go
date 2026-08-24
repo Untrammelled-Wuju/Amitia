@@ -1679,6 +1679,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		SecretBroker:       kernelSecretBroker,
 		PermissionBroker:   permBroker,
 		ArchiveUpdater:     archiveUpdater,
+		StrictProduction:   true,
 
 		KernelPermissionBroker:        permBroker,
 		KernelPermissionSnapshotStore: permSnapshotStore,

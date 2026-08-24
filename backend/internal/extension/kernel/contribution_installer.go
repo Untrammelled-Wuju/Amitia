@@ -534,7 +534,7 @@ func (i *TypedContributionInstaller) buildGamePluginOp(ctx context.Context, cont
 	if err := json.Unmarshal(defData, &raw); err != nil {
 		return installOp{}, fmt.Errorf("unmarshal game plugin: %w", err)
 	}
-	spec, err := gameprotocol.ParseGamePluginSpec(raw)
+	spec, err := gameprotocol.ParsePluginHostSpec(raw)
 	if err != nil {
 		return installOp{}, fmt.Errorf("game_plugin: %w", err)
 	}

@@ -470,8 +470,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			kernelReader := management.NewKernelReaderWithContributions(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository, services.KernelContainer.ContributionRepository)
 			gameCenterSvc := management.NewProductionService(services.KernelContainer.GameHost, kernelReader)
 			management.RegisterGameCenterRouter(apiGroup, gameCenterSvc)
-			if services.KernelContainer.GameHost.CompanionManager != nil {
-				management.RegisterGameCenterCompanionRouter(apiGroup, management.NewCompanionHandler(services.KernelContainer.GameHost.CompanionManager))
+			if services.KernelContainer.GameHost.ArtifactManager != nil {
+				management.RegisterGameCenterArtifactRouter(apiGroup, management.NewArtifactHandler(services.KernelContainer.GameHost.ArtifactManager))
 			}
 
 			if services.Extension != nil {
@@ -529,6 +529,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 						services.KernelContainer.GameHost.ControlPlane,
 						management.NewGameHostTopologyStore(services.KernelContainer.GameHost.RuntimeTopologyStore),
 						management.NewGameHostPluginRegistry(services.KernelContainer.GameHost.PluginRegistry),
+						services.KernelContainer.GameHost.RuntimeManager,
 					)
 					rpcHandler := management.NewRPCHandler(rpcInvoker)
 					management.RegisterRPCRouter(apiGroup, rpcHandler)

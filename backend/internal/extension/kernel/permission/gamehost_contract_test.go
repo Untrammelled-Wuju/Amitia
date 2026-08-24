@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-func TestGameHostPermissionIDs_ExactlyThree(t *testing.T) {
+func TestGameHostPermissionIDs_ExactlyFour(t *testing.T) {
 	ids := GameHostPermissionIDs()
-	if len(ids) != 3 {
-		t.Fatalf("expected exactly 3 GameHost permission IDs, got %d: %v", len(ids), ids)
+	if len(ids) != 4 {
+		t.Fatalf("expected exactly 4 GameHost permission IDs, got %d: %v", len(ids), ids)
 	}
 }
 
@@ -19,6 +19,7 @@ func TestGameHostPermissionIDs_CanonicalValues(t *testing.T) {
 		"gamehost.control":         false,
 		"gamehost.channel.use":     false,
 		"gamehost.host_api.invoke": false,
+		"gamehost.artifact.deploy": false,
 	}
 	for _, id := range ids {
 		if _, ok := expected[id]; !ok {

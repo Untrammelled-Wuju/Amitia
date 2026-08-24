@@ -189,13 +189,15 @@ func TestValidateTrustUnknownPublisher(t *testing.T) {
 
 func TestValidateTrustCommunityPublisher(t *testing.T) {
 	def := &ServiceRuntimeDefinition{
-		TrustLevel:  string(TrustLevelTrusted),
+		TrustLevel:  string(TrustLevelCommunity),
 		Executables: []PlatformExecutable{{Path: "x", Sha256: "h", Signature: BinarySignature{Trusted: true, Value: "s"}}},
 		Network:     ServiceNetworkPolicy{LoopbackOnly: true},
 	}
-	err := ValidateTrust(def, TrustLevelCommunity)
-	if !errors.Is(err, ErrUnknownPublisher) {
-		t.Fatalf("expected unknown publisher, got %v", err)
+	if err := ValidateTrust(def, TrustLevelCommunity); err != nil {
+		t.Fatalf("community publisher should pass trust validation before sandbox admission: %v", err)
+	}
+	if !TrustLevelCommunity.RequiresFullSandbox() {
+		t.Fatal("community publisher must require full sandbox")
 	}
 }
 
@@ -323,8 +325,11 @@ func TestTrustLevelAllowedForService(t *testing.T) {
 	if !TrustLevelTrusted.AllowedForService() {
 		t.Fatalf("trusted should be allowed")
 	}
-	if TrustLevelCommunity.AllowedForService() {
-		t.Fatalf("community should not be allowed")
+	if !TrustLevelCommunity.AllowedForService() {
+		t.Fatalf("community should be allowed behind full sandbox gate")
+	}
+	if !TrustLevelCommunity.RequiresFullSandbox() {
+		t.Fatalf("community should require full sandbox")
 	}
 	if TrustLevelUnknown.AllowedForService() {
 		t.Fatalf("unknown should not be allowed")
