@@ -43,13 +43,13 @@ export interface PermissionSnapshotResult {
 export interface PermissionRequestInput {
   permissionId: string;
   serviceId?: string;
-  reason?: string;
 }
 
 export interface PermissionRequestResult {
   permissionId: string;
   decision: 'allowed' | 'denied' | 'approval_required';
   reason?: string;
+  detail?: string;
 }
 
 export async function checkPermission(
@@ -57,7 +57,7 @@ export async function checkPermission(
   input: PermissionCheckInput,
   opts: MessageOption[] = []
 ): Promise<PermissionCheckResult> {
-  const envelope = await client.sendRequest(METHOD_PERMISSION_CHECK, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_PERMISSION_CHECK, input, ...opts);
   return envelope.payload as PermissionCheckResult;
 }
 
@@ -66,7 +66,7 @@ export async function getPermissionSnapshot(
   input: PermissionSnapshotInput,
   opts: MessageOption[] = []
 ): Promise<PermissionSnapshotResult> {
-  const envelope = await client.sendRequest(METHOD_PERMISSION_SNAPSHOT, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_PERMISSION_SNAPSHOT, input, ...opts);
   return envelope.payload as PermissionSnapshotResult;
 }
 
@@ -75,6 +75,6 @@ export async function requestPermission(
   input: PermissionRequestInput,
   opts: MessageOption[] = []
 ): Promise<PermissionRequestResult> {
-  const envelope = await client.sendRequest(METHOD_PERMISSION_REQUEST, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_PERMISSION_REQUEST, input, ...opts);
   return envelope.payload as PermissionRequestResult;
 }

@@ -21,7 +21,7 @@ export function validateMethod(method: string): string | null {
 }
 
 export function isReservedNamespace(method: string): boolean {
-  const reserved = ['host.', 'plugin.', 'runtime.', 'service.', 'channel.', 'control.', 'emergency.', 'secret.', 'artifact.'];
+  const reserved = ['host.', 'plugin.', 'runtime.', 'service.', 'channel.', 'control.', 'emergency.', 'secret.', 'artifact.', 'permission.'];
   return reserved.some((ns) => method.startsWith(ns));
 }
 
@@ -48,7 +48,7 @@ export function validateServices(services: ServiceDescriptor[]): string[] {
     const idErr = validateServiceId(svc.id);
     if (idErr) errors.push(`service '${svc.id}': ${idErr}`);
 
-    if (svc.kind !== 'process' && svc.kind !== 'external') {
+    if (svc.kind !== 'process') {
       errors.push(`service '${svc.id}': invalid kind '${svc.kind}'`);
     }
 
@@ -91,7 +91,7 @@ export function validateChannel(channel: ChannelDescriptor): string[] {
     errors.push('channel id must not be empty');
   }
 
-  const validKinds = ['event', 'state', 'log', 'metric', 'binary', 'custom'];
+  const validKinds = ['event', 'state', 'log', 'metric', 'custom'];
   if (!validKinds.includes(channel.kind)) {
     errors.push(`channel '${channel.id}': invalid kind '${channel.kind}'`);
   }

@@ -59,17 +59,17 @@ type PermissionSnapshotResult struct {
 type PermissionRequestInput struct {
 	PermissionID string `json:"permissionId"`
 	ServiceID    string `json:"serviceId,omitempty"`
-	Reason       string `json:"reason,omitempty"`
 }
 
 type PermissionRequestResult struct {
 	PermissionID string `json:"permissionId"`
 	Decision     string `json:"decision"`
 	Reason       string `json:"reason,omitempty"`
+	Detail       string `json:"detail,omitempty"`
 }
 
 func (c *Client) CheckPermission(ctx context.Context, input PermissionCheckInput, opts ...MessageOption) (PermissionCheckResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodPermissionCheck, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodPermissionCheck, input, opts...)
 	if err != nil {
 		return PermissionCheckResult{}, err
 	}
@@ -83,7 +83,7 @@ func (c *Client) CheckPermission(ctx context.Context, input PermissionCheckInput
 }
 
 func (c *Client) GetPermissionSnapshot(ctx context.Context, input PermissionSnapshotInput, opts ...MessageOption) (PermissionSnapshotResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodPermissionSnapshot, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodPermissionSnapshot, input, opts...)
 	if err != nil {
 		return PermissionSnapshotResult{}, err
 	}
@@ -97,7 +97,7 @@ func (c *Client) GetPermissionSnapshot(ctx context.Context, input PermissionSnap
 }
 
 func (c *Client) RequestPermission(ctx context.Context, input PermissionRequestInput, opts ...MessageOption) (PermissionRequestResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodPermissionRequest, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodPermissionRequest, input, opts...)
 	if err != nil {
 		return PermissionRequestResult{}, err
 	}

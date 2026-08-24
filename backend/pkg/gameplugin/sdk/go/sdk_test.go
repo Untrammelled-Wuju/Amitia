@@ -255,6 +255,7 @@ func TestReservedHostMethodRejectedForPlugin(t *testing.T) {
 		"host.runtime.health",
 		"runtime.internal.state",
 		"service.register",
+		"permission.check",
 	}
 
 	for _, method := range reservedMethods {
@@ -483,5 +484,60 @@ func TestClientRouteHelpers(t *testing.T) {
 func TestSDKVersion(t *testing.T) {
 	if SDKName == "" || SDKVersion == "" {
 		t.Fatal("SDK version info must be defined")
+	}
+}
+
+func TestPermissionSDKUsesReservedHostRPCAndDecodesDetail(t *testing.T) {
+	transport := NewMockTransport()
+	client := NewClient(transport, WithIDGenerator(NewFixedIDGenerator("perm-req-1")), WithPendingTimeout(2*time.Second))
+	ctx := context.Background()
+
+	done := make(chan struct{})
+	var result PermissionRequestResult
+	var requestErr error
+	go func() {
+		result, requestErr = client.RequestPermission(ctx, PermissionRequestInput{
+			PermissionID: PermGameHostControl,
+			ServiceID:    "service-1",
+		})
+		close(done)
+	}()
+
+	deadline := time.Now().Add(time.Second)
+	for transport.GetSentMessagesLen() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	messages := transport.GetSentMessages()
+	if len(messages) != 1 {
+		t.Fatalf("expected one permission request, got %d", len(messages))
+	}
+	if messages[0].Method != MethodPermissionRequest {
+		t.Fatalf("permission SDK used method %q, want %q", messages[0].Method, MethodPermissionRequest)
+	}
+
+	go func() {
+		response, err := client.Receive(ctx)
+		if err == nil {
+			client.DispatchIncomingResponse(response)
+		}
+	}()
+	transport.QueueMessage(protocol.Envelope{
+		Protocol:  protocol.ProtocolVersion,
+		Type:      protocol.MessageTypeResponse,
+		ID:        "perm-resp-1",
+		RequestID: "perm-req-1",
+		Payload:   json.RawMessage(`{"permissionId":"gamehost.control","decision":"denied","reason":"not_granted","detail":"gamehost.control"}`),
+	})
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("permission request did not complete")
+	}
+	if requestErr != nil {
+		t.Fatalf("RequestPermission failed: %v", requestErr)
+	}
+	if result.PermissionID != PermGameHostControl || result.Decision != DecisionDenied || result.Reason != DenyReasonNotGranted || result.Detail != PermGameHostControl {
+		t.Fatalf("unexpected permission result: %+v", result)
 	}
 }

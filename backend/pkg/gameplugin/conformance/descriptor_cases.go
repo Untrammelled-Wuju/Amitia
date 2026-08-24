@@ -18,9 +18,9 @@ func ServiceSchemaCases() []Case {
 
 	cases = append(cases, NewCase(
 		"service_external_kind",
-		"External service kind should be valid",
+		"External service kind is not part of amitia-game-host/1",
 		[]byte(`{"id":"external-svc","kind":"external"}`),
-		true,
+		false,
 		ServiceDescriptorValidator{},
 	))
 
@@ -87,7 +87,7 @@ func ChannelSchemaCases() []Case {
 		ChannelDescriptorValidator{},
 	))
 
-	channelKinds := []string{"event", "state", "log", "metric", "binary", "custom"}
+	channelKinds := []string{"event", "state", "log", "metric", "custom"}
 	for _, k := range channelKinds {
 		data := []byte(`{"id":"ch-1","kind":"` + k + `"}`)
 		cases = append(cases, NewCase(
@@ -98,6 +98,14 @@ func ChannelSchemaCases() []Case {
 			ChannelDescriptorValidator{},
 		))
 	}
+
+	cases = append(cases, NewCase(
+		"channel_kind_binary",
+		"Binary channel kind is not part of amitia-game-host/1",
+		[]byte(`{"id":"ch-binary","kind":"binary"}`),
+		false,
+		ChannelDescriptorValidator{},
+	))
 
 	directions := []string{"plugin_to_host"}
 	for _, d := range directions {

@@ -59,7 +59,7 @@ export interface PluginArtifact {
 }
 
 export interface PluginNetworkPolicy {
-  mode?: 'none' | 'loopback' | 'unrestricted';
+  mode: 'none' | 'loopback' | 'unrestricted';
 }
 
 export interface PluginServiceSpec {
@@ -86,15 +86,18 @@ export interface PluginControlEffectSinkSpec {
   description?: string;
 }
 
-export interface PluginHostSpec {
-  protocolVersion: string;
-  runtimeModuleId?: string;
+interface PluginHostSpecBase {
+  protocolVersion: 'amitia-game-host/1';
   hostFeatures?: HostFeature[];
-  services?: PluginServiceSpec[];
   channels?: PluginChannelSpec[];
   controlEffectSinks?: PluginControlEffectSinkSpec[];
   artifacts?: PluginArtifact[];
-  network?: PluginNetworkPolicy;
+  network: PluginNetworkPolicy;
   metadata?: Record<string, unknown>;
 }
+
+export type PluginHostSpec = PluginHostSpecBase & (
+  | { runtimeModuleId: string; services?: PluginServiceSpec[] }
+  | { runtimeModuleId?: string; services: [PluginServiceSpec, ...PluginServiceSpec[]] }
+);
 

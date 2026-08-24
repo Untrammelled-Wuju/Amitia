@@ -332,6 +332,7 @@ func TestReservedNamespace(t *testing.T) {
 	reservedMethods := []string{
 		`{"protocol":"amitia-game-host/1","type":"request","id":"r1","method":"host.secret.read"}`,
 		`{"protocol":"amitia-game-host/1","type":"request","id":"r1","method":"host.runtime.health"}`,
+		`{"protocol":"amitia-game-host/1","type":"request","id":"r1","method":"permission.check"}`,
 	}
 
 	for _, m := range reservedMethods {

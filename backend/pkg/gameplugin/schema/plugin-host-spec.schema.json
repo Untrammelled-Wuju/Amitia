@@ -5,7 +5,8 @@
   "description": "Canonical host-owned contribution contract for amitia-game-host/1. It intentionally contains no game identity, version, application-specific world/entity/action/observation semantics.",
   "type": "object",
   "required": [
-    "protocolVersion"
+    "protocolVersion",
+    "network"
   ],
   "properties": {
     "protocolVersion": {
@@ -207,7 +208,11 @@
           ]
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "description": "Explicit network boundary. none/loopback require an OS isolation backend; unrestricted additionally requires service.network.request."
     },
     "metadata": {
       "type": "object",

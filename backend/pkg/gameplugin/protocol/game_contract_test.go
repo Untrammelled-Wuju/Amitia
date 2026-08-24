@@ -5,7 +5,7 @@ import "testing"
 func TestPluginHostSpecValidateGenericContract(t *testing.T) {
 	spec := PluginHostSpec{
 		ProtocolVersion: ProtocolVersion,
-		HostFeatures:    []HostFeature{HostFeatureCustomRPC, HostFeatureEventStreaming, HostFeatureMultiService},
+		HostFeatures:    []HostFeature{HostFeatureCustomRPC, HostFeatureEventStreaming, HostFeatureMultiService, HostFeatureRealtimeControl},
 		Services: []PluginServiceSpec{
 			{ID: "control", ModuleID: "control-runtime", Kind: "process", Required: true},
 			{ID: "events", ModuleID: "event-runtime", Kind: "process", Required: true, DependsOn: []string{"control"}},
@@ -24,6 +24,7 @@ func TestParsePluginHostSpecRejectsGameSpecificFields(t *testing.T) {
 		"protocolVersion": ProtocolVersion,
 		"runtimeModuleId": "runtime",
 		"gameId":          "examplegame-java",
+		"network":         map[string]any{"mode": "none"},
 	})
 	if err == nil {
 		t.Fatal("ParsePluginHostSpec() accepted game-specific gameId")
@@ -31,7 +32,7 @@ func TestParsePluginHostSpecRejectsGameSpecificFields(t *testing.T) {
 }
 
 func TestPluginHostSpecRequiresExplicitProtocolVersion(t *testing.T) {
-	spec, err := ParsePluginHostSpec(map[string]any{"runtimeModuleId": "runtime"})
+	spec, err := ParsePluginHostSpec(map[string]any{"runtimeModuleId": "runtime", "network": map[string]any{"mode": "none"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +45,7 @@ func TestPluginHostSpecRequiresExplicitProtocolVersion(t *testing.T) {
 }
 
 func TestPluginHostSpecRejectsUnknownHostFeature(t *testing.T) {
-	spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", HostFeatures: []HostFeature{"event_publishing"}}
+	spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", HostFeatures: []HostFeature{"event_publishing"}, Network: &PluginNetworkPolicy{Mode: "none"}}
 	if err := spec.Validate(); err == nil {
 		t.Fatal("Validate() accepted unknown host feature")
 	}
@@ -66,7 +67,7 @@ func TestPluginNetworkPolicyOnlyExposesEnforceableModes(t *testing.T) {
 }
 
 func TestPluginHostSpecRejectsUnwiredBinaryChannel(t *testing.T) {
-	spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Channels: []PluginChannelSpec{{ID: "frames", Kind: "binary"}}}
+	spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Channels: []PluginChannelSpec{{ID: "frames", Kind: "binary"}}, Network: &PluginNetworkPolicy{Mode: "none"}}
 	if err := spec.Validate(); err == nil {
 		t.Fatal("binary channel must not be exposed until production binary channel routing is wired")
 	}
@@ -84,5 +85,63 @@ func TestHostFeatureVersionPolicyIsProtocolMajorBound(t *testing.T) {
 	}
 	if _, ok := HostFeatureIntroducedInMajor(HostFeature("vendor.experimental")); ok {
 		t.Fatal("unknown namespaced feature must require a protocol-major update")
+	}
+}
+
+func TestPluginHostSpecRequiresExplicitNetworkPolicy(t *testing.T) {
+	spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime"}
+	if err := spec.Validate(); err == nil {
+		t.Fatal("Validate() accepted missing explicit network policy")
+	}
+}
+
+func TestPluginHostSpecRejectsDuplicateServiceDependency(t *testing.T) {
+	spec := PluginHostSpec{
+		ProtocolVersion: ProtocolVersion,
+		HostFeatures:    []HostFeature{HostFeatureMultiService},
+		Services: []PluginServiceSpec{
+			{ID: "a", ModuleID: "module-a", DependsOn: []string{"b", "b"}},
+			{ID: "b", ModuleID: "module-b"},
+		},
+		Network: &PluginNetworkPolicy{Mode: "none"},
+	}
+	if err := spec.Validate(); err == nil {
+		t.Fatal("Validate() accepted duplicate service dependency")
+	}
+}
+
+func TestPluginHostSpecRejectsServiceDependencyCycle(t *testing.T) {
+	spec := PluginHostSpec{
+		ProtocolVersion: ProtocolVersion,
+		HostFeatures:    []HostFeature{HostFeatureMultiService},
+		Services: []PluginServiceSpec{
+			{ID: "a", ModuleID: "module-a", DependsOn: []string{"b"}},
+			{ID: "b", ModuleID: "module-b", DependsOn: []string{"c"}},
+			{ID: "c", ModuleID: "module-c", DependsOn: []string{"a"}},
+		},
+		Network: &PluginNetworkPolicy{Mode: "none"},
+	}
+	if err := spec.Validate(); err == nil {
+		t.Fatal("Validate() accepted cyclic service dependency graph")
+	}
+}
+
+func TestPluginHostSpecRuntimeModuleIDMustBelongToDeclaredServices(t *testing.T) {
+	spec := PluginHostSpec{
+		ProtocolVersion: ProtocolVersion,
+		RuntimeModuleID: "legacy-runtime",
+		HostFeatures:    []HostFeature{HostFeatureMultiService},
+		Services: []PluginServiceSpec{
+			{ID: "a", ModuleID: "module-a"},
+			{ID: "b", ModuleID: "module-b"},
+		},
+		Network: &PluginNetworkPolicy{Mode: "none"},
+	}
+	if err := spec.Validate(); err == nil {
+		t.Fatal("Validate() accepted runtimeModuleId outside declared service modules")
+	}
+	spec.RuntimeModuleID = "module-a"
+	if err := spec.Validate(); err != nil {
+		t.Fatalf("Validate() rejected compatible legacy runtimeModuleId: %v", err)
 	}
 }
