@@ -7,31 +7,17 @@ import (
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
-const (
-	MethodChannelPublish = "channel.publish"
-	MethodChannelSubscribe = "channel.subscribe"
-	MethodChannelUnsubscribe = "channel.unsubscribe"
-)
+const MethodChannelPublish = "channel.publish"
 
 type ChannelPublishInput struct {
-	ChannelID string          `json:"channelId"`
-	Payload   json.RawMessage `json:"payload"`
+	ChannelID string                     `json:"channelId"`
+	Payload   json.RawMessage            `json:"payload"`
 	Metadata  map[string]json.RawMessage `json:"metadata,omitempty"`
 }
 
-type ChannelSubscribeInput struct {
-	ChannelID string `json:"channelId"`
-	Cursor    string `json:"cursor,omitempty"`
-}
-
-type ChannelSubscribeOutput struct {
-	Cursor string `json:"cursor"`
-}
-
-type ChannelUnsubscribeInput struct {
-	ChannelID string `json:"channelId"`
-}
-
+// ChannelPublish sends one message from the plugin service to a channel that
+// was declared in the plugin host manifest and negotiated during hello.
+// Host-to-plugin subscriptions are intentionally not part of host protocol v1.
 func (c *Client) ChannelPublish(ctx context.Context, input ChannelPublishInput, opts ...MessageOption) (protocol.Envelope, error) {
 	payload := map[string]any{
 		"channelId": input.ChannelID,
@@ -41,23 +27,4 @@ func (c *Client) ChannelPublish(ctx context.Context, input ChannelPublishInput, 
 		payload["metadata"] = input.Metadata
 	}
 	return c.sendHostNotification(ctx, MethodChannelPublish, payload, opts...)
-}
-
-func (c *Client) ChannelSubscribe(ctx context.Context, input ChannelSubscribeInput, opts ...MessageOption) (ChannelSubscribeOutput, error) {
-	envelope, err := c.SendReservedRequest(ctx, MethodChannelSubscribe, input, opts...)
-	if err != nil {
-		return ChannelSubscribeOutput{}, err
-	}
-	var out ChannelSubscribeOutput
-	if len(envelope.Payload) > 0 {
-		if err := json.Unmarshal(envelope.Payload, &out); err != nil {
-			return ChannelSubscribeOutput{}, NewEncodeError("unmarshal channel subscribe response failed: %v", err)
-		}
-	}
-	return out, nil
-}
-
-func (c *Client) ChannelUnsubscribe(ctx context.Context, input ChannelUnsubscribeInput, opts ...MessageOption) error {
-	_, err := c.SendReservedRequest(ctx, MethodChannelUnsubscribe, input, opts...)
-	return err
 }

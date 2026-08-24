@@ -1,163 +1,101 @@
-export const GAME_PROTOCOL_VERSION = 'amitia-game/2' as const;
+import type { HostFeature } from './protocol';
 
-export const GAME_METHODS = {
-  sessionOpen: 'game.session.open',
-  sessionClose: 'game.session.close',
-  sessionSnapshot: 'game.session.snapshot',
-  observationGet: 'game.observation.get',
-  actionExecute: 'game.action.execute',
-  goalSet: 'game.goal.set',
-  capabilitiesGet: 'game.capabilities.get'
-} as const;
+export type PluginSessionStatus = 'created' | 'connecting' | 'ready' | 'paused' | 'closed' | 'failed';
+export type PluginOperationStatus = 'succeeded' | 'failed' | 'cancelled' | 'rejected';
 
-export type GameSessionStatus = 'created' | 'connecting' | 'ready' | 'paused' | 'closed' | 'failed';
-export type GameActionStatus = 'succeeded' | 'failed' | 'cancelled' | 'rejected';
-
-export interface GameSessionOpenRequest {
-  gameRoot?: string;
-  gameVersion?: string;
-  characterId?: string;
-  autoInstallCompanions?: boolean;
+export interface PluginSessionOpenRequest {
+  context?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   payload?: unknown;
 }
 
-export interface GameSession {
+export interface PluginSession {
   id: string;
-  gameId: string;
-  gameVersion?: string;
-  edition?: string;
-  status: GameSessionStatus;
-  characterId?: string;
-  worldId?: string;
-  connectionMode?: string;
+  status: PluginSessionStatus;
   startedAt?: string;
   updatedAt?: string;
   metadata?: Record<string, unknown>;
   payload?: unknown;
 }
 
-export interface GameLocation {
-  world?: string;
-  region?: string;
-  coordinates?: Record<string, number>;
-  payload?: unknown;
-}
-
-export interface GameEntity {
+export interface PluginEvent {
   id: string;
-  type: string;
-  name?: string;
-  location?: GameLocation;
-  attributes?: Record<string, unknown>;
-  payload?: unknown;
-}
-
-export interface GameInventoryItem {
-  id: string;
-  type: string;
-  name?: string;
-  quantity?: number;
-  slot?: string;
-  attributes?: Record<string, unknown>;
-  payload?: unknown;
-}
-
-export interface GameInventory {
-  items?: GameInventoryItem[];
-  capacity?: number;
-  payload?: unknown;
-}
-
-export interface GameObservation {
-  sessionId: string;
-  sequence: number;
-  observedAt: string;
-  location?: GameLocation;
-  entities?: GameEntity[];
-  inventory?: GameInventory;
-  state?: Record<string, unknown>;
-  payload?: unknown;
-}
-
-export interface GameEvent {
-  id: string;
-  sessionId: string;
+  sessionId?: string;
   type: string;
   occurredAt: string;
-  entityIds?: string[];
+  metadata?: Record<string, unknown>;
   payload?: unknown;
 }
 
-export interface GameAction {
+export interface PluginOperation {
   id: string;
-  sessionId: string;
+  sessionId?: string;
   type: string;
   parameters?: unknown;
   idempotencyKey?: string;
   deadlineMs?: number;
 }
 
-export interface GameActionResult {
-  actionId: string;
-  sessionId: string;
-  status: GameActionStatus;
-  observation?: GameObservation;
+export interface PluginOperationResult {
+  operationId: string;
+  sessionId?: string;
+  status: PluginOperationStatus;
   output?: unknown;
   errorCode?: string;
   errorMessage?: string;
   retryable?: boolean;
 }
 
-export interface GameGoal {
-  id: string;
-  sessionId: string;
-  description: string;
-  priority?: number;
-  state?: string;
-  constraints?: unknown;
-  payload?: unknown;
-}
-
-export interface GameCapability {
-  id: string;
-  kind: string;
-  description?: string;
-  schema?: unknown;
-  metadata?: Record<string, unknown>;
-}
-
-export interface GameCompanionArtifact {
+export interface PluginArtifact {
   id: string;
   type: string;
   platforms?: string[];
-  gameVersions?: string[];
+  architectures?: string[];
+  compatibilityVersions?: string[];
   source: string;
-  installTarget?: string;
+  target: string;
   required?: boolean;
   sha256?: string;
 }
 
-
-export interface GameNetworkPolicy {
-  mode?: 'none' | 'loopback' | 'unrestricted' | 'restricted';
-  allowedDomains?: string[];
-  allowedPorts?: number[];
-  requireProxy?: boolean;
-  auditAll?: boolean;
+export interface PluginNetworkPolicy {
+  mode?: 'none' | 'loopback' | 'unrestricted';
 }
 
-export interface GamePluginSpec {
+export interface PluginServiceSpec {
+  id: string;
+  moduleId: string;
+  name?: string;
+  kind?: 'process';
+  required?: boolean;
+  dependsOn?: string[];
+  metadata?: Record<string, string>;
+}
+
+export interface PluginChannelSpec {
+  id: string;
+  serviceId?: string;
+  kind: 'event' | 'state' | 'log' | 'metric' | 'custom';
+  schemaId?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface PluginControlEffectSinkSpec {
+  id: string;
+  serviceId: string;
+  description?: string;
+}
+
+export interface PluginHostSpec {
   protocolVersion: string;
-  gameProtocolVersion?: string;
-  runtimeModuleId: string;
-  gameId?: string;
-  gameFamily?: string;
-  editions?: string[];
-  supportedVersions?: string[];
-  connectionModes?: string[];
-  services?: string[];
-  actions?: GameCapability[];
-  observations?: GameCapability[];
-  companionArtifacts?: GameCompanionArtifact[];
-  network?: GameNetworkPolicy;
+  runtimeModuleId?: string;
+  hostFeatures?: HostFeature[];
+  services?: PluginServiceSpec[];
+  channels?: PluginChannelSpec[];
+  controlEffectSinks?: PluginControlEffectSinkSpec[];
+  artifacts?: PluginArtifact[];
+  network?: PluginNetworkPolicy;
+  metadata?: Record<string, unknown>;
 }
+
+export type GamePluginSpec = PluginHostSpec;

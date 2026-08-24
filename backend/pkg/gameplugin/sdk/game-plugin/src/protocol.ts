@@ -27,6 +27,7 @@ export interface Envelope {
   runtimeId?: string;
   pluginId?: string;
   serviceId?: string;
+  generation?: number;
   payload?: unknown;
   error?: ProtocolError;
   metadata?: Record<string, unknown>;
@@ -86,7 +87,7 @@ export interface ChannelDescriptor {
   metadata?: Record<string, unknown>;
 }
 
-export const Capability = {
+export const HostFeature = {
   REALTIME_CONTROL: 'realtime_control',
   STATE_STREAMING: 'state_streaming',
   EVENT_STREAMING: 'event_streaming',
@@ -96,7 +97,9 @@ export const Capability = {
   SHARED_CONTROL: 'shared_control',
   CUSTOM_UI: 'custom_ui',
   MULTI_SERVICE: 'multi_service',
-};
+} as const;
+
+export type HostFeature = typeof HostFeature[keyof typeof HostFeature];
 
 export const ErrorCode = {
   INVALID_REQUEST: 'invalid_request',

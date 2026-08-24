@@ -1,9 +1,9 @@
 import { Envelope } from './protocol';
 import { Client, MessageOption } from './client';
-import type { GameEvent } from './game';
+import type { PluginEvent } from './game';
 
 export const METHOD_EVENT_PUBLISH = 'plugin.event.publish';
-export const EVENT_ID_GAME_EVENT = 'game.event';
+export const PLUGIN_AGENT_EVENT_ID = 'plugin.agent_event';
 
 export interface EventPublishInput {
   channelId: string;
@@ -28,15 +28,15 @@ export async function publishEvent(
   return client.sendReservedNotification(METHOD_EVENT_PUBLISH, payload, ...opts);
 }
 
-export async function publishGameEvent(
+export async function publishAgentEvent(
   client: Client,
-  event: GameEvent,
+  event: PluginEvent,
   metadata: Record<string, unknown> = {},
   opts: MessageOption[] = []
 ): Promise<Envelope> {
   return publishEvent(client, {
-    channelId: event.sessionId,
-    eventId: EVENT_ID_GAME_EVENT,
+    channelId: event.sessionId ?? '',
+    eventId: PLUGIN_AGENT_EVENT_ID,
     payload: event,
     metadata,
   }, opts);

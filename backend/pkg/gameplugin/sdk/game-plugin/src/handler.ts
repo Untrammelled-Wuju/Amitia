@@ -9,7 +9,7 @@ export interface HelloConfiguration {
   supportedProtocols: string[];
   capabilities: string[];
   rpcNamespaces: string[];
-  services?: ServiceHelloDescriptor[];
+  channels?: ChannelHelloDescriptor[];
   sinks?: SinkHelloDescriptor[];
   sdk?: {
     name: string;
@@ -18,9 +18,9 @@ export interface HelloConfiguration {
   metadata?: Record<string, unknown>;
 }
 
-export interface ServiceHelloDescriptor {
-  serviceId: string;
-  capabilities?: string[];
+
+export interface ChannelHelloDescriptor {
+  id: string;
 }
 
 export interface SinkHelloDescriptor {
@@ -40,6 +40,7 @@ export interface HelloResponse {
   protocol: string;
   capabilities: string[];
   rpcNamespaces?: string[];
+  channels?: string[];
   metadata?: Record<string, unknown>;
 }
 
@@ -53,6 +54,29 @@ export class HandlerRegistry {
 
   registerNotification(method: string, handler: NotificationHandler): void {
     this.notificationHandlers.set(method, handler);
+  }
+
+  /** Merge another registry into this one. Duplicate request methods are rejected;
+   * duplicate notification methods are chained in registration order. */
+  mergeFrom(other: HandlerRegistry): void {
+    if (other === this) return;
+    for (const [method, handler] of other.requestHandlers) {
+      if (this.requestHandlers.has(method)) {
+        throw new Error(`duplicate request handler: ${method}`);
+      }
+      this.requestHandlers.set(method, handler);
+    }
+    for (const [method, handler] of other.notificationHandlers) {
+      const existing = this.notificationHandlers.get(method);
+      if (existing) {
+        this.notificationHandlers.set(method, async (notification) => {
+          await existing(notification);
+          await handler(notification);
+        });
+      } else {
+        this.notificationHandlers.set(method, handler);
+      }
+    }
   }
 
   async handleRequest(client: Client, request: Envelope): Promise<void> {

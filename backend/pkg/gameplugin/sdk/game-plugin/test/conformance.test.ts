@@ -6,7 +6,7 @@ import {
   ServiceDescriptor,
   ChannelDescriptor,
   MessageType,
-  Capability,
+  HostFeature,
   ErrorCode,
 } from '../src/protocol';
 import { Client, FixedIDGenerator } from '../src/client';
@@ -228,18 +228,18 @@ describe('TypeScript Conformance Suite', () => {
     });
   });
 
-  describe('Capability Conformance', () => {
+  describe('Host Feature Conformance', () => {
     test('all standard capabilities should be valid', () => {
       const stdCaps = [
-        Capability.REALTIME_CONTROL,
-        Capability.STATE_STREAMING,
-        Capability.EVENT_STREAMING,
-        Capability.BINARY_STREAMING,
-        Capability.CUSTOM_RPC,
-        Capability.HOST_API,
-        Capability.SHARED_CONTROL,
-        Capability.CUSTOM_UI,
-        Capability.MULTI_SERVICE,
+        HostFeature.REALTIME_CONTROL,
+        HostFeature.STATE_STREAMING,
+        HostFeature.EVENT_STREAMING,
+        HostFeature.BINARY_STREAMING,
+        HostFeature.CUSTOM_RPC,
+        HostFeature.HOST_API,
+        HostFeature.SHARED_CONTROL,
+        HostFeature.CUSTOM_UI,
+        HostFeature.MULTI_SERVICE,
       ];
       for (const cap of stdCaps) {
         const errs = validateCapability([cap]);
@@ -247,11 +247,11 @@ describe('TypeScript Conformance Suite', () => {
       }
     });
 
-    test('custom capabilities (vendor namespaced) should be valid', () => {
+    test('game-specific tool capabilities must not be accepted as host features', () => {
       const customCaps = ['minecraft.pathfinding', 'vendor.agent'];
       for (const cap of customCaps) {
         const errs = validateCapability([cap]);
-        expect(errs).toHaveLength(0);
+        expect(errs.length).toBeGreaterThan(0);
       }
     });
 

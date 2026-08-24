@@ -9,20 +9,8 @@ import (
 	"time"
 )
 
-const GameProtocolVersion = "amitia-game/2"
-
-const EventIDGameEvent = "game.event"
-
-const (
-	MethodGameSessionOpen     = "game.session.open"
-	MethodGameSessionClose    = "game.session.close"
-	MethodGameSessionSnapshot = "game.session.snapshot"
-	MethodGameObservationGet  = "game.observation.get"
-	MethodGameActionExecute   = "game.action.execute"
-	MethodGameGoalSet         = "game.goal.set"
-	MethodGameCapabilitiesGet = "game.capabilities.get"
-)
-
+// PluginSession/PluginOperation are transport-neutral helper payloads. GameHost
+// does not interpret their payloads or assign game-specific semantics to them.
 type PluginSessionStatus string
 
 const (
@@ -86,12 +74,38 @@ type PluginOperationResult struct {
 	Retryable    bool                  `json:"retryable,omitempty"`
 }
 
-type PluginCapability struct {
-	ID          string          `json:"id"`
-	Kind        string          `json:"kind"`
-	Description string          `json:"description,omitempty"`
-	Schema      json.RawMessage `json:"schema,omitempty"`
-	Metadata    map[string]any  `json:"metadata,omitempty"`
+// HostFeature is a GameHost transport/runtime feature. It is intentionally
+// separate from AI/tool capabilities, extension permissions and runtime-engine
+// capabilities.
+type HostFeature string
+
+const (
+	HostFeatureRealtimeControl HostFeature = "realtime_control"
+	HostFeatureStateStreaming  HostFeature = "state_streaming"
+	HostFeatureEventStreaming  HostFeature = "event_streaming"
+	HostFeatureBinaryStreaming HostFeature = "binary_streaming"
+	HostFeatureCustomRPC       HostFeature = "custom_rpc"
+	HostFeatureHostAPI         HostFeature = "host_api"
+	HostFeatureSharedControl   HostFeature = "shared_control"
+	HostFeatureCustomUI        HostFeature = "custom_ui"
+	HostFeatureMultiService    HostFeature = "multi_service"
+)
+
+var knownHostFeatures = map[HostFeature]struct{}{
+	HostFeatureRealtimeControl: {},
+	HostFeatureStateStreaming:  {},
+	HostFeatureEventStreaming:  {},
+	HostFeatureBinaryStreaming: {},
+	HostFeatureCustomRPC:       {},
+	HostFeatureHostAPI:         {},
+	HostFeatureSharedControl:   {},
+	HostFeatureCustomUI:        {},
+	HostFeatureMultiService:    {},
+}
+
+func IsKnownHostFeature(feature HostFeature) bool {
+	_, ok := knownHostFeatures[feature]
+	return ok
 }
 
 type PluginArtifact struct {
@@ -101,58 +115,64 @@ type PluginArtifact struct {
 	Architectures         []string `json:"architectures,omitempty"`
 	CompatibilityVersions []string `json:"compatibilityVersions,omitempty"`
 	Source                string   `json:"source"`
-	Target                string   `json:"target,omitempty"`
+	Target                string   `json:"target"`
 	Required              bool     `json:"required,omitempty"`
 	SHA256                string   `json:"sha256,omitempty"`
-	GameVersions          []string `json:"gameVersions,omitempty"`
-	InstallTarget         string   `json:"installTarget,omitempty"`
 }
 
-func (a PluginArtifact) EffectiveCompatibilityVersions() []string {
-	if len(a.CompatibilityVersions) > 0 {
-		return a.CompatibilityVersions
-	}
-	return a.GameVersions
-}
-
-func (a PluginArtifact) EffectiveTarget() string {
-	if strings.TrimSpace(a.Target) != "" {
-		return a.Target
-	}
-	return a.InstallTarget
-}
-
+// PluginNetworkPolicy deliberately exposes only policies that GameHost can
+// enforce without silently weakening them. Restricted domain/port filtering
+// and packet auditing are not part of protocol v1 until a real cross-platform
+// backend exists.
 type PluginNetworkPolicy struct {
-	Mode           string   `json:"mode,omitempty"`
-	AllowedDomains []string `json:"allowedDomains,omitempty"`
-	AllowedPorts   []int    `json:"allowedPorts,omitempty"`
-	RequireProxy   bool     `json:"requireProxy,omitempty"`
-	AuditAll       bool     `json:"auditAll,omitempty"`
+	Mode string `json:"mode,omitempty"`
 }
 
-type GameCapability = PluginCapability
-type GameCompanionArtifact = PluginArtifact
+type PluginServiceSpec struct {
+	ID        string            `json:"id"`
+	ModuleID  string            `json:"moduleId"`
+	Name      string            `json:"name,omitempty"`
+	Kind      string            `json:"kind,omitempty"`
+	Required  bool              `json:"required,omitempty"`
+	DependsOn []string          `json:"dependsOn,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+}
+
+type PluginChannelSpec struct {
+	ID        string            `json:"id"`
+	ServiceID string            `json:"serviceId,omitempty"`
+	Kind      string            `json:"kind"`
+	SchemaID  string            `json:"schemaId,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+}
+
+type PluginControlEffectSinkSpec struct {
+	ID          string `json:"id"`
+	ServiceID   string `json:"serviceId"`
+	Description string `json:"description,omitempty"`
+}
+
+// PluginHostSpec contains only host-owned execution and transport information.
+// Concrete game identity, versions, worlds, entities, actions, observations,
+// companion-mod meaning, etc. belong to the game plugin itself and may be
+// carried only in opaque plugin metadata/tool definitions.
+type PluginHostSpec struct {
+	ProtocolVersion    string                        `json:"protocolVersion"`
+	RuntimeModuleID    string                        `json:"runtimeModuleId,omitempty"`
+	HostFeatures       []HostFeature                 `json:"hostFeatures,omitempty"`
+	Services           []PluginServiceSpec           `json:"services,omitempty"`
+	Channels           []PluginChannelSpec           `json:"channels,omitempty"`
+	ControlEffectSinks []PluginControlEffectSinkSpec `json:"controlEffectSinks,omitempty"`
+	Artifacts          []PluginArtifact              `json:"artifacts,omitempty"`
+	Network            *PluginNetworkPolicy          `json:"network,omitempty"`
+	Metadata           map[string]any                `json:"metadata,omitempty"`
+}
+
+// GamePluginSpec is retained as the public contribution name, but the contents
+// are strictly generic host configuration.
+type GamePluginSpec = PluginHostSpec
+
 type GameNetworkPolicy = PluginNetworkPolicy
-
-type GamePluginSpec struct {
-	ProtocolVersion     string               `json:"protocolVersion"`
-	GameProtocolVersion string               `json:"gameProtocolVersion,omitempty"`
-	RuntimeModuleID     string               `json:"runtimeModuleId"`
-	Capabilities        []PluginCapability   `json:"capabilities,omitempty"`
-	Artifacts           []PluginArtifact     `json:"artifacts,omitempty"`
-	Network             *PluginNetworkPolicy `json:"network,omitempty"`
-	Metadata            map[string]any       `json:"metadata,omitempty"`
-
-	GameID             string           `json:"gameId,omitempty"`
-	GameFamily         string           `json:"gameFamily,omitempty"`
-	Editions           []string         `json:"editions,omitempty"`
-	SupportedVersions  []string         `json:"supportedVersions,omitempty"`
-	ConnectionModes    []string         `json:"connectionModes,omitempty"`
-	Services           []string         `json:"services,omitempty"`
-	Actions            []GameCapability `json:"actions,omitempty"`
-	Observations       []GameCapability `json:"observations,omitempty"`
-	CompanionArtifacts []PluginArtifact `json:"companionArtifacts,omitempty"`
-}
 
 func ParseGamePluginSpec(spec map[string]any) (GamePluginSpec, error) {
 	if spec == nil {
@@ -169,62 +189,135 @@ func ParseGamePluginSpec(spec map[string]any) (GamePluginSpec, error) {
 		return GamePluginSpec{}, fmt.Errorf("decode game plugin spec: %w", err)
 	}
 	parsed.ProtocolVersion = strings.TrimSpace(parsed.ProtocolVersion)
-	parsed.GameProtocolVersion = strings.TrimSpace(parsed.GameProtocolVersion)
 	parsed.RuntimeModuleID = strings.TrimSpace(parsed.RuntimeModuleID)
-	parsed.GameID = strings.TrimSpace(parsed.GameID)
-	if parsed.GameProtocolVersion == "" {
-		parsed.GameProtocolVersion = GameProtocolVersion
-	}
 	return parsed, nil
 }
 
-func (s GamePluginSpec) EffectiveArtifacts() []PluginArtifact {
-	if len(s.Artifacts) > 0 {
-		return s.Artifacts
-	}
-	return s.CompanionArtifacts
-}
-
-func (s GamePluginSpec) Validate() error {
+func (s PluginHostSpec) Validate() error {
 	if s.ProtocolVersion == "" {
 		return fmt.Errorf("protocolVersion is required")
 	}
 	if s.ProtocolVersion != ProtocolVersion {
 		return fmt.Errorf("unsupported protocolVersion %q", s.ProtocolVersion)
 	}
-	if s.GameProtocolVersion != "" && s.GameProtocolVersion != GameProtocolVersion {
-		return fmt.Errorf("unsupported gameProtocolVersion %q", s.GameProtocolVersion)
+	if s.RuntimeModuleID == "" && len(s.Services) == 0 {
+		return fmt.Errorf("runtimeModuleId or services is required")
 	}
-	if s.RuntimeModuleID == "" {
-		return fmt.Errorf("runtimeModuleId is required")
+
+	seenFeatures := make(map[HostFeature]struct{}, len(s.HostFeatures))
+	for _, raw := range s.HostFeatures {
+		feature := HostFeature(strings.TrimSpace(string(raw)))
+		if !IsKnownHostFeature(feature) {
+			return fmt.Errorf("unsupported host feature %q", raw)
+		}
+		if _, exists := seenFeatures[feature]; exists {
+			return fmt.Errorf("duplicate host feature %q", feature)
+		}
+		seenFeatures[feature] = struct{}{}
 	}
-	if s.Network != nil {
-		mode := strings.ToLower(strings.TrimSpace(s.Network.Mode))
-		switch mode {
-		case "none", "loopback", "unrestricted", "restricted":
-		default:
-			return fmt.Errorf("unsupported network mode %q", s.Network.Mode)
+	if len(s.Services) > 1 {
+		if _, ok := seenFeatures[HostFeatureMultiService]; !ok {
+			return fmt.Errorf("multiple services require hostFeatures to include %q", HostFeatureMultiService)
 		}
-		if mode != "restricted" && (len(s.Network.AllowedDomains) > 0 || len(s.Network.AllowedPorts) > 0) {
-			return fmt.Errorf("allowedDomains/allowedPorts require network mode restricted")
+	}
+
+	seenServices := make(map[string]struct{}, len(s.Services))
+	seenProcessModules := make(map[string]struct{}, len(s.Services))
+	for i, service := range s.Services {
+		id := strings.TrimSpace(service.ID)
+		moduleID := strings.TrimSpace(service.ModuleID)
+		if id == "" || moduleID == "" {
+			return fmt.Errorf("services[%d] id and moduleId are required", i)
 		}
-		if s.Network.RequireProxy && mode != "restricted" {
-			return fmt.Errorf("requireProxy requires network mode restricted")
+		if _, exists := seenServices[id]; exists {
+			return fmt.Errorf("duplicate service id %q", id)
 		}
-		if mode == "restricted" && len(s.Network.AllowedDomains) == 0 && len(s.Network.AllowedPorts) == 0 && !s.Network.RequireProxy {
-			return fmt.Errorf("restricted network mode requires an allowlist or requireProxy")
+		seenServices[id] = struct{}{}
+		kind := strings.TrimSpace(service.Kind)
+		if kind != "" && kind != "process" {
+			return fmt.Errorf("services[%d] unsupported kind %q; protocol v1 services are process-backed", i, kind)
 		}
-		for _, port := range s.Network.AllowedPorts {
-			if port < 1 || port > 65535 {
-				return fmt.Errorf("network port %d is out of range", port)
+		if _, exists := seenProcessModules[moduleID]; exists {
+			return fmt.Errorf("services[%d] reuses runtime module %q; each process service requires a distinct runtime module", i, moduleID)
+		}
+		seenProcessModules[moduleID] = struct{}{}
+	}
+	for i, service := range s.Services {
+		for _, dep := range service.DependsOn {
+			dep = strings.TrimSpace(dep)
+			if dep == "" {
+				return fmt.Errorf("services[%d] contains empty dependsOn id", i)
+			}
+			if dep == strings.TrimSpace(service.ID) {
+				return fmt.Errorf("service %q cannot depend on itself", service.ID)
+			}
+			if _, ok := seenServices[dep]; !ok {
+				return fmt.Errorf("service %q depends on unknown service %q", service.ID, dep)
 			}
 		}
 	}
-	artifacts := s.EffectiveArtifacts()
-	seenArtifacts := make(map[string]struct{}, len(artifacts))
-	for _, artifact := range artifacts {
+
+	seenChannels := make(map[string]struct{}, len(s.Channels))
+	for i, channel := range s.Channels {
+		id := strings.TrimSpace(channel.ID)
+		serviceID := strings.TrimSpace(channel.ServiceID)
+		kind := strings.TrimSpace(channel.Kind)
+		if id == "" || kind == "" {
+			return fmt.Errorf("channels[%d] id and kind are required", i)
+		}
+		if len(s.Services) > 1 && serviceID == "" {
+			return fmt.Errorf("channels[%d] serviceId is required when multiple services are declared", i)
+		}
+		if serviceID != "" && len(seenServices) > 0 {
+			if _, ok := seenServices[serviceID]; !ok {
+				return fmt.Errorf("channel %q references unknown service %q", id, serviceID)
+			}
+		}
+		switch kind {
+		case "event", "state", "log", "metric", "custom":
+		default:
+			return fmt.Errorf("channels[%d] unsupported kind %q", i, kind)
+		}
+		if _, exists := seenChannels[id]; exists {
+			return fmt.Errorf("duplicate channel id %q", id)
+		}
+		seenChannels[id] = struct{}{}
+	}
+
+	seenSinks := make(map[string]struct{}, len(s.ControlEffectSinks))
+	for i, sink := range s.ControlEffectSinks {
+		id := strings.TrimSpace(sink.ID)
+		serviceID := strings.TrimSpace(sink.ServiceID)
+		if id == "" || serviceID == "" {
+			return fmt.Errorf("controlEffectSinks[%d] id and serviceId are required", i)
+		}
+		if _, exists := seenSinks[id]; exists {
+			return fmt.Errorf("duplicate control effect sink id %q", id)
+		}
+		seenSinks[id] = struct{}{}
+		if len(seenServices) > 0 {
+			if _, ok := seenServices[serviceID]; !ok {
+				return fmt.Errorf("control effect sink %q references unknown service %q", id, serviceID)
+			}
+		}
+	}
+
+	if s.Network != nil {
+		mode := strings.ToLower(strings.TrimSpace(s.Network.Mode))
+		if mode == "" {
+			mode = "none"
+		}
+		switch mode {
+		case "none", "loopback", "unrestricted":
+		default:
+			return fmt.Errorf("unsupported network mode %q", s.Network.Mode)
+		}
+	}
+
+	seenArtifacts := make(map[string]struct{}, len(s.Artifacts))
+	for _, artifact := range s.Artifacts {
 		id := strings.TrimSpace(artifact.ID)
-		target := strings.TrimSpace(artifact.EffectiveTarget())
+		target := strings.TrimSpace(artifact.Target)
 		if id == "" || strings.TrimSpace(artifact.Type) == "" || strings.TrimSpace(artifact.Source) == "" || target == "" {
 			return fmt.Errorf("artifact id, type, source and target are required")
 		}

@@ -24,15 +24,14 @@ type HelloConfiguration struct {
 	SupportedProtocols []string
 	Capabilities       []string
 	RPCNamespaces      []string
-	Services           []ServiceHelloDescriptor
+	Channels           []ChannelHelloDescriptor
 	Sinks              []SinkHelloDescriptor
 	SDK                *SDKInfo
 	Metadata           map[string]json.RawMessage
 }
 
-type ServiceHelloDescriptor struct {
-	ServiceID    string   `json:"serviceId"`
-	Capabilities []string `json:"capabilities,omitempty"`
+type ChannelHelloDescriptor struct {
+	ID string `json:"id"`
 }
 
 type SinkHelloDescriptor struct {
@@ -62,13 +61,13 @@ type handlerTask struct {
 }
 
 type Runner struct {
-	client       *Client
-	config       RunnerConfig
-	services     map[string]*HandlerRegistry
-	running      bool
-	workerSize   int
-	workerSem    chan struct{}
-	workerWg     sync.WaitGroup
+	client     *Client
+	config     RunnerConfig
+	services   map[string]*HandlerRegistry
+	running    bool
+	workerSize int
+	workerSem  chan struct{}
+	workerWg   sync.WaitGroup
 }
 
 func NewRunner(client *Client, config RunnerConfig) *Runner {
@@ -105,8 +104,8 @@ func (r *Runner) performHandshake(ctx context.Context) (*HelloResponse, error) {
 		"rpcNamespaces":      r.config.Hello.RPCNamespaces,
 	}
 
-	if len(r.config.Hello.Services) > 0 {
-		helloReq["services"] = r.config.Hello.Services
+	if len(r.config.Hello.Channels) > 0 {
+		helloReq["channels"] = r.config.Hello.Channels
 	}
 	if len(r.config.Hello.Sinks) > 0 {
 		helloReq["sinks"] = r.config.Hello.Sinks
@@ -159,9 +158,10 @@ func (r *Runner) performHandshake(ctx context.Context) (*HelloResponse, error) {
 }
 
 type HelloResponse struct {
-	Protocol      string            `json:"protocol"`
-	Capabilities  []string          `json:"capabilities"`
-	RPCNamespaces []string          `json:"rpcNamespaces,omitempty"`
+	Protocol      string                     `json:"protocol"`
+	Capabilities  []string                   `json:"capabilities"`
+	RPCNamespaces []string                   `json:"rpcNamespaces,omitempty"`
+	Channels      []string                   `json:"channels,omitempty"`
 	Metadata      map[string]json.RawMessage `json:"metadata,omitempty"`
 }
 
@@ -183,6 +183,37 @@ func (r *HandlerRegistry) RegisterRequest(method string, handler RequestHandler)
 
 func (r *HandlerRegistry) RegisterNotification(method string, handler NotificationHandler) {
 	r.notificationHandlers[method] = handler
+}
+
+// MergeFrom merges handlers from another registry into this registry. Request
+// methods must be unique. Notification handlers with the same method are
+// chained in registration order so a single process-backed service can host
+// multiple logical namespaces without pretending to be multiple services.
+func (r *HandlerRegistry) MergeFrom(other *HandlerRegistry) error {
+	if other == nil || other == r {
+		return nil
+	}
+	for method, handler := range other.requestHandlers {
+		if _, exists := r.requestHandlers[method]; exists {
+			return fmt.Errorf("duplicate request handler: %s", method)
+		}
+		r.requestHandlers[method] = handler
+	}
+	for method, handler := range other.notificationHandlers {
+		if existing, exists := r.notificationHandlers[method]; exists {
+			first := existing
+			second := handler
+			r.notificationHandlers[method] = func(ctx context.Context, notification protocol.Envelope) error {
+				if err := first(ctx, notification); err != nil {
+					return err
+				}
+				return second(ctx, notification)
+			}
+			continue
+		}
+		r.notificationHandlers[method] = handler
+	}
+	return nil
 }
 
 func (r *HandlerRegistry) HandleRequest(ctx context.Context, client *Client, request protocol.Envelope) {

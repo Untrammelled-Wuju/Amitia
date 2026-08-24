@@ -533,16 +533,16 @@ func TestNoGameSpecificFields(t *testing.T) {
 func TestReservedNamespaces(t *testing.T) {
 	expectedReserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control."}
 	tests := map[string]bool{
-		"host.runtime.health":   true,
-		"plugin.custom.action":  true,
-		"runtime.state.update":  true,
-		"service.register":      true,
-		"channel.create":        true,
-		"control.stop":          true,
-		"minecraft.agent.goal":  false,
-		"factorio.entity.move":  false,
-		"terraria.world.load":   false,
-		"myplugin.custom.test":  false,
+		"host.runtime.health":  true,
+		"plugin.custom.action": true,
+		"runtime.state.update": true,
+		"service.register":     true,
+		"channel.create":       true,
+		"control.stop":         true,
+		"minecraft.agent.goal": false,
+		"factorio.entity.move": false,
+		"terraria.world.load":  false,
+		"myplugin.custom.test": false,
 	}
 
 	for method, expected := range tests {
@@ -681,19 +681,11 @@ func TestValidateKnownCapabilities(t *testing.T) {
 	}
 }
 
-func TestValidateCustomCapability(t *testing.T) {
-	customCaps := []Capability{
-		"minecraft.pathfinding",
-		"vendor.experimental_ai",
-		"factorio.logistics",
-		"terraria.crafting",
-	}
-	for _, cap := range customCaps {
-		t.Run(string(cap), func(t *testing.T) {
-			if err := ValidateCapability(cap); err != nil {
-				t.Fatalf("ValidateCapability(%q) failed: %v", cap, err)
-			}
-		})
+func TestRejectGameToolCapabilityAsHostFeature(t *testing.T) {
+	for _, cap := range []Capability{"minecraft.pathfinding", "vendor.experimental_ai", "factorio.logistics", "terraria.crafting"} {
+		if err := ValidateCapability(cap); err == nil {
+			t.Fatalf("game/tool capability %q must not validate as a GameHost feature", cap)
+		}
 	}
 }
 
@@ -872,9 +864,9 @@ func TestDescriptorRoundTrip(t *testing.T) {
 				Capabilities: []Capability{CapabilityCustomRPC, CapabilityStateStreaming},
 			},
 			{
-				ID:       "game-bridge",
-				Kind:     ServiceKindExternal,
-				Required: false,
+				ID:        "game-bridge",
+				Kind:      ServiceKindExternal,
+				Required:  false,
 				DependsOn: []ServiceID{"agent"},
 			},
 		},
@@ -1031,14 +1023,14 @@ func TestPluginSchemaFindChannel(t *testing.T) {
 
 func TestPluginSchemaHasCapability(t *testing.T) {
 	ps := PluginSchema{
-		Capabilities: []Capability{CapabilityCustomRPC, CapabilityStateStreaming, "minecraft.pathfinding"},
+		Capabilities: []Capability{CapabilityCustomRPC, CapabilityStateStreaming, CapabilityEventStreaming},
 	}
 
 	if !ps.HasCapability(CapabilityCustomRPC) {
 		t.Fatal("should have capability 'custom_rpc'")
 	}
-	if !ps.HasCapability("minecraft.pathfinding") {
-		t.Fatal("should have capability 'minecraft.pathfinding'")
+	if !ps.HasCapability(CapabilityEventStreaming) {
+		t.Fatal("should have host feature 'event_streaming'")
 	}
 	if ps.HasCapability("vendor.unknown") {
 		t.Fatal("should not have capability 'vendor.unknown'")

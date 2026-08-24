@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, ChannelDescriptor, ServiceDescriptor } from './protocol';
+import { PROTOCOL_VERSION, ChannelDescriptor, ServiceDescriptor, HostFeature } from './protocol';
 
 const MAX_ID_LENGTH = 256;
 
@@ -112,14 +112,15 @@ export function validateChannel(channel: ChannelDescriptor): string[] {
 export function validateCapability(capabilities: string[]): string[] {
   const errors: string[] = [];
   const seen = new Set<string>();
+  const known = new Set<string>(Object.values(HostFeature));
 
   for (const cap of capabilities) {
-    if (!cap) {
-      errors.push('capability must not be empty');
+    if (!known.has(cap)) {
+      errors.push(`unknown host feature '${cap}'`);
       continue;
     }
     if (seen.has(cap)) {
-      errors.push(`duplicate capability '${cap}'`);
+      errors.push(`duplicate host feature '${cap}'`);
     }
     seen.add(cap);
   }
