@@ -185,11 +185,9 @@ func TestCapabilityConformance(t *testing.T) {
 		}
 	}
 
-	customCaps := []string{"minecraft.pathfinding", "vendor.agent"}
-	for _, cap := range customCaps {
-		data := []byte(`"` + cap + `"`)
-		if err := validator.Validate(data); err != nil {
-			t.Errorf("custom capability %s failed: %v", cap, err)
+	for _, cap := range []string{"minecraft.pathfinding", "vendor.agent"} {
+		if err := validator.Validate([]byte(`"` + cap + `"`)); err == nil {
+			t.Errorf("game/tool capability %s must not validate as a GameHost feature", cap)
 		}
 	}
 }
@@ -198,8 +196,8 @@ func TestCustomCapabilityConformance(t *testing.T) {
 	validator := CapabilityValidator{}
 
 	data := []byte(`"minecraft.pathfinding"`)
-	if err := validator.Validate(data); err != nil {
-		t.Errorf("custom capability should be valid: %v", err)
+	if err := validator.Validate(data); err == nil {
+		t.Error("game/tool capability must not validate as a host feature")
 	}
 
 	if protocol.IsKnownCapability("minecraft.pathfinding") {
@@ -250,10 +248,10 @@ func TestGoGeneratedFixture(t *testing.T) {
 	validator := EnvelopeValidator{}
 
 	fixtures := map[string][]byte{
-		"request":     requestData,
-		"response":    responseData,
+		"request":      requestData,
+		"response":     responseData,
 		"notification": notificationData,
-		"error":       errorData,
+		"error":        errorData,
 	}
 
 	for name, data := range fixtures {
@@ -369,7 +367,7 @@ func TestEmptyObjectPayload(t *testing.T) {
 
 func TestDuplicateServiceRejected(t *testing.T) {
 	data := []byte(`[{"id":"svc","kind":"process"},{"id":"svc","kind":"process"}]`)
-	
+
 	var svcs []protocol.ServiceDescriptor
 	if err := json.Unmarshal(data, &svcs); err != nil {
 		t.Fatalf("unmarshal failed: %v", err)

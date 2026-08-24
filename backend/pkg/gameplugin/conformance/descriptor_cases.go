@@ -201,9 +201,9 @@ func CapabilityCases() []Case {
 		data := []byte(`"` + cap + `"`)
 		cases = append(cases, NewCase(
 			"custom_capability_"+cap,
-			"Custom capability '"+cap+"' should be valid",
+			"Game/tool capability '"+cap+"' must not be a GameHost feature",
 			data,
-			true,
+			false,
 			CapabilityValidator{},
 		))
 	}

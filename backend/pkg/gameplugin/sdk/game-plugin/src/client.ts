@@ -2,7 +2,6 @@ import { Envelope } from './protocol';
 import { Transport } from './transport';
 import { SDKError, createEncodeError, createTransportError, createValidationError } from './errors';
 import { validateMessageId, validatePluginMethod, validateMethod } from './validation';
-import { v4 as uuidv4 } from 'uuid';
 
 export interface PendingRequest {
   id: string;
@@ -57,7 +56,27 @@ export interface IDGenerator {
 
 export class UUIDGenerator implements IDGenerator {
   newID(): string {
-    return uuidv4();
+    const runtimeCrypto = (globalThis as unknown as { crypto?: {
+      randomUUID?: () => string;
+      getRandomValues?: (target: Uint8Array) => Uint8Array;
+    } }).crypto;
+
+    if (runtimeCrypto?.randomUUID) {
+      return runtimeCrypto.randomUUID();
+    }
+
+    const bytes = new Uint8Array(16);
+    if (runtimeCrypto?.getRandomValues) {
+      runtimeCrypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = Math.floor(Math.random() * 256);
+      }
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
 }
 

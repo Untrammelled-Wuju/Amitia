@@ -7,7 +7,7 @@ export { Client, ClientOptions, IDGenerator, FixedIDGenerator, UUIDGenerator, wi
 export { createPluginDescriptor } from './descriptor';
 export { Plugin } from './plugin';
 export { StdioTransport, StdioTransportOptions } from './transport_stdio';
-export { Runner, RunnerConfig, HandlerRegistry, RequestHandler, NotificationHandler, HelloConfiguration, ServiceHelloDescriptor, SinkHelloDescriptor } from './runner';
+export { Runner, RunnerConfig, HandlerRegistry, RequestHandler, NotificationHandler, HelloConfiguration, ChannelHelloDescriptor, SinkHelloDescriptor } from './runner';
 export * from './event';
 export * from './state';
 export * from './channel';

@@ -18,7 +18,7 @@ type Descriptor struct {
 
 	Services     []protocol.ServiceDescriptor `json:"services,omitempty"`
 	Channels     []protocol.ChannelDescriptor `json:"channels,omitempty"`
-	Capabilities []protocol.Capability        `json:"capabilities,omitempty"`
+	Capabilities []protocol.HostFeature       `json:"capabilities,omitempty"`
 
 	Metadata map[string]json.RawMessage `json:"metadata,omitempty"`
 }

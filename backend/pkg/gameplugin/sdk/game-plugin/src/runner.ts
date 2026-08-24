@@ -1,6 +1,6 @@
 import { PROTOCOL_VERSION } from './protocol';
 import { Client } from './client';
-import { HandlerRegistry, HelloConfiguration, RunnerConfig, ServiceHelloDescriptor, SinkHelloDescriptor, HelloResponse } from './handler';
+import { HandlerRegistry, HelloConfiguration, RunnerConfig, ChannelHelloDescriptor, SinkHelloDescriptor, HelloResponse } from './handler';
 
 export class Runner {
   private client: Client;
@@ -29,8 +29,8 @@ export class Runner {
       rpcNamespaces: this.config.hello.rpcNamespaces,
     };
 
-    if (this.config.hello.services && this.config.hello.services.length > 0) {
-      helloReq.services = this.config.hello.services;
+    if (this.config.hello.channels && this.config.hello.channels.length > 0) {
+      helloReq.channels = this.config.hello.channels;
     }
     if (this.config.hello.sinks && this.config.hello.sinks.length > 0) {
       helloReq.sinks = this.config.hello.sinks;
@@ -136,5 +136,5 @@ export class Runner {
   }
 }
 
-export { HelloConfiguration, RunnerConfig, ServiceHelloDescriptor, SinkHelloDescriptor, HelloResponse } from './handler';
+export { HelloConfiguration, RunnerConfig, ChannelHelloDescriptor, SinkHelloDescriptor, HelloResponse } from './handler';
 export { HandlerRegistry, RequestHandler, NotificationHandler } from './handler';

@@ -2,33 +2,31 @@ package sdk
 
 import "github.com/u-ai/backend/pkg/gameplugin/protocol"
 
-const GameProtocolVersion = protocol.GameProtocolVersion
-const EventIDGameEvent = protocol.EventIDGameEvent
+type HostFeature = protocol.HostFeature
 
 const (
-	MethodGameSessionOpen     = protocol.MethodGameSessionOpen
-	MethodGameSessionClose    = protocol.MethodGameSessionClose
-	MethodGameSessionSnapshot = protocol.MethodGameSessionSnapshot
-	MethodGameObservationGet  = protocol.MethodGameObservationGet
-	MethodGameActionExecute   = protocol.MethodGameActionExecute
-	MethodGameGoalSet         = protocol.MethodGameGoalSet
-	MethodGameCapabilitiesGet = protocol.MethodGameCapabilitiesGet
+	HostFeatureRealtimeControl = protocol.HostFeatureRealtimeControl
+	HostFeatureStateStreaming  = protocol.HostFeatureStateStreaming
+	HostFeatureEventStreaming  = protocol.HostFeatureEventStreaming
+	HostFeatureBinaryStreaming = protocol.HostFeatureBinaryStreaming
+	HostFeatureCustomRPC       = protocol.HostFeatureCustomRPC
+	HostFeatureHostAPI         = protocol.HostFeatureHostAPI
+	HostFeatureSharedControl   = protocol.HostFeatureSharedControl
+	HostFeatureCustomUI        = protocol.HostFeatureCustomUI
+	HostFeatureMultiService    = protocol.HostFeatureMultiService
 )
 
-type GameSessionOpenRequest = protocol.GameSessionOpenRequest
-type GameSession = protocol.GameSession
-type GameSessionStatus = protocol.GameSessionStatus
-type GameLocation = protocol.GameLocation
-type GameEntity = protocol.GameEntity
-type GameInventoryItem = protocol.GameInventoryItem
-type GameInventory = protocol.GameInventory
-type GameObservation = protocol.GameObservation
-type GameEvent = protocol.GameEvent
-type GameAction = protocol.GameAction
-type GameActionStatus = protocol.GameActionStatus
-type GameActionResult = protocol.GameActionResult
-type GameGoal = protocol.GameGoal
-type GameCapability = protocol.GameCapability
-type GameCompanionArtifact = protocol.GameCompanionArtifact
+type PluginSessionOpenRequest = protocol.PluginSessionOpenRequest
+type PluginSession = protocol.PluginSession
+type PluginSessionStatus = protocol.PluginSessionStatus
+type PluginEvent = protocol.PluginEvent
+type PluginOperation = protocol.PluginOperation
+type PluginOperationStatus = protocol.PluginOperationStatus
+type PluginOperationResult = protocol.PluginOperationResult
+type PluginArtifact = protocol.PluginArtifact
+type PluginNetworkPolicy = protocol.PluginNetworkPolicy
+type PluginServiceSpec = protocol.PluginServiceSpec
+type PluginChannelSpec = protocol.PluginChannelSpec
+type PluginControlEffectSinkSpec = protocol.PluginControlEffectSinkSpec
+type PluginHostSpec = protocol.PluginHostSpec
 type GamePluginSpec = protocol.GamePluginSpec
-type GameNetworkPolicy = protocol.GameNetworkPolicy

@@ -1,66 +1,47 @@
 package protocol
 
-import (
-	"fmt"
-	"strings"
-	"unicode"
-)
+import "fmt"
 
-type Capability string
+// Capability is retained as a source-compatible name for HostFeature in the
+// transport protocol. It MUST NOT be used for AI/tool capabilities, extension
+// permissions, or runtime-engine capabilities.
+// Deprecated: use HostFeature.
+type Capability = HostFeature
 
 const (
-	CapabilityRealtimeControl Capability = "realtime_control"
-	CapabilityStateStreaming  Capability = "state_streaming"
-	CapabilityEventStreaming  Capability = "event_streaming"
-	CapabilityBinaryStreaming Capability = "binary_streaming"
-	CapabilityCustomRPC       Capability = "custom_rpc"
-	CapabilityHostAPI         Capability = "host_api"
-	CapabilitySharedControl   Capability = "shared_control"
-	CapabilityCustomUI        Capability = "custom_ui"
-	CapabilityMultiService    Capability = "multi_service"
+	CapabilityRealtimeControl = HostFeatureRealtimeControl
+	CapabilityStateStreaming  = HostFeatureStateStreaming
+	CapabilityEventStreaming  = HostFeatureEventStreaming
+	CapabilityBinaryStreaming = HostFeatureBinaryStreaming
+	CapabilityCustomRPC       = HostFeatureCustomRPC
+	CapabilityHostAPI         = HostFeatureHostAPI
+	CapabilitySharedControl   = HostFeatureSharedControl
+	CapabilityCustomUI        = HostFeatureCustomUI
+	CapabilityMultiService    = HostFeatureMultiService
 )
 
-func IsKnownCapability(cap Capability) bool {
-	switch cap {
-	case CapabilityRealtimeControl, CapabilityStateStreaming,
-		CapabilityEventStreaming, CapabilityBinaryStreaming,
-		CapabilityCustomRPC, CapabilityHostAPI,
-		CapabilitySharedControl, CapabilityCustomUI,
-		CapabilityMultiService:
-		return true
-	default:
-		return false
-	}
-}
+func IsKnownCapability(cap Capability) bool { return IsKnownHostFeature(HostFeature(cap)) }
+
+// Custom capability strings are deliberately not valid GameHost features.
+// Game-specific AI/tool capabilities belong in the Extension Kernel provider
+// registry and are opaque to GameHost.
+func IsCustomCapability(cap Capability) bool { return false }
 
 func ValidateCapability(cap Capability) error {
-	if cap == "" {
-		return fmt.Errorf("capability must not be empty")
-	}
-	const maxLength = 256
-	if len(cap) > maxLength {
-		return fmt.Errorf("capability exceeds maximum length of %d", maxLength)
-	}
-	for _, r := range string(cap) {
-		if unicode.IsControl(r) {
-			return fmt.Errorf("capability contains control character")
-		}
+	if !IsKnownHostFeature(HostFeature(cap)) {
+		return fmt.Errorf("unknown host feature %q", cap)
 	}
 	return nil
 }
 
-func IsCustomCapability(cap Capability) bool {
-	return !IsKnownCapability(cap) && strings.Contains(string(cap), ".")
-}
-
 func ValidateCapabilities(caps []Capability) error {
-	seen := make(map[Capability]bool)
+	seen := make(map[Capability]bool, len(caps))
 	for i := range caps {
 		if err := ValidateCapability(caps[i]); err != nil {
-			return fmt.Errorf("capability[%d]: %w", i, err)
+			return fmt.Errorf("hostFeatures[%d]: %w", i, err)
 		}
 		if seen[caps[i]] {
-			return fmt.Errorf("duplicate capability '%s'", caps[i])
+			return fmt.Errorf("duplicate host feature %q", caps[i])
 		}
 		seen[caps[i]] = true
 	}
