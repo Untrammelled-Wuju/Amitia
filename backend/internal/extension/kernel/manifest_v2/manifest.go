@@ -763,20 +763,30 @@ func validateGamePluginContribution(spec map[string]any, cpath string, moduleIDs
 	if err := parsed.Validate(); err != nil {
 		return fmt.Errorf("%s.spec: %w", cpath, err)
 	}
-	if !moduleIDs[parsed.RuntimeModuleID] {
-		return fmt.Errorf("game_plugin references unknown module: %s", parsed.RuntimeModuleID)
+
+	moduleRefs := make(map[string]struct{})
+	if strings.TrimSpace(parsed.RuntimeModuleID) != "" {
+		moduleRefs[strings.TrimSpace(parsed.RuntimeModuleID)] = struct{}{}
 	}
-	runtime := moduleRuntimes[parsed.RuntimeModuleID]
-	if runtime == nil {
-		return fmt.Errorf("game_plugin runtime module %s has no runtime definition", parsed.RuntimeModuleID)
+	for _, service := range parsed.Services {
+		moduleRefs[strings.TrimSpace(service.ModuleID)] = struct{}{}
 	}
-	if strings.TrimSpace(runtime.EntryPoint) == "" {
-		return fmt.Errorf("game_plugin runtime module %s requires runtime.entryPoint", parsed.RuntimeModuleID)
-	}
-	switch runtime.Type {
-	case "service", "javascript":
-	default:
-		return fmt.Errorf("game_plugin runtime module %s uses unsupported runtime type %q", parsed.RuntimeModuleID, runtime.Type)
+	for moduleID := range moduleRefs {
+		if !moduleIDs[moduleID] {
+			return fmt.Errorf("game_plugin references unknown module: %s", moduleID)
+		}
+		runtime := moduleRuntimes[moduleID]
+		if runtime == nil {
+			return fmt.Errorf("game_plugin runtime module %s has no runtime definition", moduleID)
+		}
+		if strings.TrimSpace(runtime.EntryPoint) == "" {
+			return fmt.Errorf("game_plugin runtime module %s requires runtime.entryPoint", moduleID)
+		}
+		switch runtime.Type {
+		case "service", "javascript":
+		default:
+			return fmt.Errorf("game_plugin runtime module %s uses unsupported runtime type %q", moduleID, runtime.Type)
+		}
 	}
 	return nil
 }

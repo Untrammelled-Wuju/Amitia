@@ -8,111 +8,48 @@ import (
 const (
 	GameHostExtensionID = domain.ExtensionID("com.amitia.builtin.game-host")
 	GameHostModuleID    = domain.ModuleID("game-host-runtime")
-	GameHostProviderID  = capability.ProviderID("com.amitia.builtin.game-host.provider")
-
-	GameHostCapSessionManage   capability.CapabilityID = "game.session.manage"
-	GameHostCapSessionTransfer capability.CapabilityID = "game.session.transfer"
-	GameHostCapAssetManage     capability.CapabilityID = "game.asset.manage"
-	GameHostCapPluginManage    capability.CapabilityID = "game.plugin.manage"
-	GameHostCapScriptExecute   capability.CapabilityID = "game.script.execute"
-	GameHostCapDeviceManage    capability.CapabilityID = "game.device.manage"
 )
 
-// BuildGameHostExtension constructs a Built-in Extension definition for the Game Host.
-//
-//	Extension ID: com.amitia.builtin.game-host
-//	Module: game-host-runtime
-//	Provider Capabilities: game.session.manage, game.session.transfer,
-//	                       game.asset.manage, game.plugin.manage,
-//	                       game.script.execute, game.device.manage
+// BuildGameHostExtension registers only the built-in plugin-host runtime. It
+// intentionally exposes no game-specific Agent capabilities: concrete game
+// packages own detection, state, control, tooling and any companion logic.
 func BuildGameHostExtension(version string) Definition {
 	ver := parseBuiltinVersion(version)
+	_ = ver
 
 	extDef := domain.ExtensionDefinition{
 		ID:   GameHostExtensionID,
-		Name: domain.LocalizedText{Default: "Game Host"},
+		Name: domain.LocalizedText{Default: "Game Plugin Host"},
 		Description: domain.LocalizedText{
-			Default: "Provides game session management, asset management, plugin hosting, script execution, and device management for game runtimes.",
+			Default: "Provides the isolated runtime, IPC, lifecycle and permission substrate used by installed game plugins.",
 		},
-		Version:         ver,
+		Version:         parseBuiltinVersion(version),
 		ManifestVersion: 1,
 		Domain:          domain.ExtensionDomainGame,
 		Placement:       domain.ExtensionPlacementDevice,
-		Publisher: domain.PublisherReference{
-			PublisherID: "com.amitia",
-			DisplayName: "Amitia",
-			TrustLevel:  "system",
-		},
-		Package: domain.PackageReference{
-			PackageID:       "builtin-game-host",
-			ManifestVersion: 1,
-		},
-		Modules: []domain.ModuleDefinition{
-			{
-				ID:          GameHostModuleID,
-				ExtensionID: GameHostExtensionID,
-				Name:        domain.LocalizedText{Default: "Game Host Runtime"},
-				Description: domain.LocalizedText{
-					Default: "Built-in module providing game session, asset, plugin, script, and device management.",
-				},
-				Type:    domain.ModuleTypeBuiltin,
-				Version: version,
-				Runtime: &domain.RuntimeDefinition{
-					Type:        domain.RuntimeTypeBuiltin,
-					EntryPoint:  "game.session.manage",
-					WorkerCount: 2,
-				},
-				Contributions: buildGameHostContributions(GameHostExtensionID, GameHostModuleID),
-				ProvidedCapabilities: []domain.ProvidedCapability{
-					{ID: string(GameHostCapSessionManage), Version: ver.String()},
-					{ID: string(GameHostCapSessionTransfer), Version: ver.String()},
-					{ID: string(GameHostCapAssetManage), Version: ver.String()},
-					{ID: string(GameHostCapPluginManage), Version: ver.String()},
-					{ID: string(GameHostCapScriptExecute), Version: ver.String()},
-					{ID: string(GameHostCapDeviceManage), Version: ver.String()},
-				},
-				Provider: &domain.ProviderMetadata{
-					ID:       string(GameHostProviderID),
-					Priority: 80,
-					Labels: map[string]string{
-						"component": "game-host",
-					},
-				},
-				Placement: domain.ModulePlacementDevice,
-				DeviceRequirements: &domain.DeviceRequirements{
-					Platforms: []string{"windows", "linux", "darwin"},
-				},
-				Compatibility: domain.ModuleCompatibility{
-					Platforms: []string{"windows", "linux", "darwin"},
-				},
-				Policies: domain.ModulePolicies{
-					NetworkAccess:    true,
-					FileSystemAccess: true,
-				},
-			},
-		},
-		Compatibility: domain.ExtensionCompatibility{
-			Platforms: []string{"windows", "linux", "darwin"},
-		},
-		Policies: domain.ExtensionPolicies{
-			NetworkAccess: true,
-		},
+		Publisher:       domain.PublisherReference{PublisherID: "com.amitia", DisplayName: "Amitia", TrustLevel: "system"},
+		Package:         domain.PackageReference{PackageID: "builtin-game-host", ManifestVersion: 1},
+		Modules: []domain.ModuleDefinition{{
+			ID: GameHostModuleID, ExtensionID: GameHostExtensionID,
+			Name:        domain.LocalizedText{Default: "Game Plugin Host Runtime"},
+			Description: domain.LocalizedText{Default: "Built-in infrastructure for hosting independent game plugins."},
+			Type:        domain.ModuleTypeBuiltin, Version: version,
+			Runtime:            &domain.RuntimeDefinition{Type: domain.RuntimeTypeBuiltin, EntryPoint: "gamehost.runtime", WorkerCount: 2},
+			Contributions:      buildGameHostContributions(GameHostExtensionID, GameHostModuleID),
+			Placement:          domain.ModulePlacementDevice,
+			DeviceRequirements: &domain.DeviceRequirements{Platforms: []string{"windows", "linux", "darwin"}},
+			Compatibility:      domain.ModuleCompatibility{Platforms: []string{"windows", "linux", "darwin"}},
+			Policies:           domain.ModulePolicies{NetworkAccess: false, FileSystemAccess: false},
+		}},
+		Compatibility: domain.ExtensionCompatibility{Platforms: []string{"windows", "linux", "darwin"}},
+		Policies:      domain.ExtensionPolicies{NetworkAccess: false},
 	}
-
-	return Definition{
-		Extension:         extDef,
-		SystemManaged:     true,
-		Required:          false,
-		DisableAllowed:    true,
-		BootstrapRevision: 1,
-	}
+	return Definition{Extension: extDef, SystemManaged: true, Required: false, DisableAllowed: true, BootstrapRevision: 2}
 }
 
 func buildGameHostContributions(extID domain.ExtensionID, modID domain.ModuleID) []domain.ContributionDefinition {
 	_ = extID
 	_ = modID
-	// GameHost is host infrastructure, not a game_plugin contribution. Concrete games
-	// (Minecraft, Stardew Valley, etc.) are installed as independent .amitiax packages.
 	return nil
 }
 

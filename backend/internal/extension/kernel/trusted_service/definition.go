@@ -345,5 +345,7 @@ const (
 )
 
 func (t TrustLevel) AllowedForService() bool {
-	return t == TrustLevelOfficial || t == TrustLevelTrusted
+	return t == TrustLevelOfficial || t == TrustLevelTrusted || t == TrustLevelCommunity
 }
+
+func (t TrustLevel) RequiresFullSandbox() bool { return t == TrustLevelCommunity }

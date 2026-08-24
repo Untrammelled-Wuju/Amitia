@@ -314,7 +314,7 @@ func (b *EnvBuilder) IsAllowed(key string) bool {
 }
 
 func ValidateTrust(def *ServiceRuntimeDefinition, publisherTrust TrustLevel) error {
-	if publisherTrust == TrustLevelUnknown || publisherTrust == TrustLevelCommunity {
+	if publisherTrust == TrustLevelUnknown {
 		return fmt.Errorf("%w: %s", ErrUnknownPublisher, publisherTrust)
 	}
 	if !publisherTrust.AllowedForService() {
