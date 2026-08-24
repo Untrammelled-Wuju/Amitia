@@ -8,7 +8,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$root = Split-Path -Parent $PSCommandPath
+$root = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $mobile = Join-Path $root 'mobile_app'
 $pubspec = Join-Path $mobile 'pubspec.yaml'
 $localProperties = Join-Path $mobile 'android\local.properties'
