@@ -110,7 +110,7 @@ func detectIsolation() PlatformIsolationReport {
 	return PlatformIsolationReport{
 		Platform:             "windows",
 		ProcessTreeIsolation: true,
-		MemoryLimit:          true,
+		MemoryLimit:          false,
 		CPULimit:             false,
 		FilesystemIsolation:  false,
 		NetworkIsolation:     false,
@@ -119,7 +119,7 @@ func detectIsolation() PlatformIsolationReport {
 		AppContainer:         false,
 		SandboxProfile:       false,
 		Limitations: []string{
-			"CPU rate limit requires Job Object CPU rate control (not implemented in first version)",
+			"Job Object memory and CPU resource limits are not enforced yet",
 			"Filesystem isolation requires Windows AppContainer or Sandbox (not implemented)",
 			"Network isolation requires Windows Firewall integration (not implemented)",
 		},
