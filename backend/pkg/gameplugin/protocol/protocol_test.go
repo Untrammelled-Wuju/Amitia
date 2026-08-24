@@ -527,7 +527,7 @@ func TestOpaquePluginPayloadIsNotInterpretedByHostProtocol(t *testing.T) {
 }
 
 func TestReservedNamespaces(t *testing.T) {
-	expectedReserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control.", "emergency.", "secret.", "artifact."}
+	expectedReserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control.", "emergency.", "secret.", "artifact.", "permission."}
 	tests := map[string]bool{
 		"host.runtime.health":     true,
 		"plugin.custom.action":    true,
@@ -536,6 +536,7 @@ func TestReservedNamespaces(t *testing.T) {
 		"channel.create":          true,
 		"control.stop":            true,
 		"artifact.deploy":         true,
+		"permission.check":        true,
 		"example.game.goal":       false,
 		"vendor.game.entity.move": false,
 		"vendor.other.world.load": false,
@@ -577,7 +578,7 @@ func TestValidateServiceDescriptor(t *testing.T) {
 			name: "valid game-bridge",
 			svc: ServiceDescriptor{
 				ID:   "game-bridge",
-				Kind: ServiceKindExternal,
+				Kind: ServiceKindProcess,
 			},
 			wantErr: false,
 		},
@@ -601,7 +602,7 @@ func TestValidateServiceDescriptor(t *testing.T) {
 			name: "valid service_1",
 			svc: ServiceDescriptor{
 				ID:   "service_1",
-				Kind: ServiceKindExternal,
+				Kind: ServiceKindProcess,
 			},
 			wantErr: false,
 		},
@@ -618,6 +619,14 @@ func TestValidateServiceDescriptor(t *testing.T) {
 			svc: ServiceDescriptor{
 				ID:   "test-service",
 				Kind: "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "external is not part of protocol v1",
+			svc: ServiceDescriptor{
+				ID:   "external-service",
+				Kind: "external",
 			},
 			wantErr: true,
 		},
@@ -699,7 +708,6 @@ func TestValidateChannelDescriptor(t *testing.T) {
 		{ID: "state-channel", Kind: ChannelKindState},
 		{ID: "log-channel", Kind: ChannelKindLog},
 		{ID: "metric-channel", Kind: ChannelKindMetric},
-		{ID: "binary-channel", Kind: ChannelKindBinary},
 		{ID: "custom-channel", Kind: ChannelKindCustom},
 	}
 	for i := range channels {
@@ -708,6 +716,10 @@ func TestValidateChannelDescriptor(t *testing.T) {
 				t.Fatalf("ChannelDescriptor.Validate() failed for kind '%s': %v", channels[i].Kind, err)
 			}
 		})
+	}
+
+	if err := (ChannelDescriptor{ID: "binary-channel", Kind: "binary"}).Validate(); err == nil {
+		t.Fatal("binary channels must be rejected by amitia-game-host/1")
 	}
 
 	normalHint := FrequencyHintNormal
@@ -869,7 +881,7 @@ func TestDescriptorRoundTrip(t *testing.T) {
 			},
 			{
 				ID:        "game-bridge",
-				Kind:      ServiceKindExternal,
+				Kind:      ServiceKindProcess,
 				Required:  false,
 				DependsOn: []ServiceID{"agent"},
 			},
@@ -927,7 +939,7 @@ func TestDescriptorRoundTrip(t *testing.T) {
 func TestServicesDuplicateValidation(t *testing.T) {
 	services := []ServiceDescriptor{
 		{ID: "svc-1", Kind: ServiceKindProcess},
-		{ID: "svc-2", Kind: ServiceKindExternal},
+		{ID: "svc-2", Kind: ServiceKindProcess},
 		{ID: "svc-1", Kind: ServiceKindProcess},
 	}
 	if err := ValidateServices(services); err == nil {
@@ -985,7 +997,7 @@ func TestPluginSchemaFindService(t *testing.T) {
 	ps := PluginSchema{
 		Services: []ServiceDescriptor{
 			{ID: "svc-1", Kind: ServiceKindProcess},
-			{ID: "svc-2", Kind: ServiceKindExternal},
+			{ID: "svc-2", Kind: ServiceKindProcess},
 		},
 	}
 

@@ -11,14 +11,13 @@ type ServiceID string
 type ServiceKind string
 
 const (
-	ServiceKindProcess  ServiceKind = "process"
-	ServiceKindExternal ServiceKind = "external"
+	ServiceKindProcess ServiceKind = "process"
 )
 
 type ServiceDescriptor struct {
-	ID       ServiceID   `json:"id"`
-	Name     string      `json:"name,omitempty"`
-	Kind     ServiceKind `json:"kind"`
+	ID   ServiceID   `json:"id"`
+	Name string      `json:"name,omitempty"`
+	Kind ServiceKind `json:"kind"`
 
 	Required bool `json:"required,omitempty"`
 
@@ -50,7 +49,7 @@ func ValidateServiceID(id ServiceID) error {
 
 func ValidateServiceKind(kind ServiceKind) error {
 	switch kind {
-	case ServiceKindProcess, ServiceKindExternal:
+	case ServiceKindProcess:
 		return nil
 	default:
 		return fmt.Errorf("invalid service kind: %s", kind)

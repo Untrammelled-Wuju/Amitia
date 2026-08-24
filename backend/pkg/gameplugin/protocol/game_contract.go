@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"sort"
 	"strings"
 	"time"
 )
@@ -166,7 +167,7 @@ type PluginHostSpec struct {
 	Channels           []PluginChannelSpec           `json:"channels,omitempty"`
 	ControlEffectSinks []PluginControlEffectSinkSpec `json:"controlEffectSinks,omitempty"`
 	Artifacts          []PluginArtifact              `json:"artifacts,omitempty"`
-	Network            *PluginNetworkPolicy          `json:"network,omitempty"`
+	Network            *PluginNetworkPolicy          `json:"network"`
 	Metadata           map[string]any                `json:"metadata,omitempty"`
 }
 
@@ -238,7 +239,15 @@ func (s PluginHostSpec) Validate() error {
 		}
 		seenProcessModules[moduleID] = struct{}{}
 	}
+	if len(s.Services) > 0 && s.RuntimeModuleID != "" {
+		if _, ok := seenProcessModules[s.RuntimeModuleID]; !ok {
+			return fmt.Errorf("runtimeModuleId %q must reference one of services[].moduleId when services are declared", s.RuntimeModuleID)
+		}
+	}
+	dependencyGraph := make(map[string][]string, len(s.Services))
 	for i, service := range s.Services {
+		seenDeps := make(map[string]struct{}, len(service.DependsOn))
+		serviceID := strings.TrimSpace(service.ID)
 		for _, dep := range service.DependsOn {
 			dep = strings.TrimSpace(dep)
 			if dep == "" {
@@ -250,7 +259,15 @@ func (s PluginHostSpec) Validate() error {
 			if _, ok := seenServices[dep]; !ok {
 				return fmt.Errorf("service %q depends on unknown service %q", service.ID, dep)
 			}
+			if _, duplicate := seenDeps[dep]; duplicate {
+				return fmt.Errorf("service %q contains duplicate dependency %q", service.ID, dep)
+			}
+			seenDeps[dep] = struct{}{}
+			dependencyGraph[serviceID] = append(dependencyGraph[serviceID], dep)
 		}
+	}
+	if cycle := findServiceDependencyCycle(dependencyGraph); len(cycle) > 0 {
+		return fmt.Errorf("service dependency cycle detected: %s", strings.Join(cycle, " -> "))
 	}
 
 	seenChannels := make(map[string]struct{}, len(s.Channels))
@@ -311,16 +328,17 @@ func (s PluginHostSpec) Validate() error {
 		}
 	}
 
-	if s.Network != nil {
-		mode := strings.ToLower(strings.TrimSpace(s.Network.Mode))
-		if mode == "" {
-			mode = "none"
-		}
-		switch mode {
-		case "none", "loopback", "unrestricted":
-		default:
-			return fmt.Errorf("unsupported network mode %q", s.Network.Mode)
-		}
+	if s.Network == nil {
+		return fmt.Errorf("network policy is required; choose none, loopback, or unrestricted explicitly")
+	}
+	mode := strings.ToLower(strings.TrimSpace(s.Network.Mode))
+	if mode == "" {
+		return fmt.Errorf("network.mode is required")
+	}
+	switch mode {
+	case "none", "loopback", "unrestricted":
+	default:
+		return fmt.Errorf("unsupported network mode %q", s.Network.Mode)
 	}
 
 	seenArtifacts := make(map[string]struct{}, len(s.Artifacts))
@@ -345,6 +363,53 @@ func (s PluginHostSpec) Validate() error {
 		}
 		if !safePackageRelativePath(target) {
 			return fmt.Errorf("artifact %q target must be a safe target-relative path", id)
+		}
+	}
+	return nil
+}
+
+func findServiceDependencyCycle(graph map[string][]string) []string {
+	const (
+		unvisited = iota
+		visiting
+		visited
+	)
+	state := make(map[string]int, len(graph))
+	stack := make([]string, 0, len(graph))
+	stackIndex := make(map[string]int, len(graph))
+	keys := make([]string, 0, len(graph))
+	for id := range graph {
+		keys = append(keys, id)
+	}
+	sort.Strings(keys)
+	var visit func(string) []string
+	visit = func(id string) []string {
+		switch state[id] {
+		case visited:
+			return nil
+		case visiting:
+			start := stackIndex[id]
+			cycle := append([]string(nil), stack[start:]...)
+			return append(cycle, id)
+		}
+		state[id] = visiting
+		stackIndex[id] = len(stack)
+		stack = append(stack, id)
+		deps := append([]string(nil), graph[id]...)
+		sort.Strings(deps)
+		for _, dep := range deps {
+			if cycle := visit(dep); len(cycle) > 0 {
+				return cycle
+			}
+		}
+		stack = stack[:len(stack)-1]
+		delete(stackIndex, id)
+		state[id] = visited
+		return nil
+	}
+	for _, id := range keys {
+		if cycle := visit(id); len(cycle) > 0 {
+			return cycle
 		}
 	}
 	return nil

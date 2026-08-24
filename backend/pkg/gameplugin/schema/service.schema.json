@@ -4,7 +4,10 @@
   "title": "Game Host Service Descriptor",
   "description": "Schema for amitia-game-host/1 Service Descriptor. Public protocol for third-party game plugin implementations.",
   "type": "object",
-  "required": ["id", "kind"],
+  "required": [
+    "id",
+    "kind"
+  ],
   "properties": {
     "id": {
       "type": "string",
@@ -12,7 +15,11 @@
       "minLength": 1,
       "maxLength": 256,
       "pattern": "^[^\\s\\x00-\\x1f]+$",
-      "examples": ["agent-service", "game-bridge", "vision-service"]
+      "examples": [
+        "agent-service",
+        "game-bridge",
+        "vision-service"
+      ]
     },
     "name": {
       "type": "string",
@@ -21,8 +28,10 @@
     },
     "kind": {
       "type": "string",
-      "enum": ["process", "external"],
-      "description": "Service execution model."
+      "enum": [
+        "process"
+      ],
+      "description": "Service execution model. amitia-game-host/1 exposes process-backed services only."
     },
     "required": {
       "type": "boolean",
@@ -52,9 +61,7 @@
     "metadata": {
       "type": "object",
       "description": "Extension metadata. Core logic must not depend on undefined fields.",
-      "additionalProperties": {
-        "type": "object"
-      }
+      "additionalProperties": true
     }
   },
   "additionalProperties": false

@@ -9,13 +9,18 @@
       "name": "Agent Service",
       "kind": "process",
       "required": true,
-      "capabilities": ["custom_rpc", "state_streaming"]
+      "capabilities": [
+        "custom_rpc",
+        "state_streaming"
+      ]
     },
     {
       "id": "game-bridge",
-      "kind": "external",
+      "kind": "process",
       "required": false,
-      "dependsOn": ["agent"]
+      "dependsOn": [
+        "agent"
+      ]
     }
   ],
   "channels": [

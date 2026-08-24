@@ -290,6 +290,7 @@ func PluginMethodValidationCases() []Case {
 		"service.register",
 		"channel.create",
 		"control.stop",
+		"permission.check",
 	}
 	for _, m := range reservedMethods {
 		data := []byte(`{"protocol":"amitia-game-host/1","type":"request","id":"r1","method":"` + m + `"}`)

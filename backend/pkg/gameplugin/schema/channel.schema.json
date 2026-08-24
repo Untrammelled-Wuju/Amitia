@@ -28,10 +28,9 @@
         "state",
         "log",
         "metric",
-        "binary",
         "custom"
       ],
-      "description": "Channel data type classification."
+      "description": "Channel data type classification. Binary streaming is not part of amitia-game-host/1."
     },
     "schemaId": {
       "type": "string",
@@ -62,9 +61,7 @@
     "metadata": {
       "type": "object",
       "description": "Extension metadata. Core logic must not depend on undefined fields.",
-      "additionalProperties": {
-        "type": "object"
-      }
+      "additionalProperties": true
     }
   },
   "additionalProperties": false

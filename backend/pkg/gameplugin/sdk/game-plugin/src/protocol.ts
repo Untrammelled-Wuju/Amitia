@@ -33,11 +33,10 @@ export interface Envelope {
   metadata?: Record<string, unknown>;
 }
 
-export type ServiceKind = 'process' | 'external';
+export type ServiceKind = 'process';
 
 export const ServiceKind = {
   PROCESS: 'process' as ServiceKind,
-  EXTERNAL: 'external' as ServiceKind,
 };
 
 export interface ServiceDescriptor {
@@ -50,14 +49,13 @@ export interface ServiceDescriptor {
   metadata?: Record<string, unknown>;
 }
 
-export type ChannelKind = 'event' | 'state' | 'log' | 'metric' | 'binary' | 'custom';
+export type ChannelKind = 'event' | 'state' | 'log' | 'metric' | 'custom';
 
 export const ChannelKind = {
   EVENT: 'event' as ChannelKind,
   STATE: 'state' as ChannelKind,
   LOG: 'log' as ChannelKind,
   METRIC: 'metric' as ChannelKind,
-  BINARY: 'binary' as ChannelKind,
   CUSTOM: 'custom' as ChannelKind,
 };
 

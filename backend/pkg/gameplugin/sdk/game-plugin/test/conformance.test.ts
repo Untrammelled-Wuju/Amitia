@@ -156,8 +156,8 @@ describe('TypeScript Conformance Suite', () => {
       expect(errors).toHaveLength(0);
     });
 
-    test('all service kinds should be valid', () => {
-      const kinds = ['process', 'external'];
+    test('protocol v1 service kinds should be valid', () => {
+      const kinds = ['process'];
       for (const kind of kinds) {
         const svc: ServiceDescriptor = { id: `svc-${kind}`, kind: kind as any };
         const errors = validateServices([svc]);
@@ -165,6 +165,12 @@ describe('TypeScript Conformance Suite', () => {
       }
     });
 
+
+    test('external service kind should be rejected by protocol v1', () => {
+      const svc: ServiceDescriptor = { id: 'svc-external', kind: 'external' as any };
+      const errors = validateServices([svc]);
+      expect(errors.length).toBeGreaterThan(0);
+    });
     test('invalid service kind should be rejected', () => {
       const svc: ServiceDescriptor = { id: 'svc-bad', kind: 'invalid' as any };
       const errors = validateServices([svc]);
@@ -197,8 +203,8 @@ describe('TypeScript Conformance Suite', () => {
       expect(errors).toHaveLength(0);
     });
 
-    test('all channel kinds should be valid', () => {
-      const kinds = ['event', 'state', 'log', 'metric', 'binary', 'custom'];
+    test('protocol v1 channel kinds should be valid', () => {
+      const kinds = ['event', 'state', 'log', 'metric', 'custom'];
       for (const kind of kinds) {
         const ch: ChannelDescriptor = { id: `ch-${kind}`, kind: kind as any };
         const errors = validateChannel(ch);
@@ -206,6 +212,12 @@ describe('TypeScript Conformance Suite', () => {
       }
     });
 
+
+    test('binary channel kind should be rejected by protocol v1', () => {
+      const ch: ChannelDescriptor = { id: 'ch-binary', kind: 'binary' as any };
+      const errors = validateChannel(ch);
+      expect(errors.length).toBeGreaterThan(0);
+    });
     test('invalid channel kind should be rejected', () => {
       const ch: ChannelDescriptor = { id: 'ch-bad', kind: 'invalid' as any };
       const errors = validateChannel(ch);
@@ -441,6 +453,7 @@ describe('Cross-Language Wire Compatibility', () => {
         'plugin.custom.action',
         'runtime.state.update',
         'service.register',
+        'permission.check',
       ];
 
       for (const method of reservedMethods) {
