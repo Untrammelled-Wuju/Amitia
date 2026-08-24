@@ -3,7 +3,7 @@
     <header class="page-head">
       <div class="page-copy">
 <h1>游戏模式</h1>
-        <p>连接游戏后，让 Amitia 感知游戏状态、接管控制并执行任务。</p>
+        <p>通过游戏插件连接目标游戏。GameHost 只负责插件运行、权限与连接生命周期，具体感知和控制能力由插件提供。</p>
       </div>
       <div class="head-actions">
         <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
@@ -23,17 +23,17 @@
         <div class="current-game-meta">
           <span class="status-pill" :class="activeRuntime?.connected ? 'online' : 'offline'">
             <span class="status-dot"></span>
-            {{ activeRuntime?.connected ? "游戏已连接" : "等待游戏连接" }}
+            {{ activeRuntime?.connected ? "插件运行时已连接" : "等待插件运行时连接" }}
           </span>
           <span v-if="activePlugin" class="version-text">v{{ activePlugin.version }}</span>
         </div>
 
-        <h2>{{ activePlugin?.name || "还没有可用的游戏" }}</h2>
+        <h2>{{ activePlugin?.name || "还没有可用的游戏插件" }}</h2>
         <p v-if="activeRuntime?.connected">
-          Runtime 已连接{{ activeRuntime.ready ? "并完成准备" : "，正在准备中" }}。可以在对话中向 Amitia 下达游戏任务，需要人工操作时再临时接管控制。
+          插件 Runtime 已连接{{ activeRuntime.ready ? "并完成准备" : "，正在准备中" }}。插件向 Agent 注册的能力可在对话中使用；GameHost 不解释这些能力的游戏语义。
         </p>
         <p v-else-if="activePlugin">
-          游戏扩展已安装。启动对应游戏并建立 GameHost 连接后即可进入游戏模式。
+          游戏扩展已安装。由插件检测并连接其支持的游戏，GameHost 只承载插件 Runtime 与通信通道。
         </p>
         <p v-else>
           添加一个 `.amitiax` 游戏扩展。安装完成后，Amitia 会自动把它归入游戏模式。
@@ -63,7 +63,7 @@
             :disabled="!activeRuntime.ready"
             @click="goToGameChat"
           >
-            去对话下达任务
+            去对话使用插件能力
           </el-button>
           <el-button
             v-if="activeRuntime?.connected && activeRuntime.controlMode !== 'user_control'"
@@ -86,7 +86,7 @@
     <section class="content-section">
       <div class="section-heading">
         <div>
-          <h2>你的游戏</h2>
+          <h2>游戏插件</h2>
           <p>已安装的游戏扩展。安装、更新和权限校验统一由扩展包内核处理。</p>
         </div>
         <span class="section-count">{{ plugins.length }} 个</span>
@@ -158,7 +158,7 @@
       <div class="section-heading">
         <div>
           <h2>运行连接</h2>
-          <p>这里只展示连接和生命周期状态。协议、权限纪元和 Service RPC 已移至开发者详情。</p>
+          <p>这里只展示插件 Runtime 的连接和生命周期状态。协议、权限纪元和原始 Service RPC 仅在开发者访问已启用时开放。</p>
         </div>
         <span class="section-count">{{ readyRuntimeCount }}/{{ runtimes.length }} 已就绪</span>
       </div>
@@ -192,7 +192,7 @@
               :loading="busy === runtime.runtimeId"
               @click="runtimeAction(runtime.runtimeId, 'stop')"
             >停止</el-button>
-            <el-button size="small" text @click="showRuntimeDetail(runtime)">开发者详情</el-button>
+            <el-button size="small" text @click="showRuntimeDetail(runtime)">{{ developerAccess ? "开发者详情" : "运行详情" }}</el-button>
           </div>
         </article>
       </div>
@@ -396,13 +396,13 @@
           <el-table-column prop="state" label="状态" width="110" />
           <el-table-column prop="health" label="健康" width="110" />
           <el-table-column label="操作" width="110">
-            <template #default="scope"><el-button size="small" @click="openRpc(scope.row)">RPC</el-button></template>
+            <template #default="scope"><el-button v-if="developerAccess" size="small" @click="openRpc(scope.row)">RPC</el-button><span v-else>-</span></template>
           </el-table-column>
         </el-table>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="rpcDialogVisible" title="Service RPC" width="680px">
+    <el-dialog v-if="developerAccess" v-model="rpcDialogVisible" title="Service RPC" width="680px">
       <el-form label-position="top">
         <el-form-item label="Service ID"><el-input :model-value="rpcServiceId" disabled /></el-form-item>
         <el-form-item label="Method"><el-input v-model="rpcMethod" placeholder="例如 get_state" /></el-form-item>
@@ -468,6 +468,7 @@ const busy = ref("");
 const error = ref("");
 const plugins = ref<Plugin[]>([]);
 const runtimes = ref<Runtime[]>([]);
+const developerAccess = ref(false);
 
 const readyRuntimeCount = computed(() => runtimes.value.filter((item) => item.ready).length);
 const activeRuntime = computed<Runtime | null>(() =>
@@ -544,12 +545,14 @@ async function refresh() {
   loading.value = true;
   error.value = "";
   try {
-    const [pluginResult, runtimeResult] = await Promise.all([
+    const [pluginResult, runtimeResult, developerResult] = await Promise.all([
       api.get<{ items?: Plugin[] }>("/api/game-center/plugins", { page: 1, pageSize: 100 }),
       api.get<{ items?: Runtime[] }>("/api/game-center/runtimes", { page: 1, pageSize: 100 }),
+      api.get<{ enabled?: boolean }>("/api/game-center/developer-access").catch(() => ({ enabled: false })),
     ]);
     plugins.value = pluginResult?.items ?? [];
     runtimes.value = runtimeResult?.items ?? [];
+    developerAccess.value = developerResult?.enabled === true;
   } catch (err: any) {
     error.value = err?.message || "游戏模式加载失败";
   } finally {
@@ -853,6 +856,10 @@ async function showRuntimeDetail(runtime: Runtime) {
 }
 
 function openRpc(service: GameService) {
+  if (!developerAccess.value) {
+    ElMessage.warning("Service RPC 仅在开发者访问已启用时开放");
+    return;
+  }
   rpcServiceId.value = service.serviceId;
   rpcMethod.value = "";
   rpcPayload.value = "{}";
@@ -861,6 +868,11 @@ function openRpc(service: GameService) {
 }
 
 async function invokeRpc() {
+  if (!developerAccess.value) {
+    ElMessage.error("当前账号没有 GameHost 开发者访问权限");
+    rpcDialogVisible.value = false;
+    return;
+  }
   if (!selectedRuntimeId.value || !rpcServiceId.value || !rpcMethod.value.trim()) {
     ElMessage.warning("请填写 RPC Method");
     return;
