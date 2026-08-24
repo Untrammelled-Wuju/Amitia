@@ -61,23 +61,34 @@ func (c *rpcResponseCorrelator) RegisterPending(peer ipc.Peer, requestID string,
 }
 
 func (c *rpcResponseCorrelator) HandleResponse(peer ipc.Peer, envelope *protocol.Envelope) bool {
+	if envelope == nil || envelope.RequestID == "" {
+		return false
+	}
 	key := RequestKey{
 		RuntimeID: domain.RuntimeInstanceID(peer.RuntimeID),
 		ServiceID: domain.ServiceID(peer.ServiceID),
 		RequestID: envelope.RequestID,
 	}
 
+	if c.registry.Get(key) == nil {
+		return false
+	}
+
+	var completed bool
 	if envelope.Type == protocol.MessageTypeError {
-		c.registry.Fail(key, NewRPCErrorWithCause(
+		if envelope.Error == nil {
+			return false
+		}
+		completed, _ = c.registry.Fail(key, NewRPCErrorWithCause(
 			"protocol_error",
 			domain.ErrorCode(envelope.Error.Code),
 			envelope.Error.Message,
 			nil,
 		))
 	} else {
-		c.registry.Complete(key, *envelope)
+		completed, _ = c.registry.Complete(key, *envelope)
 	}
-	return true
+	return completed
 }
 
 func (c *rpcResponseCorrelator) CancelByPeer(peer ipc.Peer) {

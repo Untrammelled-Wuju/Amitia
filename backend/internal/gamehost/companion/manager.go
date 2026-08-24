@@ -288,7 +288,7 @@ func (m *Manager) Remove(ctx context.Context, extensionID, artifactID, gameRoot 
 }
 
 func (m *Manager) installLocked(extensionID, gameRoot, generationRoot string, artifact gameprotocol.GameCompanionArtifact) (InstallationRecord, error) {
-	if strings.TrimSpace(artifact.InstallTarget) == "" {
+	if strings.TrimSpace(artifact.EffectiveTarget()) == "" {
 		return InstallationRecord{}, fmt.Errorf("companion: artifact %s requires installTarget", artifact.ID)
 	}
 	source, err := resolveContained(generationRoot, artifact.Source)
@@ -304,7 +304,7 @@ func (m *Manager) installLocked(extensionID, gameRoot, generationRoot string, ar
 			return InstallationRecord{}, fmt.Errorf("companion: source hash mismatch for %s", artifact.ID)
 		}
 	}
-	target, err := resolveTarget(gameRoot, artifact.InstallTarget)
+	target, err := resolveTarget(gameRoot, artifact.EffectiveTarget())
 	if err != nil {
 		return InstallationRecord{}, err
 	}
@@ -367,12 +367,12 @@ func (m *Manager) resolveRequiredArtifacts(ctx context.Context, extensionID, gam
 		if err != nil {
 			return nil, integration.InstalledGeneration{}, err
 		}
-		for _, artifact := range spec.CompanionArtifacts {
+		for _, artifact := range spec.EffectiveArtifacts() {
 			if !artifact.Required {
 				continue
 			}
 			requiredDeclared = true
-			if platformMatches(artifact.Platforms) && versionMatches(artifact.GameVersions, gameVersion) {
+			if platformMatches(artifact.Platforms) && versionMatches(artifact.EffectiveCompatibilityVersions(), gameVersion) {
 				required = append(required, artifact)
 			}
 		}
@@ -409,8 +409,8 @@ func (m *Manager) resolveArtifactsOptional(ctx context.Context, extensionID, gam
 		if err != nil {
 			return nil, integration.InstalledGeneration{}, err
 		}
-		for _, artifact := range spec.CompanionArtifacts {
-			if platformMatches(artifact.Platforms) && versionMatches(artifact.GameVersions, gameVersion) {
+		for _, artifact := range spec.EffectiveArtifacts() {
+			if platformMatches(artifact.Platforms) && versionMatches(artifact.EffectiveCompatibilityVersions(), gameVersion) {
 				artifacts = append(artifacts, artifact)
 			}
 		}
@@ -561,7 +561,7 @@ func installArtifact(source, target, kind string) error {
 	if info.IsDir() {
 		return copyTreeAtomic(source, target)
 	}
-	if (kind == "smapi_mod" || kind == "archive" || kind == "zip") && strings.EqualFold(filepath.Ext(source), ".zip") {
+	if (kind == "archive" || kind == "zip") && strings.EqualFold(filepath.Ext(source), ".zip") {
 		return extractZipAtomic(source, target)
 	}
 	return copyFileAtomic(source, target, info.Mode().Perm())

@@ -30,10 +30,10 @@ func RegisterGameCenterMutationRouter(group *gin.RouterGroup, mutationHandler *M
 	gameCenter := group.Group("/game-center")
 	{
 		gameCenter.POST("/plugins/install", mutationHandler.Install)
-		gameCenter.POST("/plugins/:extensionId/update", mutationHandler.Update)
-		gameCenter.POST("/plugins/:extensionId/enable", mutationHandler.Enable)
-		gameCenter.POST("/plugins/:extensionId/disable", mutationHandler.Disable)
-		gameCenter.DELETE("/plugins/:extensionId", mutationHandler.Uninstall)
+		gameCenter.POST("/extensions/:extensionId/update", mutationHandler.Update)
+		gameCenter.POST("/extensions/:extensionId/enable", mutationHandler.Enable)
+		gameCenter.POST("/extensions/:extensionId/disable", mutationHandler.Disable)
+		gameCenter.DELETE("/extensions/:extensionId", mutationHandler.Uninstall)
 
 		gameCenter.POST("/runtimes/:runtimeId/start", mutationHandler.StartRuntime)
 		gameCenter.POST("/runtimes/:runtimeId/stop", mutationHandler.StopRuntime)
@@ -60,9 +60,9 @@ func RegisterRPCRouter(group *gin.RouterGroup, rpcHandler *RPCHandler) {
 
 func RegisterGameCenterCompanionRouter(group *gin.RouterGroup, handler *CompanionHandler) {
 	gameCenter := group.Group("/game-center")
-	gameCenter.GET("/plugins/:extensionId/companions", handler.List)
-	gameCenter.POST("/plugins/:extensionId/companions/install-required", handler.InstallRequired)
-	gameCenter.POST("/plugins/:extensionId/companions/:artifactId/install", handler.Install)
-	gameCenter.POST("/plugins/:extensionId/companions/:artifactId/verify", handler.Verify)
-	gameCenter.DELETE("/plugins/:extensionId/companions/:artifactId", handler.Remove)
+	gameCenter.GET("/extensions/:extensionId/companions", handler.List)
+	gameCenter.POST("/extensions/:extensionId/companions/install-required", handler.InstallRequired)
+	gameCenter.POST("/extensions/:extensionId/companions/:artifactId/install", handler.Install)
+	gameCenter.POST("/extensions/:extensionId/companions/:artifactId/verify", handler.Verify)
+	gameCenter.DELETE("/extensions/:extensionId/companions/:artifactId", handler.Remove)
 }

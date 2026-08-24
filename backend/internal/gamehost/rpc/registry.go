@@ -65,15 +65,15 @@ type RuntimeValidator interface {
 }
 
 type namespaceRegistry struct {
-	mu       sync.RWMutex
-	routes   map[RouteKey]Route
-	byService map[ServiceKey]RouteKey
-	validator RuntimeValidator
+	mu                      sync.RWMutex
+	routes                  map[RouteKey]Route
+	byService               map[ServiceKey]map[RouteKey]struct{}
+	validator               RuntimeValidator
 	maxNamespacesPerRuntime int
 }
 
 type NamespaceRegistryConfig struct {
-	Validator             RuntimeValidator
+	Validator               RuntimeValidator
 	MaxNamespacesPerRuntime int
 }
 
@@ -83,9 +83,9 @@ func NewNamespaceRegistry(config NamespaceRegistryConfig) NamespaceRegistry {
 		maxNS = 1024
 	}
 	return &namespaceRegistry{
-		routes:   make(map[RouteKey]Route),
-		byService: make(map[ServiceKey]RouteKey),
-		validator: config.Validator,
+		routes:                  make(map[RouteKey]Route),
+		byService:               make(map[ServiceKey]map[RouteKey]struct{}),
+		validator:               config.Validator,
 		maxNamespacesPerRuntime: maxNS,
 	}
 }
@@ -145,7 +145,11 @@ func (r *namespaceRegistry) Register(ctx context.Context, route Route) error {
 	}
 
 	r.routes[key] = route
-	r.byService[route.ServiceKey()] = key
+	serviceKey := route.ServiceKey()
+	if r.byService[serviceKey] == nil {
+		r.byService[serviceKey] = make(map[RouteKey]struct{})
+	}
+	r.byService[serviceKey][key] = struct{}{}
 	return nil
 }
 
@@ -168,7 +172,13 @@ func (r *namespaceRegistry) Unregister(ctx context.Context, runtimeID domain.Run
 	}
 
 	delete(r.routes, key)
-	delete(r.byService, route.ServiceKey())
+	serviceKey := route.ServiceKey()
+	if keys := r.byService[serviceKey]; keys != nil {
+		delete(keys, key)
+		if len(keys) == 0 {
+			delete(r.byService, serviceKey)
+		}
+	}
 	return nil
 }
 
@@ -185,19 +195,11 @@ func (r *namespaceRegistry) UnregisterByService(ctx context.Context, runtimeID d
 		ServiceID: serviceID,
 	}
 
-	var toRemove []RouteKey
-	for sk, rk := range r.byService {
-		if sk == prefix {
-			toRemove = append(toRemove, rk)
-		}
+	keys := r.byService[prefix]
+	for rk := range keys {
+		delete(r.routes, rk)
 	}
-
-	for _, rk := range toRemove {
-		if route, ok := r.routes[rk]; ok {
-			delete(r.routes, rk)
-			delete(r.byService, route.ServiceKey())
-		}
-	}
+	delete(r.byService, prefix)
 
 	return nil
 }
@@ -211,15 +213,22 @@ func (r *namespaceRegistry) UnregisterByRuntime(ctx context.Context, runtimeID d
 	defer r.mu.Unlock()
 
 	var toRemove []RouteKey
-	for k, route := range r.routes {
+	for k := range r.routes {
 		if k.RuntimeID == runtimeID {
 			toRemove = append(toRemove, k)
-			delete(r.byService, route.ServiceKey())
 		}
 	}
 
 	for _, k := range toRemove {
+		route := r.routes[k]
 		delete(r.routes, k)
+		serviceKey := route.ServiceKey()
+		if keys := r.byService[serviceKey]; keys != nil {
+			delete(keys, k)
+			if len(keys) == 0 {
+				delete(r.byService, serviceKey)
+			}
+		}
 	}
 
 	return nil
@@ -284,18 +293,16 @@ func (r *namespaceRegistry) ListByService(ctx context.Context, runtimeID domain.
 	}
 
 	r.mu.RLock()
-	defer r.mu.Unlock()
+	defer r.mu.RUnlock()
 
 	var result []Route
 	prefix := ServiceKey{
 		RuntimeID: runtimeID,
 		ServiceID: serviceID,
 	}
-	for sk, rk := range r.byService {
-		if sk == prefix {
-			if route, ok := r.routes[rk]; ok {
-				result = append(result, route.Clone())
-			}
+	for rk := range r.byService[prefix] {
+		if route, ok := r.routes[rk]; ok {
+			result = append(result, route.Clone())
 		}
 	}
 

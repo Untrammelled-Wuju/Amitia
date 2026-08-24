@@ -9,16 +9,17 @@ import (
 )
 
 type Correlation struct {
-	Upstream         RequestKey
-	DownstreamPeer   ipc.Peer
-	DownstreamReqID  string
-	CreatedAt        time.Time
+	Upstream        RequestKey
+	UpstreamPeer    ipc.Peer
+	DownstreamPeer  ipc.Peer
+	DownstreamReqID string
+	CreatedAt       time.Time
 }
 
 type CorrelationMap struct {
-	mu            sync.RWMutex
-	byUpstream    map[RequestKey]*Correlation
-	byDownstream  map[DownstreamKey]*Correlation
+	mu           sync.RWMutex
+	byUpstream   map[RequestKey]*Correlation
+	byDownstream map[DownstreamKey]*Correlation
 }
 
 type DownstreamKey struct {
@@ -116,10 +117,10 @@ func (m *CorrelationMap) RemoveByRuntime(runtimeID string) int {
 		if string(k.RuntimeID) == runtimeID {
 			delete(m.byUpstream, k)
 			delete(m.byDownstream, DownstreamKey{
-			RuntimeID: domain.RuntimeInstanceID(c.DownstreamPeer.RuntimeID),
-			ServiceID: domain.ServiceID(c.DownstreamPeer.ServiceID),
-			RequestID: c.DownstreamReqID,
-		})
+				RuntimeID: domain.RuntimeInstanceID(c.DownstreamPeer.RuntimeID),
+				ServiceID: domain.ServiceID(c.DownstreamPeer.ServiceID),
+				RequestID: c.DownstreamReqID,
+			})
 			count++
 		}
 	}

@@ -7,12 +7,8 @@ import (
 func ProductionHostCapabilities() []domain.Capability {
 	return []domain.Capability{
 		domain.CapabilityRealtimeControl,
-		domain.CapabilityStateStreaming,
-		domain.CapabilityEventStreaming,
-		domain.CapabilityBinaryStreaming,
 		domain.CapabilityCustomRPC,
 		domain.CapabilityHostAPI,
 		domain.CapabilitySharedControl,
-		domain.CapabilityMultiService,
 	}
 }
