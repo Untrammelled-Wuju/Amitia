@@ -149,7 +149,7 @@ func TestF05_OutputIdRequired_RejectsEmpty(t *testing.T) {
 	}
 	handler := NewControlHandler(gate, registry)
 
-	payload, _ := json.Marshal(ControlOutputInput{SinkID: "sink-1", ServiceID: "svc-1", Epoch: 10, Payload: json.RawMessage(`{}`)})
+	payload, _ := json.Marshal(ControlOutputInput{SinkID: "sink-1", Epoch: 10, Payload: json.RawMessage(`{}`)})
 	response, err := handler.handleControlOutput(context.Background(), rpc.RPCRequest{
 		ID: "request-1", PluginID: "plugin-1", RuntimeID: "rt-1", ServiceID: "svc-1", Generation: 1, Payload: payload,
 	})
@@ -176,7 +176,7 @@ func TestF05_OutputIdRequired_AcceptsValid(t *testing.T) {
 	}
 	handler := NewControlHandler(gate, registry)
 
-	payload, _ := json.Marshal(ControlOutputInput{OutputID: "output-123", SinkID: "sink-1", ServiceID: "svc-1", Epoch: 10, Payload: json.RawMessage(`{}`)})
+	payload, _ := json.Marshal(ControlOutputInput{OutputID: "output-123", SinkID: "sink-1", Epoch: 10, Payload: json.RawMessage(`{}`)})
 	response, err := handler.handleControlOutput(context.Background(), rpc.RPCRequest{
 		ID: "request-1", PluginID: "plugin-1", RuntimeID: "rt-1", ServiceID: "svc-1", Generation: 1, Payload: payload,
 	})
