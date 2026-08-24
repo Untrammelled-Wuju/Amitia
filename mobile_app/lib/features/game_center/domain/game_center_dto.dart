@@ -734,3 +734,47 @@ class GamePluginHandshakeResponse {
     );
   }
 }
+
+
+class GameHostPendingApproval {
+  final String id;
+  final String runtimeId;
+  final String pluginId;
+  final String serviceId;
+  final String extensionId;
+  final String permissionId;
+  final String status;
+  final String? targetPath;
+  final DateTime? requestedAt;
+  final DateTime? expiresAt;
+
+  const GameHostPendingApproval({
+    required this.id,
+    required this.runtimeId,
+    required this.pluginId,
+    required this.serviceId,
+    required this.extensionId,
+    required this.permissionId,
+    required this.status,
+    this.targetPath,
+    this.requestedAt,
+    this.expiresAt,
+  });
+
+  factory GameHostPendingApproval.fromJson(Map<String, dynamic> json) {
+    return GameHostPendingApproval(
+      id: (json['id'] ?? '').toString(),
+      runtimeId: (json['runtimeId'] ?? '').toString(),
+      pluginId: (json['pluginId'] ?? '').toString(),
+      serviceId: (json['serviceId'] ?? '').toString(),
+      extensionId: (json['extensionId'] ?? '').toString(),
+      permissionId: (json['permissionId'] ?? '').toString(),
+      status: (json['status'] ?? '').toString(),
+      targetPath: json['target'] is Map<String, dynamic>
+          ? ((json['target'] as Map<String, dynamic>)['path'] as String?)
+          : null,
+      requestedAt: DateTime.tryParse((json['requestedAt'] ?? '').toString()),
+      expiresAt: DateTime.tryParse((json['expiresAt'] ?? '').toString()),
+    );
+  }
+}
