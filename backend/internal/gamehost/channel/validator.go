@@ -68,21 +68,15 @@ func (v *Validator) ValidateRegistration(ctx context.Context, channel RuntimeCha
 }
 
 func ValidateDirection(channel RuntimeChannel, flow protocol.ChannelDirection) error {
+	// amitia-game-host/1 exposes only plugin -> host channels. The Direction
+	// field is retained in the runtime model for protocol-versioning, but an
+	// omitted direction means plugin_to_host and no outbound path is implied.
 	dir := channel.Direction
 	if dir == "" {
-		dir = protocol.ChannelDirectionBidirectional
+		dir = protocol.ChannelDirectionPluginToHost
 	}
-	switch dir {
-	case protocol.ChannelDirectionBidirectional:
-		return nil
-	case protocol.ChannelDirectionPluginToHost:
-		if flow != protocol.ChannelDirectionPluginToHost {
-			return ErrDirectionNotAllowed
-		}
-	case protocol.ChannelDirectionHostToPlugin:
-		if flow != protocol.ChannelDirectionHostToPlugin {
-			return ErrDirectionNotAllowed
-		}
+	if dir != protocol.ChannelDirectionPluginToHost || flow != protocol.ChannelDirectionPluginToHost {
+		return ErrDirectionNotAllowed
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -37,7 +38,20 @@ type TakeoverServiceOptions struct {
 	Audit         AuthorityAuditSink
 }
 
-func NewTakeoverService(opts TakeoverServiceOptions) *TakeoverService {
+func NewTakeoverService(opts TakeoverServiceOptions) (*TakeoverService, error) {
+	if opts.Manager == nil {
+		return nil, fmt.Errorf("takeover service: authority manager is required")
+	}
+	if opts.RuntimeReader == nil {
+		return nil, fmt.Errorf("takeover service: runtime reader is required")
+	}
+	if opts.PermChecker == nil {
+		return nil, fmt.Errorf("takeover service: permission checker is required")
+	}
+	if opts.PolicyChecker == nil {
+		return nil, fmt.Errorf("takeover service: host policy checker is required")
+	}
+
 	manager := opts.Manager
 	var store *TakeoverContextStore
 	if opts.ContextStore != nil {
@@ -65,7 +79,7 @@ func NewTakeoverService(opts TakeoverServiceOptions) *TakeoverService {
 		clock:         clock,
 		audit:         audit,
 		perRuntime:    make(map[domain.RuntimeInstanceID]*sync.Mutex),
-	}
+	}, nil
 }
 
 func (s *TakeoverService) getOpLock(runtimeID domain.RuntimeInstanceID) *sync.Mutex {

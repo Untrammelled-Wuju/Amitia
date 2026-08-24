@@ -11,7 +11,6 @@
     "custom_rpc",
     "host_api",
     "shared_control",
-    "custom_ui",
     "multi_service"
   ]
 }

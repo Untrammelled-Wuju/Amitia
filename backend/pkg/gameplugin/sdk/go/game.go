@@ -11,7 +11,6 @@ const (
 	HostFeatureCustomRPC       = protocol.HostFeatureCustomRPC
 	HostFeatureHostAPI         = protocol.HostFeatureHostAPI
 	HostFeatureSharedControl   = protocol.HostFeatureSharedControl
-	HostFeatureCustomUI        = protocol.HostFeatureCustomUI
 	HostFeatureMultiService    = protocol.HostFeatureMultiService
 )
 

@@ -470,6 +470,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			kernelReader := management.NewKernelReaderWithContributions(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository, services.KernelContainer.ContributionRepository)
 			gameCenterSvc := management.NewProductionService(services.KernelContainer.GameHost, kernelReader)
 			management.RegisterGameCenterRouter(apiGroup, gameCenterSvc)
+			if services.KernelContainer.GameHost.PermissionApprovals != nil {
+				management.RegisterGameCenterApprovalRouter(apiGroup, management.NewApprovalHandler(services.KernelContainer.GameHost.PermissionApprovals))
+			}
 			if services.KernelContainer.GameHost.ArtifactManager != nil {
 				management.RegisterGameCenterArtifactRouter(apiGroup, management.NewArtifactHandler(services.KernelContainer.GameHost.ArtifactManager))
 			}

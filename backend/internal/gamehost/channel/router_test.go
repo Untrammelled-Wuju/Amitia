@@ -380,7 +380,7 @@ func TestRouter_Route_WrongDirection(t *testing.T) {
 		ServiceID: "service-a",
 		ChannelID: "events",
 		Kind:      domain.ChannelKindEvent,
-		Direction: protocol.ChannelDirectionHostToPlugin,
+		Direction: protocol.ChannelDirection("host_to_plugin"),
 	}
 	reg.Register(context.Background(), ch)
 

@@ -27,6 +27,16 @@ func RegisterGameCenterRouter(group *gin.RouterGroup, service *GameCenterManagem
 	}
 }
 
+func RegisterGameCenterApprovalRouter(group *gin.RouterGroup, handler *ApprovalHandler) {
+	if handler == nil {
+		return
+	}
+	gameCenter := group.Group("/game-center")
+	gameCenter.GET("/approvals", handler.ListPending)
+	gameCenter.POST("/approvals/:approvalId/approve", handler.Approve)
+	gameCenter.POST("/approvals/:approvalId/reject", handler.Reject)
+}
+
 func RegisterGameCenterMutationRouter(group *gin.RouterGroup, mutationHandler *MutationHandler) {
 	gameCenter := group.Group("/game-center")
 	{
@@ -64,6 +74,9 @@ func RegisterGameCenterArtifactRouter(group *gin.RouterGroup, handler *ArtifactH
 	gameCenter := group.Group("/game-center")
 	gameCenter.Use(RequireGameHostDeveloperAccess())
 	gameCenter.GET("/extensions/:extensionId/artifacts", handler.List)
+	gameCenter.GET("/extensions/:extensionId/artifact-roots", handler.ListAuthorizedRoots)
+	gameCenter.POST("/extensions/:extensionId/artifact-roots/authorize", handler.AuthorizeRoot)
+	gameCenter.DELETE("/extensions/:extensionId/artifact-roots", handler.RevokeRoot)
 	gameCenter.POST("/extensions/:extensionId/artifacts/deploy-required", handler.DeployRequired)
 	gameCenter.POST("/extensions/:extensionId/artifacts/:artifactId/deploy", handler.Deploy)
 	gameCenter.POST("/extensions/:extensionId/artifacts/:artifactId/verify", handler.Verify)

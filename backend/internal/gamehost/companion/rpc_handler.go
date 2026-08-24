@@ -25,7 +25,7 @@ type PluginDescriptorResolver interface {
 }
 
 type ArtifactPermissionChecker interface {
-	CheckServicePermission(ctx context.Context, runtimeID, pluginID, serviceID, permID string) ghpermission.DecisionResult
+	CheckServicePermissionTarget(ctx context.Context, runtimeID, pluginID, serviceID, permID string, target kernelpermission.PermissionTarget) ghpermission.DecisionResult
 }
 
 type ArtifactRPCHandler struct {
@@ -59,6 +59,15 @@ func (h *ArtifactRPCHandler) Register(registry rpc.HandlerRegistry) error {
 	return nil
 }
 
+func artifactMethodMutates(method rpc.Method) bool {
+	switch method {
+	case MethodArtifactDeployRequired, MethodArtifactDeploy, MethodArtifactRemove:
+		return true
+	default:
+		return false
+	}
+}
+
 type artifactRPCInput struct {
 	ArtifactID           string `json:"artifactId,omitempty"`
 	TargetRoot           string `json:"targetRoot"`
@@ -71,17 +80,6 @@ func (h *ArtifactRPCHandler) Handle(ctx context.Context, request rpc.RPCRequest)
 	}
 	if strings.TrimSpace(string(request.PluginID)) == "" || strings.TrimSpace(string(request.RuntimeID)) == "" || strings.TrimSpace(string(request.ServiceID)) == "" {
 		return rpc.RPCResponse{}, domain.NewHostError(domain.ErrInvalidArgument, "artifact rpc: plugin, runtime and service identity are required")
-	}
-
-	decision := h.permissions.CheckServicePermission(
-		ctx,
-		string(request.RuntimeID),
-		string(request.PluginID),
-		string(request.ServiceID),
-		kernelpermission.PermissionGameHostArtifactDeploy,
-	)
-	if !decision.Allowed() {
-		return rpc.RPCResponse{}, domain.NewHostError(domain.ErrPermissionDenied, "artifact rpc: deployment permission denied")
 	}
 
 	descriptor, err := h.plugins.Get(ctx, request.PluginID)
@@ -103,6 +101,36 @@ func (h *ArtifactRPCHandler) Handle(ctx context.Context, request rpc.RPCRequest)
 	input.ArtifactID = strings.TrimSpace(input.ArtifactID)
 	if input.TargetRoot == "" {
 		return rpc.RPCResponse{}, domain.NewHostError(domain.ErrInvalidArgument, "artifact rpc: targetRoot is required")
+	}
+	canonicalRoot, err := canonicalTargetRoot(input.TargetRoot)
+	if err != nil {
+		return rpc.RPCResponse{}, domain.NewHostErrorWithCause(domain.ErrInvalidArgument, "artifact rpc: invalid target root", err)
+	}
+	input.TargetRoot = canonicalRoot
+
+	if artifactMethodMutates(request.Method) {
+		decision := h.permissions.CheckServicePermissionTarget(
+			ctx,
+			string(request.RuntimeID),
+			string(request.PluginID),
+			string(request.ServiceID),
+			kernelpermission.PermissionGameHostArtifactDeploy,
+			kernelpermission.PermissionTarget{Type: "directory", ID: input.ArtifactID, Path: canonicalRoot},
+		)
+		if !decision.Allowed() {
+			return rpc.RPCResponse{}, domain.NewHostError(domain.ErrPermissionDenied, "artifact rpc: deployment permission denied")
+		}
+		if _, err := h.manager.RequireAuthorizedTargetRoot(ctx, descriptor.ExtensionID, canonicalRoot); err != nil {
+			if _, grantErr := h.manager.AuthorizeTargetRoot(ctx, descriptor.ExtensionID, canonicalRoot); grantErr != nil {
+				return rpc.RPCResponse{}, domain.NewHostErrorWithCause(domain.ErrPermissionDenied, "artifact rpc: failed to authorize approved target root", grantErr)
+			}
+		}
+	} else {
+		authorizedRoot, err := h.manager.RequireAuthorizedTargetRoot(ctx, descriptor.ExtensionID, canonicalRoot)
+		if err != nil {
+			return rpc.RPCResponse{}, domain.NewHostErrorWithCause(domain.ErrPermissionDenied, "artifact rpc: target root is not authorized", err)
+		}
+		input.TargetRoot = authorizedRoot
 	}
 
 	var output any

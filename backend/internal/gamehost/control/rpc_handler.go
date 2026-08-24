@@ -32,11 +32,16 @@ type SinkDeclarationProvider interface {
 	DescriptorControlSinks(pluginID string) ([]domain.ControlSinkDeclaration, error)
 }
 
+type NegotiatedFeatureChecker interface {
+	HasNegotiatedCapability(connectionID string, feature domain.Capability) bool
+}
+
 type ControlHandler struct {
 	gate                *PluginOutputGate
 	sinkRegistry        *ControlSinkRegistry
 	effectSinkFactory   EffectSinkFactory
 	declarationProvider SinkDeclarationProvider
+	featureChecker      NegotiatedFeatureChecker
 }
 
 func NewControlHandler(gate *PluginOutputGate, sinkRegistry *ControlSinkRegistry) *ControlHandler {
@@ -59,6 +64,27 @@ func (h *ControlHandler) SetSinkDeclarationProvider(provider SinkDeclarationProv
 		return
 	}
 	h.declarationProvider = provider
+}
+
+func (h *ControlHandler) SetNegotiatedFeatureChecker(checker NegotiatedFeatureChecker) {
+	if h == nil {
+		return
+	}
+	h.featureChecker = checker
+}
+
+func (h *ControlHandler) requireRealtimeControl(request rpc.RPCRequest) *rpc.RPCResponse {
+	if h == nil || h.featureChecker == nil || !h.featureChecker.HasNegotiatedCapability(request.ConnectionID, domain.CapabilityRealtimeControl) {
+		response := rpc.RPCResponse{
+			RequestID: request.ID,
+			Error: &rpc.RPCRoutedError{
+				Code:    string(domain.ErrPermissionDenied),
+				Message: "realtime_control was not negotiated for this service connection",
+			},
+		}
+		return &response
+	}
+	return nil
 }
 
 func (h *ControlHandler) RegisterHandlers(registry rpc.HandlerRegistry) error {
@@ -88,6 +114,9 @@ func (h controlSinkRegisterHandler) Handle(ctx context.Context, request rpc.RPCR
 }
 
 func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
+	if denied := h.requireRealtimeControl(request); denied != nil {
+		return *denied, nil
+	}
 	var input ControlOutputInput
 	if err := json.Unmarshal(request.Payload, &input); err != nil {
 		return rpc.RPCResponse{
@@ -172,6 +201,9 @@ func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RP
 }
 
 func (h *ControlHandler) handleSinkRegister(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
+	if denied := h.requireRealtimeControl(request); denied != nil {
+		return *denied, nil
+	}
 	var input ControlSinkRegisterInput
 	if err := json.Unmarshal(request.Payload, &input); err != nil {
 		return rpc.RPCResponse{

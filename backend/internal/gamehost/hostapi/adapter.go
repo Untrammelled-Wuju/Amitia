@@ -21,15 +21,20 @@ type RuntimePermissionChecker interface {
 	CheckRuntimePermission(ctx context.Context, runtimeID string, pluginID string, permID string) permission.DecisionResult
 }
 
+type NegotiatedFeatureChecker interface {
+	HasNegotiatedCapability(connectionID string, feature domain.Capability) bool
+}
+
 type HostAPIAdapter struct {
-	gateway      host_api.Gateway
-	mapper       IdentityMapper
-	permProv     PermissionSnapshotIDProvider
-	scopeProv    ScopeSnapshotIDProvider
-	ready        ReadyVerifier
-	idGen        func() string
-	tracker      InvocationTracker
-	permChecker  RuntimePermissionChecker
+	gateway     host_api.Gateway
+	mapper      IdentityMapper
+	permProv    PermissionSnapshotIDProvider
+	scopeProv   ScopeSnapshotIDProvider
+	ready       ReadyVerifier
+	idGen       func() string
+	tracker     InvocationTracker
+	permChecker RuntimePermissionChecker
+	featureGate NegotiatedFeatureChecker
 }
 
 type InvocationTracker interface {
@@ -46,6 +51,7 @@ type HostAPIAdapterConfig struct {
 	IDGenerator        func() string
 	InvocationTracker  InvocationTracker
 	PermissionChecker  RuntimePermissionChecker
+	FeatureChecker     NegotiatedFeatureChecker
 }
 
 func NewHostAPIAdapter(cfg HostAPIAdapterConfig) (*HostAPIAdapter, error) {
@@ -73,6 +79,7 @@ func NewHostAPIAdapter(cfg HostAPIAdapterConfig) (*HostAPIAdapter, error) {
 		idGen:       cfg.IDGenerator,
 		tracker:     cfg.InvocationTracker,
 		permChecker: cfg.PermissionChecker,
+		featureGate: cfg.FeatureChecker,
 	}, nil
 }
 
@@ -98,6 +105,11 @@ func (a *HostAPIAdapter) Call(ctx context.Context, req Request) (Response, error
 
 	if req.ConnKey != "" && a.ready != nil && !a.ready.IsReady(req.ConnKey) {
 		return Response{}, ErrNotReady
+	}
+	if req.ConnKey != "" {
+		if a.featureGate == nil || !a.featureGate.HasNegotiatedCapability(req.ConnKey, domain.CapabilityHostAPI) {
+			return Response{}, &Error{Code: CodePermissionDenied, Message: "host_api was not negotiated for this service connection"}
+		}
 	}
 
 	identity, err := a.mapper.MapIdentity(ctx, req.Peer)

@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/integration"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
+	"github.com/u-ai/backend/internal/gamehost/permission"
 	"github.com/u-ai/backend/internal/gamehost/recovery"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	"github.com/u-ai/backend/internal/gamehost/resource"
@@ -69,9 +70,10 @@ type GameHostContainer struct {
 	HostAPIAdapter           *hostapi.HostAPIAdapter
 	HostAPIInvocationTracker *integration.HostAPIInvocationTracker
 
-	ResourceAdapter   resource.AdmissionAdapter
-	ResourceViewer    *resource.ResourcePolicyViewer
-	ResourceLifecycle *resource.LifecycleCoordinator
+	ResourceAdapter     resource.AdmissionAdapter
+	ResourceViewer      *resource.ResourcePolicyViewer
+	ResourceLifecycle   *resource.LifecycleCoordinator
+	PermissionApprovals *permission.ApprovalCoordinator
 
 	AuthorityManager     *control.ControlAuthorityManager
 	OutputGate           *control.PluginOutputGate

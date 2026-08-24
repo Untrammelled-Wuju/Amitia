@@ -47,6 +47,27 @@ func (a *ControlPermissionAdapter) CheckControlOutput(
 	return mapDecisionToControlResult(result)
 }
 
+func (a *ControlPermissionAdapter) CanPluginControl(
+	ctx context.Context,
+	runtimeID domain.RuntimeInstanceID,
+	pluginID domain.PluginID,
+	targetMode domain.ControlMode,
+) (control.PermissionCheckResult, error) {
+	if targetMode == domain.ControlModeObserveOnly {
+		return control.PermissionCheckResult{Allowed: true}, nil
+	}
+	if a.effectivePermission == nil {
+		return control.PermissionCheckResult{Allowed: false, Reason: "permission_adapter_unavailable"}, nil
+	}
+	result := a.effectivePermission.CheckRuntimePermission(
+		ctx,
+		string(runtimeID),
+		string(pluginID),
+		permission.PermissionGameHostControl,
+	)
+	return mapDecisionToControlResult(result)
+}
+
 func mapDecisionToControlResult(result ghpermission.DecisionResult) (control.PermissionCheckResult, error) {
 	switch result.Decision {
 	case ghpermission.DecisionAllowed:
@@ -63,3 +84,4 @@ func mapDecisionToControlResult(result ghpermission.DecisionResult) (control.Per
 }
 
 var _ control.EffectivePermissionChecker = (*ControlPermissionAdapter)(nil)
+var _ control.PermissionChecker = (*ControlPermissionAdapter)(nil)

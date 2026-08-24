@@ -20,6 +20,16 @@ import (
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
+const (
+	// Protocol v1 artifact deployment is host-local and bounded. These limits
+	// protect the host from archive bombs and accidental unbounded tree copies.
+	maxArtifactSingleFileBytes int64  = 512 << 20 // 512 MiB
+	maxArtifactTotalBytes      int64  = 1 << 30   // 1 GiB
+	maxArtifactFiles                  = 10000
+	maxArtifactDepth                  = 32
+	maxZipCompressionRatio     uint64 = 200
+)
+
 type DeploymentRecord struct {
 	ExtensionID   string    `json:"extensionId"`
 	ArtifactID    string    `json:"artifactId"`
@@ -43,7 +53,9 @@ type ArtifactManager struct {
 	generations     integration.InstalledGenerationResolver
 	statePath       string
 	legacyStatePath string
+	targetGrantPath string
 	records         map[string]DeploymentRecord
+	targetGrants    map[string]TargetRootGrant
 }
 
 func NewArtifactManager(dataRoot string, source integration.KernelContributionSource, generations integration.InstalledGenerationResolver) (*ArtifactManager, error) {
@@ -59,9 +71,14 @@ func NewArtifactManager(dataRoot string, source integration.KernelContributionSo
 		generations:     generations,
 		statePath:       filepath.Join(stateDir, "deployments.json"),
 		legacyStatePath: filepath.Join(dataRoot, "gamehost", "companions", "installations.json"),
+		targetGrantPath: filepath.Join(stateDir, "target-roots.json"),
 		records:         map[string]DeploymentRecord{},
+		targetGrants:    map[string]TargetRootGrant{},
 	}
 	if err := m.load(); err != nil {
+		return nil, err
+	}
+	if err := m.loadTargetGrants(); err != nil {
 		return nil, err
 	}
 	return m, nil
@@ -351,6 +368,9 @@ func (m *ArtifactManager) deployLocked(extensionID, targetRoot, generationRoot s
 	if err != nil {
 		return DeploymentRecord{}, artifactReplacement{}, err
 	}
+	if err := validateArtifactSource(source, artifact.Type); err != nil {
+		return DeploymentRecord{}, artifactReplacement{}, err
+	}
 	if artifact.SHA256 != "" {
 		h, err := hashPath(source)
 		if err != nil {
@@ -544,7 +564,7 @@ func (m *ArtifactManager) resolveRequiredArtifacts(ctx context.Context, extensio
 				continue
 			}
 			requiredDeclared = true
-			if platformMatches(artifact.Platforms) && versionMatches(artifact.CompatibilityVersions, compatibilityVersion) {
+			if platformMatches(artifact.Platforms) && architectureMatches(artifact.Architectures) && versionMatches(artifact.CompatibilityVersions, compatibilityVersion) {
 				required = append(required, artifact)
 			}
 		}
@@ -556,7 +576,7 @@ func (m *ArtifactManager) resolveRequiredArtifacts(ctx context.Context, extensio
 		return nil, integration.InstalledGeneration{}, nil
 	}
 	if len(required) == 0 {
-		return nil, integration.InstalledGeneration{}, fmt.Errorf("artifact: no required artifact is compatible with platform %s and compatibility version %q", currentPlatform(), strings.TrimSpace(compatibilityVersion))
+		return nil, integration.InstalledGeneration{}, fmt.Errorf("artifact: no required artifact is compatible with host platform %s/%s and compatibility version %q", currentPlatform(), currentArchitecture(), strings.TrimSpace(compatibilityVersion))
 	}
 	generation, err := m.generations.ResolveInstalledGeneration(ctx, extensionID)
 	if err != nil {
@@ -582,7 +602,7 @@ func (m *ArtifactManager) resolveArtifactsOptional(ctx context.Context, extensio
 			return nil, integration.InstalledGeneration{}, err
 		}
 		for _, artifact := range spec.Artifacts {
-			if platformMatches(artifact.Platforms) && versionMatches(artifact.CompatibilityVersions, compatibilityVersion) {
+			if platformMatches(artifact.Platforms) && architectureMatches(artifact.Architectures) && versionMatches(artifact.CompatibilityVersions, compatibilityVersion) {
 				artifacts = append(artifacts, artifact)
 			}
 		}
@@ -705,7 +725,31 @@ func platformMatches(platforms []string) bool {
 	}
 	return false
 }
-func currentPlatform() string { return runtimeGOOS() }
+func currentPlatform() string     { return runtimeGOOS() }
+func currentArchitecture() string { return runtimeGOARCH() }
+func architectureMatches(architectures []string) bool {
+	if len(architectures) == 0 {
+		return true
+	}
+	arch := currentArchitecture()
+	for _, value := range architectures {
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		if normalized == "all" || normalized == "*" || normalized == arch {
+			return true
+		}
+		switch arch {
+		case "amd64":
+			if normalized == "x86_64" || normalized == "x64" {
+				return true
+			}
+		case "arm64":
+			if normalized == "aarch64" {
+				return true
+			}
+		}
+	}
+	return false
+}
 func versionMatches(versions []string, version string) bool {
 	if len(versions) == 0 || strings.TrimSpace(version) == "" {
 		return true
@@ -721,7 +765,7 @@ func normalizeHash(v string) string {
 	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(v)), "sha256:")
 }
 
-func deployArtifact(source, target, kind string) error {
+func validateArtifactSource(source, kind string) error {
 	info, err := os.Lstat(source)
 	if err != nil {
 		return err
@@ -730,15 +774,65 @@ func deployArtifact(source, target, kind string) error {
 		return fmt.Errorf("artifact: symlink source rejected")
 	}
 	kind = strings.ToLower(strings.TrimSpace(kind))
-	if info.IsDir() {
-		return copyTreeAtomic(source, target)
+	switch kind {
+	case gameprotocol.PluginArtifactTypeFile:
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("artifact: type file requires a regular file source")
+		}
+		if info.Size() > maxArtifactSingleFileBytes {
+			return fmt.Errorf("artifact: source file exceeds %d bytes", maxArtifactSingleFileBytes)
+		}
+	case gameprotocol.PluginArtifactTypeDirectory:
+		if !info.IsDir() {
+			return fmt.Errorf("artifact: type directory requires a directory source")
+		}
+		_, _, err := scanArtifactTree(source)
+		return err
+	case gameprotocol.PluginArtifactTypeZIP:
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("artifact: type zip requires a regular file source")
+		}
+		if info.Size() > maxArtifactSingleFileBytes {
+			return fmt.Errorf("artifact: zip source exceeds %d bytes", maxArtifactSingleFileBytes)
+		}
+		return validateZipBudget(source)
+	default:
+		return fmt.Errorf("artifact: unsupported type %q", kind)
 	}
-	if (kind == "archive" || kind == "zip") && strings.EqualFold(filepath.Ext(source), ".zip") {
-		return extractZipAtomic(source, target)
-	}
-	return copyFileAtomic(source, target, info.Mode().Perm())
+	return nil
 }
+
+func deployArtifact(source, target, kind string) error {
+	if err := validateArtifactSource(source, kind); err != nil {
+		return err
+	}
+	info, err := os.Lstat(source)
+	if err != nil {
+		return err
+	}
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case gameprotocol.PluginArtifactTypeFile:
+		return copyFileAtomic(source, target, info.Mode().Perm())
+	case gameprotocol.PluginArtifactTypeDirectory:
+		return copyTreeAtomic(source, target)
+	case gameprotocol.PluginArtifactTypeZIP:
+		return extractZipAtomic(source, target)
+	default:
+		return fmt.Errorf("artifact: unsupported type %q", kind)
+	}
+}
+
 func copyFileAtomic(source, target string, mode os.FileMode) error {
+	info, err := os.Stat(source)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("artifact: only regular files can be copied")
+	}
+	if info.Size() > maxArtifactSingleFileBytes {
+		return fmt.Errorf("artifact: file exceeds %d bytes", maxArtifactSingleFileBytes)
+	}
 	tmp := target + ".amitia-tmp"
 	_ = os.RemoveAll(tmp)
 	in, err := os.Open(source)
@@ -750,8 +844,11 @@ func copyFileAtomic(source, target string, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	_, copyErr := io.Copy(out, in)
+	written, copyErr := io.Copy(out, io.LimitReader(in, maxArtifactSingleFileBytes+1))
 	closeErr := out.Close()
+	if copyErr == nil && written > maxArtifactSingleFileBytes {
+		copyErr = fmt.Errorf("artifact: file exceeded %d bytes during copy", maxArtifactSingleFileBytes)
+	}
 	if copyErr != nil {
 		_ = os.Remove(tmp)
 		return copyErr
@@ -762,7 +859,54 @@ func copyFileAtomic(source, target string, mode os.FileMode) error {
 	}
 	return os.Rename(tmp, target)
 }
+
+func scanArtifactTree(source string) (int, int64, error) {
+	files := 0
+	var total int64
+	err := filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("artifact: symlink rejected: %s", path)
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		depth := len(strings.FieldsFunc(filepath.ToSlash(rel), func(r rune) bool { return r == '/' }))
+		if depth > maxArtifactDepth {
+			return fmt.Errorf("artifact: directory depth exceeds %d", maxArtifactDepth)
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("artifact: unsupported non-regular file: %s", path)
+		}
+		files++
+		if files > maxArtifactFiles {
+			return fmt.Errorf("artifact: file count exceeds %d", maxArtifactFiles)
+		}
+		if info.Size() > maxArtifactSingleFileBytes {
+			return fmt.Errorf("artifact: file %s exceeds %d bytes", path, maxArtifactSingleFileBytes)
+		}
+		total += info.Size()
+		if total > maxArtifactTotalBytes {
+			return fmt.Errorf("artifact: total tree size exceeds %d bytes", maxArtifactTotalBytes)
+		}
+		return nil
+	})
+	return files, total, err
+}
+
 func copyTreeAtomic(source, target string) error {
+	if _, _, err := scanArtifactTree(source); err != nil {
+		return err
+	}
 	tmp := target + ".amitia-tmp"
 	_ = os.RemoveAll(tmp)
 	if err := os.MkdirAll(tmp, 0o755); err != nil {
@@ -772,10 +916,10 @@ func copyTreeAtomic(source, target string) error {
 		if err != nil {
 			return err
 		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("artifact: symlink rejected: %s", path)
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
 		}
-		rel, _ := filepath.Rel(source, path)
 		if rel == "." {
 			return nil
 		}
@@ -791,7 +935,53 @@ func copyTreeAtomic(source, target string) error {
 	}
 	return os.Rename(tmp, target)
 }
+
+func validateZipBudget(source string) error {
+	r, err := zip.OpenReader(source)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if len(r.File) > maxArtifactFiles {
+		return fmt.Errorf("artifact: zip entry count exceeds %d", maxArtifactFiles)
+	}
+	var total uint64
+	for _, f := range r.File {
+		clean := filepath.Clean(f.Name)
+		if filepath.IsAbs(clean) || clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("artifact: unsafe zip entry %q", f.Name)
+		}
+		depth := len(strings.FieldsFunc(filepath.ToSlash(clean), func(r rune) bool { return r == '/' }))
+		if depth > maxArtifactDepth {
+			return fmt.Errorf("artifact: zip entry depth exceeds %d", maxArtifactDepth)
+		}
+		if f.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("artifact: zip symlink rejected")
+		}
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		if !f.Mode().IsRegular() {
+			return fmt.Errorf("artifact: zip contains unsupported non-regular entry %q", f.Name)
+		}
+		if f.UncompressedSize64 > uint64(maxArtifactSingleFileBytes) {
+			return fmt.Errorf("artifact: zip entry %q exceeds %d bytes", f.Name, maxArtifactSingleFileBytes)
+		}
+		total += f.UncompressedSize64
+		if total > uint64(maxArtifactTotalBytes) {
+			return fmt.Errorf("artifact: zip uncompressed size exceeds %d bytes", maxArtifactTotalBytes)
+		}
+		if f.UncompressedSize64 >= 1<<20 && f.CompressedSize64 > 0 && f.UncompressedSize64/f.CompressedSize64 > maxZipCompressionRatio {
+			return fmt.Errorf("artifact: zip entry %q compression ratio exceeds %d:1", f.Name, maxZipCompressionRatio)
+		}
+	}
+	return nil
+}
+
 func extractZipAtomic(source, target string) error {
+	if err := validateZipBudget(source); err != nil {
+		return err
+	}
 	r, err := zip.OpenReader(source)
 	if err != nil {
 		return err
@@ -802,16 +992,9 @@ func extractZipAtomic(source, target string) error {
 	if err := os.MkdirAll(tmp, 0o755); err != nil {
 		return err
 	}
+	var extracted int64
 	for _, f := range r.File {
 		clean := filepath.Clean(f.Name)
-		if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-			_ = os.RemoveAll(tmp)
-			return fmt.Errorf("artifact: unsafe zip entry %q", f.Name)
-		}
-		if f.Mode()&os.ModeSymlink != 0 {
-			_ = os.RemoveAll(tmp)
-			return fmt.Errorf("artifact: zip symlink rejected")
-		}
 		dst := filepath.Join(tmp, clean)
 		if !isWithin(tmp, dst) {
 			_ = os.RemoveAll(tmp)
@@ -839,16 +1022,40 @@ func extractZipAtomic(source, target string) error {
 			_ = os.RemoveAll(tmp)
 			return err
 		}
-		_, err = io.Copy(out, src)
-		src.Close()
-		out.Close()
-		if err != nil {
+		limit := int64(f.UncompressedSize64) + 1
+		if limit > maxArtifactSingleFileBytes+1 {
+			limit = maxArtifactSingleFileBytes + 1
+		}
+		written, copyErr := io.Copy(out, io.LimitReader(src, limit))
+		srcErr := src.Close()
+		outErr := out.Close()
+		if copyErr == nil && written != int64(f.UncompressedSize64) {
+			copyErr = fmt.Errorf("artifact: zip entry %q size mismatch", f.Name)
+		}
+		if copyErr == nil && written > maxArtifactSingleFileBytes {
+			copyErr = fmt.Errorf("artifact: zip entry %q exceeds per-file limit", f.Name)
+		}
+		if copyErr != nil {
 			_ = os.RemoveAll(tmp)
-			return err
+			return copyErr
+		}
+		if srcErr != nil {
+			_ = os.RemoveAll(tmp)
+			return srcErr
+		}
+		if outErr != nil {
+			_ = os.RemoveAll(tmp)
+			return outErr
+		}
+		extracted += written
+		if extracted > maxArtifactTotalBytes {
+			_ = os.RemoveAll(tmp)
+			return fmt.Errorf("artifact: zip extraction exceeds %d bytes", maxArtifactTotalBytes)
 		}
 	}
 	return os.Rename(tmp, target)
 }
+
 func hashPath(path string) (string, error) {
 	info, err := os.Lstat(path)
 	if err != nil {

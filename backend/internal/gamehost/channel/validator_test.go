@@ -19,59 +19,29 @@ func TestValidateDirection_PluginToHost_AllowsPluginToHost(t *testing.T) {
 	}
 }
 
-func TestValidateDirection_PluginToHost_RejectsHostToPlugin(t *testing.T) {
+func TestValidateDirection_V1RejectsOutboundFlow(t *testing.T) {
 	ch := RuntimeChannel{
 		Direction: protocol.ChannelDirectionPluginToHost,
 		Kind:      domain.ChannelKindEvent,
 	}
-	if err := ValidateDirection(ch, protocol.ChannelDirectionHostToPlugin); err == nil {
-		t.Fatal("should reject host_to_plugin flow on plugin_to_host channel")
+	if err := ValidateDirection(ch, protocol.ChannelDirection("host_to_plugin")); err == nil {
+		t.Fatal("protocol v1 must reject host_to_plugin channel flow")
 	}
 }
 
-func TestValidateDirection_HostToPlugin_AllowsHostToPlugin(t *testing.T) {
-	ch := RuntimeChannel{
-		Direction: protocol.ChannelDirectionHostToPlugin,
-		Kind:      domain.ChannelKindEvent,
-	}
-	if err := ValidateDirection(ch, protocol.ChannelDirectionHostToPlugin); err != nil {
-		t.Fatalf("should allow host_to_plugin: %v", err)
-	}
-}
-
-func TestValidateDirection_HostToPlugin_RejectsPluginToHost(t *testing.T) {
-	ch := RuntimeChannel{
-		Direction: protocol.ChannelDirectionHostToPlugin,
-		Kind:      domain.ChannelKindEvent,
-	}
-	if err := ValidateDirection(ch, protocol.ChannelDirectionPluginToHost); err == nil {
-		t.Fatal("should reject plugin_to_host flow on host_to_plugin channel")
+func TestValidateDirection_V1RejectsLegacyOutboundDirections(t *testing.T) {
+	for _, direction := range []protocol.ChannelDirection{"host_to_plugin", "bidirectional"} {
+		ch := RuntimeChannel{Direction: direction, Kind: domain.ChannelKindEvent}
+		if err := ValidateDirection(ch, protocol.ChannelDirectionPluginToHost); err == nil {
+			t.Fatalf("protocol v1 must reject direction %q", direction)
+		}
 	}
 }
 
-func TestValidateDirection_Bidirectional_AllowsBoth(t *testing.T) {
-	ch := RuntimeChannel{
-		Direction: protocol.ChannelDirectionBidirectional,
-		Kind:      domain.ChannelKindEvent,
-	}
+func TestValidateDirection_DefaultsToPluginToHost(t *testing.T) {
+	ch := RuntimeChannel{Direction: "", Kind: domain.ChannelKindEvent}
 	if err := ValidateDirection(ch, protocol.ChannelDirectionPluginToHost); err != nil {
-		t.Fatalf("should allow plugin_to_host: %v", err)
-	}
-	if err := ValidateDirection(ch, protocol.ChannelDirectionHostToPlugin); err != nil {
-		t.Fatalf("should allow host_to_plugin: %v", err)
-	}
-}
-
-func TestValidateDirection_DefaultBidirectional(t *testing.T) {
-	ch := RuntimeChannel{
-		Direction: "",
-		Kind:      domain.ChannelKindEvent,
-	}
-	if err := ValidateDirection(ch, protocol.ChannelDirectionPluginToHost); err != nil {
-		t.Fatalf("default should be bidirectional: %v", err)
-	}
-	if err := ValidateDirection(ch, protocol.ChannelDirectionHostToPlugin); err != nil {
-		t.Fatalf("default should be bidirectional: %v", err)
+		t.Fatalf("empty direction should mean plugin_to_host in v1: %v", err)
 	}
 }
 
@@ -328,7 +298,7 @@ func TestMapper_Map_Valid(t *testing.T) {
 		RuntimeID: "r",
 		ServiceID: "s",
 		Descriptors: []protocol.ChannelDescriptor{
-			{ID: "events", Kind: "event", Direction: "plugin_to_host"},
+			{ID: "events", Kind: "event", Direction: "plugin_to_host", SchemaID: "vendor.events/v1"},
 			{ID: "state", Kind: "state"},
 		},
 	}
@@ -486,7 +456,7 @@ func TestReconciler_UpdateChannel(t *testing.T) {
 		RuntimeID: "r",
 		ServiceID: "s",
 		Descriptors: []protocol.ChannelDescriptor{
-			{ID: "events", Kind: "event", Direction: "plugin_to_host"},
+			{ID: "events", Kind: "event", Direction: "plugin_to_host", SchemaID: "vendor.events/v1"},
 		},
 	}}
 	rec.ReconcileRuntimeChannels(context.Background(), "r", input1)
@@ -496,7 +466,7 @@ func TestReconciler_UpdateChannel(t *testing.T) {
 		RuntimeID: "r",
 		ServiceID: "s",
 		Descriptors: []protocol.ChannelDescriptor{
-			{ID: "events", Kind: "event", Direction: "bidirectional"},
+			{ID: "events", Kind: "event", Direction: "plugin_to_host", SchemaID: "vendor.events/v2"},
 		},
 	}}
 	result, _ := rec.ReconcileRuntimeChannels(context.Background(), "r", input2)

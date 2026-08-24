@@ -108,3 +108,51 @@ func (h *ArtifactHandler) Remove(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+func (h *ArtifactHandler) ListAuthorizedRoots(c *gin.Context) {
+	if h == nil || h.manager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "artifact manager unavailable"})
+		return
+	}
+	items, err := h.manager.ListAuthorizedTargetRoots(c.Request.Context(), c.Param("extensionId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func (h *ArtifactHandler) AuthorizeRoot(c *gin.Context) {
+	if h == nil || h.manager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "artifact manager unavailable"})
+		return
+	}
+	var req artifactDeploymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	grant, err := h.manager.AuthorizeTargetRoot(c.Request.Context(), c.Param("extensionId"), req.TargetRoot)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, grant)
+}
+
+func (h *ArtifactHandler) RevokeRoot(c *gin.Context) {
+	if h == nil || h.manager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "artifact manager unavailable"})
+		return
+	}
+	var req artifactDeploymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.manager.RevokeTargetRoot(c.Request.Context(), c.Param("extensionId"), req.TargetRoot); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}

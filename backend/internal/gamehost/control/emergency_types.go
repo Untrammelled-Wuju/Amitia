@@ -13,6 +13,7 @@ const (
 	EmergencyActorUser   EmergencyStopActor = "user"
 	EmergencyActorHost   EmergencyStopActor = "host"
 	EmergencyActorSystem EmergencyStopActor = "system"
+	EmergencyActorPlugin EmergencyStopActor = "plugin"
 )
 
 type EmergencyStopReason string
@@ -23,6 +24,7 @@ const (
 	EmergencyReasonResourceViolation   EmergencyStopReason = "resource_violation"
 	EmergencyReasonRuntimeUnresponsive EmergencyStopReason = "runtime_unresponsive"
 	EmergencyReasonManualAdminAction   EmergencyStopReason = "manual_admin_action"
+	EmergencyReasonPluginRequested     EmergencyStopReason = "plugin_requested"
 )
 
 type EmergencyStopState string

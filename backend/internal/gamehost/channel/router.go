@@ -49,23 +49,12 @@ type IncomingChannelMessage struct {
 	Metadata  map[string]json.RawMessage
 }
 
-type OutgoingChannelMessage struct {
-	ChannelID domain.ChannelID
-	Payload   json.RawMessage
-	Metadata  map[string]json.RawMessage
-}
-
-type ChannelTargetResolver interface {
-	ResolveConnection(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (ipc.Peer, bool, error)
-}
-
 type RouterConfig struct {
 	Registry Registry
 	Events   stream.EventPublisher
 	States   state.StateStore
 	Generic  GenericChannelSink
 	Binary   BinarySink
-	Target   ChannelTargetResolver
 	NowFunc  func() time.Time
 }
 
@@ -75,7 +64,6 @@ type Router struct {
 	states   state.StateStore
 	generic  GenericChannelSink
 	binary   BinarySink
-	target   ChannelTargetResolver
 	nowFunc  func() time.Time
 }
 
@@ -90,7 +78,6 @@ func NewRouter(cfg RouterConfig) *Router {
 		states:   cfg.States,
 		generic:  cfg.Generic,
 		binary:   cfg.Binary,
-		target:   cfg.Target,
 		nowFunc:  now,
 	}
 }
@@ -212,39 +199,6 @@ func (r *Router) routeGeneric(ctx context.Context, channel RuntimeChannel, msg I
 	}
 
 	return r.generic.Publish(ctx, channel, chMsg)
-}
-
-func (r *Router) SendToChannel(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, channelID domain.ChannelID, msg OutgoingChannelMessage) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	channel, err := r.registry.Resolve(ctx, runtimeID, serviceID, channelID)
-	if err != nil {
-		return err
-	}
-
-	if err := ValidateDirection(channel, protocol.ChannelDirectionHostToPlugin); err != nil {
-		return err
-	}
-
-	if r.target == nil {
-		return errors.New("channel router: target resolver is nil")
-	}
-
-	peer, found, err := r.target.ResolveConnection(ctx, channel.RuntimeID, channel.ServiceID)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return domain.NewHostError(domain.ErrRuntimeUnavailable, "channel: target service connection not available")
-	}
-
-	return r.deliverOutbound(ctx, peer, channel, msg)
-}
-
-func (r *Router) deliverOutbound(ctx context.Context, peer ipc.Peer, channel RuntimeChannel, msg OutgoingChannelMessage) error {
-	return nil
 }
 
 func buildStateKey(channel RuntimeChannel, metadata map[string]json.RawMessage) string {

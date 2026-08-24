@@ -213,11 +213,19 @@ describe('TypeScript Conformance Suite', () => {
     });
 
     test('all channel directions should be valid', () => {
-      const directions = ['plugin_to_host', 'host_to_plugin', 'bidirectional'];
+      const directions = ['plugin_to_host'];
       for (const dir of directions) {
         const ch: ChannelDescriptor = { id: 'ch-1', kind: 'event', direction: dir as any };
         const errors = validateChannel(ch);
         expect(errors).toHaveLength(0);
+      }
+    });
+
+    test('legacy outbound channel directions should be rejected by protocol v1', () => {
+      for (const direction of ['host_to_plugin', 'bidirectional']) {
+        const ch: ChannelDescriptor = { id: 'ch-legacy', kind: 'event', direction: direction as any };
+        const errors = validateChannel(ch);
+        expect(errors.length).toBeGreaterThan(0);
       }
     });
 
@@ -234,11 +242,9 @@ describe('TypeScript Conformance Suite', () => {
         HostFeature.REALTIME_CONTROL,
         HostFeature.STATE_STREAMING,
         HostFeature.EVENT_STREAMING,
-        HostFeature.BINARY_STREAMING,
         HostFeature.CUSTOM_RPC,
         HostFeature.HOST_API,
         HostFeature.SHARED_CONTROL,
-        HostFeature.CUSTOM_UI,
         HostFeature.MULTI_SERVICE,
       ];
       for (const cap of stdCaps) {

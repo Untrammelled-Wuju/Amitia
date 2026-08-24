@@ -15,8 +15,7 @@ const (
 	MethodControlOutput            = "control.output"
 	MethodControlAuthorityTakeover = "control.authority.takeover"
 	MethodControlAuthorityRelease  = "control.authority.release"
-	MethodEmergencyStopInitiate    = "emergency.stop.initiate"
-	MethodEmergencyStopStatus      = "emergency.stop.status"
+	MethodEmergencyStop            = "emergency.stop"
 )
 
 const (
@@ -121,17 +120,21 @@ type AuthorityReleaseResult struct {
 	Reason        string `json:"reason,omitempty"`
 }
 
-type EmergencyStopStatusInput struct {
-	OperationID string `json:"operationId,omitempty"`
+type EmergencyStopInput struct {
+	IdempotencyKey string `json:"idempotencyKey,omitempty"`
 }
 
-type EmergencyStopStatusResult struct {
-	OperationID string `json:"operationId"`
-	State       string `json:"state"`
-	Active      bool   `json:"active"`
-	Reason      string `json:"reason,omitempty"`
-	InitiatedAt int64  `json:"initiatedAt,omitempty"`
-	CompletedAt int64  `json:"completedAt,omitempty"`
+type EmergencyStopResult struct {
+	OperationID     string    `json:"operationId"`
+	RuntimeID       string    `json:"runtimeId"`
+	State           string    `json:"state"`
+	Actor           string    `json:"actor"`
+	Reason          string    `json:"reason"`
+	Success         bool      `json:"success"`
+	CriticalFailure bool      `json:"criticalFailure"`
+	Residue         []string  `json:"residue,omitempty"`
+	StartedAt       time.Time `json:"startedAt"`
+	FinishedAt      time.Time `json:"finishedAt"`
 }
 
 func (c *Client) GetAuthoritySnapshot(ctx context.Context, runtimeID, serviceID string, opts ...MessageOption) (AuthoritySnapshot, error) {
@@ -208,15 +211,15 @@ func (c *Client) ReleaseAuthority(ctx context.Context, input AuthorityReleaseInp
 	return out, nil
 }
 
-func (c *Client) GetEmergencyStopStatus(ctx context.Context, input EmergencyStopStatusInput, opts ...MessageOption) (EmergencyStopStatusResult, error) {
-	envelope, err := c.SendReservedRequest(ctx, MethodEmergencyStopStatus, input, opts...)
+func (c *Client) EmergencyStop(ctx context.Context, input EmergencyStopInput, opts ...MessageOption) (EmergencyStopResult, error) {
+	envelope, err := c.SendReservedRequest(ctx, MethodEmergencyStop, input, opts...)
 	if err != nil {
-		return EmergencyStopStatusResult{}, err
+		return EmergencyStopResult{}, err
 	}
-	var out EmergencyStopStatusResult
+	var out EmergencyStopResult
 	if len(envelope.Payload) > 0 {
 		if err := json.Unmarshal(envelope.Payload, &out); err != nil {
-			return EmergencyStopStatusResult{}, NewEncodeError("unmarshal emergency stop status: %v", err)
+			return EmergencyStopResult{}, NewEncodeError("unmarshal emergency stop response: %v", err)
 		}
 	}
 	return out, nil

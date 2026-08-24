@@ -20,7 +20,10 @@ type RuntimeChannel struct {
 
 	ChannelID domain.ChannelID
 
-	Kind      domain.ChannelKind
+	Kind domain.ChannelKind
+	// SchemaID is descriptive metadata negotiated at handshake time. Protocol v1
+	// does not imply host-side payload validation; plugins own game-specific schemas.
+	SchemaID  string
 	Direction protocol.ChannelDirection
 	Frequency *protocol.FrequencyHint
 
@@ -60,6 +63,7 @@ func (c RuntimeChannel) Clone() RuntimeChannel {
 		ServiceID: c.ServiceID,
 		ChannelID: c.ChannelID,
 		Kind:      c.Kind,
+		SchemaID:  c.SchemaID,
 		Direction: c.Direction,
 	}
 	if c.Frequency != nil {

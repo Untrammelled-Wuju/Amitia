@@ -241,6 +241,30 @@ func (r *Registry) DescriptorChannels(pluginID, serviceID string) ([]string, err
 	return channels, nil
 }
 
+func (r *Registry) DescriptorChannelDescriptors(pluginID, serviceID string) ([]domain.ChannelDescriptor, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, ok := r.plugins[domain.PluginID(pluginID)]
+	if !ok {
+		return nil, fmt.Errorf("plugin not found: %s", pluginID)
+	}
+	channels := make([]domain.ChannelDescriptor, 0, len(p.Channels))
+	for _, ch := range p.Channels {
+		if serviceID != "" && string(ch.ServiceID) != serviceID {
+			continue
+		}
+		copy := ch
+		if ch.Metadata != nil {
+			copy.Metadata = make(map[string]string, len(ch.Metadata))
+			for key, value := range ch.Metadata {
+				copy.Metadata[key] = value
+			}
+		}
+		channels = append(channels, copy)
+	}
+	return channels, nil
+}
+
 func (r *Registry) DescriptorControlSinks(pluginID string) ([]domain.ControlSinkDeclaration, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

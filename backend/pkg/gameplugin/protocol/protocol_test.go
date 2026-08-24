@@ -662,7 +662,6 @@ func TestValidateKnownCapabilities(t *testing.T) {
 		CapabilityCustomRPC,
 		CapabilityHostAPI,
 		CapabilitySharedControl,
-		CapabilityCustomUI,
 		CapabilityMultiService,
 	}
 	for _, cap := range knownCaps {
@@ -730,14 +729,23 @@ func TestValidateChannelDescriptor(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid state with bidirectional",
+			name: "valid state with plugin_to_host",
 			ch: ChannelDescriptor{
 				ID:            "ch-2",
 				Kind:          ChannelKindState,
-				Direction:     ChannelDirectionBidirectional,
+				Direction:     ChannelDirectionPluginToHost,
 				FrequencyHint: &realtimeHint,
 			},
 			wantErr: false,
+		},
+		{
+			name: "legacy bidirectional rejected by v1",
+			ch: ChannelDescriptor{
+				ID:        "ch-legacy",
+				Kind:      ChannelKindEvent,
+				Direction: ChannelDirection("bidirectional"),
+			},
+			wantErr: true,
 		},
 		{
 			name: "empty kind",

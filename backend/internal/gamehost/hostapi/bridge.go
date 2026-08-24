@@ -23,6 +23,7 @@ type ProductionHostAPIAdapterDeps struct {
 	ConnectionRegistry ConnectionReadyChecker
 	InvocationTracker  InvocationTracker
 	PermissionChecker  RuntimePermissionChecker
+	FeatureChecker     NegotiatedFeatureChecker
 }
 
 type RuntimeGenerationReader interface {
@@ -81,5 +82,6 @@ func NewProductionHostAPIAdapter(deps ProductionHostAPIAdapterDeps) (*HostAPIAda
 		IDGenerator:        DefaultIDGenerator(),
 		InvocationTracker:  deps.InvocationTracker,
 		PermissionChecker:  deps.PermissionChecker,
+		FeatureChecker:     deps.FeatureChecker,
 	})
 }

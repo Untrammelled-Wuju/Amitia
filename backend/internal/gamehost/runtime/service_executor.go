@@ -33,11 +33,16 @@ type SecretLeaseAwareServiceExecutor interface {
 	SetServiceLeaseLifecycle(lifecycle ServiceLeaseLifecycle)
 }
 
+type ServiceStartPermissionGuard interface {
+	AuthorizeServiceStart(ctx context.Context, execCtx ServiceExecutionContext, definition *trusted_service.ServiceRuntimeDefinition) error
+}
+
 type serviceExecutor struct {
 	processAdapter     ProcessSupervisorAdapter
 	externalAdapter    ExternalServiceAdapter
 	topologyStore      RuntimeTopologyStore
 	definitionResolver ServiceDefinitionBindingResolver
+	startPermission    ServiceStartPermissionGuard
 	leaseLifecycle     ServiceLeaseLifecycle
 }
 
@@ -50,6 +55,7 @@ func NewServiceExecutor(
 	externalAdapter ExternalServiceAdapter,
 	topologyStore RuntimeTopologyStore,
 	definitionResolver ServiceDefinitionBindingResolver,
+	startPermission ServiceStartPermissionGuard,
 ) (ServiceExecutor, error) {
 	if processAdapter == nil {
 		return nil, &TopologyError{Code: ErrInvalidArgument, Message: "process adapter must not be nil"}
@@ -60,11 +66,15 @@ func NewServiceExecutor(
 	if topologyStore == nil {
 		return nil, &TopologyError{Code: ErrInvalidArgument, Message: "topology store must not be nil"}
 	}
+	if startPermission == nil {
+		return nil, &TopologyError{Code: ErrInvalidArgument, Message: "service start permission guard must not be nil"}
+	}
 	return &serviceExecutor{
 		processAdapter:     processAdapter,
 		externalAdapter:    externalAdapter,
 		topologyStore:      topologyStore,
 		definitionResolver: definitionResolver,
+		startPermission:    startPermission,
 	}, nil
 }
 
@@ -125,10 +135,6 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 		}
 	}
 
-	if err := topology.UpdateServiceState(serviceID, ServiceStateStarting, now); err != nil {
-		return nil, err
-	}
-
 	execCtx := ServiceExecutionContext{
 		RuntimeID:    svc.RuntimeID,
 		PluginID:     svc.PluginID,
@@ -140,6 +146,37 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 	}
 	if execCtx.Generation <= 0 {
 		return nil, &ExecutionError{Code: ErrInvalidArgument, RuntimeID: string(svc.RuntimeID), ServiceID: string(svc.ServiceID), Message: "execution generation is required"}
+	}
+
+	var def *trusted_service.ServiceRuntimeDefinition
+	if svc.ServiceKind != domain.ServiceKindExternal {
+		def, err = resolveDefinition(definitionID)
+		if err != nil {
+			return nil, &ExecutionError{
+				Code:         ErrDefinitionNotResolved,
+				RuntimeID:    string(execCtx.RuntimeID),
+				PluginID:     string(execCtx.PluginID),
+				ServiceID:    string(execCtx.ServiceID),
+				DefinitionID: definitionID,
+				Message:      "failed to resolve service definition",
+				Cause:        err,
+			}
+		}
+	}
+	if err := e.startPermission.AuthorizeServiceStart(ctx, execCtx, def); err != nil {
+		return nil, &ExecutionError{
+			Code:         ErrServiceLaunchFailed,
+			RuntimeID:    string(execCtx.RuntimeID),
+			PluginID:     string(execCtx.PluginID),
+			ServiceID:    string(execCtx.ServiceID),
+			DefinitionID: definitionID,
+			Message:      "service start permission denied",
+			Cause:        err,
+		}
+	}
+
+	if err := topology.UpdateServiceState(serviceID, ServiceStateStarting, now); err != nil {
+		return nil, err
 	}
 	execCtx.SessionToken, err = newExecutionSessionToken()
 	if err != nil {
@@ -174,20 +211,6 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 			ServiceID: string(svc.ServiceID),
 		}, nil
 	}
-	def, err := resolveDefinition(definitionID)
-	if err != nil {
-		topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
-		return nil, &ExecutionError{
-			Code:         ErrDefinitionNotResolved,
-			RuntimeID:    string(execCtx.RuntimeID),
-			PluginID:     string(execCtx.PluginID),
-			ServiceID:    string(execCtx.ServiceID),
-			DefinitionID: definitionID,
-			Message:      "failed to resolve service definition",
-			Cause:        err,
-		}
-	}
-
 	_, handle, err := e.processAdapter.StartProcess(ctx, def, execCtx)
 	if err != nil {
 		topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())

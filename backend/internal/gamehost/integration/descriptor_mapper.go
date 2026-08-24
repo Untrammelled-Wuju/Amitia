@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -85,6 +86,16 @@ func (m *DefaultGamePluginContributionMapper) ToDescriptor(
 	}
 
 	metadata := make(map[string]string)
+	for k, v := range spec.Metadata {
+		if isKernelPrivateMetadataKey(k) {
+			continue
+		}
+		encoded, err := encodeOpaqueMetadataValue(v)
+		if err != nil {
+			return gamehostdomain.PluginDescriptor{}, fmt.Errorf("encode plugin metadata %q: %w", k, err)
+		}
+		metadata[k] = encoded
+	}
 	if contribution.Metadata != nil {
 		for k, v := range contribution.Metadata {
 			if isKernelPrivateMetadataKey(k) {
@@ -200,4 +211,15 @@ func isKernelPrivateMetadataKey(key string) bool {
 	}
 	_, ok := privateKeys[key]
 	return ok
+}
+
+func encodeOpaqueMetadataValue(value any) (string, error) {
+	if text, ok := value.(string); ok {
+		return text, nil
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
