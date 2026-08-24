@@ -35,12 +35,14 @@ func TestPluginDescriptorValid(t *testing.T) {
 		},
 		Channels: []ChannelDescriptor{
 			{
-				ID:   ChannelID("agent.events"),
-				Kind: ChannelKindEvent,
+				ID:        ChannelID("agent.events"),
+				ServiceID: ServiceID("agent-service"),
+				Kind:      ChannelKindEvent,
 			},
 			{
-				ID:   ChannelID("game.state"),
-				Kind: ChannelKindState,
+				ID:        ChannelID("game.state"),
+				ServiceID: ServiceID("game-bridge"),
+				Kind:      ChannelKindState,
 			},
 		},
 		Metadata: map[string]string{
@@ -165,22 +167,14 @@ func TestPluginDescriptorRejectsDuplicateCapability(t *testing.T) {
 	}
 }
 
-func TestPluginDescriptorAcceptsCustomCapability(t *testing.T) {
+func TestPluginDescriptorRejectsGameToolCapabilityAsHostFeature(t *testing.T) {
 	desc := PluginDescriptor{
-		ID:              PluginID("test-plugin"),
-		ExtensionID:     "com.example.test",
-		Name:            "Test",
-		Version:         "1.0.0",
-		ProtocolVersion: "amitia-game-host/1",
-		Capabilities: []Capability{
-			Capability("minecraft.pathfinding"),
-			Capability("vendor.visual-agent"),
-			Capability("custom.gameplay"),
-		},
+		ID: PluginID("test-plugin"), ExtensionID: "com.example.test", Name: "Test",
+		Version: "1.0.0", ProtocolVersion: "amitia-game-host/1",
+		Capabilities: []Capability{Capability("minecraft.pathfinding")},
 	}
-
-	if err := desc.Validate(); err != nil {
-		t.Fatalf("expected custom capabilities to be valid, got: %v", err)
+	if err := desc.Validate(); err == nil {
+		t.Fatal("game/tool capability must not be accepted as a GameHost feature")
 	}
 }
 
@@ -249,14 +243,15 @@ func TestPluginDescriptorRejectsDuplicateChannelID(t *testing.T) {
 		Name:            "Test",
 		Version:         "1.0.0",
 		ProtocolVersion: "amitia-game-host/1",
+		Services: []ServiceDescriptor{{
+			ID: ServiceID("svc-1"), Name: "Service 1", Kind: ServiceKindProcess,
+		}},
 		Channels: []ChannelDescriptor{
 			{
-				ID:   ChannelID("state"),
-				Kind: ChannelKindState,
+				ID: ChannelID("state"), ServiceID: ServiceID("svc-1"), Kind: ChannelKindState,
 			},
 			{
-				ID:   ChannelID("state"),
-				Kind: ChannelKindState,
+				ID: ChannelID("state"), ServiceID: ServiceID("svc-1"), Kind: ChannelKindState,
 			},
 		},
 	}
@@ -296,15 +291,14 @@ func TestPluginDescriptorCloneDeepCopy(t *testing.T) {
 		},
 		Channels: []ChannelDescriptor{
 			{
-				ID:   ChannelID("events"),
-				Kind: ChannelKindEvent,
+				ID: ChannelID("events"), ServiceID: ServiceID("svc-1"), Kind: ChannelKindEvent,
 				Metadata: map[string]string{
 					"schema": "v1",
 				},
 			},
 		},
 		Metadata: map[string]string{
-			"vendor": "example",
+			"vendor":   "example",
 			"category": "utility",
 		},
 	}
@@ -334,28 +328,14 @@ func TestPluginDescriptorCloneDeepCopy(t *testing.T) {
 	}
 }
 
-func TestCustomGameCapabilitiesDoNotRequireHostKnowledge(t *testing.T) {
+func TestGameToolCapabilitiesStayOutsideGameHostDescriptor(t *testing.T) {
 	desc := PluginDescriptor{
-		ID:              PluginID("minecraft-plugin"),
-		ExtensionID:     "com.example.minecraft",
-		Name:            "Minecraft Plugin",
-		Version:         "1.0.0",
-		ProtocolVersion: "amitia-game-host/1",
-		Capabilities: []Capability{
-			Capability("minecraft.building"),
-			Capability("minecraft.combat"),
-			Capability("custom.vision-agent"),
-		},
+		ID: PluginID("minecraft-plugin"), ExtensionID: "com.example.minecraft",
+		Name: "Minecraft Plugin", Version: "1.0.0", ProtocolVersion: "amitia-game-host/1",
+		Capabilities: []Capability{Capability("minecraft.building")},
 	}
-
-	if err := desc.Validate(); err != nil {
-		t.Fatalf("expected custom capabilities to be valid, got: %v", err)
-	}
-
-	for _, cap := range desc.Capabilities {
-		if IsKnownCapability(cap) {
-			t.Errorf("custom capability %s should not be marked as known", cap)
-		}
+	if err := desc.Validate(); err == nil {
+		t.Fatal("game-specific tool capability must be registered through Extension Kernel, not GameHost")
 	}
 }
 
@@ -378,8 +358,7 @@ func TestDescriptorHasNoGameSpecificRequirement(t *testing.T) {
 		},
 		Channels: []ChannelDescriptor{
 			{
-				ID:   ChannelID("rpc"),
-				Kind: ChannelKindCustom,
+				ID: ChannelID("rpc"), ServiceID: ServiceID("controller"), Kind: ChannelKindCustom,
 			},
 		},
 	}
@@ -423,5 +402,28 @@ func TestPluginDescriptorHasCapability(t *testing.T) {
 	}
 	if desc.HasCapability(CapabilityBinaryStreaming) {
 		t.Error("did not expect to find binary_streaming capability")
+	}
+}
+
+func TestPluginDescriptorRejectsChannelUnknownService(t *testing.T) {
+	desc := PluginDescriptor{
+		ID: "test-plugin", ExtensionID: "com.example.test", Name: "Test", Version: "1.0.0", ProtocolVersion: "amitia-game-host/1",
+		Services: []ServiceDescriptor{{ID: "svc-1", Name: "Service 1", Kind: ServiceKindProcess}},
+		Channels: []ChannelDescriptor{{ID: "events", ServiceID: "missing", Kind: ChannelKindEvent}},
+	}
+	if err := desc.Validate(); err == nil {
+		t.Fatal("expected unknown channel service to be rejected")
+	}
+}
+
+func TestEqualPluginDescriptorDetectsChannelServiceChange(t *testing.T) {
+	a := PluginDescriptor{ID: "p", ExtensionID: "ext", Name: "P", Version: "1", ProtocolVersion: "amitia-game-host/1",
+		Services: []ServiceDescriptor{{ID: "svc-a", Name: "A", Kind: ServiceKindProcess}, {ID: "svc-b", Name: "B", Kind: ServiceKindProcess}},
+		Channels: []ChannelDescriptor{{ID: "events", ServiceID: "svc-a", Kind: ChannelKindEvent}},
+	}
+	b := a.Clone()
+	b.Channels[0].ServiceID = "svc-b"
+	if EqualPluginDescriptor(a, b) {
+		t.Fatal("channel service ownership must participate in descriptor equality")
 	}
 }

@@ -60,13 +60,13 @@ type ChannelTargetResolver interface {
 }
 
 type RouterConfig struct {
-	Registry   Registry
-	Events     stream.EventPublisher
-	States     state.StateStore
-	Generic    GenericChannelSink
-	Binary     BinarySink
-	Target     ChannelTargetResolver
-	NowFunc    func() time.Time
+	Registry Registry
+	Events   stream.EventPublisher
+	States   state.StateStore
+	Generic  GenericChannelSink
+	Binary   BinarySink
+	Target   ChannelTargetResolver
+	NowFunc  func() time.Time
 }
 
 type Router struct {
@@ -134,21 +134,24 @@ func (r *Router) Route(ctx context.Context, msg IncomingChannelMessage) error {
 }
 
 func (r *Router) routeEvent(ctx context.Context, channel RuntimeChannel, msg IncomingChannelMessage) error {
+	// In production channel.publish itself travels through the durable notification
+	// pipeline. A separate EventPublisher is optional and is used only when a
+	// caller wants an additional typed stream event.
 	if r.events == nil {
-		return errors.New("channel router: event publisher is nil")
+		return nil
 	}
 
 	envelope := stream.EventEnvelope{
-		ID:        r.generateID(),
-		TypeID:    "gamehost.channel.event",
-		Version:   1,
-		PluginID:  msg.Peer.PluginID,
-		RuntimeID: msg.Peer.RuntimeID,
-		ServiceID: msg.Peer.ServiceID,
-		Method:    string(msg.ChannelID),
-		Payload:   copyRawMessage(msg.Payload),
-		Metadata:  copyMetadata(msg.Metadata),
-		TraceID:   string(channel.ID),
+		ID:         r.generateID(),
+		TypeID:     "gamehost.channel.event",
+		Version:    1,
+		PluginID:   msg.Peer.PluginID,
+		RuntimeID:  msg.Peer.RuntimeID,
+		ServiceID:  msg.Peer.ServiceID,
+		Method:     string(msg.ChannelID),
+		Payload:    copyRawMessage(msg.Payload),
+		Metadata:   copyMetadata(msg.Metadata),
+		TraceID:    string(channel.ID),
 		OccurredAt: r.nowFunc().Unix(),
 	}
 
@@ -163,13 +166,13 @@ func (r *Router) routeState(ctx context.Context, channel RuntimeChannel, msg Inc
 	stateKey := buildStateKey(channel, msg.Metadata)
 
 	update := state.StateUpdate{
-		ID:        r.generateID(),
-		PluginID:  msg.Peer.PluginID,
-		RuntimeID: msg.Peer.RuntimeID,
-		ServiceID: msg.Peer.ServiceID,
-		Key:       stateKey,
-		Payload:   copyRawMessage(msg.Payload),
-		Metadata:  copyMetadata(msg.Metadata),
+		ID:         r.generateID(),
+		PluginID:   msg.Peer.PluginID,
+		RuntimeID:  msg.Peer.RuntimeID,
+		ServiceID:  msg.Peer.ServiceID,
+		Key:        stateKey,
+		Payload:    copyRawMessage(msg.Payload),
+		Metadata:   copyMetadata(msg.Metadata),
 		ReceivedAt: r.nowFunc(),
 	}
 

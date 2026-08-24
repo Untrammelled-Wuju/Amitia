@@ -27,8 +27,9 @@ func newTestPluginDescriptor(id domain.PluginID, extensionID string) domain.Plug
 		},
 		Channels: []domain.ChannelDescriptor{
 			{
-				ID:   domain.ChannelID("events"),
-				Kind: domain.ChannelKindEvent,
+				ID:        domain.ChannelID("events"),
+				ServiceID: domain.ServiceID("svc-1"),
+				Kind:      domain.ChannelKindEvent,
 			},
 		},
 		Metadata: map[string]string{
@@ -59,6 +60,7 @@ func TestRegisterRejectsInvalidDescriptor(t *testing.T) {
 
 	desc := domain.PluginDescriptor{
 		ID:              "",
+		ServiceID:       domain.ServiceID("svc-1"),
 		ExtensionID:     "com.example",
 		Name:            "Bad Plugin",
 		Version:         "1.0.0",

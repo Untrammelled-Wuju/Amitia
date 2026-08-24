@@ -29,11 +29,11 @@ type InstallationRecord struct {
 }
 
 type ArtifactStatus struct {
-	Artifact      gameprotocol.GameCompanionArtifact `json:"artifact"`
-	Installed     bool                               `json:"installed"`
-	Healthy       bool                               `json:"healthy"`
-	TargetPath    string                             `json:"targetPath,omitempty"`
-	InstalledHash string                             `json:"installedHash,omitempty"`
+	Artifact      gameprotocol.PluginArtifact `json:"artifact"`
+	Installed     bool                        `json:"installed"`
+	Healthy       bool                        `json:"healthy"`
+	TargetPath    string                      `json:"targetPath,omitempty"`
+	InstalledHash string                      `json:"installedHash,omitempty"`
 }
 
 type Manager struct {
@@ -287,8 +287,8 @@ func (m *Manager) Remove(ctx context.Context, extensionID, artifactID, gameRoot 
 	return m.saveLocked()
 }
 
-func (m *Manager) installLocked(extensionID, gameRoot, generationRoot string, artifact gameprotocol.GameCompanionArtifact) (InstallationRecord, error) {
-	if strings.TrimSpace(artifact.EffectiveTarget()) == "" {
+func (m *Manager) installLocked(extensionID, gameRoot, generationRoot string, artifact gameprotocol.PluginArtifact) (InstallationRecord, error) {
+	if strings.TrimSpace(artifact.Target) == "" {
 		return InstallationRecord{}, fmt.Errorf("companion: artifact %s requires installTarget", artifact.ID)
 	}
 	source, err := resolveContained(generationRoot, artifact.Source)
@@ -304,7 +304,7 @@ func (m *Manager) installLocked(extensionID, gameRoot, generationRoot string, ar
 			return InstallationRecord{}, fmt.Errorf("companion: source hash mismatch for %s", artifact.ID)
 		}
 	}
-	target, err := resolveTarget(gameRoot, artifact.EffectiveTarget())
+	target, err := resolveTarget(gameRoot, artifact.Target)
 	if err != nil {
 		return InstallationRecord{}, err
 	}
@@ -334,7 +334,7 @@ func (m *Manager) installLocked(extensionID, gameRoot, generationRoot string, ar
 	return r, nil
 }
 
-func (m *Manager) statusesLocked(extensionID, gameRoot string, artifacts []gameprotocol.GameCompanionArtifact) []ArtifactStatus {
+func (m *Manager) statusesLocked(extensionID, gameRoot string, artifacts []gameprotocol.PluginArtifact) []ArtifactStatus {
 	out := make([]ArtifactStatus, 0, len(artifacts))
 	for _, a := range artifacts {
 		r, ok := m.records[recordKey(extensionID, a.ID, gameRoot)]
@@ -350,14 +350,14 @@ func (m *Manager) statusesLocked(extensionID, gameRoot string, artifacts []gamep
 	return out
 }
 
-func (m *Manager) resolveRequiredArtifacts(ctx context.Context, extensionID, gameVersion string) ([]gameprotocol.GameCompanionArtifact, integration.InstalledGeneration, error) {
+func (m *Manager) resolveRequiredArtifacts(ctx context.Context, extensionID, gameVersion string) ([]gameprotocol.PluginArtifact, integration.InstalledGeneration, error) {
 	plugins, err := m.source.ListEnabledGamePlugins(ctx)
 	if err != nil {
 		return nil, integration.InstalledGeneration{}, err
 	}
 	foundExtension := false
 	requiredDeclared := false
-	var required []gameprotocol.GameCompanionArtifact
+	var required []gameprotocol.PluginArtifact
 	for _, kp := range plugins {
 		if string(kp.Extension.ID) != extensionID {
 			continue
@@ -367,12 +367,12 @@ func (m *Manager) resolveRequiredArtifacts(ctx context.Context, extensionID, gam
 		if err != nil {
 			return nil, integration.InstalledGeneration{}, err
 		}
-		for _, artifact := range spec.EffectiveArtifacts() {
+		for _, artifact := range spec.Artifacts {
 			if !artifact.Required {
 				continue
 			}
 			requiredDeclared = true
-			if platformMatches(artifact.Platforms) && versionMatches(artifact.EffectiveCompatibilityVersions(), gameVersion) {
+			if platformMatches(artifact.Platforms) && versionMatches(artifact.CompatibilityVersions, gameVersion) {
 				required = append(required, artifact)
 			}
 		}
@@ -393,12 +393,12 @@ func (m *Manager) resolveRequiredArtifacts(ctx context.Context, extensionID, gam
 	return required, generation, nil
 }
 
-func (m *Manager) resolveArtifactsOptional(ctx context.Context, extensionID, gameVersion string) ([]gameprotocol.GameCompanionArtifact, integration.InstalledGeneration, error) {
+func (m *Manager) resolveArtifactsOptional(ctx context.Context, extensionID, gameVersion string) ([]gameprotocol.PluginArtifact, integration.InstalledGeneration, error) {
 	plugins, err := m.source.ListEnabledGamePlugins(ctx)
 	if err != nil {
 		return nil, integration.InstalledGeneration{}, err
 	}
-	var artifacts []gameprotocol.GameCompanionArtifact
+	var artifacts []gameprotocol.PluginArtifact
 	foundExtension := false
 	for _, kp := range plugins {
 		if string(kp.Extension.ID) != extensionID {
@@ -409,8 +409,8 @@ func (m *Manager) resolveArtifactsOptional(ctx context.Context, extensionID, gam
 		if err != nil {
 			return nil, integration.InstalledGeneration{}, err
 		}
-		for _, artifact := range spec.EffectiveArtifacts() {
-			if platformMatches(artifact.Platforms) && versionMatches(artifact.EffectiveCompatibilityVersions(), gameVersion) {
+		for _, artifact := range spec.Artifacts {
+			if platformMatches(artifact.Platforms) && versionMatches(artifact.CompatibilityVersions, gameVersion) {
 				artifacts = append(artifacts, artifact)
 			}
 		}
@@ -428,7 +428,7 @@ func (m *Manager) resolveArtifactsOptional(ctx context.Context, extensionID, gam
 	return artifacts, generation, nil
 }
 
-func (m *Manager) resolveArtifacts(ctx context.Context, extensionID, gameVersion string) ([]gameprotocol.GameCompanionArtifact, integration.InstalledGeneration, error) {
+func (m *Manager) resolveArtifacts(ctx context.Context, extensionID, gameVersion string) ([]gameprotocol.PluginArtifact, integration.InstalledGeneration, error) {
 	artifacts, generation, err := m.resolveArtifactsOptional(ctx, extensionID, gameVersion)
 	if err != nil {
 		return nil, integration.InstalledGeneration{}, err
@@ -512,13 +512,13 @@ func isWithin(root, path string) bool {
 	r, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
 	return err == nil && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator))
 }
-func findArtifact(items []gameprotocol.GameCompanionArtifact, id string) (gameprotocol.GameCompanionArtifact, bool) {
+func findArtifact(items []gameprotocol.PluginArtifact, id string) (gameprotocol.PluginArtifact, bool) {
 	for _, a := range items {
 		if a.ID == id {
 			return a, true
 		}
 	}
-	return gameprotocol.GameCompanionArtifact{}, false
+	return gameprotocol.PluginArtifact{}, false
 }
 func platformMatches(platforms []string) bool {
 	if len(platforms) == 0 {

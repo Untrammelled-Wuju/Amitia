@@ -22,6 +22,7 @@ type PluginDescriptor struct {
 	Capabilities []Capability
 	Services     []ServiceDescriptor
 	Channels     []ChannelDescriptor
+	ControlSinks []ControlSinkDeclaration
 
 	Metadata map[string]string
 }
@@ -100,11 +101,31 @@ func (p PluginDescriptor) Validate() error {
 		if err := ch.Validate(); err != nil {
 			return err
 		}
+		if _, exists := seenServiceIDs[ch.ServiceID]; !exists {
+			return NewHostErrorWithCause(ErrInvalidArgument, "channel references unknown service",
+				NewHostError(ErrInvalidArgument, string(ch.ServiceID)))
+		}
 		if _, exists := seenChannelIDs[ch.ID]; exists {
 			return NewHostErrorWithCause(ErrInvalidArgument, "duplicate channel id",
 				NewHostError(ErrInvalidArgument, string(ch.ID)))
 		}
 		seenChannelIDs[ch.ID] = struct{}{}
+	}
+
+	seenSinkIDs := make(map[string]struct{}, len(p.ControlSinks))
+	for _, sink := range p.ControlSinks {
+		if err := sink.Validate(); err != nil {
+			return err
+		}
+		if _, exists := seenServiceIDs[sink.ServiceID]; len(seenServiceIDs) > 0 && !exists {
+			return NewHostErrorWithCause(ErrInvalidArgument, "control sink references unknown service",
+				NewHostError(ErrInvalidArgument, string(sink.ServiceID)))
+		}
+		if _, exists := seenSinkIDs[sink.ID]; exists {
+			return NewHostErrorWithCause(ErrInvalidArgument, "duplicate control sink id",
+				NewHostError(ErrInvalidArgument, sink.ID))
+		}
+		seenSinkIDs[sink.ID] = struct{}{}
 	}
 
 	if p.Metadata != nil {
@@ -162,6 +183,10 @@ func (p PluginDescriptor) Clone() PluginDescriptor {
 		}
 	}
 
+	if p.ControlSinks != nil {
+		cloned.ControlSinks = append([]ControlSinkDeclaration(nil), p.ControlSinks...)
+	}
+
 	if p.Metadata != nil {
 		cloned.Metadata = make(map[string]string, len(p.Metadata))
 		for k, v := range p.Metadata {
@@ -207,12 +232,13 @@ func EqualPluginDescriptor(a, b PluginDescriptor) bool {
 	if len(a.Services) != len(b.Services) {
 		return false
 	}
-	svcMap := make(map[ServiceID]struct{}, len(a.Services))
+	svcMap := make(map[ServiceID]ServiceDescriptor, len(a.Services))
 	for _, svc := range a.Services {
-		svcMap[svc.ID] = struct{}{}
+		svcMap[svc.ID] = svc
 	}
 	for _, svc := range b.Services {
-		if _, ok := svcMap[svc.ID]; !ok {
+		other, ok := svcMap[svc.ID]
+		if !ok || other.Name != svc.Name || other.Kind != svc.Kind || other.Required != svc.Required || !equalServiceIDs(other.DependsOn, svc.DependsOn) {
 			return false
 		}
 	}
@@ -220,15 +246,52 @@ func EqualPluginDescriptor(a, b PluginDescriptor) bool {
 	if len(a.Channels) != len(b.Channels) {
 		return false
 	}
-	chMap := make(map[ChannelID]struct{}, len(a.Channels))
+	chMap := make(map[ChannelID]ChannelDescriptor, len(a.Channels))
 	for _, ch := range a.Channels {
-		chMap[ch.ID] = struct{}{}
+		chMap[ch.ID] = ch
 	}
 	for _, ch := range b.Channels {
-		if _, ok := chMap[ch.ID]; !ok {
+		other, ok := chMap[ch.ID]
+		if !ok || other.ServiceID != ch.ServiceID || other.Kind != ch.Kind || other.SchemaID != ch.SchemaID {
 			return false
 		}
 	}
 
+	if len(a.ControlSinks) != len(b.ControlSinks) {
+		return false
+	}
+	sinkMap := make(map[string]ControlSinkDeclaration, len(a.ControlSinks))
+	for _, sink := range a.ControlSinks {
+		sinkMap[sink.ID] = sink
+	}
+	for _, sink := range b.ControlSinks {
+		other, ok := sinkMap[sink.ID]
+		if !ok || other.ServiceID != sink.ServiceID || other.Kind != sink.Kind {
+			return false
+		}
+	}
+
+	return true
+}
+
+func equalServiceIDs(a, b []ServiceID) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[ServiceID]int, len(a))
+	for _, id := range a {
+		counts[id]++
+	}
+	for _, id := range b {
+		counts[id]--
+		if counts[id] < 0 {
+			return false
+		}
+	}
+	for _, n := range counts {
+		if n != 0 {
+			return false
+		}
+	}
 	return true
 }

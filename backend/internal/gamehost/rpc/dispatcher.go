@@ -233,7 +233,7 @@ func (d *RPCDispatcher) dispatchCustom(ctx context.Context, source ipc.DispatchS
 	forwardEnv.PluginID = string(route.PluginID)
 	forwardEnv.RuntimeID = string(route.RuntimeID)
 	forwardEnv.ServiceID = string(route.ServiceID)
-	forwardEnv.Generation = targetPeer.Generation
+	forwardEnv.Generation = envelopeGeneration(targetPeer.Generation)
 
 	if dm := d.getLifecycle(); dm != nil {
 		dm.CorrelateForward(source.Peer, envelope.ID, targetPeer, downstreamID)
@@ -254,6 +254,13 @@ func cloneRawMessage(src json.RawMessage) json.RawMessage {
 	dst := make(json.RawMessage, len(src))
 	copy(dst, src)
 	return dst
+}
+
+func envelopeGeneration(generation int64) uint64 {
+	if generation < 0 {
+		return 0
+	}
+	return uint64(generation)
 }
 
 func normalizeEnvelope(env protocol.Envelope) protocol.Envelope {

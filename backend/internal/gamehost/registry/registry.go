@@ -224,7 +224,7 @@ func (r *Registry) DescriptorCapabilities(pluginID string) ([]string, error) {
 	return caps, nil
 }
 
-func (r *Registry) DescriptorChannels(pluginID string) ([]string, error) {
+func (r *Registry) DescriptorChannels(pluginID, serviceID string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	p, ok := r.plugins[domain.PluginID(pluginID)]
@@ -233,9 +233,22 @@ func (r *Registry) DescriptorChannels(pluginID string) ([]string, error) {
 	}
 	channels := make([]string, 0, len(p.Channels))
 	for _, ch := range p.Channels {
+		if serviceID != "" && string(ch.ServiceID) != serviceID {
+			continue
+		}
 		channels = append(channels, string(ch.ID))
 	}
 	return channels, nil
+}
+
+func (r *Registry) DescriptorControlSinks(pluginID string) ([]domain.ControlSinkDeclaration, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, ok := r.plugins[domain.PluginID(pluginID)]
+	if !ok {
+		return nil, fmt.Errorf("plugin not found: %s", pluginID)
+	}
+	return append([]domain.ControlSinkDeclaration(nil), p.ControlSinks...), nil
 }
 
 func (r *Registry) HasCapability(pluginID, capability string) bool {

@@ -194,6 +194,8 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	hostHandlers := rpc.NewHostHandlerRegistry()
 	rpcLifecycle := rpc.NewLifecycleManager(rpc.LifecycleManagerConfig{})
 	notifComposite := notification.NewCompositeSink(durableNotifSink)
+	channelRouter := channel.NewRouter(channel.RouterConfig{Registry: channelReg, States: stateStore})
+	notifComposite.Add(integration.NewChannelNotificationSink(channelRouter))
 	notifBridge := notification.NewBridge(notifComposite)
 	rpcDispatcher := rpc.NewRPCDispatcher(rpc.DispatcherConfig{
 		Namespaces:    nsReg,
@@ -292,7 +294,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	})
 
 	effectSinkFactory := integration.NewProtocolControlEffectSinkFactory(connReg, controlPlane)
-	if err := control.NewControlHandlerWithEffectFactory(pluginOutputGate, controlSinkRegistry, effectSinkFactory.CreateSink).RegisterHandlers(hostHandlers); err != nil {
+	controlHandler := control.NewControlHandlerWithEffectFactory(pluginOutputGate, controlSinkRegistry, effectSinkFactory.CreateSink)
+	controlHandler.SetSinkDeclarationProvider(pluginReg)
+	if err := controlHandler.RegisterHandlers(hostHandlers); err != nil {
 		return nil, fmt.Errorf("register control RPC handlers: %w", err)
 	}
 
@@ -316,6 +320,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			ExtensionRoot:      opts.DataRoot,
 			NodeResolver:       opts.NodeResolver,
 			GenerationResolver: opts.GenerationResolver,
+			ChannelReconciler:  channel.NewReconciler(channelReg, channel.NewMapper()),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("compose runtime graph provisioner: %w", err)
@@ -750,9 +755,6 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	gameAgentBridge, err := agentbridge.NewRuntimeAdapter(pluginReg, runtimeManager, topologyStore, controlPlane)
 	if err != nil {
 		return nil, fmt.Errorf("compose game agent bridge: %w", err)
-	}
-	if companionManager != nil {
-		gameAgentBridge.SetCompanionPreparer(companionManager)
 	}
 	agentEventSink := notification.NewAgentEventSink(gameAgentBridge.SessionRegistry())
 	notifComposite.Add(agentEventSink)

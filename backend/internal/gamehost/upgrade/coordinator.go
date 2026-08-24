@@ -115,6 +115,9 @@ func NewUpgradeCoordinator(
 	if configValidator == nil {
 		return nil, fmt.Errorf("upgrade coordinator: configValidator is required")
 	}
+	if kernelLifecycle == nil {
+		return nil, fmt.Errorf("upgrade coordinator: kernelLifecycle is required")
+	}
 	if archiveUpdater == nil {
 		return nil, fmt.Errorf("upgrade coordinator: archiveUpdater is required")
 	}
@@ -195,22 +198,27 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 
 	result.Stage = UpgradeStateUpdating
 	c.logStage(operationID, req.ExtensionID, UpgradeStateUpdating, "")
-	if c.kernelLifecycle != nil {
-		kernelResult, kerr := c.kernelLifecycle.ExecuteUpdate(ctx, req.ExtensionID, req.TargetVersion, operationID)
-		if kerr != nil || (kernelResult != nil && !kernelResult.Success) {
-			err := kerr
-			if err == nil && kernelResult != nil {
-				err = fmt.Errorf("kernel update failed: %s", kernelResult.Reason)
-			}
-			if err == nil {
-				err = fmt.Errorf("kernel update failed: unknown reason")
-			}
-			c.clearUpgradeIntent(runtimeSnapshots)
-			result.Error = fmt.Errorf("kernel package update failed: %w", err)
-			result.Stage = UpgradeStateFailed
-			c.recordAudit(operationID, req, result, result.Error)
-			return result, result.Error
+	kernelResult, kerr := c.kernelLifecycle.ExecuteUpdate(ctx, req.ExtensionID, req.TargetVersion, operationID)
+	if kerr != nil || kernelResult == nil || !kernelResult.Success {
+		err := kerr
+		if err == nil && kernelResult != nil {
+			err = fmt.Errorf("kernel update failed: %s", kernelResult.Reason)
 		}
+		if err == nil {
+			err = fmt.Errorf("kernel update failed: empty result")
+		}
+		c.clearUpgradeIntent(runtimeSnapshots)
+		result.Error = fmt.Errorf("kernel package update failed: %w", err)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+	if kernelResult.NewVersion == "" || kernelResult.NewVersion != req.TargetVersion {
+		c.clearUpgradeIntent(runtimeSnapshots)
+		result.Error = fmt.Errorf("kernel package update version mismatch: expected %q, got %q", req.TargetVersion, kernelResult.NewVersion)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
 	}
 
 	result.Stage = UpgradeStateMigrating
@@ -339,16 +347,22 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 	result.Stage = UpgradeStateUpdating
 	c.logStage(result.OperationID, extensionID, UpgradeStateUpdating, "")
 	kernelResult, kerr := c.archiveUpdater.UpdateArchive(ctx, extensionID, archivePath)
-	if kerr != nil || (kernelResult != nil && !kernelResult.Success) {
+	if kerr != nil || kernelResult == nil || !kernelResult.Success {
 		err := kerr
 		if err == nil && kernelResult != nil {
 			err = fmt.Errorf("kernel update failed: %s", kernelResult.Reason)
 		}
 		if err == nil {
-			err = fmt.Errorf("kernel archive update failed: unknown reason")
+			err = fmt.Errorf("kernel archive update failed: empty result")
 		}
 		c.clearUpgradeIntent(runtimeSnapshots)
 		archiveErr := fmt.Errorf("kernel package update failed: %w", err)
+		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
+		return archiveErr
+	}
+	if kernelResult.NewVersion == "" {
+		c.clearUpgradeIntent(runtimeSnapshots)
+		archiveErr := fmt.Errorf("kernel package update failed: archive updater returned empty new version")
 		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
 		return archiveErr
 	}

@@ -3,17 +3,16 @@ package notification
 import (
 	"context"
 	"encoding/json"
-	"testing"
-	"time"
-
 	"github.com/u-ai/backend/internal/gamehost/agentbridge"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
+	"testing"
+	"time"
 )
 
 type captureAgentWakePort struct{ ch chan AgentWakeRequest }
 
-func (p *captureAgentWakePort) WakeGameAgent(ctx context.Context, request AgentWakeRequest) error {
+func (p *captureAgentWakePort) WakePluginAgent(ctx context.Context, request AgentWakeRequest) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -21,37 +20,21 @@ func (p *captureAgentWakePort) WakeGameAgent(ctx context.Context, request AgentW
 		return nil
 	}
 }
-
-func makeGameEventNotification(t *testing.T, pluginID domain.PluginID, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, event gameprotocol.GameEvent, metadata map[string]any) Notification {
+func makePluginEventNotification(t *testing.T, pluginID domain.PluginID, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, event gameprotocol.PluginEvent, metadata map[string]any) Notification {
 	t.Helper()
 	payload, err := json.Marshal(event)
 	if err != nil {
 		t.Fatal(err)
 	}
-	envelope, err := json.Marshal(map[string]any{
-		"channelId": event.SessionID,
-		"eventId":   GameEventPublishID,
-		"payload":   json.RawMessage(payload),
-		"metadata":  metadata,
-	})
+	envelope, err := json.Marshal(map[string]any{"channelId": event.SessionID, "eventId": PluginAgentEventPublishID, "payload": json.RawMessage(payload), "metadata": metadata})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return Notification{PluginID: pluginID, RuntimeID: runtimeID, ServiceID: serviceID, Method: "plugin.event.publish", Payload: envelope, ReceivedAt: time.Now().UTC()}
 }
-
-func TestAgentEventSinkWakesBoundGameSession(t *testing.T) {
+func TestAgentEventSinkWakesBoundRuntimeContext(t *testing.T) {
 	sessions := agentbridge.NewSessionRegistry()
-	sessions.Bind(agentbridge.SessionScope{
-		GameSessionID:  "game-1",
-		PluginID:       "plugin-1",
-		RuntimeID:      "runtime-1",
-		ServiceID:      "service-1",
-		UserID:         "user-1",
-		CharacterID:    "char-1",
-		ConversationID: "conv-1",
-		Channel:        "web",
-	})
+	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1", UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
 	sink := NewAgentEventSink(sessions)
 	port := &captureAgentWakePort{ch: make(chan AgentWakeRequest, 1)}
 	sink.SetPort(port)
@@ -59,34 +42,31 @@ func TestAgentEventSinkWakesBoundGameSession(t *testing.T) {
 	defer cancel()
 	sink.Start(ctx)
 	defer sink.Shutdown()
-
-	n := makeGameEventNotification(t, "plugin-1", "runtime-1", "service-1", gameprotocol.GameEvent{ID: "evt-1", SessionID: "game-1", Type: "hostile.nearby"}, nil)
+	n := makePluginEventNotification(t, "plugin-1", "runtime-1", "service-1", gameprotocol.PluginEvent{ID: "evt-1", Type: "vendor.hostile.nearby"}, nil)
 	if err := sink.Publish(context.Background(), n); err != nil {
-		t.Fatalf("Publish() error = %v", err)
+		t.Fatal(err)
 	}
 	select {
 	case req := <-port.ch:
 		if req.Scope.CharacterID != "char-1" || req.Event.ID != "evt-1" {
-			t.Fatalf("unexpected wake request: %+v", req)
+			t.Fatalf("unexpected %+v", req)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("agent wake request was not delivered")
+		t.Fatal("wake not delivered")
 	}
 }
-
 func TestAgentEventSinkRejectsRouteMismatch(t *testing.T) {
 	sessions := agentbridge.NewSessionRegistry()
-	sessions.Bind(agentbridge.SessionScope{GameSessionID: "game-1", PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1"})
+	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1"})
 	sink := NewAgentEventSink(sessions)
-	n := makeGameEventNotification(t, "plugin-other", "runtime-1", "service-1", gameprotocol.GameEvent{ID: "evt-1", SessionID: "game-1", Type: "damage"}, nil)
+	n := makePluginEventNotification(t, "other", "runtime-1", "service-1", gameprotocol.PluginEvent{ID: "evt", Type: "vendor.event"}, nil)
 	if err := sink.Publish(context.Background(), n); err == nil {
-		t.Fatal("Publish() error = nil, want route mismatch error")
+		t.Fatal("expected route mismatch")
 	}
 }
-
 func TestAgentEventSinkRespectsWakeAgentFalse(t *testing.T) {
 	sessions := agentbridge.NewSessionRegistry()
-	sessions.Bind(agentbridge.SessionScope{GameSessionID: "game-1", PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1"})
+	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1"})
 	sink := NewAgentEventSink(sessions)
 	port := &captureAgentWakePort{ch: make(chan AgentWakeRequest, 1)}
 	sink.SetPort(port)
@@ -94,14 +74,13 @@ func TestAgentEventSinkRespectsWakeAgentFalse(t *testing.T) {
 	defer cancel()
 	sink.Start(ctx)
 	defer sink.Shutdown()
-
-	n := makeGameEventNotification(t, "plugin-1", "runtime-1", "service-1", gameprotocol.GameEvent{ID: "evt-1", SessionID: "game-1", Type: "ambient"}, map[string]any{"wakeAgent": false})
+	n := makePluginEventNotification(t, "plugin-1", "runtime-1", "service-1", gameprotocol.PluginEvent{ID: "evt", Type: "vendor.event"}, map[string]any{"wakeAgent": false})
 	if err := sink.Publish(context.Background(), n); err != nil {
-		t.Fatalf("Publish() error = %v", err)
+		t.Fatal(err)
 	}
 	select {
 	case <-port.ch:
-		t.Fatal("wakeAgent=false should suppress real-time wake")
+		t.Fatal("wakeAgent=false woke agent")
 	case <-time.After(50 * time.Millisecond):
 	}
 }

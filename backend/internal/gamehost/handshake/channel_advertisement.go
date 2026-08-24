@@ -7,6 +7,7 @@ import (
 type ChannelAdvertiser interface {
 	ValidateChannelAdvertisement(
 		pluginID string,
+		serviceID string,
 		advertised []ChannelAdvertisement,
 	) error
 }
@@ -21,13 +22,14 @@ func NewChannelAdvertiser(provider DescriptorProvider) ChannelAdvertiser {
 
 func (a *descriptorChannelAdvertiser) ValidateChannelAdvertisement(
 	pluginID string,
+	serviceID string,
 	advertised []ChannelAdvertisement,
 ) error {
 	if err := ValidateChannelAdvertisements(advertised); err != nil {
 		return err
 	}
 
-	channels, err := a.provider.DescriptorChannels(pluginID)
+	channels, err := a.provider.DescriptorChannels(pluginID, serviceID)
 	if err != nil {
 		return NewHandshakeError(
 			HandshakeErrorChannelInvalid,
@@ -58,6 +60,7 @@ type NoopChannelAdvertiser struct{}
 
 func (NoopChannelAdvertiser) ValidateChannelAdvertisement(
 	pluginID string,
+	serviceID string,
 	advertised []ChannelAdvertisement,
 ) error {
 	return ValidateChannelAdvertisements(advertised)
