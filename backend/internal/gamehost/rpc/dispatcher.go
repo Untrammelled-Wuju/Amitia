@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -218,11 +219,6 @@ func (d *RPCDispatcher) dispatchCustom(ctx context.Context, source ipc.DispatchS
 		)
 	}
 
-	forwardEnv := envelope
-	forwardEnv.PluginID = string(route.PluginID)
-	forwardEnv.RuntimeID = string(route.RuntimeID)
-	forwardEnv.ServiceID = string(route.ServiceID)
-
 	targetPeer := ipc.Peer{
 		PluginID:   route.PluginID,
 		RuntimeID:  route.RuntimeID,
@@ -230,7 +226,25 @@ func (d *RPCDispatcher) dispatchCustom(ctx context.Context, source ipc.DispatchS
 		Generation: source.Peer.Generation,
 	}
 
-	return cp.Send(ctx, targetPeer, forwardEnv)
+	downstreamID := d.idGenerator()
+	forwardEnv := envelope
+	forwardEnv.ID = downstreamID
+	forwardEnv.RequestID = ""
+	forwardEnv.PluginID = string(route.PluginID)
+	forwardEnv.RuntimeID = string(route.RuntimeID)
+	forwardEnv.ServiceID = string(route.ServiceID)
+	forwardEnv.Generation = targetPeer.Generation
+
+	if dm := d.getLifecycle(); dm != nil {
+		dm.CorrelateForward(source.Peer, envelope.ID, targetPeer, downstreamID)
+	}
+	if err := cp.Send(ctx, targetPeer, forwardEnv); err != nil {
+		if dm := d.getLifecycle(); dm != nil {
+			dm.correlation.Remove(RequestKeyFromIPC(envelope.ID, source.Peer))
+		}
+		return err
+	}
+	return nil
 }
 
 func cloneRawMessage(src json.RawMessage) json.RawMessage {
@@ -250,9 +264,8 @@ func normalizeEnvelope(env protocol.Envelope) protocol.Envelope {
 }
 
 func defaultIDGenerator() func() string {
-	counter := int64(0)
+	var counter atomic.Uint64
 	return func() string {
-		counter++
-		return fmt.Sprintf("rpc-resp-%d-%d", time.Now().UnixNano(), counter)
+		return fmt.Sprintf("rpc-resp-%d-%d", time.Now().UnixNano(), counter.Add(1))
 	}
 }

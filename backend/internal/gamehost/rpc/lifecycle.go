@@ -23,11 +23,11 @@ type RequestLifecycleManager struct {
 }
 
 type LifecycleManagerConfig struct {
-	Pending   PendingRequestRegistry
+	Pending     PendingRequestRegistry
 	Correlation *CorrelationMap
-	Cache     *CompletedResponseCache
+	Cache       *CompletedResponseCache
 	IDGenerator func() string
-	Timeout   TimeoutConfig
+	Timeout     TimeoutConfig
 }
 
 func NewLifecycleManager(config LifecycleManagerConfig) *RequestLifecycleManager {
@@ -52,7 +52,7 @@ func NewLifecycleManager(config LifecycleManagerConfig) *RequestLifecycleManager
 		idGen = defaultIDGenerator()
 	}
 
- timeoutCfg := config.Timeout
+	timeoutCfg := config.Timeout
 	if timeoutCfg.Default == 0 {
 		timeoutCfg = DefaultTimeoutConfig()
 	}
@@ -153,71 +153,57 @@ func (m *RequestLifecycleManager) HandleOutgoingRequest(
 	return req, nil
 }
 
+func (m *RequestLifecycleManager) CorrelateForward(upstreamPeer ipc.Peer, upstreamRequestID string, downstreamPeer ipc.Peer, downstreamRequestID string) {
+	if upstreamRequestID == "" || downstreamRequestID == "" {
+		return
+	}
+	m.correlation.Add(&Correlation{
+		Upstream:        RequestKeyFromIPC(upstreamRequestID, upstreamPeer),
+		UpstreamPeer:    upstreamPeer,
+		DownstreamPeer:  downstreamPeer,
+		DownstreamReqID: downstreamRequestID,
+		CreatedAt:       time.Now().UTC(),
+	})
+}
+
 func (m *RequestLifecycleManager) HandleIncomingResponse(
 	sourcePeer ipc.Peer,
 	response protocol.Envelope,
 ) error {
+	if correlation, ok := m.correlation.ByDownstream(sourcePeer, response.RequestID); ok {
+		m.correlation.Remove(correlation.Upstream)
+		if cp := m.getCP(); cp != nil {
+			upstreamResponse := cloneEnvelope(response)
+			upstreamResponse.RequestID = correlation.Upstream.RequestID
+			upstreamResponse.PluginID = string(correlation.UpstreamPeer.PluginID)
+			upstreamResponse.RuntimeID = string(correlation.UpstreamPeer.RuntimeID)
+			upstreamResponse.ServiceID = string(correlation.UpstreamPeer.ServiceID)
+			upstreamResponse.Generation = correlation.UpstreamPeer.Generation
+			return cp.Send(context.Background(), correlation.UpstreamPeer, upstreamResponse)
+		}
+		return nil
+	}
+
 	targetKey := RequestKey{
 		RuntimeID: domain.RuntimeInstanceID(sourcePeer.RuntimeID),
 		ServiceID: domain.ServiceID(sourcePeer.ServiceID),
 		RequestID: response.RequestID,
 	}
-
-	if correlation, ok := m.correlation.ByDownstream(sourcePeer, response.RequestID); ok {
-		upstreamKey := correlation.Upstream
-
-		existingReq := m.findPendingByKey(upstreamKey)
-		var fp RequestFingerprint
-		if existingReq != nil {
-			fp = existingReq.Fingerprint
-		}
-
-		ok, _ := m.pending.Complete(upstreamKey, response)
-		if ok {
-			cachedReq := &CompletedRequest{
-				Key:         upstreamKey,
-				Fingerprint: fp,
-				Response:    cloneEnvelope(response),
-				FinishedAt:  time.Now().UTC(),
-			}
-			m.cache.Save(*cachedReq)
-		}
-
-		m.correlation.Remove(upstreamKey)
-
-		if cp := m.getCP(); cp != nil {
-			upstreamResponse := response
-			upstreamResponse.RequestID = upstreamKey.RequestID
-			if ipcPeer := keyToPeer(upstreamKey); ipcPeer != nil {
-				_ = cp.Send(context.Background(), *ipcPeer, upstreamResponse)
-			}
-		}
-
-		return nil
-	}
-
 	existingReq := findPending(m.pending, targetKey)
-	var fp RequestFingerprint
-	if existingReq != nil {
-		fp = existingReq.Fingerprint
-	}
-
-	ok, _ := m.pending.Complete(targetKey, response)
-
-	if !ok {
-		req := m.pending.(*pendingRequestRegistry)
-		_ = req
+	if existingReq == nil {
 		return nil
 	}
-
+	fp := existingReq.Fingerprint
+	ok, _ := m.pending.Complete(targetKey, response)
+	if !ok {
+		return nil
+	}
 	m.cache.Save(CompletedRequest{
-		Key:        targetKey,
+		Key:         targetKey,
 		Fingerprint: fp,
-		Response:   cloneEnvelope(response),
-		FinishedAt: time.Now().UTC(),
+		Response:    cloneEnvelope(response),
+		FinishedAt:  time.Now().UTC(),
 	})
-
-	m.pending.Remove(targetKey)
 	return nil
 }
 

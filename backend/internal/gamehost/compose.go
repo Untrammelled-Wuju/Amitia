@@ -7,7 +7,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/u-ai/backend/internal/desktoppet/plugin"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	kernelpermission "github.com/u-ai/backend/internal/extension/kernel/permission"
@@ -961,9 +960,6 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		)
 		if err := opts.TrustedSupervisor.RegisterStdioProtocolHandler(protocol.ProtocolVersion, handler); err != nil {
 			return nil, fmt.Errorf("register gamehost stdio protocol handler: %w", err)
-		}
-		if err := opts.TrustedSupervisor.RegisterStdioProtocolHandler(plugin.PetSupportedProtocol, handler); err != nil {
-			return nil, fmt.Errorf("register desktop pet stdio protocol handler: %w", err)
 		}
 	}
 

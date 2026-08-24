@@ -251,7 +251,6 @@ func cloneStringMap(in map[string]string) map[string]string {
 	return out
 }
 
-const DesktopPetProtocol = "amitia.desktop.pet/1"
 const TrustedServiceProtocol = "amitia-trusted-service/1"
 const GameHostProtocol = "amitia-game-host/1"
 
@@ -260,9 +259,6 @@ func resolveProtocol(view ServiceRuntimeView) string {
 		if proto, ok := view.Metadata["protocol"]; ok && proto != "" {
 			return proto
 		}
-	}
-	if view.RuntimeType == "desktop_pet" {
-		return DesktopPetProtocol
 	}
 	return TrustedServiceProtocol
 }
