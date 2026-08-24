@@ -87,16 +87,21 @@ func (s *ChannelNotificationSink) Publish(ctx context.Context, n notification.No
 		}
 		return domain.NewHostError(domain.ErrPermissionDenied, message)
 	}
-	if s.admission != nil {
-		if s.generation == nil {
-			return domain.NewHostError(domain.ErrInternal, "channel.publish: runtime generation reader unavailable")
-		}
-		generation, err := s.generation.GetCurrentGeneration(n.RuntimeID)
-		if err != nil || generation <= 0 {
+	if n.Generation <= 0 {
+		return domain.NewHostError(domain.ErrInvalidArgument, "channel.publish: trusted generation must be positive")
+	}
+	if s.generation != nil {
+		currentGeneration, err := s.generation.GetCurrentGeneration(n.RuntimeID)
+		if err != nil || currentGeneration <= 0 {
 			return domain.NewHostErrorWithCause(domain.ErrRuntimeUnavailable, "channel.publish: runtime generation unavailable", err)
 		}
+		if currentGeneration != n.Generation {
+			return domain.NewHostError(domain.ErrConflict, "channel.publish: stale runtime generation")
+		}
+	}
+	if s.admission != nil {
 		decision, release := s.admission.AcquireQueuePublish(ctx, resource.RuntimeIdentitySubject{
-			PluginID: string(n.PluginID), RuntimeID: string(n.RuntimeID), ServiceID: string(n.ServiceID), Generation: generation,
+			PluginID: string(n.PluginID), RuntimeID: string(n.RuntimeID), ServiceID: string(n.ServiceID), Generation: n.Generation,
 		})
 		if !decision.Allowed {
 			return domain.NewHostError(domain.ErrResourceExhausted, "channel.publish: queue admission denied: "+string(decision.Reason))
@@ -105,9 +110,10 @@ func (s *ChannelNotificationSink) Publish(ctx context.Context, n notification.No
 	}
 	return s.router.Route(ctx, channel.IncomingChannelMessage{
 		Peer: ipc.Peer{
-			PluginID:  n.PluginID,
-			RuntimeID: n.RuntimeID,
-			ServiceID: n.ServiceID,
+			PluginID:   n.PluginID,
+			RuntimeID:  n.RuntimeID,
+			ServiceID:  n.ServiceID,
+			Generation: n.Generation,
 		},
 		ChannelID: domain.ChannelID(payload.ChannelID),
 		Payload:   payload.Payload,
