@@ -97,9 +97,10 @@ func (d *RPCDispatcher) Dispatch(ctx context.Context, source ipc.DispatchSource,
 			return nil
 		}
 		return d.notifications.Handle(ctx, notification.RouteContext{
-			PluginID:  source.Peer.PluginID,
-			RuntimeID: source.Peer.RuntimeID,
-			ServiceID: source.Peer.ServiceID,
+			PluginID:   source.Peer.PluginID,
+			RuntimeID:  source.Peer.RuntimeID,
+			ServiceID:  source.Peer.ServiceID,
+			Generation: source.Peer.Generation,
 		}, envelope.Method, envelope.Payload, envelope.Metadata)
 	default:
 		return nil
