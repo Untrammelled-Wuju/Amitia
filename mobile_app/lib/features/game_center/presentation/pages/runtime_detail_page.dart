@@ -26,6 +26,8 @@ class RuntimeDetailPage extends ConsumerStatefulWidget {
 }
 
 class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
+  bool _developerAccess = false;
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +35,9 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
   }
 
   Future<void> _loadAll() async {
+    final api = ref.read(gameCenterApiProvider);
+    final access = await api.developerAccess();
+    if (mounted) setState(() => _developerAccess = access);
     final controller = ref.read(gameCenterControllerProvider.notifier);
     await controller.selectRuntime(widget.runtimeId, pluginId: widget.pluginId);
     await controller.loadRuntimeServices(widget.runtimeId);
@@ -271,10 +276,12 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
                     contentPadding: EdgeInsets.zero,
                     title: Text(svc.serviceId, style: AppTypography.bodySmall(context)),
                     subtitle: Text('状态: ${svc.state} | 健康: ${_healthLabel(svc.health)}', style: AppTypography.caption(context)),
-                    trailing: TextButton(
-                      onPressed: () => _showRpcDialog(context, svc.serviceId),
-                      child: const Text('RPC'),
-                    ),
+                    trailing: _developerAccess
+                        ? TextButton(
+                            onPressed: () => _showRpcDialog(context, svc.serviceId),
+                            child: const Text('RPC'),
+                          )
+                        : null,
                   )),
           ],
         ),
@@ -305,8 +312,10 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
             label: svc.ready ? 'Ready' : 'Not Ready',
             type: svc.ready ? BadgeType.success : BadgeType.neutral,
           ),
-          const SizedBox(width: 8),
-          TextButton(onPressed: () => _showRpcDialog(context, svc.serviceId), child: const Text('RPC')),
+          if (_developerAccess) ...[
+            const SizedBox(width: 8),
+            TextButton(onPressed: () => _showRpcDialog(context, svc.serviceId), child: const Text('RPC')),
+          ],
         ],
       ),
     );
@@ -375,6 +384,7 @@ class _RuntimeDetailPageState extends ConsumerState<RuntimeDetailPage> {
   }
 
   Future<void> _showRpcDialog(BuildContext context, String serviceId) async {
+    if (!_developerAccess) return;
     final methodController = TextEditingController();
     final payloadController = TextEditingController(text: '{}');
     final timeoutController = TextEditingController(text: '30000');
