@@ -154,12 +154,12 @@ class GameCenterApi {
   }
 
   Future<bool> enablePlugin(String extensionId) async {
-    final data = await _api.post<Map<String, dynamic>>('/api/game-center/plugins/$extensionId/enable');
+    final data = await _api.post<Map<String, dynamic>>('/api/game-center/extensions/$extensionId/enable');
     return _packageMutationSucceeded(data);
   }
 
   Future<bool> disablePlugin(String extensionId) async {
-    final data = await _api.post<Map<String, dynamic>>('/api/game-center/plugins/$extensionId/disable');
+    final data = await _api.post<Map<String, dynamic>>('/api/game-center/extensions/$extensionId/disable');
     return _packageMutationSucceeded(data);
   }
 
