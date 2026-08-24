@@ -58,18 +58,12 @@ func (h *PermissionRPCHandler) Register(registry rpc.HandlerRegistry) error {
 
 type permissionCheckInput struct {
 	PermissionID string `json:"permissionId"`
-	ServiceID    string `json:"serviceId,omitempty"`
-	RuntimeID    string `json:"runtimeId,omitempty"`
 }
 
-type permissionSnapshotInput struct {
-	RuntimeID string `json:"runtimeId,omitempty"`
-	ServiceID string `json:"serviceId,omitempty"`
-}
+type permissionSnapshotInput struct{}
 
 type permissionRequestInput struct {
 	PermissionID string `json:"permissionId"`
-	ServiceID    string `json:"serviceId,omitempty"`
 }
 
 func (h *PermissionRPCHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
@@ -106,20 +100,14 @@ func (h *PermissionRPCHandler) handleCheck(ctx context.Context, request rpc.RPCR
 		return routedPermissionError(request.ID, "INVALID_PAYLOAD", err.Error()), nil
 	}
 	input.PermissionID = strings.TrimSpace(input.PermissionID)
-	input.ServiceID = strings.TrimSpace(input.ServiceID)
-	input.RuntimeID = strings.TrimSpace(input.RuntimeID)
 	if input.PermissionID == "" {
 		return routedPermissionError(request.ID, "INVALID_PAYLOAD", "permissionId is required"), nil
-	}
-	if err := validatePermissionIdentity(request, input.RuntimeID, input.ServiceID); err != nil {
-		return routedPermissionError(request.ID, "IDENTITY_MISMATCH", err.Error()), nil
 	}
 	if !declaresPermission(descriptor, input.PermissionID) {
 		return permissionDecisionResponse(request.ID, input.PermissionID, DecisionResult{Decision: DecisionDenied, Reason: ReasonNotDeclared}), nil
 	}
 
-	serviceID := trustedPermissionServiceID(request, input.ServiceID)
-	decision := h.permissions.InspectServicePermission(ctx, string(request.RuntimeID), string(request.PluginID), serviceID, input.PermissionID)
+	decision := h.permissions.InspectServicePermission(ctx, string(request.RuntimeID), string(request.PluginID), string(request.ServiceID), input.PermissionID)
 	return permissionDecisionResponse(request.ID, input.PermissionID, decision), nil
 }
 
@@ -129,19 +117,14 @@ func (h *PermissionRPCHandler) handleRequest(ctx context.Context, request rpc.RP
 		return routedPermissionError(request.ID, "INVALID_PAYLOAD", err.Error()), nil
 	}
 	input.PermissionID = strings.TrimSpace(input.PermissionID)
-	input.ServiceID = strings.TrimSpace(input.ServiceID)
 	if input.PermissionID == "" {
 		return routedPermissionError(request.ID, "INVALID_PAYLOAD", "permissionId is required"), nil
-	}
-	if err := validatePermissionIdentity(request, "", input.ServiceID); err != nil {
-		return routedPermissionError(request.ID, "IDENTITY_MISMATCH", err.Error()), nil
 	}
 	if !declaresPermission(descriptor, input.PermissionID) {
 		return permissionDecisionResponse(request.ID, input.PermissionID, DecisionResult{Decision: DecisionDenied, Reason: ReasonNotDeclared}), nil
 	}
 
-	serviceID := trustedPermissionServiceID(request, input.ServiceID)
-	decision := h.permissions.CheckServicePermission(ctx, string(request.RuntimeID), string(request.PluginID), serviceID, input.PermissionID)
+	decision := h.permissions.CheckServicePermission(ctx, string(request.RuntimeID), string(request.PluginID), string(request.ServiceID), input.PermissionID)
 	return permissionDecisionResponse(request.ID, input.PermissionID, decision), nil
 }
 
@@ -150,14 +133,7 @@ func (h *PermissionRPCHandler) handleSnapshot(ctx context.Context, request rpc.R
 	if err := decodePermissionPayload(request.Payload, &input); err != nil {
 		return routedPermissionError(request.ID, "INVALID_PAYLOAD", err.Error()), nil
 	}
-	input.RuntimeID = strings.TrimSpace(input.RuntimeID)
-	input.ServiceID = strings.TrimSpace(input.ServiceID)
-	if err := validatePermissionIdentity(request, input.RuntimeID, input.ServiceID); err != nil {
-		return routedPermissionError(request.ID, "IDENTITY_MISMATCH", err.Error()), nil
-	}
-
-	serviceID := trustedPermissionServiceID(request, input.ServiceID)
-	subject, err := h.permissions.MapServiceSubject(string(request.RuntimeID), string(request.PluginID), serviceID)
+	subject, err := h.permissions.MapServiceSubject(string(request.RuntimeID), string(request.PluginID), string(request.ServiceID))
 	if err != nil {
 		return routedPermissionError(request.ID, "INVALID_IDENTITY", err.Error()), nil
 	}
@@ -192,23 +168,6 @@ func decodePermissionPayload(payload json.RawMessage, target any) error {
 		return fmt.Errorf("invalid permission payload: %w", err)
 	}
 	return nil
-}
-
-func validatePermissionIdentity(request rpc.RPCRequest, runtimeID, serviceID string) error {
-	if runtimeID != "" && runtimeID != string(request.RuntimeID) {
-		return fmt.Errorf("runtimeId does not match trusted identity")
-	}
-	if serviceID != "" && serviceID != string(request.ServiceID) {
-		return fmt.Errorf("serviceId does not match trusted identity")
-	}
-	return nil
-}
-
-func trustedPermissionServiceID(request rpc.RPCRequest, requested string) string {
-	if strings.TrimSpace(requested) != "" {
-		return strings.TrimSpace(requested)
-	}
-	return string(request.ServiceID)
 }
 
 func declaresPermission(descriptor domain.PluginDescriptor, permissionID string) bool {

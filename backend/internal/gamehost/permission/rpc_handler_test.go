@@ -192,30 +192,29 @@ func TestPermissionRPCRejectsUndeclaredWithoutConsultingBroker(t *testing.T) {
 	}
 }
 
-func TestPermissionRPCRejectsCrossServiceIdentity(t *testing.T) {
+func TestPermissionRPCIgnoresPayloadServiceIdentityAndUsesTrustedService(t *testing.T) {
 	broker := &permissionRPCFakeBroker{decision: kernelpermission.DecisionAllow}
 	h := newPermissionRPCTestHandler(t, broker)
 	response, err := h.Handle(context.Background(), permissionRPCTestRequest(MethodPermissionCheck, map[string]any{
 		"permissionId": kernelpermission.PermissionGameHostControl,
-		"serviceId":    "other-service",
+		"serviceId":    "spoofed-service",
 	}))
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if response.Error == nil || response.Error.Code != "IDENTITY_MISMATCH" {
-		t.Fatalf("expected identity mismatch, got %+v", response.Error)
+	out := decodePermissionRPCPayload(t, response)
+	if out["decision"] != RPCDecisionAllowed {
+		t.Fatalf("decision=%v want %s", out["decision"], RPCDecisionAllowed)
 	}
-	if broker.calls != 0 {
-		t.Fatalf("identity mismatch consulted broker %d times", broker.calls)
+	if broker.calls != 1 || broker.last.Subject.ModuleID != "module-1" || broker.last.ExecutionContext.ModuleID != "module-1" {
+		t.Fatalf("permission evaluation did not bind trusted service/module: calls=%d subject=%+v execution=%+v", broker.calls, broker.last.Subject, broker.last.ExecutionContext)
 	}
 }
 
 func TestPermissionRPCSnapshotContainsOnlyEffectiveDeclaredPermissions(t *testing.T) {
 	broker := &permissionRPCFakeBroker{decision: kernelpermission.DecisionAllow}
 	h := newPermissionRPCTestHandler(t, broker)
-	response, err := h.Handle(context.Background(), permissionRPCTestRequest(MethodPermissionSnapshot, map[string]any{
-		"serviceId": "service-1",
-	}))
+	response, err := h.Handle(context.Background(), permissionRPCTestRequest(MethodPermissionSnapshot, map[string]any{}))
 	if err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
