@@ -89,10 +89,20 @@ func (v *BinaryVerifier) Verify(ctx context.Context, exe *PlatformExecutable, ba
 	if exe == nil {
 		return errors.New("trusted_service: nil executable")
 	}
-	if isNodeAlias(exe.Path) {
-		return fmt.Errorf("trusted_service: node alias %q not allowed, must use managed node absolute path", exe.Path)
+	rawPath := strings.TrimSpace(exe.Path)
+	if rawPath == "" {
+		return errors.New("trusted_service: executable path is required")
 	}
-	fullPath := exe.Path
+	// Bare node/npm/npx aliases are never trusted. A node executable is only
+	// accepted when the caller provides an absolute path and the configured
+	// ManagedNodeChecker confirms that exact binary belongs to Amitia's managed
+	// Node environment.
+	if isNodeAlias(rawPath) {
+		if !isManagedNodeCandidate(rawPath) || !isPortableAbsolutePath(rawPath) {
+			return fmt.Errorf("trusted_service: node/npm/npx alias %q not allowed; only a managed node absolute path is accepted", exe.Path)
+		}
+	}
+	fullPath := rawPath
 	if !filepath.IsAbs(fullPath) && basePath != "" {
 		fullPath = filepath.Join(basePath, fullPath)
 	}
@@ -174,12 +184,36 @@ func (v *BinaryVerifier) verifyDependencies(exe *PlatformExecutable, basePath st
 	return nil
 }
 
-func isNodeAlias(path string) bool {
+func portableBase(path string) string {
+	trimmed := strings.TrimSpace(path)
+	trimmed = strings.TrimRight(trimmed, "/\\")
+	if trimmed == "" {
+		return ""
+	}
+	if idx := strings.LastIndexAny(trimmed, "/\\"); idx >= 0 {
+		return trimmed[idx+1:]
+	}
+	return trimmed
+}
+
+func isPortableAbsolutePath(path string) bool {
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {
 		return false
 	}
-	base := strings.ToLower(filepath.Base(trimmed))
+	if filepath.IsAbs(trimmed) {
+		return true
+	}
+	// filepath.IsAbs follows the host OS, so explicitly recognize Windows
+	// absolute forms when validating descriptors on Linux/macOS.
+	if len(trimmed) >= 3 && ((trimmed[0] >= 'A' && trimmed[0] <= 'Z') || (trimmed[0] >= 'a' && trimmed[0] <= 'z')) && trimmed[1] == ':' && (trimmed[2] == '\\' || trimmed[2] == '/') {
+		return true
+	}
+	return strings.HasPrefix(trimmed, `\\`) || strings.HasPrefix(trimmed, "//")
+}
+
+func isNodeAlias(path string) bool {
+	base := strings.ToLower(portableBase(path))
 	base = strings.TrimSuffix(base, ".exe")
 	base = strings.TrimSuffix(base, ".cmd")
 	switch base {
@@ -190,14 +224,10 @@ func isNodeAlias(path string) bool {
 }
 
 func isManagedNodeCandidate(fullPath string) bool {
-	base := strings.ToLower(filepath.Base(fullPath))
+	base := strings.ToLower(portableBase(fullPath))
 	base = strings.TrimSuffix(base, ".exe")
 	base = strings.TrimSuffix(base, ".cmd")
-	switch base {
-	case "node":
-		return true
-	}
-	return false
+	return base == "node"
 }
 
 func (v *BinaryVerifier) hashFile(path string) (string, error) {

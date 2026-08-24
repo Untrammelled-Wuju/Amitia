@@ -126,6 +126,25 @@ func TestVerifyRejectsNodeAlias(t *testing.T) {
 	}
 }
 
+func TestVerifyRejectsAbsoluteNpmAndNpxPaths(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits differ on Windows")
+	}
+	for _, name := range []string{"npm", "npx"} {
+		path := filepath.Join(t.TempDir(), name)
+		content := []byte("fake package-manager binary")
+		if err := os.WriteFile(path, content, 0755); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		hash := sha256.Sum256(content)
+		exe := &PlatformExecutable{Path: path, Sha256: hex.EncodeToString(hash[:]), Signature: BinarySignature{Trusted: true, Value: "sig"}}
+		checker := &fakeManagedNodeChecker{managed: map[string]bool{path: true}}
+		if err := NewBinaryVerifierWithManagedNode(checker).Verify(context.Background(), exe, ""); err == nil {
+			t.Fatalf("absolute %s path must remain forbidden", name)
+		}
+	}
+}
+
 func TestVerifyRejectsNilExecutable(t *testing.T) {
 	v := NewBinaryVerifier()
 	err := v.Verify(context.Background(), nil, "")
