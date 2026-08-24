@@ -116,6 +116,7 @@ type fakeIdentity struct {
 type identityEntry struct {
 	pluginID    string
 	extensionID string
+	moduleID    string
 	state       string
 	generation  int64
 }
@@ -136,9 +137,13 @@ func (f *fakeIdentity) AddRuntime(rtID, pluginID, extID, state string) {
 }
 
 func (f *fakeIdentity) AddService(rtID, svcID, pluginID, extID, state string) {
+	f.AddServiceModule(rtID, svcID, svcID, pluginID, extID, state)
+}
+
+func (f *fakeIdentity) AddServiceModule(rtID, svcID, moduleID, pluginID, extID, state string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.services[rtID+"/"+svcID] = identityEntry{pluginID: pluginID, extensionID: extID, state: state}
+	f.services[rtID+"/"+svcID] = identityEntry{pluginID: pluginID, extensionID: extID, moduleID: moduleID, state: state}
 }
 
 func (f *fakeIdentity) ResolveRuntime(ctx context.Context, rtID string) (string, string, string, int64, error) {
@@ -151,14 +156,14 @@ func (f *fakeIdentity) ResolveRuntime(ctx context.Context, rtID string) (string,
 	return e.pluginID, e.extensionID, e.state, e.generation, nil
 }
 
-func (f *fakeIdentity) ResolveService(ctx context.Context, rtID, svcID string) (string, string, string, error) {
+func (f *fakeIdentity) ResolveService(ctx context.Context, rtID, svcID string) (string, string, string, string, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	e, ok := f.services[rtID+"/"+svcID]
 	if !ok {
-		return "", "", "", errors.New("service not found")
+		return "", "", "", "", errors.New("service not found")
 	}
-	return e.pluginID, e.extensionID, e.state, nil
+	return e.pluginID, e.extensionID, e.moduleID, e.state, nil
 }
 
 func (f *fakeIdentity) ExtensionEnabled(ctx context.Context, extID string) (bool, error) {
@@ -227,6 +232,32 @@ func TestAcquireServiceLease_ValidService_Granted(t *testing.T) {
 	}
 	if g.Calls() != 1 {
 		t.Errorf("expected 1 gate call, got %d", g.Calls())
+	}
+}
+
+func TestAcquireServiceLease_UsesKernelModuleBindingInsteadOfServiceID(t *testing.T) {
+	b := newFakeBroker()
+	b.SeedSecret(refOpenAI, "sk-real")
+	id := newFakeIdentity()
+	id.AddRuntime("rt-1", "plugin-x", "ext-x", "created")
+	id.AddServiceModule("rt-1", "service-public", "module-kernel", "plugin-x", "ext-x", "running")
+	g := &fakeGate{allow: true}
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
+
+	res, err := a.AcquireServiceLease(context.Background(), "rt-1", "plugin-x", "service-public",
+		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
+	if err != nil {
+		t.Fatalf("expected grant, got err=%v", err)
+	}
+	lease, ok := b.GetLease(res.LeaseID)
+	if !ok {
+		t.Fatalf("lease %s not found", res.LeaseID)
+	}
+	if lease.ModuleID != "module-kernel" {
+		t.Fatalf("lease module id=%q want module-kernel", lease.ModuleID)
 	}
 }
 

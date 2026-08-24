@@ -455,12 +455,13 @@ func (p *RuntimeGraphProvisioner) extractSecretManifestGrouped(kp KernelGamePlug
 }
 
 func buildPluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, permissions []string) (trusted_service.ServiceNetworkPolicy, error) {
-	// Game plugins are deny-by-default. Omitting network policy is equivalent to
-	// an enforced no-network policy; there is no legacy unrestricted fallback.
-	mode := "none"
-	if spec != nil && strings.TrimSpace(spec.Mode) != "" {
-		mode = strings.ToLower(strings.TrimSpace(spec.Mode))
+	// Cross-platform process isolation capabilities differ. Never infer a network
+	// policy: every game plugin must choose its intended boundary explicitly so
+	// Windows/macOS do not accidentally inherit a Linux-only deny-all default.
+	if spec == nil || strings.TrimSpace(spec.Mode) == "" {
+		return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("explicit game plugin network.mode is required")
 	}
+	mode := strings.ToLower(strings.TrimSpace(spec.Mode))
 	policy := trusted_service.ServiceNetworkPolicy{Mode: mode, Enforce: true}
 	switch mode {
 	case "none":

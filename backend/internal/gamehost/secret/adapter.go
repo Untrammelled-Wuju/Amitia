@@ -35,6 +35,7 @@ type RuntimeIdentityReader interface {
 	) (
 		pluginID string,
 		extensionID string,
+		moduleID string,
 		state string,
 		err error,
 	)
@@ -64,13 +65,13 @@ type PermissionGate interface {
 }
 
 type SecretLeaseAdapter struct {
-	broker       KernelLeaseBroker
-	index        *LeaseBindingIndex
-	reader       RuntimeIdentityReader
-	gate         PermissionGate
-	mu           sync.RWMutex
-	stopping     map[serviceBinding]bool
-	shutdown     bool
+	broker        KernelLeaseBroker
+	index         *LeaseBindingIndex
+	reader        RuntimeIdentityReader
+	gate          PermissionGate
+	mu            sync.RWMutex
+	stopping      map[serviceBinding]bool
+	shutdown      bool
 	sessionLeases map[string][]kernelsecret.LeaseID
 }
 
@@ -171,7 +172,7 @@ func (a *SecretLeaseAdapter) AcquireServiceLease(
 		return result, ErrGenerationMismatch
 	}
 
-	svcPluginID, svcExtID, _, err := a.reader.ResolveService(ctx, runtimeID, serviceID)
+	svcPluginID, svcExtID, svcModuleID, _, err := a.reader.ResolveService(ctx, runtimeID, serviceID)
 	if err != nil {
 		result.Reason = fmt.Sprintf("service not found: %v", err)
 		return result, ErrServiceInvalid
@@ -182,6 +183,10 @@ func (a *SecretLeaseAdapter) AcquireServiceLease(
 	}
 	if svcExtID != extID {
 		result.Reason = "service/runtime extension mismatch"
+		return result, ErrBindingInvalid
+	}
+	if svcModuleID == "" {
+		result.Reason = "service has no kernel module binding"
 		return result, ErrBindingInvalid
 	}
 
@@ -223,7 +228,7 @@ func (a *SecretLeaseAdapter) AcquireServiceLease(
 		Purpose:           string(purpose),
 		RuntimeInstanceID: runtimeID,
 		ExtensionID:       extID,
-		ModuleID:          serviceID,
+		ModuleID:          svcModuleID,
 		Generation:        generation,
 		MaxUses:           1,
 	}

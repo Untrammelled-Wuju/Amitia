@@ -24,7 +24,7 @@ type RuntimeHealthAccessor interface {
 type HealthAggregatorFunc func(topology RuntimeTopologySnapshot, services []ServiceHealthSnapshot) RuntimeHealthResult
 
 type healthAdapter struct {
-	mu        sync.RWMutex
+	mu         sync.RWMutex
 	aggregator HealthAggregator
 	topology   RuntimeTopologyStore
 	runtime    RuntimeHealthAccessor
@@ -66,7 +66,10 @@ func (a *healthAdapter) HandleSupervisorHealth(ctx context.Context, event Superv
 	pluginID := a.resolvePluginID(event.RuntimeID)
 
 	existing, exists := services[event.ServiceID]
-	now := time.Now()
+	now := event.Occurred
+	if now.IsZero() {
+		now = time.Now()
+	}
 
 	if exists && existing.LastChangedAt.After(now) {
 		now = existing.LastChangedAt

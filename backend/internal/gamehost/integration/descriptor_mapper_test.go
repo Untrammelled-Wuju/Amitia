@@ -8,20 +8,29 @@ import (
 	gamehostdomain "github.com/u-ai/backend/internal/gamehost/domain"
 )
 
+func mapperTestExtension(id kerneldomain.ExtensionID, name string, version kerneldomain.SemanticVersion) kerneldomain.ExtensionDefinition {
+	return kerneldomain.ExtensionDefinition{
+		ID:      id,
+		Name:    kerneldomain.LocalizedText{Default: name},
+		Version: version,
+		Domain:  kerneldomain.ExtensionDomainGame,
+		Modules: []kerneldomain.ModuleDefinition{{
+			ID:          "runtime",
+			ExtensionID: id,
+			Type:        kerneldomain.ModuleTypeService,
+			Runtime: &kerneldomain.RuntimeDefinition{
+				Type:       kerneldomain.RuntimeTypeService,
+				EntryPoint: "bin/runtime",
+			},
+		}},
+	}
+}
+
 func TestMapGamePluginContribution(t *testing.T) {
 	mapper := NewDefaultGamePluginContributionMapper()
 	ctx := context.Background()
 
-	ext := kerneldomain.ExtensionDefinition{
-		ID:   "com.example.test",
-		Name: kerneldomain.LocalizedText{Default: "Test Extension"},
-		Version: kerneldomain.SemanticVersion{
-			Major: 1,
-			Minor: 0,
-			Patch: 0,
-		},
-		Domain: kerneldomain.ExtensionDomainGame,
-	}
+	ext := mapperTestExtension("com.example.test", "Test Extension", kerneldomain.SemanticVersion{Major: 1})
 
 	contrib := kerneldomain.ContributionDefinition{
 		ID:   "main",
@@ -30,7 +39,8 @@ func TestMapGamePluginContribution(t *testing.T) {
 		Definition: map[string]any{
 			"protocolVersion": "amitia-game-host/1",
 			"runtimeModuleId": "runtime",
-			"capabilities":    []interface{}{"realtime_control", "custom_rpc"},
+			"hostFeatures":    []interface{}{"realtime_control", "custom_rpc"},
+			"network":         map[string]any{"mode": "none"},
 		},
 		Metadata: map[string]any{
 			"author": "test",
@@ -56,18 +66,13 @@ func TestMapperPreservesExtensionID(t *testing.T) {
 	mapper := NewDefaultGamePluginContributionMapper()
 	ctx := context.Background()
 
-	ext := kerneldomain.ExtensionDefinition{
-		ID:      "com.example.game",
-		Name:    kerneldomain.LocalizedText{Default: "Example Game"},
-		Version: kerneldomain.SemanticVersion{Major: 1, Minor: 2, Patch: 0},
-		Domain:  kerneldomain.ExtensionDomainGame,
-	}
+	ext := mapperTestExtension("com.example.game", "Example Game", kerneldomain.SemanticVersion{Major: 1, Minor: 2})
 
 	contrib := kerneldomain.ContributionDefinition{
 		ID:         "core",
 		Kind:       kerneldomain.ContributionKindGamePlugin,
 		Name:       kerneldomain.LocalizedText{Default: "Example Game Core"},
-		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
+		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": map[string]any{"mode": "none"}},
 	}
 
 	desc, err := mapper.ToDescriptor(ctx, ext, contrib)
@@ -84,18 +89,13 @@ func TestMapperGeneratesStablePluginID(t *testing.T) {
 	mapper := NewDefaultGamePluginContributionMapper()
 	ctx := context.Background()
 
-	ext := kerneldomain.ExtensionDefinition{
-		ID:      "com.example.stable",
-		Name:    kerneldomain.LocalizedText{Default: "Stable"},
-		Version: kerneldomain.SemanticVersion{Major: 1},
-		Domain:  kerneldomain.ExtensionDomainGame,
-	}
+	ext := mapperTestExtension("com.example.stable", "Stable", kerneldomain.SemanticVersion{Major: 1})
 
 	contrib := kerneldomain.ContributionDefinition{
 		ID:         "plugin",
 		Kind:       kerneldomain.ContributionKindGamePlugin,
 		Name:       kerneldomain.LocalizedText{Default: "Plugin"},
-		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
+		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": map[string]any{"mode": "none"}},
 	}
 
 	desc1, err := mapper.ToDescriptor(ctx, ext, contrib)
@@ -117,18 +117,13 @@ func TestMapperPreservesProtocolVersion(t *testing.T) {
 	mapper := NewDefaultGamePluginContributionMapper()
 	ctx := context.Background()
 
-	ext := kerneldomain.ExtensionDefinition{
-		ID:      "com.example.protocol",
-		Name:    kerneldomain.LocalizedText{Default: "Protocol"},
-		Version: kerneldomain.SemanticVersion{Major: 1},
-		Domain:  kerneldomain.ExtensionDomainGame,
-	}
+	ext := mapperTestExtension("com.example.protocol", "Protocol", kerneldomain.SemanticVersion{Major: 1})
 
 	contrib := kerneldomain.ContributionDefinition{
 		ID:         "main",
 		Kind:       kerneldomain.ContributionKindGamePlugin,
 		Name:       kerneldomain.LocalizedText{Default: "Main"},
-		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
+		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": map[string]any{"mode": "none"}},
 	}
 
 	desc, err := mapper.ToDescriptor(ctx, ext, contrib)
@@ -141,16 +136,11 @@ func TestMapperPreservesProtocolVersion(t *testing.T) {
 	}
 }
 
-func TestMapperPreservesCapabilities(t *testing.T) {
+func TestMapperPreservesHostFeatures(t *testing.T) {
 	mapper := NewDefaultGamePluginContributionMapper()
 	ctx := context.Background()
 
-	ext := kerneldomain.ExtensionDefinition{
-		ID:      "com.example.cap",
-		Name:    kerneldomain.LocalizedText{Default: "Capabilities"},
-		Version: kerneldomain.SemanticVersion{Major: 1},
-		Domain:  kerneldomain.ExtensionDomainGame,
-	}
+	ext := mapperTestExtension("com.example.cap", "Capabilities", kerneldomain.SemanticVersion{Major: 1})
 
 	contrib := kerneldomain.ContributionDefinition{
 		ID:   "main",
@@ -159,7 +149,8 @@ func TestMapperPreservesCapabilities(t *testing.T) {
 		Definition: map[string]any{
 			"protocolVersion": "amitia-game-host/1",
 			"runtimeModuleId": "runtime",
-			"capabilities":    []interface{}{"realtime_control", "custom_rpc", "example.navigation"},
+			"hostFeatures":    []interface{}{"realtime_control", "custom_rpc"},
+			"network":         map[string]any{"mode": "none"},
 		},
 	}
 
@@ -169,9 +160,8 @@ func TestMapperPreservesCapabilities(t *testing.T) {
 	}
 
 	expectedCaps := map[gamehostdomain.Capability]struct{}{
-		"realtime_control":   {},
-		"custom_rpc":         {},
-		"example.navigation": {},
+		"realtime_control": {},
+		"custom_rpc":       {},
 	}
 
 	if len(desc.Capabilities) != len(expectedCaps) {
@@ -189,22 +179,64 @@ func TestMapperRejectsInvalidDescriptor(t *testing.T) {
 	mapper := NewDefaultGamePluginContributionMapper()
 	ctx := context.Background()
 
-	ext := kerneldomain.ExtensionDefinition{
-		ID:      "", // 非法空ID
-		Name:    kerneldomain.LocalizedText{Default: "Invalid"},
-		Version: kerneldomain.SemanticVersion{Major: 1},
-		Domain:  kerneldomain.ExtensionDomainGame,
-	}
+	ext := mapperTestExtension("", "Invalid", kerneldomain.SemanticVersion{Major: 1}) // 非法空ID
 
 	contrib := kerneldomain.ContributionDefinition{
 		ID:         "main",
 		Kind:       kerneldomain.ContributionKindGamePlugin,
 		Name:       kerneldomain.LocalizedText{Default: "Main"},
-		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
+		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": map[string]any{"mode": "none"}},
 	}
 
 	_, err := mapper.ToDescriptor(ctx, ext, contrib)
 	if err == nil {
 		t.Error("expected error for invalid extension, got nil")
+	}
+}
+
+func TestMapperSupportsServicesOnlyMultiServiceSpec(t *testing.T) {
+	mapper := NewDefaultGamePluginContributionMapper()
+	ctx := context.Background()
+	ext := mapperTestExtension("com.example.multi-service", "Multi Service", kerneldomain.SemanticVersion{Major: 1})
+	ext.Modules = append(ext.Modules, kerneldomain.ModuleDefinition{
+		ID:          "events-runtime",
+		ExtensionID: ext.ID,
+		Type:        kerneldomain.ModuleTypeService,
+		Runtime: &kerneldomain.RuntimeDefinition{
+			Type:       kerneldomain.RuntimeTypeService,
+			EntryPoint: "bin/events-runtime",
+		},
+	})
+	contrib := kerneldomain.ContributionDefinition{
+		ID:   "main",
+		Kind: kerneldomain.ContributionKindGamePlugin,
+		Name: kerneldomain.LocalizedText{Default: "Main"},
+		Definition: map[string]any{
+			"protocolVersion": "amitia-game-host/1",
+			"hostFeatures":    []any{"multi_service"},
+			"services": []any{
+				map[string]any{"id": "control", "moduleId": "runtime", "required": true},
+				map[string]any{"id": "events", "moduleId": "events-runtime", "dependsOn": []any{"control"}},
+			},
+			"network": map[string]any{"mode": "none"},
+		},
+	}
+
+	desc, err := mapper.ToDescriptor(ctx, ext, contrib)
+	if err != nil {
+		t.Fatalf("ToDescriptor: %v", err)
+	}
+	if len(desc.Services) != 2 {
+		t.Fatalf("services=%d want 2", len(desc.Services))
+	}
+	modules := map[gamehostdomain.ServiceID]string{}
+	for _, service := range desc.Services {
+		modules[service.ID] = service.Metadata["moduleId"]
+	}
+	if modules["control"] != "runtime" || modules["events"] != "events-runtime" {
+		t.Fatalf("service module bindings=%v", modules)
+	}
+	if got := desc.Metadata["runtimeModuleId"]; got != "" {
+		t.Fatalf("services-only spec should not synthesize legacy runtimeModuleId, got %q", got)
 	}
 }

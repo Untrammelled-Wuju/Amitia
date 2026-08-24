@@ -24,6 +24,7 @@ func TestApprovalCoordinator_ApproveConsumesAllowOnce(t *testing.T) {
 		RuntimeID:   "runtime-1",
 		PluginID:    "plugin-1",
 		ServiceID:   "service-1",
+		ModuleID:    "service-1",
 		ExtensionID: "extension-1",
 	}
 	request := kernelpermission.PermissionEvaluationRequest{
@@ -140,7 +141,7 @@ func TestApprovalCoordinator_PendingIncludesGenericTarget(t *testing.T) {
 	}
 	coordinator.SetTTL(2 * time.Second)
 
-	subject := EffectiveSubject{RuntimeID: "runtime-target", PluginID: "plugin-target", ServiceID: "service-target", ExtensionID: "extension-target"}
+	subject := EffectiveSubject{RuntimeID: "runtime-target", PluginID: "plugin-target", ServiceID: "service-target", ModuleID: "service-target", ExtensionID: "extension-target"}
 	request := kernelpermission.PermissionEvaluationRequest{
 		Subject: subject.KernelSubject(),
 		Requirements: []kernelpermission.PermissionRequirement{{
@@ -198,7 +199,7 @@ func TestApprovalCoordinator_ContextCancellationDoesNotLeaveAllowOnceGrant(t *te
 	}
 	coordinator.SetTTL(5 * time.Second)
 
-	subject := EffectiveSubject{RuntimeID: "runtime-cancel", PluginID: "plugin-cancel", ServiceID: "service-cancel", ExtensionID: "extension-cancel"}
+	subject := EffectiveSubject{RuntimeID: "runtime-cancel", PluginID: "plugin-cancel", ServiceID: "service-cancel", ModuleID: "service-cancel", ExtensionID: "extension-cancel"}
 	request := kernelpermission.PermissionEvaluationRequest{
 		Subject: subject.KernelSubject(),
 		Requirements: []kernelpermission.PermissionRequirement{{
@@ -264,7 +265,7 @@ func TestApprovalCoordinator_SerializesSamePermissionRequests(t *testing.T) {
 	}
 	coordinator.SetTTL(3 * time.Second)
 
-	subject := EffectiveSubject{RuntimeID: "runtime-serial", PluginID: "plugin-serial", ServiceID: "service-serial", ExtensionID: "extension-serial"}
+	subject := EffectiveSubject{RuntimeID: "runtime-serial", PluginID: "plugin-serial", ServiceID: "service-serial", ModuleID: "service-serial", ExtensionID: "extension-serial"}
 	request := kernelpermission.PermissionEvaluationRequest{
 		Subject: subject.KernelSubject(),
 		Requirements: []kernelpermission.PermissionRequirement{{
@@ -328,7 +329,7 @@ func TestApprovalCoordinator_DoesNotSuspendPersistentPermission(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewApprovalCoordinator: %v", err)
 	}
-	subject := EffectiveSubject{RuntimeID: "runtime-persistent", PluginID: "plugin-persistent", ServiceID: "service-persistent", ExtensionID: "extension-persistent"}
+	subject := EffectiveSubject{RuntimeID: "runtime-persistent", PluginID: "plugin-persistent", ServiceID: "service-persistent", ModuleID: "service-persistent", ExtensionID: "extension-persistent"}
 	request := kernelpermission.PermissionEvaluationRequest{
 		Subject: subject.KernelSubject(),
 		Requirements: []kernelpermission.PermissionRequirement{{
@@ -358,7 +359,7 @@ func TestEffectivePermissionResolveView_DoesNotCreatePendingApproval(t *testing.
 	}
 	adapter := NewEffectivePermissionAdapter(broker, nil, nil)
 	adapter.SetApprovalCoordinator(coordinator)
-	subject := EffectiveSubject{RuntimeID: "runtime-view", PluginID: "plugin-view", ServiceID: "service-view", ExtensionID: "extension-view"}
+	subject := EffectiveSubject{RuntimeID: "runtime-view", PluginID: "plugin-view", ServiceID: "service-view", ModuleID: "service-view", ExtensionID: "extension-view"}
 
 	view := adapter.ResolveServicePermissions(context.Background(), subject, kernelpermission.PermissionGameHostControl)
 	if len(view.Checks) != 1 || view.Checks[0].Decision != DecisionRequireApproval {

@@ -314,7 +314,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	auditSink = integration.NewControlAuditAdapter(opts.EventService, pluginReg)
 
 	if opts.EffectivePermission == nil && opts.PermissionBroker != nil {
-		subjectResolver := integration.NewGameHostPermissionSubjectResolver(runtimeManager, pluginReg)
+		subjectResolver := integration.NewGameHostPermissionSubjectResolver(runtimeManager, pluginReg, topologyStore)
 		subjectMapper := permission.NewGameHostSubjectMapper(subjectResolver)
 		opts.EffectivePermission = permission.NewEffectivePermissionAdapter(opts.PermissionBroker, nil, subjectMapper)
 	}
@@ -332,6 +332,16 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 	permChecker := integration.NewControlPermissionAdapter(opts.EffectivePermission)
 	channelNotificationSink.SetPermissionChecker(opts.EffectivePermission)
+
+	if opts.EffectivePermission != nil {
+		permissionRPC, err := permission.NewPermissionRPCHandler(opts.EffectivePermission, pluginReg)
+		if err != nil {
+			return nil, fmt.Errorf("compose permission RPC handler: %w", err)
+		}
+		if err := permissionRPC.Register(hostHandlers); err != nil {
+			return nil, fmt.Errorf("register permission RPC handlers: %w", err)
+		}
+	}
 
 	if artifactManager != nil && opts.EffectivePermission != nil {
 		artifactRPC, err := artifact.NewArtifactRPCHandler(artifactManager, pluginReg, opts.EffectivePermission)
@@ -717,7 +727,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	}
 
 	if opts.EffectivePermission != nil && runtimeManager != nil {
-		subjectMapper := integration.NewGameHostPermissionSubjectResolver(runtimeManager, pluginReg)
+		subjectMapper := integration.NewGameHostPermissionSubjectResolver(runtimeManager, pluginReg, topologyStore)
 		ghSubjectMapper := permission.NewGameHostSubjectMapper(subjectMapper)
 		permissionAdapter = &recovery.PermissionServiceAdapter{
 			ResolveFn: func(ctx context.Context, runtimeID, pluginID string) (recovery.PermissionView, error) {

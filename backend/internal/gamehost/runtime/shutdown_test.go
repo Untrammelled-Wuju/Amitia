@@ -37,6 +37,10 @@ func (f *fakeTopologyAccessor) Snapshot() RuntimeTopologySnapshot {
 	return f.topology
 }
 
+func (f *fakeTopologyAccessor) ListServices() []ServiceInstanceSnapshot {
+	return append([]ServiceInstanceSnapshot(nil), f.topology.Services...)
+}
+
 func TestShutdownCoordinator_NilExecutor(t *testing.T) {
 	_, err := NewShutdownCoordinator(nil, 4, 30*time.Second)
 	if err == nil {
@@ -120,11 +124,11 @@ func TestShutdownCoordinator_ForceCleanup(t *testing.T) {
 }
 
 type fakeRuntimeExecutor struct {
-	mu               sync.Mutex
-	stoppedRuntimes  []domain.RuntimeInstanceID
-	cleanedRuntimes  []domain.RuntimeInstanceID
-	stopErr          error
-	cleanupErr       error
+	mu              sync.Mutex
+	stoppedRuntimes []domain.RuntimeInstanceID
+	cleanedRuntimes []domain.RuntimeInstanceID
+	stopErr         error
+	cleanupErr      error
 }
 
 func (f *fakeRuntimeExecutor) StartRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {

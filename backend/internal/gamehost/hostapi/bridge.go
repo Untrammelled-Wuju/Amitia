@@ -22,7 +22,7 @@ type ProductionHostAPIAdapterDeps struct {
 	GenerationReader   RuntimeGenerationReader
 	ConnectionRegistry ConnectionReadyChecker
 	InvocationTracker  InvocationTracker
-	PermissionChecker  RuntimePermissionChecker
+	PermissionChecker  ServicePermissionChecker
 	FeatureChecker     NegotiatedFeatureChecker
 }
 

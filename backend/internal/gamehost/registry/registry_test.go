@@ -60,7 +60,6 @@ func TestRegisterRejectsInvalidDescriptor(t *testing.T) {
 
 	desc := domain.PluginDescriptor{
 		ID:              "",
-		ServiceID:       domain.ServiceID("svc-1"),
 		ExtensionID:     "com.example",
 		Name:            "Bad Plugin",
 		Version:         "1.0.0",

@@ -19,10 +19,11 @@ type PluginDescriptor struct {
 	Version         string
 	ProtocolVersion string
 
-	Capabilities []Capability
-	Services     []ServiceDescriptor
-	Channels     []ChannelDescriptor
-	ControlSinks []ControlSinkDeclaration
+	Capabilities        []Capability
+	RequiredPermissions []string
+	Services            []ServiceDescriptor
+	Channels            []ChannelDescriptor
+	ControlSinks        []ControlSinkDeclaration
 
 	Metadata map[string]string
 }
@@ -73,6 +74,22 @@ func (p PluginDescriptor) Validate() error {
 				NewHostError(ErrInvalidArgument, string(cap)))
 		}
 		seenCapabilities[cap] = struct{}{}
+	}
+
+	seenPermissions := make(map[string]struct{}, len(p.RequiredPermissions))
+	for _, permissionID := range p.RequiredPermissions {
+		permissionID = strings.TrimSpace(permissionID)
+		if permissionID == "" {
+			return NewHostError(ErrInvalidArgument, "required permission id must not be empty")
+		}
+		if strings.ContainsAny(permissionID, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f") {
+			return NewHostError(ErrInvalidArgument, "required permission id contains control characters")
+		}
+		if _, exists := seenPermissions[permissionID]; exists {
+			return NewHostErrorWithCause(ErrInvalidArgument, "duplicate required permission",
+				NewHostError(ErrInvalidArgument, permissionID))
+		}
+		seenPermissions[permissionID] = struct{}{}
 	}
 
 	seenServiceIDs := make(map[ServiceID]struct{})
@@ -149,6 +166,10 @@ func (p PluginDescriptor) Clone() PluginDescriptor {
 	if p.Capabilities != nil {
 		cloned.Capabilities = make([]Capability, len(p.Capabilities))
 		copy(cloned.Capabilities, p.Capabilities)
+	}
+
+	if p.RequiredPermissions != nil {
+		cloned.RequiredPermissions = append([]string(nil), p.RequiredPermissions...)
 	}
 
 	if p.Services != nil {
@@ -229,6 +250,10 @@ func EqualPluginDescriptor(a, b PluginDescriptor) bool {
 		}
 	}
 
+	if !equalStringsUnordered(a.RequiredPermissions, b.RequiredPermissions) {
+		return false
+	}
+
 	if len(a.Services) != len(b.Services) {
 		return false
 	}
@@ -271,6 +296,28 @@ func EqualPluginDescriptor(a, b PluginDescriptor) bool {
 		}
 	}
 
+	return true
+}
+
+func equalStringsUnordered(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[string]int, len(a))
+	for _, value := range a {
+		counts[value]++
+	}
+	for _, value := range b {
+		counts[value]--
+		if counts[value] < 0 {
+			return false
+		}
+	}
+	for _, count := range counts {
+		if count != 0 {
+			return false
+		}
+	}
 	return true
 }
 

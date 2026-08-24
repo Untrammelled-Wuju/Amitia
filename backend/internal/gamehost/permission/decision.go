@@ -13,13 +13,13 @@ const (
 type DenyReason string
 
 const (
-	ReasonNotDeclared     DenyReason = "not_declared"
-	ReasonNotGranted      DenyReason = "not_granted"
-	ReasonScopeDenied     DenyReason = "scope_denied"
-	ReasonPolicyDenied    DenyReason = "host_policy_deny"
-	ReasonUnknownPerm     DenyReason = "unknown_permission"
-	ReasonInvalidSubject  DenyReason = "invalid_subject"
-	ReasonRuntimeInactive DenyReason = "runtime_inactive"
+	ReasonNotDeclared         DenyReason = "not_declared"
+	ReasonNotGranted          DenyReason = "not_granted"
+	ReasonScopeDenied         DenyReason = "scope_denied"
+	ReasonPolicyDenied        DenyReason = "host_policy_denied"
+	ReasonUnknownPerm         DenyReason = "unknown_permission"
+	ReasonInvalidSubject      DenyReason = "invalid_subject"
+	ReasonRuntimeInactive     DenyReason = "runtime_inactive"
 	ReasonSnapshotUnavailable DenyReason = "snapshot_unavailable"
 )
 
