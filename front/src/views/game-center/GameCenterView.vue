@@ -890,7 +890,7 @@ async function invokeRpc() {
 async function togglePlugin(plugin: Plugin) {
   busy.value = plugin.extensionId;
   try {
-    await api.post(`/api/game-center/plugins/${encodeURIComponent(plugin.extensionId)}/${plugin.enabled ? "disable" : "enable"}`);
+    await api.post(`/api/game-center/extensions/${encodeURIComponent(plugin.extensionId)}/${plugin.enabled ? "disable" : "enable"}`);
     ElMessage.success(plugin.enabled ? "游戏扩展已禁用" : "游戏扩展已启用");
     await refresh();
   } catch (err: any) {
