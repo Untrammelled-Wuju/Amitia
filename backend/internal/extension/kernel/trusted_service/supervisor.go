@@ -370,6 +370,16 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 		return nil, err
 	}
 
+	if req.PublisherTrust.RequiresFullSandbox() || TrustLevel(def.TrustLevel).RequiresFullSandbox() {
+		report := s.procMgr.IsolationReport()
+		if !report.IsFullyIsolated() {
+			return nil, fmt.Errorf("trusted_service: community service %s requires full sandbox; platform %s isolation is incomplete: %v", req.ServiceID, report.Platform, report.Limitations)
+		}
+		if !def.Network.Enforce {
+			return nil, fmt.Errorf("trusted_service: community service %s requires an enforced network policy", req.ServiceID)
+		}
+	}
+
 	exe, err := s.selector.Select(def)
 	if err != nil {
 		return nil, err
@@ -640,12 +650,7 @@ func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance
 	}
 
 	welcomeExpiry := time.Now().UTC().Add(30 * time.Minute)
-	if err := rpcSession.SendWelcome(req.SessionToken, map[string]any{
-		"max_memory_mb":        def.Limits.MaxMemoryMB,
-		"max_cpu_percent":      def.Limits.MaxCPUPercent,
-		"max_subprocesses":     def.Limits.MaxSubprocesses,
-		"max_file_descriptors": def.Limits.MaxFileDescriptors,
-	}, welcomeExpiry); err != nil {
+	if err := rpcSession.SendWelcome(req.SessionToken, enforcedResourceLimits(def.Limits), welcomeExpiry); err != nil {
 		s.killProcessTree(instance)
 		rpcSession.Close()
 		return cmd, fmt.Errorf("trusted_service: rpc send welcome: %w", err)
@@ -1576,3 +1581,29 @@ func (w *logWriter) Write(p []byte) (int, error) {
 }
 
 var _ io.Writer = (*logWriter)(nil)
+
+// enforcedResourceLimits only advertises limits with an actual enforcement
+// value. Zero-valued fields mean "not enforced by this supervisor" and are not
+// sent as misleading max_* guarantees to plugin runtimes.
+func enforcedResourceLimits(limits ServiceResourceLimits) map[string]any {
+	out := make(map[string]any)
+	if limits.MaxMemoryMB > 0 {
+		out["max_memory_mb"] = limits.MaxMemoryMB
+	}
+	if limits.MaxCPUPercent > 0 {
+		out["max_cpu_percent"] = limits.MaxCPUPercent
+	}
+	if limits.MaxSubprocesses > 0 {
+		out["max_subprocesses"] = limits.MaxSubprocesses
+	}
+	if limits.MaxFileDescriptors > 0 {
+		out["max_file_descriptors"] = limits.MaxFileDescriptors
+	}
+	if limits.MaxDiskMB > 0 {
+		out["max_disk_mb"] = limits.MaxDiskMB
+	}
+	if limits.CPUTime > 0 {
+		out["cpu_time_ms"] = limits.CPUTime.Milliseconds()
+	}
+	return out
+}

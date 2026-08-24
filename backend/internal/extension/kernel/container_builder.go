@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
@@ -1721,22 +1722,104 @@ func newGameHostDefinitionReconcile(instRepo domain.InstallationRepository, defR
 }
 
 func (r *gameHostDefinitionReconcile) ReconcileExtension(extensionID string) *service_definition.ReconcileReport {
-	report := &service_definition.ReconcileReport{ExtensionID: extensionID}
+	report := &service_definition.ReconcileReport{ExtensionID: extensionID, DefinitionErrors: make(map[string]error)}
+	ctx := context.Background()
 	extID := domain.ExtensionID(extensionID)
-	inst, err := r.instRepo.GetInstallation(context.Background(), extID)
+	if r.instRepo == nil || r.defRepo == nil || r.contribRepo == nil || r.installer == nil {
+		report.Errors = append(report.Errors, fmt.Errorf("gamehost definition reconcile: required repository or installer is unavailable"))
+		return report
+	}
+	inst, err := r.instRepo.GetInstallation(ctx, extID)
 	if err != nil {
 		report.Errors = append(report.Errors, fmt.Errorf("get installation: %w", err))
 		return report
 	}
-	def, err := r.defRepo.GetExtension(context.Background(), extID, inst.InstalledVersion)
+	def, err := r.defRepo.GetExtension(ctx, extID, inst.InstalledVersion)
 	if err != nil {
-		report.Errors = append(report.Errors, fmt.Errorf("get extension: %w", err))
+		report.Errors = append(report.Errors, fmt.Errorf("get installed extension definition: %w", err))
 		return report
 	}
-	for _, mod := range def.Modules {
-		_ = mod
+	desired := def.AllContributions()
+	current, err := r.contribRepo.ListContributions(ctx, extID)
+	if err != nil {
+		report.Errors = append(report.Errors, fmt.Errorf("list persisted contributions: %w", err))
+		return report
 	}
-	report.Added = len(def.Modules)
+
+	currentByID := make(map[domain.ContributionID]domain.ContributionDefinition, len(current))
+	for _, item := range current {
+		currentByID[item.ID] = item
+	}
+	desiredByID := make(map[domain.ContributionID]domain.ContributionDefinition, len(desired))
+	for _, item := range desired {
+		item.ExtensionID = extID
+		desiredByID[item.ID] = item
+		if before, ok := currentByID[item.ID]; !ok {
+			report.Added++
+		} else {
+			beforeJSON, _ := json.Marshal(before)
+			afterJSON, _ := json.Marshal(item)
+			if string(beforeJSON) == string(afterJSON) {
+				report.Skipped++
+			} else {
+				report.Updated++
+			}
+		}
+	}
+	for id := range currentByID {
+		if _, ok := desiredByID[id]; !ok {
+			report.Removed++
+		}
+	}
+	if report.Added == 0 && report.Updated == 0 && report.Removed == 0 {
+		return report
+	}
+
+	// Unregister the old runtime contributions first, then atomically rebuild the
+	// persisted contribution view. If any stage fails, restore the previous view
+	// and registrations so upgrade does not report a false successful reconcile.
+	if err := r.installer.UninstallContributions(ctx, extID); err != nil {
+		report.Errors = append(report.Errors, fmt.Errorf("uninstall previous contributions: %w", err))
+		return report
+	}
+	restore := func(cause error) {
+		if err := r.installer.UninstallContributions(ctx, extID); err != nil {
+			report.Errors = append(report.Errors, fmt.Errorf("rollback uninstall partial contributions: %w", err))
+		}
+		_ = r.contribRepo.DeleteContributions(ctx, extID)
+		for _, item := range current {
+			_ = r.contribRepo.PutContribution(ctx, item)
+		}
+		if err := r.installer.InstallContributions(ctx, current, inst.Generation); err != nil {
+			report.Errors = append(report.Errors, fmt.Errorf("rollback contribution registrations: %w", err))
+		} else if inst.EnablementState == domain.EnablementEnabled {
+			if err := r.installer.ActivateContributions(ctx, extID); err != nil {
+				report.Errors = append(report.Errors, fmt.Errorf("rollback contribution activation: %w", err))
+			}
+		}
+		report.Errors = append(report.Errors, cause)
+	}
+	if err := r.contribRepo.DeleteContributions(ctx, extID); err != nil {
+		restore(fmt.Errorf("replace contribution records: %w", err))
+		return report
+	}
+	for _, item := range desired {
+		item.ExtensionID = extID
+		if err := r.contribRepo.PutContribution(ctx, item); err != nil {
+			restore(fmt.Errorf("persist contribution %s: %w", item.ID, err))
+			return report
+		}
+	}
+	if err := r.installer.InstallContributions(ctx, desired, inst.Generation); err != nil {
+		restore(fmt.Errorf("install reconciled contributions: %w", err))
+		return report
+	}
+	if inst.EnablementState == domain.EnablementEnabled {
+		if err := r.installer.ActivateContributions(ctx, extID); err != nil {
+			restore(fmt.Errorf("activate reconciled contributions: %w", err))
+			return report
+		}
+	}
 	return report
 }
 
@@ -1752,20 +1835,30 @@ func (k *gameHostKernelLifecycle) ExecuteUpdate(ctx context.Context, extensionID
 	if k.manager == nil {
 		return nil, fmt.Errorf("kernel lifecycle manager not available")
 	}
+	version, err := domain.ParseVersion(strings.TrimSpace(targetVersion))
+	if err != nil {
+		return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, fmt.Errorf("parse target version %q: %w", targetVersion, err)
+	}
 	result, err := k.manager.Execute(ctx, lifecycle_manager.LifecycleCommand{
-		Kind:          lifecycle_manager.CmdUpdate,
-		ExtensionID:   domain.ExtensionID(extensionID),
-		TargetVersion: domain.SemanticVersion{Major: 0, Minor: 0, Patch: 0},
-		RequestID:     string(operationID),
+		Kind: lifecycle_manager.CmdUpdate, ExtensionID: domain.ExtensionID(extensionID), TargetVersion: version, RequestID: string(operationID),
 	})
 	if err != nil {
 		return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, err
 	}
-	return &upgrade.KernelUpdateResult{
-		Success:    result.Status == "completed",
-		NewVersion: "",
-		Reason:     result.Error,
-	}, nil
+	if result.Status != "completed" {
+		err := fmt.Errorf("kernel update did not complete: status=%s reason=%s", result.Status, result.Error)
+		return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, err
+	}
+	if result.FinalState.Installation == nil {
+		err := fmt.Errorf("kernel update completed without installation state")
+		return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, err
+	}
+	newVersion := strings.TrimSpace(result.FinalState.Installation.InstalledVersion.String())
+	if newVersion == "" || newVersion != version.String() {
+		err := fmt.Errorf("kernel update version mismatch: expected %s, got %q", version.String(), newVersion)
+		return &upgrade.KernelUpdateResult{Success: false, NewVersion: newVersion, Reason: err.Error()}, err
+	}
+	return &upgrade.KernelUpdateResult{Success: true, NewVersion: newVersion}, nil
 }
 
 func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error) {
