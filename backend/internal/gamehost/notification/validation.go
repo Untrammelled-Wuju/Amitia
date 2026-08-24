@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	maxMethodLength     = 1024
+	maxMethodLength      = 1024
 	maxMetadataKeyLength = 256
 )
 
@@ -20,6 +20,9 @@ func ValidateRoute(ctx RouteContext) error {
 	}
 	if ctx.ServiceID == "" {
 		return domain.NewHostError(domain.ErrInvalidArgument, "notification: route.service_id must not be empty")
+	}
+	if ctx.Generation <= 0 {
+		return domain.NewHostError(domain.ErrInvalidArgument, "notification: route.generation must be positive")
 	}
 	if containsControlChars(string(ctx.PluginID)) {
 		return domain.NewHostError(domain.ErrInvalidArgument, "notification: route.plugin_id contains control characters")

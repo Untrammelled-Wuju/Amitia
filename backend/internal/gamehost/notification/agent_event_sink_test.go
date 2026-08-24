@@ -26,15 +26,15 @@ func makePluginEventNotification(t *testing.T, pluginID domain.PluginID, runtime
 	if err != nil {
 		t.Fatal(err)
 	}
-	envelope, err := json.Marshal(map[string]any{"channelId": event.SessionID, "eventId": PluginAgentEventPublishID, "payload": json.RawMessage(payload), "metadata": metadata})
+	envelope, err := json.Marshal(map[string]any{"eventId": PluginAgentEventPublishID, "payload": json.RawMessage(payload), "metadata": metadata})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Notification{PluginID: pluginID, RuntimeID: runtimeID, ServiceID: serviceID, Method: "plugin.event.publish", Payload: envelope, ReceivedAt: time.Now().UTC()}
+	return Notification{PluginID: pluginID, RuntimeID: runtimeID, ServiceID: serviceID, Generation: 1, Method: "plugin.event.publish", Payload: envelope, ReceivedAt: time.Now().UTC()}
 }
 func TestAgentEventSinkWakesBoundRuntimeContext(t *testing.T) {
 	sessions := agentbridge.NewSessionRegistry()
-	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1", UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
+	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1", Generation: 1, UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
 	sink := NewAgentEventSink(sessions)
 	port := &captureAgentWakePort{ch: make(chan AgentWakeRequest, 1)}
 	sink.SetPort(port)
@@ -57,7 +57,7 @@ func TestAgentEventSinkWakesBoundRuntimeContext(t *testing.T) {
 }
 func TestAgentEventSinkRejectsRouteMismatch(t *testing.T) {
 	sessions := agentbridge.NewSessionRegistry()
-	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1"})
+	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1", Generation: 1})
 	sink := NewAgentEventSink(sessions)
 	n := makePluginEventNotification(t, "other", "runtime-1", "service-1", gameprotocol.PluginEvent{ID: "evt", Type: "vendor.event"}, nil)
 	if err := sink.Publish(context.Background(), n); err == nil {
@@ -66,7 +66,7 @@ func TestAgentEventSinkRejectsRouteMismatch(t *testing.T) {
 }
 func TestAgentEventSinkRespectsWakeAgentFalse(t *testing.T) {
 	sessions := agentbridge.NewSessionRegistry()
-	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1"})
+	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1", Generation: 1})
 	sink := NewAgentEventSink(sessions)
 	port := &captureAgentWakePort{ch: make(chan AgentWakeRequest, 1)}
 	sink.SetPort(port)
@@ -82,5 +82,15 @@ func TestAgentEventSinkRespectsWakeAgentFalse(t *testing.T) {
 	case <-port.ch:
 		t.Fatal("wakeAgent=false woke agent")
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestAgentEventSinkRejectsStaleGeneration(t *testing.T) {
+	sessions := agentbridge.NewSessionRegistry()
+	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1", Generation: 2})
+	sink := NewAgentEventSink(sessions)
+	n := makePluginEventNotification(t, "plugin-1", "runtime-1", "service-1", gameprotocol.PluginEvent{ID: "evt", Type: "vendor.event"}, nil)
+	if err := sink.Publish(context.Background(), n); err == nil {
+		t.Fatal("expected generation mismatch")
 	}
 }

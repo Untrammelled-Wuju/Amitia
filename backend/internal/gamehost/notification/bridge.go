@@ -53,6 +53,7 @@ func (b *Bridge) Handle(
 		PluginID:   source.PluginID,
 		RuntimeID:  source.RuntimeID,
 		ServiceID:  source.ServiceID,
+		Generation: source.Generation,
 		Method:     method,
 		Payload:    deepCopyRaw(payload),
 		Metadata:   deepCopyMetadata(metadata),

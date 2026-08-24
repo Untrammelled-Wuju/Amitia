@@ -12,6 +12,7 @@ type Notification struct {
 	PluginID   domain.PluginID
 	RuntimeID  domain.RuntimeInstanceID
 	ServiceID  domain.ServiceID
+	Generation int64
 	Method     string
 	Payload    json.RawMessage
 	Metadata   map[string]json.RawMessage
@@ -19,16 +20,18 @@ type Notification struct {
 }
 
 type RouteContext struct {
-	PluginID  domain.PluginID
-	RuntimeID domain.RuntimeInstanceID
-	ServiceID domain.ServiceID
+	PluginID   domain.PluginID
+	RuntimeID  domain.RuntimeInstanceID
+	ServiceID  domain.ServiceID
+	Generation int64
 }
 
 func (n Notification) Route() RouteContext {
 	return RouteContext{
-		PluginID:  n.PluginID,
-		RuntimeID: n.RuntimeID,
-		ServiceID: n.ServiceID,
+		PluginID:   n.PluginID,
+		RuntimeID:  n.RuntimeID,
+		ServiceID:  n.ServiceID,
+		Generation: n.Generation,
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 )
 
 type TrustedServiceNotificationAdapter struct {
-	bridge  NotificationBridge
+	bridge         NotificationBridge
 	routeByService map[string]RouteContext
 }
 
@@ -49,10 +49,11 @@ func (s DirectNotificationSource) AsRoute() RouteContext {
 	return s.Route
 }
 
-func BuildRoute(plugin domain.PluginID, runtime domain.RuntimeInstanceID, service domain.ServiceID) RouteContext {
+func BuildRoute(plugin domain.PluginID, runtime domain.RuntimeInstanceID, service domain.ServiceID, generation int64) RouteContext {
 	return RouteContext{
-		PluginID:  plugin,
-		RuntimeID: runtime,
-		ServiceID: service,
+		PluginID:   plugin,
+		RuntimeID:  runtime,
+		ServiceID:  service,
+		Generation: generation,
 	}
 }
