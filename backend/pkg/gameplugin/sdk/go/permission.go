@@ -31,8 +31,6 @@ const (
 
 type PermissionCheckInput struct {
 	PermissionID string `json:"permissionId"`
-	ServiceID    string `json:"serviceId,omitempty"`
-	RuntimeID    string `json:"runtimeId,omitempty"`
 }
 
 type PermissionCheckResult struct {
@@ -42,23 +40,16 @@ type PermissionCheckResult struct {
 	Detail       string `json:"detail,omitempty"`
 }
 
-type PermissionSnapshotInput struct {
-	RuntimeID string `json:"runtimeId,omitempty"`
-	ServiceID string `json:"serviceId,omitempty"`
-}
-
 type PermissionSnapshotResult struct {
 	SnapshotID    string   `json:"snapshotId"`
 	Revision      string   `json:"revision"`
 	GrantedPerms  []string `json:"grantedPerms"`
 	GrantedScopes []string `json:"grantedScopes"`
-	ExpiresAt     int64    `json:"expiresAt,omitempty"`
 	IsValid       bool     `json:"isValid"`
 }
 
 type PermissionRequestInput struct {
 	PermissionID string `json:"permissionId"`
-	ServiceID    string `json:"serviceId,omitempty"`
 }
 
 type PermissionRequestResult struct {
@@ -82,8 +73,8 @@ func (c *Client) CheckPermission(ctx context.Context, input PermissionCheckInput
 	return out, nil
 }
 
-func (c *Client) GetPermissionSnapshot(ctx context.Context, input PermissionSnapshotInput, opts ...MessageOption) (PermissionSnapshotResult, error) {
-	envelope, err := c.SendReservedRequest(ctx, MethodPermissionSnapshot, input, opts...)
+func (c *Client) GetPermissionSnapshot(ctx context.Context, opts ...MessageOption) (PermissionSnapshotResult, error) {
+	envelope, err := c.SendReservedRequest(ctx, MethodPermissionSnapshot, struct{}{}, opts...)
 	if err != nil {
 		return PermissionSnapshotResult{}, err
 	}

@@ -1,16 +1,3 @@
-export interface ControlEffectSinkDescriptor {
-  sinkId: string;
-  kind: string;
-  serviceId?: string;
-  description?: string;
-}
-
-export interface ControlAuthoritySnapshot {
-  runtimeId: string;
-  pluginId: string;
-  mode: string;
-  epoch: number;
-  serviceId?: string;
-  updatedAt?: number;
-  valid: boolean;
-}
+// Backward-compatible type name for callers that imported the historical
+// security module. The canonical authority wire contract lives in control.ts.
+export type { AuthoritySnapshot as ControlAuthoritySnapshot } from './control';

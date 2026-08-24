@@ -9,49 +9,20 @@ const (
 	MethodHostInvoke = "host.invoke"
 )
 
-const (
-	HostAPIRead    = "read"
-	HostAPIWrite   = "write"
-	HostAPIExecute = "execute"
-	HostAPINotify  = "notify"
-
-	HostAPISuccess   = "success"
-	HostAPIFailed    = "failed"
-	HostAPITimeout   = "timeout"
-	HostAPICancelled = "cancelled"
-
-	HostAPIPermissionDenied = "permission_denied"
-	HostAPIScopeDenied      = "scope_denied"
-	HostAPIRateLimited      = "rate_limited"
-	HostAPIMethodNotFound   = "method_not_found"
-	HostAPIInputInvalid     = "input_invalid"
-	HostAPIOutputInvalid    = "output_invalid"
-	HostAPIGenerationStale  = "generation_stale"
-	HostAPIHostUnavailable  = "host_unavailable"
-)
+const HostAPISuccess = "success"
 
 type HostInvokeInput struct {
-	Method     string          `json:"method"`
-	Version    int             `json:"version,omitempty"`
-	Input      json.RawMessage `json:"input"`
-	ServiceID  string          `json:"serviceId,omitempty"`
-	SideEffect string          `json:"sideEffect,omitempty"`
-	RequestID  string          `json:"requestId,omitempty"`
-	TimeoutMs  int             `json:"timeoutMs,omitempty"`
+	Method    string          `json:"method"`
+	Version   int             `json:"version,omitempty"`
+	Input     json.RawMessage `json:"input"`
+	TimeoutMs int             `json:"timeoutMs,omitempty"`
 }
 
 type HostInvokeResult struct {
 	Status     string          `json:"status"`
-	Output     json.RawMessage `json:"output,omitempty"`
-	Method     string          `json:"method,omitempty"`
-	DurationMs int             `json:"durationMs,omitempty"`
-	Error      *HostAPIError   `json:"error,omitempty"`
-}
-
-type HostAPIError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Detail  string `json:"detail,omitempty"`
+	Output     json.RawMessage `json:"output"`
+	Method     string          `json:"method"`
+	DurationMs int64           `json:"durationMs"`
 }
 
 func (c *Client) InvokeHostMethod(ctx context.Context, input HostInvokeInput, opts ...MessageOption) (HostInvokeResult, error) {

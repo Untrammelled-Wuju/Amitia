@@ -16,37 +16,26 @@ const (
 	SecretPurposeRuntime = "runtime"
 )
 
-const (
-	LeaseStatusGranted = "granted"
-	LeaseStatusDenied  = "denied"
-	LeaseStatusRevoked = "revoked"
-	LeaseStatusExpired = "expired"
-)
-
 type SecretRef string
 
 type SecretAcquireInput struct {
-	Ref       SecretRef `json:"ref"`
-	Purpose   string    `json:"purpose"`
-	ServiceID string    `json:"serviceId,omitempty"`
-	Required  bool      `json:"required"`
-	RuntimeID string    `json:"runtimeId,omitempty"`
+	Ref      SecretRef `json:"ref"`
+	Purpose  string    `json:"purpose"`
+	Required bool      `json:"required"`
 }
 
 type SecretAcquireResult struct {
 	LeaseID   string    `json:"leaseId"`
 	Ref       SecretRef `json:"ref"`
-	Status    string    `json:"status"`
+	Purpose   string    `json:"purpose"`
 	Granted   bool      `json:"granted"`
 	ExpiresAt int64     `json:"expiresAt,omitempty"`
 	Reason    string    `json:"reason,omitempty"`
 }
 
 type SecretReleaseInput struct {
-	LeaseID   string    `json:"leaseId"`
-	Ref       SecretRef `json:"ref,omitempty"`
-	ServiceID string    `json:"serviceId,omitempty"`
-	Reason    string    `json:"reason,omitempty"`
+	LeaseID string `json:"leaseId"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 type SecretReleaseResult struct {
@@ -55,15 +44,12 @@ type SecretReleaseResult struct {
 }
 
 type SecretQueryInput struct {
-	LeaseID   string    `json:"leaseId,omitempty"`
-	Ref       SecretRef `json:"ref,omitempty"`
-	ServiceID string    `json:"serviceId,omitempty"`
+	LeaseID string `json:"leaseId"`
 }
 
 type SecretQueryResult struct {
 	LeaseID   string    `json:"leaseId"`
-	Ref       SecretRef `json:"ref"`
-	Status    string    `json:"status"`
+	Ref       SecretRef `json:"ref,omitempty"`
 	Granted   bool      `json:"granted"`
 	ExpiresAt int64     `json:"expiresAt,omitempty"`
 	Valid     bool      `json:"valid"`

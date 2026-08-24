@@ -8,12 +8,18 @@ export const METHOD_CONTROL_AUTHORITY_RELEASE = 'control.authority.release';
 export const METHOD_EMERGENCY_STOP = 'emergency.stop';
 export const METHOD_CONTROL_SINK_DISPATCH = 'control.sink.dispatch';
 
-export const CONTROL_MODE_OBSERVE = 'observe';
+export const CONTROL_MODE_OBSERVE_ONLY = 'observe_only';
 export const CONTROL_MODE_ASSIST = 'assist';
-export const CONTROL_MODE_SHARED = 'shared';
-export const CONTROL_MODE_PLUGIN = 'plugin';
-export const CONTROL_MODE_USER = 'user';
+export const CONTROL_MODE_SHARED_CONTROL = 'shared_control';
+export const CONTROL_MODE_PLUGIN_CONTROL = 'plugin_control';
+export const CONTROL_MODE_USER_CONTROL = 'user_control';
 export const CONTROL_MODE_SUSPENDED = 'suspended';
+
+// Backward-compatible symbol names using canonical GameHost v1 wire values.
+export const CONTROL_MODE_OBSERVE = CONTROL_MODE_OBSERVE_ONLY;
+export const CONTROL_MODE_SHARED = CONTROL_MODE_SHARED_CONTROL;
+export const CONTROL_MODE_PLUGIN = CONTROL_MODE_PLUGIN_CONTROL;
+export const CONTROL_MODE_USER = CONTROL_MODE_USER_CONTROL;
 
 export const OUTPUT_KIND_CUSTOM_RPC = 'custom_rpc';
 export const OUTPUT_KIND_CHANNEL = 'channel';
@@ -25,15 +31,14 @@ export interface AuthoritySnapshot {
   pluginId: string;
   mode: string;
   epoch: number;
-  serviceId?: string;
-  updatedAt?: number;
-  valid: boolean;
+  updatedAt: string;
+  lastTransitionReason?: string;
+  lastTransitionActor?: string;
 }
 
 export interface ControlSinkRegisterInput {
   sinkId: string;
   kind: string;
-  serviceId?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -46,8 +51,6 @@ export interface ControlOutputInput {
   outputId: string;
   sinkId: string;
   epoch: number;
-  kind: string;
-  serviceId?: string;
   payload: unknown;
 }
 
@@ -60,10 +63,7 @@ export interface ControlOutputResult {
 }
 
 export interface AuthorityTakeoverInput {
-  targetMode: string;
-  actor: string;
   expectedEpoch?: number;
-  serviceId?: string;
 }
 
 export interface AuthorityTakeoverResult {
@@ -71,15 +71,12 @@ export interface AuthorityTakeoverResult {
   newMode: string;
   previousEpoch: number;
   newEpoch: number;
-  success: boolean;
-  reason?: string;
+  snapshot: AuthoritySnapshot;
 }
 
 export interface AuthorityReleaseInput {
-  targetMode: string;
-  actor: string;
+  targetMode?: string;
   expectedEpoch?: number;
-  serviceId?: string;
 }
 
 export interface AuthorityReleaseResult {
@@ -87,8 +84,7 @@ export interface AuthorityReleaseResult {
   newMode: string;
   previousEpoch: number;
   newEpoch: number;
-  success: boolean;
-  reason?: string;
+  snapshot: AuthoritySnapshot;
 }
 
 export interface EmergencyStopInput {
@@ -119,15 +115,9 @@ export interface SinkEffectDispatchPayload {
 
 export async function getAuthoritySnapshot(
   client: Client,
-  runtimeId: string,
-  serviceId?: string,
   opts: MessageOption[] = []
 ): Promise<AuthoritySnapshot> {
-  const input: Record<string, unknown> = { runtimeId };
-  if (serviceId) {
-    input.serviceId = serviceId;
-  }
-  const envelope = await client.sendReservedRequest(METHOD_AUTHORITY_SNAPSHOT, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_AUTHORITY_SNAPSHOT, {}, ...opts);
   return envelope.payload as AuthoritySnapshot;
 }
 
@@ -151,8 +141,7 @@ export async function submitControlOutput(
 
 export async function takeoverAuthority(
   client: Client,
-  input: AuthorityTakeoverInput,
-  _runtimeId: string,
+  input: AuthorityTakeoverInput = {},
   opts: MessageOption[] = []
 ): Promise<AuthorityTakeoverResult> {
   const envelope = await client.sendReservedRequest(METHOD_CONTROL_AUTHORITY_TAKEOVER, input, ...opts);
@@ -161,8 +150,7 @@ export async function takeoverAuthority(
 
 export async function releaseAuthority(
   client: Client,
-  input: AuthorityReleaseInput,
-  _runtimeId: string,
+  input: AuthorityReleaseInput = {},
   opts: MessageOption[] = []
 ): Promise<AuthorityReleaseResult> {
   const envelope = await client.sendReservedRequest(METHOD_CONTROL_AUTHORITY_RELEASE, input, ...opts);

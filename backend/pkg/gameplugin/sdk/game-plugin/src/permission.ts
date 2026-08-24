@@ -15,8 +15,6 @@ export const DECISION_APPROVAL_REQUIRED = 'approval_required';
 
 export interface PermissionCheckInput {
   permissionId: string;
-  serviceId?: string;
-  runtimeId?: string;
 }
 
 export interface PermissionCheckResult {
@@ -26,23 +24,16 @@ export interface PermissionCheckResult {
   detail?: string;
 }
 
-export interface PermissionSnapshotInput {
-  runtimeId?: string;
-  serviceId?: string;
-}
-
 export interface PermissionSnapshotResult {
   snapshotId: string;
   revision: string;
   grantedPerms: string[];
   grantedScopes: string[];
-  expiresAt?: number;
   isValid: boolean;
 }
 
 export interface PermissionRequestInput {
   permissionId: string;
-  serviceId?: string;
 }
 
 export interface PermissionRequestResult {
@@ -63,10 +54,9 @@ export async function checkPermission(
 
 export async function getPermissionSnapshot(
   client: Client,
-  input: PermissionSnapshotInput,
   opts: MessageOption[] = []
 ): Promise<PermissionSnapshotResult> {
-  const envelope = await client.sendReservedRequest(METHOD_PERMISSION_SNAPSHOT, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_PERMISSION_SNAPSHOT, {}, ...opts);
   return envelope.payload as PermissionSnapshotResult;
 }
 

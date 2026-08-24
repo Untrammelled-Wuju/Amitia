@@ -7,25 +7,18 @@ export const METHOD_SECRET_QUERY = 'secret.query';
 export const SECRET_PURPOSE_STARTUP = 'startup';
 export const SECRET_PURPOSE_RUNTIME = 'runtime';
 
-export const LEASE_STATUS_GRANTED = 'granted';
-export const LEASE_STATUS_DENIED = 'denied';
-export const LEASE_STATUS_REVOKED = 'revoked';
-export const LEASE_STATUS_EXPIRED = 'expired';
-
 export type SecretRef = string;
 
 export interface SecretAcquireInput {
   ref: SecretRef;
   purpose: 'startup' | 'runtime';
-  serviceId?: string;
   required?: boolean;
-  runtimeId?: string;
 }
 
 export interface SecretAcquireResult {
   leaseId: string;
   ref: SecretRef;
-  status: 'granted' | 'denied' | 'revoked' | 'expired';
+  purpose: 'startup' | 'runtime';
   granted: boolean;
   expiresAt?: number;
   reason?: string;
@@ -33,8 +26,6 @@ export interface SecretAcquireResult {
 
 export interface SecretReleaseInput {
   leaseId: string;
-  ref?: SecretRef;
-  serviceId?: string;
   reason?: string;
 }
 
@@ -44,15 +35,12 @@ export interface SecretReleaseResult {
 }
 
 export interface SecretQueryInput {
-  leaseId?: string;
-  ref?: SecretRef;
-  serviceId?: string;
+  leaseId: string;
 }
 
 export interface SecretQueryResult {
   leaseId: string;
-  ref: SecretRef;
-  status: string;
+  ref?: SecretRef;
   granted: boolean;
   expiresAt?: number;
   valid: boolean;

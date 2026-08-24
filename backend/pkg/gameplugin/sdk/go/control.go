@@ -19,12 +19,19 @@ const (
 )
 
 const (
-	ControlModeObserve   = "observe"
-	ControlModeAssist    = "assist"
-	ControlModeShared    = "shared"
-	ControlModePlugin    = "plugin"
-	ControlModeUser      = "user"
-	ControlModeSuspended = "suspended"
+	ControlModeObserveOnly   = "observe_only"
+	ControlModeAssist        = "assist"
+	ControlModeSharedControl = "shared_control"
+	ControlModePluginControl = "plugin_control"
+	ControlModeUserControl   = "user_control"
+	ControlModeSuspended     = "suspended"
+
+	// Backward-compatible constant names. Values are the canonical GameHost v1
+	// wire values above.
+	ControlModeObserve = ControlModeObserveOnly
+	ControlModeShared  = ControlModeSharedControl
+	ControlModePlugin  = ControlModePluginControl
+	ControlModeUser    = ControlModeUserControl
 )
 
 const (
@@ -48,12 +55,6 @@ const (
 )
 
 const (
-	TakeoverActorUser   = "user"
-	TakeoverActorHost   = "host"
-	TakeoverActorSystem = "system"
-)
-
-const (
 	EmergencyStopStateRequested         = "requested"
 	EmergencyStopStateClosingGate       = "closing_gate"
 	EmergencyStopStateSuspending        = "suspending"
@@ -68,13 +69,13 @@ const (
 )
 
 type AuthoritySnapshot struct {
-	RuntimeID string `json:"runtimeId"`
-	PluginID  string `json:"pluginId"`
-	Mode      string `json:"mode"`
-	Epoch     uint64 `json:"epoch"`
-	ServiceID string `json:"serviceId,omitempty"`
-	UpdatedAt int64  `json:"updatedAt,omitempty"`
-	Valid     bool   `json:"valid"`
+	RuntimeID            string    `json:"runtimeId"`
+	PluginID             string    `json:"pluginId"`
+	Mode                 string    `json:"mode"`
+	Epoch                uint64    `json:"epoch"`
+	UpdatedAt            time.Time `json:"updatedAt"`
+	LastTransitionReason string    `json:"lastTransitionReason,omitempty"`
+	LastTransitionActor  string    `json:"lastTransitionActor,omitempty"`
 }
 
 type ControlSinkRegisterInput = contracts.SinkRegisterInput
@@ -89,35 +90,28 @@ type ControlOutputInput = contracts.ControlOutputInput
 type ControlOutputResult = contracts.ControlOutputResult
 
 type AuthorityTakeoverInput struct {
-	TargetMode    string `json:"targetMode"`
-	Actor         string `json:"actor"`
-	ExpectedEpoch uint64 `json:"expectedEpoch,omitempty"`
-	ServiceID     string `json:"serviceId,omitempty"`
+	ExpectedEpoch *uint64 `json:"expectedEpoch,omitempty"`
 }
 
 type AuthorityTakeoverResult struct {
-	PreviousMode  string `json:"previousMode"`
-	NewMode       string `json:"newMode"`
-	PreviousEpoch uint64 `json:"previousEpoch"`
-	NewEpoch      uint64 `json:"newEpoch"`
-	Success       bool   `json:"success"`
-	Reason        string `json:"reason,omitempty"`
+	PreviousMode  string            `json:"previousMode"`
+	NewMode       string            `json:"newMode"`
+	PreviousEpoch uint64            `json:"previousEpoch"`
+	NewEpoch      uint64            `json:"newEpoch"`
+	Snapshot      AuthoritySnapshot `json:"snapshot"`
 }
 
 type AuthorityReleaseInput struct {
-	TargetMode    string `json:"targetMode"`
-	Actor         string `json:"actor"`
-	ExpectedEpoch uint64 `json:"expectedEpoch,omitempty"`
-	ServiceID     string `json:"serviceId,omitempty"`
+	TargetMode    string  `json:"targetMode,omitempty"`
+	ExpectedEpoch *uint64 `json:"expectedEpoch,omitempty"`
 }
 
 type AuthorityReleaseResult struct {
-	PreviousMode  string `json:"previousMode"`
-	NewMode       string `json:"newMode"`
-	PreviousEpoch uint64 `json:"previousEpoch"`
-	NewEpoch      uint64 `json:"newEpoch"`
-	Success       bool   `json:"success"`
-	Reason        string `json:"reason,omitempty"`
+	PreviousMode  string            `json:"previousMode"`
+	NewMode       string            `json:"newMode"`
+	PreviousEpoch uint64            `json:"previousEpoch"`
+	NewEpoch      uint64            `json:"newEpoch"`
+	Snapshot      AuthoritySnapshot `json:"snapshot"`
 }
 
 type EmergencyStopInput struct {
@@ -137,12 +131,8 @@ type EmergencyStopResult struct {
 	FinishedAt      time.Time `json:"finishedAt"`
 }
 
-func (c *Client) GetAuthoritySnapshot(ctx context.Context, runtimeID, serviceID string, opts ...MessageOption) (AuthoritySnapshot, error) {
-	input := map[string]any{
-		"runtimeId": runtimeID,
-		"serviceId": serviceID,
-	}
-	envelope, err := c.SendReservedRequest(ctx, MethodAuthoritySnapshot, input, opts...)
+func (c *Client) GetAuthoritySnapshot(ctx context.Context, opts ...MessageOption) (AuthoritySnapshot, error) {
+	envelope, err := c.SendReservedRequest(ctx, MethodAuthoritySnapshot, struct{}{}, opts...)
 	if err != nil {
 		return AuthoritySnapshot{}, err
 	}
@@ -183,7 +173,7 @@ func (c *Client) SubmitControlOutput(ctx context.Context, input ControlOutputInp
 	return out, nil
 }
 
-func (c *Client) TakeoverAuthority(ctx context.Context, input AuthorityTakeoverInput, runtimeID string, opts ...MessageOption) (AuthorityTakeoverResult, error) {
+func (c *Client) TakeoverAuthority(ctx context.Context, input AuthorityTakeoverInput, opts ...MessageOption) (AuthorityTakeoverResult, error) {
 	envelope, err := c.SendReservedRequest(ctx, MethodControlAuthorityTakeover, input, opts...)
 	if err != nil {
 		return AuthorityTakeoverResult{}, err
@@ -197,7 +187,7 @@ func (c *Client) TakeoverAuthority(ctx context.Context, input AuthorityTakeoverI
 	return out, nil
 }
 
-func (c *Client) ReleaseAuthority(ctx context.Context, input AuthorityReleaseInput, runtimeID string, opts ...MessageOption) (AuthorityReleaseResult, error) {
+func (c *Client) ReleaseAuthority(ctx context.Context, input AuthorityReleaseInput, opts ...MessageOption) (AuthorityReleaseResult, error) {
 	envelope, err := c.SendReservedRequest(ctx, MethodControlAuthorityRelease, input, opts...)
 	if err != nil {
 		return AuthorityReleaseResult{}, err
