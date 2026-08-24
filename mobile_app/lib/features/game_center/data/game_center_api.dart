@@ -120,6 +120,17 @@ class GameCenterApi {
     return HandshakeSummary.fromJson(data ?? const <String, dynamic>{});
   }
 
+  Future<bool> developerAccess() async {
+    try {
+      final data = await _api.get<Map<String, dynamic>>(
+        '/api/game-center/developer-access',
+      );
+      return data?['enabled'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<dynamic> invokeServiceRpc(
     String runtimeId,
     String serviceId, {
