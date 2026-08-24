@@ -53,20 +53,6 @@ type RuntimeExecutor interface {
 
 type SecretLeaseService interface {
 	RevokeByRuntimeInstance(runtimeID string) int
-	IssueLease(ctx context.Context, req SecretLeaseRequest) (SecretLeaseResult, error)
-}
-
-type SecretLeaseRequest struct {
-	RuntimeInstanceID string
-	PluginID          string
-	ExtensionID       string
-	InvocationID      string
-}
-
-type SecretLeaseResult struct {
-	LeaseID string
-	Success bool
-	Error   string
 }
 
 type PermissionService interface {

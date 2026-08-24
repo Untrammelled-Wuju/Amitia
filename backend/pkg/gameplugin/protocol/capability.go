@@ -12,7 +12,6 @@ const (
 	CapabilityRealtimeControl = HostFeatureRealtimeControl
 	CapabilityStateStreaming  = HostFeatureStateStreaming
 	CapabilityEventStreaming  = HostFeatureEventStreaming
-	CapabilityBinaryStreaming = HostFeatureBinaryStreaming
 	CapabilityCustomRPC       = HostFeatureCustomRPC
 	CapabilityHostAPI         = HostFeatureHostAPI
 	CapabilitySharedControl   = HostFeatureSharedControl

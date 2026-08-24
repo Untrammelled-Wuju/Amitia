@@ -4,8 +4,7 @@ import "testing"
 
 func TestValidateCapability(t *testing.T) {
 	validCases := []Capability{
-		CapabilityRealtimeControl, CapabilityStateStreaming, CapabilityEventStreaming,
-		CapabilityBinaryStreaming, CapabilityCustomRPC, CapabilityHostAPI,
+		CapabilityRealtimeControl, CapabilityStateStreaming, CapabilityEventStreaming, CapabilityCustomRPC, CapabilityHostAPI,
 		CapabilitySharedControl, CapabilityCustomUI, CapabilityMultiService,
 	}
 	for _, cap := range validCases {
@@ -16,7 +15,7 @@ func TestValidateCapability(t *testing.T) {
 }
 
 func TestValidateCapabilityRejectsUnknown(t *testing.T) {
-	for _, cap := range []Capability{"minecraft.pathfinding", "vendor.visual-agent", "custom.gameplay", ""} {
+	for _, cap := range []Capability{"example.navigation", "vendor.visual-agent", "custom.gameplay", ""} {
 		if err := ValidateCapability(cap); err == nil {
 			t.Errorf("expected unknown host feature %q to be rejected", cap)
 		}
@@ -24,12 +23,12 @@ func TestValidateCapabilityRejectsUnknown(t *testing.T) {
 }
 
 func TestIsKnownCapability(t *testing.T) {
-	for _, cap := range []Capability{CapabilityRealtimeControl, CapabilityStateStreaming, CapabilityEventStreaming, CapabilityBinaryStreaming, CapabilityCustomRPC, CapabilityHostAPI, CapabilitySharedControl, CapabilityCustomUI, CapabilityMultiService} {
+	for _, cap := range []Capability{CapabilityRealtimeControl, CapabilityStateStreaming, CapabilityEventStreaming, CapabilityCustomRPC, CapabilityHostAPI, CapabilitySharedControl, CapabilityCustomUI, CapabilityMultiService} {
 		if !IsKnownCapability(cap) {
 			t.Errorf("expected %s to be known", cap)
 		}
 	}
-	for _, cap := range []Capability{"minecraft.pathfinding", "minecraft.building", "vendor.custom-agent"} {
+	for _, cap := range []Capability{"example.navigation", "example.build", "vendor.custom-agent"} {
 		if IsKnownCapability(cap) {
 			t.Errorf("game/tool capability %s must not be a GameHost feature", cap)
 		}
@@ -38,8 +37,8 @@ func TestIsKnownCapability(t *testing.T) {
 
 func TestAllKnownCapabilities(t *testing.T) {
 	all := AllKnownCapabilities()
-	if len(all) != 9 {
-		t.Fatalf("expected 9 known host features, got %d", len(all))
+	if len(all) != 8 {
+		t.Fatalf("expected 8 known host features, got %d", len(all))
 	}
 	seen := make(map[Capability]struct{}, len(all))
 	for _, cap := range all {

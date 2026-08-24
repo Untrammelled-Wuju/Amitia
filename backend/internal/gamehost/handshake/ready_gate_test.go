@@ -20,7 +20,7 @@ func TestReadyGate_PreReady(t *testing.T) {
 		t.Error("cancel method should be allowed pre-ready")
 	}
 
-	if gate.IsAllowedPreReady("minecraft.move") {
+	if gate.IsAllowedPreReady("example.game.move") {
 		t.Error("custom rpc should not be allowed pre-ready")
 	}
 }
@@ -34,7 +34,7 @@ func TestReadyGate_AfterReady(t *testing.T) {
 		t.Error("conn-1 should be ready")
 	}
 
-	if !gate.CanProcess("conn-1", "minecraft.move") {
+	if !gate.CanProcess("conn-1", "example.game.move") {
 		t.Error("ready connection can process any method")
 	}
 }
@@ -42,7 +42,7 @@ func TestReadyGate_AfterReady(t *testing.T) {
 func TestReadyGate_CanProcess(t *testing.T) {
 	gate := handshake.NewReadyGate([]string{handshake.HelloMethod})
 
-	if gate.CanProcess("conn-1", "minecraft.move") {
+	if gate.CanProcess("conn-1", "example.game.move") {
 		t.Error("pre-ready connection cannot process custom rpc")
 	}
 

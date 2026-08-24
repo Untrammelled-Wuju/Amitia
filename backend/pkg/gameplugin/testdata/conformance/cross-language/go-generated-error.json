@@ -4,7 +4,7 @@
   "id": "go-err-001",
   "requestId": "go-req-001",
   "error": {
-    "code": "minecraft.connection_failed",
+    "code": "vendor.game.connection_failed",
     "message": "connection to game server failed",
     "retryable": true,
     "data": {

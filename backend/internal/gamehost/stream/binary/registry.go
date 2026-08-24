@@ -12,24 +12,24 @@ import (
 type ObjectState string
 
 const (
-	ObjectStateWriting  ObjectState = "writing"
-	ObjectStateReady    ObjectState = "ready"
+	ObjectStateWriting   ObjectState = "writing"
+	ObjectStateReady     ObjectState = "ready"
 	ObjectStateReleasing ObjectState = "releasing"
 	ObjectStateReleased  ObjectState = "released"
 )
 
 type BinaryObjectRecord struct {
-	ID          BinaryObjectID
-	Kind        BinaryStorageKind
-	Owner       BinaryOwner
-	Size        int64
-	MediaType   string
-	Lifetime    BinaryLifetime
-	Checksum    *Checksum
-	Metadata    map[string]json.RawMessage
-	State       ObjectState
-	CreatedAt   time.Time
-	ReleasedAt  *time.Time
+	ID         BinaryObjectID
+	Kind       BinaryStorageKind
+	Owner      BinaryOwner
+	Size       int64
+	MediaType  string
+	Lifetime   BinaryLifetime
+	Checksum   *Checksum
+	Metadata   map[string]json.RawMessage
+	State      ObjectState
+	CreatedAt  time.Time
+	ReleasedAt *time.Time
 
 	Internal interface{}
 }
@@ -43,24 +43,29 @@ type ObjectRegistry interface {
 	ListByService(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (map[BinaryObjectID]BinaryObjectRecord, error)
 	CountActive() int
 	LimitActive() int
+	ActiveBytes() int64
+	LimitActiveBytes() int64
+	CountByRuntime(runtimeID domain.RuntimeInstanceID) int
+	ActiveBytesByRuntime(runtimeID domain.RuntimeInstanceID) int64
 	RemoveByRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) (int, error)
 	RemoveByService(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (int, error)
 	GetActiveObjects() []BinaryObjectRecord
 }
 
 type Options struct {
-	MaxActiveObjects   int
-	MaxObjectSize      int64
+	MaxActiveObjects int
+	MaxObjectSize    int64
+	MaxActiveBytes   int64
 }
 
 type OptionsFunc func(*Options)
 
 type memoryObjectRegistry struct {
-	mu            sync.RWMutex
-	index         map[BinaryObjectID]BinaryObjectRecord
-	runtimeIndex  map[domain.RuntimeInstanceID]map[BinaryObjectID]struct{}
-	serviceIndex  map[domain.RuntimeInstanceID]map[domain.ServiceID]map[BinaryObjectID]struct{}
-	opts          Options
+	mu           sync.RWMutex
+	index        map[BinaryObjectID]BinaryObjectRecord
+	runtimeIndex map[domain.RuntimeInstanceID]map[BinaryObjectID]struct{}
+	serviceIndex map[domain.RuntimeInstanceID]map[domain.ServiceID]map[BinaryObjectID]struct{}
+	opts         Options
 }
 
 func NewObjectRegistry(opts Options) ObjectRegistry {
@@ -69,6 +74,9 @@ func NewObjectRegistry(opts Options) ObjectRegistry {
 	}
 	if opts.MaxObjectSize <= 0 {
 		opts.MaxObjectSize = 1 << 30
+	}
+	if opts.MaxActiveBytes <= 0 {
+		opts.MaxActiveBytes = 4 << 30
 	}
 	return &memoryObjectRegistry{
 		index:        make(map[BinaryObjectID]BinaryObjectRecord),
@@ -88,6 +96,12 @@ func (r *memoryObjectRegistry) InsertWriting(ctx context.Context, record BinaryO
 	if record.ID.IsEmpty() {
 		return ErrIDEmpty
 	}
+	if record.Size < 0 {
+		return ErrSizeNegative
+	}
+	if record.Size > r.opts.MaxObjectSize {
+		return ErrSizeTooLarge
+	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -95,6 +109,12 @@ func (r *memoryObjectRegistry) InsertWriting(ctx context.Context, record BinaryO
 	active := r.countActiveLocked()
 	if active >= r.opts.MaxActiveObjects {
 		return ErrActiveObjectLimit
+	}
+	if record.Size > 0 && r.opts.MaxActiveBytes > 0 {
+		used := r.activeBytesLocked()
+		if used > r.opts.MaxActiveBytes-record.Size {
+			return ErrActiveBytesLimit
+		}
 	}
 
 	now := time.Now().UTC()
@@ -129,6 +149,15 @@ func (r *memoryObjectRegistry) SealObject(ctx context.Context, id BinaryObjectID
 	}
 	if record.State != ObjectStateWriting {
 		return ErrObjectNotReady
+	}
+	if r.opts.MaxActiveBytes > 0 {
+		usedWithoutCurrent := r.activeBytesLocked() - record.Size
+		if usedWithoutCurrent < 0 {
+			usedWithoutCurrent = 0
+		}
+		if actualSize > r.opts.MaxActiveBytes || usedWithoutCurrent > r.opts.MaxActiveBytes-actualSize {
+			return ErrActiveBytesLimit
+		}
 	}
 
 	record.State = ObjectStateReady
@@ -223,6 +252,52 @@ func (r *memoryObjectRegistry) LimitActive() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.opts.MaxActiveObjects
+}
+
+func (r *memoryObjectRegistry) ActiveBytes() int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.activeBytesLocked()
+}
+
+func (r *memoryObjectRegistry) LimitActiveBytes() int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.opts.MaxActiveBytes
+}
+
+func (r *memoryObjectRegistry) CountByRuntime(runtimeID domain.RuntimeInstanceID) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	count := 0
+	for id := range r.runtimeIndex[runtimeID] {
+		if record, ok := r.index[id]; ok && record.State != ObjectStateReleased {
+			count++
+		}
+	}
+	return count
+}
+
+func (r *memoryObjectRegistry) ActiveBytesByRuntime(runtimeID domain.RuntimeInstanceID) int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var total int64
+	for id := range r.runtimeIndex[runtimeID] {
+		if record, ok := r.index[id]; ok && record.State != ObjectStateReleased && record.Size > 0 {
+			total += record.Size
+		}
+	}
+	return total
+}
+
+func (r *memoryObjectRegistry) activeBytesLocked() int64 {
+	var total int64
+	for _, record := range r.index {
+		if record.State != ObjectStateReleased && record.Size > 0 {
+			total += record.Size
+		}
+	}
+	return total
 }
 
 func (r *memoryObjectRegistry) countActiveLocked() int {

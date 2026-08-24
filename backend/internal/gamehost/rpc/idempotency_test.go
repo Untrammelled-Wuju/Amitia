@@ -11,7 +11,7 @@ import (
 func TestIdempotencyIndex_CheckOrAdd(t *testing.T) {
 	idx := NewIdempotencyIndex()
 	key := RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"}
-	fp := ComputeFingerprint("minecraft.move", []byte(`{"x":1}`))
+	fp := ComputeFingerprint("example.game.move", []byte(`{"x":1}`))
 
 	err := idx.CheckOrAdd(key, fp, RequestStateRunning)
 	if err != nil {
@@ -27,7 +27,7 @@ func TestIdempotencyIndex_CheckOrAdd(t *testing.T) {
 func TestIdempotencyIndex_Exists(t *testing.T) {
 	idx := NewIdempotencyIndex()
 	key := RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"}
-	fp := ComputeFingerprint("minecraft.move", []byte(`{"x":1}`))
+	fp := ComputeFingerprint("example.game.move", []byte(`{"x":1}`))
 
 	if state := idx.Exists(key, fp); state != "" {
 		t.Errorf("non-existent key should return empty, got %q", state)
@@ -43,7 +43,7 @@ func TestIdempotencyIndex_Exists(t *testing.T) {
 func TestIdempotencyIndex_UpdateState(t *testing.T) {
 	idx := NewIdempotencyIndex()
 	key := RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"}
-	fp := ComputeFingerprint("minecraft.move", nil)
+	fp := ComputeFingerprint("example.game.move", nil)
 
 	idx.CheckOrAdd(key, fp, RequestStateRunning)
 	idx.UpdateState(key, fp, RequestStateCompleted)
@@ -56,7 +56,7 @@ func TestIdempotencyIndex_UpdateState(t *testing.T) {
 func TestIdempotencyIndex_Remove(t *testing.T) {
 	idx := NewIdempotencyIndex()
 	key := RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"}
-	fp := ComputeFingerprint("minecraft.move", nil)
+	fp := ComputeFingerprint("example.game.move", nil)
 
 	idx.CheckOrAdd(key, fp, RequestStateRunning)
 	idx.Remove(key, fp)
@@ -69,8 +69,8 @@ func TestIdempotencyIndex_Remove(t *testing.T) {
 func TestIdempotencyIndex_CheckIDReuse(t *testing.T) {
 	idx := NewIdempotencyIndex()
 	key := RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"}
-	fp := ComputeFingerprint("minecraft.move", []byte(`{"v":1}`))
-	differentFP := ComputeFingerprint("minecraft.attack", []byte(`{"v":2}`))
+	fp := ComputeFingerprint("example.game.move", []byte(`{"v":1}`))
+	differentFP := ComputeFingerprint("example.game.action", []byte(`{"v":2}`))
 
 	idx.CheckOrAdd(key, fp, RequestStateCompleted)
 
@@ -89,7 +89,7 @@ func TestCompletedResponseCache_Basic(t *testing.T) {
 	cache := NewCompletedResponseCache(DefaultCompletedResponseCacheConfig())
 
 	key := RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"}
-	fp := ComputeFingerprint("minecraft.move", nil)
+	fp := ComputeFingerprint("example.game.move", nil)
 	resp := protocol.Envelope{
 		Type:    protocol.MessageTypeResponse,
 		Payload: json.RawMessage(`{"result":"ok"}`),
@@ -119,8 +119,8 @@ func TestCompletedResponseCache_WrongFingerprint(t *testing.T) {
 	cache := NewCompletedResponseCache(DefaultCompletedResponseCacheConfig())
 
 	key := RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"}
-	fp1 := ComputeFingerprint("minecraft.move", []byte(`{"v":1}`))
-	fp2 := ComputeFingerprint("minecraft.move", []byte(`{"v":2}`))
+	fp1 := ComputeFingerprint("example.game.move", []byte(`{"v":1}`))
+	fp2 := ComputeFingerprint("example.game.move", []byte(`{"v":2}`))
 
 	cache.Save(CompletedRequest{
 		Key:         key,
@@ -141,7 +141,7 @@ func TestCompletedResponseCache_TTLExpiry(t *testing.T) {
 	})
 
 	key := RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"}
-	fp := ComputeFingerprint("minecraft.move", nil)
+	fp := ComputeFingerprint("example.game.move", nil)
 
 	cache.Save(CompletedRequest{
 		Key:         key,
@@ -163,7 +163,7 @@ func TestCompletedResponseCache_Capacity(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		key := RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req"}
-		fp := ComputeFingerprint("minecraft.move", json.RawMessage(`{"v":`+itoa(i)+`}`))
+		fp := ComputeFingerprint("example.game.move", json.RawMessage(`{"v":`+itoa(i)+`}`))
 		cache.Save(CompletedRequest{
 			Key:         key,
 			Fingerprint: fp,
@@ -179,7 +179,7 @@ func TestCompletedResponseCache_Capacity(t *testing.T) {
 func TestCompletedResponseCache_Invalidate(t *testing.T) {
 	cache := NewCompletedResponseCache(DefaultCompletedResponseCacheConfig())
 	key := RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"}
-	fp := ComputeFingerprint("minecraft.move", nil)
+	fp := ComputeFingerprint("example.game.move", nil)
 
 	cache.Save(CompletedRequest{
 		Key:         key,

@@ -10,22 +10,22 @@ import (
 )
 
 const (
-	MethodAuthoritySnapshot   = "control.authority.snapshot"
-	MethodControlRegisterSink = "control.sink.register"
-	MethodControlOutput       = "control.output"
+	MethodAuthoritySnapshot        = "control.authority.snapshot"
+	MethodControlRegisterSink      = "control.sink.register"
+	MethodControlOutput            = "control.output"
 	MethodControlAuthorityTakeover = "control.authority.takeover"
 	MethodControlAuthorityRelease  = "control.authority.release"
-	MethodEmergencyStopInitiate   = "emergency.stop.initiate"
-	MethodEmergencyStopStatus     = "emergency.stop.status"
+	MethodEmergencyStopInitiate    = "emergency.stop.initiate"
+	MethodEmergencyStopStatus      = "emergency.stop.status"
 )
 
 const (
-	ControlModeObserve     = "observe"
-	ControlModeAssist      = "assist"
-	ControlModeShared      = "shared"
-	ControlModePlugin      = "plugin"
-	ControlModeUser        = "user"
-	ControlModeSuspended   = "suspended"
+	ControlModeObserve   = "observe"
+	ControlModeAssist    = "assist"
+	ControlModeShared    = "shared"
+	ControlModePlugin    = "plugin"
+	ControlModeUser      = "user"
+	ControlModeSuspended = "suspended"
 )
 
 const (
@@ -81,8 +81,8 @@ type AuthoritySnapshot struct {
 type ControlSinkRegisterInput = contracts.SinkRegisterInput
 
 type ControlSinkRegisterResult struct {
-	SinkID  string `json:"sinkId"`
-	Registered bool `json:"registered"`
+	SinkID     string `json:"sinkId"`
+	Registered bool   `json:"registered"`
 }
 
 type ControlOutputInput = contracts.ControlOutputInput
@@ -126,12 +126,12 @@ type EmergencyStopStatusInput struct {
 }
 
 type EmergencyStopStatusResult struct {
-	OperationID   string `json:"operationId"`
-	State         string `json:"state"`
-	Active        bool   `json:"active"`
-	Reason        string `json:"reason,omitempty"`
-	InitiatedAt   int64  `json:"initiatedAt,omitempty"`
-	CompletedAt   int64  `json:"completedAt,omitempty"`
+	OperationID string `json:"operationId"`
+	State       string `json:"state"`
+	Active      bool   `json:"active"`
+	Reason      string `json:"reason,omitempty"`
+	InitiatedAt int64  `json:"initiatedAt,omitempty"`
+	CompletedAt int64  `json:"completedAt,omitempty"`
 }
 
 func (c *Client) GetAuthoritySnapshot(ctx context.Context, runtimeID, serviceID string, opts ...MessageOption) (AuthoritySnapshot, error) {
@@ -303,7 +303,7 @@ func RegisterSinkDispatchHandler(registry interface {
 				Accepted:   false,
 				Committed:  false,
 				EffectID:   "",
-				Generation: 0,
+				Generation: payload.Generation,
 				ErrorCode:  "handler_error",
 				Message:    err.Error(),
 			}, nil

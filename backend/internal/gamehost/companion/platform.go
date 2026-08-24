@@ -1,4 +1,4 @@
-package companion
+package artifact
 
 import "runtime"
 

@@ -568,7 +568,7 @@ func TestControlPlane_CustomMethodNoBusinessInterpretation(t *testing.T) {
 	}
 
 	type recorded struct {
-		peer      ipc.Peer
+		peer     ipc.Peer
 		envelope protocol.Envelope
 	}
 
@@ -611,7 +611,7 @@ func TestControlPlane_CustomMethodNoBusinessInterpretation(t *testing.T) {
 		Protocol: protocol.ProtocolVersion,
 		Type:     protocol.MessageTypeRequest,
 		ID:       "custom-msg",
-		Method:   "minecraft.agent.execute",
+		Method:   "example.game.operation.execute",
 	}
 
 	sendCtx := context.Background()
@@ -628,7 +628,7 @@ func TestControlPlane_CustomMethodNoBusinessInterpretation(t *testing.T) {
 		t.Fatal("dispatcher should have received the custom method envelope")
 	}
 
-	if recordedCalls[0].envelope.Method != "minecraft.agent.execute" {
+	if recordedCalls[0].envelope.Method != "example.game.operation.execute" {
 		t.Errorf("method should be preserved as-is, got %s", recordedCalls[0].envelope.Method)
 	}
 }

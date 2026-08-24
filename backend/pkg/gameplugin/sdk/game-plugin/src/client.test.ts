@@ -29,18 +29,18 @@ describe('Client', () => {
   });
 
   test('newRequest should create valid request envelope', () => {
-    const payload = { goal: 'build a shelter' };
-    const envelope = client.newRequest('minecraft.agent.submit_goal', payload);
+    const payload = { command: 'perform operation' };
+    const envelope = client.newRequest('example.game.operation.submit', payload);
 
     expect(envelope.protocol).toBe('amitia-game-host/1');
     expect(envelope.type).toBe('request');
     expect(envelope.id).toBe('msg-001');
-    expect(envelope.method).toBe('minecraft.agent.submit_goal');
+    expect(envelope.method).toBe('example.game.operation.submit');
     expect(envelope.payload).toEqual(payload);
   });
 
   test('newResponse should set requestId correctly', () => {
-    const request = client.newRequest('minecraft.agent.submit_goal');
+    const request = client.newRequest('example.game.operation.submit');
     const response = client.newResponse(request, { status: 'ok' });
 
     expect(response.requestId).toBe(request.id);
@@ -55,7 +55,7 @@ describe('Client', () => {
   });
 
   test('newError should set error fields', () => {
-    const request = client.newRequest('minecraft.agent.submit_goal');
+    const request = client.newRequest('example.game.operation.submit');
     const error = client.newError(request, 'permission_denied', 'permission denied', false);
 
     expect(error.type).toBe('error');
@@ -70,7 +70,7 @@ describe('Client', () => {
 
   test('custom methods should work', () => {
     const methods = [
-      'minecraft.agent.submit_goal',
+      'example.game.operation.submit',
       'vendor.control.execute',
       'custom.foo.bar',
     ];

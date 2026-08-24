@@ -281,10 +281,10 @@ func TestOpaquePayloadRoundTrip(t *testing.T) {
 
 func TestCustomMethodAccepted(t *testing.T) {
 	methods := []string{
-		"minecraft.agent.submit_goal",
+		"example.game.operation.submit",
 		"custom.vendor.action",
-		"factorio.entity.create",
-		"terraria.world.generate",
+		"vendor.game.entity.create",
+		"vendor.other.world.generate",
 	}
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
@@ -317,8 +317,8 @@ func TestReservedHostNamespaceValidation(t *testing.T) {
 	}
 
 	customMethods := []string{
-		"minecraft.agent.submit_goal",
-		"factorio.entity.create",
+		"example.game.operation.submit",
+		"vendor.game.entity.create",
 		"myplugin.custom.action",
 	}
 	for _, method := range customMethods {
@@ -359,7 +359,7 @@ func TestMethodValidation(t *testing.T) {
 		wantErr bool
 	}{
 		{"valid", "host.runtime.health", false},
-		{"valid custom", "minecraft.agent.submit_goal", false},
+		{"valid custom", "example.game.operation.submit", false},
 		{"empty", "", true},
 		{"single part", "health", true},
 		{"uppercase", "Host.Runtime.Health", true},
@@ -497,22 +497,18 @@ func TestDecodeInvalidEnvelope(t *testing.T) {
 	}
 }
 
-func TestNoGameSpecificFields(t *testing.T) {
+func TestOpaquePluginPayloadIsNotInterpretedByHostProtocol(t *testing.T) {
 	payloads := []map[string]any{
-		{"inventory": []any{"sword", "shield"}},
-		{"player": map[string]any{"name": "steve"}},
-		{"world": map[string]any{"seed": 12345}},
-		{"block": map[string]any{"type": "stone"}},
-		{"npc": map[string]any{"id": "npc-001"}},
-		{"position": map[string]any{"x": 0, "y": 64, "z": 0}},
-		{"goal": "build a shelter"},
+		{"applicationState": map[string]any{"phase": "ready"}},
+		{"resource": map[string]any{"id": "resource-001"}},
+		{"coordinates": map[string]any{"a": 0, "b": 64, "c": 0}},
+		{"command": "perform operation"},
 		{"task": map[string]any{"id": "task-001"}},
 		{"plan": []any{"step1", "step2"}},
-		{"combatState": "idle"},
 	}
 
 	for _, payload := range payloads {
-		env, err := NewRequest("msg-001", "game.custom.action", payload)
+		env, err := NewRequest("msg-001", "vendor.custom.operation", payload)
 		if err != nil {
 			t.Fatalf("NewRequest failed for payload %v: %v", payload, err)
 		}
@@ -531,18 +527,19 @@ func TestNoGameSpecificFields(t *testing.T) {
 }
 
 func TestReservedNamespaces(t *testing.T) {
-	expectedReserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control."}
+	expectedReserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control.", "emergency.", "secret.", "artifact."}
 	tests := map[string]bool{
-		"host.runtime.health":  true,
-		"plugin.custom.action": true,
-		"runtime.state.update": true,
-		"service.register":     true,
-		"channel.create":       true,
-		"control.stop":         true,
-		"minecraft.agent.goal": false,
-		"factorio.entity.move": false,
-		"terraria.world.load":  false,
-		"myplugin.custom.test": false,
+		"host.runtime.health":     true,
+		"plugin.custom.action":    true,
+		"runtime.state.update":    true,
+		"service.register":        true,
+		"channel.create":          true,
+		"control.stop":            true,
+		"artifact.deploy":         true,
+		"example.game.goal":       false,
+		"vendor.game.entity.move": false,
+		"vendor.other.world.load": false,
+		"myplugin.custom.test":    false,
 	}
 
 	for method, expected := range tests {
@@ -662,7 +659,6 @@ func TestValidateKnownCapabilities(t *testing.T) {
 		CapabilityRealtimeControl,
 		CapabilityStateStreaming,
 		CapabilityEventStreaming,
-		CapabilityBinaryStreaming,
 		CapabilityCustomRPC,
 		CapabilityHostAPI,
 		CapabilitySharedControl,
@@ -682,7 +678,7 @@ func TestValidateKnownCapabilities(t *testing.T) {
 }
 
 func TestRejectGameToolCapabilityAsHostFeature(t *testing.T) {
-	for _, cap := range []Capability{"minecraft.pathfinding", "vendor.experimental_ai", "factorio.logistics", "terraria.crafting"} {
+	for _, cap := range []Capability{"example.navigation", "vendor.experimental_ai", "vendor.game.logistics", "vendor.other.crafting"} {
 		if err := ValidateCapability(cap); err == nil {
 			t.Fatalf("game/tool capability %q must not validate as a GameHost feature", cap)
 		}
@@ -690,7 +686,7 @@ func TestRejectGameToolCapabilityAsHostFeature(t *testing.T) {
 }
 
 func TestUnknownCapabilityIsNotKnown(t *testing.T) {
-	if IsKnownCapability("minecraft.pathfinding") {
+	if IsKnownCapability("example.navigation") {
 		t.Fatal("IsKnownCapability should return false for custom capability")
 	}
 	if !IsKnownCapability(CapabilityCustomRPC) {
@@ -771,7 +767,7 @@ func TestValidateChannelDescriptor(t *testing.T) {
 }
 
 func TestCustomSchemaID(t *testing.T) {
-	schemaID := "minecraft.world-state/v1"
+	schemaID := "example.game.state/v1"
 	ch := ChannelDescriptor{
 		ID:       "state-ch",
 		Kind:     ChannelKindState,
@@ -825,9 +821,9 @@ func TestProtocolErrorKnownCode(t *testing.T) {
 
 func TestProtocolErrorExtensionCode(t *testing.T) {
 	extensionCodes := []ErrorCode{
-		"minecraft.connection_failed",
+		"vendor.game.connection_failed",
 		"vendor.auth_failed",
-		"factorio.protocol_error",
+		"vendor.game.protocol_error",
 	}
 	for _, code := range extensionCodes {
 		t.Run(string(code), func(t *testing.T) {
@@ -879,13 +875,13 @@ func TestDescriptorRoundTrip(t *testing.T) {
 			{
 				ID:       "world-state",
 				Kind:     ChannelKindState,
-				SchemaID: "minecraft.world-state/v1",
+				SchemaID: "example.game.state/v1",
 			},
 		},
 		Capabilities: []Capability{
 			CapabilityCustomRPC,
 			CapabilityStateStreaming,
-			"minecraft.pathfinding",
+			"example.navigation",
 		},
 	}
 

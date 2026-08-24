@@ -97,6 +97,7 @@ func (r *Resolver) Create(
 		ID:        handle.ObjectID,
 		Kind:      kind,
 		Owner:     owner,
+		Size:      request.ExpectedSize,
 		Lifetime:  BinaryLifetimeMessage,
 		MediaType: request.MediaType,
 		Metadata:  request.Metadata,
@@ -114,6 +115,11 @@ func (r *Resolver) Create(
 			return BinaryReference{}, err
 		}
 		if err := r.registry.SealObject(ctx, ref.ID, ref.Size, ref.Checksum); err != nil {
+			// The provider has already sealed the object. If registry admission rejects
+			// the final size, release both sides so a failed seal cannot leave an
+			// unreachable provider object or a permanently-writing registry record.
+			_ = provider.Release(ctx, owner, ref.ID)
+			_ = r.registry.Release(ctx, ref.ID)
 			return BinaryReference{}, err
 		}
 		return ref, nil

@@ -19,19 +19,19 @@ func TestPluginHostSpecValidateGenericContract(t *testing.T) {
 	}
 }
 
-func TestParseGamePluginSpecRejectsGameSpecificFields(t *testing.T) {
-	_, err := ParseGamePluginSpec(map[string]any{
+func TestParsePluginHostSpecRejectsGameSpecificFields(t *testing.T) {
+	_, err := ParsePluginHostSpec(map[string]any{
 		"protocolVersion": ProtocolVersion,
 		"runtimeModuleId": "runtime",
-		"gameId":          "minecraft-java",
+		"gameId":          "examplegame-java",
 	})
 	if err == nil {
-		t.Fatal("ParseGamePluginSpec() accepted game-specific gameId")
+		t.Fatal("ParsePluginHostSpec() accepted game-specific gameId")
 	}
 }
 
 func TestPluginHostSpecRequiresExplicitProtocolVersion(t *testing.T) {
-	spec, err := ParseGamePluginSpec(map[string]any{"runtimeModuleId": "runtime"})
+	spec, err := ParsePluginHostSpec(map[string]any{"runtimeModuleId": "runtime"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,5 +69,20 @@ func TestPluginHostSpecRejectsUnwiredBinaryChannel(t *testing.T) {
 	spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Channels: []PluginChannelSpec{{ID: "frames", Kind: "binary"}}}
 	if err := spec.Validate(); err == nil {
 		t.Fatal("binary channel must not be exposed until production binary channel routing is wired")
+	}
+}
+
+func TestHostFeatureVersionPolicyIsProtocolMajorBound(t *testing.T) {
+	for feature := range knownHostFeatures {
+		major, ok := HostFeatureIntroducedInMajor(feature)
+		if !ok || major != 1 {
+			t.Fatalf("feature %q version policy = (%d,%v), want (1,true)", feature, major, ok)
+		}
+		if !HostFeatureSupportedByCurrentProtocol(feature) {
+			t.Fatalf("current protocol does not support known feature %q", feature)
+		}
+	}
+	if _, ok := HostFeatureIntroducedInMajor(HostFeature("vendor.experimental")); ok {
+		t.Fatal("unknown namespaced feature must require a protocol-major update")
 	}
 }

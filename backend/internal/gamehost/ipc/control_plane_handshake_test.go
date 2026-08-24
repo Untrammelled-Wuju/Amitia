@@ -25,7 +25,6 @@ func newTestHandshakeManager() *handshake.HandshakeManager {
 			domain.CapabilityCustomRPC,
 			domain.CapabilityEventStreaming,
 			domain.CapabilityStateStreaming,
-			domain.CapabilityBinaryStreaming,
 			domain.CapabilityHostAPI,
 		},
 		NamespaceAdapter:  adapter,

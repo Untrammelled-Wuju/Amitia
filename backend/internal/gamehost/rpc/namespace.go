@@ -26,7 +26,7 @@ func ParseMethod(method string) (Namespace, []string, error) {
 }
 
 func IsReservedNamespace(namespace Namespace) bool {
-	reserved := []string{"host", "plugin", "runtime", "service", "channel", "control", "emergency", "secret"}
+	reserved := []string{"host", "plugin", "runtime", "service", "channel", "control", "emergency", "secret", "artifact"}
 	ns := string(namespace)
 	for _, r := range reserved {
 		if ns == r {

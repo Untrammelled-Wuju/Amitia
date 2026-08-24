@@ -83,7 +83,6 @@ const (
 	HostFeatureRealtimeControl HostFeature = "realtime_control"
 	HostFeatureStateStreaming  HostFeature = "state_streaming"
 	HostFeatureEventStreaming  HostFeature = "event_streaming"
-	HostFeatureBinaryStreaming HostFeature = "binary_streaming"
 	HostFeatureCustomRPC       HostFeature = "custom_rpc"
 	HostFeatureHostAPI         HostFeature = "host_api"
 	HostFeatureSharedControl   HostFeature = "shared_control"
@@ -95,7 +94,6 @@ var knownHostFeatures = map[HostFeature]struct{}{
 	HostFeatureRealtimeControl: {},
 	HostFeatureStateStreaming:  {},
 	HostFeatureEventStreaming:  {},
-	HostFeatureBinaryStreaming: {},
 	HostFeatureCustomRPC:       {},
 	HostFeatureHostAPI:         {},
 	HostFeatureSharedControl:   {},
@@ -153,8 +151,8 @@ type PluginControlEffectSinkSpec struct {
 }
 
 // PluginHostSpec contains only host-owned execution and transport information.
-// Concrete game identity, versions, worlds, entities, actions, observations,
-// companion-mod meaning, etc. belong to the game plugin itself and may be
+// Concrete integration identity, versions, worlds, entities, actions and observations
+// belong to the plugin itself and may be
 // carried only in opaque plugin metadata/tool definitions.
 type PluginHostSpec struct {
 	ProtocolVersion    string                        `json:"protocolVersion"`
@@ -168,25 +166,19 @@ type PluginHostSpec struct {
 	Metadata           map[string]any                `json:"metadata,omitempty"`
 }
 
-// GamePluginSpec is retained as the public contribution name, but the contents
-// are strictly generic host configuration.
-type GamePluginSpec = PluginHostSpec
-
-type GameNetworkPolicy = PluginNetworkPolicy
-
-func ParseGamePluginSpec(spec map[string]any) (GamePluginSpec, error) {
+func ParsePluginHostSpec(spec map[string]any) (PluginHostSpec, error) {
 	if spec == nil {
-		return GamePluginSpec{}, fmt.Errorf("game plugin spec is required")
+		return PluginHostSpec{}, fmt.Errorf("game plugin spec is required")
 	}
 	data, err := json.Marshal(spec)
 	if err != nil {
-		return GamePluginSpec{}, fmt.Errorf("marshal game plugin spec: %w", err)
+		return PluginHostSpec{}, fmt.Errorf("marshal game plugin spec: %w", err)
 	}
-	var parsed GamePluginSpec
+	var parsed PluginHostSpec
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&parsed); err != nil {
-		return GamePluginSpec{}, fmt.Errorf("decode game plugin spec: %w", err)
+		return PluginHostSpec{}, fmt.Errorf("decode game plugin spec: %w", err)
 	}
 	parsed.ProtocolVersion = strings.TrimSpace(parsed.ProtocolVersion)
 	parsed.RuntimeModuleID = strings.TrimSpace(parsed.RuntimeModuleID)
@@ -207,8 +199,8 @@ func (s PluginHostSpec) Validate() error {
 	seenFeatures := make(map[HostFeature]struct{}, len(s.HostFeatures))
 	for _, raw := range s.HostFeatures {
 		feature := HostFeature(strings.TrimSpace(string(raw)))
-		if !IsKnownHostFeature(feature) {
-			return fmt.Errorf("unsupported host feature %q", raw)
+		if !HostFeatureSupportedByCurrentProtocol(feature) {
+			return fmt.Errorf("unsupported host feature %q for %s", raw, ProtocolVersion)
 		}
 		if _, exists := seenFeatures[feature]; exists {
 			return fmt.Errorf("duplicate host feature %q", feature)

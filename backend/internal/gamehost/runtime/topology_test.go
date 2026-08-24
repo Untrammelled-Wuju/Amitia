@@ -25,8 +25,8 @@ func newTestDescriptor(id domain.PluginID, services []domain.ServiceDescriptor) 
 
 func TestTopologyBuilder_SingleService(t *testing.T) {
 	now := time.Now()
-	rt := newTestRuntime("runtime-001", "minecraft-plugin", now)
-	descriptor := newTestDescriptor("minecraft-plugin", []domain.ServiceDescriptor{
+	rt := newTestRuntime("runtime-001", "example-game-plugin", now)
+	descriptor := newTestDescriptor("example-game-plugin", []domain.ServiceDescriptor{
 		{
 			ID:       "bridge",
 			Name:     "Bridge Service",
@@ -44,8 +44,8 @@ func TestTopologyBuilder_SingleService(t *testing.T) {
 	if topology.RuntimeID != "runtime-001" {
 		t.Errorf("expected runtime-001, got %s", topology.RuntimeID)
 	}
-	if topology.PluginID != "minecraft-plugin" {
-		t.Errorf("expected minecraft-plugin, got %s", topology.PluginID)
+	if topology.PluginID != "example-game-plugin" {
+		t.Errorf("expected example-game-plugin, got %s", topology.PluginID)
 	}
 	if topology.ServiceCount() != 1 {
 		t.Errorf("expected 1 service, got %d", topology.ServiceCount())
@@ -65,8 +65,8 @@ func TestTopologyBuilder_SingleService(t *testing.T) {
 
 func TestTopologyBuilder_MultiService(t *testing.T) {
 	now := time.Now()
-	rt := newTestRuntime("runtime-001", "minecraft-plugin", now)
-	descriptor := newTestDescriptor("minecraft-plugin", []domain.ServiceDescriptor{
+	rt := newTestRuntime("runtime-001", "example-game-plugin", now)
+	descriptor := newTestDescriptor("example-game-plugin", []domain.ServiceDescriptor{
 		{ID: "bridge", Name: "Bridge", Kind: domain.ServiceKindProcess, Required: true},
 		{ID: "agent", Name: "Agent", Kind: domain.ServiceKindProcess, Required: true, DependsOn: []domain.ServiceID{"bridge"}},
 		{ID: "vision", Name: "Vision", Kind: domain.ServiceKindExternal, Required: false, DependsOn: []domain.ServiceID{"bridge"}},
@@ -99,8 +99,8 @@ func TestTopologyBuilder_MultiService(t *testing.T) {
 
 func TestTopologyBuilder_StableServiceInstanceID(t *testing.T) {
 	now := time.Now()
-	rt := newTestRuntime("runtime-001", "minecraft-plugin", now)
-	descriptor := newTestDescriptor("minecraft-plugin", []domain.ServiceDescriptor{
+	rt := newTestRuntime("runtime-001", "example-game-plugin", now)
+	descriptor := newTestDescriptor("example-game-plugin", []domain.ServiceDescriptor{
 		{ID: "bridge", Name: "Bridge", Kind: domain.ServiceKindProcess, Required: true},
 	})
 
@@ -126,9 +126,9 @@ func TestTopologyBuilder_StableServiceInstanceID(t *testing.T) {
 
 func TestTopologyBuilder_DifferentRuntimesDifferentIDs(t *testing.T) {
 	now := time.Now()
-	rtA := newTestRuntime("runtime-a", "minecraft-plugin", now)
-	rtB := newTestRuntime("runtime-b", "minecraft-plugin", now)
-	descriptor := newTestDescriptor("minecraft-plugin", []domain.ServiceDescriptor{
+	rtA := newTestRuntime("runtime-a", "example-game-plugin", now)
+	rtB := newTestRuntime("runtime-b", "example-game-plugin", now)
+	descriptor := newTestDescriptor("example-game-plugin", []domain.ServiceDescriptor{
 		{ID: "bridge", Name: "Bridge", Kind: domain.ServiceKindProcess, Required: true},
 	})
 
@@ -453,9 +453,9 @@ func TestTopology_NilDescriptorID(t *testing.T) {
 
 func TestTopology_MultipleRuntimesForSamePlugin(t *testing.T) {
 	now := time.Now()
-	rt1 := newTestRuntime("runtime-001", "minecraft-plugin", now)
-	rt2 := newTestRuntime("runtime-002", "minecraft-plugin", now)
-	descriptor := newTestDescriptor("minecraft-plugin", []domain.ServiceDescriptor{
+	rt1 := newTestRuntime("runtime-001", "example-game-plugin", now)
+	rt2 := newTestRuntime("runtime-002", "example-game-plugin", now)
+	descriptor := newTestDescriptor("example-game-plugin", []domain.ServiceDescriptor{
 		{ID: "bridge", Name: "Bridge", Kind: domain.ServiceKindProcess},
 		{ID: "agent", Name: "Agent", Kind: domain.ServiceKindProcess, DependsOn: []domain.ServiceID{"bridge"}},
 	})

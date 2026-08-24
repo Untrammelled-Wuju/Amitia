@@ -12,20 +12,20 @@ type fakeViewResolver struct {
 	binary  map[string]int
 }
 
-func (r *fakeViewResolver) ResolveCPUMemory(runtimeID string) (int, int64, int64, int, int) {
-	return 25, 1024 * 1024 * 256, 1024 * 1024 * 1024 * 4, 128, 4
-}
-
-func (r *fakeViewResolver) ResolvePending(runtimeID, serviceID string) int {
+func (r *fakeViewResolver) ResolveUsage(runtimeID, serviceID string) map[UsageDimension]UsageSample {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.pending[runtimeID+"/"+serviceID]
-}
-
-func (r *fakeViewResolver) ResolveBinaryCount(runtimeID string) int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.binary[runtimeID]
+	return map[UsageDimension]UsageSample{
+		UsageCPUPercent:   {Used: 25, Limit: 100, Available: true, Enforced: true},
+		UsageMemoryBytes:  {Used: 1024 * 1024 * 256, Limit: 1024 * 1024 * 1024, Available: true, Enforced: true},
+		UsageDiskBytes:    {Used: 1024 * 1024 * 1024 * 4, Limit: 0, Available: true, Enforced: false},
+		UsageOpenFiles:    {Used: 128, Limit: 0, Available: true, Enforced: false},
+		UsageSubprocesses: {Used: 4, Limit: 0, Available: true, Enforced: false},
+		UsagePendingRPC:   {Used: int64(r.pending[runtimeID+"/"+serviceID]), Limit: 0, Available: true, Enforced: true},
+		UsageQueue:        {Used: 0, Limit: 0, Available: true, Enforced: true},
+		UsageBinaryCount:  {Used: int64(r.binary[runtimeID]), Limit: 0, Available: true, Enforced: true},
+		UsageBinaryBytes:  {Used: 0, Limit: 0, Available: true, Enforced: true},
+	}
 }
 
 func TestBuildView_Derived(t *testing.T) {

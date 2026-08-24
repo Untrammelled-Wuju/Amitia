@@ -57,8 +57,8 @@ func TestMapperPreservesExtensionID(t *testing.T) {
 	ctx := context.Background()
 
 	ext := kerneldomain.ExtensionDefinition{
-		ID:      "com.example.minecraft",
-		Name:    kerneldomain.LocalizedText{Default: "Minecraft"},
+		ID:      "com.example.game",
+		Name:    kerneldomain.LocalizedText{Default: "Example Game"},
 		Version: kerneldomain.SemanticVersion{Major: 1, Minor: 2, Patch: 0},
 		Domain:  kerneldomain.ExtensionDomainGame,
 	}
@@ -66,7 +66,7 @@ func TestMapperPreservesExtensionID(t *testing.T) {
 	contrib := kerneldomain.ContributionDefinition{
 		ID:         "core",
 		Kind:       kerneldomain.ContributionKindGamePlugin,
-		Name:       kerneldomain.LocalizedText{Default: "Minecraft Core"},
+		Name:       kerneldomain.LocalizedText{Default: "Example Game Core"},
 		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
 	}
 
@@ -159,7 +159,7 @@ func TestMapperPreservesCapabilities(t *testing.T) {
 		Definition: map[string]any{
 			"protocolVersion": "amitia-game-host/1",
 			"runtimeModuleId": "runtime",
-			"capabilities":    []interface{}{"realtime_control", "custom_rpc", "minecraft.pathfinding"},
+			"capabilities":    []interface{}{"realtime_control", "custom_rpc", "example.navigation"},
 		},
 	}
 
@@ -169,9 +169,9 @@ func TestMapperPreservesCapabilities(t *testing.T) {
 	}
 
 	expectedCaps := map[gamehostdomain.Capability]struct{}{
-		"realtime_control":      {},
-		"custom_rpc":            {},
-		"minecraft.pathfinding": {},
+		"realtime_control":   {},
+		"custom_rpc":         {},
+		"example.navigation": {},
 	}
 
 	if len(desc.Capabilities) != len(expectedCaps) {

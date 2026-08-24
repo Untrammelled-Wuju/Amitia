@@ -215,7 +215,7 @@ func TestLifecycleManager_BasicOutgoing(t *testing.T) {
 
 	env := protocol.Envelope{
 		ID:      "req-1",
-		Method:  "minecraft.move",
+		Method:  "example.game.move",
 		Payload: json.RawMessage(`{"x":1}`),
 	}
 
@@ -239,7 +239,7 @@ func TestLifecycleManager_IdempotentReplay(t *testing.T) {
 
 	env := protocol.Envelope{
 		ID:      "req-1",
-		Method:  "minecraft.move",
+		Method:  "example.game.move",
 		Payload: json.RawMessage(`{"x":1}`),
 	}
 
@@ -274,7 +274,7 @@ func TestLifecycleManager_UnauthorizedCancel(t *testing.T) {
 
 	env := protocol.Envelope{
 		ID:      "req-1",
-		Method:  "minecraft.move",
+		Method:  "example.game.move",
 		Payload: json.RawMessage(`{"x":1}`),
 	}
 
@@ -293,7 +293,7 @@ func TestLifecycleManager_CancelSuccess(t *testing.T) {
 
 	env := protocol.Envelope{
 		ID:      "req-1",
-		Method:  "minecraft.move",
+		Method:  "example.game.move",
 		Payload: json.RawMessage(`{"x":1}`),
 	}
 

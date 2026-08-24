@@ -315,7 +315,7 @@ func TestBridge_MultiRuntimeNotification(t *testing.T) {
 	}
 
 	for _, rt := range runtimes {
-		if err := bridge.Handle(context.Background(), rt, "minecraft.player.moved", json.RawMessage(`{}`), nil); err != nil {
+		if err := bridge.Handle(context.Background(), rt, "example.game.entity.updated", json.RawMessage(`{}`), nil); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	}
@@ -360,10 +360,10 @@ func TestBridge_DoNotInterpretMethodName(t *testing.T) {
 		ServiceID: "svc",
 	}
 	methods := []string{
-		"minecraft.player.moved",
-		"minecraft.inventory.changed",
+		"example.game.entity.updated",
+		"example.game.inventory.updated",
 		"vendor.agent.thinking",
-		"factorio.factory.updated",
+		"vendor.game.state.updated",
 		"plugin.custom.notification",
 	}
 	for _, m := range methods {

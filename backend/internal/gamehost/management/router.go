@@ -10,6 +10,7 @@ func RegisterGameCenterRouter(group *gin.RouterGroup, service *GameCenterManagem
 	gameCenter := group.Group("/game-center")
 	{
 		gameCenter.GET("/health", handler.GetCenterHealth)
+		gameCenter.GET("/developer-access", GetGameHostDeveloperAccess)
 		gameCenter.GET("/plugins", handler.ListPlugins)
 		gameCenter.GET("/plugins/:pluginId", handler.GetPlugin)
 		gameCenter.GET("/plugins/:pluginId/health", handler.GetPluginHealth)
@@ -53,16 +54,18 @@ func RegisterGameCenterControlRouter(group *gin.RouterGroup, controlHandler *Con
 
 func RegisterRPCRouter(group *gin.RouterGroup, rpcHandler *RPCHandler) {
 	gameCenter := group.Group("/game-center")
+	gameCenter.Use(RequireGameHostDeveloperAccess())
 	{
 		gameCenter.POST("/runtimes/:runtimeId/services/:serviceId/rpc", rpcHandler.InvokeRPC)
 	}
 }
 
-func RegisterGameCenterCompanionRouter(group *gin.RouterGroup, handler *CompanionHandler) {
+func RegisterGameCenterArtifactRouter(group *gin.RouterGroup, handler *ArtifactHandler) {
 	gameCenter := group.Group("/game-center")
-	gameCenter.GET("/extensions/:extensionId/companions", handler.List)
-	gameCenter.POST("/extensions/:extensionId/companions/install-required", handler.InstallRequired)
-	gameCenter.POST("/extensions/:extensionId/companions/:artifactId/install", handler.Install)
-	gameCenter.POST("/extensions/:extensionId/companions/:artifactId/verify", handler.Verify)
-	gameCenter.DELETE("/extensions/:extensionId/companions/:artifactId", handler.Remove)
+	gameCenter.Use(RequireGameHostDeveloperAccess())
+	gameCenter.GET("/extensions/:extensionId/artifacts", handler.List)
+	gameCenter.POST("/extensions/:extensionId/artifacts/deploy-required", handler.DeployRequired)
+	gameCenter.POST("/extensions/:extensionId/artifacts/:artifactId/deploy", handler.Deploy)
+	gameCenter.POST("/extensions/:extensionId/artifacts/:artifactId/verify", handler.Verify)
+	gameCenter.DELETE("/extensions/:extensionId/artifacts/:artifactId", handler.Remove)
 }

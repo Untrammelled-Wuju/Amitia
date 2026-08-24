@@ -13,9 +13,9 @@ import (
 // === Fakes ===
 
 type fakeKernelRollback struct {
-	mu       sync.Mutex
-	results  map[string]KernelRollbackResult
-	calls    []string
+	mu      sync.Mutex
+	results map[string]KernelRollbackResult
+	calls   []string
 }
 
 func newFakeKernelRollback() *fakeKernelRollback {
@@ -43,16 +43,16 @@ func (f *fakeKernelRollback) GetCalls() []string {
 }
 
 type fakeSupervisorView struct {
-	quarantined    map[string]bool
-	restartCounts  map[string]int
-	maxRestarts    map[string]int
+	quarantined   map[string]bool
+	restartCounts map[string]int
+	maxRestarts   map[string]int
 }
 
 func newFakeSupervisorView() *fakeSupervisorView {
 	return &fakeSupervisorView{
-		quarantined:    make(map[string]bool),
-		restartCounts:  make(map[string]int),
-		maxRestarts:     make(map[string]int),
+		quarantined:   make(map[string]bool),
+		restartCounts: make(map[string]int),
+		maxRestarts:   make(map[string]int),
 	}
 }
 
@@ -72,8 +72,8 @@ func (f *fakeSupervisorView) GetMaxRestarts(serviceID string) int {
 }
 
 type fakeRuntimeManager struct {
-	mu        sync.Mutex
-	runtimes  map[domain.RuntimeInstanceID]*RuntimeInstanceRef
+	mu       sync.Mutex
+	runtimes map[domain.RuntimeInstanceID]*RuntimeInstanceRef
 }
 
 func newFakeRuntimeManager() *fakeRuntimeManager {
@@ -107,8 +107,8 @@ func (f *fakeRuntimeManager) ListRuntimes() []*RuntimeInstanceRef {
 }
 
 type fakePluginRegistry struct {
-	mu       sync.Mutex
-	plugins  map[domain.PluginID]domain.PluginDescriptor
+	mu      sync.Mutex
+	plugins map[domain.PluginID]domain.PluginDescriptor
 }
 
 func newFakePluginRegistry() *fakePluginRegistry {
@@ -196,10 +196,8 @@ func (f *fakeRuntimeExecutor) GetStopped() []domain.RuntimeInstanceID {
 }
 
 type fakeSecretLease struct {
-	mu       sync.Mutex
-	revokes  []string
-	leases   []SecretLeaseRequest
-	nextID   int
+	mu      sync.Mutex
+	revokes []string
 }
 
 func newFakeSecretLease() *fakeSecretLease {
@@ -213,27 +211,11 @@ func (f *fakeSecretLease) RevokeByRuntimeInstance(runtimeID string) int {
 	return 1
 }
 
-func (f *fakeSecretLease) IssueLease(ctx context.Context, req SecretLeaseRequest) (SecretLeaseResult, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.leases = append(f.leases, req)
-	f.nextID++
-	return SecretLeaseResult{LeaseID: fmt.Sprintf("lease-%d", f.nextID), Success: true}, nil
-}
-
 func (f *fakeSecretLease) GetRevokes() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	r := make([]string, len(f.revokes))
 	copy(r, f.revokes)
-	return r
-}
-
-func (f *fakeSecretLease) GetLeases() []SecretLeaseRequest {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	r := make([]SecretLeaseRequest, len(f.leases))
-	copy(r, f.leases)
 	return r
 }
 
@@ -261,11 +243,11 @@ func (f *fakeAuditSink) GetEvents() []RecoveryAuditEvent {
 }
 
 type fakeStructureBuilder struct {
-	mu              sync.Mutex
-	topoBuilds      int
-	planBuilds      int
-	topoValid       bool
-	planValid       bool
+	mu         sync.Mutex
+	topoBuilds int
+	planBuilds int
+	topoValid  bool
+	planValid  bool
 }
 
 func newFakeStructureBuilder() *fakeStructureBuilder {
@@ -293,9 +275,9 @@ func (f *fakeStructureBuilder) GetBuildCounts() (int, int) {
 }
 
 type fakeCheckpointStore struct {
-	mu        sync.Mutex
-	metadata  map[domain.RuntimeInstanceID]RuntimeMetadataView
-	checkpoints map[domain.RuntimeInstanceID]RuntimeCheckpointView
+	mu            sync.Mutex
+	metadata      map[domain.RuntimeInstanceID]RuntimeMetadataView
+	checkpoints   map[domain.RuntimeInstanceID]RuntimeCheckpointView
 	hasMetadataFn func(id domain.RuntimeInstanceID) (bool, error)
 }
 
@@ -495,9 +477,9 @@ func TestRecovery_CheckpointCorrupt(t *testing.T) {
 func TestRecovery_CheckpointStale(t *testing.T) {
 	store := newFakeCheckpointStore()
 	store.setMetadata("rt-1", RuntimeMetadataView{
-		RuntimeID:  "rt-1",
-		PluginID:   "plugin-1",
-		ExtensionID: "ext-1",
+		RuntimeID:          "rt-1",
+		PluginID:           "plugin-1",
+		ExtensionID:        "ext-1",
 		DescriptorRevision: "rev-A",
 	})
 	classifier := NewDefaultCheckpointClassifier(store)
@@ -514,15 +496,15 @@ func TestRecovery_CheckpointStale(t *testing.T) {
 func TestRecovery_CheckpointCompatible(t *testing.T) {
 	store := newFakeCheckpointStore()
 	store.setMetadata("rt-1", RuntimeMetadataView{
-		RuntimeID:  "rt-1",
-		PluginID:   "plugin-1",
-		ExtensionID: "ext-1",
+		RuntimeID:          "rt-1",
+		PluginID:           "plugin-1",
+		ExtensionID:        "ext-1",
 		DescriptorRevision: "rev-A",
 	})
 	store.setCheckpoint("rt-1", RuntimeCheckpointView{
-		RuntimeID:  "rt-1",
-		PluginID:   "plugin-1",
-		CleanShutdown: true,
+		RuntimeID:          "rt-1",
+		PluginID:           "plugin-1",
+		CleanShutdown:      true,
 		DescriptorRevision: "rev-A",
 	})
 	classifier := NewDefaultCheckpointClassifier(store)
@@ -862,7 +844,8 @@ func TestRecovery_Operation_Metadata(t *testing.T) {
 func TestRecovery_ErrorRuntimeRecovering(t *testing.T) {
 	err := NewRuntimeAlreadyRecoveringError("rt-1")
 	if err.Code != ErrCodeRuntimeRecovering {
-		t.Errorf("expected code %s, got %s", ErrCodeRuntimeRecovering, err.Code)}
+		t.Errorf("expected code %s, got %s", ErrCodeRuntimeRecovering, err.Code)
+	}
 	if err.Unwrap() != nil {
 		t.Error("should have no wrapped error")
 	}
@@ -871,20 +854,23 @@ func TestRecovery_ErrorRuntimeRecovering(t *testing.T) {
 func TestRecovery_ErrorRecoveryExhausted(t *testing.T) {
 	err := NewRecoveryExhaustedError("rt-1", 5, 3)
 	if err.Code != ErrCodeRecoveryExhausted {
-		t.Errorf("expected code %s, got %s", ErrCodeRecoveryExhausted, err.Code)}
+		t.Errorf("expected code %s, got %s", ErrCodeRecoveryExhausted, err.Code)
+	}
 }
 
 func TestRecovery_ErrorQuarantined(t *testing.T) {
 	err := NewQuarantinedError("rt-1", "frequent crashes")
 	if err.Code != ErrCodeQuarantined {
-		t.Errorf("expected code %s, got %s", ErrCodeQuarantined, err.Code)}
+		t.Errorf("expected code %s, got %s", ErrCodeQuarantined, err.Code)
+	}
 }
 
 func TestRecovery_ErrorRollbackFailed(t *testing.T) {
 	cause := fmt.Errorf("no rollback point")
 	err := NewRollbackFailedError("ext-1", cause)
 	if err.Code != ErrCodeRollbackFailed {
-		t.Errorf("expected code %s, got %s", ErrCodeRollbackFailed, err.Code)}
+		t.Errorf("expected code %s, got %s", ErrCodeRollbackFailed, err.Code)
+	}
 	if err.Unwrap() != cause {
 		t.Error("cause should be unwrappable")
 	}
@@ -940,8 +926,8 @@ func TestRecovery_NoPendingRPCRestored(t *testing.T) {
 func TestRecovery_NoSecretLeaseStored(t *testing.T) {
 	store := newFakeCheckpointStore()
 	store.setMetadata("rt-1", RuntimeMetadataView{
-		RuntimeID:  "rt-1",
-		PluginID:   "plugin-1",
+		RuntimeID:   "rt-1",
+		PluginID:    "plugin-1",
 		ExtensionID: "ext-1",
 	})
 	meta, _ := store.LoadMetadata(context.Background(), "rt-1")
@@ -969,8 +955,8 @@ func TestRecovery_NoBinaryHandleRestored(t *testing.T) {
 func TestRecovery_CheckpointNoSecretValue(t *testing.T) {
 	store := newFakeCheckpointStore()
 	meta := RuntimeMetadataView{
-		RuntimeID:  "rt-1",
-		PluginID:   "plugin-1",
+		RuntimeID:   "rt-1",
+		PluginID:    "plugin-1",
 		ExtensionID: "ext-1",
 	}
 	store.setMetadata("rt-1", meta)

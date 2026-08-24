@@ -65,9 +65,9 @@ func TestNewRequest(t *testing.T) {
 	client := NewClient(transport, WithIDGenerator(idGen))
 
 	payload := map[string]any{
-		"goal": "build a shelter",
+		"command": "perform operation",
 	}
-	envelope, err := client.NewRequest("minecraft.agent.submit_goal", payload)
+	envelope, err := client.NewRequest("example.game.operation.submit", payload)
 	if err != nil {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
@@ -81,8 +81,8 @@ func TestNewRequest(t *testing.T) {
 	if envelope.ID != "msg-001" {
 		t.Fatalf("expected ID 'msg-001', got '%s'", envelope.ID)
 	}
-	if envelope.Method != "minecraft.agent.submit_goal" {
-		t.Fatalf("expected Method 'minecraft.agent.submit_goal', got '%s'", envelope.Method)
+	if envelope.Method != "example.game.operation.submit" {
+		t.Fatalf("expected Method 'example.game.operation.submit', got '%s'", envelope.Method)
 	}
 	if len(envelope.Payload) == 0 {
 		t.Fatal("expected non-empty payload")
@@ -94,7 +94,7 @@ func TestNewResponse(t *testing.T) {
 	idGen := NewFixedIDGenerator("msg-001", "msg-002")
 	client := NewClient(transport, WithIDGenerator(idGen))
 
-	request, err := client.NewRequest("minecraft.agent.submit_goal", nil)
+	request, err := client.NewRequest("example.game.operation.submit", nil)
 	if err != nil {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
@@ -147,13 +147,13 @@ func TestNewErrorResponse(t *testing.T) {
 	idGen := NewFixedIDGenerator("msg-001", "msg-004")
 	client := NewClient(transport, WithIDGenerator(idGen))
 
-	request, err := client.NewRequest("minecraft.agent.submit_goal", nil)
+	request, err := client.NewRequest("example.game.operation.submit", nil)
 	if err != nil {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
 
 	data := map[string]any{
-		"reason": "goal not allowed",
+		"reason": "operation not allowed",
 	}
 	envelope, err := client.NewError(request, protocol.ErrorPermissionDenied, "permission denied", false, data)
 	if err != nil {
@@ -179,7 +179,7 @@ func TestDecodePayload(t *testing.T) {
 	client := NewClient(transport)
 
 	originalPayload := map[string]any{
-		"player": "steve",
+		"subject": "sample-user",
 		"position": map[string]any{
 			"x": 100,
 			"y": 64,
@@ -187,7 +187,7 @@ func TestDecodePayload(t *testing.T) {
 		},
 	}
 
-	envelope, err := client.NewRequest("game.event.player_moved", originalPayload)
+	envelope, err := client.NewRequest("examplegame.event.player_moved", originalPayload)
 	if err != nil {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
@@ -197,8 +197,8 @@ func TestDecodePayload(t *testing.T) {
 		t.Fatalf("DecodePayload failed: %v", err)
 	}
 
-	if result["player"] != "steve" {
-		t.Fatalf("expected player 'steve', got '%v'", result["player"])
+	if result["subject"] != "sample-user" {
+		t.Fatalf("expected subject 'sample-user', got '%v'", result["subject"])
 	}
 	pos := result["position"].(map[string]any)
 	if pos["x"] != float64(100) {
@@ -229,8 +229,8 @@ func TestCustomMethod(t *testing.T) {
 	client := NewClient(transport, WithIDGenerator(idGen))
 
 	methods := []string{
-		"minecraft.agent.submit_goal",
-		"minecraft.state.query",
+		"example.game.operation.submit",
+		"example.game.state.query",
 		"vendor.control.execute",
 		"custom.foo.bar",
 	}
@@ -294,8 +294,8 @@ func TestSendRequestWithTransport(t *testing.T) {
 	var resp protocol.Envelope
 	var sendErr error
 	go func() {
-		resp, sendErr = client.SendRequest(ctx, "minecraft.agent.submit_goal", map[string]any{
-			"goal": "mine diamonds",
+		resp, sendErr = client.SendRequest(ctx, "example.game.operation.submit", map[string]any{
+			"command": "perform operation",
 		})
 		close(done)
 	}()
@@ -309,8 +309,8 @@ func TestSendRequestWithTransport(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("expected 1 sent message, got %d", len(messages))
 	}
-	if messages[0].Method != "minecraft.agent.submit_goal" {
-		t.Fatalf("expected method 'minecraft.agent.submit_goal', got '%s'", messages[0].Method)
+	if messages[0].Method != "example.game.operation.submit" {
+		t.Fatalf("expected method 'example.game.operation.submit', got '%s'", messages[0].Method)
 	}
 
 	go func() {
@@ -350,7 +350,7 @@ func TestSendResponseWithTransport(t *testing.T) {
 
 	ctx := context.Background()
 
-	request, err := client.NewRequest("minecraft.agent.submit_goal", nil)
+	request, err := client.NewRequest("example.game.operation.submit", nil)
 	if err != nil {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
@@ -400,7 +400,7 @@ func TestSendErrorWithTransport(t *testing.T) {
 
 	ctx := context.Background()
 
-	request, err := client.NewRequest("minecraft.agent.submit_goal", nil)
+	request, err := client.NewRequest("example.game.operation.submit", nil)
 	if err != nil {
 		t.Fatalf("NewRequest failed: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestReceiveMessage(t *testing.T) {
 		Protocol: protocol.ProtocolVersion,
 		Type:     protocol.MessageTypeRequest,
 		ID:       "msg-001",
-		Method:   "minecraft.agent.submit_goal",
+		Method:   "example.game.operation.submit",
 	}
 	transport.QueueMessage(expectedEnvelope)
 
@@ -459,7 +459,7 @@ func TestClientRouteHelpers(t *testing.T) {
 		WithClientServiceID("service-789"),
 	)
 
-	envelope, err := client.NewRequest("minecraft.agent.submit_goal", nil,
+	envelope, err := client.NewRequest("example.game.operation.submit", nil,
 		WithMetadata("traceId", json.RawMessage(`"trace-001"`)),
 	)
 	if err != nil {

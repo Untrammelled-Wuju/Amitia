@@ -267,10 +267,10 @@ func PluginMethodValidationCases() []Case {
 	cases := make([]Case, 0)
 
 	validMethods := []string{
-		"minecraft.agent.execute",
+		"example.game.operation.execute",
 		"vendor.control.run",
 		"custom.foo.bar",
-		"minecraft.state.query",
+		"example.game.state.query",
 	}
 	for _, m := range validMethods {
 		data := []byte(`{"protocol":"amitia-game-host/1","type":"request","id":"r1","method":"` + m + `"}`)

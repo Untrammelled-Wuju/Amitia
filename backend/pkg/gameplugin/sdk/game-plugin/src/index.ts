@@ -11,13 +11,13 @@ export { Runner, RunnerConfig, HandlerRegistry, RequestHandler, NotificationHand
 export * from './event';
 export * from './state';
 export * from './channel';
-export * from './binary';
 export * from './stream';
 export * from './service';
 export * from './permission';
 export * from './secret';
 export * from './control';
 export * from './hostapi';
+export * from './artifact';
 export * from './security';
 export {
   METHOD_CONTROL_SINK_DISPATCH,

@@ -18,7 +18,7 @@ func TestKernelEventAdapter_Publish_NoPublisher(t *testing.T) {
 
 func TestKernelEventAdapter_Publish_CustomType(t *testing.T) {
 	provider := NewStaticEventTypeProvider("gamehost.notification", 1)
-	provider.WithOverride("minecraft.player.moved", "game.player.event")
+	provider.WithOverride("example.game.entity.updated", "game.player.event")
 
 	var capturedTypeID string
 	var capturedVersion int
@@ -38,7 +38,7 @@ func TestKernelEventAdapter_Publish_CustomType(t *testing.T) {
 		PluginID:  "plugin",
 		RuntimeID: "runtime",
 		ServiceID: "svc",
-		Method:    "minecraft.player.moved",
+		Method:    "example.game.entity.updated",
 		Payload:   json.RawMessage(`{"x":1}`),
 	})
 	if err != nil {
@@ -53,7 +53,7 @@ func TestKernelEventAdapter_Publish_CustomType(t *testing.T) {
 	if capturedOpts == nil {
 		t.Fatal("expected opts")
 	}
-	if string(capturedOpts["method"]) != `"minecraft.player.moved"` {
+	if string(capturedOpts["method"]) != `"example.game.entity.updated"` {
 		t.Errorf("expected method in opts, got %s", capturedOpts["method"])
 	}
 	if string(capturedOpts["producerId"]) != `"plugin"` {

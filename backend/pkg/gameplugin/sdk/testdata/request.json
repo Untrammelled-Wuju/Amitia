@@ -2,12 +2,12 @@
   "protocol": "amitia-game-host/1",
   "type": "request",
   "id": "msg-001",
-  "method": "minecraft.agent.submit_goal",
+  "method": "example.game.operation.submit",
   "runtimeId": "runtime-123",
   "pluginId": "plugin-456",
   "serviceId": "service-789",
   "payload": {
-    "goal": "build a shelter",
+    "command": "perform operation",
     "priority": "high"
   },
   "metadata": {

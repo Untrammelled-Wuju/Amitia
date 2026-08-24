@@ -7,20 +7,20 @@ import (
 )
 
 func TestBuildServiceDefinitionID(t *testing.T) {
-	id := BuildServiceDefinitionID("com.example.minecraft", "bridge-service")
-	expected := "com.example.minecraft/bridge-service"
+	id := BuildServiceDefinitionID("com.example.game", "bridge-service")
+	expected := "com.example.game/bridge-service"
 	if id != expected {
 		t.Errorf("expected %s, got %s", expected, id)
 	}
 }
 
 func TestParseServiceDefinitionID(t *testing.T) {
-	extID, modID, err := ParseServiceDefinitionID("com.example.minecraft/bridge-service")
+	extID, modID, err := ParseServiceDefinitionID("com.example.game/bridge-service")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if extID != "com.example.minecraft" {
-		t.Errorf("expected com.example.minecraft, got %s", extID)
+	if extID != "com.example.game" {
+		t.Errorf("expected com.example.game, got %s", extID)
 	}
 	if modID != "bridge-service" {
 		t.Errorf("expected bridge-service, got %s", modID)
@@ -66,11 +66,11 @@ func TestDefinitionMapper_MapToDefinition(t *testing.T) {
 	mapper := NewDefinitionMapper()
 
 	view := ServiceRuntimeView{
-		ExtensionID: "com.example.minecraft",
+		ExtensionID: "com.example.game",
 		ModuleID:    "bridge-service",
 		RuntimeType: "service",
-		Name:        "Minecraft Bridge",
-		Description: "Bridge service for Minecraft",
+		Name:        "Example Game Bridge",
+		Description: "Bridge service for Example Game",
 		EntryPoint:  "./bin/bridge",
 		Env: map[string]string{
 			"PORT": "8080",
@@ -83,16 +83,16 @@ func TestDefinitionMapper_MapToDefinition(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if def.ServiceID != "com.example.minecraft/bridge-service" {
+	if def.ServiceID != "com.example.game/bridge-service" {
 		t.Errorf("unexpected ServiceID: %s", def.ServiceID)
 	}
-	if def.ExtensionID != "com.example.minecraft" {
+	if def.ExtensionID != "com.example.game" {
 		t.Errorf("unexpected ExtensionID: %s", def.ExtensionID)
 	}
 	if def.ModuleID != "bridge-service" {
 		t.Errorf("unexpected ModuleID: %s", def.ModuleID)
 	}
-	if def.Name != "Minecraft Bridge" {
+	if def.Name != "Example Game Bridge" {
 		t.Errorf("unexpected Name: %s", def.Name)
 	}
 	if len(def.Executables) != 1 {

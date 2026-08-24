@@ -123,10 +123,10 @@ func ChannelSchemaCases() []Case {
 		))
 	}
 
-	customSchemaData := []byte(`{"id":"custom-state","kind":"state","schemaId":"minecraft.world-state/v1"}`)
+	customSchemaData := []byte(`{"id":"custom-state","kind":"state","schemaId":"example.game.state/v1"}`)
 	cases = append(cases, NewCase(
 		"custom_schema_id",
-		"Custom schemaId like 'minecraft.world-state/v1' should be preserved",
+		"Custom schemaId like 'example.game.state/v1' should be preserved",
 		customSchemaData,
 		true,
 		ChannelDescriptorValidator{},
@@ -174,7 +174,6 @@ func CapabilityCases() []Case {
 		protocol.CapabilityRealtimeControl,
 		protocol.CapabilityStateStreaming,
 		protocol.CapabilityEventStreaming,
-		protocol.CapabilityBinaryStreaming,
 		protocol.CapabilityCustomRPC,
 		protocol.CapabilityHostAPI,
 		protocol.CapabilitySharedControl,
@@ -193,7 +192,7 @@ func CapabilityCases() []Case {
 	}
 
 	customCaps := []string{
-		"minecraft.pathfinding",
+		"example.navigation",
 		"vendor.visual-agent",
 		"game.foo",
 	}
@@ -257,7 +256,7 @@ func PluginErrorCases() []Case {
 	}
 
 	customCodes := []string{
-		"minecraft.connection_failed",
+		"vendor.game.connection_failed",
 		"vendor.agent_crashed",
 	}
 	for _, code := range customCodes {

@@ -23,7 +23,7 @@
       "type": "string",
       "description": "Optional URI identifying the payload schema. Host does not interpret custom schema IDs.",
       "maxLength": 1024,
-      "examples": ["minecraft.world-state/v1", "vendor.world-map/v2"]
+      "examples": ["example.game.state/v1", "vendor.world-map/v2"]
     },
     "direction": {
       "type": "string",

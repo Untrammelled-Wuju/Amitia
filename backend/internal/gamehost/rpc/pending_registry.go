@@ -29,6 +29,9 @@ type PendingRequestRegistry interface {
 	CancelByRuntime(runtimeID domain.RuntimeInstanceID) int
 	Count() int
 	CountByRuntime(runtimeID domain.RuntimeInstanceID) int
+	CountByPeer(runtimeID, serviceID string) int
+	LimitPerPeer() int
+	LimitGlobal() int
 	Shutdown()
 }
 
@@ -371,6 +374,24 @@ func (r *pendingRequestRegistry) CountByRuntime(runtimeID domain.RuntimeInstance
 		}
 	}
 	return count
+}
+
+func (r *pendingRequestRegistry) CountByPeer(runtimeID, serviceID string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.peerCount[PeerKey{RuntimeID: domain.RuntimeInstanceID(runtimeID), ServiceID: domain.ServiceID(serviceID)}]
+}
+
+func (r *pendingRequestRegistry) LimitPerPeer() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.maxPerPeer
+}
+
+func (r *pendingRequestRegistry) LimitGlobal() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.maxGlobal
 }
 
 func (r *pendingRequestRegistry) Get(key RequestKey) *PendingRequest {

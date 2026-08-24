@@ -143,7 +143,7 @@ func (v *SDKBuildValidator) validateBuildRequest() error {
 	idGen := NewFixedIDGen("req-001")
 	client := sdk.NewClient(transport, sdk.WithIDGenerator(idGen))
 
-	payload := map[string]any{"goal": "build shelter"}
+	payload := map[string]any{"command": "perform operation"}
 	env, err := client.NewRequest("vendor.agent.execute", payload)
 	if err != nil {
 		return err

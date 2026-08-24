@@ -33,7 +33,7 @@
           "type": "string",
           "pattern": "^[a-z][a-z0-9]*\\.[a-z][a-z0-9.]*$",
           "description": "Custom namespaced error code using vendor namespace prefix.",
-          "examples": ["minecraft.connection_failed", "vendor.auth_failed"]
+          "examples": ["vendor.game.connection_failed", "vendor.auth_failed"]
         }
       ]
     },

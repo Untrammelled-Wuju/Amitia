@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/gamehost/config"
+	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	ghintegration "github.com/u-ai/backend/internal/gamehost/integration"
 	ghintegrationdefs "github.com/u-ai/backend/internal/gamehost/integration/service_definition"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
-	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 )
 
 type KernelLifecycleAdapter struct {
@@ -28,7 +28,7 @@ func (a *KernelLifecycleAdapter) ExecuteUpdate(ctx context.Context, extensionID 
 }
 
 type KernelArchiveUpdaterAdapter struct {
-	updateArchiveFn       func(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error)
+	updateArchiveFn          func(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error)
 	getPreviousArchivePathFn func(ctx context.Context, extensionID string) (string, error)
 }
 
@@ -66,7 +66,7 @@ func (a *RuntimeGraphReconcilerAdapter) ReconcileExtension(ctx context.Context, 
 	if a.provisioner == nil {
 		return fmt.Errorf("runtime graph provisioner not wired")
 	}
-	return a.provisioner.Reconcile(ctx)
+	return a.provisioner.ReconcileExtension(ctx, extensionID)
 }
 
 type DefinitionReconcilerAdapter struct {
@@ -85,15 +85,15 @@ func (a *DefinitionReconcilerAdapter) ReconcileExtension(extensionID string) *gh
 }
 
 type UpgradeCoordinatorDeps struct {
-	PluginRegistry      *registry.Registry
-	RuntimeManager      ghruntime.RuntimeManager
-	RuntimeExecutor     ghruntime.RuntimeExecutor
-	DefinitionReconcile DefinitionReconciler
+	PluginRegistry        *registry.Registry
+	RuntimeManager        ghruntime.RuntimeManager
+	RuntimeExecutor       ghruntime.RuntimeExecutor
+	DefinitionReconcile   DefinitionReconciler
 	RuntimeGraphReconcile RuntimeGraphReconciler
-	ContributionSync    *ghintegration.GamePluginSyncService
-	ConfigResolver      *config.Resolver
-	KernelLifecycle     KernelExtensionLifecycle
-	ArchiveUpdater      KernelArchiveUpdater
+	ContributionSync      *ghintegration.GamePluginSyncService
+	ConfigResolver        *config.Resolver
+	KernelLifecycle       KernelExtensionLifecycle
+	ArchiveUpdater        KernelArchiveUpdater
 }
 
 func BuildUpgradeCoordinator(deps UpgradeCoordinatorDeps) (*UpgradeCoordinator, error) {

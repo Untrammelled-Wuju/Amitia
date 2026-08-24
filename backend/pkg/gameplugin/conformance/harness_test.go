@@ -173,7 +173,7 @@ func TestChannelSchemaConformance(t *testing.T) {
 
 func TestCapabilityConformance(t *testing.T) {
 	caps := []string{
-		"realtime_control", "state_streaming", "event_streaming", "binary_streaming",
+		"realtime_control", "state_streaming", "event_streaming",
 		"custom_rpc", "host_api", "shared_control", "custom_ui", "multi_service",
 	}
 
@@ -185,7 +185,7 @@ func TestCapabilityConformance(t *testing.T) {
 		}
 	}
 
-	for _, cap := range []string{"minecraft.pathfinding", "vendor.agent"} {
+	for _, cap := range []string{"example.navigation", "vendor.agent"} {
 		if err := validator.Validate([]byte(`"` + cap + `"`)); err == nil {
 			t.Errorf("game/tool capability %s must not validate as a GameHost feature", cap)
 		}
@@ -195,12 +195,12 @@ func TestCapabilityConformance(t *testing.T) {
 func TestCustomCapabilityConformance(t *testing.T) {
 	validator := CapabilityValidator{}
 
-	data := []byte(`"minecraft.pathfinding"`)
+	data := []byte(`"example.navigation"`)
 	if err := validator.Validate(data); err == nil {
 		t.Error("game/tool capability must not validate as a host feature")
 	}
 
-	if protocol.IsKnownCapability("minecraft.pathfinding") {
+	if protocol.IsKnownCapability("example.navigation") {
 		t.Error("custom capability should not be known")
 	}
 }
@@ -319,7 +319,7 @@ func TestReservedNamespace(t *testing.T) {
 	validator := PluginMethodValidator{}
 
 	validMethods := []string{
-		`{"protocol":"amitia-game-host/1","type":"request","id":"r1","method":"minecraft.agent.execute"}`,
+		`{"protocol":"amitia-game-host/1","type":"request","id":"r1","method":"example.game.operation.execute"}`,
 		`{"protocol":"amitia-game-host/1","type":"request","id":"r1","method":"vendor.control.run"}`,
 	}
 
@@ -398,7 +398,7 @@ func TestInvalidBareErrorCodeRejected(t *testing.T) {
 
 func TestCustomErrorCodeAccepted(t *testing.T) {
 	validator := EnvelopeValidator{}
-	data := []byte(`{"protocol":"amitia-game-host/1","type":"error","id":"e1","error":{"code":"minecraft.connection_failed","message":"test"}}`)
+	data := []byte(`{"protocol":"amitia-game-host/1","type":"error","id":"e1","error":{"code":"vendor.game.connection_failed","message":"test"}}`)
 	if err := validator.Validate(data); err != nil {
 		t.Errorf("custom error code should be accepted: %v", err)
 	}

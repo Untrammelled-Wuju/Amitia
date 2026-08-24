@@ -17,7 +17,7 @@ func TestRace_AcquireStartupAndStop(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, _ = adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-				RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
+				RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1,
 			}, nil)
 		}()
 		go func() {
@@ -43,7 +43,7 @@ func TestRace_AcquireParallelDifferentRuntimes(t *testing.T) {
 		go func(rid string) {
 			defer wg.Done()
 			adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-				RuntimeID: rid, PluginID: "p-1", ServiceID: "s-1",
+				RuntimeID: rid, PluginID: "p-1", ServiceID: "s-1", Generation: 1,
 			}, nil)
 		}(id)
 	}
@@ -64,7 +64,7 @@ func TestRace_AcquireVsRevokeHostState(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-			RuntimeID: "rt-x", PluginID: "p-1", ServiceID: "s-1",
+			RuntimeID: "rt-x", PluginID: "p-1", ServiceID: "s-1", Generation: 1,
 		}, nil)
 	}()
 	go func() {
@@ -74,7 +74,7 @@ func TestRace_AcquireVsRevokeHostState(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		adapter.AcquireRPCPending(context.Background(), RuntimeIdentitySubject{
-			RuntimeID: "rt-x", PluginID: "p-1", ServiceID: "s-1",
+			RuntimeID: "rt-x", PluginID: "p-1", ServiceID: "s-1", Generation: 1,
 		})
 	}()
 	wg.Wait()
@@ -100,7 +100,7 @@ func TestRace_HostShutdownParallelAdmission(t *testing.T) {
 		go func(rid string) {
 			defer wg.Done()
 			_, _ = adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-				RuntimeID: rid, PluginID: "p-1", ServiceID: "s-1",
+				RuntimeID: rid, PluginID: "p-1", ServiceID: "s-1", Generation: 1,
 			}, nil)
 		}(id)
 	}

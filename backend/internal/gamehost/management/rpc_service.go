@@ -14,18 +14,23 @@ type RPCInvoker interface {
 	SendCustomRPC(ctx context.Context, runtimeID, serviceID, method string, payload []byte, timeout time.Duration) (*protocol.Envelope, error)
 }
 
+type RuntimeGenerationReader interface {
+	GetCurrentGeneration(runtimeID domain.RuntimeInstanceID) (int64, error)
+}
+
 type ControlPlaneRPCInvoker struct {
 	controlPlane ipc.ControlPlane
 	topology     RuntimeTopologyReader
 	registry     PluginRegistryReader
+	generation   RuntimeGenerationReader
 }
 
-func NewControlPlaneRPCInvoker(cp ipc.ControlPlane, topo RuntimeTopologyReader, reg PluginRegistryReader) *ControlPlaneRPCInvoker {
-	return &ControlPlaneRPCInvoker{
-		controlPlane: cp,
-		topology:     topo,
-		registry:     reg,
+func NewControlPlaneRPCInvoker(cp ipc.ControlPlane, topo RuntimeTopologyReader, reg PluginRegistryReader, generation ...RuntimeGenerationReader) *ControlPlaneRPCInvoker {
+	var gen RuntimeGenerationReader
+	if len(generation) > 0 {
+		gen = generation[0]
 	}
+	return &ControlPlaneRPCInvoker{controlPlane: cp, topology: topo, registry: reg, generation: gen}
 }
 
 func (v *ControlPlaneRPCInvoker) SendCustomRPC(ctx context.Context, runtimeID, serviceID, method string, payload []byte, timeout time.Duration) (*protocol.Envelope, error) {
@@ -56,16 +61,24 @@ func (v *ControlPlaneRPCInvoker) SendCustomRPC(ctx context.Context, runtimeID, s
 	if !found {
 		return nil, ErrServiceNotFound
 	}
+	if v.generation == nil {
+		return nil, ErrGenerationUnavailable
+	}
+	generation, err := v.generation.GetCurrentGeneration(rtID)
+	if err != nil || generation <= 0 {
+		return nil, fmt.Errorf("%w: %v", ErrGenerationUnavailable, err)
+	}
 
 	envelope := protocol.Envelope{
-		Protocol:  protocol.ProtocolVersion,
-		Type:      protocol.MessageTypeRequest,
-		ID:        fmt.Sprintf("mgmt-rpc-%d", time.Now().UnixNano()),
-		Method:    method,
-		Payload:   payload,
-		PluginID:  targetPluginID,
-		RuntimeID: runtimeID,
-		ServiceID: serviceID,
+		Protocol:   protocol.ProtocolVersion,
+		Type:       protocol.MessageTypeRequest,
+		ID:         fmt.Sprintf("mgmt-rpc-%d", time.Now().UnixNano()),
+		Method:     method,
+		Payload:    payload,
+		PluginID:   targetPluginID,
+		RuntimeID:  runtimeID,
+		ServiceID:  serviceID,
+		Generation: uint64(generation),
 	}
 
 	if timeout <= 0 {
@@ -73,9 +86,10 @@ func (v *ControlPlaneRPCInvoker) SendCustomRPC(ctx context.Context, runtimeID, s
 	}
 
 	return v.controlPlane.SendRequest(ctx, ipc.Peer{
-		PluginID:  domain.PluginID(targetPluginID),
-		RuntimeID: rtID,
-		ServiceID: svcID,
+		PluginID:   domain.PluginID(targetPluginID),
+		RuntimeID:  rtID,
+		ServiceID:  svcID,
+		Generation: generation,
 	}, envelope, timeout)
 }
 
@@ -86,4 +100,5 @@ var (
 	ErrTopologyUnavailable     = fmt.Errorf("management RPC: topology unavailable")
 	ErrRuntimeNotFound         = fmt.Errorf("management RPC: runtime not found")
 	ErrServiceNotFound         = fmt.Errorf("management RPC: service not found")
+	ErrGenerationUnavailable   = fmt.Errorf("management RPC: runtime generation unavailable")
 )

@@ -38,11 +38,11 @@ const (
 )
 
 type AdmissionDecision struct {
-	Allowed   bool
-	Reason    DenyReason
-	Class     ResourceClass
-	Current   int64
-	Limit     int64
+	Allowed bool
+	Reason  DenyReason
+	Class   ResourceClass
+	Current int64
+	Limit   int64
 }
 
 type RuntimeIdentitySubject struct {
@@ -69,7 +69,7 @@ type AdmissionAdapter interface {
 	AcquireRuntimeStartup(ctx context.Context, subj RuntimeIdentitySubject, profile *RuntimeResourceProfile) (StartupRevertFunc, error)
 	AcquireRPCPending(ctx context.Context, subj RuntimeIdentitySubject) (AdmissionDecision, ReleaseFunc)
 	AcquireBinaryObject(ctx context.Context, subj RuntimeIdentitySubject, requestedBytes int64) (AdmissionDecision, BinaryRevertFunc)
-	AcquireQueuePublish(ctx context.Context, subj RuntimeIdentitySubject) AdmissionDecision
+	AcquireQueuePublish(ctx context.Context, subj RuntimeIdentitySubject) (AdmissionDecision, ReleaseFunc)
 	Shutdown()
 	Reset()
 }
