@@ -15,6 +15,7 @@ type SessionScope struct {
 	PluginID        domain.PluginID
 	RuntimeID       domain.RuntimeInstanceID
 	ServiceID       domain.ServiceID
+	Generation      int64
 	UserID          string
 	CharacterID     string
 	ConversationID  string
