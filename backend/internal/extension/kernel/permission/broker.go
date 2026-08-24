@@ -79,6 +79,17 @@ func (b *DefaultPermissionBroker) GetTrustLevelChecker() TrustLevelChecker {
 	return b.trustChecker
 }
 
+// RequiresPerUse reports whether the canonical permission definition requires
+// a fresh, one-operation approval. It is intentionally read-only so adapters
+// can distinguish per-use approval from ordinary persistent permission setup.
+func (b *DefaultPermissionBroker) RequiresPerUse(permissionID string) bool {
+	if b == nil || b.registry == nil {
+		return false
+	}
+	def, ok := b.registry.Get(permissionID)
+	return ok && def.RequiresPerUse
+}
+
 func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request PermissionEvaluationRequest) PermissionEvaluationResult {
 	request.ExecutionContext = request.ExecutionContext.Normalize()
 	if !request.ExecutionContext.IsEmpty() {
@@ -220,7 +231,7 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 			return result
 		})
 
-		matched := b.matchGrants(grants, effectiveScope, req, request.ExecutionContext)
+		matched := b.matchGrants(grants, effectiveScope, req, request.ExecutionContext, request.Input)
 		if len(matched) > 0 {
 			result.MatchedGrants = append(result.MatchedGrants, matched...)
 			result.Reasons = append(result.Reasons, PermissionReason{
@@ -251,7 +262,7 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 	} else if hasNormalMissing {
 		b.determineDenyOrApproval(&result, request)
 	} else {
-		result.Decision = DecisionAllow
+		result.Decision = decisionForMatchedGrants(result.MatchedGrants)
 	}
 
 	b.auditRec.RecordEvaluation(ctx, request, result)
@@ -373,6 +384,9 @@ func (b *DefaultPermissionBroker) Grant(ctx context.Context, request PermissionG
 
 	if request.Decision == DecisionAllowPersistent && !def.PersistentGrantable {
 		return PermissionGrant{}, fmt.Errorf("persistent grant not allowed for permission %s", request.PermissionID)
+	}
+	if def.RequiresPerUse && request.Decision != DecisionAllowOnce {
+		return PermissionGrant{}, fmt.Errorf("permission %s requires an allow_once grant", request.PermissionID)
 	}
 
 	grantID := b.generateGrantID(request)
@@ -590,11 +604,17 @@ func (b *DefaultPermissionBroker) isScopeAllowed(def PermissionDefinition, scope
 	return false
 }
 
-func (b *DefaultPermissionBroker) matchGrants(grants []PermissionGrant, scope PermissionScope, req PermissionRequirement, execCtx PermissionExecutionContext) []PermissionGrant {
+func (b *DefaultPermissionBroker) matchGrants(grants []PermissionGrant, scope PermissionScope, req PermissionRequirement, execCtx PermissionExecutionContext, input json.RawMessage) []PermissionGrant {
 	def, _ := b.registry.Get(req.PermissionID)
 	matched := make([]PermissionGrant, 0)
 	for _, g := range grants {
 		if !g.IsValid() {
+			continue
+		}
+		// RequiresPerUse permissions must never be satisfied by a legacy/session/
+		// persistent grant. Only an explicit allow_once grant may authorize one
+		// operation.
+		if def.RequiresPerUse && !g.IsOneTime() {
 			continue
 		}
 		if scope.Type != ScopeGlobal && !g.Scope.Contains(scope) {
@@ -606,11 +626,33 @@ func (b *DefaultPermissionBroker) matchGrants(grants []PermissionGrant, scope Pe
 		if b.requiresBoundGrant(def, execCtx) && g.TargetBinding == nil {
 			continue
 		}
-		if g.IsPersistent() || g.Decision == DecisionAllowSession || g.Decision == DecisionAllow {
+		if g.InputBinding != nil {
+			if len(input) == 0 || g.InputBinding.InputHash != permissionInputHash(input) {
+				continue
+			}
+		}
+		if g.IsOneTime() || g.IsPersistent() || g.Decision == DecisionAllowSession || g.Decision == DecisionAllow {
 			matched = append(matched, g)
 		}
 	}
 	return matched
+}
+
+func permissionInputHash(input json.RawMessage) string {
+	if len(input) == 0 {
+		return ""
+	}
+	h := sha256.Sum256(input)
+	return hex.EncodeToString(h[:])
+}
+
+func decisionForMatchedGrants(grants []PermissionGrant) PermissionDecision {
+	for _, grant := range grants {
+		if grant.IsOneTime() {
+			return DecisionAllowOnce
+		}
+	}
+	return DecisionAllow
 }
 
 func (b *DefaultPermissionBroker) determineForcedApproval(result *PermissionEvaluationResult, request PermissionEvaluationRequest) {
@@ -666,7 +708,7 @@ func (b *DefaultPermissionBroker) isNotTrusted(subject PermissionSubject) bool {
 	checker := b.trustChecker
 	b.mu.RUnlock()
 	if checker == nil {
-		return false
+		return true
 	}
 	return !checker.IsTrusted(subject)
 }

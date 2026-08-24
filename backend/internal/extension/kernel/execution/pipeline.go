@@ -1046,9 +1046,31 @@ func (p *ExecutionPipeline) runApprovalWithReEvaluate(ctx context.Context, tool 
 	switch reEvalResult.Decision {
 	case permission.DecisionAllow:
 		return approvalDecisionApproved
+	case permission.DecisionAllowOnce:
+		if err := consumeAllowOnceGrants(ctx, broker, reEvalResult.MatchedGrants); err != nil {
+			return approvalDecisionError
+		}
+		return approvalDecisionApproved
 	default:
 		return approvalDecisionDenied
 	}
+}
+
+func consumeAllowOnceGrants(ctx context.Context, broker permission.PermissionBroker, grants []permission.PermissionGrant) error {
+	consumed := false
+	for _, grant := range grants {
+		if !grant.IsOneTime() {
+			continue
+		}
+		if err := broker.Revoke(ctx, grant.GrantID); err != nil {
+			return err
+		}
+		consumed = true
+	}
+	if !consumed {
+		return fmt.Errorf("allow_once decision returned without a one-time grant")
+	}
+	return nil
 }
 
 func (p *ExecutionPipeline) createPermissionSnapshot(ctx context.Context, inv capability.ToolInvocationContext, grantedPerms, grantedScopes []string, scopeSnapshotID string) {

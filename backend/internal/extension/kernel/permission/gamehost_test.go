@@ -18,6 +18,7 @@ func TestGameHostPermissionDefinitions_Registered(t *testing.T) {
 		{permission.PermissionGameHostControl, permission.CategoryGameHost, capability.RiskHigh},
 		{permission.PermissionGameHostChannelUse, permission.CategoryGameHost, capability.RiskMedium},
 		{permission.PermissionGameHostAPIInvoke, permission.CategoryGameHost, capability.RiskMedium},
+		{permission.PermissionGameHostArtifactDeploy, permission.CategoryGameHost, capability.RiskHigh},
 	}
 
 	for _, e := range expected {
@@ -76,6 +77,7 @@ func TestGameHostPermissionDefinition_DefaultDeny(t *testing.T) {
 		permission.PermissionGameHostControl,
 		permission.PermissionGameHostChannelUse,
 		permission.PermissionGameHostAPIInvoke,
+		permission.PermissionGameHostArtifactDeploy,
 	}
 	for _, id := range expected {
 		def, ok := registry.Get(id)
@@ -118,6 +120,7 @@ func TestGameHostPermissionDefinition_GameSemanticFree(t *testing.T) {
 		"gamehost.control",
 		"gamehost.channel.use",
 		"gamehost.host_api.invoke",
+		"gamehost.artifact.deploy",
 	}
 	forbiddenSubstrings := []string{"minecraft", "inventory", "attack", "craft", "player", "block", "move", "jump", "keyboard", "mouse", "keypress", "click"}
 	for _, id := range gameSemantics {
@@ -127,8 +130,8 @@ func TestGameHostPermissionDefinition_GameSemanticFree(t *testing.T) {
 			}
 		}
 	}
-	if len(gameSemantics) != 3 {
-		t.Fatalf("expected exactly 3 GameHost permissions, got %d", len(gameSemantics))
+	if len(gameSemantics) != 4 {
+		t.Fatalf("expected exactly 4 GameHost permissions, got %d", len(gameSemantics))
 	}
 }
 
