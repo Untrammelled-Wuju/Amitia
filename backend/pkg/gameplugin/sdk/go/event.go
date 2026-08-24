@@ -7,30 +7,24 @@ import (
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
-const MethodEventPublish = "plugin.event.publish"
+const MethodAgentEventPublish = "plugin.event.publish"
 const PluginAgentEventID = "plugin.agent_event"
 
-type EventPublishInput struct {
-	ChannelID string                     `json:"channelId"`
-	EventID   string                     `json:"eventId"`
-	Payload   json.RawMessage            `json:"payload"`
-	Metadata  map[string]json.RawMessage `json:"metadata,omitempty"`
-}
-
-func (c *Client) PublishEvent(ctx context.Context, input EventPublishInput, opts ...MessageOption) (protocol.Envelope, error) {
-	payload := map[string]any{"channelId": input.ChannelID, "eventId": input.EventID, "payload": input.Payload}
-	if input.Metadata != nil {
-		payload["metadata"] = input.Metadata
-	}
-	return c.sendHostNotification(ctx, MethodEventPublish, payload, opts...)
-}
-
-// PublishAgentEvent publishes a generic plugin-defined event that may wake the
-// bound Agent context. GameHost treats Type and Payload as opaque data.
+// PublishAgentEvent publishes a plugin-defined event as an Agent wake-up hint.
+// This reserved host method is deliberately not a generic event bus. Generic
+// plugin event/state traffic belongs on channels declared in the GameHost
+// manifest and must use ChannelPublish.
 func (c *Client) PublishAgentEvent(ctx context.Context, event protocol.PluginEvent, metadata map[string]json.RawMessage, opts ...MessageOption) (protocol.Envelope, error) {
 	payload, err := json.Marshal(event)
 	if err != nil {
 		return protocol.Envelope{}, err
 	}
-	return c.PublishEvent(ctx, EventPublishInput{ChannelID: event.SessionID, EventID: PluginAgentEventID, Payload: payload, Metadata: metadata}, opts...)
+	envelope := map[string]any{
+		"eventId": PluginAgentEventID,
+		"payload": json.RawMessage(payload),
+	}
+	if metadata != nil {
+		envelope["metadata"] = metadata
+	}
+	return c.sendHostNotification(ctx, MethodAgentEventPublish, envelope, opts...)
 }

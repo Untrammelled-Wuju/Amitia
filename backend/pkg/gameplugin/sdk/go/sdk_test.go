@@ -496,10 +496,7 @@ func TestPermissionSDKUsesReservedHostRPCAndDecodesDetail(t *testing.T) {
 	var result PermissionRequestResult
 	var requestErr error
 	go func() {
-		result, requestErr = client.RequestPermission(ctx, PermissionRequestInput{
-			PermissionID: PermGameHostControl,
-			ServiceID:    "service-1",
-		})
+		result, requestErr = client.RequestPermission(ctx, PermissionRequestInput{PermissionID: PermGameHostControl})
 		close(done)
 	}()
 
@@ -513,6 +510,15 @@ func TestPermissionSDKUsesReservedHostRPCAndDecodesDetail(t *testing.T) {
 	}
 	if messages[0].Method != MethodPermissionRequest {
 		t.Fatalf("permission SDK used method %q, want %q", messages[0].Method, MethodPermissionRequest)
+	}
+	var sentPayload map[string]json.RawMessage
+	if err := json.Unmarshal(messages[0].Payload, &sentPayload); err != nil {
+		t.Fatalf("decode permission request payload: %v", err)
+	}
+	for _, key := range []string{"runtimeId", "pluginId", "serviceId", "generation", "reason"} {
+		if _, exists := sentPayload[key]; exists {
+			t.Fatalf("permission request must not carry host-owned/unused field %q", key)
+		}
 	}
 
 	go func() {

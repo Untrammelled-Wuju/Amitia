@@ -2,13 +2,14 @@ package contracts
 
 import "encoding/json"
 
+// ControlOutputInput is intentionally identity-free. Runtime, plugin, service,
+// and generation are bound by the trusted GameHost connection and must never
+// be supplied by an untrusted plugin payload.
 type ControlOutputInput struct {
-	OutputID  string          `json:"outputId"`
-	SinkID    string          `json:"sinkId"`
-	Epoch     uint64          `json:"epoch"`
-	Kind      string          `json:"kind"`
-	ServiceID string          `json:"serviceId,omitempty"`
-	Payload   json.RawMessage `json:"payload"`
+	OutputID string          `json:"outputId"`
+	SinkID   string          `json:"sinkId"`
+	Epoch    uint64          `json:"epoch"`
+	Payload  json.RawMessage `json:"payload"`
 }
 
 type ControlOutputResult struct {
