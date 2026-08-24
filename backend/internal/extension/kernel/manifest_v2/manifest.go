@@ -756,7 +756,7 @@ func deref[T any](p *T) T {
 }
 
 func validateGamePluginContribution(spec map[string]any, cpath string, moduleIDs map[string]bool, moduleRuntimes map[string]*RuntimeMeta) error {
-	parsed, err := gameprotocol.ParseGamePluginSpec(spec)
+	parsed, err := gameprotocol.ParsePluginHostSpec(spec)
 	if err != nil {
 		return fmt.Errorf("%s.spec: %w", cpath, err)
 	}

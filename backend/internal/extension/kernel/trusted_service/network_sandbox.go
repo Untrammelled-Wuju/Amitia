@@ -3,7 +3,9 @@ package trusted_service
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -63,16 +65,37 @@ func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args [
 	// to host/public interfaces. The child sees only its private namespace.
 	if runtime.GOOS == "linux" {
 		if bwrap, err := exec.LookPath("bwrap"); err == nil {
+			// Do not expose the host filesystem with --ro-bind / /. The network
+			// sandbox is also a confidentiality boundary: give the child a fresh
+			// root and bind only runtime prerequisites plus its owned work/temp
+			// directories. In particular, user home directories are never mounted.
 			wrapped := []string{
 				"--die-with-parent", "--new-session", "--unshare-net",
-				"--ro-bind", "/", "/",
-				"--dev", "/dev", "--proc", "/proc",
+				"--tmpfs", "/", "--dev", "/dev", "--proc", "/proc",
 			}
-			if strings.TrimSpace(workingDir) != "" {
-				wrapped = append(wrapped, "--bind", workingDir, workingDir, "--chdir", workingDir)
+			for _, systemPath := range []string{
+				"/usr", "/bin", "/sbin", "/lib", "/lib64",
+				"/etc/ld.so.cache", "/etc/ld.so.conf", "/etc/ld.so.conf.d",
+				"/etc/ssl", "/etc/ca-certificates", "/etc/localtime",
+			} {
+				if _, statErr := os.Stat(systemPath); statErr == nil {
+					wrapped = append(wrapped, "--ro-bind", systemPath, systemPath)
+				}
 			}
-			if strings.TrimSpace(tempDir) != "" && tempDir != workingDir {
-				wrapped = append(wrapped, "--bind", tempDir, tempDir)
+			work := strings.TrimSpace(workingDir)
+			tmp := strings.TrimSpace(tempDir)
+			if work != "" {
+				wrapped = append(wrapped, "--bind", work, work, "--chdir", work)
+			}
+			if tmp != "" && tmp != work {
+				wrapped = append(wrapped, "--bind", tmp, tmp)
+			}
+			// Executables normally live under work. If a trusted runtime points at
+			// a different path, expose only that executable instead of its parent.
+			if work == "" || !pathWithin(work, executable) {
+				if _, statErr := os.Stat(executable); statErr == nil {
+					wrapped = append(wrapped, "--ro-bind", executable, executable)
+				}
 			}
 			wrapped = append(wrapped, "--", executable)
 			wrapped = append(wrapped, args...)
@@ -93,4 +116,17 @@ func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args [
 	}
 
 	return "", nil, fmt.Errorf("%w on %s for mode %s", ErrNetworkSandboxUnavailable, runtime.GOOS, mode)
+}
+
+func pathWithin(root, candidate string) bool {
+	root = strings.TrimSpace(root)
+	candidate = strings.TrimSpace(candidate)
+	if root == "" || candidate == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
