@@ -138,12 +138,13 @@ func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RP
 		}, nil
 	}
 
-	sinkDesc, sink, found := h.sinkRegistry.ResolveEffect(request.RuntimeID, domain.ServiceID(input.ServiceID), input.SinkID)
+	sinkDesc, sink, found := h.sinkRegistry.ResolveEffect(request.RuntimeID, request.ServiceID, input.SinkID)
 	if !found {
 		result := ControlOutputResult{
-			OutputID: input.OutputID,
-			Allowed:  false,
-			Reason:   "sink_not_found",
+			OutputID:   input.OutputID,
+			Allowed:    false,
+			Reason:     "sink_not_found",
+			Generation: int64(request.Generation),
 		}
 		payload, _ := json.Marshal(result)
 		return rpc.RPCResponse{
@@ -160,7 +161,7 @@ func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RP
 	intent := ControlOutputIntent{
 		OutputID:       input.OutputID,
 		RuntimeID:      request.RuntimeID,
-		ServiceID:      domain.ServiceID(input.ServiceID),
+		ServiceID:      request.ServiceID,
 		AuthorityEpoch: input.Epoch,
 		Kind:           sinkDesc.Kind,
 		Payload:        input.Payload,
@@ -225,16 +226,6 @@ func (h *ControlHandler) handleSinkRegister(ctx context.Context, request rpc.RPC
 			},
 		}, nil
 	}
-	if domain.ServiceID(input.ServiceID) != request.ServiceID {
-		return rpc.RPCResponse{
-			RequestID: request.ID,
-			Error: &rpc.RPCRoutedError{
-				Code:    string(domain.ErrInvalidArgument),
-				Message: "sink service id must match trusted request identity",
-			},
-		}, nil
-	}
-
 	if h.declarationProvider != nil {
 		declared, err := h.declarationProvider.DescriptorControlSinks(string(request.PluginID))
 		if err != nil {
@@ -256,7 +247,7 @@ func (h *ControlHandler) handleSinkRegister(ctx context.Context, request rpc.RPC
 		SinkID:     input.SinkID,
 		RuntimeID:  request.RuntimeID,
 		PluginID:   request.PluginID,
-		ServiceID:  domain.ServiceID(input.ServiceID),
+		ServiceID:  request.ServiceID,
 		Kind:       kind,
 		Generation: uint64(request.Generation),
 		Metadata:   input.Metadata,

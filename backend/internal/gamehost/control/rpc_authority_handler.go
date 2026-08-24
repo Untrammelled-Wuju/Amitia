@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -60,6 +61,56 @@ func (h *AuthorityRPCHandler) RegisterHandlers(registry rpc.HandlerRegistry) err
 	return nil
 }
 
+type authoritySnapshotRPCResult struct {
+	RuntimeID            string    `json:"runtimeId"`
+	PluginID             string    `json:"pluginId"`
+	Mode                 string    `json:"mode"`
+	Epoch                uint64    `json:"epoch"`
+	UpdatedAt            time.Time `json:"updatedAt"`
+	LastTransitionReason string    `json:"lastTransitionReason,omitempty"`
+	LastTransitionActor  string    `json:"lastTransitionActor,omitempty"`
+}
+
+type authorityMutationRPCResult struct {
+	PreviousMode  string                     `json:"previousMode"`
+	NewMode       string                     `json:"newMode"`
+	PreviousEpoch uint64                     `json:"previousEpoch"`
+	NewEpoch      uint64                     `json:"newEpoch"`
+	Snapshot      authoritySnapshotRPCResult `json:"snapshot"`
+}
+
+func newAuthoritySnapshotRPCResult(snapshot ControlAuthoritySnapshot) authoritySnapshotRPCResult {
+	return authoritySnapshotRPCResult{
+		RuntimeID:            string(snapshot.RuntimeID),
+		PluginID:             string(snapshot.PluginID),
+		Mode:                 string(snapshot.Mode),
+		Epoch:                snapshot.Epoch,
+		UpdatedAt:            snapshot.UpdatedAt,
+		LastTransitionReason: string(snapshot.LastTransitionReason),
+		LastTransitionActor:  string(snapshot.LastTransitionActor),
+	}
+}
+
+func newTakeoverRPCResult(result TakeoverResult) authorityMutationRPCResult {
+	return authorityMutationRPCResult{
+		PreviousMode:  string(result.PreviousMode),
+		NewMode:       string(result.NewMode),
+		PreviousEpoch: result.PreviousEpoch,
+		NewEpoch:      result.NewEpoch,
+		Snapshot:      newAuthoritySnapshotRPCResult(result.Snapshot),
+	}
+}
+
+func newReleaseRPCResult(result ReleaseResult) authorityMutationRPCResult {
+	return authorityMutationRPCResult{
+		PreviousMode:  string(result.PreviousMode),
+		NewMode:       string(result.NewMode),
+		PreviousEpoch: result.PreviousEpoch,
+		NewEpoch:      result.NewEpoch,
+		Snapshot:      newAuthoritySnapshotRPCResult(result.Snapshot),
+	}
+}
+
 type authoritySnapshotRPCHandler struct{ parent *AuthorityRPCHandler }
 type authorityTakeoverRPCHandler struct{ parent *AuthorityRPCHandler }
 type authorityReleaseRPCHandler struct{ parent *AuthorityRPCHandler }
@@ -83,7 +134,10 @@ func (h authoritySnapshotRPCHandler) Handle(ctx context.Context, request rpc.RPC
 		return *denied, nil
 	}
 	snapshot, err := h.parent.authority.Get(ctx, request.RuntimeID)
-	return authorityRPCResponse(request.ID, snapshot, err), nil
+	if err != nil {
+		return authorityRPCResponse(request.ID, nil, err), nil
+	}
+	return authorityRPCResponse(request.ID, newAuthoritySnapshotRPCResult(snapshot), nil), nil
 }
 
 func (h authorityTakeoverRPCHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
@@ -97,7 +151,10 @@ func (h authorityTakeoverRPCHandler) Handle(ctx context.Context, request rpc.RPC
 		return invalidAuthorityRPCResponse(request.ID, err), nil
 	}
 	result, err := h.parent.takeover.Takeover(ctx, TakeoverRequest{RuntimeID: request.RuntimeID, PluginID: request.PluginID, Actor: ActorPlugin, ExpectedEpoch: input.ExpectedEpoch})
-	return authorityRPCResponse(request.ID, result, err), nil
+	if err != nil {
+		return authorityRPCResponse(request.ID, nil, err), nil
+	}
+	return authorityRPCResponse(request.ID, newTakeoverRPCResult(result), nil), nil
 }
 
 func (h authorityReleaseRPCHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
@@ -105,14 +162,22 @@ func (h authorityReleaseRPCHandler) Handle(ctx context.Context, request rpc.RPCR
 		return *denied, nil
 	}
 	var input struct {
-		ExpectedEpoch uint64 `json:"expectedEpoch"`
-		TargetMode    string `json:"targetMode"`
+		ExpectedEpoch *uint64 `json:"expectedEpoch"`
+		TargetMode    string  `json:"targetMode"`
 	}
 	if err := json.Unmarshal(request.Payload, &input); err != nil {
 		return invalidAuthorityRPCResponse(request.ID, err), nil
 	}
-	result, err := h.parent.takeover.Release(ctx, ReleaseRequest{RuntimeID: request.RuntimeID, PluginID: request.PluginID, Actor: ActorPlugin, ExpectedEpoch: input.ExpectedEpoch, UseExpected: true, TargetMode: domain.ControlMode(input.TargetMode)})
-	return authorityRPCResponse(request.ID, result, err), nil
+	releaseReq := ReleaseRequest{RuntimeID: request.RuntimeID, PluginID: request.PluginID, Actor: ActorPlugin, TargetMode: domain.ControlMode(input.TargetMode)}
+	if input.ExpectedEpoch != nil {
+		releaseReq.ExpectedEpoch = *input.ExpectedEpoch
+		releaseReq.UseExpected = true
+	}
+	result, err := h.parent.takeover.Release(ctx, releaseReq)
+	if err != nil {
+		return authorityRPCResponse(request.ID, nil, err), nil
+	}
+	return authorityRPCResponse(request.ID, newReleaseRPCResult(result), nil), nil
 }
 
 func (h emergencyStopRPCHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
@@ -148,7 +213,12 @@ func (h emergencyStopRPCHandler) Handle(ctx context.Context, request rpc.RPCRequ
 
 func authorityRPCResponse(requestID string, value interface{}, err error) rpc.RPCResponse {
 	if err != nil {
-		return rpc.RPCResponse{RequestID: requestID, Error: &rpc.RPCRoutedError{Code: string(domain.ErrInvalidState), Message: err.Error()}}
+		code := domain.ErrInvalidState
+		var authorityErr *AuthorityError
+		if errors.As(err, &authorityErr) && authorityErr.Code != "" {
+			code = authorityErr.Code
+		}
+		return rpc.RPCResponse{RequestID: requestID, Error: &rpc.RPCRoutedError{Code: string(code), Message: err.Error()}}
 	}
 	payload, marshalErr := json.Marshal(value)
 	if marshalErr != nil {
