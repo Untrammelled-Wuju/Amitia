@@ -61,12 +61,10 @@ export const ChannelKind = {
   CUSTOM: 'custom' as ChannelKind,
 };
 
-export type ChannelDirection = 'plugin_to_host' | 'host_to_plugin' | 'bidirectional';
+export type ChannelDirection = 'plugin_to_host';
 
 export const ChannelDirection = {
   PLUGIN_TO_HOST: 'plugin_to_host' as ChannelDirection,
-  HOST_TO_PLUGIN: 'host_to_plugin' as ChannelDirection,
-  BIDIRECTIONAL: 'bidirectional' as ChannelDirection,
 };
 
 export type FrequencyHint = 'low' | 'normal' | 'high' | 'realtime';
@@ -94,7 +92,6 @@ export const HostFeature = {
   CUSTOM_RPC: 'custom_rpc',
   HOST_API: 'host_api',
   SHARED_CONTROL: 'shared_control',
-  CUSTOM_UI: 'custom_ui',
   MULTI_SERVICE: 'multi_service',
 } as const;
 

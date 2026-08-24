@@ -6,6 +6,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type PermissionDecisionHostPolicy func(ctx context.Context, subject EffectiveSubject, permID string) (allowed bool, handled bool)
@@ -18,6 +19,7 @@ type EffectivePermissionAdapter struct {
 	broker        Broker
 	policy        PermissionDecisionHostPolicy
 	subjectMapper *GameHostSubjectMapper
+	approvals     *ApprovalCoordinator
 	clock         func() time.Time
 }
 
@@ -46,6 +48,13 @@ func NewEffectivePermissionAdapterWithClock(
 		subjectMapper: mapper,
 		clock:         clock,
 	}
+}
+
+func (a *EffectivePermissionAdapter) SetApprovalCoordinator(coordinator *ApprovalCoordinator) {
+	if a == nil {
+		return
+	}
+	a.approvals = coordinator
 }
 
 func (a *EffectivePermissionAdapter) Check(
@@ -77,23 +86,76 @@ func (a *EffectivePermissionAdapter) Check(
 	}
 
 	kernelSubject := subject.KernelSubject()
-	return a.kernelEvaluate(ctx, kernelSubject, permID)
+	return a.kernelEvaluate(ctx, subject, kernelSubject, permID, permission.PermissionTarget{})
+}
+
+func (a *EffectivePermissionAdapter) CheckTarget(
+	ctx context.Context,
+	subject EffectiveSubject,
+	permID string,
+	target permission.PermissionTarget,
+) DecisionResult {
+	if permID == "" || subject.RuntimeID == "" || subject.PluginID == "" || subject.ExtensionID == "" {
+		return DecisionResult{Decision: DecisionDenied, Reason: ReasonInvalidSubject, Detail: "invalid permission subject or permission id"}
+	}
+	if a.policy != nil {
+		allowed, handled := a.policy(ctx, subject, permID)
+		if handled && !allowed {
+			return DecisionResult{Decision: DecisionDenied, Reason: ReasonPolicyDenied, Detail: "host policy denied"}
+		}
+	}
+	return a.kernelEvaluate(ctx, subject, subject.KernelSubject(), permID, target)
 }
 
 func (a *EffectivePermissionAdapter) kernelEvaluate(
 	ctx context.Context,
+	effectiveSubject EffectiveSubject,
 	kernelSubject permission.PermissionSubject,
 	permID string,
+	target permission.PermissionTarget,
 ) DecisionResult {
-	kernelResult := a.broker.Evaluate(ctx, permission.PermissionEvaluationRequest{
+	return a.kernelEvaluateMode(ctx, effectiveSubject, kernelSubject, permID, target, true)
+}
+
+// kernelEvaluateMode keeps permission inspection side-effect free. Interactive
+// evaluation is reserved for an operation that is actually about to execute;
+// diagnostic/effective-view reads must never create a pending approval request.
+func (a *EffectivePermissionAdapter) kernelEvaluateMode(
+	ctx context.Context,
+	effectiveSubject EffectiveSubject,
+	kernelSubject permission.PermissionSubject,
+	permID string,
+	target permission.PermissionTarget,
+	interactive bool,
+) DecisionResult {
+	scope := permission.ScopeForExtension(effectiveSubject.ExtensionID)
+	if effectiveSubject.ServiceID != "" {
+		scope = permission.PermissionScope{Type: permission.ScopeModule, ID: effectiveSubject.ServiceID}
+	}
+	request := permission.PermissionEvaluationRequest{
 		Subject: kernelSubject,
 		Requirements: []permission.PermissionRequirement{{
 			PermissionID: permID,
+			Scope:        scope,
 		}},
-	})
+		Target: target,
+		ExecutionContext: permission.PermissionExecutionContext{
+			Placement:   permission.ExecutionPlacementLocal,
+			RuntimeID:   runtimeidentity.ParseRuntimeID(effectiveSubject.RuntimeID),
+			ExtensionID: effectiveSubject.ExtensionID,
+			ModuleID:    effectiveSubject.ServiceID,
+			Source:      "gamehost",
+		},
+	}
+	var kernelResult permission.PermissionEvaluationResult
+	if interactive && a.approvals != nil {
+		kernelResult = a.approvals.Evaluate(ctx, effectiveSubject, permID, request)
+	} else {
+		kernelResult = a.broker.Evaluate(ctx, request)
+	}
 
 	switch kernelResult.Decision {
-	case permission.DecisionAllow:
+	case permission.DecisionAllow, permission.DecisionAllowOnce, permission.DecisionAllowSession, permission.DecisionAllowPersistent:
 		return DecisionResult{Decision: DecisionAllowed}
 	case permission.DecisionRequireApproval:
 		return DecisionResult{Decision: DecisionRequireApproval}
@@ -134,6 +196,21 @@ func (a *EffectivePermissionAdapter) CheckServicePermission(
 	return a.Check(ctx, subject, permID)
 }
 
+func (a *EffectivePermissionAdapter) CheckServicePermissionTarget(
+	ctx context.Context,
+	runtimeID string,
+	pluginID string,
+	serviceID string,
+	permID string,
+	target permission.PermissionTarget,
+) DecisionResult {
+	subject, err := a.subjectMapper.MapServiceSubject(runtimeID, pluginID, serviceID)
+	if err != nil {
+		return DecisionResult{Decision: DecisionDenied, Reason: ReasonInvalidSubject, Detail: err.Error()}
+	}
+	return a.CheckTarget(ctx, subject, permID, target)
+}
+
 func (a *EffectivePermissionAdapter) ResolveRuntimePermissions(
 	ctx context.Context,
 	subject EffectiveSubject,
@@ -167,7 +244,7 @@ func (a *EffectivePermissionAdapter) resolvePermissions(
 			continue
 		}
 
-		decision := a.Check(ctx, subject, permID)
+		decision := a.kernelEvaluateMode(ctx, subject, subject.KernelSubject(), permID, permission.PermissionTarget{}, false)
 		view.Checks = append(view.Checks, PermissionCheck{
 			PermissionID: permID,
 			Decision:     decision.Decision,

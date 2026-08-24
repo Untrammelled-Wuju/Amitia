@@ -5,8 +5,7 @@ export const METHOD_CONTROL_REGISTER_SINK = 'control.sink.register';
 export const METHOD_CONTROL_OUTPUT = 'control.output';
 export const METHOD_CONTROL_AUTHORITY_TAKEOVER = 'control.authority.takeover';
 export const METHOD_CONTROL_AUTHORITY_RELEASE = 'control.authority.release';
-export const METHOD_EMERGENCY_STOP_INITIATE = 'emergency.stop.initiate';
-export const METHOD_EMERGENCY_STOP_STATUS = 'emergency.stop.status';
+export const METHOD_EMERGENCY_STOP = 'emergency.stop';
 export const METHOD_CONTROL_SINK_DISPATCH = 'control.sink.dispatch';
 
 export const CONTROL_MODE_OBSERVE = 'observe';
@@ -92,17 +91,21 @@ export interface AuthorityReleaseResult {
   reason?: string;
 }
 
-export interface EmergencyStopStatusInput {
-  operationId?: string;
+export interface EmergencyStopInput {
+  idempotencyKey?: string;
 }
 
-export interface EmergencyStopStatusResult {
+export interface EmergencyStopResult {
   operationId: string;
+  runtimeId: string;
   state: string;
-  active: boolean;
-  reason?: string;
-  initiatedAt?: number;
-  completedAt?: number;
+  actor: string;
+  reason: string;
+  success: boolean;
+  criticalFailure: boolean;
+  residue?: string[];
+  startedAt: string;
+  finishedAt: string;
 }
 
 export interface SinkEffectDispatchPayload {
@@ -166,13 +169,13 @@ export async function releaseAuthority(
   return envelope.payload as AuthorityReleaseResult;
 }
 
-export async function getEmergencyStopStatus(
+export async function emergencyStop(
   client: Client,
-  input: EmergencyStopStatusInput = {},
+  input: EmergencyStopInput = {},
   opts: MessageOption[] = []
-): Promise<EmergencyStopStatusResult> {
-  const envelope = await client.sendReservedRequest(METHOD_EMERGENCY_STOP_STATUS, input, ...opts);
-  return envelope.payload as EmergencyStopStatusResult;
+): Promise<EmergencyStopResult> {
+  const envelope = await client.sendReservedRequest(METHOD_EMERGENCY_STOP, input, ...opts);
+  return envelope.payload as EmergencyStopResult;
 }
 
 export interface SinkEffectCommitResult {

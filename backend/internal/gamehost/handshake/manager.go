@@ -21,8 +21,7 @@ type HandshakeManager struct {
 	runtimeValidator     RuntimeValidator
 	descriptorProvider   DescriptorProvider
 
-	timeout  int64
-	hostCaps []domain.Capability
+	timeout int64
 
 	allowlist []string
 }
@@ -51,7 +50,6 @@ func NewHandshakeManager(config HandshakeManagerConfig) *HandshakeManager {
 		channelAdvertiser:    config.ChannelAdvertiser,
 		runtimeValidator:     config.RuntimeValidator,
 		descriptorProvider:   config.DescriptorProvider,
-		hostCaps:             config.HostCapabilities,
 		allowlist:            append([]string{HelloMethod, "control.request.cancel"}, config.PreReadyAllowlist...),
 	}
 }
@@ -88,6 +86,18 @@ func (m *HandshakeManager) GetSnapshot(id string) *HandshakeSnapshot {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.snapshots[id]
+}
+
+// HasNegotiatedCapability reports whether a ready connection negotiated the
+// requested GameHost v1 feature. Runtime handlers use this as the execution
+// gate so a package declaration alone cannot activate a feature that the
+// concrete service connection did not advertise during handshake.
+func (m *HandshakeManager) HasNegotiatedCapability(connectionID string, feature domain.Capability) bool {
+	if m == nil || connectionID == "" {
+		return false
+	}
+	snapshot := m.GetSnapshot(connectionID)
+	return snapshot != nil && snapshot.HasCapability(feature)
 }
 
 func (m *HandshakeManager) IsReady(id string) bool {
@@ -217,6 +227,10 @@ func (m *HandshakeManager) process(
 		}
 	}
 
+	if err := validateNegotiatedChannelFeatures(m.descriptorProvider, string(peer.PluginID), string(peer.ServiceID), hello.Channels, negotiatedCaps); err != nil {
+		return nil, err
+	}
+
 	if m.channelAdvertiser != nil {
 		if err := m.channelAdvertiser.ValidateChannelAdvertisement(string(peer.PluginID), string(peer.ServiceID), hello.Channels); err != nil {
 			return nil, err
@@ -242,6 +256,45 @@ func (m *HandshakeManager) process(
 		RPCNamespaces: ns,
 		Channels:      channelIDs,
 	}, nil
+}
+
+func validateNegotiatedChannelFeatures(provider DescriptorProvider, pluginID, serviceID string, advertised []ChannelAdvertisement, negotiated []domain.Capability) error {
+	if len(advertised) == 0 {
+		return nil
+	}
+	if provider == nil {
+		return NewHandshakeError(HandshakeErrorCapabilityMismatch, domain.ErrPermissionDenied, "channel feature validation requires a plugin descriptor")
+	}
+	declared, err := provider.DescriptorChannelDescriptors(pluginID, serviceID)
+	if err != nil {
+		return NewHandshakeError(HandshakeErrorCapabilityMismatch, domain.ErrPermissionDenied, "failed to resolve declared channel features")
+	}
+	byID := make(map[string]domain.ChannelKind, len(declared))
+	for _, ch := range declared {
+		byID[string(ch.ID)] = ch.Kind
+	}
+	negotiatedSet := make(map[domain.Capability]struct{}, len(negotiated))
+	for _, feature := range negotiated {
+		negotiatedSet[feature] = struct{}{}
+	}
+	for _, ad := range advertised {
+		kind, ok := byID[ad.ID]
+		if !ok {
+			continue // declaration membership is rejected by ChannelAdvertiser below
+		}
+		required := domain.CapabilityEventStreaming
+		if kind == domain.ChannelKindState {
+			required = domain.CapabilityStateStreaming
+		}
+		if _, ok := negotiatedSet[required]; !ok {
+			return NewHandshakeError(
+				HandshakeErrorCapabilityMismatch,
+				domain.ErrPermissionDenied,
+				"channel "+ad.ID+" requires negotiated capability "+string(required),
+			)
+		}
+	}
+	return nil
 }
 
 func (m *HandshakeManager) preValidate(peer ipc.Peer, hello *HelloRequest) error {
@@ -318,10 +371,6 @@ func (m *HandshakeManager) commit(connID string, state *stateCell, snap *Handsha
 		delete(m.snapshots, connID)
 		m.mu.Unlock()
 	}
-}
-
-func (m *HandshakeManager) SetHostCapabilities(caps []domain.Capability) {
-	m.hostCaps = append([]domain.Capability(nil), caps...)
 }
 
 func (m *HandshakeManager) descriptorCaps(pluginID domain.PluginID) []domain.Capability {

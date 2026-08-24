@@ -174,7 +174,7 @@ func TestChannelSchemaConformance(t *testing.T) {
 func TestCapabilityConformance(t *testing.T) {
 	caps := []string{
 		"realtime_control", "state_streaming", "event_streaming",
-		"custom_rpc", "host_api", "shared_control", "custom_ui", "multi_service",
+		"custom_rpc", "host_api", "shared_control", "multi_service",
 	}
 
 	validator := CapabilityValidator{}

@@ -167,6 +167,9 @@ func validateStrictProductionOptions(opts GameHostComposeOptions) error {
 	if opts.PermissionBroker == nil && opts.EffectivePermission == nil {
 		missing = append(missing, "PermissionBroker/EffectivePermission")
 	}
+	if opts.KernelPermissionBroker == nil {
+		missing = append(missing, "KernelPermissionBroker")
+	}
 	if len(missing) > 0 {
 		return fmt.Errorf("gamehost: strict production composition missing: %s", strings.Join(missing, ", "))
 	}
@@ -316,7 +319,19 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		opts.EffectivePermission = permission.NewEffectivePermissionAdapter(opts.PermissionBroker, nil, subjectMapper)
 	}
 
+	var permissionApprovals *permission.ApprovalCoordinator
+	if opts.KernelPermissionBroker != nil {
+		permissionApprovals, err = permission.NewApprovalCoordinator(opts.KernelPermissionBroker)
+		if err != nil {
+			return nil, fmt.Errorf("compose gamehost permission approval coordinator: %w", err)
+		}
+		if opts.EffectivePermission != nil {
+			opts.EffectivePermission.SetApprovalCoordinator(permissionApprovals)
+		}
+	}
+
 	permChecker := integration.NewControlPermissionAdapter(opts.EffectivePermission)
+	channelNotificationSink.SetPermissionChecker(opts.EffectivePermission)
 
 	if artifactManager != nil && opts.EffectivePermission != nil {
 		artifactRPC, err := artifact.NewArtifactRPCHandler(artifactManager, pluginReg, opts.EffectivePermission)
@@ -348,14 +363,21 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		return nil, fmt.Errorf("compose plugin output gate: %w", err)
 	}
 
-	takeoverService := control.NewTakeoverService(control.TakeoverServiceOptions{
-		Manager: controlManager,
-		Audit:   auditSink,
+	takeoverService, err := control.NewTakeoverService(control.TakeoverServiceOptions{
+		Manager:       controlManager,
+		RuntimeReader: runtimeAdapter,
+		PermChecker:   permChecker,
+		PolicyChecker: hostPolicyAdapter,
+		Audit:         auditSink,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("compose takeover service: %w", err)
+	}
 
 	effectSinkFactory := integration.NewProtocolControlEffectSinkFactory(connReg, controlPlane)
 	controlHandler := control.NewControlHandlerWithEffectFactory(pluginOutputGate, controlSinkRegistry, effectSinkFactory.CreateSink)
 	controlHandler.SetSinkDeclarationProvider(pluginReg)
+	controlHandler.SetNegotiatedFeatureChecker(handshakeMgr)
 	if err := controlHandler.RegisterHandlers(hostHandlers); err != nil {
 		return nil, fmt.Errorf("register control RPC handlers: %w", err)
 	}
@@ -386,11 +408,16 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			return nil, fmt.Errorf("compose runtime graph provisioner: %w", err)
 		}
 
+		serviceStartPermission, permissionErr := integration.NewServiceStartPermissionAdapter(opts.EffectivePermission)
+		if permissionErr != nil {
+			return nil, fmt.Errorf("compose service start permission: %w", permissionErr)
+		}
 		serviceExecutor, err = runtime.NewServiceExecutor(
 			procAdapter,
 			runtime.NewUnavailableExternalServiceAdapter(),
 			topologyStore,
 			topologyStore,
+			serviceStartPermission,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("compose service executor: %w", err)
@@ -517,7 +544,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("compose emergency stop service: %w", err)
 	}
-	if err := control.NewAuthorityRPCHandler(controlManager, takeoverService, emergencyStopService).RegisterHandlers(hostHandlers); err != nil {
+	authorityRPCHandler := control.NewAuthorityRPCHandler(controlManager, takeoverService, emergencyStopService)
+	authorityRPCHandler.SetNegotiatedFeatureChecker(handshakeMgr)
+	if err := authorityRPCHandler.RegisterHandlers(hostHandlers); err != nil {
 		return nil, fmt.Errorf("register authority RPC handlers: %w", err)
 	}
 
@@ -850,9 +879,10 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		HostAPIGateway:           opts.HostAPIGateway,
 		HostAPIInvocationTracker: emergencyHostAPITracker,
 
-		ResourceAdapter:   resourceAdapter,
-		ResourceViewer:    resourceViewer,
-		ResourceLifecycle: resourceLifecycle,
+		ResourceAdapter:     resourceAdapter,
+		ResourceViewer:      resourceViewer,
+		ResourceLifecycle:   resourceLifecycle,
+		PermissionApprovals: permissionApprovals,
 
 		AuthorityManager:     controlManager,
 		OutputGate:           pluginOutputGate,
@@ -998,6 +1028,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			ConnectionRegistry: readyGate,
 			InvocationTracker:  emergencyHostAPITracker,
 			PermissionChecker:  opts.EffectivePermission,
+			FeatureChecker:     handshakeMgr,
 		})
 		if err != nil {
 			return nil, err

@@ -7,6 +7,15 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
+func mustNewTakeoverService(t *testing.T, opts TakeoverServiceOptions) *TakeoverService {
+	t.Helper()
+	svc, err := NewTakeoverService(opts)
+	if err != nil {
+		t.Fatalf("NewTakeoverService failed: %v", err)
+	}
+	return svc
+}
+
 func setupTakeoverService(t *testing.T) (*TakeoverService, *ControlAuthorityManager, *FakeRuntimeReader, *InMemoryAuthorityAuditSink) {
 	t.Helper()
 	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
@@ -15,7 +24,7 @@ func setupTakeoverService(t *testing.T) (*TakeoverService, *ControlAuthorityMana
 	policyChecker := NoopHostPolicyChecker{}
 	audit := NewInMemoryAuthorityAuditSink()
 
-	svc := NewTakeoverService(TakeoverServiceOptions{
+	svc := mustNewTakeoverService(t, TakeoverServiceOptions{
 		Manager:       mgr,
 		RuntimeReader: rtReader,
 		PermChecker:   permChecker,

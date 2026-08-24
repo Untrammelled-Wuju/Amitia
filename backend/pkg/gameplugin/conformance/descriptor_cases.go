@@ -99,7 +99,7 @@ func ChannelSchemaCases() []Case {
 		))
 	}
 
-	directions := []string{"plugin_to_host", "host_to_plugin", "bidirectional"}
+	directions := []string{"plugin_to_host"}
 	for _, d := range directions {
 		data := []byte(`{"id":"ch-1","kind":"event","direction":"` + d + `"}`)
 		cases = append(cases, NewCase(
@@ -177,7 +177,6 @@ func CapabilityCases() []Case {
 		protocol.CapabilityCustomRPC,
 		protocol.CapabilityHostAPI,
 		protocol.CapabilitySharedControl,
-		protocol.CapabilityCustomUI,
 		protocol.CapabilityMultiService,
 	}
 	for _, cap := range knownCaps {

@@ -150,7 +150,11 @@
           },
           "type": {
             "type": "string",
-            "minLength": 1
+            "enum": [
+              "file",
+              "directory",
+              "zip"
+            ]
           },
           "platforms": {
             "type": "array",

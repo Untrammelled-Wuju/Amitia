@@ -75,6 +75,7 @@ func (m *Mapper) mapOne(pluginID domain.PluginID, runtimeID domain.RuntimeInstan
 		ServiceID: serviceID,
 		ChannelID: channelID,
 		Kind:      domain.ChannelKind(desc.Kind),
+		SchemaID:  desc.SchemaID,
 		Direction: desc.Direction,
 		Frequency: freq,
 		Metadata:  metadata,

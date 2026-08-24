@@ -15,7 +15,6 @@ const (
 	CapabilityCustomRPC       = HostFeatureCustomRPC
 	CapabilityHostAPI         = HostFeatureHostAPI
 	CapabilitySharedControl   = HostFeatureSharedControl
-	CapabilityCustomUI        = HostFeatureCustomUI
 	CapabilityMultiService    = HostFeatureMultiService
 )
 

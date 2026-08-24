@@ -251,24 +251,13 @@ func TestRegistry_pluginToHost_Direction_PublishAllowed(t *testing.T) {
 	}
 }
 
-func TestRegistry_hostToPlugin_Direction_PublishRejected(t *testing.T) {
-	ch := sampleChannel()
-	ch.Direction = protocol.ChannelDirectionHostToPlugin
-
-	if err := ValidateDirection(ch, protocol.ChannelDirectionPluginToHost); err == nil {
-		t.Fatal("expected direction rejection for host_to_plugin channel with plugin_to_host flow")
-	}
-}
-
-func TestRegistry_bidirectional_Direction_BothDirectionsAllowed(t *testing.T) {
-	ch := sampleChannel()
-	ch.Direction = protocol.ChannelDirectionBidirectional
-
-	if err := ValidateDirection(ch, protocol.ChannelDirectionPluginToHost); err != nil {
-		t.Fatalf("bidirectional should allow plugin_to_host: %v", err)
-	}
-	if err := ValidateDirection(ch, protocol.ChannelDirectionHostToPlugin); err != nil {
-		t.Fatalf("bidirectional should allow host_to_plugin: %v", err)
+func TestRegistry_V1RejectsLegacyOutboundDirections(t *testing.T) {
+	for _, direction := range []protocol.ChannelDirection{"host_to_plugin", "bidirectional"} {
+		ch := sampleChannel()
+		ch.Direction = direction
+		if err := ValidateDirection(ch, protocol.ChannelDirectionPluginToHost); err == nil {
+			t.Fatalf("expected v1 direction rejection for %q", direction)
+		}
 	}
 }
 

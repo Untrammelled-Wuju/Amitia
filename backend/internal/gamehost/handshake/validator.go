@@ -10,6 +10,7 @@ type RuntimeValidator interface {
 type DescriptorProvider interface {
 	DescriptorCapabilities(pluginID string) ([]string, error)
 	DescriptorChannels(pluginID, serviceID string) ([]string, error)
+	DescriptorChannelDescriptors(pluginID, serviceID string) ([]domain.ChannelDescriptor, error)
 	DescriptorControlSinks(pluginID string) ([]domain.ControlSinkDeclaration, error)
 	HasCapability(pluginID, capability string) bool
 }

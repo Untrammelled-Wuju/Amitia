@@ -159,16 +159,32 @@ func (a *RuntimeAdapter) resolvePeer(ctx context.Context, binding capability.Run
 		return ipc.Peer{}, err
 	}
 	serviceID := metadataString(binding.Metadata, "serviceId")
-	if serviceID == "" {
-		for _, svc := range snapshot.Services {
-			if svc.ServiceKind == ghdomain.ServiceKindProcess {
-				serviceID = string(svc.ServiceID)
-				break
-			}
+	processServices := make([]ghdomain.ServiceID, 0, len(snapshot.Services))
+	for _, svc := range snapshot.Services {
+		if svc.ServiceKind == ghdomain.ServiceKindProcess {
+			processServices = append(processServices, svc.ServiceID)
 		}
 	}
 	if serviceID == "" {
-		return ipc.Peer{}, fmt.Errorf("no executable plugin service is available")
+		switch len(processServices) {
+		case 0:
+			return ipc.Peer{}, fmt.Errorf("no executable plugin service is available")
+		case 1:
+			serviceID = string(processServices[0])
+		default:
+			return ipc.Peer{}, fmt.Errorf("runtime binding must declare metadata.serviceId when plugin has multiple executable services")
+		}
+	} else {
+		found := false
+		for _, candidate := range processServices {
+			if string(candidate) == serviceID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ipc.Peer{}, fmt.Errorf("runtime binding service %q is not an executable service of runtime %s", serviceID, runtimeID)
+		}
 	}
 	generation, err := a.runtimes.GetCurrentGeneration(runtimeID)
 	if err != nil {

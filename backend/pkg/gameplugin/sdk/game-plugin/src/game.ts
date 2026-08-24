@@ -48,7 +48,7 @@ export interface PluginOperationResult {
 
 export interface PluginArtifact {
   id: string;
-  type: string;
+  type: 'file' | 'directory' | 'zip';
   platforms?: string[];
   architectures?: string[];
   compatibilityVersions?: string[];

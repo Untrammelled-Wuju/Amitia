@@ -32,7 +32,6 @@ const (
 	HostFeatureCustomRPC       HostFeature = "custom_rpc"
 	HostFeatureHostAPI         HostFeature = "host_api"
 	HostFeatureSharedControl   HostFeature = "shared_control"
-	HostFeatureCustomUI        HostFeature = "custom_ui"
 	HostFeatureMultiService    HostFeature = "multi_service"
 )
 
@@ -43,7 +42,6 @@ const (
 	CapabilityCustomRPC       Capability = "custom_rpc"
 	CapabilityHostAPI         Capability = "host_api"
 	CapabilitySharedControl   Capability = "shared_control"
-	CapabilityCustomUI        Capability = "custom_ui"
 	CapabilityMultiService    Capability = "multi_service"
 )
 
@@ -59,7 +57,6 @@ var knownHostFeatures = map[HostFeature]struct{}{
 	HostFeatureCustomRPC:       {},
 	HostFeatureHostAPI:         {},
 	HostFeatureSharedControl:   {},
-	HostFeatureCustomUI:        {},
 	HostFeatureMultiService:    {},
 }
 

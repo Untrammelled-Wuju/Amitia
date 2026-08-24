@@ -53,7 +53,7 @@ func TestRelease_UserToPlugin(t *testing.T) {
 	policyChecker := NoopHostPolicyChecker{}
 	audit := NewInMemoryAuthorityAuditSink()
 
-	svc := NewTakeoverService(TakeoverServiceOptions{
+	svc := mustNewTakeoverService(t, TakeoverServiceOptions{
 		Manager:       mgr,
 		RuntimeReader: rtReader,
 		PermChecker:   permChecker,
@@ -103,7 +103,7 @@ func TestRelease_UserToShared(t *testing.T) {
 	policyChecker := NoopHostPolicyChecker{}
 	audit := NewInMemoryAuthorityAuditSink()
 
-	svc := NewTakeoverService(TakeoverServiceOptions{
+	svc := mustNewTakeoverService(t, TakeoverServiceOptions{
 		Manager:       mgr,
 		RuntimeReader: rtReader,
 		PermChecker:   permChecker,
@@ -153,7 +153,7 @@ func TestRelease_UserToAssist(t *testing.T) {
 	policyChecker := NoopHostPolicyChecker{}
 	audit := NewInMemoryAuthorityAuditSink()
 
-	svc := NewTakeoverService(TakeoverServiceOptions{
+	svc := mustNewTakeoverService(t, TakeoverServiceOptions{
 		Manager:       mgr,
 		RuntimeReader: rtReader,
 		PermChecker:   permChecker,
@@ -203,7 +203,7 @@ func TestRelease_PermissionRevoked(t *testing.T) {
 	policyChecker := NoopHostPolicyChecker{}
 	audit := NewInMemoryAuthorityAuditSink()
 
-	svc := NewTakeoverService(TakeoverServiceOptions{
+	svc := mustNewTakeoverService(t, TakeoverServiceOptions{
 		Manager:       mgr,
 		RuntimeReader: rtReader,
 		PermChecker:   permChecker,
@@ -260,7 +260,7 @@ func TestRelease_PermissionRevokedObserveAllowed(t *testing.T) {
 	policyChecker := NoopHostPolicyChecker{}
 	audit := NewInMemoryAuthorityAuditSink()
 
-	svc := NewTakeoverService(TakeoverServiceOptions{
+	svc := mustNewTakeoverService(t, TakeoverServiceOptions{
 		Manager:       mgr,
 		RuntimeReader: rtReader,
 		PermChecker:   permChecker,
@@ -311,7 +311,7 @@ func TestRelease_HostPolicyDenied(t *testing.T) {
 	policyChecker := AlwaysDenyHostPolicyChecker{}
 	audit := NewInMemoryAuthorityAuditSink()
 
-	svc := NewTakeoverService(TakeoverServiceOptions{
+	svc := mustNewTakeoverService(t, TakeoverServiceOptions{
 		Manager:       mgr,
 		RuntimeReader: rtReader,
 		PermChecker:   permChecker,
@@ -393,7 +393,7 @@ func TestRelease_RuntimeNotReady(t *testing.T) {
 	policyChecker := NoopHostPolicyChecker{}
 	audit := NewInMemoryAuthorityAuditSink()
 
-	svc := NewTakeoverService(TakeoverServiceOptions{
+	svc := mustNewTakeoverService(t, TakeoverServiceOptions{
 		Manager:       mgr,
 		RuntimeReader: rtReader,
 		PermChecker:   permChecker,
@@ -522,8 +522,8 @@ func TestRelease_DefaultTargetIsObserve(t *testing.T) {
 	}
 
 	result, err := svc.Release(ctx, ReleaseRequest{
-		RuntimeID: runtimeID,
-		PluginID:  pluginID,
+		RuntimeID:  runtimeID,
+		PluginID:   pluginID,
 		TargetMode: "",
 		Actor:      ActorUser,
 	})

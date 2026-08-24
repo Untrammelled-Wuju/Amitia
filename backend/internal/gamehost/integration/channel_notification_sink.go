@@ -5,23 +5,30 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
+	ghpermission "github.com/u-ai/backend/internal/gamehost/permission"
 	"github.com/u-ai/backend/internal/gamehost/resource"
 )
 
 const channelPublishMethod = "channel.publish"
 
 type ChannelNotificationSink struct {
-	router     *channel.Router
-	admission  *resource.ResourceAdmissionAdapter
-	generation RuntimeGenerationReader
+	router      *channel.Router
+	admission   *resource.ResourceAdmissionAdapter
+	generation  RuntimeGenerationReader
+	permissions ChannelPermissionChecker
 }
 
 type RuntimeGenerationReader interface {
 	GetCurrentGeneration(runtimeID domain.RuntimeInstanceID) (int64, error)
+}
+
+type ChannelPermissionChecker interface {
+	CheckServicePermission(ctx context.Context, runtimeID, pluginID, serviceID, permID string) ghpermission.DecisionResult
 }
 
 func NewChannelNotificationSink(router *channel.Router) *ChannelNotificationSink {
@@ -34,6 +41,13 @@ func (s *ChannelNotificationSink) SetResourceAdmission(admission *resource.Resou
 	}
 	s.admission = admission
 	s.generation = generation
+}
+
+func (s *ChannelNotificationSink) SetPermissionChecker(checker ChannelPermissionChecker) {
+	if s == nil {
+		return
+	}
+	s.permissions = checker
 }
 
 type channelPublishPayload struct {
@@ -55,6 +69,23 @@ func (s *ChannelNotificationSink) Publish(ctx context.Context, n notification.No
 	}
 	if payload.ChannelID == "" {
 		return domain.NewHostError(domain.ErrInvalidArgument, "channel.publish: channelId is required")
+	}
+	if s.permissions == nil {
+		return domain.NewHostError(domain.ErrPermissionDenied, "channel.publish: permission checker unavailable")
+	}
+	permissionResult := s.permissions.CheckServicePermission(
+		ctx,
+		string(n.RuntimeID),
+		string(n.PluginID),
+		string(n.ServiceID),
+		permission.PermissionGameHostChannelUse,
+	)
+	if !permissionResult.Allowed() {
+		message := "channel.publish: permission denied"
+		if permissionResult.Decision == ghpermission.DecisionRequireApproval {
+			message = "channel.publish: approval required"
+		}
+		return domain.NewHostError(domain.ErrPermissionDenied, message)
 	}
 	if s.admission != nil {
 		if s.generation == nil {

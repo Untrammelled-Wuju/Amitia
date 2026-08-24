@@ -20,9 +20,10 @@ const (
 )
 
 const (
+	// Protocol v1 channels are intentionally one-way: plugin -> host. Host ->
+	// plugin delivery uses ordinary RPC until a future protocol major defines
+	// a real outbound/bidirectional channel transport.
 	ChannelDirectionPluginToHost ChannelDirection = "plugin_to_host"
-	ChannelDirectionHostToPlugin ChannelDirection = "host_to_plugin"
-	ChannelDirectionBidirectional ChannelDirection = "bidirectional"
 )
 
 const (
@@ -74,12 +75,10 @@ func ValidateChannelDirection(dir ChannelDirection) error {
 	if dir == "" {
 		return nil
 	}
-	switch dir {
-	case ChannelDirectionPluginToHost, ChannelDirectionHostToPlugin, ChannelDirectionBidirectional:
+	if dir == ChannelDirectionPluginToHost {
 		return nil
-	default:
-		return fmt.Errorf("invalid channel direction: %s", dir)
 	}
+	return fmt.Errorf("invalid channel direction %q: amitia-game-host/1 supports plugin_to_host only", dir)
 }
 
 func ValidateFrequencyHint(hint FrequencyHint) error {

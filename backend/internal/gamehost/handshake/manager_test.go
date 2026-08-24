@@ -42,8 +42,9 @@ func (f *fakeRuntimeValidator) ServiceBelongsToRuntime(runtimeID, serviceID, plu
 }
 
 type fakeDescriptorProvider struct {
-	caps map[string][]string
-	chs  map[string][]string
+	caps               map[string][]string
+	chs                map[string][]string
+	channelDescriptors map[string][]domain.ChannelDescriptor
 }
 
 func newFakeDescriptorProvider() *fakeDescriptorProvider {
@@ -55,6 +56,12 @@ func newFakeDescriptorProvider() *fakeDescriptorProvider {
 		chs: map[string][]string{
 			"plugin-1": {"events", "state"},
 		},
+		channelDescriptors: map[string][]domain.ChannelDescriptor{
+			"plugin-1": {
+				{ID: "events", ServiceID: "service-a", Kind: domain.ChannelKindEvent},
+				{ID: "state", ServiceID: "service-a", Kind: domain.ChannelKindState},
+			},
+		},
 	}
 }
 
@@ -65,6 +72,16 @@ func (f *fakeDescriptorProvider) DescriptorCapabilities(pluginID string) ([]stri
 func (f *fakeDescriptorProvider) DescriptorChannels(pluginID, serviceID string) ([]string, error) {
 	_ = serviceID
 	return f.chs[pluginID], nil
+}
+
+func (f *fakeDescriptorProvider) DescriptorChannelDescriptors(pluginID, serviceID string) ([]domain.ChannelDescriptor, error) {
+	out := make([]domain.ChannelDescriptor, 0)
+	for _, ch := range f.channelDescriptors[pluginID] {
+		if serviceID == "" || string(ch.ServiceID) == serviceID {
+			out = append(out, ch)
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeDescriptorProvider) DescriptorControlSinks(pluginID string) ([]domain.ControlSinkDeclaration, error) {

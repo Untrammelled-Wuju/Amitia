@@ -86,7 +86,6 @@ const (
 	HostFeatureCustomRPC       HostFeature = "custom_rpc"
 	HostFeatureHostAPI         HostFeature = "host_api"
 	HostFeatureSharedControl   HostFeature = "shared_control"
-	HostFeatureCustomUI        HostFeature = "custom_ui"
 	HostFeatureMultiService    HostFeature = "multi_service"
 )
 
@@ -97,7 +96,6 @@ var knownHostFeatures = map[HostFeature]struct{}{
 	HostFeatureCustomRPC:       {},
 	HostFeatureHostAPI:         {},
 	HostFeatureSharedControl:   {},
-	HostFeatureCustomUI:        {},
 	HostFeatureMultiService:    {},
 }
 
@@ -105,6 +103,12 @@ func IsKnownHostFeature(feature HostFeature) bool {
 	_, ok := knownHostFeatures[feature]
 	return ok
 }
+
+const (
+	PluginArtifactTypeFile      = "file"
+	PluginArtifactTypeDirectory = "directory"
+	PluginArtifactTypeZIP       = "zip"
+)
 
 type PluginArtifact struct {
 	ID                    string   `json:"id"`
@@ -266,7 +270,14 @@ func (s PluginHostSpec) Validate() error {
 			}
 		}
 		switch kind {
-		case "event", "state", "log", "metric", "custom":
+		case "state":
+			if _, ok := seenFeatures[HostFeatureStateStreaming]; !ok {
+				return fmt.Errorf("state channel %q requires hostFeatures to include %q", id, HostFeatureStateStreaming)
+			}
+		case "event", "log", "metric", "custom":
+			if _, ok := seenFeatures[HostFeatureEventStreaming]; !ok {
+				return fmt.Errorf("%s channel %q requires hostFeatures to include %q", kind, id, HostFeatureEventStreaming)
+			}
 		default:
 			return fmt.Errorf("channels[%d] unsupported kind %q", i, kind)
 		}
@@ -274,6 +285,12 @@ func (s PluginHostSpec) Validate() error {
 			return fmt.Errorf("duplicate channel id %q", id)
 		}
 		seenChannels[id] = struct{}{}
+	}
+
+	if len(s.ControlEffectSinks) > 0 {
+		if _, ok := seenFeatures[HostFeatureRealtimeControl]; !ok {
+			return fmt.Errorf("controlEffectSinks require hostFeatures to include %q", HostFeatureRealtimeControl)
+		}
 	}
 
 	seenSinks := make(map[string]struct{}, len(s.ControlEffectSinks))
@@ -310,8 +327,14 @@ func (s PluginHostSpec) Validate() error {
 	for _, artifact := range s.Artifacts {
 		id := strings.TrimSpace(artifact.ID)
 		target := strings.TrimSpace(artifact.Target)
-		if id == "" || strings.TrimSpace(artifact.Type) == "" || strings.TrimSpace(artifact.Source) == "" || target == "" {
+		artifactType := strings.ToLower(strings.TrimSpace(artifact.Type))
+		if id == "" || artifactType == "" || strings.TrimSpace(artifact.Source) == "" || target == "" {
 			return fmt.Errorf("artifact id, type, source and target are required")
+		}
+		switch artifactType {
+		case PluginArtifactTypeFile, PluginArtifactTypeDirectory, PluginArtifactTypeZIP:
+		default:
+			return fmt.Errorf("artifact %q has unsupported type %q; protocol v1 supports file, directory and zip", id, artifact.Type)
 		}
 		if _, exists := seenArtifacts[id]; exists {
 			return fmt.Errorf("duplicate artifact id %q", id)

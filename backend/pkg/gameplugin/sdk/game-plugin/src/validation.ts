@@ -96,7 +96,7 @@ export function validateChannel(channel: ChannelDescriptor): string[] {
     errors.push(`channel '${channel.id}': invalid kind '${channel.kind}'`);
   }
 
-  const validDirections = ['plugin_to_host', 'host_to_plugin', 'bidirectional'];
+  const validDirections = ['plugin_to_host'];
   if (channel.direction && !validDirections.includes(channel.direction)) {
     errors.push(`channel '${channel.id}': invalid direction '${channel.direction}'`);
   }
