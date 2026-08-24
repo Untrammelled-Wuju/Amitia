@@ -25,8 +25,6 @@ func (h *hostInvokeHandler) Handle(ctx context.Context, req rpc.RPCRequest) (rpc
 		Method    string          `json:"method"`
 		Version   int             `json:"version,omitempty"`
 		Input     json.RawMessage `json:"input"`
-		SideEffect string         `json:"sideEffect,omitempty"`
-		RequestID string          `json:"requestId,omitempty"`
 		TimeoutMs int             `json:"timeoutMs,omitempty"`
 	}
 	if err := json.Unmarshal(req.Payload, &invokeInput); err != nil {
@@ -67,7 +65,9 @@ func (h *hostInvokeHandler) Handle(ctx context.Context, req rpc.RPCRequest) (rpc
 		callReq.Deadline = time.Now().Add(time.Duration(invokeInput.TimeoutMs) * time.Millisecond)
 	}
 
+	startedAt := time.Now()
 	resp, err := h.adapter.Call(ctx, callReq)
+	durationMs := time.Since(startedAt).Milliseconds()
 	if err != nil {
 		return rpc.RPCResponse{
 			RequestID: req.ID,
@@ -78,19 +78,21 @@ func (h *hostInvokeHandler) Handle(ctx context.Context, req rpc.RPCRequest) (rpc
 		}, nil
 	}
 
-	output := normalizeResult(resp.Output)
-
-	var statusResult map[string]any
-	if err := json.Unmarshal(output, &statusResult); err != nil {
-		statusResult = map[string]any{"status": resp.Status, "output": json.RawMessage(output)}
+	result := struct {
+		Status     string          `json:"status"`
+		Output     json.RawMessage `json:"output"`
+		Method     string          `json:"method"`
+		DurationMs int64           `json:"durationMs"`
+	}{
+		Status:     resp.Status,
+		Output:     normalizeResult(resp.Output),
+		Method:     invokeInput.Method,
+		DurationMs: durationMs,
 	}
-	if _, hasStatus := statusResult["status"]; !hasStatus {
-		statusResult["status"] = resp.Status
+	resultPayload, marshalErr := json.Marshal(result)
+	if marshalErr != nil {
+		return rpc.RPCResponse{RequestID: req.ID, Error: &rpc.RPCRoutedError{Code: CodeInternal, Message: marshalErr.Error()}}, nil
 	}
-	resultPayload, _ := json.Marshal(statusResult)
 
-	return rpc.RPCResponse{
-		RequestID: req.ID,
-		Payload:   resultPayload,
-	}, nil
+	return rpc.RPCResponse{RequestID: req.ID, Payload: resultPayload}, nil
 }
