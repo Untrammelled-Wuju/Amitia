@@ -451,7 +451,7 @@ func (m Manifest) Validate() ValidationReport {
 				report.AddError(cpath+".name.default", "missing", "contribution name required")
 			}
 			if c.Kind == "game_plugin" {
-				if err := validateGamePluginContribution(c.Spec, cpath, moduleIDs, moduleRuntimes); err != nil {
+				if err := validateGamePluginContribution(c.Spec, c.RequiredPermissions, cpath, moduleIDs, moduleRuntimes); err != nil {
 					report.AddError(cpath+".spec", "invalid_game_plugin", err.Error())
 				}
 			}
@@ -755,13 +755,27 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-func validateGamePluginContribution(spec map[string]any, cpath string, moduleIDs map[string]bool, moduleRuntimes map[string]*RuntimeMeta) error {
+func validateGamePluginContribution(spec map[string]any, requiredPermissions []string, cpath string, moduleIDs map[string]bool, moduleRuntimes map[string]*RuntimeMeta) error {
 	parsed, err := gameprotocol.ParsePluginHostSpec(spec)
 	if err != nil {
 		return fmt.Errorf("%s.spec: %w", cpath, err)
 	}
 	if err := parsed.Validate(); err != nil {
 		return fmt.Errorf("%s.spec: %w", cpath, err)
+	}
+
+	if parsed.Network != nil && strings.EqualFold(strings.TrimSpace(parsed.Network.Mode), "unrestricted") {
+		const networkPermission = "service.network.request"
+		declared := false
+		for _, permissionID := range requiredPermissions {
+			if strings.TrimSpace(permissionID) == networkPermission {
+				declared = true
+				break
+			}
+		}
+		if !declared {
+			return fmt.Errorf("game_plugin network mode unrestricted requires requiredPermissions to include %s", networkPermission)
+		}
 	}
 
 	moduleRefs := make(map[string]struct{})
