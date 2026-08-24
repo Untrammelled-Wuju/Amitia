@@ -10,9 +10,9 @@ import (
 
 func TestValidateRoute_OK(t *testing.T) {
 	cases := []RouteContext{
-		{"p", "r", "s"},
-		{"plugin.a.b", "runtime-123", "svc-main"},
-		{"P", "R", "S"},
+		{"p", "r", "s", 1},
+		{"plugin.a.b", "runtime-123", "svc-main", 2},
+		{"P", "R", "S", 3},
 	}
 	for _, c := range cases {
 		if err := ValidateRoute(c); err != nil {
@@ -27,9 +27,10 @@ func TestValidateRoute_MissingFields(t *testing.T) {
 		ctx  RouteContext
 	}{
 		{"all empty", RouteContext{}},
-		{"missing plugin", RouteContext{RuntimeID: "r", ServiceID: "s"}},
-		{"missing runtime", RouteContext{PluginID: "p", ServiceID: "s"}},
-		{"missing service", RouteContext{PluginID: "p", RuntimeID: "r"}},
+		{"missing plugin", RouteContext{RuntimeID: "r", ServiceID: "s", Generation: 1}},
+		{"missing runtime", RouteContext{PluginID: "p", ServiceID: "s", Generation: 1}},
+		{"missing service", RouteContext{PluginID: "p", RuntimeID: "r", Generation: 1}},
+		{"missing generation", RouteContext{PluginID: "p", RuntimeID: "r", ServiceID: "s"}},
 	}
 	for _, c := range cases {
 		err := ValidateRoute(c.ctx)
@@ -48,9 +49,9 @@ func TestValidateRoute_ControlChars(t *testing.T) {
 		name string
 		ctx  RouteContext
 	}{
-		{"bad plugin ID", RouteContext{"bad\x01id", "r", "s"}},
-		{"bad runtime ID", RouteContext{"p", "bad\x01id", "s"}},
-		{"bad service ID", RouteContext{"p", "r", "bad\x01id"}},
+		{"bad plugin ID", RouteContext{"bad\x01id", "r", "s", 1}},
+		{"bad runtime ID", RouteContext{"p", "bad\x01id", "s", 1}},
+		{"bad service ID", RouteContext{"p", "r", "bad\x01id", 1}},
 	}
 	for _, c := range cases {
 		err := ValidateRoute(c.ctx)

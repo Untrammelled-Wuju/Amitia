@@ -16,9 +16,10 @@ func TestBridge_Handle_BasicNotification(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin-a",
-		RuntimeID: "runtime-1",
-		ServiceID: "service-main",
+		PluginID:   "plugin-a",
+		RuntimeID:  "runtime-1",
+		ServiceID:  "service-main",
+		Generation: 1,
 	}
 	payload := json.RawMessage(`{"foo":"bar"}`)
 
@@ -57,9 +58,10 @@ func TestBridge_Handle_PayloadOpaque(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin-b",
-		RuntimeID: "runtime-2",
-		ServiceID: "svc",
+		PluginID:   "plugin-b",
+		RuntimeID:  "runtime-2",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	payload := json.RawMessage(`{"foo":{"unknown":[1,2,3]}}`)
 
@@ -78,9 +80,10 @@ func TestBridge_Handle_PayloadDeepCopy(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin-c",
-		RuntimeID: "runtime-3",
-		ServiceID: "svc",
+		PluginID:   "plugin-c",
+		RuntimeID:  "runtime-3",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	payload := json.RawMessage(`{"key":"value"}`)
 
@@ -101,9 +104,10 @@ func TestBridge_Handle_MetadataDeepCopy(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin-d",
-		RuntimeID: "runtime-4",
-		ServiceID: "svc",
+		PluginID:   "plugin-d",
+		RuntimeID:  "runtime-4",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	metadata := map[string]json.RawMessage{
 		"trace": json.RawMessage(`"abc"`),
@@ -127,8 +131,9 @@ func TestBridge_Handle_MissingPluginID(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		RuntimeID: "runtime-1",
-		ServiceID: "svc",
+		RuntimeID:  "runtime-1",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	err := bridge.Handle(context.Background(), source, "method", nil, nil)
 	if err == nil {
@@ -144,8 +149,9 @@ func TestBridge_Handle_MissingRuntimeID(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin",
-		ServiceID: "svc",
+		PluginID:   "plugin",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	err := bridge.Handle(context.Background(), source, "method", nil, nil)
 	if err == nil {
@@ -172,9 +178,10 @@ func TestBridge_Handle_EmptyMethod(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin",
-		RuntimeID: "runtime",
-		ServiceID: "svc",
+		PluginID:   "plugin",
+		RuntimeID:  "runtime",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	err := bridge.Handle(context.Background(), source, "", nil, nil)
 	if err == nil {
@@ -187,9 +194,10 @@ func TestBridge_Handle_MethodWithControlChars(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin",
-		RuntimeID: "runtime",
-		ServiceID: "svc",
+		PluginID:   "plugin",
+		RuntimeID:  "runtime",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	badMethod := "bad" + strings.Repeat("\x00", 1) + "method"
 	err := bridge.Handle(context.Background(), source, badMethod, nil, nil)
@@ -203,9 +211,10 @@ func TestBridge_Handle_TooLongMethod(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin",
-		RuntimeID: "runtime",
-		ServiceID: "svc",
+		PluginID:   "plugin",
+		RuntimeID:  "runtime",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	longMethod := strings.Repeat("a", maxMethodLength+1)
 	err := bridge.Handle(context.Background(), source, longMethod, nil, nil)
@@ -227,9 +236,10 @@ func TestBridge_Handle_SinkError(t *testing.T) {
 	bridge := NewBridge(&errorSink{err: expectedErr})
 
 	source := RouteContext{
-		PluginID:  "plugin",
-		RuntimeID: "runtime",
-		ServiceID: "svc",
+		PluginID:   "plugin",
+		RuntimeID:  "runtime",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	err := bridge.Handle(context.Background(), source, "method", nil, nil)
 	if !errors.Is(err, expectedErr) {
@@ -241,9 +251,10 @@ func TestBridge_Handle_NilSink(t *testing.T) {
 	bridge := NewBridge(nil)
 
 	source := RouteContext{
-		PluginID:  "plugin",
-		RuntimeID: "runtime",
-		ServiceID: "svc",
+		PluginID:   "plugin",
+		RuntimeID:  "runtime",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	err := bridge.Handle(context.Background(), source, "method", nil, nil)
 	if err == nil {
@@ -256,9 +267,10 @@ func TestBridge_Handle_ContextCancel(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin",
-		RuntimeID: "runtime",
-		ServiceID: "svc",
+		PluginID:   "plugin",
+		RuntimeID:  "runtime",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -277,9 +289,9 @@ func TestBridge_MultiServiceNotification(t *testing.T) {
 		Route  RouteContext
 		Method string
 	}{
-		{RouteContext{"plugin", "runtime", "bridge"}, "bridge.event"},
-		{RouteContext{"plugin", "runtime", "agent"}, "agent.event"},
-		{RouteContext{"plugin", "runtime", "vision"}, "vision.event"},
+		{RouteContext{"plugin", "runtime", "bridge", 1}, "bridge.event"},
+		{RouteContext{"plugin", "runtime", "agent", 1}, "agent.event"},
+		{RouteContext{"plugin", "runtime", "vision", 1}, "vision.event"},
 	}
 
 	for _, svc := range services {
@@ -310,8 +322,8 @@ func TestBridge_MultiRuntimeNotification(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	runtimes := []RouteContext{
-		{"plugin-beta", "runtime-1", "svc"},
-		{"plugin-beta", "runtime-2", "svc"},
+		{"plugin-beta", "runtime-1", "svc", 1},
+		{"plugin-beta", "runtime-2", "svc", 1},
 	}
 
 	for _, rt := range runtimes {
@@ -334,9 +346,10 @@ func TestBridge_BigIntPrecision(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin",
-		RuntimeID: "runtime",
-		ServiceID: "svc",
+		PluginID:   "plugin",
+		RuntimeID:  "runtime",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	payload := json.RawMessage(`{"tick":9007199254740993}`)
 
@@ -355,9 +368,10 @@ func TestBridge_DoNotInterpretMethodName(t *testing.T) {
 	bridge := NewBridge(sink)
 
 	source := RouteContext{
-		PluginID:  "plugin",
-		RuntimeID: "runtime",
-		ServiceID: "svc",
+		PluginID:   "plugin",
+		RuntimeID:  "runtime",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	methods := []string{
 		"example.game.entity.updated",
@@ -388,9 +402,10 @@ func TestBridge_NowFuncOverride(t *testing.T) {
 	bridge.SetNowFunc(func() time.Time { return fixedTime })
 
 	source := RouteContext{
-		PluginID:  "plugin",
-		RuntimeID: "runtime",
-		ServiceID: "svc",
+		PluginID:   "plugin",
+		RuntimeID:  "runtime",
+		ServiceID:  "svc",
+		Generation: 1,
 	}
 	if err := bridge.Handle(context.Background(), source, "method", nil, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -404,12 +419,13 @@ func TestBridge_NowFuncOverride(t *testing.T) {
 
 func TestNotification_Route(t *testing.T) {
 	n := Notification{
-		PluginID:  "p",
-		RuntimeID: "r",
-		ServiceID: "s",
+		PluginID:   "p",
+		RuntimeID:  "r",
+		ServiceID:  "s",
+		Generation: 7,
 	}
 	r := n.Route()
-	if r.PluginID != "p" || r.RuntimeID != "r" || r.ServiceID != "s" {
+	if r.PluginID != "p" || r.RuntimeID != "r" || r.ServiceID != "s" || r.Generation != 7 {
 		t.Errorf("Route() returned wrong values: %+v", r)
 	}
 }

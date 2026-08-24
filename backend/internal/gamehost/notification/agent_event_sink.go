@@ -93,10 +93,9 @@ func (s *AgentEventSink) run(ctx context.Context) {
 }
 
 type eventPublishEnvelope struct {
-	ChannelID string                     `json:"channelId"`
-	EventID   string                     `json:"eventId"`
-	Payload   json.RawMessage            `json:"payload"`
-	Metadata  map[string]json.RawMessage `json:"metadata,omitempty"`
+	EventID  string                     `json:"eventId"`
+	Payload  json.RawMessage            `json:"payload"`
+	Metadata map[string]json.RawMessage `json:"metadata,omitempty"`
 }
 
 func (s *AgentEventSink) Publish(ctx context.Context, n Notification) error {
@@ -127,7 +126,7 @@ func (s *AgentEventSink) Publish(ctx context.Context, n Notification) error {
 	if !ok {
 		return nil
 	}
-	if scope.PluginID != n.PluginID || scope.ServiceID != n.ServiceID {
+	if scope.PluginID != n.PluginID || scope.ServiceID != n.ServiceID || scope.Generation != n.Generation {
 		return fmt.Errorf("notification: plugin event route does not match bound runtime context")
 	}
 	if event.OccurredAt.IsZero() {

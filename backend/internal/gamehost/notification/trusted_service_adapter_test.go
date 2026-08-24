@@ -13,9 +13,10 @@ func TestTrustedServiceNotificationAdapter_Handle(t *testing.T) {
 	adapter := NewTrustedServiceNotificationAdapter(bridge)
 
 	adapter.RegisterRoute("svc-1", RouteContext{
-		PluginID:  "plugin-a",
-		RuntimeID: "runtime-1",
-		ServiceID: "svc-1",
+		PluginID:   "plugin-a",
+		RuntimeID:  "runtime-1",
+		ServiceID:  "svc-1",
+		Generation: 1,
 	})
 
 	err := adapter.Handle(context.Background(), "svc-1", "service.event", json.RawMessage(`{"data":true}`))
@@ -60,7 +61,7 @@ func TestTrustedServiceNotificationAdapter_Unregister(t *testing.T) {
 	bridge := NewBridge(sink)
 	adapter := NewTrustedServiceNotificationAdapter(bridge)
 
-	adapter.RegisterRoute("svc", RouteContext{PluginID: "p", RuntimeID: "r", ServiceID: "svc"})
+	adapter.RegisterRoute("svc", RouteContext{PluginID: "p", RuntimeID: "r", ServiceID: "svc", Generation: 1})
 	adapter.UnregisterRoute("svc")
 
 	err := adapter.Handle(context.Background(), "svc", "method", nil)
@@ -74,8 +75,8 @@ func TestTrustedServiceNotificationAdapter_MultipleServices(t *testing.T) {
 	bridge := NewBridge(sink)
 	adapter := NewTrustedServiceNotificationAdapter(bridge)
 
-	adapter.RegisterRoute("svc-a", RouteContext{PluginID: "p", RuntimeID: "r1", ServiceID: "svc-a"})
-	adapter.RegisterRoute("svc-b", RouteContext{PluginID: "p", RuntimeID: "r2", ServiceID: "svc-b"})
+	adapter.RegisterRoute("svc-a", RouteContext{PluginID: "p", RuntimeID: "r1", ServiceID: "svc-a", Generation: 1})
+	adapter.RegisterRoute("svc-b", RouteContext{PluginID: "p", RuntimeID: "r2", ServiceID: "svc-b", Generation: 2})
 
 	_ = adapter.Handle(context.Background(), "svc-a", "evt.a", json.RawMessage(`{}`))
 	_ = adapter.Handle(context.Background(), "svc-b", "evt.b", json.RawMessage(`{}`))
@@ -96,7 +97,7 @@ func TestTrustedServiceNotificationAdapter_BridgeError(t *testing.T) {
 	bridge := NewBridge(&errorSink{err: errors.New("bridge fail")})
 	adapter := NewTrustedServiceNotificationAdapter(bridge)
 
-	adapter.RegisterRoute("svc", RouteContext{PluginID: "p", RuntimeID: "r", ServiceID: "svc"})
+	adapter.RegisterRoute("svc", RouteContext{PluginID: "p", RuntimeID: "r", ServiceID: "svc", Generation: 1})
 	err := adapter.Handle(context.Background(), "svc", "method", nil)
 	if err == nil {
 		t.Fatal("expected error from bridge")
@@ -112,8 +113,8 @@ func (s directSrc) AsRoute() RouteContext {
 }
 
 func TestBuildRoute(t *testing.T) {
-	r := BuildRoute("plugin", "runtime", "service")
-	if r.PluginID != "plugin" || r.RuntimeID != "runtime" || r.ServiceID != "service" {
+	r := BuildRoute("plugin", "runtime", "service", 9)
+	if r.PluginID != "plugin" || r.RuntimeID != "runtime" || r.ServiceID != "service" || r.Generation != 9 {
 		t.Errorf("bad route: %+v", r)
 	}
 }
