@@ -60,7 +60,6 @@ func (m *MockRuntimeValidator) ValidateService(
 	return nil
 }
 
-
 func TestParseMethod_Valid(t *testing.T) {
 	tests := []struct {
 		method      string
@@ -68,13 +67,13 @@ func TestParseMethod_Valid(t *testing.T) {
 		segmentLen  int
 		expectError bool
 	}{
-		{"minecraft.move", "minecraft", 2, false},
-		{"minecraft.bot.move", "minecraft", 3, false},
+		{"examplegame.move", "examplegame", 2, false},
+		{"examplegame.bot.move", "examplegame", 3, false},
 		{"vendor.foo.bar.baz", "vendor", 4, false},
-		{"minecraft", "", 0, true},
-		{".minecraft.move", "", 0, true},
-		{"minecraft.", "", 0, true},
-		{"minecraft..move", "", 0, true},
+		{"examplegame", "", 0, true},
+		{".examplegame.move", "", 0, true},
+		{"examplegame.", "", 0, true},
+		{"examplegame..move", "", 0, true},
 		{"UPPER.foo", "", 0, true},
 	}
 
@@ -101,14 +100,14 @@ func TestParseMethod_Valid(t *testing.T) {
 }
 
 func TestReservedNamespace(t *testing.T) {
-	reserved := []string{"host", "runtime", "service", "control", "plugin", "channel"}
+	reserved := []string{"host", "runtime", "service", "control", "plugin", "channel", "emergency", "secret", "artifact"}
 	for _, ns := range reserved {
 		if !rpc.IsReservedNamespace(rpc.Namespace(ns)) {
 			t.Errorf("expected %q to be reserved", ns)
 		}
 	}
 
-	custom := []string{"minecraft", "factorio", "mygame", "vendor"}
+	custom := []string{"examplegame", "vendorgame", "mygame", "vendor"}
 	for _, ns := range custom {
 		if rpc.IsReservedNamespace(rpc.Namespace(ns)) {
 			t.Errorf("expected %q to be available for plugins", ns)
@@ -128,7 +127,7 @@ func TestNamespaceRegistry_RegisterAndResolve(t *testing.T) {
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
 		ServiceID: "service-a",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}
 
 	err := reg.Register(ctx, route)
@@ -136,7 +135,7 @@ func TestNamespaceRegistry_RegisterAndResolve(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
-	resolved, err := reg.Resolve(ctx, "runtime-1", "minecraft.bot.move")
+	resolved, err := reg.Resolve(ctx, "runtime-1", "examplegame.bot.move")
 	if err != nil {
 		t.Fatalf("resolve failed: %v", err)
 	}
@@ -179,14 +178,14 @@ func TestNamespaceRegistry_SameRuntimeConflict(t *testing.T) {
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
 		ServiceID: "service-a",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}
 
 	route2 := rpc.Route{
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
 		ServiceID: "service-b",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}
 
 	if err := reg.Register(ctx, route1); err != nil {
@@ -211,14 +210,14 @@ func TestNamespaceRegistry_CrossRuntimeSameNamespace(t *testing.T) {
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
 		ServiceID: "service-a",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}
 
 	routeB := rpc.Route{
 		RuntimeID: "runtime-2",
 		PluginID:  "plugin-2",
 		ServiceID: "service-a",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}
 
 	if err := reg.Register(ctx, routeA); err != nil {
@@ -229,7 +228,7 @@ func TestNamespaceRegistry_CrossRuntimeSameNamespace(t *testing.T) {
 		t.Fatalf("routeB register failed: %v", err)
 	}
 
-	resolved1, err := reg.Resolve(ctx, "runtime-1", "minecraft.foo")
+	resolved1, err := reg.Resolve(ctx, "runtime-1", "examplegame.foo")
 	if err != nil {
 		t.Fatalf("resolve runtime-1 failed: %v", err)
 	}
@@ -237,7 +236,7 @@ func TestNamespaceRegistry_CrossRuntimeSameNamespace(t *testing.T) {
 		t.Errorf("runtime-1 should resolve to service-a")
 	}
 
-	resolved2, err := reg.Resolve(ctx, "runtime-2", "minecraft.bar")
+	resolved2, err := reg.Resolve(ctx, "runtime-2", "examplegame.bar")
 	if err != nil {
 		t.Fatalf("resolve runtime-2 failed: %v", err)
 	}
@@ -254,7 +253,7 @@ func TestNamespaceRegistry_MultiNamespacePerService(t *testing.T) {
 		Validator: validator,
 	})
 
-	namespaces := []string{"minecraft", "gamebridge", "vendor"}
+	namespaces := []string{"examplegame", "gamebridge", "vendor"}
 	for _, ns := range namespaces {
 		route := rpc.Route{
 			RuntimeID: "runtime-1",
@@ -284,7 +283,7 @@ func TestNamespaceRegistry_UnknownNamespaceResolve(t *testing.T) {
 		Validator: validator,
 	})
 
-	_, err := reg.Resolve(ctx, "runtime-1", "factorio.foo")
+	_, err := reg.Resolve(ctx, "runtime-1", "vendorgame.foo")
 	if err == nil {
 		t.Fatal("resolve unknown namespace should fail")
 	}
@@ -302,7 +301,7 @@ func TestNamespaceRegistry_RuntimeIsolation(t *testing.T) {
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
 		ServiceID: "service-a",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}
 
 	routeB := rpc.Route{
@@ -324,9 +323,9 @@ func TestNamespaceRegistry_RuntimeIsolation(t *testing.T) {
 		t.Error("runtime-1 should not access runtime-2's agent namespace")
 	}
 
-	_, err = reg.Resolve(ctx, "runtime-2", "minecraft.foo")
+	_, err = reg.Resolve(ctx, "runtime-2", "examplegame.foo")
 	if err == nil {
-		t.Error("runtime-2 should not access runtime-1's minecraft namespace")
+		t.Error("runtime-2 should not access runtime-1's examplegame namespace")
 	}
 }
 
@@ -342,14 +341,14 @@ func TestNamespaceRegistry_RuntimeCleanup(t *testing.T) {
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
 		ServiceID: "service-a",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}
 
 	routeB := rpc.Route{
 		RuntimeID: "runtime-2",
 		PluginID:  "plugin-2",
 		ServiceID: "service-a",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}
 
 	if err := reg.Register(ctx, routeA); err != nil {
@@ -363,14 +362,14 @@ func TestNamespaceRegistry_RuntimeCleanup(t *testing.T) {
 		t.Fatalf("unregister runtime-1 failed: %v", err)
 	}
 
-	_, err := reg.Resolve(ctx, "runtime-1", "minecraft.foo")
+	_, err := reg.Resolve(ctx, "runtime-1", "examplegame.foo")
 	if err == nil {
 		t.Error("runtime-1 namespaces should be removed")
 	}
 
-	resolved, err := reg.Resolve(ctx, "runtime-2", "minecraft.foo")
+	resolved, err := reg.Resolve(ctx, "runtime-2", "examplegame.foo")
 	if err != nil {
-		t.Errorf("runtime-2 minecraft should still exist: %v", err)
+		t.Errorf("runtime-2 examplegame should still exist: %v", err)
 	}
 	if resolved.RuntimeID != "runtime-2" {
 		t.Error("wrong route resolved")
@@ -389,7 +388,7 @@ func TestNamespaceRegistry_ServiceCleanup(t *testing.T) {
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
 		ServiceID: "service-a",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}
 
 	routeB := rpc.Route{
@@ -410,9 +409,9 @@ func TestNamespaceRegistry_ServiceCleanup(t *testing.T) {
 		t.Fatalf("unregister service-a failed: %v", err)
 	}
 
-	_, err := reg.Resolve(ctx, "runtime-1", "minecraft.foo")
+	_, err := reg.Resolve(ctx, "runtime-1", "examplegame.foo")
 	if err == nil {
-		t.Error("service-a's minecraft namespace should be removed")
+		t.Error("service-a's examplegame namespace should be removed")
 	}
 
 	_, err = reg.Resolve(ctx, "runtime-1", "agent.foo")
@@ -429,7 +428,7 @@ func TestNamespaceRegistry_StableList(t *testing.T) {
 		Validator: validator,
 	})
 
-	namespaces := []string{"zebra", "alpha", "minecraft", "factorio"}
+	namespaces := []string{"zebra", "alpha", "examplegame", "vendorgame"}
 	for _, ns := range namespaces {
 		route := rpc.Route{
 			RuntimeID: "runtime-1",
@@ -451,7 +450,7 @@ func TestNamespaceRegistry_StableList(t *testing.T) {
 		t.Fatalf("expected 4 namespaces, got %d", len(list))
 	}
 
-	expected := []string{"alpha", "factorio", "minecraft", "zebra"}
+	expected := []string{"alpha", "vendorgame", "examplegame", "zebra"}
 	for i, ns := range expected {
 		if string(list[i].Namespace) != ns {
 			t.Errorf("position %d: got %q, want %q", i, list[i].Namespace, ns)
@@ -527,7 +526,7 @@ func TestRPCDispatcher_Integration(t *testing.T) {
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
 		ServiceID: "service-a",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}
 	if err := nsReg.Register(ctx, route); err != nil {
 		t.Fatalf("register namespace failed: %v", err)
@@ -575,7 +574,7 @@ func TestRPCDispatcher_CustomRouteForward(t *testing.T) {
 		RuntimeID: "runtime-1",
 		PluginID:  "plugin-1",
 		ServiceID: "service-a",
-		Namespace: "minecraft",
+		Namespace: "examplegame",
 	}); err != nil {
 		t.Fatalf("register namespace failed: %v", err)
 	}
@@ -597,7 +596,7 @@ func TestRPCDispatcher_CustomRouteForward(t *testing.T) {
 		Protocol: protocol.ProtocolVersion,
 		Type:     protocol.MessageTypeRequest,
 		ID:       "custom-req-1",
-		Method:   "minecraft.bot.move",
+		Method:   "examplegame.bot.move",
 		Payload:  json.RawMessage(`{"x":1,"y":2,"z":3}`),
 	})
 
@@ -616,7 +615,7 @@ func TestRPCDispatcher_CustomRouteForward(t *testing.T) {
 	if forwarded.Envelope.ID != "custom-req-1" {
 		t.Errorf("request ID should be preserved")
 	}
-	if forwarded.Envelope.Method != "minecraft.bot.move" {
+	if forwarded.Envelope.Method != "examplegame.bot.move" {
 		t.Errorf("method should be preserved")
 	}
 }
@@ -646,7 +645,7 @@ func TestRPCDispatcher_CustomNamespaceNotFound(t *testing.T) {
 		Protocol: protocol.ProtocolVersion,
 		Type:     protocol.MessageTypeRequest,
 		ID:       "req-unknown",
-		Method:   "factorio.foo.bar",
+		Method:   "vendor.game.foo.bar",
 	})
 
 	if err == nil {
@@ -664,8 +663,8 @@ type mockControlPlane struct {
 }
 
 type mockSent struct {
-	Peer      ipc.Peer
-	Envelope  protocol.Envelope
+	Peer     ipc.Peer
+	Envelope protocol.Envelope
 }
 
 func (m *mockControlPlane) Attach(

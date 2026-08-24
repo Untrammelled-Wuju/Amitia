@@ -136,6 +136,10 @@ type ResponseCorrelator interface {
 	Terminalize(key TerminalKey, state TerminalState, err error)
 }
 
+type RequestAdmissionController interface {
+	AdmitRequest(ctx context.Context, peer Peer) error
+}
+
 type ControlPlaneConfig struct {
 	Registry            *ConnectionRegistry
 	Resolver            RuntimePeerResolver
@@ -145,6 +149,7 @@ type ControlPlaneConfig struct {
 	MaxEnvelopeSize     int64
 	HandshakeController HandshakeController
 	ResponseCorrelator  ResponseCorrelator
+	RequestAdmission    RequestAdmissionController
 }
 
 type controlPlane struct {
@@ -162,6 +167,7 @@ type controlPlane struct {
 	maxEnvelopeSize     int64
 	handshakeController HandshakeController
 	responseCorrelator  ResponseCorrelator
+	requestAdmission    RequestAdmissionController
 }
 
 func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
@@ -197,6 +203,7 @@ func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
 		maxEnvelopeSize:     config.MaxEnvelopeSize,
 		handshakeController: config.HandshakeController,
 		responseCorrelator:  config.ResponseCorrelator,
+		requestAdmission:    config.RequestAdmission,
 	}
 	cp.connHandler = newDefaultConnectionHandler(cp.dispatcher, cp.handler)
 	return cp, nil
@@ -356,6 +363,12 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 	}
 
 	FillRouting(&envelope, peer)
+
+	if cp.requestAdmission != nil {
+		if err := cp.requestAdmission.AdmitRequest(ctx, peer); err != nil {
+			return nil, NewIPCErrorWithCause(IPCErrorProtocol, domain.ErrResourceExhausted, "request denied by resource admission", err)
+		}
+	}
 
 	handle, registered := cp.responseCorrelator.RegisterPending(peer, envelope.ID, envelope.Generation, envelope.Method, envelope.Payload)
 	if !registered {

@@ -98,4 +98,3 @@ export interface PluginHostSpec {
   metadata?: Record<string, unknown>;
 }
 
-export type GamePluginSpec = PluginHostSpec;

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -132,74 +133,142 @@ func (p *RuntimeGraphProvisioner) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list enabled game plugins: %w", err)
 	}
-	desired := make(map[ghdomain.PluginID]struct{}, len(plugins))
-	for _, kp := range plugins {
-		descriptor, mapErr := p.mapper.ToDescriptor(ctx, kp.Extension, kp.Contribution)
-		if mapErr != nil {
-			return fmt.Errorf("map enabled game plugin %s/%s: %w", kp.Extension.ID, kp.Contribution.ID, mapErr)
-		}
-		desired[descriptor.ID] = struct{}{}
-		if err := p.reconcilePlugin(ctx, kp); err != nil {
-			return fmt.Errorf("reconcile plugin %s/%s: %w", kp.Extension.ID, kp.Contribution.ID, err)
-		}
+	desired, reconcileErr := p.reconcilePluginSet(ctx, plugins)
+	if reconcileErr != nil {
+		// Reconcile healthy plugins but do not prune while the desired set is
+		// incomplete. This isolates failures without deleting a plugin merely
+		// because another plugin failed to map or provision.
+		return reconcileErr
 	}
-	if err := p.pruneOrphanRuntimes(ctx, desired); err != nil {
+	if err := p.pruneOrphanRuntimes(ctx, desired, ""); err != nil {
 		return fmt.Errorf("prune orphan game runtimes: %w", err)
 	}
 	return nil
 }
 
-func (p *RuntimeGraphProvisioner) pruneOrphanRuntimes(ctx context.Context, desired map[ghdomain.PluginID]struct{}) error {
+// ReconcileExtension converges only one extension's runtime graph. It never
+// performs a global prune and therefore cannot stop/remove unrelated plugins.
+func (p *RuntimeGraphProvisioner) ReconcileExtension(ctx context.Context, extensionID string) error {
+	if strings.TrimSpace(extensionID) == "" {
+		return fmt.Errorf("extension id is required")
+	}
+	plugins, err := p.source.ListEnabledGamePlugins(ctx)
+	if err != nil {
+		return fmt.Errorf("list enabled game plugins for extension %s: %w", extensionID, err)
+	}
+	filtered := make([]KernelGamePlugin, 0)
+	for _, kp := range plugins {
+		if string(kp.Extension.ID) == extensionID {
+			filtered = append(filtered, kp)
+		}
+	}
+	desired, reconcileErr := p.reconcilePluginSet(ctx, filtered)
+	if reconcileErr != nil {
+		return reconcileErr
+	}
+	if err := p.pruneOrphanRuntimes(ctx, desired, extensionID); err != nil {
+		return fmt.Errorf("prune extension %s orphan runtimes: %w", extensionID, err)
+	}
+	return nil
+}
+
+func (p *RuntimeGraphProvisioner) reconcilePluginSet(ctx context.Context, plugins []KernelGamePlugin) (map[ghdomain.PluginID]struct{}, error) {
+	desired := make(map[ghdomain.PluginID]struct{}, len(plugins))
+	var errs []error
+	for _, kp := range plugins {
+		descriptor, mapErr := p.mapper.ToDescriptor(ctx, kp.Extension, kp.Contribution)
+		if mapErr != nil {
+			errs = append(errs, fmt.Errorf("map enabled game plugin %s/%s: %w", kp.Extension.ID, kp.Contribution.ID, mapErr))
+			continue
+		}
+		desired[descriptor.ID] = struct{}{}
+		if err := p.reconcilePlugin(ctx, kp); err != nil {
+			errs = append(errs, fmt.Errorf("reconcile plugin %s/%s: %w", kp.Extension.ID, kp.Contribution.ID, err))
+		}
+	}
+	return desired, errors.Join(errs...)
+}
+
+func (p *RuntimeGraphProvisioner) pruneOrphanRuntimes(ctx context.Context, desired map[ghdomain.PluginID]struct{}, extensionID string) error {
+	var errs []error
 	for _, runtimeRef := range p.runtimeManager.ListRuntimes() {
 		if runtimeRef == nil {
 			continue
 		}
+		if extensionID != "" {
+			snapshot, snapErr := p.topologyStore.GetTopologySnapshot(runtimeRef.ID)
+			if snapErr != nil {
+				// Ownership is unknown: fail closed and leave the runtime untouched.
+				errs = append(errs, fmt.Errorf("resolve runtime %s extension ownership: %w", runtimeRef.ID, snapErr))
+				continue
+			}
+			if snapshot.ExtensionID != extensionID {
+				continue
+			}
+		}
 		if _, keep := desired[runtimeRef.PluginID]; keep {
 			continue
 		}
-		if ghdomain.IsActiveRuntimeState(runtimeRef.State) {
-			if p.runtimeExecutor == nil {
-				return fmt.Errorf("runtime %s for removed plugin %s is active but runtime executor is unavailable", runtimeRef.ID, runtimeRef.PluginID)
-			}
-			if err := p.runtimeExecutor.StopRuntime(ctx, runtimeRef.ID); err != nil {
-				return fmt.Errorf("stop orphan runtime %s: %w", runtimeRef.ID, err)
-			}
+		if err := p.pruneRuntime(ctx, runtimeRef); err != nil {
+			errs = append(errs, err)
 		}
+	}
+	return errors.Join(errs...)
+}
 
-		definitionIDs := make([]string, 0)
-		if snapshot, err := p.topologyStore.GetTopologySnapshot(runtimeRef.ID); err == nil {
-			for _, service := range snapshot.Services {
-				if definitionID, resolveErr := p.topologyStore.ResolveDefinitionID(runtimeRef.ID, service.ServiceID); resolveErr == nil && definitionID != "" {
-					definitionIDs = append(definitionIDs, definitionID)
-				}
+func (p *RuntimeGraphProvisioner) pruneRuntime(ctx context.Context, runtimeRef *ghruntime.RuntimeInstanceRef) error {
+	if runtimeRef == nil {
+		return nil
+	}
+	if ghdomain.IsActiveRuntimeState(runtimeRef.State) {
+		if p.runtimeExecutor == nil {
+			return fmt.Errorf("runtime %s for removed plugin %s is active but runtime executor is unavailable", runtimeRef.ID, runtimeRef.PluginID)
+		}
+		if err := p.runtimeExecutor.StopRuntime(ctx, runtimeRef.ID); err != nil {
+			return fmt.Errorf("stop orphan runtime %s: %w", runtimeRef.ID, err)
+		}
+	}
+
+	definitionIDs := make([]string, 0)
+	if snapshot, err := p.topologyStore.GetTopologySnapshot(runtimeRef.ID); err == nil {
+		for _, service := range snapshot.Services {
+			if definitionID, resolveErr := p.topologyStore.ResolveDefinitionID(runtimeRef.ID, service.ServiceID); resolveErr == nil && definitionID != "" {
+				definitionIDs = append(definitionIDs, definitionID)
 			}
 		}
-		if p.runtimeExecutor != nil {
-			if err := p.runtimeExecutor.CleanupRuntime(ctx, runtimeRef.ID); err != nil {
-				return fmt.Errorf("cleanup orphan runtime %s: %w", runtimeRef.ID, err)
+	}
+	if p.runtimeExecutor != nil {
+		if err := p.runtimeExecutor.CleanupRuntime(ctx, runtimeRef.ID); err != nil {
+			return fmt.Errorf("cleanup orphan runtime %s: %w", runtimeRef.ID, err)
+		}
+	}
+	if p.channelReconciler != nil {
+		if _, err := p.channelReconciler.ReconcileRuntimeChannels(ctx, runtimeRef.ID, nil); err != nil {
+			return fmt.Errorf("remove orphan runtime channels %s: %w", runtimeRef.ID, err)
+		}
+	}
+	// Unregister service definitions before deleting topology/runtime ownership.
+	// If unregister fails, keeping authoritative ownership makes the residue
+	// retryable instead of orphaning a supervisor definition with no owner.
+	var unregisterErrs []error
+	for _, definitionID := range definitionIDs {
+		if p.supervisor.HasDefinition(definitionID) {
+			if err := p.supervisor.Unregister(definitionID); err != nil {
+				unregisterErrs = append(unregisterErrs, fmt.Errorf("unregister orphan service definition %s: %w", definitionID, err))
 			}
 		}
-		if p.channelReconciler != nil {
-			if _, err := p.channelReconciler.ReconcileRuntimeChannels(ctx, runtimeRef.ID, nil); err != nil {
-				return fmt.Errorf("remove orphan runtime channels %s: %w", runtimeRef.ID, err)
-			}
-		}
-		if p.secretRegistrar != nil {
-			p.secretRegistrar.RemoveRuntimeStartupManifests(string(runtimeRef.ID))
-		}
-		if err := p.topologyStore.RemoveRuntime(runtimeRef.ID); err != nil && !strings.Contains(err.Error(), "not found") {
-			return fmt.Errorf("remove orphan topology %s: %w", runtimeRef.ID, err)
-		}
-		if err := p.runtimeManager.RemoveRuntime(runtimeRef.ID); err != nil && !strings.Contains(err.Error(), "not found") {
-			return fmt.Errorf("remove orphan runtime %s: %w", runtimeRef.ID, err)
-		}
-		for _, definitionID := range definitionIDs {
-			if p.supervisor.HasDefinition(definitionID) {
-				if err := p.supervisor.Unregister(definitionID); err != nil {
-					return fmt.Errorf("unregister orphan service definition %s: %w", definitionID, err)
-				}
-			}
-		}
+	}
+	if err := errors.Join(unregisterErrs...); err != nil {
+		return err
+	}
+	if p.secretRegistrar != nil {
+		p.secretRegistrar.RemoveRuntimeStartupManifests(string(runtimeRef.ID))
+	}
+	if err := p.topologyStore.RemoveRuntime(runtimeRef.ID); err != nil && !strings.Contains(err.Error(), "not found") {
+		return fmt.Errorf("remove orphan topology %s: %w", runtimeRef.ID, err)
+	}
+	if err := p.runtimeManager.RemoveRuntime(runtimeRef.ID); err != nil && !strings.Contains(err.Error(), "not found") {
+		return fmt.Errorf("remove orphan runtime %s: %w", runtimeRef.ID, err)
 	}
 	return nil
 }
@@ -385,7 +454,7 @@ func (p *RuntimeGraphProvisioner) extractSecretManifestGrouped(kp KernelGamePlug
 	return grouped, errs
 }
 
-func buildGameNetworkPolicy(spec *gameprotocol.GameNetworkPolicy, permissions []string) (trusted_service.ServiceNetworkPolicy, error) {
+func buildPluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, permissions []string) (trusted_service.ServiceNetworkPolicy, error) {
 	// Game plugins are deny-by-default. Omitting network policy is equivalent to
 	// an enforced no-network policy; there is no legacy unrestricted fallback.
 	mode := "none"
@@ -448,7 +517,7 @@ func (p *RuntimeGraphProvisioner) buildBootService(ctx context.Context, kp Kerne
 }
 
 func (p *RuntimeGraphProvisioner) buildBootServices(ctx context.Context, kp KernelGamePlugin) ([]bootServiceInfo, error) {
-	spec, err := gameprotocol.ParseGamePluginSpec(kp.Contribution.Definition)
+	spec, err := gameprotocol.ParsePluginHostSpec(kp.Contribution.Definition)
 	if err != nil {
 		return nil, fmt.Errorf("plugin %s/%s: parse game plugin spec: %w", kp.Extension.ID, kp.Contribution.ID, err)
 	}
@@ -514,7 +583,7 @@ func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp Ke
 	}
 	protocolVersion := gameSpec.ProtocolVersion
 
-	networkPolicy, err := buildGameNetworkPolicy(gameSpec.Network, kp.Contribution.RequiredPermissions)
+	networkPolicy, err := buildPluginNetworkPolicy(gameSpec.Network, kp.Contribution.RequiredPermissions)
 	if err != nil {
 		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: network policy: %w", kp.Extension.ID, kp.Contribution.ID, err)
 	}

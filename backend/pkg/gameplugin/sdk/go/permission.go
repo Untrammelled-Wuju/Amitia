@@ -12,19 +12,20 @@ const (
 )
 
 const (
-	PermGameHostControl     = "gamehost.control"
-	PermGameHostChannelUse  = "gamehost.channel.use"
-	PermGameHostHostAPIInvoke = "gamehost.host_api.invoke"
+	PermGameHostControl        = "gamehost.control"
+	PermGameHostChannelUse     = "gamehost.channel.use"
+	PermGameHostHostAPIInvoke  = "gamehost.host_api.invoke"
+	PermGameHostArtifactDeploy = "gamehost.artifact.deploy"
 
-	DecisionAllowed = "allowed"
-	DecisionDenied  = "denied"
+	DecisionAllowed          = "allowed"
+	DecisionDenied           = "denied"
 	DecisionApprovalRequired = "approval_required"
 
-	DenyReasonNotDeclared   = "not_declared"
-	DenyReasonNotGranted    = "not_granted"
-	DenyReasonScopeDenied   = "scope_denied"
-	DenyReasonPolicyDenied  = "host_policy_denied"
-	DenyReasonUnknownPerm   = "unknown_permission"
+	DenyReasonNotDeclared    = "not_declared"
+	DenyReasonNotGranted     = "not_granted"
+	DenyReasonScopeDenied    = "scope_denied"
+	DenyReasonPolicyDenied   = "host_policy_denied"
+	DenyReasonUnknownPerm    = "unknown_permission"
 	DenyReasonInvalidSubject = "invalid_subject"
 )
 
@@ -42,8 +43,8 @@ type PermissionCheckResult struct {
 }
 
 type PermissionSnapshotInput struct {
-	RuntimeID  string `json:"runtimeId,omitempty"`
-	ServiceID  string `json:"serviceId,omitempty"`
+	RuntimeID string `json:"runtimeId,omitempty"`
+	ServiceID string `json:"serviceId,omitempty"`
 }
 
 type PermissionSnapshotResult struct {

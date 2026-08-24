@@ -49,6 +49,11 @@ func ValidateEnvelopePeer(envelope protocol.Envelope, peer Peer) error {
 			nil,
 		)
 	}
+	if peer.Generation > 0 {
+		if envelope.Generation == 0 || envelope.Generation != uint64(peer.Generation) {
+			return NewIPCErrorWithCause(IPCErrorPeerRoute, domain.ErrInvalidArgument, fmt.Sprintf("envelope generation mismatch: expected %d, got %d", peer.Generation, envelope.Generation), nil)
+		}
+	}
 	return nil
 }
 

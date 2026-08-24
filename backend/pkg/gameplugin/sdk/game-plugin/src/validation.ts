@@ -21,7 +21,7 @@ export function validateMethod(method: string): string | null {
 }
 
 export function isReservedNamespace(method: string): boolean {
-  const reserved = ['host.', 'plugin.', 'runtime.', 'service.', 'channel.', 'control.', 'emergency.', 'secret.'];
+  const reserved = ['host.', 'plugin.', 'runtime.', 'service.', 'channel.', 'control.', 'emergency.', 'secret.', 'artifact.'];
   return reserved.some((ns) => method.startsWith(ns));
 }
 

@@ -1,9 +1,13 @@
 package resource
 
+import "fmt"
+
 type RuntimeIdentityReader interface {
 	ResolveRuntime(runtimeID string) (pluginID string, extensionID string, state string, err error)
 	ResolveService(runtimeID, serviceID string) (pluginID string, extensionID string, state string, err error)
+	CurrentGeneration(runtimeID string) (int64, error)
 	ExtensionEnabled(extensionID string) bool
+	RuntimeIDsByExtension(extensionID string) []string
 }
 
 type SubjectMapper struct {
@@ -22,18 +26,13 @@ func (m *SubjectMapper) Validate(runtimeID, pluginID, serviceID string, generati
 		Generation: generation,
 	}
 
-	if runtimeID == "" {
+	if runtimeID == "" || pluginID == "" || serviceID == "" || generation <= 0 {
 		return subj, ErrSubjectInvalid
 	}
-	if pluginID == "" {
+	// Resource admission is a security boundary. Missing identity infrastructure
+	// must fail closed rather than accepting an unverifiable subject.
+	if m == nil || m.reader == nil {
 		return subj, ErrSubjectInvalid
-	}
-	if serviceID == "" {
-		return subj, ErrSubjectInvalid
-	}
-
-	if m.reader == nil {
-		return subj, nil
 	}
 
 	pluginOK, extID, _, err := m.reader.ResolveRuntime(runtimeID)
@@ -49,11 +48,16 @@ func (m *SubjectMapper) Validate(runtimeID, pluginID, serviceID string, generati
 	if err != nil {
 		return subj, ErrServiceNotFound
 	}
-	if svcPluginID != pluginID {
+	if svcPluginID != pluginID || svcExtID != extID {
 		return subj, ErrSubjectInvalid
 	}
-	if svcExtID != extID {
-		return subj, ErrSubjectInvalid
+
+	currentGeneration, err := m.reader.CurrentGeneration(runtimeID)
+	if err != nil {
+		return subj, ErrRuntimeNotFound
+	}
+	if currentGeneration <= 0 || currentGeneration != generation {
+		return subj, fmt.Errorf("%w: runtime generation expected=%d got=%d", ErrSubjectInvalid, currentGeneration, generation)
 	}
 
 	if !m.reader.ExtensionEnabled(extID) {
@@ -61,4 +65,11 @@ func (m *SubjectMapper) Validate(runtimeID, pluginID, serviceID string, generati
 	}
 
 	return subj, nil
+}
+
+func (m *SubjectMapper) RuntimeIDsByExtension(extensionID string) []string {
+	if m == nil || m.reader == nil || extensionID == "" {
+		return nil
+	}
+	return m.reader.RuntimeIDsByExtension(extensionID)
 }

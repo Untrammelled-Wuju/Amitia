@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/event"
@@ -17,7 +18,7 @@ import (
 	ghTrustedService "github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/agentbridge"
 	"github.com/u-ai/backend/internal/gamehost/channel"
-	"github.com/u-ai/backend/internal/gamehost/companion"
+	artifact "github.com/u-ai/backend/internal/gamehost/companion"
 	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -59,6 +60,7 @@ type GameHostComposeOptions struct {
 	KernelLifecycle     upgrade.KernelExtensionLifecycle
 	SecretBroker        *secret.Broker
 	RollbackPostAction  RollbackPostAction
+	StrictProduction    bool
 
 	EffectivePermission *permission.EffectivePermissionAdapter
 	PermissionBroker    permission.Broker
@@ -133,7 +135,50 @@ func getRollbackArchivePath(ctx context.Context, extensionID string, opts GameHo
 	return archivePath
 }
 
+func validateStrictProductionOptions(opts GameHostComposeOptions) error {
+	missing := make([]string, 0)
+	if opts.KernelSource == nil {
+		missing = append(missing, "KernelSource")
+	}
+	if opts.TrustedSupervisor == nil {
+		missing = append(missing, "TrustedSupervisor")
+	}
+	if opts.GenerationResolver == nil {
+		missing = append(missing, "GenerationResolver")
+	}
+	if opts.EventService == nil {
+		missing = append(missing, "EventService")
+	}
+	if opts.HostAPIGateway == nil {
+		missing = append(missing, "HostAPIGateway")
+	}
+	if opts.ArchiveUpdater == nil {
+		missing = append(missing, "ArchiveUpdater")
+	}
+	if opts.DefinitionReconcile == nil {
+		missing = append(missing, "DefinitionReconcile")
+	}
+	if opts.KernelLifecycle == nil {
+		missing = append(missing, "KernelLifecycle")
+	}
+	if opts.SecretBroker == nil {
+		missing = append(missing, "SecretBroker")
+	}
+	if opts.PermissionBroker == nil && opts.EffectivePermission == nil {
+		missing = append(missing, "PermissionBroker/EffectivePermission")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("gamehost: strict production composition missing: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
 func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
+	if opts.StrictProduction {
+		if err := validateStrictProductionOptions(opts); err != nil {
+			return nil, err
+		}
+	}
 	dirMgr, err := storage.NewDirectoryManager(opts.DataRoot)
 	if err != nil {
 		return nil, err
@@ -147,11 +192,11 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	configStore := config.NewFileStore(dirMgr)
 	configResolver := config.NewResolver(configStore, nil, nil)
 
-	var companionManager *companion.Manager
+	var artifactManager *artifact.ArtifactManager
 	if opts.KernelSource != nil && opts.GenerationResolver != nil {
-		companionManager, err = companion.NewManager(opts.DataRoot, opts.KernelSource, opts.GenerationResolver)
+		artifactManager, err = artifact.NewArtifactManager(opts.DataRoot, opts.KernelSource, opts.GenerationResolver)
 		if err != nil {
-			return nil, fmt.Errorf("compose companion manager: %w", err)
+			return nil, fmt.Errorf("compose artifact manager: %w", err)
 		}
 	}
 
@@ -193,9 +238,16 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 	hostHandlers := rpc.NewHostHandlerRegistry()
 	rpcLifecycle := rpc.NewLifecycleManager(rpc.LifecycleManagerConfig{})
+
+	resourceMapper := newResourceSubjectMapper(pluginReg, runtimeManager, topologyStore)
+	resourceGovernor := newRuntimeLimitGovernor()
+	resourceAdapter := resource.NewResourceAdmissionAdapter(resourceMapper, rpcLifecycle.Registry(), binaryReg, resourceGovernor)
+
 	notifComposite := notification.NewCompositeSink(durableNotifSink)
 	channelRouter := channel.NewRouter(channel.RouterConfig{Registry: channelReg, States: stateStore})
-	notifComposite.Add(integration.NewChannelNotificationSink(channelRouter))
+	channelNotificationSink := integration.NewChannelNotificationSink(channelRouter)
+	channelNotificationSink.SetResourceAdmission(resourceAdapter, runtimeManager)
+	notifComposite.Add(channelNotificationSink)
 	notifBridge := notification.NewBridge(notifComposite)
 	rpcDispatcher := rpc.NewRPCDispatcher(rpc.DispatcherConfig{
 		Namespaces:    nsReg,
@@ -214,6 +266,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		Dispatcher:          rpcDispatcher,
 		HandshakeController: handshakeController,
 		ResponseCorrelator:  responseCorrelator,
+		RequestAdmission:    resourceRequestAdmission{inner: resourceAdapter},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("compose control plane: %w", err)
@@ -240,10 +293,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		procAdapter = adapt
 	}
 
-	resourceMapper := newResourceSubjectMapper(pluginReg)
-	resourceGovernor := newRuntimeLimitGovernor()
-	resourceAdapter := resource.NewResourceAdmissionAdapter(resourceMapper, nil, binaryReg, resourceGovernor)
-	resourceViewer := resource.NewResourcePolicyViewer(newContainerViewResolver(binaryReg, streamMgr))
+	resourceViewer := resource.NewResourcePolicyViewer(newContainerViewResolver(binaryReg, rpcLifecycle.Registry(), topologyStore, opts.TrustedSupervisor, dirMgr, resourceGovernor, resourceAdapter))
 	resourceLifecycle := resource.NewLifecycleCoordinator(resourceAdapter, resourceViewer)
 
 	controlSinkRegistry := control.NewControlSinkRegistry()
@@ -267,6 +317,16 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	}
 
 	permChecker := integration.NewControlPermissionAdapter(opts.EffectivePermission)
+
+	if artifactManager != nil && opts.EffectivePermission != nil {
+		artifactRPC, err := artifact.NewArtifactRPCHandler(artifactManager, pluginReg, opts.EffectivePermission)
+		if err != nil {
+			return nil, fmt.Errorf("compose artifact RPC handler: %w", err)
+		}
+		if err := artifactRPC.Register(hostHandlers); err != nil {
+			return nil, fmt.Errorf("register artifact RPC handlers: %w", err)
+		}
+	}
 
 	controlManager := control.NewControlAuthorityManager(control.ControlAuthorityManagerOptions{
 		Audit:         auditSink,
@@ -560,21 +620,20 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	}
 
 	if secretAdapter != nil {
-		secretLeaseAdapter = recovery.NewSecretLeaseAdapter(
-			func(runtimeID string) int {
-				return secretAdapter.RevokeRuntimeLeases(runtimeID, "recovery").RevokedCount
-			},
-			func(ctx context.Context, req recovery.SecretLeaseRequest) (recovery.SecretLeaseResult, error) {
-				return recovery.SecretLeaseResult{Success: false, Error: "recovery lease issuance is unavailable"}, fmt.Errorf("recovery lease issuance is unavailable")
-			},
-		)
+		// Recovery revokes stale leases before restart/reconstruction. Fresh leases
+		// are acquired by SecretLifecycle.PrepareServiceStart using the registered
+		// startup manifest and current generation; there is no separate fake
+		// recovery issuance path.
+		secretLeaseAdapter = recovery.NewSecretLeaseAdapter(func(runtimeID string) int {
+			return secretAdapter.RevokeRuntimeLeases(runtimeID, "recovery").RevokedCount
+		})
 	}
 
 	if runtimeProvisioner != nil && runtimeManager != nil && pluginReg != nil {
 		lifecyclePlanner := runtime.NewLifecyclePlanner()
 		structureBuilderAdapter = recovery.NewHostStructureBuilderAdapter(
 			func(ctx context.Context, pluginID domain.PluginID, extensionID string) (recovery.TopologyResult, error) {
-				if err := runtimeProvisioner.Reconcile(ctx); err != nil {
+				if err := runtimeProvisioner.ReconcileExtension(ctx, extensionID); err != nil {
 					return recovery.TopologyResult{Valid: false}, err
 				}
 				runtimes, err := runtimeManager.List(ctx)
@@ -764,7 +823,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		CheckpointStore:          checkpointStore,
 		ConfigStore:              configStore,
 		ConfigResolver:           configResolver,
-		CompanionManager:         companionManager,
+		ArtifactManager:          artifactManager,
 		PluginRegistry:           pluginReg,
 		ContributionSync:         contributionSync,
 		RuntimeManager:           runtimeManager,

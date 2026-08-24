@@ -8,7 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/gamehost/agentbridge"
 	"github.com/u-ai/backend/internal/gamehost/channel"
-	"github.com/u-ai/backend/internal/gamehost/companion"
+	artifact "github.com/u-ai/backend/internal/gamehost/companion"
 	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -37,7 +37,7 @@ type GameHostContainer struct {
 	CheckpointStore  checkpoint.CheckpointStore
 	ConfigStore      *config.FileStore
 	ConfigResolver   *config.Resolver
-	CompanionManager *companion.Manager
+	ArtifactManager  *artifact.ArtifactManager
 
 	PluginRegistry   *registry.Registry
 	ContributionSync *integration.GamePluginSyncService
@@ -108,7 +108,7 @@ func (c *GameHostContainer) ReconcileExtension(ctx context.Context, extensionID 
 		}
 	}
 	if c.RuntimeProvisioner != nil {
-		if err := c.RuntimeProvisioner.Reconcile(ctx); err != nil {
+		if err := c.RuntimeProvisioner.ReconcileExtension(ctx, extensionID); err != nil {
 			return fmt.Errorf("gamehost: reconcile extension %s runtime graph: %w", extensionID, err)
 		}
 	}

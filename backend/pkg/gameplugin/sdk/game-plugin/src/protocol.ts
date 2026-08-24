@@ -91,7 +91,6 @@ export const HostFeature = {
   REALTIME_CONTROL: 'realtime_control',
   STATE_STREAMING: 'state_streaming',
   EVENT_STREAMING: 'event_streaming',
-  BINARY_STREAMING: 'binary_streaming',
   CUSTOM_RPC: 'custom_rpc',
   HOST_API: 'host_api',
   SHARED_CONTROL: 'shared_control',

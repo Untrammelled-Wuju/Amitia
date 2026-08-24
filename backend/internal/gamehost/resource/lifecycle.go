@@ -31,7 +31,7 @@ func (c *LifecycleCoordinator) OnRuntimeRestart(runtimeID string) {
 
 func (c *LifecycleCoordinator) OnExtensionDisabled(extensionID string) {
 	if c.adapter != nil {
-		for _, id := range c.adapter.ActiveSubjects() {
+		for _, id := range c.adapter.RuntimeIDsByExtension(extensionID) {
 			c.adapter.MarkStopping(id)
 		}
 	}

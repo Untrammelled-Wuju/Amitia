@@ -1,4 +1,4 @@
-package companion
+package artifact
 
 import (
 	"archive/zip"
@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,10 +20,10 @@ import (
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
-type InstallationRecord struct {
+type DeploymentRecord struct {
 	ExtensionID   string    `json:"extensionId"`
 	ArtifactID    string    `json:"artifactId"`
-	GameRoot      string    `json:"gameRoot"`
+	TargetRoot    string    `json:"targetRoot"`
 	TargetPath    string    `json:"targetPath"`
 	InstalledHash string    `json:"installedHash"`
 	InstalledAt   time.Time `json:"installedAt"`
@@ -36,58 +37,84 @@ type ArtifactStatus struct {
 	InstalledHash string                      `json:"installedHash,omitempty"`
 }
 
-type Manager struct {
-	mu          sync.Mutex
-	source      integration.KernelContributionSource
-	generations integration.InstalledGenerationResolver
-	statePath   string
-	records     map[string]InstallationRecord
+type ArtifactManager struct {
+	mu              sync.Mutex
+	source          integration.KernelContributionSource
+	generations     integration.InstalledGenerationResolver
+	statePath       string
+	legacyStatePath string
+	records         map[string]DeploymentRecord
 }
 
-func NewManager(dataRoot string, source integration.KernelContributionSource, generations integration.InstalledGenerationResolver) (*Manager, error) {
+func NewArtifactManager(dataRoot string, source integration.KernelContributionSource, generations integration.InstalledGenerationResolver) (*ArtifactManager, error) {
 	if strings.TrimSpace(dataRoot) == "" || source == nil || generations == nil {
-		return nil, fmt.Errorf("companion: data root, kernel source and generation resolver are required")
+		return nil, fmt.Errorf("artifact: data root, kernel source and generation resolver are required")
 	}
-	stateDir := filepath.Join(dataRoot, "gamehost", "companions")
+	stateDir := filepath.Join(dataRoot, "gamehost", "artifacts")
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		return nil, err
 	}
-	m := &Manager{source: source, generations: generations, statePath: filepath.Join(stateDir, "installations.json"), records: map[string]InstallationRecord{}}
+	m := &ArtifactManager{
+		source:          source,
+		generations:     generations,
+		statePath:       filepath.Join(stateDir, "deployments.json"),
+		legacyStatePath: filepath.Join(dataRoot, "gamehost", "companions", "installations.json"),
+		records:         map[string]DeploymentRecord{},
+	}
 	if err := m.load(); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func recordKey(extensionID, artifactID, gameRoot string) string {
-	return extensionID + "\x00" + artifactID + "\x00" + filepath.Clean(gameRoot)
+func recordKey(extensionID, artifactID, targetRoot string) string {
+	return extensionID + "\x00" + artifactID + "\x00" + filepath.Clean(targetRoot)
 }
 
-func (m *Manager) load() error {
+func (m *ArtifactManager) load() error {
 	data, err := os.ReadFile(m.statePath)
+	legacy := false
+	if os.IsNotExist(err) && strings.TrimSpace(m.legacyStatePath) != "" {
+		data, err = os.ReadFile(m.legacyStatePath)
+		legacy = err == nil
+	}
 	if os.IsNotExist(err) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	var records []InstallationRecord
-	if err := json.Unmarshal(data, &records); err != nil {
-		return fmt.Errorf("companion: decode state: %w", err)
+	type persistedRecord struct {
+		DeploymentRecord
+		LegacyGameRoot string `json:"gameRoot,omitempty"`
 	}
-	for _, r := range records {
-		m.records[recordKey(r.ExtensionID, r.ArtifactID, r.GameRoot)] = r
+	var persisted []persistedRecord
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		return fmt.Errorf("artifact: decode state: %w", err)
+	}
+	for _, item := range persisted {
+		r := item.DeploymentRecord
+		if strings.TrimSpace(r.TargetRoot) == "" {
+			r.TargetRoot = item.LegacyGameRoot
+		}
+		if strings.TrimSpace(r.TargetRoot) == "" {
+			continue
+		}
+		m.records[recordKey(r.ExtensionID, r.ArtifactID, r.TargetRoot)] = r
+	}
+	if legacy {
+		return m.saveLocked()
 	}
 	return nil
 }
 
-func (m *Manager) saveLocked() error {
-	records := make([]InstallationRecord, 0, len(m.records))
+func (m *ArtifactManager) saveLocked() error {
+	records := make([]DeploymentRecord, 0, len(m.records))
 	for _, r := range m.records {
 		records = append(records, r)
 	}
 	sort.Slice(records, func(i, j int) bool {
-		return recordKey(records[i].ExtensionID, records[i].ArtifactID, records[i].GameRoot) < recordKey(records[j].ExtensionID, records[j].ArtifactID, records[j].GameRoot)
+		return recordKey(records[i].ExtensionID, records[i].ArtifactID, records[i].TargetRoot) < recordKey(records[j].ExtensionID, records[j].ArtifactID, records[j].TargetRoot)
 	})
 	data, err := json.MarshalIndent(records, "", "  ")
 	if err != nil {
@@ -100,7 +127,7 @@ func (m *Manager) saveLocked() error {
 	return replaceStateFile(tmp, m.statePath)
 }
 
-// replaceStateFile replaces the persisted companion state without relying on
+// replaceStateFile replaces persisted artifact deployment state without relying on
 // POSIX rename-over-existing semantics. Windows does not allow os.Rename to
 // replace an existing file, so keep a short-lived backup and restore it if the
 // replacement fails.
@@ -117,7 +144,7 @@ func replaceStateFile(tmp, target string) error {
 	if _, err := os.Stat(target); err == nil {
 		hadTarget = true
 		if err := os.Rename(target, backup); err != nil {
-			return fmt.Errorf("companion: backup state before replacement: %w", err)
+			return fmt.Errorf("artifact: backup state before replacement: %w", err)
 		}
 	} else if !os.IsNotExist(err) {
 		return err
@@ -127,7 +154,7 @@ func replaceStateFile(tmp, target string) error {
 		if hadTarget {
 			_ = os.Rename(backup, target)
 		}
-		return fmt.Errorf("companion: replace state: %w", err)
+		return fmt.Errorf("artifact: replace state: %w", err)
 	}
 	if hadTarget {
 		_ = os.Remove(backup)
@@ -135,14 +162,14 @@ func replaceStateFile(tmp, target string) error {
 	return nil
 }
 
-func (m *Manager) List(ctx context.Context, extensionID, gameRoot, gameVersion string) ([]ArtifactStatus, error) {
+func (m *ArtifactManager) List(ctx context.Context, extensionID, targetRoot, compatibilityVersion string) ([]ArtifactStatus, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	artifacts, _, err := m.resolveArtifacts(ctx, extensionID, gameVersion)
+	artifacts, _, err := m.resolveArtifacts(ctx, extensionID, compatibilityVersion)
 	if err != nil {
 		return nil, err
 	}
-	root, err := canonicalGameRoot(gameRoot)
+	root, err := canonicalTargetRoot(targetRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -160,92 +187,102 @@ func (m *Manager) List(ctx context.Context, extensionID, gameRoot, gameVersion s
 	return out, nil
 }
 
-func (m *Manager) PrepareRequired(ctx context.Context, extensionID, gameRoot, gameVersion string) error {
+func (m *ArtifactManager) DeployRequired(ctx context.Context, extensionID, targetRoot, compatibilityVersion string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	required, generation, err := m.resolveRequiredArtifacts(ctx, extensionID, gameVersion)
+	required, generation, err := m.resolveRequiredArtifacts(ctx, extensionID, compatibilityVersion)
 	if err != nil {
 		return err
 	}
 	if len(required) == 0 {
 		return nil
 	}
-	root, err := canonicalGameRoot(gameRoot)
+	root, err := canonicalTargetRoot(targetRoot)
 	if err != nil {
-		return fmt.Errorf("companion: required artifacts need a valid gameRoot: %w", err)
+		return fmt.Errorf("artifact: required artifacts need a valid targetRoot: %w", err)
 	}
+	original := cloneDeploymentRecords(m.records)
+	txs := make([]artifactReplacement, 0, len(required))
 	for _, artifact := range required {
-		if _, err := m.installLocked(extensionID, root, generation.Path, artifact); err != nil {
-			return err
+		_, tx, deployErr := m.deployLocked(extensionID, root, generation.Path, artifact)
+		if deployErr != nil {
+			return m.rollbackDeploymentBatch(txs, original, deployErr)
 		}
+		txs = append(txs, tx)
 	}
-	return m.saveLocked()
+	return m.persistDeploymentBatch(txs, original)
 }
 
-func (m *Manager) InstallRequired(ctx context.Context, extensionID, gameRoot, gameVersion string) ([]ArtifactStatus, error) {
+func (m *ArtifactManager) DeployRequiredArtifacts(ctx context.Context, extensionID, targetRoot, compatibilityVersion string) ([]ArtifactStatus, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	artifacts, generation, err := m.resolveArtifacts(ctx, extensionID, gameVersion)
+	artifacts, generation, err := m.resolveArtifacts(ctx, extensionID, compatibilityVersion)
 	if err != nil {
 		return nil, err
 	}
-	root, err := canonicalGameRoot(gameRoot)
+	root, err := canonicalTargetRoot(targetRoot)
 	if err != nil {
 		return nil, err
 	}
+	original := cloneDeploymentRecords(m.records)
+	txs := make([]artifactReplacement, 0)
 	for _, a := range artifacts {
-		if a.Required {
-			if _, err := m.installLocked(extensionID, root, generation.Path, a); err != nil {
-				return nil, err
-			}
+		if !a.Required {
+			continue
 		}
+		_, tx, deployErr := m.deployLocked(extensionID, root, generation.Path, a)
+		if deployErr != nil {
+			return nil, m.rollbackDeploymentBatch(txs, original, deployErr)
+		}
+		txs = append(txs, tx)
 	}
-	if err := m.saveLocked(); err != nil {
+	if err := m.persistDeploymentBatch(txs, original); err != nil {
 		return nil, err
 	}
 	return m.statusesLocked(extensionID, root, artifacts), nil
 }
 
-func (m *Manager) Install(ctx context.Context, extensionID, artifactID, gameRoot, gameVersion string) (ArtifactStatus, error) {
+func (m *ArtifactManager) Deploy(ctx context.Context, extensionID, artifactID, targetRoot, compatibilityVersion string) (ArtifactStatus, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	artifacts, generation, err := m.resolveArtifacts(ctx, extensionID, gameVersion)
+	artifacts, generation, err := m.resolveArtifacts(ctx, extensionID, compatibilityVersion)
 	if err != nil {
 		return ArtifactStatus{}, err
 	}
-	root, err := canonicalGameRoot(gameRoot)
+	root, err := canonicalTargetRoot(targetRoot)
 	if err != nil {
 		return ArtifactStatus{}, err
 	}
 	a, ok := findArtifact(artifacts, artifactID)
 	if !ok {
-		return ArtifactStatus{}, fmt.Errorf("companion: artifact %q not found", artifactID)
+		return ArtifactStatus{}, fmt.Errorf("artifact: artifact %q not found", artifactID)
 	}
-	r, err := m.installLocked(extensionID, root, generation.Path, a)
+	original := cloneDeploymentRecords(m.records)
+	r, tx, err := m.deployLocked(extensionID, root, generation.Path, a)
 	if err != nil {
 		return ArtifactStatus{}, err
 	}
-	if err := m.saveLocked(); err != nil {
+	if err := m.persistDeploymentBatch([]artifactReplacement{tx}, original); err != nil {
 		return ArtifactStatus{}, err
 	}
 	return ArtifactStatus{Artifact: a, Installed: true, Healthy: true, TargetPath: r.TargetPath, InstalledHash: r.InstalledHash}, nil
 }
 
-func (m *Manager) Verify(ctx context.Context, extensionID, artifactID, gameRoot, gameVersion string) (ArtifactStatus, error) {
+func (m *ArtifactManager) Verify(ctx context.Context, extensionID, artifactID, targetRoot, compatibilityVersion string) (ArtifactStatus, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	artifacts, _, err := m.resolveArtifacts(ctx, extensionID, gameVersion)
+	artifacts, _, err := m.resolveArtifacts(ctx, extensionID, compatibilityVersion)
 	if err != nil {
 		return ArtifactStatus{}, err
 	}
-	root, err := canonicalGameRoot(gameRoot)
+	root, err := canonicalTargetRoot(targetRoot)
 	if err != nil {
 		return ArtifactStatus{}, err
 	}
 	a, ok := findArtifact(artifacts, artifactID)
 	if !ok {
-		return ArtifactStatus{}, fmt.Errorf("companion: artifact %q not found", artifactID)
+		return ArtifactStatus{}, fmt.Errorf("artifact: artifact %q not found", artifactID)
 	}
 	r, ok := m.records[recordKey(extensionID, artifactID, root)]
 	if !ok {
@@ -255,11 +292,11 @@ func (m *Manager) Verify(ctx context.Context, extensionID, artifactID, gameRoot,
 	return ArtifactStatus{Artifact: a, Installed: true, Healthy: hashErr == nil && strings.EqualFold(h, r.InstalledHash), TargetPath: r.TargetPath, InstalledHash: r.InstalledHash}, nil
 }
 
-func (m *Manager) Remove(ctx context.Context, extensionID, artifactID, gameRoot string) error {
+func (m *ArtifactManager) Remove(ctx context.Context, extensionID, artifactID, targetRoot string) error {
 	_ = ctx
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	root, err := canonicalGameRoot(gameRoot)
+	root, err := canonicalTargetRoot(targetRoot)
 	if err != nil {
 		return err
 	}
@@ -269,75 +306,210 @@ func (m *Manager) Remove(ctx context.Context, extensionID, artifactID, gameRoot 
 		return nil
 	}
 	if !isWithin(root, r.TargetPath) {
-		return fmt.Errorf("companion: managed target escaped game root")
+		return fmt.Errorf("artifact: managed target escaped target root")
 	}
 	h, err := hashPath(r.TargetPath)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	if err == nil && !strings.EqualFold(h, r.InstalledHash) {
-		return fmt.Errorf("companion: refusing to remove modified artifact %s", r.TargetPath)
+		return fmt.Errorf("artifact: refusing to remove modified artifact %s", r.TargetPath)
 	}
+
+	quarantine := ""
 	if err == nil {
-		if err := os.RemoveAll(r.TargetPath); err != nil {
-			return err
+		quarantine = r.TargetPath + fmt.Sprintf(".amitia-remove-%d", time.Now().UnixNano())
+		_ = os.RemoveAll(quarantine)
+		if err := os.Rename(r.TargetPath, quarantine); err != nil {
+			return fmt.Errorf("artifact: quarantine deployment before removal: %w", err)
 		}
 	}
 	delete(m.records, key)
-	return m.saveLocked()
+	if err := m.saveLocked(); err != nil {
+		m.records[key] = r
+		_ = os.Remove(m.statePath + ".tmp")
+		if quarantine != "" {
+			if restoreErr := os.Rename(quarantine, r.TargetPath); restoreErr != nil {
+				return errors.Join(err, fmt.Errorf("artifact: restore deployment after state failure: %w", restoreErr))
+			}
+		}
+		return err
+	}
+	if quarantine != "" {
+		if err := os.RemoveAll(quarantine); err != nil {
+			return fmt.Errorf("artifact: state committed but cleanup of removed deployment failed: %w", err)
+		}
+	}
+	return nil
 }
 
-func (m *Manager) installLocked(extensionID, gameRoot, generationRoot string, artifact gameprotocol.PluginArtifact) (InstallationRecord, error) {
+func (m *ArtifactManager) deployLocked(extensionID, targetRoot, generationRoot string, artifact gameprotocol.PluginArtifact) (DeploymentRecord, artifactReplacement, error) {
 	if strings.TrimSpace(artifact.Target) == "" {
-		return InstallationRecord{}, fmt.Errorf("companion: artifact %s requires installTarget", artifact.ID)
+		return DeploymentRecord{}, artifactReplacement{}, fmt.Errorf("artifact: artifact %s requires target", artifact.ID)
 	}
 	source, err := resolveContained(generationRoot, artifact.Source)
 	if err != nil {
-		return InstallationRecord{}, err
+		return DeploymentRecord{}, artifactReplacement{}, err
 	}
 	if artifact.SHA256 != "" {
 		h, err := hashPath(source)
 		if err != nil {
-			return InstallationRecord{}, err
+			return DeploymentRecord{}, artifactReplacement{}, err
 		}
 		if !strings.EqualFold(h, normalizeHash(artifact.SHA256)) {
-			return InstallationRecord{}, fmt.Errorf("companion: source hash mismatch for %s", artifact.ID)
+			return DeploymentRecord{}, artifactReplacement{}, fmt.Errorf("artifact: source hash mismatch for %s", artifact.ID)
 		}
 	}
-	target, err := resolveTarget(gameRoot, artifact.Target)
+	target, err := resolveTarget(targetRoot, artifact.Target)
 	if err != nil {
-		return InstallationRecord{}, err
+		return DeploymentRecord{}, artifactReplacement{}, err
 	}
-	key := recordKey(extensionID, artifact.ID, gameRoot)
-	if existing, ok := m.records[key]; ok {
+
+	key := recordKey(extensionID, artifact.ID, targetRoot)
+	existing, managed := m.records[key]
+	if managed {
+		if !isWithin(targetRoot, existing.TargetPath) {
+			return DeploymentRecord{}, artifactReplacement{}, fmt.Errorf("artifact: existing managed target escaped target root")
+		}
 		h, hashErr := hashPath(existing.TargetPath)
-		if hashErr == nil && strings.EqualFold(h, existing.InstalledHash) {
-			_ = os.RemoveAll(existing.TargetPath)
-		} else if hashErr == nil {
-			return InstallationRecord{}, fmt.Errorf("companion: managed target was modified; refusing overwrite")
+		if hashErr != nil {
+			if !os.IsNotExist(hashErr) {
+				return DeploymentRecord{}, artifactReplacement{}, hashErr
+			}
+		} else if !strings.EqualFold(h, existing.InstalledHash) {
+			return DeploymentRecord{}, artifactReplacement{}, fmt.Errorf("artifact: managed target was modified; refusing overwrite")
 		}
-	} else if _, err := os.Lstat(target); err == nil {
-		return InstallationRecord{}, fmt.Errorf("companion: target already exists and is not managed: %s", target)
-	} else if !os.IsNotExist(err) {
-		return InstallationRecord{}, err
 	}
-	if err := installArtifact(source, target, artifact.Type); err != nil {
-		return InstallationRecord{}, err
+	if !managed || filepath.Clean(existing.TargetPath) != filepath.Clean(target) {
+		if _, err := os.Lstat(target); err == nil {
+			return DeploymentRecord{}, artifactReplacement{}, fmt.Errorf("artifact: target already exists and is not managed by this artifact: %s", target)
+		} else if !os.IsNotExist(err) {
+			return DeploymentRecord{}, artifactReplacement{}, err
+		}
 	}
-	h, err := hashPath(target)
+
+	stage := target + fmt.Sprintf(".amitia-stage-%d", time.Now().UnixNano())
+	_ = os.RemoveAll(stage)
+	if err := deployArtifact(source, stage, artifact.Type); err != nil {
+		return DeploymentRecord{}, artifactReplacement{}, err
+	}
+	defer os.RemoveAll(stage)
+
+	h, err := hashPath(stage)
 	if err != nil {
-		_ = os.RemoveAll(target)
-		return InstallationRecord{}, err
+		return DeploymentRecord{}, artifactReplacement{}, err
 	}
-	r := InstallationRecord{ExtensionID: extensionID, ArtifactID: artifact.ID, GameRoot: gameRoot, TargetPath: target, InstalledHash: h, InstalledAt: time.Now().UTC()}
+	tx, err := commitArtifactReplacement(stage, target, existing, managed)
+	if err != nil {
+		return DeploymentRecord{}, artifactReplacement{}, err
+	}
+
+	r := DeploymentRecord{
+		ExtensionID: extensionID, ArtifactID: artifact.ID, TargetRoot: targetRoot,
+		TargetPath: target, InstalledHash: h, InstalledAt: time.Now().UTC(),
+	}
 	m.records[key] = r
-	return r, nil
+	return r, tx, nil
 }
 
-func (m *Manager) statusesLocked(extensionID, gameRoot string, artifacts []gameprotocol.PluginArtifact) []ArtifactStatus {
+// artifactReplacement keeps a previous deployment recoverable until the
+// deployment state file is durably committed.
+type artifactReplacement struct {
+	target       string
+	previousPath string
+	backup       string
+}
+
+func commitArtifactReplacement(stage, target string, existing DeploymentRecord, managed bool) (artifactReplacement, error) {
+	tx := artifactReplacement{target: target}
+	if managed {
+		old := filepath.Clean(existing.TargetPath)
+		tx.previousPath = old
+		if _, err := os.Lstat(old); err == nil {
+			tx.backup = old + fmt.Sprintf(".amitia-backup-%d", time.Now().UnixNano())
+			_ = os.RemoveAll(tx.backup)
+			if err := os.Rename(old, tx.backup); err != nil {
+				return artifactReplacement{}, fmt.Errorf("artifact: backup previous deployment: %w", err)
+			}
+		} else if !os.IsNotExist(err) {
+			return artifactReplacement{}, err
+		}
+	}
+
+	if err := os.Rename(stage, target); err != nil {
+		if tx.backup != "" {
+			_ = os.Rename(tx.backup, tx.previousPath)
+		}
+		return artifactReplacement{}, fmt.Errorf("artifact: commit deployment: %w", err)
+	}
+	return tx, nil
+}
+
+func (tx artifactReplacement) rollback() error {
+	var errs []error
+	if tx.target != "" {
+		if err := os.RemoveAll(tx.target); err != nil {
+			errs = append(errs, fmt.Errorf("remove new deployment %s: %w", tx.target, err))
+		}
+	}
+	if tx.backup != "" {
+		if err := os.Rename(tx.backup, tx.previousPath); err != nil {
+			errs = append(errs, fmt.Errorf("restore previous deployment %s: %w", tx.previousPath, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (tx artifactReplacement) finalize() error {
+	if tx.backup == "" {
+		return nil
+	}
+	if err := os.RemoveAll(tx.backup); err != nil {
+		return fmt.Errorf("remove deployment backup %s: %w", tx.backup, err)
+	}
+	return nil
+}
+
+func cloneDeploymentRecords(records map[string]DeploymentRecord) map[string]DeploymentRecord {
+	copyOf := make(map[string]DeploymentRecord, len(records))
+	for key, value := range records {
+		copyOf[key] = value
+	}
+	return copyOf
+}
+
+func (m *ArtifactManager) rollbackDeploymentBatch(txs []artifactReplacement, original map[string]DeploymentRecord, cause error) error {
+	m.records = original
+	var errs []error
+	if cause != nil {
+		errs = append(errs, cause)
+	}
+	for i := len(txs) - 1; i >= 0; i-- {
+		if err := txs[i].rollback(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (m *ArtifactManager) persistDeploymentBatch(txs []artifactReplacement, original map[string]DeploymentRecord) error {
+	if err := m.saveLocked(); err != nil {
+		_ = os.Remove(m.statePath + ".tmp")
+		return m.rollbackDeploymentBatch(txs, original, err)
+	}
+	var errs []error
+	for _, tx := range txs {
+		if err := tx.finalize(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (m *ArtifactManager) statusesLocked(extensionID, targetRoot string, artifacts []gameprotocol.PluginArtifact) []ArtifactStatus {
 	out := make([]ArtifactStatus, 0, len(artifacts))
 	for _, a := range artifacts {
-		r, ok := m.records[recordKey(extensionID, a.ID, gameRoot)]
+		r, ok := m.records[recordKey(extensionID, a.ID, targetRoot)]
 		st := ArtifactStatus{Artifact: a, Installed: ok}
 		if ok {
 			st.TargetPath = r.TargetPath
@@ -350,7 +522,7 @@ func (m *Manager) statusesLocked(extensionID, gameRoot string, artifacts []gamep
 	return out
 }
 
-func (m *Manager) resolveRequiredArtifacts(ctx context.Context, extensionID, gameVersion string) ([]gameprotocol.PluginArtifact, integration.InstalledGeneration, error) {
+func (m *ArtifactManager) resolveRequiredArtifacts(ctx context.Context, extensionID, compatibilityVersion string) ([]gameprotocol.PluginArtifact, integration.InstalledGeneration, error) {
 	plugins, err := m.source.ListEnabledGamePlugins(ctx)
 	if err != nil {
 		return nil, integration.InstalledGeneration{}, err
@@ -363,7 +535,7 @@ func (m *Manager) resolveRequiredArtifacts(ctx context.Context, extensionID, gam
 			continue
 		}
 		foundExtension = true
-		spec, err := gameprotocol.ParseGamePluginSpec(kp.Contribution.Definition)
+		spec, err := gameprotocol.ParsePluginHostSpec(kp.Contribution.Definition)
 		if err != nil {
 			return nil, integration.InstalledGeneration{}, err
 		}
@@ -372,19 +544,19 @@ func (m *Manager) resolveRequiredArtifacts(ctx context.Context, extensionID, gam
 				continue
 			}
 			requiredDeclared = true
-			if platformMatches(artifact.Platforms) && versionMatches(artifact.CompatibilityVersions, gameVersion) {
+			if platformMatches(artifact.Platforms) && versionMatches(artifact.CompatibilityVersions, compatibilityVersion) {
 				required = append(required, artifact)
 			}
 		}
 	}
 	if !foundExtension {
-		return nil, integration.InstalledGeneration{}, fmt.Errorf("companion: enabled game extension %s not found", extensionID)
+		return nil, integration.InstalledGeneration{}, fmt.Errorf("artifact: enabled game plugin extension %s not found", extensionID)
 	}
 	if !requiredDeclared {
 		return nil, integration.InstalledGeneration{}, nil
 	}
 	if len(required) == 0 {
-		return nil, integration.InstalledGeneration{}, fmt.Errorf("companion: no required artifact is compatible with platform %s and game version %q", currentPlatform(), strings.TrimSpace(gameVersion))
+		return nil, integration.InstalledGeneration{}, fmt.Errorf("artifact: no required artifact is compatible with platform %s and compatibility version %q", currentPlatform(), strings.TrimSpace(compatibilityVersion))
 	}
 	generation, err := m.generations.ResolveInstalledGeneration(ctx, extensionID)
 	if err != nil {
@@ -393,7 +565,7 @@ func (m *Manager) resolveRequiredArtifacts(ctx context.Context, extensionID, gam
 	return required, generation, nil
 }
 
-func (m *Manager) resolveArtifactsOptional(ctx context.Context, extensionID, gameVersion string) ([]gameprotocol.PluginArtifact, integration.InstalledGeneration, error) {
+func (m *ArtifactManager) resolveArtifactsOptional(ctx context.Context, extensionID, compatibilityVersion string) ([]gameprotocol.PluginArtifact, integration.InstalledGeneration, error) {
 	plugins, err := m.source.ListEnabledGamePlugins(ctx)
 	if err != nil {
 		return nil, integration.InstalledGeneration{}, err
@@ -405,18 +577,18 @@ func (m *Manager) resolveArtifactsOptional(ctx context.Context, extensionID, gam
 			continue
 		}
 		foundExtension = true
-		spec, err := gameprotocol.ParseGamePluginSpec(kp.Contribution.Definition)
+		spec, err := gameprotocol.ParsePluginHostSpec(kp.Contribution.Definition)
 		if err != nil {
 			return nil, integration.InstalledGeneration{}, err
 		}
 		for _, artifact := range spec.Artifacts {
-			if platformMatches(artifact.Platforms) && versionMatches(artifact.CompatibilityVersions, gameVersion) {
+			if platformMatches(artifact.Platforms) && versionMatches(artifact.CompatibilityVersions, compatibilityVersion) {
 				artifacts = append(artifacts, artifact)
 			}
 		}
 	}
 	if !foundExtension {
-		return nil, integration.InstalledGeneration{}, fmt.Errorf("companion: enabled game extension %s not found", extensionID)
+		return nil, integration.InstalledGeneration{}, fmt.Errorf("artifact: enabled game plugin extension %s not found", extensionID)
 	}
 	if len(artifacts) == 0 {
 		return nil, integration.InstalledGeneration{}, nil
@@ -428,21 +600,21 @@ func (m *Manager) resolveArtifactsOptional(ctx context.Context, extensionID, gam
 	return artifacts, generation, nil
 }
 
-func (m *Manager) resolveArtifacts(ctx context.Context, extensionID, gameVersion string) ([]gameprotocol.PluginArtifact, integration.InstalledGeneration, error) {
-	artifacts, generation, err := m.resolveArtifactsOptional(ctx, extensionID, gameVersion)
+func (m *ArtifactManager) resolveArtifacts(ctx context.Context, extensionID, compatibilityVersion string) ([]gameprotocol.PluginArtifact, integration.InstalledGeneration, error) {
+	artifacts, generation, err := m.resolveArtifactsOptional(ctx, extensionID, compatibilityVersion)
 	if err != nil {
 		return nil, integration.InstalledGeneration{}, err
 	}
 	if len(artifacts) == 0 {
-		return nil, integration.InstalledGeneration{}, fmt.Errorf("companion: no compatible artifacts for extension %s", extensionID)
+		return nil, integration.InstalledGeneration{}, fmt.Errorf("artifact: no compatible artifacts for extension %s", extensionID)
 	}
 	return artifacts, generation, nil
 }
 
-func canonicalGameRoot(root string) (string, error) {
+func canonicalTargetRoot(root string) (string, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
-		return "", fmt.Errorf("companion: gameRoot is required")
+		return "", fmt.Errorf("artifact: targetRoot is required")
 	}
 	abs, err := filepath.Abs(root)
 	if err != nil {
@@ -450,10 +622,10 @@ func canonicalGameRoot(root string) (string, error) {
 	}
 	info, err := os.Stat(abs)
 	if err != nil {
-		return "", fmt.Errorf("companion: gameRoot unavailable: %w", err)
+		return "", fmt.Errorf("artifact: targetRoot unavailable: %w", err)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("companion: gameRoot must be a directory")
+		return "", fmt.Errorf("artifact: targetRoot must be a directory")
 	}
 	real, err := filepath.EvalSymlinks(abs)
 	if err != nil {
@@ -463,11 +635,11 @@ func canonicalGameRoot(root string) (string, error) {
 }
 func resolveContained(root, rel string) (string, error) {
 	if filepath.IsAbs(rel) {
-		return "", fmt.Errorf("companion: source must be relative")
+		return "", fmt.Errorf("artifact: source must be relative")
 	}
 	clean := filepath.Clean(rel)
 	if clean == "." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("companion: invalid source path")
+		return "", fmt.Errorf("artifact: invalid source path")
 	}
 	p := filepath.Join(root, clean)
 	real, err := filepath.EvalSymlinks(p)
@@ -479,21 +651,21 @@ func resolveContained(root, rel string) (string, error) {
 		return "", err
 	}
 	if !isWithin(base, real) {
-		return "", fmt.Errorf("companion: source escaped generation")
+		return "", fmt.Errorf("artifact: source escaped generation")
 	}
 	return real, nil
 }
 func resolveTarget(root, rel string) (string, error) {
 	if filepath.IsAbs(rel) {
-		return "", fmt.Errorf("companion: installTarget must be relative")
+		return "", fmt.Errorf("artifact: target must be relative")
 	}
 	clean := filepath.Clean(rel)
 	if clean == "." || clean == "" || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("companion: invalid installTarget")
+		return "", fmt.Errorf("artifact: invalid target")
 	}
 	target := filepath.Join(root, clean)
 	if !isWithin(root, target) {
-		return "", fmt.Errorf("companion: target escaped game root")
+		return "", fmt.Errorf("artifact: target escaped target root")
 	}
 	parent := filepath.Dir(target)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
@@ -504,7 +676,7 @@ func resolveTarget(root, rel string) (string, error) {
 		return "", err
 	}
 	if !isWithin(root, realParent) {
-		return "", fmt.Errorf("companion: target parent escaped game root")
+		return "", fmt.Errorf("artifact: target parent escaped target root")
 	}
 	return target, nil
 }
@@ -549,13 +721,13 @@ func normalizeHash(v string) string {
 	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(v)), "sha256:")
 }
 
-func installArtifact(source, target, kind string) error {
+func deployArtifact(source, target, kind string) error {
 	info, err := os.Lstat(source)
 	if err != nil {
 		return err
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("companion: symlink source rejected")
+		return fmt.Errorf("artifact: symlink source rejected")
 	}
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	if info.IsDir() {
@@ -601,7 +773,7 @@ func copyTreeAtomic(source, target string) error {
 			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("companion: symlink rejected: %s", path)
+			return fmt.Errorf("artifact: symlink rejected: %s", path)
 		}
 		rel, _ := filepath.Rel(source, path)
 		if rel == "." {
@@ -634,16 +806,16 @@ func extractZipAtomic(source, target string) error {
 		clean := filepath.Clean(f.Name)
 		if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 			_ = os.RemoveAll(tmp)
-			return fmt.Errorf("companion: unsafe zip entry %q", f.Name)
+			return fmt.Errorf("artifact: unsafe zip entry %q", f.Name)
 		}
 		if f.Mode()&os.ModeSymlink != 0 {
 			_ = os.RemoveAll(tmp)
-			return fmt.Errorf("companion: zip symlink rejected")
+			return fmt.Errorf("artifact: zip symlink rejected")
 		}
 		dst := filepath.Join(tmp, clean)
 		if !isWithin(tmp, dst) {
 			_ = os.RemoveAll(tmp)
-			return fmt.Errorf("companion: zip entry escaped target")
+			return fmt.Errorf("artifact: zip entry escaped target")
 		}
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(dst, f.Mode().Perm()); err != nil {
@@ -683,7 +855,7 @@ func hashPath(path string) (string, error) {
 		return "", err
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("companion: symlink rejected")
+		return "", fmt.Errorf("artifact: symlink rejected")
 	}
 	h := sha256.New()
 	if !info.IsDir() {
@@ -703,7 +875,7 @@ func hashPath(path string) (string, error) {
 			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("companion: symlink rejected")
+			return fmt.Errorf("artifact: symlink rejected")
 		}
 		if !info.IsDir() {
 			paths = append(paths, p)

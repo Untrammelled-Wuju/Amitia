@@ -7,6 +7,7 @@ export const METHOD_PERMISSION_REQUEST = 'permission.request';
 export const PERM_GAMEHOST_CONTROL = 'gamehost.control';
 export const PERM_GAMEHOST_CHANNEL_USE = 'gamehost.channel.use';
 export const PERM_GAMEHOST_HOST_API_INVOKE = 'gamehost.host_api.invoke';
+export const PERM_GAMEHOST_ARTIFACT_DEPLOY = 'gamehost.artifact.deploy';
 
 export const DECISION_ALLOWED = 'allowed';
 export const DECISION_DENIED = 'denied';

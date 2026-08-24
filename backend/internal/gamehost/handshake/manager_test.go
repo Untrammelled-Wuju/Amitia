@@ -93,13 +93,13 @@ func newTestHandshakeManager() (*handshake.HandshakeManager, *rpc.NamespaceRegis
 			domain.CapabilityCustomRPC,
 			domain.CapabilityEventStreaming,
 			domain.CapabilityStateStreaming,
-			domain.CapabilityBinaryStreaming,
 			domain.CapabilityHostAPI,
 		},
-		NamespaceAdapter:  adapter,
-		ChannelAdvertiser: advertiser,
-		RuntimeValidator:  valid,
-		PreReadyAllowlist: nil,
+		NamespaceAdapter:   adapter,
+		ChannelAdvertiser:  advertiser,
+		RuntimeValidator:   valid,
+		DescriptorProvider: newFakeDescriptorProvider(),
+		PreReadyAllowlist:  nil,
 	})
 
 	return mgr, &validator
@@ -118,7 +118,7 @@ func TestHandshakeManager_BasicHello(t *testing.T) {
 	hello := &handshake.HelloRequest{
 		SupportedProtocols: []string{"amitia-game-host/1"},
 		Capabilities:       []string{"custom_rpc"},
-		RPCNamespaces:      []string{"minecraft"},
+		RPCNamespaces:      []string{"examplegame"},
 	}
 
 	resp, err := mgr.HandleHello(context.Background(), connID, peer, hello)
@@ -220,7 +220,7 @@ func TestHandshakeManager_NamespaceConflict(t *testing.T) {
 	hello1 := &handshake.HelloRequest{
 		SupportedProtocols: []string{"amitia-game-host/1"},
 		Capabilities:       []string{"custom_rpc"},
-		RPCNamespaces:      []string{"minecraft"},
+		RPCNamespaces:      []string{"examplegame"},
 	}
 
 	_, err := mgr.HandleHello(context.Background(), connID1, peer1, hello1)
@@ -231,7 +231,7 @@ func TestHandshakeManager_NamespaceConflict(t *testing.T) {
 	hello2 := &handshake.HelloRequest{
 		SupportedProtocols: []string{"amitia-game-host/1"},
 		Capabilities:       []string{"custom_rpc"},
-		RPCNamespaces:      []string{"minecraft"},
+		RPCNamespaces:      []string{"examplegame"},
 	}
 
 	_, err = mgr.HandleHello(context.Background(), connID2, peer2, hello2)
@@ -252,7 +252,7 @@ func TestHandshakeManager_CrossRuntimeSameNamespace(t *testing.T) {
 	hello := &handshake.HelloRequest{
 		SupportedProtocols: []string{"amitia-game-host/1"},
 		Capabilities:       []string{"custom_rpc"},
-		RPCNamespaces:      []string{"minecraft"},
+		RPCNamespaces:      []string{"examplegame"},
 	}
 
 	_, err := mgr.HandleHello(context.Background(), connID1, peer1, hello)
@@ -276,7 +276,7 @@ func TestHandshakeManager_SnapshotAfterReady(t *testing.T) {
 	hello := &handshake.HelloRequest{
 		SupportedProtocols: []string{"amitia-game-host/1"},
 		Capabilities:       []string{"custom_rpc"},
-		RPCNamespaces:      []string{"minecraft", "agent"},
+		RPCNamespaces:      []string{"examplegame", "agent"},
 	}
 
 	_, err := mgr.HandleHello(context.Background(), connID, peer, hello)
@@ -313,7 +313,7 @@ func TestHandshakeManager_NamespacesRequireCustomRPC(t *testing.T) {
 	hello := &handshake.HelloRequest{
 		SupportedProtocols: []string{"amitia-game-host/1"},
 		Capabilities:       []string{"event_streaming"},
-		RPCNamespaces:      []string{"minecraft"},
+		RPCNamespaces:      []string{"examplegame"},
 	}
 
 	_, err := mgr.HandleHello(context.Background(), connID, peer, hello)
@@ -331,7 +331,7 @@ func TestHandshakeManager_HandleHelloFromEnvelope(t *testing.T) {
 	payload := []byte(`{
 		"supportedProtocols": ["amitia-game-host/1"],
 		"capabilities": ["custom_rpc"],
-		"rpcNamespaces": ["minecraft"]
+		"rpcNamespaces": ["examplegame"]
 	}`)
 
 	resp, err := mgr.HandleHelloFromEnvelope(context.Background(), connID, peer, payload)

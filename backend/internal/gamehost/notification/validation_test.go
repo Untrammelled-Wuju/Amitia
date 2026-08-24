@@ -62,7 +62,7 @@ func TestValidateRoute_ControlChars(t *testing.T) {
 
 func TestValidateMethod_OK(t *testing.T) {
 	cases := []string{
-		"minecraft.player.moved",
+		"example.game.entity.updated",
 		"vendor.event",
 		"plugin.custom.notification",
 		"a",

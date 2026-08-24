@@ -30,8 +30,9 @@ type ServiceInstanceSnapshot struct {
 }
 
 type RuntimeTopologySnapshot struct {
-	RuntimeID domain.RuntimeInstanceID
-	PluginID  domain.PluginID
+	RuntimeID   domain.RuntimeInstanceID
+	PluginID    domain.PluginID
+	ExtensionID string
 
 	Services []ServiceInstanceSnapshot
 

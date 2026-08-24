@@ -39,7 +39,7 @@ func (m *DefaultGamePluginContributionMapper) ToDescriptor(
 		name = extension.Name.Default
 	}
 
-	spec, err := protocol.ParseGamePluginSpec(contribution.Definition)
+	spec, err := protocol.ParsePluginHostSpec(contribution.Definition)
 	if err != nil {
 		return gamehostdomain.PluginDescriptor{}, fmt.Errorf("parse game plugin spec: %w", err)
 	}

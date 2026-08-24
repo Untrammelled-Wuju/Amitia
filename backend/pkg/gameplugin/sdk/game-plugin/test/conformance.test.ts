@@ -248,7 +248,7 @@ describe('TypeScript Conformance Suite', () => {
     });
 
     test('game-specific tool capabilities must not be accepted as host features', () => {
-      const customCaps = ['minecraft.pathfinding', 'vendor.agent'];
+      const customCaps = ['example.navigation', 'vendor.agent'];
       for (const cap of customCaps) {
         const errs = validateCapability([cap]);
         expect(errs.length).toBeGreaterThan(0);
@@ -298,7 +298,7 @@ describe('TypeScript Conformance Suite', () => {
     });
 
     test('custom error codes with vendor namespace should be valid', () => {
-      const customCodes = ['minecraft.connection_failed', 'vendor.agent_crashed'];
+      const customCodes = ['vendor.game.connection_failed', 'vendor.agent_crashed'];
       for (const code of customCodes) {
         const env: Envelope = {
           protocol: PROTOCOL_VERSION,
@@ -323,8 +323,8 @@ describe('Cross-Language Wire Compatibility', () => {
       expect(data.protocol).toBe(PROTOCOL_VERSION);
       expect(data.type).toBe('request');
       expect(data.id).toBe('go-req-001');
-      expect(data.method).toBe('minecraft.agent.submit_goal');
-      expect(data.pluginId).toBe('minecraft-plugin');
+      expect(data.method).toBe('example.game.operation.submit');
+      expect(data.pluginId).toBe('example-game-plugin');
       expect(data.runtimeId).toBe('runtime-abc');
       expect(data.payload).toBeDefined();
     });
@@ -352,7 +352,7 @@ describe('Cross-Language Wire Compatibility', () => {
       expect(data.protocol).toBe(PROTOCOL_VERSION);
       expect(data.type).toBe('error');
       expect(data.error).toBeDefined();
-      expect(data.error!.code).toBe('minecraft.connection_failed');
+      expect(data.error!.code).toBe('vendor.game.connection_failed');
       expect(data.error!.retryable).toBe(true);
     });
   });
@@ -363,7 +363,7 @@ describe('Cross-Language Wire Compatibility', () => {
       const idGen = new FixedIDGenerator('ts-req-001');
       const client = new Client(transport, { idGenerator: idGen, pluginId: 'test-plugin' });
 
-      const payload = { goal: 'test' };
+      const payload = { command: 'test' };
       const envelope = client.newRequest('vendor.agent.execute', payload);
 
       expect(envelope.protocol).toBe(PROTOCOL_VERSION);
@@ -549,7 +549,7 @@ describe('Request-Response Correlation', () => {
     const idGen = new FixedIDGenerator('req-100', 'resp-100');
     const client = new Client(transport, { idGenerator: idGen });
 
-    const request = client.newRequest('vendor.test', { goal: 'mine' });
+    const request = client.newRequest('vendor.test', { command: 'run' });
     const response = client.newResponse(request, { status: 'accepted' });
 
     expect(response.requestId).toBe(request.id);

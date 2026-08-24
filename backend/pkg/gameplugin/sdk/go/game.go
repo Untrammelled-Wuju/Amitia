@@ -8,7 +8,6 @@ const (
 	HostFeatureRealtimeControl = protocol.HostFeatureRealtimeControl
 	HostFeatureStateStreaming  = protocol.HostFeatureStateStreaming
 	HostFeatureEventStreaming  = protocol.HostFeatureEventStreaming
-	HostFeatureBinaryStreaming = protocol.HostFeatureBinaryStreaming
 	HostFeatureCustomRPC       = protocol.HostFeatureCustomRPC
 	HostFeatureHostAPI         = protocol.HostFeatureHostAPI
 	HostFeatureSharedControl   = protocol.HostFeatureSharedControl
@@ -29,4 +28,3 @@ type PluginServiceSpec = protocol.PluginServiceSpec
 type PluginChannelSpec = protocol.PluginChannelSpec
 type PluginControlEffectSinkSpec = protocol.PluginControlEffectSinkSpec
 type PluginHostSpec = protocol.PluginHostSpec
-type GamePluginSpec = protocol.GamePluginSpec

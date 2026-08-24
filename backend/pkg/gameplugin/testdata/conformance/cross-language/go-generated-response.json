@@ -8,5 +8,5 @@
     "taskId": "task-123"
   },
   "runtimeId": "runtime-abc",
-  "pluginId": "minecraft-plugin"
+  "pluginId": "example-game-plugin"
 }

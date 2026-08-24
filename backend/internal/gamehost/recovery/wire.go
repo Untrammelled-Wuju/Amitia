@@ -27,7 +27,7 @@ func (a *KernelRollbackAdapter) RollbackPackage(ctx context.Context, extensionID
 }
 
 type SupervisorViewAdapter struct {
-	isQuarantinedFn  func(serviceID string) bool
+	isQuarantinedFn   func(serviceID string) bool
 	getRestartCountFn func(serviceID string) int
 	getMaxRestartsFn  func(serviceID string) int
 }
@@ -38,7 +38,7 @@ func NewSupervisorViewAdapter(
 	getMaxRestartsFn func(serviceID string) int,
 ) *SupervisorViewAdapter {
 	return &SupervisorViewAdapter{
-		isQuarantinedFn:  isQuarantinedFn,
+		isQuarantinedFn:   isQuarantinedFn,
 		getRestartCountFn: getRestartCountFn,
 		getMaxRestartsFn:  getMaxRestartsFn,
 	}
@@ -81,14 +81,10 @@ func (a *AuditSinkAdapter) RecordRecovery(event RecoveryAuditEvent) {
 
 type SecretLeaseAdapter struct {
 	revokeFn func(runtimeID string) int
-	issueFn  func(ctx context.Context, req SecretLeaseRequest) (SecretLeaseResult, error)
 }
 
-func NewSecretLeaseAdapter(
-	revokeFn func(runtimeID string) int,
-	issueFn func(ctx context.Context, req SecretLeaseRequest) (SecretLeaseResult, error),
-) *SecretLeaseAdapter {
-	return &SecretLeaseAdapter{revokeFn: revokeFn, issueFn: issueFn}
+func NewSecretLeaseAdapter(revokeFn func(runtimeID string) int) *SecretLeaseAdapter {
+	return &SecretLeaseAdapter{revokeFn: revokeFn}
 }
 
 func (a *SecretLeaseAdapter) RevokeByRuntimeInstance(runtimeID string) int {
@@ -98,15 +94,8 @@ func (a *SecretLeaseAdapter) RevokeByRuntimeInstance(runtimeID string) int {
 	return 0
 }
 
-func (a *SecretLeaseAdapter) IssueLease(ctx context.Context, req SecretLeaseRequest) (SecretLeaseResult, error) {
-	if a.issueFn != nil {
-		return a.issueFn(ctx, req)
-	}
-	return SecretLeaseResult{Success: false, Error: "not configured"}, nil
-}
-
 type HostStructureBuilderAdapter struct {
-	rebuildTopologyFn func(ctx context.Context, pluginID domain.PluginID, extensionID string) (TopologyResult, error)
+	rebuildTopologyFn  func(ctx context.Context, pluginID domain.PluginID, extensionID string) (TopologyResult, error)
 	rebuildLifecycleFn func(ctx context.Context, topology TopologyResult) (LifecycleResult, error)
 }
 
@@ -251,8 +240,8 @@ func (a *ExtensionStateCheckerAdapter) IsPluginCurrent(pluginID domain.PluginID)
 }
 
 type CheckpointStoreAdapter struct {
-	hasMetadataFn func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (bool, error)
-	loadMetadataFn func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (RuntimeMetadataView, error)
+	hasMetadataFn    func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (bool, error)
+	loadMetadataFn   func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (RuntimeMetadataView, error)
 	loadCheckpointFn func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (RuntimeCheckpointView, error)
 }
 

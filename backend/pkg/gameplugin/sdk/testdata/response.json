@@ -5,6 +5,6 @@
   "requestId": "msg-001",
   "payload": {
     "status": "accepted",
-    "goalId": "goal-001"
+    "operationId": "operation-001"
   }
 }

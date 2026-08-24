@@ -10,8 +10,9 @@ import (
 type RuntimeTopology struct {
 	mu sync.RWMutex
 
-	RuntimeID domain.RuntimeInstanceID
-	PluginID  domain.PluginID
+	RuntimeID   domain.RuntimeInstanceID
+	PluginID    domain.PluginID
+	ExtensionID string
 
 	Services map[domain.ServiceID]*ServiceInstance
 
@@ -96,11 +97,12 @@ func (t *RuntimeTopology) Snapshot() RuntimeTopologySnapshot {
 	sortServicesByID(services)
 
 	return RuntimeTopologySnapshot{
-		RuntimeID: t.RuntimeID,
-		PluginID:  t.PluginID,
-		Services:  services,
-		CreatedAt: t.CreatedAt,
-		UpdatedAt: t.UpdatedAt,
+		RuntimeID:   t.RuntimeID,
+		PluginID:    t.PluginID,
+		ExtensionID: t.ExtensionID,
+		Services:    services,
+		CreatedAt:   t.CreatedAt,
+		UpdatedAt:   t.UpdatedAt,
 	}
 }
 

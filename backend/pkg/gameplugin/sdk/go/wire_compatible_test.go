@@ -30,16 +30,16 @@ func TestWireCompatibleRequest(t *testing.T) {
 	if fixture["type"] != string(protocol.MessageTypeRequest) {
 		t.Fatalf("expected type 'request', got '%v'", fixture["type"])
 	}
-	if fixture["method"] != "minecraft.agent.submit_goal" {
-		t.Fatalf("expected method 'minecraft.agent.submit_goal', got '%v'", fixture["method"])
+	if fixture["method"] != "example.game.operation.submit" {
+		t.Fatalf("expected method 'example.game.operation.submit', got '%v'", fixture["method"])
 	}
 
 	payload, ok := fixture["payload"].(map[string]any)
 	if !ok {
 		t.Fatal("expected payload to be a map")
 	}
-	if payload["goal"] != "build a shelter" {
-		t.Fatalf("expected payload.goal 'build a shelter', got '%v'", payload["goal"])
+	if payload["command"] != "perform operation" {
+		t.Fatalf("expected payload.command 'perform operation', got '%v'", payload["command"])
 	}
 }
 

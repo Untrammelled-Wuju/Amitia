@@ -18,7 +18,7 @@ const (
 )
 
 // HostFeature describes a protocol/host capability supported by a GameHost plugin.
-// Examples: "realtime_control", "state_streaming", "binary_streaming", "custom_rpc"
+// Examples: "realtime_control", "state_streaming", "event_streaming", "custom_rpc"
 //
 // This is NOT an AI logical capability and must NOT be registered in the shared kernel
 // Capability Provider Registry. It declares what kinds of host interaction the plugin
@@ -29,7 +29,6 @@ const (
 	HostFeatureRealtimeControl HostFeature = "realtime_control"
 	HostFeatureStateStreaming  HostFeature = "state_streaming"
 	HostFeatureEventStreaming  HostFeature = "event_streaming"
-	HostFeatureBinaryStreaming HostFeature = "binary_streaming"
 	HostFeatureCustomRPC       HostFeature = "custom_rpc"
 	HostFeatureHostAPI         HostFeature = "host_api"
 	HostFeatureSharedControl   HostFeature = "shared_control"
@@ -41,7 +40,6 @@ const (
 	CapabilityRealtimeControl Capability = "realtime_control"
 	CapabilityStateStreaming  Capability = "state_streaming"
 	CapabilityEventStreaming  Capability = "event_streaming"
-	CapabilityBinaryStreaming Capability = "binary_streaming"
 	CapabilityCustomRPC       Capability = "custom_rpc"
 	CapabilityHostAPI         Capability = "host_api"
 	CapabilitySharedControl   Capability = "shared_control"
@@ -58,7 +56,6 @@ var knownHostFeatures = map[HostFeature]struct{}{
 	HostFeatureRealtimeControl: {},
 	HostFeatureStateStreaming:  {},
 	HostFeatureEventStreaming:  {},
-	HostFeatureBinaryStreaming: {},
 	HostFeatureCustomRPC:       {},
 	HostFeatureHostAPI:         {},
 	HostFeatureSharedControl:   {},

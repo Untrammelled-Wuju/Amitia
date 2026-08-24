@@ -1,7 +1,7 @@
 import { Envelope } from './protocol';
 import { Transport } from './transport';
 import { SDKError, createEncodeError, createTransportError, createValidationError } from './errors';
-import { validateMessageId, validatePluginMethod, validateMethod } from './validation';
+import { validateMessageId, validatePluginMethod, validateMethod, isReservedNamespace } from './validation';
 
 export interface PendingRequest {
   id: string;
@@ -158,8 +158,13 @@ export class Client {
     payload?: unknown,
     ...opts: MessageOption[]
   ): Promise<Envelope> {
-    const envelope = this.newRequest(method, payload, ...opts)
-    return this.sendWithPending(envelope, opts)
+    const methodErr = validateMethod(method);
+    if (methodErr) throw createValidationError(methodErr);
+    if (!isReservedNamespace(method)) {
+      throw createValidationError(`reserved request method '${method}' is not in a reserved namespace`);
+    }
+    const envelope = this.newRequest(method, payload, ...opts);
+    return this.sendWithPending(envelope, opts);
   }
 
   private async sendWithPending(

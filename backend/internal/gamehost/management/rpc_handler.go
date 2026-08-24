@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	ghrpc "github.com/u-ai/backend/internal/gamehost/rpc"
+	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 type RPCHandler struct {
@@ -53,8 +55,21 @@ func (h *RPCHandler) InvokeRPC(c *gin.Context) {
 		return
 	}
 
+	req.Method = strings.TrimSpace(req.Method)
 	if req.Method == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "method required"})
+		return
+	}
+	if err := protocol.ValidateMethod(req.Method); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid RPC method: " + err.Error()})
+		return
+	}
+	if namespace, _, err := ghrpc.ParseMethod(req.Method); err != nil || ghrpc.IsReservedNamespace(namespace) {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "reserved host RPC namespaces are not available through the management debug endpoint"})
+		return
+	}
+	if req.Timeout < 0 || req.Timeout > 120000 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "timeoutMs must be between 0 and 120000"})
 		return
 	}
 

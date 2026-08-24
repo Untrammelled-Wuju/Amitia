@@ -2,7 +2,7 @@
   "protocol": "amitia-game-host/1",
   "type": "request",
   "id": "roundtrip-001",
-  "method": "minecraft.world.query",
+  "method": "example.game.state.query",
   "payload": {
     "position": {
       "x": 100.5,
@@ -15,11 +15,11 @@
     ],
     "entities": [
       {
-        "type": "player",
-        "name": "steve",
+        "type": "subject",
+        "name": "sample-user",
         "health": 20,
         "inventory": [
-          {"slot": 0, "item": "diamond_sword", "enchantments": ["sharpness"]}
+          {"slot": 0, "item": "sample_item", "enchantments": ["sample_modifier"]}
         ]
       }
     ],

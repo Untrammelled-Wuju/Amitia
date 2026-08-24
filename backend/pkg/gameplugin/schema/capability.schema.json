@@ -8,7 +8,6 @@
     "realtime_control",
     "state_streaming",
     "event_streaming",
-    "binary_streaming",
     "custom_rpc",
     "host_api",
     "shared_control",

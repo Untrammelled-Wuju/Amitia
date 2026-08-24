@@ -27,13 +27,13 @@
     {
       "id": "world-state",
       "kind": "state",
-      "schemaId": "minecraft.world-state/v1",
+      "schemaId": "example.game.state/v1",
       "frequencyHint": "high"
     }
   ],
   "capabilities": [
     "custom_rpc",
     "state_streaming",
-    "minecraft.pathfinding"
+    "example.navigation"
   ]
 }

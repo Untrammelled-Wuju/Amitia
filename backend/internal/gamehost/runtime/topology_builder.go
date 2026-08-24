@@ -39,6 +39,7 @@ func (b *TopologyBuilder) Build(
 	}
 
 	topology := NewRuntimeTopology(runtime.ID, runtime.PluginID, now)
+	topology.ExtensionID = descriptor.ExtensionID
 
 	seenServiceIDs := make(map[domain.ServiceID]domain.ServiceDescriptor)
 	for _, svc := range descriptor.Services {

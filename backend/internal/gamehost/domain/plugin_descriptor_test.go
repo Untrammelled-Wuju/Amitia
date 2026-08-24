@@ -171,7 +171,7 @@ func TestPluginDescriptorRejectsGameToolCapabilityAsHostFeature(t *testing.T) {
 	desc := PluginDescriptor{
 		ID: PluginID("test-plugin"), ExtensionID: "com.example.test", Name: "Test",
 		Version: "1.0.0", ProtocolVersion: "amitia-game-host/1",
-		Capabilities: []Capability{Capability("minecraft.pathfinding")},
+		Capabilities: []Capability{Capability("example.navigation")},
 	}
 	if err := desc.Validate(); err == nil {
 		t.Fatal("game/tool capability must not be accepted as a GameHost feature")
@@ -330,9 +330,9 @@ func TestPluginDescriptorCloneDeepCopy(t *testing.T) {
 
 func TestGameToolCapabilitiesStayOutsideGameHostDescriptor(t *testing.T) {
 	desc := PluginDescriptor{
-		ID: PluginID("minecraft-plugin"), ExtensionID: "com.example.minecraft",
-		Name: "Minecraft Plugin", Version: "1.0.0", ProtocolVersion: "amitia-game-host/1",
-		Capabilities: []Capability{Capability("minecraft.building")},
+		ID: PluginID("example-game-plugin"), ExtensionID: "com.example.game",
+		Name: "Example Game Plugin", Version: "1.0.0", ProtocolVersion: "amitia-game-host/1",
+		Capabilities: []Capability{Capability("example.build")},
 	}
 	if err := desc.Validate(); err == nil {
 		t.Fatal("game-specific tool capability must be registered through Extension Kernel, not GameHost")
@@ -400,8 +400,8 @@ func TestPluginDescriptorHasCapability(t *testing.T) {
 	if !desc.HasCapability(CapabilityEventStreaming) {
 		t.Error("expected to find event_streaming capability")
 	}
-	if desc.HasCapability(CapabilityBinaryStreaming) {
-		t.Error("did not expect to find binary_streaming capability")
+	if desc.HasCapability(Capability("binary_streaming")) {
+		t.Error("did not expect unsupported binary_streaming feature")
 	}
 }
 

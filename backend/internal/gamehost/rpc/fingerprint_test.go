@@ -8,32 +8,32 @@ import (
 )
 
 func TestFingerprintDeterministic(t *testing.T) {
-	fp1 := ComputeFingerprint("minecraft.move", []byte(`{"x":1,"y":2}`))
-	fp2 := ComputeFingerprint("minecraft.move", []byte(`{"x":1,"y":2}`))
+	fp1 := ComputeFingerprint("example.game.move", []byte(`{"x":1,"y":2}`))
+	fp2 := ComputeFingerprint("example.game.move", []byte(`{"x":1,"y":2}`))
 	if fp1 != fp2 {
 		t.Errorf("fingerprint must be deterministic: %s != %s", fp1, fp2)
 	}
 }
 
 func TestFingerprintDifferentPayloads(t *testing.T) {
-	fp1 := ComputeFingerprint("minecraft.move", []byte(`{"x":1}`))
-	fp2 := ComputeFingerprint("minecraft.move", []byte(`{"x":2}`))
+	fp1 := ComputeFingerprint("example.game.move", []byte(`{"x":1}`))
+	fp2 := ComputeFingerprint("example.game.move", []byte(`{"x":2}`))
 	if fp1 == fp2 {
 		t.Error("different payloads should produce different fingerprints")
 	}
 }
 
 func TestFingerprintDifferentMethods(t *testing.T) {
-	fp1 := ComputeFingerprint("minecraft.move", []byte(`{"x":1}`))
-	fp2 := ComputeFingerprint("minecraft.attack", []byte(`{"x":1}`))
+	fp1 := ComputeFingerprint("example.game.move", []byte(`{"x":1}`))
+	fp2 := ComputeFingerprint("example.game.action", []byte(`{"x":1}`))
 	if fp1 == fp2 {
 		t.Error("different methods should produce different fingerprints")
 	}
 }
 
 func TestFingerprintNilPayload(t *testing.T) {
-	fp1 := ComputeFingerprint("minecraft.move", nil)
-	fp2 := ComputeFingerprint("minecraft.move", []byte{})
+	fp1 := ComputeFingerprint("example.game.move", nil)
+	fp2 := ComputeFingerprint("example.game.move", []byte{})
 	if fp1 != fp2 {
 		t.Error("nil and empty payload should produce same fingerprint")
 	}

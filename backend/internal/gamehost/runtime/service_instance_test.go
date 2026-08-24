@@ -74,7 +74,7 @@ func TestNewServiceInstance(t *testing.T) {
 	inst, err := NewServiceInstance(
 		"runtime-001/bridge",
 		"runtime-001",
-		"minecraft-plugin",
+		"example-game-plugin",
 		"bridge",
 		true,
 		domain.ServiceKindProcess,

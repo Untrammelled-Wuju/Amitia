@@ -63,15 +63,15 @@ func TestPluginDescriptorConstruction(t *testing.T) {
 }
 
 func TestCustomCapability(t *testing.T) {
-	customCap := Capability("minecraft.pathfinding")
-	if string(customCap) != "minecraft.pathbuilding" && string(customCap) == "minecraft.pathfinding" {
-		// 自定义 cap 不影响核心逻辑
+	customCap := Capability("example.navigation")
+	if string(customCap) != "example.navigation" {
+		t.Fatalf("custom capability changed unexpectedly: %s", customCap)
 	}
 
 	desc := PluginDescriptor{
 		Capabilities: []Capability{
-			"minecraft.pathfinding",
-			"minecraft.building",
+			"example.navigation",
+			"example.build",
 			"custom.visual-agent",
 		},
 	}

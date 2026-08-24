@@ -7,10 +7,10 @@ import (
 )
 
 type fakeReader struct {
-	mu        sync.RWMutex
-	runtimes  map[string]runtimeEntry
-	services  map[string]serviceEntry
-	disabled  map[string]bool
+	mu       sync.RWMutex
+	runtimes map[string]runtimeEntry
+	services map[string]serviceEntry
+	disabled map[string]bool
 }
 
 type runtimeEntry struct {
@@ -76,40 +76,47 @@ func (f *fakeReader) ExtensionEnabled(extensionID string) bool {
 	return !f.disabled[extensionID]
 }
 
+func (f *fakeReader) CurrentGeneration(runtimeID string) (int64, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	if _, ok := f.runtimes[runtimeID]; !ok {
+		return 0, ErrRuntimeNotFound
+	}
+	return 1, nil
+}
+
+func (f *fakeReader) RuntimeIDsByExtension(extensionID string) []string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	var out []string
+	for id, entry := range f.runtimes {
+		if entry.extensionID == extensionID {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 type fakePending struct {
 	mu    sync.Mutex
 	count int
 	limit int
 }
 
-func (p *fakePending) Register(req *PendingRegisterRequest) (bool, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.limit > 0 && p.count >= p.limit {
-		return false, ErrResourceDenied
-	}
-	p.count++
-	return true, nil
-}
-
-func (p *fakePending) Release(key string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.count > 0 {
-		p.count--
-	}
-}
-
-func (p *fakePending) Count() int {
+func (p *fakePending) Count() int { p.mu.Lock(); defer p.mu.Unlock(); return p.count }
+func (p *fakePending) CountByPeer(runtimeID, serviceID string) int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.count
 }
+func (p *fakePending) LimitPerPeer() int { return p.limit }
+func (p *fakePending) LimitGlobal() int  { return p.limit * 10 }
 
 type fakeBinary struct {
-	mu    sync.Mutex
-	count int
-	limit int
+	mu        sync.Mutex
+	count     int
+	limit     int
+	byteLimit int64
 }
 
 func (b *fakeBinary) CountActive() int {
@@ -122,6 +129,13 @@ func (b *fakeBinary) LimitActive() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.limit
+}
+
+func (b *fakeBinary) ActiveBytes() int64 { return int64(b.CountActive()) * 64 }
+func (b *fakeBinary) LimitActiveBytes() int64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.byteLimit
 }
 
 type fakeGovernor struct {
@@ -142,7 +156,7 @@ func (g *fakeGovernor) ConfigureResourceLimits(runtimeID string, limits ServiceR
 func newTestAdapter() (*ResourceAdmissionAdapter, *fakeReader, *fakePending, *fakeBinary, *fakeGovernor) {
 	reader := newFakeReader()
 	pending := &fakePending{limit: 10}
-	fbinary := &fakeBinary{limit: 5}
+	fbinary := &fakeBinary{limit: 5, byteLimit: 5 * 1024 * 1024}
 	resourceGov := &fakeGovernor{}
 	mapper := NewSubjectMapper(reader)
 	adapter := NewResourceAdmissionAdapter(mapper, pending, fbinary, resourceGov)
@@ -155,8 +169,7 @@ func TestAcquireRuntimeStartup_ValidGranted(t *testing.T) {
 	reader.AddService("rt-1", "svc-1", "plugin-1", "ext-1")
 
 	revert, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "plugin-1", ServiceID: "svc-1",
-	}, &RuntimeResourceProfile{MaxMemoryMB: 512, MaxCPUPercent: 50, MaxFileDescriptors: 1024})
+		RuntimeID: "rt-1", PluginID: "plugin-1", ServiceID: "svc-1", Generation: 1}, &RuntimeResourceProfile{MaxMemoryMB: 512, MaxCPUPercent: 50, MaxFileDescriptors: 1024})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -169,8 +182,7 @@ func TestAcquireRuntimeStartup_ValidGranted(t *testing.T) {
 func TestAcquireRuntimeStartup_UnknownRuntime(t *testing.T) {
 	adapter, _, _, _, _ := newTestAdapter()
 	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "missing", PluginID: "p", ServiceID: "s",
-	}, nil)
+		RuntimeID: "missing", PluginID: "p", ServiceID: "s", Generation: 1}, nil)
 	if err != ErrRuntimeNotFound {
 		t.Fatalf("expected ErrRuntimeNotFound, got %v", err)
 	}
@@ -180,8 +192,7 @@ func TestAcquireRuntimeStartup_UnknownService(t *testing.T) {
 	adapter, reader, _, _, _ := newTestAdapter()
 	reader.AddRuntime("rt-1", "plugin-1", "ext-1")
 	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "plugin-1", ServiceID: "svc-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "plugin-1", ServiceID: "svc-1", Generation: 1}, nil)
 	if err != ErrServiceNotFound {
 		t.Fatalf("expected ErrServiceNotFound, got %v", err)
 	}
@@ -193,8 +204,7 @@ func TestAcquireRuntimeStartup_PluginMismatch(t *testing.T) {
 	reader.AddService("rt-1", "svc-1", "plugin-A", "ext-1")
 
 	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "plugin-B", ServiceID: "svc-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "plugin-B", ServiceID: "svc-1", Generation: 1}, nil)
 	if err != ErrSubjectInvalid {
 		t.Fatalf("expected ErrSubjectInvalid, got %v", err)
 	}
@@ -207,8 +217,7 @@ func TestAcquireRuntimeStartup_ExtensionDisabled(t *testing.T) {
 	reader.SetDisabled("ext-1", true)
 
 	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	if err != ErrExtensionDisabled {
 		t.Fatalf("expected ErrExtensionDisabled, got %v", err)
 	}
@@ -220,8 +229,7 @@ func TestAcquireRuntimeStartup_NegativeMemoryProfileRejected(t *testing.T) {
 	reader.AddService("rt-1", "s-1", "p-1", "ext-1")
 
 	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, &RuntimeResourceProfile{MaxMemoryMB: -1})
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, &RuntimeResourceProfile{MaxMemoryMB: -1})
 	if err != ErrProfileInvalid {
 		t.Fatalf("expected ErrProfileInvalid, got %v", err)
 	}
@@ -233,8 +241,7 @@ func TestAcquireRuntimeStartup_CPURateClamped(t *testing.T) {
 	reader.AddService("rt-1", "s-1", "p-1", "ext-1")
 
 	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, &RuntimeResourceProfile{MaxCPUPercent: 500})
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, &RuntimeResourceProfile{MaxCPUPercent: 500})
 	if err != nil {
 		t.Fatalf("should accept but clamp cpu, got %v", err)
 	}
@@ -253,8 +260,7 @@ func TestAcquireRuntimeStartup_HostShutdown(t *testing.T) {
 	adapter.Shutdown()
 
 	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	if err != ErrHostShutdown {
 		t.Fatalf("expected ErrHostShutdown, got %v", err)
 	}
@@ -266,16 +272,14 @@ func TestAcquireRuntimeStartup_RuntimeStopping(t *testing.T) {
 	reader.AddService("rt-1", "s-1", "p-1", "ext-1")
 
 	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	if err != nil {
 		t.Fatalf("initial startup should succeed: %v", err)
 	}
 	adapter.MarkStopping("rt-1")
 
 	_, err = adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	if err != ErrRuntimeStopping {
 		t.Fatalf("expected ErrRuntimeStopping, got %v", err)
 	}
@@ -287,15 +291,13 @@ func TestAcquireRPCPending_WithinLimit(t *testing.T) {
 	reader.AddService("rt-1", "s-1", "p-1", "ext-1")
 
 	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	if err != nil {
 		t.Fatalf("startup: %v", err)
 	}
 
 	decision, release := adapter.AcquireRPCPending(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	})
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1})
 	if !decision.Allowed {
 		t.Fatalf("should allow, got decision %+v", decision)
 	}
@@ -305,8 +307,7 @@ func TestAcquireRPCPending_WithinLimit(t *testing.T) {
 func TestAcquireRPCPending_UnknownRuntime(t *testing.T) {
 	adapter, _, _, _, _ := newTestAdapter()
 	decision, _ := adapter.AcquireRPCPending(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "missing", PluginID: "p", ServiceID: "s",
-	})
+		RuntimeID: "missing", PluginID: "p", ServiceID: "s", Generation: 1})
 	if decision.Allowed {
 		t.Fatal("should deny for missing runtime")
 	}
@@ -317,19 +318,16 @@ func TestAcquireRPCPending_HostShutdown(t *testing.T) {
 	reader.AddRuntime("rt-1", "p-1", "ext-1")
 	reader.AddService("rt-1", "s-1", "p-1", "ext-1")
 	adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	adapter.Shutdown()
 
 	decision, _ := adapter.AcquireRPCPending(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	})
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1})
 	if decision.Allowed {
 		t.Fatal("shutdown should deny new pending")
 	}
 	decision, _ = adapter.AcquireRPCPending(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "new-rt", PluginID: "p", ServiceID: "s",
-	})
+		RuntimeID: "new-rt", PluginID: "p", ServiceID: "s", Generation: 1})
 	if decision.Allowed {
 		t.Fatal("shutdown should deny ALL new pending")
 	}
@@ -341,12 +339,10 @@ func TestAcquireBinaryObject_WithinLimit(t *testing.T) {
 	reader.AddService("rt-1", "s-1", "p-1", "ext-1")
 
 	adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 
 	decision, _ := adapter.AcquireBinaryObject(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, 1024)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, 1024)
 	if !decision.Allowed {
 		t.Fatalf("should allow: %+v", decision)
 	}
@@ -357,13 +353,11 @@ func TestAcquireBinaryObject_HostShutdown(t *testing.T) {
 	reader.AddRuntime("rt-1", "p-1", "ext-1")
 	reader.AddService("rt-1", "s-1", "p-1", "ext-1")
 	adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	adapter.Shutdown()
 
 	decision, _ := adapter.AcquireBinaryObject(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, 100)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, 100)
 	if decision.Allowed {
 		t.Fatal("should deny after shutdown")
 	}
@@ -374,13 +368,11 @@ func TestAcquireQueuePublish_HostShutdown(t *testing.T) {
 	reader.AddRuntime("rt-1", "p-1", "ext-1")
 	reader.AddService("rt-1", "s-1", "p-1", "ext-1")
 	adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	adapter.Shutdown()
 
-	decision := adapter.AcquireQueuePublish(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	})
+	decision, _ := adapter.AcquireQueuePublish(context.Background(), RuntimeIdentitySubject{
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1})
 	if decision.Allowed {
 		t.Fatal("should deny queue publish after shutdown")
 	}
@@ -391,14 +383,12 @@ func TestResetClearsState(t *testing.T) {
 	reader.AddRuntime("rt-1", "p-1", "ext-1")
 	reader.AddService("rt-1", "s-1", "p-1", "ext-1")
 	adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	adapter.Shutdown()
 	adapter.Reset()
 
 	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
-		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1",
-	}, nil)
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	if err != nil {
 		t.Fatalf("reset should clear shutdown, got %v", err)
 	}

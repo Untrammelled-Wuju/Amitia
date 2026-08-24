@@ -5,27 +5,31 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/gamehost/companion"
+	artifact "github.com/u-ai/backend/internal/gamehost/companion"
 )
 
-type CompanionHandler struct{ manager *companion.Manager }
+// ArtifactHandler exposes generic deployment operations for artifacts declared
+// by a game plugin. It deliberately has no knowledge of game installation
+// layouts, loaders, worlds or versions. Callers provide an explicitly approved
+// target root and an opaque compatibility version understood by the plugin.
+type ArtifactHandler struct{ manager *artifact.ArtifactManager }
 
-func NewCompanionHandler(manager *companion.Manager) *CompanionHandler {
-	return &CompanionHandler{manager: manager}
+func NewArtifactHandler(manager *artifact.ArtifactManager) *ArtifactHandler {
+	return &ArtifactHandler{manager: manager}
 }
 
-type companionRequest struct {
-	GameRoot    string `json:"gameRoot"`
-	GameVersion string `json:"gameVersion,omitempty"`
+type artifactDeploymentRequest struct {
+	TargetRoot           string `json:"targetRoot"`
+	CompatibilityVersion string `json:"compatibilityVersion,omitempty"`
 }
 
-func (h *CompanionHandler) List(c *gin.Context) {
+func (h *ArtifactHandler) List(c *gin.Context) {
 	if h == nil || h.manager == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "companion manager unavailable"})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "artifact manager unavailable"})
 		return
 	}
-	root := strings.TrimSpace(c.Query("gameRoot"))
-	version := strings.TrimSpace(c.Query("gameVersion"))
+	root := strings.TrimSpace(c.Query("targetRoot"))
+	version := strings.TrimSpace(c.Query("compatibilityVersion"))
 	items, err := h.manager.List(c.Request.Context(), c.Param("extensionId"), root, version)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -34,13 +38,17 @@ func (h *CompanionHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
-func (h *CompanionHandler) Install(c *gin.Context) {
-	var req companionRequest
+func (h *ArtifactHandler) Deploy(c *gin.Context) {
+	if h == nil || h.manager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "artifact manager unavailable"})
+		return
+	}
+	var req artifactDeploymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	item, err := h.manager.Install(c.Request.Context(), c.Param("extensionId"), c.Param("artifactId"), req.GameRoot, req.GameVersion)
+	item, err := h.manager.Deploy(c.Request.Context(), c.Param("extensionId"), c.Param("artifactId"), req.TargetRoot, req.CompatibilityVersion)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -48,13 +56,17 @@ func (h *CompanionHandler) Install(c *gin.Context) {
 	c.JSON(http.StatusOK, item)
 }
 
-func (h *CompanionHandler) InstallRequired(c *gin.Context) {
-	var req companionRequest
+func (h *ArtifactHandler) DeployRequired(c *gin.Context) {
+	if h == nil || h.manager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "artifact manager unavailable"})
+		return
+	}
+	var req artifactDeploymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	items, err := h.manager.InstallRequired(c.Request.Context(), c.Param("extensionId"), req.GameRoot, req.GameVersion)
+	items, err := h.manager.DeployRequiredArtifacts(c.Request.Context(), c.Param("extensionId"), req.TargetRoot, req.CompatibilityVersion)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -62,13 +74,17 @@ func (h *CompanionHandler) InstallRequired(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
-func (h *CompanionHandler) Verify(c *gin.Context) {
-	var req companionRequest
+func (h *ArtifactHandler) Verify(c *gin.Context) {
+	if h == nil || h.manager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "artifact manager unavailable"})
+		return
+	}
+	var req artifactDeploymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	item, err := h.manager.Verify(c.Request.Context(), c.Param("extensionId"), c.Param("artifactId"), req.GameRoot, req.GameVersion)
+	item, err := h.manager.Verify(c.Request.Context(), c.Param("extensionId"), c.Param("artifactId"), req.TargetRoot, req.CompatibilityVersion)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -76,13 +92,17 @@ func (h *CompanionHandler) Verify(c *gin.Context) {
 	c.JSON(http.StatusOK, item)
 }
 
-func (h *CompanionHandler) Remove(c *gin.Context) {
-	var req companionRequest
+func (h *ArtifactHandler) Remove(c *gin.Context) {
+	if h == nil || h.manager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "artifact manager unavailable"})
+		return
+	}
+	var req artifactDeploymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.manager.Remove(c.Request.Context(), c.Param("extensionId"), c.Param("artifactId"), req.GameRoot); err != nil {
+	if err := h.manager.Remove(c.Request.Context(), c.Param("extensionId"), c.Param("artifactId"), req.TargetRoot); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}

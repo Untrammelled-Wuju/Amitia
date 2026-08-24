@@ -1,8 +1,8 @@
 package sdk
 
 import (
-	"os"
 	"encoding/json"
+	"os"
 	"testing"
 )
 
@@ -15,6 +15,9 @@ func TestGameHostPermissionConstants_CanonicalValues(t *testing.T) {
 	}
 	if PermGameHostHostAPIInvoke != "gamehost.host_api.invoke" {
 		t.Fatalf("PermGameHostHostAPIInvoke = %q, want %q", PermGameHostHostAPIInvoke, "gamehost.host_api.invoke")
+	}
+	if PermGameHostArtifactDeploy != "gamehost.artifact.deploy" {
+		t.Fatalf("PermGameHostArtifactDeploy = %q, want %q", PermGameHostArtifactDeploy, "gamehost.artifact.deploy")
 	}
 }
 
@@ -29,7 +32,7 @@ func TestGameHostPermissionConstants_MatchGoldenFixture(t *testing.T) {
 	if err := json.Unmarshal(data, &fixture); err != nil {
 		t.Fatalf("parse golden fixture: %v", err)
 	}
-	sdkPerms := []string{PermGameHostControl, PermGameHostChannelUse, PermGameHostHostAPIInvoke}
+	sdkPerms := []string{PermGameHostControl, PermGameHostChannelUse, PermGameHostHostAPIInvoke, PermGameHostArtifactDeploy}
 	if len(sdkPerms) != len(fixture.GameHostPermissions) {
 		t.Fatalf("SDK GameHost permission count mismatch: got %d, golden %d", len(sdkPerms), len(fixture.GameHostPermissions))
 	}
@@ -40,13 +43,14 @@ func TestGameHostPermissionConstants_MatchGoldenFixture(t *testing.T) {
 	}
 }
 
-func TestGameHostPermissionConstants_ExactlyThree(t *testing.T) {
+func TestGameHostPermissionConstants_ExactlyFour(t *testing.T) {
 	perms := map[string]bool{
-		PermGameHostControl:       true,
-		PermGameHostChannelUse:    true,
-		PermGameHostHostAPIInvoke: true,
+		PermGameHostControl:        true,
+		PermGameHostChannelUse:     true,
+		PermGameHostHostAPIInvoke:  true,
+		PermGameHostArtifactDeploy: true,
 	}
-	if len(perms) != 3 {
-		t.Fatalf("expected exactly 3 unique GameHost permissions, got %d", len(perms))
+	if len(perms) != 4 {
+		t.Fatalf("expected exactly 4 unique GameHost permissions, got %d", len(perms))
 	}
 }
