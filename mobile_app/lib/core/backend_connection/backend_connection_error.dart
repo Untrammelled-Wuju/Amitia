@@ -15,7 +15,8 @@ enum BackendConnectionErrorCode {
 class BackendConnectionError {
   final BackendConnectionErrorCode code;
   final String message;
-  BackendConnectionError(this.code, this.message);
+
+  const BackendConnectionError(this.code, this.message);
 
   @override
   String toString() => 'BackendConnectionError(${code.name}: $message)';

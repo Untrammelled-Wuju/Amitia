@@ -1,16 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../runtime/status/runtime_status_snapshot.dart';
-import '../runtime/status/runtime_status_provider.dart';
-import '../runtime/status/runtime_status_phase.dart';
-import '../backend_transport/state/backend_transport_state.dart';
+
 import '../backend_transport/providers/backend_transport_providers.dart';
+import '../backend_transport/state/backend_transport_state.dart';
+import '../runtime/status/runtime_status_provider.dart';
+import '../runtime/status/runtime_status_snapshot.dart';
 import 'debug_log_service.dart';
 
 final debugRuntimeLogBridgeProvider = Provider<void>((ref) {
   final logService = ref.read(debugLogServiceProvider);
+  String? lastTransportSignature;
 
   ref.listen<RuntimeStatusSnapshot>(runtimeStatusCurrentProvider, (prev, next) {
-    if (prev?.phase != next.phase) {
+    if (prev?.phase != next.phase ||
+        prev?.runtimeState != next.runtimeState ||
+        prev?.generation != next.generation) {
       logService.addRuntimeLog(
         'Phase: ${next.phase.name} | State: ${next.runtimeState.name} | Gen: ${next.generation}',
         next.primaryError != null ? DebugLogLevel.warn : DebugLogLevel.info,
@@ -23,8 +26,9 @@ final debugRuntimeLogBridgeProvider = Provider<void>((ref) {
       logService.addBackendLog('WebSocket connected');
     }
     if (prev?.primaryError != next.primaryError && next.primaryError != null) {
+      final error = next.primaryError!;
       logService.addRuntimeLog(
-        'Error: ${next.primaryError!.message}',
+        'Error [${error.code}]: ${error.message}',
         DebugLogLevel.error,
       );
     }
@@ -33,10 +37,17 @@ final debugRuntimeLogBridgeProvider = Provider<void>((ref) {
   ref.listen<AsyncValue<BackendTransportState>>(
     backendTransportProvider,
     (prev, next) {
+      final signature = next.when(
+        data: (state) => 'data:${state.runtimeType}',
+        loading: () => 'loading',
+        error: (err, _) => 'error:${err.runtimeType}:$err',
+      );
+      if (signature == lastTransportSignature) return;
+      lastTransportSignature = signature;
+
       next.when(
         data: (state) {
-          final stateName = state.runtimeType.toString();
-          logService.addBackendLog('Transport: $stateName');
+          logService.addBackendLog('Transport: ${state.runtimeType}');
         },
         loading: () {
           logService.addBackendLog('Transport: loading...');
