@@ -118,6 +118,14 @@ export class BackendDriver {
     return this.client.getHandshakeStatus(runtimeId);
   }
 
+  async bindAgentContext(runtimeId: string, body: { serviceId: string; userId?: string; characterId?: string; conversationId?: string; channel?: string; sessionId?: string }): Promise<unknown> {
+    return this.client.bindAgentContext(runtimeId, body);
+  }
+
+  async invokeCanonicalTool<T = unknown>(body: { toolId: string; input?: unknown; userId?: string; characterId?: string; conversationId?: string; channel?: string; sessionId?: string; requestId?: string; toolCallId?: string }): Promise<T> {
+    return this.client.invokeCanonicalTool<T>(body);
+  }
+
   async listPlugins(filter?: { search?: string; status?: string }): Promise<GamePluginSummary[]> {
     const resp = await this.client.listPlugins(filter);
     return resp.items;

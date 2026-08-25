@@ -176,6 +176,29 @@ describe('G47-F15 E2E Full Flow', () => {
     expect(readyDetail.runtimeState).toBe('running');
     expect(readyDetail.handshake?.ready).toBe(true);
 
+    // Canonical Agent Tool E2E: this is deliberately NOT the direct management
+    // RPC endpoint. It traverses ToolFacade -> ExecutionPipeline -> GameHost
+    // RuntimeAdapter -> ControlPlane -> the external mock process.
+    await driver.bindAgentContext(runtimeId, {
+      serviceId: 'mock-game-runtime',
+      characterId: 'e2e-character',
+      conversationId: 'e2e-conversation',
+      channel: 'web',
+      sessionId: 'e2e-session',
+    });
+    const agentToolResult = await driver.invokeCanonicalTool<any>({
+      toolId: 'mock-developer/mock-amitiax-game-plugin/mockgame/move',
+      input: { direction: 'north' },
+      characterId: 'e2e-character',
+      conversationId: 'e2e-conversation',
+      channel: 'web',
+      sessionId: 'e2e-session',
+      requestId: `agent-tool-${Date.now()}`,
+      toolCallId: 'mock-move-call',
+    });
+    expect(agentToolResult).toBeDefined();
+    expect(agentToolResult.status).toBe('success');
+
     // 6. Custom RPC (via new RPC endpoint)
     const customRpcResp = await fetch(
       `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,

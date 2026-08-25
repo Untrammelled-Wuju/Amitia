@@ -198,6 +198,14 @@ export class GameCenterClient {
     return this.post(`/game-center/runtimes/${encodeURIComponent(runtimeId)}/rearm`);
   }
 
+  async bindAgentContext(runtimeId: string, body: { serviceId: string; userId?: string; characterId?: string; conversationId?: string; channel?: string; sessionId?: string }): Promise<unknown> {
+    return this.post(`/game-center/runtimes/${encodeURIComponent(runtimeId)}/agent-context`, body);
+  }
+
+  async invokeCanonicalTool<T = unknown>(body: { toolId: string; input?: unknown; userId?: string; characterId?: string; conversationId?: string; channel?: string; sessionId?: string; requestId?: string; toolCallId?: string }): Promise<T> {
+    return this.post<T>('/game-center-debug/tools/invoke', body);
+  }
+
   async updatePlugin(extensionId: string, archivePath: string): Promise<unknown> {
     return this.post(`/game-center/plugins/${encodeURIComponent(extensionId)}/update`, { archivePath } satisfies InstallPluginRequest);
   }
