@@ -601,10 +601,52 @@ async function refresh() {
     plugins.value = pluginResult?.items ?? [];
     runtimes.value = runtimeResult?.items ?? [];
     developerAccess.value = developerResult?.enabled === true;
+    void bindRuntimeAgentContexts(runtimes.value);
   } catch (err: any) {
     error.value = err?.message || "游戏模式加载失败";
   } finally {
     loading.value = false;
+  }
+}
+
+function currentGameAgentContext() {
+  let characterId = String(localStorage.getItem("webchat-char-id") || "").trim();
+  if (!characterId) {
+    try {
+      const cached = JSON.parse(localStorage.getItem("uai-default-char") || "{}");
+      characterId = cached?.id ? String(cached.id).trim() : "";
+    } catch {
+      characterId = "";
+    }
+  }
+  return {
+    characterId,
+    conversationId: localStorage.getItem("webchat-conv-id") || "",
+    channel: "web",
+    sessionId: "game-center",
+  };
+}
+
+async function bindRuntimeAgentContexts(runtimeItems: Runtime[]) {
+  await Promise.all(runtimeItems
+    .filter((runtime) => runtime.runtimeId && (runtime.connected || runtime.ready))
+    .map((runtime) => bindRuntimeAgentContext(runtime.runtimeId)));
+}
+
+async function bindRuntimeAgentContext(runtimeId: string) {
+  runtimeId = String(runtimeId || "").trim();
+  if (!runtimeId) return;
+  try {
+    await api.post(
+      `/api/game-center/runtimes/${encodeURIComponent(runtimeId)}/agent-context`,
+      currentGameAgentContext(),
+      { timeout: 10000 },
+    );
+  } catch {
+    // Context binding is best-effort from the UI because a runtime may be in
+    // the middle of a restart. The Agent bridge also refreshes the binding on
+    // every real tool invocation, so a transient bind failure must not make
+    // Game Center itself unusable.
   }
 }
 
@@ -729,8 +771,11 @@ function formatBytes(bytes: number) {
   return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
 }
 
-function goToGameChat() {
-  void router.push("/chat");
+async function goToGameChat() {
+  if (activeRuntime.value?.runtimeId) {
+    await bindRuntimeAgentContext(activeRuntime.value.runtimeId);
+  }
+  await router.push("/chat");
 }
 
 async function takeManualControl() {
@@ -941,6 +986,7 @@ async function showRuntimeDetail(runtime: Runtime) {
     runtimeHealth.value = healthResult;
     runtimeHandshake.value = handshakeResult;
     runtimeAuthority.value = authorityResult;
+    await bindRuntimeAgentContext(runtime.runtimeId);
   } catch (err: any) {
     ElMessage.error(err?.message || "加载运行时开发者详情失败");
   } finally {
