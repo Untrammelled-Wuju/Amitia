@@ -600,7 +600,7 @@ func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance
 	instance.PID = cmd.Process.Pid
 	instance.managedProc = cmd
 
-	handle, attachErr := process.AttachProcessTree(cmd)
+	handle, attachErr := process.AttachProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
 	if attachErr != nil {
 		stdinPipe.Close()
 		stdoutPipe.Close()
@@ -651,7 +651,7 @@ func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance
 	}
 
 	welcomeExpiry := time.Now().UTC().Add(30 * time.Minute)
-	if err := rpcSession.SendWelcome(req.SessionToken, enforcedResourceLimits(def.Limits), welcomeExpiry); err != nil {
+	if err := rpcSession.SendWelcome(req.SessionToken, enforcedResourceLimits(def.Limits, process.ResourceLimitsSupported()), welcomeExpiry); err != nil {
 		s.killProcessTree(instance)
 		rpcSession.Close()
 		return cmd, fmt.Errorf("trusted_service: rpc send welcome: %w", err)
@@ -702,7 +702,7 @@ func (s *ProcessSupervisor) startPlainService(processCtx context.Context, instan
 	instance.PID = cmd.Process.Pid
 	instance.managedProc = cmd
 
-	handle, attachErr := process.AttachProcessTree(cmd)
+	handle, attachErr := process.AttachProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
 	if attachErr != nil {
 		return cmd, fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
 	}
@@ -755,7 +755,7 @@ func (s *ProcessSupervisor) startManagedStdioProtocolService(
 	instance.PID = cmd.Process.Pid
 	instance.managedProc = cmd
 
-	handle, attachErr := process.AttachProcessTree(cmd)
+	handle, attachErr := process.AttachProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
 	if attachErr != nil {
 		stdinPipe.Close()
 		stdoutPipe.Close()
@@ -1583,28 +1583,57 @@ func (w *logWriter) Write(p []byte) (int, error) {
 
 var _ io.Writer = (*logWriter)(nil)
 
-// enforcedResourceLimits only advertises limits with an actual enforcement
-// value. Zero-valued fields mean "not enforced by this supervisor" and are not
-// sent as misleading max_* guarantees to plugin runtimes.
-func enforcedResourceLimits(limits ServiceResourceLimits) map[string]any {
-	out := make(map[string]any)
+// platformProcessResourceLimits converts manifest declarations to the subset
+// understood by the platform process backend.
+func platformProcessResourceLimits(limits ServiceResourceLimits) process.ResourceLimits {
+	out := process.ResourceLimits{}
 	if limits.MaxMemoryMB > 0 {
-		out["max_memory_mb"] = limits.MaxMemoryMB
+		const mib = uint64(1024 * 1024)
+		mb := uint64(limits.MaxMemoryMB)
+		if mb > ^uint64(0)/mib {
+			out.MaxMemoryBytes = ^uint64(0)
+		} else {
+			out.MaxMemoryBytes = mb * mib
+		}
 	}
 	if limits.MaxCPUPercent > 0 {
-		out["max_cpu_percent"] = limits.MaxCPUPercent
+		pct := limits.MaxCPUPercent
+		if pct > 100 {
+			pct = 100
+		}
+		out.MaxCPUPercent = uint32(pct)
 	}
 	if limits.MaxSubprocesses > 0 {
+		// Job/process-tree limits count the service process itself. The manifest
+		// value describes child processes, so reserve one slot for the root.
+		if uint64(limits.MaxSubprocesses) >= uint64(^uint32(0)) {
+			out.MaxProcesses = ^uint32(0)
+		} else {
+			out.MaxProcesses = uint32(limits.MaxSubprocesses) + 1
+		}
+	}
+	return out
+}
+
+// enforcedResourceLimits only advertises limits backed by an active platform
+// enforcement mechanism. Declarative limits that are merely observed are not
+// sent to a plugin as hard guarantees.
+func enforcedResourceLimits(limits ServiceResourceLimits, support process.ResourceLimitSupport) map[string]any {
+	out := make(map[string]any)
+	if support.Memory && limits.MaxMemoryMB > 0 {
+		out["max_memory_mb"] = limits.MaxMemoryMB
+	}
+	if support.CPU && limits.MaxCPUPercent > 0 {
+		pct := limits.MaxCPUPercent
+		if pct > 100 {
+			pct = 100
+		}
+		out["max_cpu_percent"] = pct
+	}
+	if support.Processes && limits.MaxSubprocesses > 0 {
 		out["max_subprocesses"] = limits.MaxSubprocesses
 	}
-	if limits.MaxFileDescriptors > 0 {
-		out["max_file_descriptors"] = limits.MaxFileDescriptors
-	}
-	if limits.MaxDiskMB > 0 {
-		out["max_disk_mb"] = limits.MaxDiskMB
-	}
-	if limits.CPUTime > 0 {
-		out["cpu_time_ms"] = limits.CPUTime.Milliseconds()
-	}
+	// MaxFileDescriptors, MaxDiskMB and CPUTime remain declarative until a
+	// platform backend enforces them. Do not mislabel them as hard limits.
 	return out
 }
