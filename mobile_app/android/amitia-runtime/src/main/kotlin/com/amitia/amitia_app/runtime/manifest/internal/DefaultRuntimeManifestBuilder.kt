@@ -17,8 +17,17 @@ import java.io.File
 
 internal class DefaultRuntimeManifestBuilder(
     private val layout: RuntimeHostLayout,
-    private val abiStatus: RuntimeAbiStatus.Supported,
+    private val hostAbi: String,
 ) : RuntimeManifestBuilder {
+
+    constructor(
+        layout: RuntimeHostLayout,
+        abiStatus: RuntimeAbiStatus.Supported,
+    ) : this(layout, abiStatus.abi)
+
+    init {
+        require(hostAbi.isNotBlank()) { "hostAbi must not be blank" }
+    }
 
     private var manifest: RuntimeManifest? = null
 
@@ -39,7 +48,7 @@ internal class DefaultRuntimeManifestBuilder(
     ): RuntimeManifestResult {
         val target = RuntimeManifestTarget(
             hostPlatform = RuntimeManifestTarget.HOST_PLATFORM_ANDROID,
-            hostAbi = abiStatus.abi,
+            hostAbi = hostAbi,
             runtimeKind = RuntimeManifestTarget.RUNTIME_KIND_PROOT,
             guestPlatform = RuntimeManifestTarget.GUEST_PLATFORM_LINUX,
             guestArchitecture = "arm64",

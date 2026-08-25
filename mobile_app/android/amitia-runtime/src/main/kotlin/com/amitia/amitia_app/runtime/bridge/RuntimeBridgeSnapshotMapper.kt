@@ -18,6 +18,7 @@ object RuntimeBridgeSnapshotMapper {
         result["generation"] = snapshot.generation
         result["runtimeInstalled"] = runtimeInstalled
         result["runtimeAvailable"] = runtimeAvailable
+        result["activeProfile"] = snapshot.activeProfile
         result["lastError"] = snapshot.lastError?.let { mapError(it) }
         result["manifest"] = manifest?.let { mapManifest(it) }
         return result

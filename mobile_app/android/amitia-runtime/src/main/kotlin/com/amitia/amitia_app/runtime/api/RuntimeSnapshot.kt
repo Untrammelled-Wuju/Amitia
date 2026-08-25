@@ -9,7 +9,9 @@ data class RuntimeSnapshot(
     val components: List<RuntimeComponentSnapshot>,
     val lastError: RuntimeError?,
     val generation: Long,
-    val updatedAtEpochMillis: Long
+    val updatedAtEpochMillis: Long,
+    /** Runtime profile owned by the current generation (for example local/device-agent). */
+    val activeProfile: String? = null
 ) {
     init {
         require(generation >= 0) { "generation must not be negative" }
@@ -30,7 +32,8 @@ data class RuntimeSnapshot(
             components = emptyList(),
             lastError = null,
             generation = 0,
-            updatedAtEpochMillis = 0
+            updatedAtEpochMillis = 0,
+            activeProfile = null
         )
     }
 }

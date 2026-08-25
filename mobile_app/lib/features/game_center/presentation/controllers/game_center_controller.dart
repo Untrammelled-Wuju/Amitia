@@ -215,6 +215,16 @@ class GameCenterController extends StateNotifier<GameCenterState> {
       if (!mounted) return;
       if (gen != state.generation) return;
       state = state.copyWith(runtimeDetail: detail, runtimeLoading: false);
+      try {
+        // The backend derives the authenticated user from the request context
+        // and applies this binding to all process services when serviceId is
+        // omitted. A missing explicit character is valid; the Agent event sink
+        // will resolve the user's current/default character on first wake.
+        await api.bindAgentContext(runtimeId);
+      } catch (_) {
+        // Runtime selection must remain usable during transient restart windows.
+        // A later selection or real tool invocation refreshes the binding.
+      }
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;

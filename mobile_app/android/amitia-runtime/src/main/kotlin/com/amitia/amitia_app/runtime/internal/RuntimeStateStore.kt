@@ -26,7 +26,12 @@ class RuntimeStateStore(
         }
     }
 
-    fun initialize(targetState: RuntimeState, runtimeVersion: String? = null): RuntimeSnapshot {
+    fun initialize(
+        targetState: RuntimeState,
+        runtimeVersion: String? = null,
+        lastError: com.amitia.amitia_app.runtime.api.RuntimeError? = null,
+        activeProfile: String? = null,
+    ): RuntimeSnapshot {
         var resultSnapshot: RuntimeSnapshot
         var snapshotToNotify: RuntimeSnapshot? = null
 
@@ -44,6 +49,8 @@ class RuntimeStateStore(
             val newSnapshot = currentSnapshot.copy(
                 state = targetState,
                 runtimeVersion = runtimeVersion,
+                lastError = lastError,
+                activeProfile = activeProfile,
                 updatedAtEpochMillis = clock.nowEpochMillis()
             )
 
@@ -77,18 +84,22 @@ class RuntimeStateStore(
 
     fun subscribe(listener: RuntimeListener): RuntimeSubscription {
         val entry = ListenerEntry(listener)
-        val snapshotCopy = currentSnapshot.copy(
-            components = currentSnapshot.components.toList()
-        )
         lock.writeLock().withLock {
             if (closed.get()) {
                 return CancelledSubscription
             }
+            // Registration and the initial callback are serialized with updates.
+            // This prevents both a lost update and the inverse ordering where a
+            // concurrent READY event is delivered before an older STARTING
+            // initial snapshot.
             listeners.add(entry)
-        }
-        try {
-            listener.onRuntimeSnapshotChanged(snapshotCopy)
-        } catch (_: Throwable) {
+            val snapshotCopy = currentSnapshot.copy(
+                components = currentSnapshot.components.toList()
+            )
+            try {
+                listener.onRuntimeSnapshotChanged(snapshotCopy)
+            } catch (_: Throwable) {
+            }
         }
         return RuntimeSubscriptionImpl(entry, this)
     }
@@ -143,7 +154,7 @@ class RuntimeStateStore(
         )
     }
 
-    fun transitionToStarting(): RuntimeSnapshot {
+    fun transitionToStarting(profile: String = "local"): RuntimeSnapshot {
         var resultSnapshot: RuntimeSnapshot
         var snapshotToNotify: RuntimeSnapshot? = null
 
@@ -165,10 +176,12 @@ class RuntimeStateStore(
 
             val newGeneration = oldSnapshot.generation + 1
 
+            val normalizedProfile = profile.trim().ifEmpty { "local" }
             val newSnapshot = oldSnapshot.copy(
                 state = RuntimeState.STARTING,
                 generation = newGeneration,
                 lastError = null,
+                activeProfile = normalizedProfile,
                 updatedAtEpochMillis = clock.nowEpochMillis()
             )
 

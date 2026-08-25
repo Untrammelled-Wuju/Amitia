@@ -3,7 +3,12 @@ package com.amitia.amitia_app.runtime.recovery
 internal interface RuntimeCrashRecoveryPolicy {
     fun evaluate(request: RuntimeRecoveryRequest): RuntimeRecoveryDecision
     fun recordReady(generation: Long)
-    fun cancelPending()
+
+    /** Cancel bookkeeping associated with a scheduled job without resetting crash history. */
+    fun cancelPending() {}
+
+    /** Explicitly start a new crash-recovery budget (user stop/retry or fresh lifecycle). */
+    fun resetBudget() {}
 }
 
 internal class DefaultRuntimeCrashRecoveryPolicy(
@@ -39,7 +44,7 @@ internal class DefaultRuntimeCrashRecoveryPolicy(
         val now = clock()
 
         if (lastReadyGeneration >= 0 && now - lastReadyTime >= stableReadyWindowMillis &&
-            request.failedGeneration > lastReadyGeneration) {
+            request.failedGeneration >= lastReadyGeneration) {
             attempts = 0
             firstAttemptTime = now
             lastReadyGeneration = -1L
@@ -71,8 +76,16 @@ internal class DefaultRuntimeCrashRecoveryPolicy(
     }
 
     override fun cancelPending() {
+        // Scheduling is owned by RuntimeRecoveryScheduler. Cancelling a pending
+        // job must not erase the attempt budget, otherwise every crash becomes
+        // attempt #1 and RECOVERY_EXHAUSTED can never be reached.
+    }
+
+    override fun resetBudget() {
         attempts = 0
         firstAttemptTime = 0L
+        lastReadyGeneration = -1L
+        lastReadyTime = 0L
     }
 
     private fun isRecoverable(error: com.amitia.amitia_app.runtime.api.RuntimeError): Boolean {

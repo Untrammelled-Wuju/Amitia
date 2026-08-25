@@ -82,6 +82,26 @@ class GameCenterApi {
     );
   }
 
+  Future<void> bindAgentContext(
+    String runtimeId, {
+    String? serviceId,
+    String? characterId,
+    String? conversationId,
+    String? channel = 'mobile',
+    String? sessionId = 'game-center',
+  }) async {
+    await _api.post<void>(
+      '/api/game-center/runtimes/${Uri.encodeComponent(runtimeId)}/agent-context',
+      data: <String, dynamic>{
+        if (serviceId != null && serviceId.trim().isNotEmpty) 'serviceId': serviceId.trim(),
+        if (characterId != null && characterId.trim().isNotEmpty) 'characterId': characterId.trim(),
+        if (conversationId != null && conversationId.trim().isNotEmpty) 'conversationId': conversationId.trim(),
+        if (channel != null && channel.trim().isNotEmpty) 'channel': channel.trim(),
+        if (sessionId != null && sessionId.trim().isNotEmpty) 'sessionId': sessionId.trim(),
+      },
+    );
+  }
+
   Future<GameRuntimeHealthResponse> getRuntimeHealth(String runtimeId) async {
     final data = await _api.get<Map<String, dynamic>>('/api/game-center/runtimes/$runtimeId/health');
     return GameRuntimeHealthResponse.fromJson(data ?? const <String, dynamic>{});

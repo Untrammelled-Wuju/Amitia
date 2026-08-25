@@ -365,6 +365,22 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     var status = await _embeddedRuntime.getStatus();
     var startIssued = false;
 
+    // READY and STARTING are still profile-specific on Android. Route the
+    // first observation through ensureRunning(profile) so a local ↔ hybrid
+    // switch cannot silently reuse the wrong native generation.
+    if (status == EmbeddedRuntimeStatus.ready ||
+        status == EmbeddedRuntimeStatus.starting ||
+        status == EmbeddedRuntimeStatus.stopped ||
+        status == EmbeddedRuntimeStatus.failed) {
+      startIssued = true;
+      status = await _embeddedRuntime.ensureRunning(profile);
+      if (status == EmbeddedRuntimeStatus.ready ||
+          status == EmbeddedRuntimeStatus.unsupported ||
+          status == EmbeddedRuntimeStatus.notInstalled) {
+        return status;
+      }
+    }
+
     while (!_disposed && expectedGeneration == _generation) {
       if (status == EmbeddedRuntimeStatus.ready ||
           status == EmbeddedRuntimeStatus.unsupported ||

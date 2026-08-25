@@ -41,6 +41,8 @@ internal class DefaultRuntimeBootstrapper(
     private val activeRuntimeManager: ActiveRuntimeManager,
     private val hostLayout: RuntimeHostLayout,
     private val installedRuntimeVerifier: InstalledRuntimeVerifier,
+    /** Keep plugin attachment lightweight; deep integrity verification happens before start. */
+    private val verifyInstalledTreeOnBootstrap: Boolean = true,
 ) : RuntimeBootstrapper {
 
     override fun bootstrap(): RuntimeBootstrapResult {
@@ -106,6 +108,12 @@ internal class DefaultRuntimeBootstrapper(
             return RuntimeBootstrapResult.Failed(
                 code = RuntimeBootstrapErrorCode.ACTIVE_VERSION_MISSING,
                 message = "active runtime version directory missing: ${activeInfo.version}"
+            )
+        }
+
+        if (!verifyInstalledTreeOnBootstrap) {
+            return RuntimeBootstrapResult.InstalledStopped(
+                runtimeVersion = manifest.runtimeVersion
             )
         }
 

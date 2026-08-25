@@ -40,6 +40,18 @@ private enum class CommitStage {
     ACTIVE_COMMITTED,
 }
 
+private data class RepairBackup(
+    val versionDir: File,
+    val backupVersionDir: File?,
+    val receiptFile: File,
+    val receiptBytes: ByteArray?,
+    val manifestBytes: ByteArray?,
+    val manifestShaBytes: ByteArray?,
+    val activeRuntimeBytes: ByteArray?,
+    val manifestBefore: RuntimeManifestResult,
+    val activeBefore: ActiveRuntimeResult,
+)
+
 internal class DefaultRuntimeInstaller(
     private val layout: RuntimeHostLayout,
     private val abiGate: RuntimeAbiGate,
@@ -104,6 +116,8 @@ internal class DefaultRuntimeInstaller(
         val transaction = createTransaction()
         var commitStage = CommitStage.PRE_COMMIT
         var versionExistedBeforeInstall = false
+        var repairBackup: RepairBackup? = null
+        var repairCompleted = false
         try {
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.CREATED)
 
@@ -117,7 +131,7 @@ internal class DefaultRuntimeInstaller(
             transaction.setPackageSha256(verifiedPackage.packageSha256)
 
             val existingReceipt = receiptStore.load(verifiedPackage.packageIndex.runtimeVersion)
-            if (existingReceipt is InstallReceiptResult.Success) {
+            if (existingReceipt is InstallReceiptResult.Success && !request.allowRepairExisting) {
                 val receipt = existingReceipt.receipt
                 if (receipt.packageSha256 == verifiedPackage.packageSha256 &&
                     receipt.runtimeRootTreeSha256.isNotEmpty()) {
@@ -137,7 +151,7 @@ internal class DefaultRuntimeInstaller(
 
             val targetVersionDir = layout.runtimeVersionRoot(verifiedPackage.packageIndex.runtimeVersion)
             versionExistedBeforeInstall = targetVersionDir.exists()
-            if (versionExistedBeforeInstall) {
+            if (versionExistedBeforeInstall && !request.allowRepairExisting) {
                 val existingReceiptForCompare = receiptStore.load(verifiedPackage.packageIndex.runtimeVersion)
                 if (existingReceiptForCompare is InstallReceiptResult.Success &&
                     existingReceiptForCompare.receipt.packageSha256 == verifiedPackage.packageSha256) {
@@ -220,7 +234,7 @@ internal class DefaultRuntimeInstaller(
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.RUNTIME_VERIFIED)
 
             val versionDir = layout.runtimeVersionRoot(verifiedPackage.packageIndex.runtimeVersion)
-            if (versionDir.exists()) {
+            if (versionDir.exists() && !request.allowRepairExisting) {
                 cleanupStaging(stagingDir)
                 return RuntimeInstallResult.Failure(
                     code = RuntimeInstallErrorCode.RUNTIME_VERSION_CONFLICT,
@@ -230,10 +244,29 @@ internal class DefaultRuntimeInstaller(
                 )
             }
 
+            // Capture the pre-commit authority for every install, not only
+            // repair. If manifest/activation/receipt commit fails after the
+            // runtime tree has been published, the operation must restore the
+            // exact previous active runtime (or clean NOT_INSTALLED state)
+            // instead of leaving a half-committed CORRUPTED installation.
+            repairBackup = createRepairBackup(
+                transactionId = transaction.transactionId,
+                runtimeVersion = verifiedPackage.packageIndex.runtimeVersion,
+                versionDir = versionDir,
+            )
+
             versionDir.parentFile?.mkdirs()
             if (!stagingDir.renameTo(versionDir)) {
                 stagingDir.copyRecursively(versionDir, overwrite = true)
                 stagingDir.deleteRecursively()
+            }
+            if (!versionDir.exists()) {
+                return RuntimeInstallResult.Failure(
+                    code = RuntimeInstallErrorCode.INTERNAL_ERROR,
+                    message = "runtime publish did not create target version directory",
+                    phase = RuntimeInstallPhase.PUBLISH,
+                    transactionId = transaction.transactionId,
+                )
             }
 
             transaction.setTargetVersionDir(versionDir.absolutePath)
@@ -387,6 +420,7 @@ internal class DefaultRuntimeInstaller(
             } catch (_: Exception) {
             }
 
+            repairCompleted = true
             return RuntimeInstallResult.Success(
                 runtimeVersion = receipt.runtimeVersion,
                 packageSha256 = receipt.packageSha256,
@@ -410,6 +444,129 @@ internal class DefaultRuntimeInstaller(
                 transactionId = transaction.transactionId,
                 cause = e,
             )
+        } finally {
+            val backup = repairBackup
+            if (backup != null) {
+                if (repairCompleted) {
+                    backup.backupVersionDir?.let(::cleanupVersionDir)
+                } else {
+                    restoreRepairBackup(backup)
+                }
+            }
+        }
+    }
+
+    private fun createRepairBackup(
+        transactionId: String,
+        runtimeVersion: String,
+        versionDir: File,
+    ): RepairBackup {
+        val receiptFile = layout.installReceiptFile(runtimeVersion)
+        val receiptBytes = if (receiptFile.exists()) receiptFile.readBytes() else null
+        val manifestBytes = layout.runtimeManifestFile.takeIf { it.exists() }?.readBytes()
+        val manifestShaBytes = layout.runtimeManifestShaFile.takeIf { it.exists() }?.readBytes()
+        val activeRuntimeBytes = layout.activeRuntimeFile.takeIf { it.exists() }?.readBytes()
+        val manifestBefore = manifestStore.read()
+        val activeBefore = activeRuntimeManager.current()
+
+        var backupVersionDir: File? = null
+        try {
+            if (versionDir.exists()) {
+                val backup = File(layout.versionsRoot, ".repair-$transactionId-$runtimeVersion")
+                if (backup.exists()) backup.deleteRecursively()
+                backup.parentFile?.mkdirs()
+                val moved = versionDir.renameTo(backup)
+                if (!moved) {
+                    versionDir.copyRecursively(backup, overwrite = true)
+                    if (!backup.exists() || !versionDir.deleteRecursively()) {
+                        backup.deleteRecursively()
+                        throw IllegalStateException("failed to create repair backup for $runtimeVersion")
+                    }
+                }
+                backupVersionDir = backup
+            }
+            return RepairBackup(
+                versionDir = versionDir,
+                backupVersionDir = backupVersionDir,
+                receiptFile = receiptFile,
+                receiptBytes = receiptBytes,
+                manifestBytes = manifestBytes,
+                manifestShaBytes = manifestShaBytes,
+                activeRuntimeBytes = activeRuntimeBytes,
+                manifestBefore = manifestBefore,
+                activeBefore = activeBefore,
+            )
+        } catch (e: Exception) {
+            val backup = backupVersionDir
+            if (backup != null && backup.exists() && !versionDir.exists()) {
+                try {
+                    if (!backup.renameTo(versionDir)) {
+                        backup.copyRecursively(versionDir, overwrite = true)
+                        backup.deleteRecursively()
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            throw e
+        }
+    }
+
+    private fun restoreRepairBackup(backup: RepairBackup) {
+        try {
+            if (backup.versionDir.exists()) {
+                backup.versionDir.deleteRecursively()
+            }
+            val backupVersionDir = backup.backupVersionDir
+            if (backupVersionDir != null && backupVersionDir.exists()) {
+                backup.versionDir.parentFile?.mkdirs()
+                if (!backupVersionDir.renameTo(backup.versionDir)) {
+                    backupVersionDir.copyRecursively(backup.versionDir, overwrite = true)
+                    backupVersionDir.deleteRecursively()
+                }
+            }
+        } catch (_: Exception) {
+        }
+
+        restoreFileBytes(layout.runtimeManifestFile, backup.manifestBytes)
+        restoreFileBytes(layout.runtimeManifestShaFile, backup.manifestShaBytes)
+        restoreFileBytes(layout.activeRuntimeFile, backup.activeRuntimeBytes)
+        restoreFileBytes(backup.receiptFile, backup.receiptBytes)
+
+        // Keep test/different manager implementations coherent as well as the
+        // production file-backed metadata restored above.
+        try {
+            val previousManifest = backup.manifestBefore
+            if (previousManifest is RuntimeManifestResult.Success && backup.manifestBytes == null) {
+                manifestStore.write(previousManifest.manifest)
+            }
+        } catch (_: Exception) {
+        }
+        try {
+            val previousActive = backup.activeBefore
+            if (previousActive is ActiveRuntimeResult.Active) {
+                activeRuntimeManager.activate(previousActive.info.version)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun restoreFileBytes(file: File, bytes: ByteArray?) {
+        try {
+            if (bytes == null) {
+                if (file.exists()) file.delete()
+                return
+            }
+            file.parentFile?.mkdirs()
+            val tmp = File("${file.absolutePath}.repair-restore.tmp")
+            tmp.writeBytes(bytes)
+            if (!tmp.renameTo(file)) {
+                if (file.exists()) file.delete()
+                if (!tmp.renameTo(file)) {
+                    file.writeBytes(bytes)
+                    tmp.delete()
+                }
+            }
+        } catch (_: Exception) {
         }
     }
 

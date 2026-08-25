@@ -32,12 +32,14 @@ internal interface InstallLock : AutoCloseable {
                     if (lock != null) break
                 } catch (_: OverlappingFileLockException) {
                 } catch (e: Exception) {
+                    try { raf.close() } catch (_: Exception) {}
                     return InstallLockResult.Failure(
                         RuntimeInstallErrorCode.IO_ERROR,
                         "failed to acquire lock: ${e.message}"
                     )
                 }
                 if (System.currentTimeMillis() >= deadline) {
+                    try { raf.close() } catch (_: Exception) {}
                     return InstallLockResult.Failure(
                         RuntimeInstallErrorCode.INSTALL_ALREADY_IN_PROGRESS,
                         "another installation is in progress"
@@ -46,7 +48,14 @@ internal interface InstallLock : AutoCloseable {
                 Thread.sleep(100)
             }
 
-            return InstallLockResult.Success(FileBasedInstallLock(raf, lock))
+            val acquiredLock = lock ?: run {
+                try { raf.close() } catch (_: Exception) {}
+                return InstallLockResult.Failure(
+                    RuntimeInstallErrorCode.IO_ERROR,
+                    "lock acquisition completed without a lock",
+                )
+            }
+            return InstallLockResult.Success(FileBasedInstallLock(raf, acquiredLock))
         }
 
         fun acquire(paths: RuntimeInstallPaths, timeoutMs: Long = 5000L): InstallLockResult {
@@ -71,12 +80,14 @@ internal interface InstallLock : AutoCloseable {
                     if (lock != null) break
                 } catch (_: OverlappingFileLockException) {
                 } catch (e: Exception) {
+                    try { raf.close() } catch (_: Exception) {}
                     return InstallLockResult.Failure(
                         RuntimeInstallErrorCode.IO_ERROR,
                         "failed to acquire lock: ${e.message}"
                     )
                 }
                 if (System.currentTimeMillis() >= deadline) {
+                    try { raf.close() } catch (_: Exception) {}
                     return InstallLockResult.Failure(
                         RuntimeInstallErrorCode.INSTALL_ALREADY_IN_PROGRESS,
                         "another installation is in progress"
@@ -85,7 +96,14 @@ internal interface InstallLock : AutoCloseable {
                 Thread.sleep(100)
             }
 
-            return InstallLockResult.Success(FileBasedInstallLock(raf, lock))
+            val acquiredLock = lock ?: run {
+                try { raf.close() } catch (_: Exception) {}
+                return InstallLockResult.Failure(
+                    RuntimeInstallErrorCode.IO_ERROR,
+                    "lock acquisition completed without a lock",
+                )
+            }
+            return InstallLockResult.Success(FileBasedInstallLock(raf, acquiredLock))
         }
     }
 }

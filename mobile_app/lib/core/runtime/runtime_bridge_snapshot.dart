@@ -8,6 +8,7 @@ class RuntimeBridgeSnapshot {
   final int generation;
   final bool runtimeInstalled;
   final bool runtimeAvailable;
+  final String? activeProfile;
   final RuntimeBridgeError? lastError;
   final RuntimeManifestSummary? manifest;
 
@@ -17,6 +18,7 @@ class RuntimeBridgeSnapshot {
     required this.generation,
     required this.runtimeInstalled,
     required this.runtimeAvailable,
+    this.activeProfile,
     this.lastError,
     this.manifest,
   });
@@ -28,6 +30,7 @@ class RuntimeBridgeSnapshot {
       generation: map['generation'] as int? ?? 0,
       runtimeInstalled: map['runtimeInstalled'] as bool? ?? false,
       runtimeAvailable: map['runtimeAvailable'] as bool? ?? false,
+      activeProfile: _normalizedOptionalString(map['activeProfile']),
       lastError: RuntimeBridgeError.tryFromMap(
         map['lastError'] is Map
             ? Map<String, dynamic>.from(map['lastError'] as Map)
@@ -41,6 +44,12 @@ class RuntimeBridgeSnapshot {
     );
   }
 
+  static String? _normalizedOptionalString(Object? value) {
+    if (value is! String) return null;
+    final normalized = value.trim();
+    return normalized.isEmpty ? null : normalized;
+  }
+
   factory RuntimeBridgeSnapshot.initial() {
     return const RuntimeBridgeSnapshot(
       schemaVersion: 1,
@@ -48,6 +57,7 @@ class RuntimeBridgeSnapshot {
       generation: 0,
       runtimeInstalled: false,
       runtimeAvailable: false,
+      activeProfile: null,
     );
   }
 
@@ -60,6 +70,7 @@ class RuntimeBridgeSnapshot {
           generation == other.generation &&
           runtimeInstalled == other.runtimeInstalled &&
           runtimeAvailable == other.runtimeAvailable &&
+          activeProfile == other.activeProfile &&
           lastError == other.lastError &&
           manifest == other.manifest;
 
@@ -70,6 +81,7 @@ class RuntimeBridgeSnapshot {
       generation.hashCode ^
       runtimeInstalled.hashCode ^
       runtimeAvailable.hashCode ^
+      activeProfile.hashCode ^
       lastError.hashCode ^
       manifest.hashCode;
 }

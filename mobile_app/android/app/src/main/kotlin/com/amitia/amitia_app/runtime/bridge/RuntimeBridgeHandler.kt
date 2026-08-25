@@ -200,11 +200,13 @@ internal class RuntimeBridgeHandler(
         val manifestResult = manifestStore?.read()
         if (manifestResult is RuntimeManifestResult.Success) {
             val manifest = manifestResult.manifest
+            val snapshot = controller.snapshot()
             val mapped = RuntimeBridgeSnapshotMapper.toBridgeSnapshot(
-                snapshot = controller.snapshot(),
+                snapshot = snapshot,
                 manifest = manifest,
                 runtimeInstalled = true,
-                runtimeAvailable = true,
+                runtimeAvailable = snapshot.state == RuntimeState.READY ||
+                    snapshot.state == RuntimeState.DEGRADED,
             )
             val manifestMap = mapped["manifest"] as? Map<String, Any?>
             result.success(manifestMap)
