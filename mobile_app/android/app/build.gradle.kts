@@ -136,6 +136,7 @@ val frozenRuntimePackagePath: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_PA
     ?.takeIf { it.isNotEmpty() }
 val amitiaRuntimeCandidateBuild: String? = System.getenv("AMITIA_RUNTIME_CANDIDATE_BUILD")
 val isCandidateBuild = amitiaRuntimeCandidateBuild == "1"
+val allowRuntimelessApk = System.getenv("AMITIA_ALLOW_RUNTIMELESS_APK") == "1"
 val bundledRuntimeAssetDir = layout.projectDirectory.dir("src/main/assets/runtime-package")
 val bundledRuntimeAsset = bundledRuntimeAssetDir.file("amitia-runtime-1.0.0.zip")
 
@@ -173,10 +174,17 @@ tasks.register<Copy>("copyFrozenRuntimePackage") {
                 logger.lifecycle(
                     "copyFrozenRuntimePackage: preserving existing bundled runtime asset: ${bundledRuntimeAsset.asFile.absolutePath}"
                 )
-            } else {
+            } else if (allowRuntimelessApk) {
                 logger.warn(
-                    "copyFrozenRuntimePackage: no bundled runtime asset is present. " +
-                        "Fresh-device installation requires FROZEN_RUNTIME_PACKAGE_PATH when building the APK."
+                    "copyFrozenRuntimePackage: building without an embedded runtime because " +
+                        "AMITIA_ALLOW_RUNTIMELESS_APK=1. This APK supports cloud-only deployment."
+                )
+            } else {
+                throw GradleException(
+                    "copyFrozenRuntimePackage: embedded Runtime Package is missing. " +
+                        "Set FROZEN_RUNTIME_PACKAGE_PATH for a local-runtime APK, or explicitly set " +
+                        "AMITIA_ALLOW_RUNTIMELESS_APK=1 for a cloud-only APK. Refusing to produce an " +
+                        "APK that installs successfully but cannot start its local backend on a fresh device."
                 )
             }
         }

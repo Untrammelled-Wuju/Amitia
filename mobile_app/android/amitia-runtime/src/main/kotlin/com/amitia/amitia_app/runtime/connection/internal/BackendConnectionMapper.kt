@@ -41,6 +41,7 @@ object BackendConnectionMapper {
             result["status"] = "unavailable"
             val errMap = LinkedHashMap<String, Any?>()
             errMap["code"] = error?.code?.name ?: BackendConnectionErrorCode.ENDPOINT_UNAVAILABLE.name
+            errMap["message"] = error?.message ?: "runtime backend connection is unavailable"
             result["error"] = errMap
         }
         return result

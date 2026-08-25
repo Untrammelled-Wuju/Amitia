@@ -2,6 +2,8 @@ package com.amitia.amitia_app.runtime
 
 import com.amitia.amitia_app.runtime.api.RuntimeComponentSnapshot
 import com.amitia.amitia_app.runtime.api.RuntimeComponentState
+import com.amitia.amitia_app.runtime.api.RuntimeError
+import com.amitia.amitia_app.runtime.api.RuntimeErrorCode
 import com.amitia.amitia_app.runtime.api.RuntimeSnapshot
 import com.amitia.amitia_app.runtime.api.RuntimeState
 import com.amitia.amitia_app.runtime.api.RuntimeSubscription
@@ -89,6 +91,29 @@ class RuntimeStateStoreTest {
         assertEquals(RuntimeState.STARTING, result.state)
         assertEquals(6, result.generation)
         assertEquals(6, store.snapshot().generation)
+    }
+
+    @Test
+    fun transitionToStarting_clearsPreviousGenerationError() {
+        val store = RuntimeStateStore(FakeClock(1000))
+        store.update { it.copy(state = RuntimeState.INSTALLED, generation = 2) }
+        store.transitionToStarting()
+        store.update {
+            it.copy(
+                state = RuntimeState.FAILED,
+                lastError = RuntimeError(
+                    code = RuntimeErrorCode.START_FAILED,
+                    message = "old generation failure",
+                    recoverable = true,
+                ),
+            )
+        }
+
+        val result = store.transitionToStarting()
+
+        assertEquals(RuntimeState.STARTING, result.state)
+        assertEquals(4, result.generation)
+        assertEquals(null, result.lastError)
     }
 
     @Test

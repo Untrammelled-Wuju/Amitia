@@ -9,6 +9,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -338,7 +340,7 @@ class RuntimeStartupDetectorTest {
     }
 
     @Test
-    fun readiness401_returnsProtocolFailure() {
+    fun readiness401_returnsHealthAuthFailed() {
         val session = createAlwaysAliveSession()
         val probe = createFakeReadinessProbe(
             listOf(RuntimeHealthProbeResult.Success(401, """{"error":"unauthorized"}"""))
@@ -359,13 +361,13 @@ class RuntimeStartupDetectorTest {
         assertTrue("Expected Failed but was $result", result is RuntimeStartupResult.Failed)
         val failed = result as RuntimeStartupResult.Failed
         assertTrue(
-            "Expected InvalidResponse but was ${failed.error}",
-            failed.error is RuntimeStartupError.InvalidResponse
+            "Expected HealthAuthFailed but was ${failed.error}",
+            failed.error is RuntimeStartupError.HealthAuthFailed
         )
     }
 
     @Test
-    fun readiness404_returnsProtocolFailure() {
+    fun readiness404_returnsHealthEndpointMissing() {
         val session = createAlwaysAliveSession()
         val probe = createFakeReadinessProbe(
             listOf(RuntimeHealthProbeResult.Success(404, ""))
@@ -386,8 +388,8 @@ class RuntimeStartupDetectorTest {
         assertTrue("Expected Failed but was $result", result is RuntimeStartupResult.Failed)
         val failed = result as RuntimeStartupResult.Failed
         assertTrue(
-            "Expected InvalidResponse but was ${failed.error}",
-            failed.error is RuntimeStartupError.InvalidResponse
+            "Expected HealthEndpointMissing but was ${failed.error}",
+            failed.error is RuntimeStartupError.HealthEndpointMissing
         )
     }
 
@@ -434,6 +436,62 @@ class RuntimeStartupDetectorTest {
             throw AssertionError("Expected IllegalArgumentException")
         } catch (_: IllegalArgumentException) {
         }
+    }
+
+    @Test
+    fun cancel_doesNotReleaseActiveRequestBeforeRunningCallExits() {
+        val session = createAlwaysAliveSession()
+        val enteredProbe = CountDownLatch(1)
+        val releaseProbe = CountDownLatch(1)
+        val probe = object : RuntimeHealthProbe {
+            override fun checkReadiness(endpoint: BackendEndpointPolicy): RuntimeHealthProbeResult {
+                enteredProbe.countDown()
+                while (true) {
+                    try {
+                        if (releaseProbe.await(50, TimeUnit.MILLISECONDS)) break
+                    } catch (_: InterruptedException) {
+                        // Deliberately remain inside the probe. This models a
+                        // transport call that does not abort immediately when
+                        // the detector thread is interrupted.
+                    }
+                }
+                return RuntimeHealthProbeResult.Failure(RuntimeHealthProbeError.ConnectionRefused)
+            }
+        }
+        val detector = DefaultRuntimeStartupDetector(
+            healthProbe = probe,
+            totalStartupTimeoutMs = 5000L,
+            initialProbeIntervalMs = 10L,
+        )
+        val request1 = RuntimeStartupRequest(
+            generation = 1L,
+            session = session,
+            endpoint = validEndpoint,
+            startAttemptId = "attempt-cancel-owner-1",
+        )
+        val request2 = request1.copy(
+            generation = 2L,
+            startAttemptId = "attempt-cancel-owner-2",
+        )
+        val firstResult = AtomicReference<RuntimeStartupResult?>(null)
+        val firstThread = Thread {
+            firstResult.set(detector.awaitStartup(request1))
+        }.apply {
+            isDaemon = true
+            start()
+        }
+
+        assertTrue("first detector did not enter probe", enteredProbe.await(1, TimeUnit.SECONDS))
+        detector.cancel()
+
+        val secondResult = detector.awaitStartup(request2)
+        assertTrue("Expected active detector rejection but was $secondResult", secondResult is RuntimeStartupResult.Failed)
+        assertTrue((secondResult as RuntimeStartupResult.Failed).error is RuntimeStartupError.InternalError)
+
+        releaseProbe.countDown()
+        firstThread.join(1000)
+        assertTrue("cancelled detector did not exit", !firstThread.isAlive)
+        assertTrue("Expected Cancelled but was ${firstResult.get()}", firstResult.get() is RuntimeStartupResult.Cancelled)
     }
 
     @Test
