@@ -1,17 +1,39 @@
 package management
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/gamehost"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
-type DebugHandler struct{ container *gamehost.GameHostContainer }
+type DebugToolScope struct {
+	UserID         string
+	CharacterID    string
+	ConversationID string
+	Channel        string
+	SessionID      string
+	RequestID      string
+	ToolCallID     string
+}
 
-func NewDebugHandler(container *gamehost.GameHostContainer) *DebugHandler {
-	return &DebugHandler{container: container}
+type DebugToolInvokeFunc func(context.Context, string, json.RawMessage, DebugToolScope) (any, bool)
+
+type DebugHandler struct {
+	container  *gamehost.GameHostContainer
+	invokeTool DebugToolInvokeFunc
+}
+
+func NewDebugHandler(container *gamehost.GameHostContainer, invokers ...DebugToolInvokeFunc) *DebugHandler {
+	h := &DebugHandler{container: container}
+	if len(invokers) > 0 {
+		h.invokeTool = invokers[0]
+	}
+	return h
 }
 
 type ResidueReport struct {
@@ -121,4 +143,50 @@ func (h *DebugHandler) runtimeResidue(runtimeID domain.RuntimeInstanceID) Residu
 	}
 	report.ProcessCount = h.container.CountRuntimeProcesses(runtimeID)
 	return report
+}
+
+type debugToolInvokeRequest struct {
+	ToolID         string          `json:"toolId"`
+	Input          json.RawMessage `json:"input"`
+	UserID         string          `json:"userId,omitempty"`
+	CharacterID    string          `json:"characterId,omitempty"`
+	ConversationID string          `json:"conversationId,omitempty"`
+	Channel        string          `json:"channel,omitempty"`
+	SessionID      string          `json:"sessionId,omitempty"`
+	RequestID      string          `json:"requestId,omitempty"`
+	ToolCallID     string          `json:"toolCallId,omitempty"`
+}
+
+// InvokeTool is developer-only and exists to exercise the exact canonical
+// ToolFacade -> ExecutionPipeline -> GameHost -> external process path in E2E
+// tests. It is protected by RequireGameHostDeveloperAccess and is never exposed
+// as a normal user-facing Game Center RPC shortcut.
+func (h *DebugHandler) InvokeTool(c *gin.Context) {
+	if h == nil || h.invokeTool == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "canonical tool invoker unavailable"})
+		return
+	}
+	var req debugToolInvokeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid tool invocation payload"})
+		return
+	}
+	req.ToolID = strings.TrimSpace(req.ToolID)
+	if req.ToolID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "toolId required"})
+		return
+	}
+	if len(req.Input) == 0 {
+		req.Input = json.RawMessage(`{}`)
+	}
+	result, ok := h.invokeTool(c.Request.Context(), req.ToolID, req.Input, DebugToolScope{
+		UserID: strings.TrimSpace(req.UserID), CharacterID: strings.TrimSpace(req.CharacterID),
+		ConversationID: strings.TrimSpace(req.ConversationID), Channel: strings.TrimSpace(req.Channel),
+		SessionID: strings.TrimSpace(req.SessionID), RequestID: strings.TrimSpace(req.RequestID), ToolCallID: strings.TrimSpace(req.ToolCallID),
+	})
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "tool not found or unavailable"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
 }
