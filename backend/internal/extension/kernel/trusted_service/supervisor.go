@@ -371,16 +371,6 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 		return nil, err
 	}
 
-	if req.PublisherTrust.RequiresFullSandbox() || TrustLevel(def.TrustLevel).RequiresFullSandbox() {
-		report := s.procMgr.IsolationReport()
-		if !report.IsFullyIsolated() {
-			return nil, fmt.Errorf("trusted_service: community service %s requires full sandbox; platform %s isolation is incomplete: %v", req.ServiceID, report.Platform, report.Limitations)
-		}
-		if !def.Network.Enforce {
-			return nil, fmt.Errorf("trusted_service: community service %s requires an enforced network policy", req.ServiceID)
-		}
-	}
-
 	exe, err := s.selector.Select(def)
 	if err != nil {
 		return nil, err
@@ -422,9 +412,19 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	}
 
 	env := s.buildSafeEnvironment(exe, def, req.SessionToken, instanceID, req.Generation, tempDir, defaultLogLevel(req.LogLevel), req.SecretLease)
-	launchPath, launchArgs, err := prepareNetworkLaunch(def.Network, fullExePath, args, workingDir, tempDir, def.SandboxReadOnlyRoot)
+	launchPlan, err := prepareNetworkLaunch(def.Network, fullExePath, args, workingDir, tempDir, def.SandboxReadOnlyRoot)
 	if err != nil {
 		return nil, fmt.Errorf("trusted_service: enforce network policy: %w", err)
+	}
+	if req.PublisherTrust.RequiresFullSandbox() || TrustLevel(def.TrustLevel).RequiresFullSandbox() {
+		if err := validateFullSandboxLaunch(req.ServiceID, def, launchPlan, s.procMgr.IsolationReport(), process.ResourceLimitsSupported()); err != nil {
+			return nil, err
+		}
+	}
+	launchPath, launchArgs := launchPlan.Path, launchPlan.Args
+	launchWorkingDir := launchPlan.WorkingDir
+	if launchWorkingDir == "" {
+		launchWorkingDir = workingDir
 	}
 
 	instance := &ServiceInstance{
@@ -489,7 +489,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	isRPC := def.Protocol == "jsonrpc" || def.Protocol == "amitia_jsonrpc_v1"
 
 	if isRPC {
-		startedCmd, err = s.startRPCService(processCtx, instance, def, exe, launchPath, launchArgs, env, workingDir, req)
+		startedCmd, err = s.startRPCService(processCtx, instance, def, exe, launchPath, launchArgs, env, launchWorkingDir, req)
 		if err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
@@ -509,7 +509,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 			return nil, err
 		}
 	} else if def.Protocol == "" || def.Protocol == "plain" {
-		startedCmd, err = s.startPlainService(processCtx, instance, def, exe, launchPath, launchArgs, env, workingDir, req)
+		startedCmd, err = s.startPlainService(processCtx, instance, def, exe, launchPath, launchArgs, env, launchWorkingDir, req)
 		if err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
@@ -1585,6 +1585,31 @@ var _ io.Writer = (*logWriter)(nil)
 
 // platformProcessResourceLimits converts manifest declarations to the subset
 // understood by the platform process backend.
+func validateFullSandboxLaunch(serviceID string, def ServiceRuntimeDefinition, plan sandboxLaunchPlan, report process.PlatformIsolationReport, support process.ResourceLimitSupport) error {
+	if !def.Network.Enforce {
+		return fmt.Errorf("trusted_service: community service %s requires an enforced network policy", serviceID)
+	}
+	if !plan.FilesystemIsolated || !plan.NetworkPolicyEnforced {
+		return fmt.Errorf("trusted_service: community service %s requires filesystem and network isolation on platform %s", serviceID, report.Platform)
+	}
+	if !report.ProcessTreeIsolation {
+		return fmt.Errorf("trusted_service: community service %s requires process-tree isolation on platform %s", serviceID, report.Platform)
+	}
+	if def.Limits.MaxMemoryMB > 0 && !support.Memory {
+		return fmt.Errorf("trusted_service: community service %s requests an unenforceable memory limit on platform %s", serviceID, report.Platform)
+	}
+	if def.Limits.MaxCPUPercent > 0 && !support.CPU {
+		return fmt.Errorf("trusted_service: community service %s requests an unenforceable CPU limit on platform %s", serviceID, report.Platform)
+	}
+	if def.Limits.MaxSubprocesses > 0 && !support.Processes {
+		return fmt.Errorf("trusted_service: community service %s requests an unenforceable subprocess limit on platform %s", serviceID, report.Platform)
+	}
+	if def.Limits.MaxFileDescriptors > 0 || def.Limits.MaxDiskMB > 0 || def.Limits.CPUTime > 0 {
+		return fmt.Errorf("trusted_service: community service %s requests resource limits without a hard enforcement backend on platform %s", serviceID, report.Platform)
+	}
+	return nil
+}
+
 func platformProcessResourceLimits(limits ServiceResourceLimits) process.ResourceLimits {
 	out := process.ResourceLimits{}
 	if limits.MaxMemoryMB > 0 {

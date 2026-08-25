@@ -6,22 +6,22 @@ import (
 	"testing"
 )
 
-func TestPrepareNetworkLaunchUnrestrictedExplicitPolicyDoesNotWrap(t *testing.T) {
-	path, args, err := prepareNetworkLaunch(ServiceNetworkPolicy{
+func TestPrepareNetworkLaunchWithoutEnforcementReturnsDirectPlan(t *testing.T) {
+	plan, err := prepareNetworkLaunch(ServiceNetworkPolicy{
 		Mode:          "unrestricted",
-		Enforce:       true,
+		Enforce:       false,
 		AllowOutbound: true,
 	}, "/tmp/runtime", []string{"--x"}, "/tmp/work", "/tmp/temp")
 	if err != nil {
 		t.Fatalf("prepareNetworkLaunch() error = %v", err)
 	}
-	if path != "/tmp/runtime" || len(args) != 1 || args[0] != "--x" {
-		t.Fatalf("unexpected launch plan: path=%q args=%v", path, args)
+	if plan.Path != "/tmp/runtime" || len(plan.Args) != 1 || plan.Args[0] != "--x" || plan.WorkingDir != "/tmp/work" {
+		t.Fatalf("unexpected launch plan: %+v", plan)
 	}
 }
 
 func TestPrepareNetworkLaunchRejectsGranularPolicyWithoutBackend(t *testing.T) {
-	_, _, err := prepareNetworkLaunch(ServiceNetworkPolicy{
+	_, err := prepareNetworkLaunch(ServiceNetworkPolicy{
 		Mode:           "restricted",
 		Enforce:        true,
 		AllowOutbound:  true,
@@ -34,7 +34,7 @@ func TestPrepareNetworkLaunchRejectsGranularPolicyWithoutBackend(t *testing.T) {
 }
 
 func TestPrepareNetworkLaunchRejectsNonLoopbackInbound(t *testing.T) {
-	_, _, err := prepareNetworkLaunch(ServiceNetworkPolicy{
+	_, err := prepareNetworkLaunch(ServiceNetworkPolicy{
 		Enforce:       true,
 		AllowInbound:  true,
 		AllowOutbound: true,
@@ -45,7 +45,7 @@ func TestPrepareNetworkLaunchRejectsNonLoopbackInbound(t *testing.T) {
 }
 
 func TestPrepareNetworkLaunchRejectsAuditWithoutAuditBackend(t *testing.T) {
-	_, _, err := prepareNetworkLaunch(ServiceNetworkPolicy{
+	_, err := prepareNetworkLaunch(ServiceNetworkPolicy{
 		Enforce:  true,
 		AuditAll: true,
 	}, "/tmp/runtime", nil, "", "")
@@ -75,4 +75,25 @@ func TestPathWithinRejectsSiblingPrefix(t *testing.T) {
 	if pathWithin(`/opt/plugin`, `/opt/plugin-evil/index.js`) {
 		t.Fatal("sibling prefix must not be treated as within root")
 	}
+}
+
+func TestBuildDarwinSandboxProfileUnrestrictedStillRestrictsFilesystem(t *testing.T) {
+	profile, err := buildDarwinSandboxProfile("unrestricted", "/opt/runtime", "/tmp/work", "/tmp/temp", "/opt/plugin")
+	if err != nil {
+		t.Fatalf("buildDarwinSandboxProfile() error = %v", err)
+	}
+	for _, want := range []string{"(deny default)", "(allow network*)", `(subpath "/opt/plugin")`, `(subpath "/tmp/work")`} {
+		if !containsLiteral(profile, want) {
+			t.Fatalf("profile missing %q:\n%s", want, profile)
+		}
+	}
+}
+
+func containsLiteral(haystack, needle string) bool {
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
 }
