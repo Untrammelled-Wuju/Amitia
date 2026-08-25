@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -215,5 +216,38 @@ func TestRuntimeGraphProvisioner_Reconcile_NoEntryPoint_FailClosed(t *testing.T)
 	runtimes := rtManager.ListRuntimes()
 	if len(runtimes) != 0 {
 		t.Errorf("failed reconcile should not create runtime, got %d", len(runtimes))
+	}
+}
+
+func TestResolveGamePluginEntry_UsesModuleRootAndRejectsEscape(t *testing.T) {
+	bundle := t.TempDir()
+	got, err := resolveGamePluginEntry(bundle, "runtime-module", "bin/game")
+	if err != nil {
+		t.Fatalf("resolveGamePluginEntry error: %v", err)
+	}
+	want := filepath.Join(bundle, "modules", "runtime-module", "bin", "game")
+	if got != want {
+		t.Fatalf("resolved path = %q, want %q", got, want)
+	}
+	if _, err := resolveGamePluginEntry(bundle, "runtime-module", "../escape"); err == nil {
+		t.Fatal("expected traversal entry point to be rejected")
+	}
+	if _, err := resolveGamePluginEntry(bundle, "../runtime", "bin/game"); err == nil {
+		t.Fatal("expected invalid module id to be rejected")
+	}
+}
+
+func TestBytesToMiBCeil(t *testing.T) {
+	const mib = int64(1024 * 1024)
+	cases := map[int64]int64{
+		0:       0,
+		1:       1,
+		mib:     1,
+		mib + 1: 2,
+	}
+	for in, want := range cases {
+		if got := bytesToMiBCeil(in); got != want {
+			t.Fatalf("bytesToMiBCeil(%d)=%d, want %d", in, got, want)
+		}
 	}
 }

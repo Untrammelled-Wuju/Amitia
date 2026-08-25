@@ -310,6 +310,7 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 			Env:                 bootService.Env,
 			Metadata:            metadata,
 			Network:             bootService.Network,
+			Limits:              bootService.Limits,
 			Enabled:             true,
 		}
 
@@ -506,6 +507,7 @@ type bootServiceInfo struct {
 	Protocol            string
 	Env                 map[string]string
 	Network             trusted_service.ServiceNetworkPolicy
+	Limits              trusted_service.ServiceResourceLimits
 }
 
 func (p *RuntimeGraphProvisioner) buildBootService(ctx context.Context, kp KernelGamePlugin) (bootServiceInfo, error) {
@@ -600,6 +602,11 @@ func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp Ke
 		Protocol:    protocolVersion,
 		Env:         module.Runtime.Env,
 		Network:     networkPolicy,
+		Limits: trusted_service.ServiceResourceLimits{
+			MaxMemoryMB:     bytesToMiBCeil(module.Runtime.Memory),
+			MaxCPUPercent:   module.Runtime.CPUPercent,
+			MaxSubprocesses: module.Runtime.MaxSubprocesses,
+		},
 	}
 	if info.RuntimeType == "" {
 		info.RuntimeType = service_definition.ServiceRuntimeType
@@ -617,7 +624,7 @@ func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp Ke
 		if generation.Version != "" && generation.Version != fmt.Sprintf("%v", kp.Extension.Version) {
 			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: package generation version %q does not match enabled definition version %q", kp.Extension.ID, kp.Contribution.ID, generation.Version, kp.Extension.Version)
 		}
-		entryPath, resolveErr = resolveGamePluginEntry(generation.Path, entryPath)
+		entryPath, resolveErr = resolveGamePluginEntry(generation.Path, runtimeModuleID, entryPath)
 		if resolveErr != nil {
 			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, resolveErr)
 		}
@@ -637,7 +644,7 @@ func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp Ke
 			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: installed bundle path not found", kp.Extension.ID, kp.Contribution.ID)
 		}
 		var resolveErr error
-		entryPath, resolveErr = resolveGamePluginEntry(bundlePath, entryPath)
+		entryPath, resolveErr = resolveGamePluginEntry(bundlePath, runtimeModuleID, entryPath)
 		if resolveErr != nil {
 			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, resolveErr)
 		}
@@ -750,22 +757,51 @@ func hashExtensionDefinition(def kerneldomain.ExtensionDefinition) (string, erro
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func resolveGamePluginEntry(bundlePath, entryPoint string) (string, error) {
-	if filepath.IsAbs(entryPoint) {
-		return "", fmt.Errorf("absolute entry point is not allowed")
+func resolveGamePluginEntry(bundlePath, moduleID, entryPoint string) (string, error) {
+	moduleID = strings.TrimSpace(moduleID)
+	entryPoint = strings.TrimSpace(entryPoint)
+	if moduleID == "" || strings.ContainsAny(moduleID, `/\\:`) || moduleID == "." || moduleID == ".." {
+		return "", fmt.Errorf("invalid runtime module id %q", moduleID)
 	}
+	if entryPoint == "" || filepath.IsAbs(entryPoint) || strings.Contains(entryPoint, "\\") {
+		return "", fmt.Errorf("entry point must be a relative module path")
+	}
+	cleanEntry := filepath.Clean(entryPoint)
+	if cleanEntry == "." || cleanEntry == ".." || strings.HasPrefix(cleanEntry, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("entry point escapes runtime module")
+	}
+
 	bundleAbs, err := filepath.Abs(bundlePath)
 	if err != nil {
 		return "", err
 	}
-	entryAbs, err := filepath.Abs(filepath.Join(bundleAbs, filepath.Clean(entryPoint)))
+	moduleRoot := filepath.Join(bundleAbs, "modules", moduleID)
+	moduleAbs, err := filepath.Abs(moduleRoot)
 	if err != nil {
 		return "", err
 	}
-	if entryAbs == bundleAbs || !strings.HasPrefix(entryAbs, bundleAbs+string(os.PathSeparator)) {
-		return "", fmt.Errorf("entry point escapes installed bundle")
+	entryAbs, err := filepath.Abs(filepath.Join(moduleAbs, cleanEntry))
+	if err != nil {
+		return "", err
+	}
+	if entryAbs == moduleAbs || !strings.HasPrefix(entryAbs, moduleAbs+string(os.PathSeparator)) {
+		return "", fmt.Errorf("entry point escapes runtime module")
+	}
+	if !strings.HasPrefix(moduleAbs, bundleAbs+string(os.PathSeparator)) {
+		return "", fmt.Errorf("runtime module escapes installed bundle")
 	}
 	return entryAbs, nil
+}
+
+func bytesToMiBCeil(value int64) int64 {
+	if value <= 0 {
+		return 0
+	}
+	const mib = int64(1024 * 1024)
+	if value > (int64(^uint64(0)>>1) - (mib - 1)) {
+		return int64(^uint64(0)>>1) / mib
+	}
+	return (value + mib - 1) / mib
 }
 
 func ensureRegularFile(path string) error {

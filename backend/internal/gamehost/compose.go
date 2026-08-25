@@ -485,7 +485,28 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		}
 	}
 
-	baseEmergencyStore := integration.NewInMemoryEmergencyIntentStore()
+	var baseEmergencyStore control.EmergencyIntentStore
+	if strings.TrimSpace(opts.DataRoot) != "" {
+		persistentEmergencyStore, storeErr := integration.NewFileEmergencyIntentStore(
+			filepath.Join(opts.DataRoot, "gamehost", "control", "emergency-intents.json"),
+		)
+		if storeErr != nil {
+			return nil, fmt.Errorf("compose emergency intent store: %w", storeErr)
+		}
+		baseEmergencyStore = persistentEmergencyStore
+		// RuntimeExecutor and recovery paths query RuntimeManager directly, so the
+		// manager must consult persisted plugin-level latches as well as its local
+		// map. This preserves emergency stop across host restarts/new runtime IDs.
+		runtimeManager.SetEmergencyLatchResolver(func(runtimeID domain.RuntimeInstanceID) bool {
+			rt, getErr := runtimeManager.Get(context.Background(), runtimeID)
+			if getErr != nil || rt == nil {
+				return false
+			}
+			return persistentEmergencyStore.IsEmergencyLatchedForPlugin(context.Background(), runtimeID, rt.PluginID)
+		})
+	} else {
+		baseEmergencyStore = integration.NewInMemoryEmergencyIntentStore()
+	}
 	emergencyIntentStore := integration.NewManagerEmergencyLatchBridge(runtimeManager, baseEmergencyStore)
 	emergencyRuntimeAdapter := integration.NewEmergencyRuntimeAdapter(runtimeExecutor, runtimeManager)
 	emergencyRPCAdapter := integration.NewEmergencyRPCAdapter(rpcLifecycle.Registry())

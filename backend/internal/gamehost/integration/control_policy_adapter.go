@@ -33,7 +33,7 @@ func (a *ControlHostPolicyAdapter) AllowPluginControl(
 		return control.PolicyCheckResult{Allowed: false, Reason: err.Error()}, err
 	}
 
-	if lifecycleIntent == "emergency_stop" || lifecycleIntent == "disable" || lifecycleIntent == "uninstall" {
+	if lifecycleIntent == "emergency" || lifecycleIntent == "emergency_stop" || lifecycleIntent == "disable" || lifecycleIntent == "uninstall" {
 		return control.PolicyCheckResult{Allowed: false, Reason: "runtime lifecycle intent blocks control: " + lifecycleIntent}, nil
 	}
 

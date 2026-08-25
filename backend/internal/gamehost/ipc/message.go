@@ -50,7 +50,13 @@ func ValidateEnvelopePeer(envelope protocol.Envelope, peer Peer) error {
 		)
 	}
 	if peer.Generation > 0 {
-		if envelope.Generation == 0 || envelope.Generation != uint64(peer.Generation) {
+		// The generation is assigned by the host, so a freshly started plugin cannot
+		// know it before the first handshake response. Permit generation=0 only for
+		// the initial handshake request; all other traffic remains generation-bound.
+		bootstrapHello := envelope.Generation == 0 &&
+			envelope.Type == protocol.MessageTypeRequest &&
+			envelope.Method == HandshakeMethod
+		if !bootstrapHello && envelope.Generation != uint64(peer.Generation) {
 			return NewIPCErrorWithCause(IPCErrorPeerRoute, domain.ErrInvalidArgument, fmt.Sprintf("envelope generation mismatch: expected %d, got %d", peer.Generation, envelope.Generation), nil)
 		}
 	}

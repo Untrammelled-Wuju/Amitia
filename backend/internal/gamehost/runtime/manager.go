@@ -28,9 +28,10 @@ type Manager struct {
 	idGenerator RuntimeIDGenerator
 	clock       func() time.Time
 
-	generations      map[domain.RuntimeInstanceID]int64
-	lifecycleIntents map[domain.RuntimeInstanceID]string
-	emergencyLatches map[domain.RuntimeInstanceID]bool
+	generations            map[domain.RuntimeInstanceID]int64
+	lifecycleIntents       map[domain.RuntimeInstanceID]string
+	emergencyLatches       map[domain.RuntimeInstanceID]bool
+	emergencyLatchResolver func(domain.RuntimeInstanceID) bool
 }
 
 type ManagerOptions struct {
@@ -47,7 +48,7 @@ func NewManager(opts ManagerOptions) *Manager {
 	if clock == nil {
 		clock = time.Now
 	}
- return &Manager{
+	return &Manager{
 		runtimes:         make(map[domain.RuntimeInstanceID]*domain.RuntimeInstance),
 		byPlugin:         make(map[domain.PluginID]map[domain.RuntimeInstanceID]struct{}),
 		idGenerator:      idGen,
@@ -260,12 +261,24 @@ func (m *Manager) AllocateGeneration(runtimeID domain.RuntimeInstanceID) (int64,
 
 func (m *Manager) GetLifecycleIntent(runtimeID domain.RuntimeInstanceID) (string, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	if _, ok := m.runtimes[runtimeID]; !ok {
+		m.mu.RUnlock()
 		return "", &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
 	}
-	return m.lifecycleIntents[runtimeID], nil
+	intent := m.lifecycleIntents[runtimeID]
+	resolver := m.emergencyLatchResolver
+	m.mu.RUnlock()
+	if intent != "" {
+		return intent, nil
+	}
+	// Emergency intent is safety state, not an ephemeral lifecycle hint. When a
+	// durable emergency latch survives a host restart, expose the matching
+	// lifecycle intent as well so every recovery/control policy sees one
+	// consistent state even if the runtime received a new instance ID.
+	if resolver != nil && resolver(runtimeID) {
+		return "emergency", nil
+	}
+	return "", nil
 }
 
 func (m *Manager) SetLifecycleIntent(runtimeID domain.RuntimeInstanceID, intent string) error {
@@ -279,10 +292,21 @@ func (m *Manager) SetLifecycleIntent(runtimeID domain.RuntimeInstanceID, intent 
 	return nil
 }
 
+func (m *Manager) SetEmergencyLatchResolver(resolver func(domain.RuntimeInstanceID) bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.emergencyLatchResolver = resolver
+}
+
 func (m *Manager) IsEmergencyLatched(runtimeID domain.RuntimeInstanceID) bool {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.emergencyLatches[runtimeID]
+	latched := m.emergencyLatches[runtimeID]
+	resolver := m.emergencyLatchResolver
+	m.mu.RUnlock()
+	if latched {
+		return true
+	}
+	return resolver != nil && resolver(runtimeID)
 }
 
 func (m *Manager) SetEmergencyLatch(runtimeID domain.RuntimeInstanceID, latched bool) {
