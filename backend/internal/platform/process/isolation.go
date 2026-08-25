@@ -1,5 +1,22 @@
 package process
 
+// ResourceLimits describes process-tree limits that the platform process
+// backend may enforce. Zero means no requested limit.
+type ResourceLimits struct {
+	MaxMemoryBytes uint64
+	MaxCPUPercent  uint32
+	MaxProcesses   uint32
+}
+
+// ResourceLimitSupport reports only limits that are actually enforced by the
+// current platform backend. It is used by higher layers to avoid advertising
+// declarative limits as hard guarantees.
+type ResourceLimitSupport struct {
+	Memory    bool
+	CPU       bool
+	Processes bool
+}
+
 type PlatformIsolationReport struct {
 	Platform             string   `json:"platform"`
 	ProcessTreeIsolation bool     `json:"process_tree_isolation"`
