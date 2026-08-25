@@ -3,6 +3,7 @@ package trusted_service
 import (
 	"errors"
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -82,10 +83,37 @@ func TestBuildDarwinSandboxProfileUnrestrictedStillRestrictsFilesystem(t *testin
 	if err != nil {
 		t.Fatalf("buildDarwinSandboxProfile() error = %v", err)
 	}
-	for _, want := range []string{"(deny default)", "(allow network*)", `(subpath "/opt/plugin")`, `(subpath "/tmp/work")`} {
+	for _, want := range []string{"(deny default)", "(allow network-outbound)", `(subpath "/opt/plugin")`, `(subpath "/tmp/work")`} {
 		if !containsLiteral(profile, want) {
 			t.Fatalf("profile missing %q:\n%s", want, profile)
 		}
+	}
+}
+
+func TestBuildDarwinSandboxProfileUnrestrictedDoesNotAllowInbound(t *testing.T) {
+	profile, err := buildDarwinSandboxProfile("unrestricted", "/opt/runtime", "/tmp/work", "/tmp/temp", "/opt/plugin")
+	if err != nil {
+		t.Fatalf("buildDarwinSandboxProfile() error = %v", err)
+	}
+	if containsLiteral(profile, "(allow network*)") || containsLiteral(profile, "network-inbound") {
+		t.Fatalf("unrestricted outbound profile unexpectedly allows inbound networking:\n%s", profile)
+	}
+	if !containsLiteral(profile, "(allow network-outbound)") {
+		t.Fatalf("unrestricted outbound profile is missing network-outbound rule:\n%s", profile)
+	}
+}
+
+func TestPrepareNetworkLaunchLinuxUnrestrictedFailsClosedWithoutOutboundOnlyBackend(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux-specific enforcement behavior")
+	}
+	_, err := prepareNetworkLaunch(ServiceNetworkPolicy{
+		Mode:          "unrestricted",
+		Enforce:       true,
+		AllowOutbound: true,
+	}, "/tmp/runtime", nil, "/tmp/work", "/tmp/temp")
+	if !errors.Is(err, ErrGranularNetworkPolicyUnsupported) {
+		t.Fatalf("prepareNetworkLaunch() error = %v, want ErrGranularNetworkPolicyUnsupported", err)
 	}
 }
 

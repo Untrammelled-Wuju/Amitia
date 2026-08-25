@@ -9,14 +9,23 @@ import (
 )
 
 type EntryValidator struct {
-	policy           ArchivePolicy
-	fileTypeDetector *FileTypeDetector
-	forbiddenExt     map[string]bool
-	nestedArchiveExt map[string]bool
-	executableMagics [][]byte
+	policy              ArchivePolicy
+	fileTypeDetector    *FileTypeDetector
+	forbiddenExt        map[string]bool
+	nestedArchiveExt    map[string]bool
+	executableMagics    [][]byte
+	declaredExecutables map[string]struct{}
 }
 
 func NewEntryValidator(policy ArchivePolicy) *EntryValidator {
+	return NewEntryValidatorWithDeclaredExecutables(policy, nil)
+}
+
+func NewEntryValidatorWithDeclaredExecutables(policy ArchivePolicy, declared map[string]struct{}) *EntryValidator {
+	copied := make(map[string]struct{}, len(declared))
+	for name := range declared {
+		copied[strings.ToLower(strings.ReplaceAll(name, "\\", "/"))] = struct{}{}
+	}
 	return &EntryValidator{
 		policy:           policy,
 		fileTypeDetector: NewFileTypeDetector(),
@@ -38,6 +47,7 @@ func NewEntryValidator(policy ArchivePolicy) *EntryValidator {
 			{0xcf, 0xfa, 0xed, 0xfe},
 			{0xce, 0xfa, 0xed, 0xfe},
 		},
+		declaredExecutables: copied,
 	}
 }
 
@@ -51,8 +61,10 @@ func (v *EntryValidator) Validate(entry ArchiveEntryInfo, content []byte) EntryV
 	result := EntryValidationResult{Passed: true}
 
 	ext := strings.ToLower(path.Ext(entry.NormalizedPath))
+	_, declaredExecutable := v.declaredExecutables[strings.ToLower(strings.ReplaceAll(entry.NormalizedPath, "\\", "/"))]
+	executableAllowed := v.policy.AllowExecutable || (v.policy.AllowDeclaredExecutable && declaredExecutable)
 
-	if v.forbiddenExt[ext] {
+	if v.forbiddenExt[ext] && !executableAllowed {
 		result.Passed = false
 		result.Errors = append(result.Errors, "forbidden file extension: "+ext)
 	}
@@ -68,11 +80,11 @@ func (v *EntryValidator) Validate(entry ArchiveEntryInfo, content []byte) EntryV
 
 	for _, magic := range v.executableMagics {
 		if len(content) >= len(magic) && bytes.Equal(content[:len(magic)], magic) {
-			if !v.policy.AllowExecutable {
+			if !executableAllowed {
 				result.Passed = false
 				result.Errors = append(result.Errors, "executable binary not allowed: "+entry.NormalizedPath)
 			} else {
-				result.Warnings = append(result.Warnings, "executable binary: "+entry.NormalizedPath)
+				result.Warnings = append(result.Warnings, "declared executable binary: "+entry.NormalizedPath)
 			}
 			break
 		}

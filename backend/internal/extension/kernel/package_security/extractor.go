@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type SecureExtractor struct {
@@ -52,6 +53,8 @@ func (e *SecureExtractor) ExtractFile(ctx context.Context, archivePath, targetRo
 func (e *SecureExtractor) extractReader(ctx context.Context, reader *zip.Reader, targetRoot string) ([]ArchiveEntryInfo, error) {
 
 	var entries []ArchiveEntryInfo
+	declaredExecutables := discoverDeclaredServiceExecutables(reader, e.policy)
+	entryValidator := NewEntryValidatorWithDeclaredExecutables(e.policy, declaredExecutables)
 
 	for _, item := range reader.File {
 		if err := ctx.Err(); err != nil {
@@ -112,12 +115,16 @@ func (e *SecureExtractor) extractReader(ctx context.Context, reader *zip.Reader,
 			Mode:             uint32(item.Mode()),
 			CRC32:            item.CRC32,
 		}
-		validation := e.entryValidator.Validate(entry, content)
+		validation := entryValidator.Validate(entry, content)
 		if !validation.Passed {
 			return nil, ErrForbiddenFileType
 		}
 
-		f, err := os.OpenFile(resolved, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
+		mode := os.FileMode(0o400)
+		if _, ok := declaredExecutables[strings.ToLower(strings.ReplaceAll(entry.NormalizedPath, "\\", "/"))]; ok {
+			mode = 0o500
+		}
+		f, err := os.OpenFile(resolved, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +136,7 @@ func (e *SecureExtractor) extractReader(ctx context.Context, reader *zip.Reader,
 		}
 		f.Close()
 
-		if err := os.Chmod(resolved, 0o400); err != nil {
+		if err := os.Chmod(resolved, mode); err != nil {
 			return nil, err
 		}
 

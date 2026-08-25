@@ -83,6 +83,7 @@ func (i *ArchiveInspector) inspectReader(ctx context.Context, reader *zip.Reader
 
 	result := &ArchiveInspectionResult{Passed: true}
 	canonical := make(map[string]bool)
+	entryValidator := NewEntryValidatorWithDeclaredExecutables(i.policy, discoverDeclaredServiceExecutables(reader, i.policy))
 
 	for _, item := range reader.File {
 		if err := ctx.Err(); err != nil {
@@ -164,7 +165,7 @@ func (i *ArchiveInspector) inspectReader(ctx context.Context, reader *zip.Reader
 			result.Passed = false
 			continue
 		}
-		validation := i.entryValidator.Validate(entry, head)
+		validation := entryValidator.Validate(entry, head)
 		for _, validationErr := range validation.Errors {
 			result.Errors = append(result.Errors, validationErr)
 		}

@@ -94,15 +94,17 @@ type ModulePolicies struct {
 }
 
 type RuntimeMeta struct {
-	Type         string            `json:"type"`
-	ServiceID    string            `json:"serviceId,omitempty"`
-	EntryPoint   string            `json:"entryPoint,omitempty"`
-	WorkerCount  int               `json:"workerCount,omitempty"`
-	Timeout      string            `json:"timeout,omitempty"`
-	Memory       int64             `json:"memory,omitempty"`
-	Permissions  []string          `json:"permissions,omitempty"`
-	Capabilities map[string]bool   `json:"capabilities,omitempty"`
-	Env          map[string]string `json:"env,omitempty"`
+	Type            string            `json:"type"`
+	ServiceID       string            `json:"serviceId,omitempty"`
+	EntryPoint      string            `json:"entryPoint,omitempty"`
+	WorkerCount     int               `json:"workerCount,omitempty"`
+	Timeout         string            `json:"timeout,omitempty"`
+	Memory          int64             `json:"memory,omitempty"`
+	CPUPercent      int               `json:"cpuPercent,omitempty"`
+	MaxSubprocesses int               `json:"maxSubprocesses,omitempty"`
+	Permissions     []string          `json:"permissions,omitempty"`
+	Capabilities    map[string]bool   `json:"capabilities,omitempty"`
+	Env             map[string]string `json:"env,omitempty"`
 }
 
 type ContributionMeta struct {
@@ -446,6 +448,20 @@ func (m Manifest) Validate() ValidationReport {
 			} else if !runtimeTypes[mod.Runtime.Type] {
 				report.AddError(path+".runtime.type", "unsupported_runtime", fmt.Sprintf(`{"code":"unsupported_runtime","moduleId":"%s","runtimeType":"%s"}`, mod.ID, mod.Runtime.Type))
 			}
+			if mod.Runtime.EntryPoint != "" {
+				if err := validateRuntimeEntrypoint(mod.Runtime.EntryPoint); err != nil {
+					report.AddError(path+".runtime.entryPoint", "invalid_entrypoint", err.Error())
+				}
+			}
+			if mod.Runtime.Memory < 0 {
+				report.AddError(path+".runtime.memory", "invalid_limit", "memory must be non-negative bytes")
+			}
+			if mod.Runtime.CPUPercent < 0 || mod.Runtime.CPUPercent > 100 {
+				report.AddError(path+".runtime.cpuPercent", "invalid_limit", "cpuPercent must be between 0 and 100")
+			}
+			if mod.Runtime.MaxSubprocesses < 0 {
+				report.AddError(path+".runtime.maxSubprocesses", "invalid_limit", "maxSubprocesses must be non-negative")
+			}
 		}
 		for j, c := range mod.Contributions {
 			cpath := fmt.Sprintf("%s.contributions[%d]", path, j)
@@ -642,15 +658,17 @@ func (m ModuleMeta) ToDomain(extID domain.ExtensionID) (domain.ModuleDefinition,
 	if m.Runtime != nil {
 		timeout, _ := time.ParseDuration(m.Runtime.Timeout)
 		rd := domain.RuntimeDefinition{
-			Type:         domain.RuntimeType(m.Runtime.Type),
-			ServiceID:    m.Runtime.ServiceID,
-			EntryPoint:   m.Runtime.EntryPoint,
-			WorkerCount:  m.Runtime.WorkerCount,
-			Timeout:      timeout,
-			Memory:       m.Runtime.Memory,
-			Permissions:  m.Runtime.Permissions,
-			Capabilities: m.Runtime.Capabilities,
-			Env:          m.Runtime.Env,
+			Type:            domain.RuntimeType(m.Runtime.Type),
+			ServiceID:       m.Runtime.ServiceID,
+			EntryPoint:      m.Runtime.EntryPoint,
+			WorkerCount:     m.Runtime.WorkerCount,
+			Timeout:         timeout,
+			Memory:          m.Runtime.Memory,
+			CPUPercent:      m.Runtime.CPUPercent,
+			MaxSubprocesses: m.Runtime.MaxSubprocesses,
+			Permissions:     m.Runtime.Permissions,
+			Capabilities:    m.Runtime.Capabilities,
+			Env:             m.Runtime.Env,
 		}
 		runtime = &rd
 	}
@@ -769,6 +787,26 @@ func deref[T any](p *T) T {
 		return zero
 	}
 	return *p
+}
+
+func validateRuntimeEntrypoint(entryPoint string) error {
+	if entryPoint == "" {
+		return nil
+	}
+	if entryPoint != strings.TrimSpace(entryPoint) {
+		return fmt.Errorf("entryPoint must not contain leading or trailing whitespace")
+	}
+	if strings.Contains(entryPoint, "\\") || strings.ContainsRune(entryPoint, '\x00') || path.IsAbs(entryPoint) {
+		return fmt.Errorf("entryPoint must be a forward-slash relative module path")
+	}
+	cleaned := path.Clean(entryPoint)
+	if cleaned == "." || cleaned == ".." || cleaned != entryPoint || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("entryPoint must stay within its module directory")
+	}
+	if len(entryPoint) >= 2 && entryPoint[1] == ':' {
+		return fmt.Errorf("entryPoint must not be drive-qualified")
+	}
+	return nil
 }
 
 func validateGamePluginContribution(spec map[string]any, requiredPermissions []string, cpath, extensionPlacement string, moduleIDs map[string]bool, moduleRuntimes map[string]*RuntimeMeta, modulePlacements map[string]string) error {

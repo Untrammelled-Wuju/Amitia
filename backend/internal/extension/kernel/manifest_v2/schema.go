@@ -90,7 +90,9 @@ const manifestV2Schema = `{
               "entryPoint": {"type": "string"},
               "workerCount": {"type": "integer"},
               "timeout": {"type": "string"},
-              "memory": {"type": "integer"},
+              "memory": {"type": "integer", "minimum": 0},
+              "cpuPercent": {"type": "integer", "minimum": 0, "maximum": 100},
+              "maxSubprocesses": {"type": "integer", "minimum": 0},
               "permissions": {"type": "array", "items": {"type": "string"}},
               "capabilities": {"type": "object", "additionalProperties": {"type": "boolean"}},
               "env": {"type": "object"}

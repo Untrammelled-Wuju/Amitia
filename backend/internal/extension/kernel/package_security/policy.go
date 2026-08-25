@@ -14,6 +14,7 @@ type ArchivePolicy struct {
 	AllowHardlink             bool     `json:"allow_hardlink"`
 	AllowNestedArchive        bool     `json:"allow_nested_archive"`
 	AllowExecutable           bool     `json:"allow_executable"`
+	AllowDeclaredExecutable   bool     `json:"allow_declared_executable"`
 }
 
 func DefaultArchivePolicy() ArchivePolicy {
@@ -29,6 +30,7 @@ func DefaultArchivePolicy() ArchivePolicy {
 		AllowHardlink:             false,
 		AllowNestedArchive:        false,
 		AllowExecutable:           false,
+		AllowDeclaredExecutable:   true,
 	}
 }
 
@@ -45,5 +47,6 @@ func RestrictedArchivePolicy() ArchivePolicy {
 		AllowHardlink:             false,
 		AllowNestedArchive:        false,
 		AllowExecutable:           false,
+		AllowDeclaredExecutable:   false,
 	}
 }
