@@ -15,11 +15,8 @@ func (v EnvelopeValidator) Name() string {
 }
 
 func (v EnvelopeValidator) Validate(data []byte) error {
-	var envelope protocol.Envelope
-	if err := json.Unmarshal(data, &envelope); err != nil {
-		return fmt.Errorf("failed to unmarshal envelope: %w", err)
-	}
-	if err := envelope.Validate(); err != nil {
+	envelope, err := protocol.Decode(data)
+	if err != nil {
 		return err
 	}
 	if envelope.Type == protocol.MessageTypeError && envelope.Error != nil {
