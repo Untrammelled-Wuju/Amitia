@@ -108,17 +108,17 @@ type ClientOption func(*Client)
 const DefaultCompletedCacheSize = 256
 
 type completedEntry struct {
-	response  protocol.Envelope
-	err       error
+	response    protocol.Envelope
+	err         error
 	fingerprint string
-	createdAt time.Time
+	createdAt   time.Time
 }
 
 type CompletedResponseCache struct {
-	mu       sync.Mutex
-	entries  map[string]*completedEntry
-	maxSize  uint64
-	order    []string
+	mu      sync.Mutex
+	entries map[string]*completedEntry
+	maxSize uint64
+	order   []string
 }
 
 func NewCompletedResponseCache() *CompletedResponseCache {
@@ -242,6 +242,52 @@ func (c *Client) SetGeneration(generation uint64) {
 
 func (c *Client) GetGeneration() uint64 {
 	return c.generation
+}
+
+// AdoptPeerRouting binds the client to the authoritative route returned by
+// GameHost after the generation-free bootstrap handshake. Existing non-empty
+// fields cannot be rebound to a different peer.
+func (c *Client) AdoptPeerRouting(envelope protocol.Envelope) error {
+	if envelope.Generation == 0 {
+		return NewValidationError("handshake response is missing a positive generation")
+	}
+	if c.generation != 0 && c.generation != envelope.Generation {
+		return NewValidationError("handshake generation mismatch: expected %d, got %d", c.generation, envelope.Generation)
+	}
+
+	resolve := func(current string, incoming string, label string) (string, error) {
+		if current != "" && incoming != "" && current != incoming {
+			return "", NewValidationError("handshake %s mismatch: expected %s, got %s", label, current, incoming)
+		}
+		if incoming != "" {
+			return incoming, nil
+		}
+		if current != "" {
+			return current, nil
+		}
+		return "", NewValidationError("handshake response is missing %s", label)
+	}
+
+	runtimeID, err := resolve(c.runtimeID, envelope.RuntimeID, "runtimeId")
+	if err != nil {
+		return err
+	}
+	pluginID, err := resolve(c.pluginID, envelope.PluginID, "pluginId")
+	if err != nil {
+		return err
+	}
+	serviceID, err := resolve(c.serviceID, envelope.ServiceID, "serviceId")
+	if err != nil {
+		return err
+	}
+
+	// Commit only after every authoritative routing field has validated so a
+	// rejected handshake cannot leave the client partially rebound.
+	c.runtimeID = runtimeID
+	c.pluginID = pluginID
+	c.serviceID = serviceID
+	c.generation = envelope.Generation
+	return nil
 }
 
 func (c *Client) FillRouting(envelope *protocol.Envelope) {
@@ -720,13 +766,14 @@ func (c *Client) NewError(request protocol.Envelope, code protocol.ErrorCode, me
 	}
 
 	envelope := protocol.Envelope{
-		Protocol:  protocol.ProtocolVersion,
-		Type:      protocol.MessageTypeError,
-		ID:        id,
-		RequestID: request.ID,
-		PluginID:  c.pluginID,
-		RuntimeID: c.runtimeID,
-		ServiceID: c.serviceID,
+		Protocol:   protocol.ProtocolVersion,
+		Type:       protocol.MessageTypeError,
+		ID:         id,
+		RequestID:  request.ID,
+		PluginID:   c.pluginID,
+		RuntimeID:  c.runtimeID,
+		ServiceID:  c.serviceID,
+		Generation: c.generation,
 		Error: &protocol.ProtocolError{
 			Code:      code,
 			Message:   message,

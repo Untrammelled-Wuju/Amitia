@@ -132,15 +132,24 @@ func (r *Runner) performHandshake(ctx context.Context) (*HelloResponse, error) {
 		return nil, fmt.Errorf("receive hello response failed: %w", err)
 	}
 
+	if respEnvelope.Error != nil {
+		return nil, fmt.Errorf("handshake failed: %s - %s", respEnvelope.Error.Code, respEnvelope.Error.Message)
+	}
 	if respEnvelope.Type == protocol.MessageTypeError {
-		if respEnvelope.Error != nil {
-			return nil, fmt.Errorf("handshake failed: %s - %s", respEnvelope.Error.Code, respEnvelope.Error.Message)
-		}
 		return nil, fmt.Errorf("handshake failed with unknown error")
 	}
 
 	if respEnvelope.Type != protocol.MessageTypeResponse {
 		return nil, fmt.Errorf("unexpected handshake response type: %s", respEnvelope.Type)
+	}
+	if respEnvelope.Protocol != protocol.ProtocolVersion {
+		return nil, fmt.Errorf("handshake envelope protocol mismatch: got %s, expected %s", respEnvelope.Protocol, protocol.ProtocolVersion)
+	}
+	if respEnvelope.RequestID != envelope.ID {
+		return nil, fmt.Errorf("handshake response requestId mismatch: got %q, expected %q", respEnvelope.RequestID, envelope.ID)
+	}
+	if err := r.client.AdoptPeerRouting(respEnvelope); err != nil {
+		return nil, fmt.Errorf("bind handshake peer route: %w", err)
 	}
 
 	var respPayload HelloResponse

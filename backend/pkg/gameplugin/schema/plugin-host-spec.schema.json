@@ -213,7 +213,7 @@
       "required": [
         "mode"
       ],
-      "description": "Explicit network boundary. none/loopback require an OS isolation backend; unrestricted additionally requires service.network.request."
+      "description": "Explicit protocol-v1 network intent. Host/platform support is validated before provisioning and unsupported combinations fail closed; unrestricted additionally requires service.network.request."
     },
     "metadata": {
       "type": "object",
