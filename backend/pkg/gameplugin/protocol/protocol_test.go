@@ -527,7 +527,7 @@ func TestOpaquePluginPayloadIsNotInterpretedByHostProtocol(t *testing.T) {
 }
 
 func TestReservedNamespaces(t *testing.T) {
-	expectedReserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control.", "emergency.", "secret.", "artifact.", "permission."}
+	expectedReserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control.", "emergency.", "secret.", "artifact.", "permission.", "binary."}
 	tests := map[string]bool{
 		"host.runtime.health":     true,
 		"plugin.custom.action":    true,
@@ -672,6 +672,7 @@ func TestValidateKnownCapabilities(t *testing.T) {
 		CapabilityHostAPI,
 		CapabilitySharedControl,
 		CapabilityMultiService,
+		CapabilityBinaryStreaming,
 	}
 	for _, cap := range knownCaps {
 		t.Run(string(cap), func(t *testing.T) {
@@ -709,6 +710,7 @@ func TestValidateChannelDescriptor(t *testing.T) {
 		{ID: "log-channel", Kind: ChannelKindLog},
 		{ID: "metric-channel", Kind: ChannelKindMetric},
 		{ID: "custom-channel", Kind: ChannelKindCustom},
+		{ID: "binary-channel", Kind: ChannelKindBinary},
 	}
 	for i := range channels {
 		t.Run(string(channels[i].Kind), func(t *testing.T) {
@@ -716,10 +718,6 @@ func TestValidateChannelDescriptor(t *testing.T) {
 				t.Fatalf("ChannelDescriptor.Validate() failed for kind '%s': %v", channels[i].Kind, err)
 			}
 		})
-	}
-
-	if err := (ChannelDescriptor{ID: "binary-channel", Kind: "binary"}).Validate(); err == nil {
-		t.Fatal("binary channels must be rejected by amitia-game-host/1")
 	}
 
 	normalHint := FrequencyHintNormal

@@ -10,6 +10,7 @@ export { StdioTransport, StdioTransportOptions } from './transport_stdio';
 export { Runner, RunnerConfig, HandlerRegistry, RequestHandler, NotificationHandler, HelloConfiguration, ChannelHelloDescriptor, SinkHelloDescriptor } from './runner';
 export * from './event';
 export * from './channel';
+export * from './binary';
 export * from './permission';
 export * from './secret';
 export * from './control';

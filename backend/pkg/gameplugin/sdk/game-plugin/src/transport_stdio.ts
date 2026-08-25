@@ -2,6 +2,8 @@ import { Envelope } from './protocol';
 
 export const STDIO_MAX_FRAME_SIZE = 16 * 1024 * 1024;
 export const STDIO_FRAME_HEADER_SIZE = 4;
+export const STDIO_BINARY_FRAME_FLAG = 0x80000000;
+export const STDIO_FRAME_LENGTH_MASK = 0x7fffffff;
 
 export interface StdioTransportOptions {
   stdin?: NodeJS.ReadableStream;
@@ -79,6 +81,44 @@ export class StdioTransport {
 
     return new Promise<void>((resolve, reject) => {
       this.stdout.write(Buffer.concat([header, payload]), (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+
+  async sendBinaryFrame(message: Envelope, objectId: string, offset: number, data: Uint8Array): Promise<void> {
+    if (!message.id) throw new Error('binary frame requires message id');
+    if (!objectId || !objectId.startsWith('bin_')) throw new Error('binary frame requires valid object id');
+    if (!Number.isSafeInteger(offset) || offset < 0) throw new Error('binary frame offset must be a non-negative safe integer');
+    if (!(data instanceof Uint8Array) || data.byteLength === 0) throw new Error('binary frame payload must not be empty');
+
+    const frameHeader = {
+      protocol: message.protocol,
+      id: message.id,
+      runtimeId: message.runtimeId,
+      pluginId: message.pluginId,
+      serviceId: message.serviceId,
+      generation: message.generation,
+      objectId,
+      offset,
+    };
+    const headerJson = Buffer.from(JSON.stringify(frameHeader), 'utf-8');
+    const payload = Buffer.from(data);
+    const bodyLength = 4 + headerJson.length + payload.length;
+    if (bodyLength <= 4 || bodyLength > this.maxFrameSize || bodyLength > STDIO_FRAME_LENGTH_MASK) {
+      throw new Error(`binary frame size ${bodyLength} exceeds limit ${this.maxFrameSize}`);
+    }
+
+    const outer = Buffer.alloc(STDIO_FRAME_HEADER_SIZE);
+    outer.writeUInt32BE((STDIO_BINARY_FRAME_FLAG | bodyLength) >>> 0, 0);
+    const meta = Buffer.alloc(4);
+    meta.writeUInt32BE(headerJson.length, 0);
+    const frame = Buffer.concat([outer, meta, headerJson, payload]);
+
+    return new Promise<void>((resolve, reject) => {
+      this.stdout.write(frame, (err) => {
         if (err) reject(err);
         else resolve();
       });

@@ -203,6 +203,46 @@ export class Client {
     })
   }
 
+  supportsBinaryFrames(): boolean {
+    return typeof this.transport.sendBinaryFrame === 'function';
+  }
+
+  async sendReservedBinaryRequest(
+    method: string,
+    objectId: string,
+    offset: number,
+    data: Uint8Array,
+    ...opts: MessageOption[]
+  ): Promise<Envelope> {
+    const methodErr = validateMethod(method);
+    if (methodErr) throw createValidationError(methodErr);
+    if (!isReservedNamespace(method)) {
+      throw createValidationError(`reserved request method '${method}' is not in a reserved namespace`);
+    }
+    const sendBinaryFrame = this.transport.sendBinaryFrame;
+    if (typeof sendBinaryFrame !== 'function') {
+      throw createTransportError('binary frame transport is unavailable');
+    }
+    const envelope = this.newRequest(method, undefined, ...opts);
+    const id = envelope.id!;
+    let timeout = this.pendingTimeoutMs;
+    const timeoutValue = envelope.metadata?.['__timeout'];
+    if (typeof timeoutValue === 'number' && timeoutValue > 0) timeout = timeoutValue;
+
+    return new Promise<Envelope>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`request ${id} timed out after ${timeout}ms`));
+      }, timeout);
+      this.pending.set(id, { id, method, resolve, reject, timer, createdAt: Date.now() });
+      sendBinaryFrame.call(this.transport, envelope, objectId, offset, data).catch((err) => {
+        this.pending.delete(id);
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
   handleIncomingResponse(envelope: Envelope): boolean {
     if (envelope.type !== 'response' && envelope.type !== 'error') {
       return false;

@@ -21,7 +21,7 @@ export function validateMethod(method: string): string | null {
 }
 
 export function isReservedNamespace(method: string): boolean {
-  const reserved = ['host.', 'plugin.', 'runtime.', 'service.', 'channel.', 'control.', 'emergency.', 'secret.', 'artifact.', 'permission.'];
+  const reserved = ['host.', 'plugin.', 'runtime.', 'service.', 'channel.', 'control.', 'emergency.', 'secret.', 'artifact.', 'permission.', 'binary.'];
   return reserved.some((ns) => method.startsWith(ns));
 }
 
@@ -91,7 +91,7 @@ export function validateChannel(channel: ChannelDescriptor): string[] {
     errors.push('channel id must not be empty');
   }
 
-  const validKinds = ['event', 'state', 'log', 'metric', 'custom'];
+  const validKinds = ['event', 'state', 'log', 'metric', 'custom', 'binary'];
   if (!validKinds.includes(channel.kind)) {
     errors.push(`channel '${channel.id}': invalid kind '${channel.kind}'`);
   }

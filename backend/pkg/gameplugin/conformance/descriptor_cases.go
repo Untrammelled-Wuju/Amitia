@@ -87,7 +87,7 @@ func ChannelSchemaCases() []Case {
 		ChannelDescriptorValidator{},
 	))
 
-	channelKinds := []string{"event", "state", "log", "metric", "custom"}
+	channelKinds := []string{"event", "state", "log", "metric", "custom", "binary"}
 	for _, k := range channelKinds {
 		data := []byte(`{"id":"ch-1","kind":"` + k + `"}`)
 		cases = append(cases, NewCase(
@@ -98,14 +98,6 @@ func ChannelSchemaCases() []Case {
 			ChannelDescriptorValidator{},
 		))
 	}
-
-	cases = append(cases, NewCase(
-		"channel_kind_binary",
-		"Binary channel kind is not part of amitia-game-host/1",
-		[]byte(`{"id":"ch-binary","kind":"binary"}`),
-		false,
-		ChannelDescriptorValidator{},
-	))
 
 	directions := []string{"plugin_to_host"}
 	for _, d := range directions {

@@ -66,10 +66,14 @@ func TestPluginNetworkPolicyOnlyExposesEnforceableModes(t *testing.T) {
 	}
 }
 
-func TestPluginHostSpecRejectsUnwiredBinaryChannel(t *testing.T) {
+func TestPluginHostSpecBinaryChannelRequiresNegotiatedFeature(t *testing.T) {
 	spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Channels: []PluginChannelSpec{{ID: "frames", Kind: "binary"}}, Network: &PluginNetworkPolicy{Mode: "none"}}
 	if err := spec.Validate(); err == nil {
-		t.Fatal("binary channel must not be exposed until production binary channel routing is wired")
+		t.Fatal("binary channel without binary_streaming host feature must be rejected")
+	}
+	spec.HostFeatures = []HostFeature{HostFeatureBinaryStreaming}
+	if err := spec.Validate(); err != nil {
+		t.Fatalf("binary channel with binary_streaming feature rejected: %v", err)
 	}
 }
 
@@ -143,5 +147,35 @@ func TestPluginHostSpecRuntimeModuleIDMustBelongToDeclaredServices(t *testing.T)
 	spec.RuntimeModuleID = "module-a"
 	if err := spec.Validate(); err != nil {
 		t.Fatalf("Validate() rejected compatible legacy runtimeModuleId: %v", err)
+	}
+}
+
+func TestPluginArtifactCompatibilityConstraintValidation(t *testing.T) {
+	valid := []string{"1.21.4", "build-2026-a", "*", "1.21.x", ">=1.20.1 <1.22", "^1.20.1", "~1.20.2", "1.20.1 - 1.21.4", ">=1.20 <1.21 || >=1.21.4 <1.22"}
+	for _, constraint := range valid {
+		if err := ValidateCompatibilityConstraint(constraint); err != nil {
+			t.Fatalf("constraint %q rejected: %v", constraint, err)
+		}
+	}
+	invalid := []string{"", "1.x.3", ">=", "1.2 ||", "1.2 - broken"}
+	for _, constraint := range invalid {
+		if err := ValidateCompatibilityConstraint(constraint); err == nil {
+			t.Fatalf("constraint %q unexpectedly accepted", constraint)
+		}
+	}
+}
+
+func TestCompatibilityVersionMatchesRangesAndRequiresExplicitVersion(t *testing.T) {
+	if CompatibilityVersionMatches([]string{"1.21.x"}, "") {
+		t.Fatal("declared compatibility constraint must not match a missing version")
+	}
+	if !CompatibilityVersionMatches([]string{">=1.20.1 <1.22"}, "1.21.4") {
+		t.Fatal("expected range to match 1.21.4")
+	}
+	if CompatibilityVersionMatches([]string{">=1.20.1 <1.22"}, "1.22.0") {
+		t.Fatal("range unexpectedly matched upper bound")
+	}
+	if !CompatibilityVersionMatches([]string{"build-2026-a"}, "BUILD-2026-A") {
+		t.Fatal("opaque exact identifiers should remain case-insensitive")
 	}
 }

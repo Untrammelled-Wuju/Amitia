@@ -27,6 +27,10 @@ type Envelope struct {
 	Error   *ProtocolError  `json:"error,omitempty"`
 
 	Metadata map[string]json.RawMessage `json:"metadata,omitempty"`
+
+	BinaryObjectID string `json:"-"`
+	BinaryOffset   int64  `json:"-"`
+	BinaryPayload  []byte `json:"-"`
 }
 
 func (e Envelope) Validate() error {
@@ -153,7 +157,7 @@ func ValidateMethod(method string) error {
 }
 
 func IsReservedNamespace(method string) bool {
-	reserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control.", "emergency.", "secret.", "artifact.", "permission."}
+	reserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control.", "binary.", "emergency.", "secret.", "artifact.", "permission."}
 	for _, ns := range reserved {
 		if strings.HasPrefix(method, ns) {
 			return true

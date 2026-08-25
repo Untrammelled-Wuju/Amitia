@@ -204,7 +204,7 @@ describe('TypeScript Conformance Suite', () => {
     });
 
     test('protocol v1 channel kinds should be valid', () => {
-      const kinds = ['event', 'state', 'log', 'metric', 'custom'];
+      const kinds = ['event', 'state', 'log', 'metric', 'custom', 'binary'];
       for (const kind of kinds) {
         const ch: ChannelDescriptor = { id: `ch-${kind}`, kind: kind as any };
         const errors = validateChannel(ch);
@@ -212,12 +212,6 @@ describe('TypeScript Conformance Suite', () => {
       }
     });
 
-
-    test('binary channel kind should be rejected by protocol v1', () => {
-      const ch: ChannelDescriptor = { id: 'ch-binary', kind: 'binary' as any };
-      const errors = validateChannel(ch);
-      expect(errors.length).toBeGreaterThan(0);
-    });
     test('invalid channel kind should be rejected', () => {
       const ch: ChannelDescriptor = { id: 'ch-bad', kind: 'invalid' as any };
       const errors = validateChannel(ch);

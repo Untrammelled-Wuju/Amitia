@@ -49,7 +49,7 @@ export interface ServiceDescriptor {
   metadata?: Record<string, unknown>;
 }
 
-export type ChannelKind = 'event' | 'state' | 'log' | 'metric' | 'custom';
+export type ChannelKind = 'event' | 'state' | 'log' | 'metric' | 'custom' | 'binary';
 
 export const ChannelKind = {
   EVENT: 'event' as ChannelKind,
@@ -57,6 +57,7 @@ export const ChannelKind = {
   LOG: 'log' as ChannelKind,
   METRIC: 'metric' as ChannelKind,
   CUSTOM: 'custom' as ChannelKind,
+  BINARY: 'binary' as ChannelKind,
 };
 
 export type ChannelDirection = 'plugin_to_host';
@@ -91,6 +92,7 @@ export const HostFeature = {
   HOST_API: 'host_api',
   SHARED_CONTROL: 'shared_control',
   MULTI_SERVICE: 'multi_service',
+  BINARY_STREAMING: 'binary_streaming',
 } as const;
 
 export type HostFeature = typeof HostFeature[keyof typeof HostFeature];
