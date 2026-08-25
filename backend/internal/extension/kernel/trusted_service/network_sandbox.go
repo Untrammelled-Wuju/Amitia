@@ -29,56 +29,75 @@ func directSandboxLaunch(executable string, args []string, workingDir string) sa
 	return sandboxLaunchPlan{Path: executable, Args: args, WorkingDir: workingDir}
 }
 
-func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args []string, workingDir, tempDir string, readOnlyRoots ...string) (sandboxLaunchPlan, error) {
+// ValidateNetworkPolicySupport rejects policy/platform combinations that the
+// trusted service launcher cannot enforce without weakening the requested
+// boundary. It is intentionally safe to call during GameHost provisioning so
+// unsupported modes fail before a child process is created. prepareNetworkLaunch
+// performs the same validation again at the final launch boundary.
+func ValidateNetworkPolicySupport(policy ServiceNetworkPolicy) error {
+	return validateNetworkPolicySupportForOS(policy, runtime.GOOS)
+}
+
+func validateNetworkPolicySupportForOS(policy ServiceNetworkPolicy, goos string) error {
 	if !policy.Enforce {
-		return directSandboxLaunch(executable, args, workingDir), nil
+		return nil
 	}
-	mode := strings.ToLower(strings.TrimSpace(policy.Mode))
-	if mode == "" {
-		switch {
-		case policy.LoopbackOnly:
-			mode = "loopback"
-		case policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedPorts) > 0:
-			mode = "restricted"
-		case policy.AllowOutbound:
-			mode = "unrestricted"
-		default:
-			mode = "none"
-		}
-	}
+	mode := normalizedNetworkMode(policy)
 	if policy.AllowInbound && !policy.LoopbackOnly {
-		return sandboxLaunchPlan{}, fmt.Errorf("%w: non-loopback inbound access is forbidden", ErrUnauthorizedNetwork)
+		return fmt.Errorf("%w: non-loopback inbound access is forbidden", ErrUnauthorizedNetwork)
 	}
 	if policy.AuditAll {
-		return sandboxLaunchPlan{}, fmt.Errorf("%w: packet-level network audit backend is unavailable", ErrNetworkSandboxUnavailable)
+		return fmt.Errorf("%w: packet-level network audit backend is unavailable", ErrNetworkSandboxUnavailable)
 	}
 
 	switch mode {
 	case "unrestricted":
 		if !policy.AllowOutbound || policy.LoopbackOnly || policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedPorts) > 0 {
-			return sandboxLaunchPlan{}, fmt.Errorf("%w: inconsistent unrestricted policy", ErrUnauthorizedNetwork)
+			return fmt.Errorf("%w: inconsistent unrestricted policy", ErrUnauthorizedNetwork)
 		}
-		// Network access is unrestricted, but Enforce still means the plugin must
-		// cross the platform filesystem/process sandbox. Do not bypass the sandbox
-		// merely because the user approved outbound networking.
+		if goos == "linux" {
+			return fmt.Errorf("%w: linux outbound-only unrestricted mode requires a dedicated network backend", ErrGranularNetworkPolicyUnsupported)
+		}
 	case "restricted":
-		// Restricted arbitrary TCP requires a platform firewall/proxy backend.
-		// Until such a backend is present, deny startup rather than degrading to
-		// unrestricted connectivity.
-		return sandboxLaunchPlan{}, fmt.Errorf("%w: domains=%v ports=%v requireProxy=%v", ErrGranularNetworkPolicyUnsupported, policy.AllowedDomains, policy.AllowedPorts, policy.RequireProxy)
+		return fmt.Errorf("%w: domains=%v ports=%v requireProxy=%v", ErrGranularNetworkPolicyUnsupported, policy.AllowedDomains, policy.AllowedPorts, policy.RequireProxy)
 	case "none", "loopback":
-		// Continue to the platform sandbox below.
+		return nil
 	default:
-		return sandboxLaunchPlan{}, fmt.Errorf("%w: unsupported network mode %q", ErrUnauthorizedNetwork, mode)
+		return fmt.Errorf("%w: unsupported network mode %q", ErrUnauthorizedNetwork, mode)
+	}
+	return nil
+}
+
+func normalizedNetworkMode(policy ServiceNetworkPolicy) string {
+	mode := strings.ToLower(strings.TrimSpace(policy.Mode))
+	if mode != "" {
+		return mode
+	}
+	switch {
+	case policy.LoopbackOnly:
+		return "loopback"
+	case policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedPorts) > 0:
+		return "restricted"
+	case policy.AllowOutbound:
+		return "unrestricted"
+	default:
+		return "none"
+	}
+}
+
+func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args []string, workingDir, tempDir string, readOnlyRoots ...string) (sandboxLaunchPlan, error) {
+	if !policy.Enforce {
+		return directSandboxLaunch(executable, args, workingDir), nil
+	}
+	mode := normalizedNetworkMode(policy)
+	if err := ValidateNetworkPolicySupport(policy); err != nil {
+		return sandboxLaunchPlan{}, err
 	}
 
-	// Linux bubblewrap can either share the host network namespace (which would
-	// also permit non-loopback inbound listeners) or create a private namespace
-	// with no outbound path. Until an outbound-only slirp/firewall backend is
-	// wired, unrestricted outbound cannot be enforced safely on Linux.
-	if runtime.GOOS == "linux" && mode == "unrestricted" {
-		return sandboxLaunchPlan{}, fmt.Errorf("%w: linux outbound-only unrestricted mode requires a dedicated network backend", ErrGranularNetworkPolicyUnsupported)
-	}
+	// Network access can only proceed when the platform implementation above has
+	// proved that the requested boundary is enforceable. In particular, Linux
+	// unrestricted outbound remains fail-closed until an outbound-only backend is
+	// available; it is never downgraded to the host network namespace.
 
 	// Linux bubblewrap creates a separate network namespace, preventing access
 	// to host/public interfaces. The child sees only its private namespace.

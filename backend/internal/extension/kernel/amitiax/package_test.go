@@ -168,6 +168,12 @@ func TestOpenArchive(t *testing.T) {
 	if len(pkg.Layout.Modules) != 1 {
 		t.Errorf("expected 1 module, got %d", len(pkg.Layout.Modules))
 	}
+	if pkg.Tree.TreeHash == "" {
+		t.Fatal("expected canonical content tree hash")
+	}
+	if pkg.Manifest.Integrity.ContentTreeHash != pkg.Tree.TreeHash {
+		t.Fatalf("manifest tree binding = %q, want %q", pkg.Manifest.Integrity.ContentTreeHash, pkg.Tree.TreeHash)
+	}
 }
 
 func TestVerifyIntegrity(t *testing.T) {
