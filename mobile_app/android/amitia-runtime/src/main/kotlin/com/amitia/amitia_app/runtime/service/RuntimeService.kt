@@ -444,16 +444,6 @@ class RuntimeService : Service() {
             )
             return
         }
-        if (!session.isAlive()) {
-            teardownAfterStartupFailure(
-                generation = generation,
-                sessionId = currentSessionIdRef.get(),
-                launchStartId = startId,
-                cause = RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED,
-                phase = "proot_launch_failed_session"
-            )
-            return
-        }
         currentSessionRef.set(session)
         currentSessionIdRef.set(session.sessionId)
         currentSessionContextRef.set(

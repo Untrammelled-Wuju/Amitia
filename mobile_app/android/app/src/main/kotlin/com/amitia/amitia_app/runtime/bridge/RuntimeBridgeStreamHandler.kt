@@ -27,12 +27,12 @@ internal class RuntimeBridgeStreamHandler(
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
         if (!active.compareAndSet(false, true)) {
             sinkRef.set(events)
+            emitCurrentSnapshot()
             return
         }
         sinkRef.set(events)
         val subscription = controller.subscribe(listener)
         subscriptionRef.set(subscription)
-        emitCurrentSnapshot()
     }
 
     override fun onCancel(arguments: Any?) {
@@ -62,6 +62,14 @@ internal class RuntimeBridgeStreamHandler(
             )
             sink.success(mapped)
         } catch (_: Exception) {
+            try {
+                sink.error(
+                    "RUNTIME_EVENT_EMIT_FAILED",
+                    "runtime snapshot event mapping failed",
+                    null,
+                )
+            } catch (_: Exception) {
+            }
         }
     }
 

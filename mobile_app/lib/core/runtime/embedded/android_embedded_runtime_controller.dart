@@ -8,6 +8,8 @@ import 'embedded_runtime_controller.dart';
 const String _methodStartWithProfile = 'runtime.startWithProfile';
 const String _methodStop = 'runtime.stop';
 const String _methodSnapshot = 'runtime.snapshot';
+const Duration _profileSwitchTimeout = Duration(seconds: 20);
+const Duration _profileSwitchPollInterval = Duration(milliseconds: 100);
 
 class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
   static const MethodChannel _channel = MethodChannel(
@@ -22,18 +24,59 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
     EmbeddedRuntimeProfile profile,
   ) async {
     final capturedGeneration = ++_startGeneration;
+    final requestedProfile = profile.runtimeProfileArg;
 
     try {
-      final currentStatus = await getStatus();
+      var snapshot = await _readSnapshot();
       if (capturedGeneration != _startGeneration) {
         return EmbeddedRuntimeStatus.stopped;
       }
 
-      // Never issue a second start while Native is already transitioning.
-      if (currentStatus == EmbeddedRuntimeStatus.ready ||
-          currentStatus == EmbeddedRuntimeStatus.starting ||
+      var currentStatus = _mapSnapshotStatus(snapshot);
+      final currentProfile = _activeProfile(snapshot);
+
+      if (currentStatus == EmbeddedRuntimeStatus.ready &&
+          currentProfile == requestedProfile) {
+        _lastEndpoint = await getEndpoint();
+        return EmbeddedRuntimeStatus.ready;
+      }
+
+      // Native generations are profile-bound. Never reuse a READY/STARTING
+      // generation for a different runtime profile: stop it completely first.
+      if ((currentStatus == EmbeddedRuntimeStatus.ready ||
+              currentStatus == EmbeddedRuntimeStatus.starting) &&
+          currentProfile != null &&
+          currentProfile != requestedProfile) {
+        await _requestStop();
+        snapshot = await _waitForStopped(capturedGeneration);
+        currentStatus = _mapSnapshotStatus(snapshot);
+      } else if (currentStatus == EmbeddedRuntimeStatus.stopping) {
+        snapshot = await _waitForStopped(capturedGeneration);
+        currentStatus = _mapSnapshotStatus(snapshot);
+      }
+
+      if (capturedGeneration != _startGeneration) {
+        return EmbeddedRuntimeStatus.stopped;
+      }
+
+      if (currentStatus == EmbeddedRuntimeStatus.stopping) {
+        // The previous profile did not stop within the bounded switch window.
+        // Never issue a new start into a generation that still owns teardown.
+        return EmbeddedRuntimeStatus.stopping;
+      }
+
+      if (currentStatus == EmbeddedRuntimeStatus.ready) {
+        // READY without a profile is treated as unsafe legacy state. Do not
+        // silently claim it satisfies a profile-specific request.
+        if (_activeProfile(snapshot) == requestedProfile) {
+          _lastEndpoint = await getEndpoint();
+          return EmbeddedRuntimeStatus.ready;
+        }
+        return EmbeddedRuntimeStatus.failed;
+      }
+
+      if (currentStatus == EmbeddedRuntimeStatus.starting ||
           currentStatus == EmbeddedRuntimeStatus.installing ||
-          currentStatus == EmbeddedRuntimeStatus.stopping ||
           currentStatus == EmbeddedRuntimeStatus.notInstalled ||
           currentStatus == EmbeddedRuntimeStatus.unsupported) {
         return currentStatus;
@@ -41,7 +84,7 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
 
       final result = await _channel.invokeMethod<Map<Object?, Object?>>(
         _methodStartWithProfile,
-        {'profile': profile.runtimeProfileArg},
+        {'profile': requestedProfile},
       );
 
       if (capturedGeneration != _startGeneration) {
@@ -53,26 +96,34 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
 
       final map = _stringKeyMap(result);
       final accepted = map['accepted'] as bool? ?? false;
-      final snapshot = _stringKeyMap(map['snapshot']);
-      final status = _mapBridgeState(snapshot['state'] as String?);
+      final resultSnapshot = _stringKeyMap(map['snapshot']);
+      final status = _mapSnapshotStatus(resultSnapshot);
 
       if (status == EmbeddedRuntimeStatus.ready) {
+        if (_activeProfile(resultSnapshot) != requestedProfile) {
+          return EmbeddedRuntimeStatus.failed;
+        }
         _lastEndpoint = await getEndpoint();
       }
 
-      // A start command may legally report STARTING before the native startup
-      // detector reaches READY. Rejection is only fatal when Native also
-      // reports a terminal/non-startable state.
+      // STARTING is an asynchronous accepted lifecycle even when a duplicate
+      // command is rejected by Native as already running.
       if (!accepted &&
           status != EmbeddedRuntimeStatus.ready &&
           status != EmbeddedRuntimeStatus.starting) {
-        return EmbeddedRuntimeStatus.failed;
+        return status == EmbeddedRuntimeStatus.unsupported
+            ? EmbeddedRuntimeStatus.unsupported
+            : EmbeddedRuntimeStatus.failed;
       }
 
       return status;
     } on MissingPluginException {
       return EmbeddedRuntimeStatus.unsupported;
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      if (error.code == 'UNSUPPORTED_ABI' ||
+          error.code == 'UNSUPPORTED_PLATFORM') {
+        return EmbeddedRuntimeStatus.unsupported;
+      }
       return EmbeddedRuntimeStatus.failed;
     } catch (_) {
       return EmbeddedRuntimeStatus.failed;
@@ -82,8 +133,9 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
   @override
   Future<void> stop() async {
     _startGeneration++;
+    _lastEndpoint = null;
     try {
-      await _channel.invokeMethod<void>(_methodStop, null);
+      await _requestStop();
     } on PlatformException {
       // Native already stopped/failed. The lifecycle will observe the snapshot.
     } on MissingPluginException {
@@ -91,23 +143,52 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
     }
   }
 
+  Future<void> _requestStop() async {
+    await _channel.invokeMethod<Object?>(_methodStop, null);
+  }
+
+  Future<Map<String, dynamic>> _waitForStopped(int capturedGeneration) async {
+    final deadline = DateTime.now().add(_profileSwitchTimeout);
+    var last = await _readSnapshot();
+    while (capturedGeneration == _startGeneration &&
+        DateTime.now().isBefore(deadline)) {
+      final status = _mapSnapshotStatus(last);
+      if (status == EmbeddedRuntimeStatus.stopped ||
+          status == EmbeddedRuntimeStatus.failed ||
+          status == EmbeddedRuntimeStatus.notInstalled ||
+          status == EmbeddedRuntimeStatus.unsupported) {
+        return last;
+      }
+      await Future<void>.delayed(_profileSwitchPollInterval);
+      last = await _readSnapshot();
+    }
+    return last;
+  }
+
   @override
   Future<EmbeddedRuntimeStatus> getStatus() async {
     try {
-      final result = await _channel.invokeMethod<Map<Object?, Object?>>(
-        _methodSnapshot,
-        null,
-      );
-      if (result == null) return EmbeddedRuntimeStatus.failed;
-      final map = _stringKeyMap(result);
-      return _mapBridgeState(map['state'] as String?);
+      return _mapSnapshotStatus(await _readSnapshot());
     } on MissingPluginException {
       return EmbeddedRuntimeStatus.unsupported;
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      if (error.code == 'UNSUPPORTED_ABI' ||
+          error.code == 'UNSUPPORTED_PLATFORM') {
+        return EmbeddedRuntimeStatus.unsupported;
+      }
       return EmbeddedRuntimeStatus.failed;
     } catch (_) {
       return EmbeddedRuntimeStatus.failed;
     }
+  }
+
+  Future<Map<String, dynamic>> _readSnapshot() async {
+    final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+      _methodSnapshot,
+      null,
+    );
+    if (result == null) return <String, dynamic>{};
+    return _stringKeyMap(result);
   }
 
   @override
@@ -121,6 +202,25 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
     );
     _lastEndpoint = endpoint;
     return endpoint;
+  }
+
+  String? _activeProfile(Map<String, dynamic> snapshot) {
+    final value = snapshot['activeProfile'];
+    if (value is! String) return null;
+    final normalized = value.trim();
+    return normalized.isEmpty ? null : normalized;
+  }
+
+  EmbeddedRuntimeStatus _mapSnapshotStatus(Map<String, dynamic> snapshot) {
+    final bridgeState = snapshot['state'] as String?;
+    if (bridgeState == 'FAILED' || bridgeState == 'CORRUPTED') {
+      final error = _stringKeyMap(snapshot['lastError']);
+      final code = error['code'] as String?;
+      if (code == 'UNSUPPORTED_ABI' || code == 'UNSUPPORTED_PLATFORM') {
+        return EmbeddedRuntimeStatus.unsupported;
+      }
+    }
+    return _mapBridgeState(bridgeState);
   }
 
   EmbeddedRuntimeStatus _mapBridgeState(String? bridgeState) {

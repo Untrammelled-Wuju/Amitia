@@ -3,6 +3,7 @@ package com.amitia.amitia_app.runtime
 import android.content.Context
 import com.amitia.amitia_app.runtime.abi.internal.BuildAndroidAbiProvider
 import com.amitia.amitia_app.runtime.abi.internal.DefaultRuntimeAbiGate
+import com.amitia.amitia_app.runtime.abi.RuntimeAbiPolicy
 import com.amitia.amitia_app.runtime.api.RuntimeModule
 import com.amitia.amitia_app.runtime.connection.internal.DefaultBackendConnectionProvider
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
@@ -99,9 +100,12 @@ object AndroidRuntimeModule {
 
         val activeRuntimeManager = DefaultActiveRuntimeManager(layout, manifestStore)
         cachedActiveRuntimeManager = activeRuntimeManager
+        // Manifest target architecture is a package/runtime contract, not a claim
+        // that the current device passed ABI detection. The installer still
+        // fail-closes through abiGate before it can build a manifest.
         val manifestBuilder = DefaultRuntimeManifestBuilder(
             layout = layout,
-            abiStatus = abiGate.evaluate() as com.amitia.amitia_app.runtime.abi.RuntimeAbiStatus.Supported,
+            hostAbi = RuntimeAbiPolicy.AMITIA_ANDROID.required64BitAbi,
         )
         val installedRuntimeSource = ActiveRuntimeBackedInstalledRuntimeSource(activeRuntimeManager)
         val recoveryPolicy: RuntimeCrashRecoveryPolicy = DefaultRuntimeCrashRecoveryPolicy(
@@ -126,6 +130,7 @@ object AndroidRuntimeModule {
             activeRuntimeManager = activeRuntimeManager,
             hostLayout = layout,
             installedRuntimeVerifier = installedVerifier,
+            verifyInstalledTreeOnBootstrap = false,
         )
 
         val controller = DefaultRuntimeController(

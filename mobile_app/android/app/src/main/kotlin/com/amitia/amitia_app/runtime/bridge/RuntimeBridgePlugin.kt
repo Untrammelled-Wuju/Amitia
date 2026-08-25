@@ -10,6 +10,7 @@ import android.content.Context
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.StandardMethodCodec
 
 class RuntimeBridgePlugin : FlutterPlugin {
 
@@ -27,7 +28,16 @@ class RuntimeBridgePlugin : FlutterPlugin {
         val runtimePackageSource = AndroidRuntimeModule.runtimePackageSource
             ?: error("RuntimePackageSource is not initialized")
 
-        val methodChannel = MethodChannel(binding.binaryMessenger, RuntimeBridgeContract.METHOD_CHANNEL)
+        // Runtime install/verify/start perform filesystem and integrity work. Run
+        // method handlers on a serial background task queue so plugin attachment
+        // and Flutter's Android platform thread cannot be blocked into an ANR.
+        val runtimeTaskQueue = binding.binaryMessenger.makeBackgroundTaskQueue()
+        val methodChannel = MethodChannel(
+            binding.binaryMessenger,
+            RuntimeBridgeContract.METHOD_CHANNEL,
+            StandardMethodCodec.INSTANCE,
+            runtimeTaskQueue,
+        )
         val methodHandler = RuntimeBridgeHandler(
             controller = controller,
             backendConnectionProvider = backendConnectionProvider,

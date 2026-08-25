@@ -22,6 +22,7 @@ internal object RuntimeStateMachine {
         ))
         put(RuntimeState.INSTALLING, setOf(
             RuntimeState.INSTALLED,
+            RuntimeState.CORRUPTED,
             RuntimeState.FAILED,
             RuntimeState.NOT_INSTALLED
         ))
@@ -29,6 +30,7 @@ internal object RuntimeStateMachine {
             RuntimeState.VERIFYING,
             RuntimeState.STARTING,
             RuntimeState.REPAIRING,
+            RuntimeState.CORRUPTED,
             RuntimeState.NOT_INSTALLED
         ))
         put(RuntimeState.VERIFYING, setOf(
@@ -62,9 +64,11 @@ internal object RuntimeStateMachine {
             RuntimeState.VERIFYING,
             RuntimeState.STARTING,
             RuntimeState.REPAIRING,
+            RuntimeState.CORRUPTED,
             RuntimeState.NOT_INSTALLED
         ))
         put(RuntimeState.CORRUPTED, setOf(
+            RuntimeState.VERIFYING,
             RuntimeState.REPAIRING,
             RuntimeState.NOT_INSTALLED,
             RuntimeState.FAILED
@@ -76,8 +80,10 @@ internal object RuntimeStateMachine {
             RuntimeState.NOT_INSTALLED
         ))
         put(RuntimeState.FAILED, setOf(
+            RuntimeState.INSTALLING,
             RuntimeState.VERIFYING,
             RuntimeState.REPAIRING,
+            RuntimeState.CORRUPTED,
             RuntimeState.STARTING,
             RuntimeState.STOPPING,
             RuntimeState.NOT_INSTALLED

@@ -5,6 +5,7 @@ internal class NoOpRecoveryPolicy : RuntimeCrashRecoveryPolicy {
         RuntimeRecoveryDecision.DoNotRecover
     override fun recordReady(generation: Long) {}
     override fun cancelPending() {}
+    override fun resetBudget() {}
 }
 
 internal class AlwaysInstalledRuntimeSource : InstalledRuntimeSource {

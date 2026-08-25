@@ -28,6 +28,8 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
       StreamController<RuntimeBridgeSnapshot>.broadcast();
 
   StreamSubscription<dynamic>? _eventSubscription;
+  Timer? _reconnectTimer;
+  int _reconnectAttempt = 0;
   bool _disposed = false;
 
   MethodChannelRuntimeBridge() {
@@ -35,9 +37,11 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
   }
 
   void _subscribeToEvents() {
+    if (_disposed || _eventSubscription != null) return;
     _eventSubscription = _eventChannel.receiveBroadcastStream().listen(
       (dynamic event) {
         if (_disposed) return;
+        _reconnectAttempt = 0;
         if (event is Map) {
           try {
             final snapshot = RuntimeBridgeSnapshot.fromMap(
@@ -45,13 +49,64 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
             );
             _snapshotController.add(snapshot);
           } catch (_) {
+            // A malformed event must not permanently tear down runtime
+            // observation; the next native snapshot can still recover state.
           }
         }
       },
       onError: (Object error) {
-        if (_disposed) return;
+        _handleEventStreamClosed();
       },
+      onDone: _handleEventStreamClosed,
+      cancelOnError: false,
     );
+  }
+
+  void _handleEventStreamClosed() {
+    if (_disposed) return;
+    final old = _eventSubscription;
+    if (old == null) return;
+    _eventSubscription = null;
+    unawaited(_completeEventStreamRestart(old));
+  }
+
+  Future<void> _completeEventStreamRestart(
+    StreamSubscription<dynamic> old,
+  ) async {
+    try {
+      await old.cancel();
+    } catch (_) {
+      // Reconciliation below is the authority even if cancellation itself
+      // reports an error. Waiting here prevents old native onCancel from
+      // racing a replacement onListen and tearing down the new subscription.
+    }
+    if (_disposed) return;
+    try {
+      await _reconcileSnapshotAfterStreamLoss();
+    } catch (_) {
+      // Snapshot reconciliation is best-effort. A malformed/transient method
+      // response must never disable EventChannel recovery permanently.
+    } finally {
+      _scheduleEventReconnect();
+    }
+  }
+
+  Future<void> _reconcileSnapshotAfterStreamLoss() async {
+    if (_disposed) return;
+    final current = await snapshot();
+    if (_disposed) return;
+    _snapshotController.add(current);
+  }
+
+  void _scheduleEventReconnect() {
+    if (_disposed || _reconnectTimer != null) return;
+    final exponent = _reconnectAttempt.clamp(0, 5).toInt();
+    final delayMs = (250 * (1 << exponent)).clamp(250, 5000).toInt();
+    _reconnectAttempt++;
+    _reconnectTimer = Timer(Duration(milliseconds: delayMs), () {
+      _reconnectTimer = null;
+      _subscribeToEvents();
+    });
   }
 
   @override
@@ -72,6 +127,10 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
     } on PlatformException {
       return RuntimeBridgeSnapshot.initial();
     } on MissingPluginException {
+      return RuntimeBridgeSnapshot.initial();
+    } catch (_) {
+      // Treat malformed/forward-incompatible payloads as bridge unavailable
+      // rather than letting bootstrap fail with an uncaught TypeError.
       return RuntimeBridgeSnapshot.initial();
     }
   }
@@ -116,6 +175,16 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
           code: 'BRIDGE_UNAVAILABLE',
           message: 'Runtime bridge not available',
           retryable: false,
+        ),
+      );
+    } catch (error) {
+      return RuntimeBridgeCommandResult(
+        accepted: false,
+        snapshot: RuntimeBridgeSnapshot.initial(),
+        error: RuntimeBridgeError(
+          code: 'BRIDGE_PROTOCOL_ERROR',
+          message: 'Invalid runtime bridge response: ${error.runtimeType}',
+          retryable: true,
         ),
       );
     }
@@ -163,6 +232,16 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
           retryable: false,
         ),
       );
+    } catch (error) {
+      return RuntimeBridgeCommandResult(
+        accepted: false,
+        snapshot: RuntimeBridgeSnapshot.initial(),
+        error: RuntimeBridgeError(
+          code: 'BRIDGE_PROTOCOL_ERROR',
+          message: 'Invalid runtime bridge response: ${error.runtimeType}',
+          retryable: true,
+        ),
+      );
     }
   }
 
@@ -206,6 +285,16 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
           code: 'BRIDGE_UNAVAILABLE',
           message: 'Runtime bridge not available',
           retryable: false,
+        ),
+      );
+    } catch (error) {
+      return RuntimeBridgeCommandResult(
+        accepted: false,
+        snapshot: RuntimeBridgeSnapshot.initial(),
+        error: RuntimeBridgeError(
+          code: 'BRIDGE_PROTOCOL_ERROR',
+          message: 'Invalid runtime bridge response: ${error.runtimeType}',
+          retryable: true,
         ),
       );
     }
@@ -253,6 +342,16 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
           retryable: false,
         ),
       );
+    } catch (error) {
+      return RuntimeBridgeCommandResult(
+        accepted: false,
+        snapshot: RuntimeBridgeSnapshot.initial(),
+        error: RuntimeBridgeError(
+          code: 'BRIDGE_PROTOCOL_ERROR',
+          message: 'Invalid runtime bridge response: ${error.runtimeType}',
+          retryable: true,
+        ),
+      );
     }
   }
 
@@ -298,6 +397,16 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
           retryable: false,
         ),
       );
+    } catch (error) {
+      return RuntimeBridgeCommandResult(
+        accepted: false,
+        snapshot: RuntimeBridgeSnapshot.initial(),
+        error: RuntimeBridgeError(
+          code: 'BRIDGE_PROTOCOL_ERROR',
+          message: 'Invalid runtime bridge response: ${error.runtimeType}',
+          retryable: true,
+        ),
+      );
     }
   }
 
@@ -317,12 +426,16 @@ class MethodChannelRuntimeBridge implements RuntimeBridge {
       return null;
     } on MissingPluginException {
       return null;
+    } catch (_) {
+      return null;
     }
   }
 
   @override
   Future<void> dispose() async {
     _disposed = true;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     await _eventSubscription?.cancel();
     _eventSubscription = null;
     await _snapshotController.close();

@@ -18,6 +18,7 @@ import com.amitia.amitia_app.runtime.api.RuntimeStopRequest
 import com.amitia.amitia_app.runtime.api.RuntimeSubscription
 import com.amitia.amitia_app.runtime.api.RuntimeVerifyRequest
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiGate
+import com.amitia.amitia_app.runtime.abi.RuntimeAbiStatus
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
 import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerifier
@@ -83,7 +84,7 @@ internal class DefaultRuntimeController(
     private val serviceSessionWatchdogThread = AtomicReference<Thread?>(null)
     private val pendingRecoveryJob = AtomicReference<com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryJob?>(null)
     private val lastFailedGeneration = AtomicLong(-1L)
-    private val lastFailedAttemptId = AtomicReference<String?>(null)
+    private val verifiedRuntimeVersionRef = AtomicReference<String?>(null)
 
     private companion object {
         const val SERVICE_SESSION_TIMEOUT_MS = 30_000L
@@ -96,8 +97,39 @@ internal class DefaultRuntimeController(
     }
 
     private fun runBootstrap() {
-        val bootstrapper = bootstrapper ?: return
         if (stateStore.isInitialized()) return
+
+        when (val abiStatus = abiGate?.evaluate()) {
+            is RuntimeAbiStatus.Unsupported -> {
+                stateStore.initialize(
+                    targetState = RuntimeState.FAILED,
+                    lastError = RuntimeError(
+                        code = RuntimeErrorCode.UNSUPPORTED_ABI,
+                        message = "embedded runtime ABI is unsupported: ${abiStatus.reason.name}",
+                        recoverable = false,
+                    ),
+                )
+                return
+            }
+            is RuntimeAbiStatus.DetectionFailed -> {
+                stateStore.initialize(
+                    targetState = RuntimeState.FAILED,
+                    lastError = RuntimeError(
+                        code = RuntimeErrorCode.UNSUPPORTED_ABI,
+                        message = "embedded runtime ABI detection failed: ${abiStatus.error.messageKey}",
+                        recoverable = abiStatus.error.recoverable,
+                    ),
+                )
+                return
+            }
+            is RuntimeAbiStatus.Supported, null -> Unit
+        }
+
+        val bootstrapper = bootstrapper
+        if (bootstrapper == null) {
+            stateStore.initialize(RuntimeState.NOT_INSTALLED)
+            return
+        }
 
         when (val result = bootstrapper.bootstrap()) {
             is RuntimeBootstrapResult.NotInstalled -> {
@@ -107,7 +139,15 @@ internal class DefaultRuntimeController(
                 stateStore.initialize(RuntimeState.STOPPED, result.runtimeVersion)
             }
             is RuntimeBootstrapResult.Failed -> {
-                stateStore.initialize(RuntimeState.FAILED)
+                stateStore.initialize(
+                    targetState = RuntimeState.CORRUPTED,
+                    lastError = RuntimeError(
+                        code = RuntimeErrorCode.RUNTIME_CORRUPTED,
+                        message = result.message,
+                        recoverable = true,
+                        detailsSource = mapOf("bootstrapCode" to result.code.name),
+                    ),
+                )
             }
         }
     }
@@ -148,6 +188,7 @@ internal class DefaultRuntimeController(
         }
     }
 
+    @Synchronized
     private fun onServiceHostEvent(event: RuntimeServiceHostEvent) {
         when (event) {
             is RuntimeServiceHostEvent.ForegroundStarted -> {
@@ -158,12 +199,12 @@ internal class DefaultRuntimeController(
             is RuntimeServiceHostEvent.ExpectedStopped -> {
                 val current = stateStore.snapshot()
                 if (current.generation != event.generation) return
-                cancelPendingRecovery()
+                cancelPendingRecovery(resetBudget = true)
                 cancelServiceSessionWatchdog()
                 cancelStartupDetector()
                 val target = RuntimeStateMachine.expectedStopTarget(current.state)
                 if (target != null && target != current.state) {
-                    stateStore.update { it.copy(state = target) }
+                    stateStore.update { it.copy(state = target, activeProfile = null) }
                 }
                 clearExpectedStop(event.generation)
             }
@@ -218,6 +259,7 @@ internal class DefaultRuntimeController(
         }
     }
 
+    @Synchronized
     private fun onSessionReady(generation: Long) {
         if (!isCurrentGeneration(generation)) return
 
@@ -259,6 +301,7 @@ internal class DefaultRuntimeController(
         startStartupDetection(session, generation, attemptId)
     }
 
+    @Synchronized
     private fun failSessionReadyPrecondition(generation: Long, message: String, phase: String) {
         if (!isCurrentGeneration(generation)) return
         val current = stateStore.snapshot()
@@ -338,6 +381,7 @@ internal class DefaultRuntimeController(
         onStartupDetectionCompleted(result, generation, attemptId)
     }
 
+    @Synchronized
     private fun onStartupDetectionCompleted(result: RuntimeStartupResult, expectedGeneration: Long, expectedAttemptId: String) {
         startupDetectionThread.compareAndSet(Thread.currentThread(), null)
         if (currentStartAttemptId.get() != expectedAttemptId) return
@@ -585,7 +629,7 @@ internal class DefaultRuntimeController(
     private fun evaluateRecovery(error: RuntimeError, requestedStop: Boolean) {
         val current = stateStore.snapshot()
         if (current.state != RuntimeState.FAILED) return
-        cancelPendingRecovery()
+        cancelPendingRecovery(resetBudget = false)
         val currentExpectedStop = expectedStopRef.get()
         val isExpectedStop = currentExpectedStop != null && currentExpectedStop.generation == current.generation
         val request = RuntimeRecoveryRequest(
@@ -615,18 +659,25 @@ internal class DefaultRuntimeController(
     }
 
     private fun scheduleRecovery(delayMillis: Long) {
-        cancelPendingRecovery()
+        cancelPendingRecovery(resetBudget = false)
         val failedGen = lastFailedGeneration.get()
         if (failedGen <= 0) return
         try {
+            val jobRef = AtomicReference<com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryJob?>(null)
             val job = recoveryScheduler.schedule(delayMillis) {
+                val runningJob = jobRef.get()
+                if (runningJob != null) {
+                    pendingRecoveryJob.compareAndSet(runningJob, null)
+                }
                 executeRecoveryStart(failedGen)
             }
+            jobRef.set(job)
             pendingRecoveryJob.set(job)
         } catch (_: Throwable) {
         }
     }
 
+    @Synchronized
     private fun executeRecoveryStart(failedGeneration: Long) {
         val current = stateStore.snapshot()
         if (current.state != RuntimeState.FAILED) return
@@ -644,9 +695,10 @@ internal class DefaultRuntimeController(
         }
         val currentGen = serviceHost.currentGeneration()
         if (currentGen != 0L && currentGen != failedGeneration) return false
-        cancelPendingRecovery()
+        cancelPendingRecovery(resetBudget = false)
+        val recoveryProfile = stateStore.snapshot().activeProfile ?: "local"
         start(
-            RuntimeStartRequest(reason = RuntimeStartReason.RECOVERY),
+            RuntimeStartRequest(reason = RuntimeStartReason.RECOVERY, profile = recoveryProfile),
             object : RuntimeOperationCallback {
                 override fun onCompleted(result: RuntimeOperationResult) {}
             }
@@ -654,7 +706,7 @@ internal class DefaultRuntimeController(
         return true
     }
 
-    private fun cancelPendingRecovery() {
+    private fun cancelPendingRecovery(resetBudget: Boolean = false) {
         val job = pendingRecoveryJob.getAndSet(null)
         if (job != null) {
             try {
@@ -664,12 +716,15 @@ internal class DefaultRuntimeController(
         }
         try {
             recoveryPolicy.cancelPending()
+            if (resetBudget) {
+                recoveryPolicy.resetBudget()
+            }
         } catch (_: Throwable) {
         }
     }
 
     private fun recordRecoveryReady(generation: Long) {
-        cancelPendingRecovery()
+        cancelPendingRecovery(resetBudget = false)
         try {
             recoveryPolicy.recordReady(generation)
         } catch (_: Throwable) {
@@ -751,6 +806,80 @@ internal class DefaultRuntimeController(
         }
     }
 
+    private fun runtimeAbiError(): RuntimeError? {
+        return when (val status = abiGate?.evaluate()) {
+            is RuntimeAbiStatus.Supported, null -> null
+            is RuntimeAbiStatus.Unsupported -> RuntimeError(
+                code = RuntimeErrorCode.UNSUPPORTED_ABI,
+                message = "embedded runtime ABI is unsupported: ${status.reason.name}",
+                recoverable = false,
+            )
+            is RuntimeAbiStatus.DetectionFailed -> RuntimeError(
+                code = RuntimeErrorCode.UNSUPPORTED_ABI,
+                message = "embedded runtime ABI detection failed: ${status.error.messageKey}",
+                recoverable = status.error.recoverable,
+            )
+        }
+    }
+
+    private fun normalizeRuntimeProfile(profile: String): String? {
+        val normalized = profile.trim().lowercase()
+        if (normalized.isEmpty() || normalized.length > 32) return null
+        if (!normalized.matches(Regex("[a-z0-9][a-z0-9-]*"))) return null
+        return normalized
+    }
+
+    private fun verifyRuntimeBeforeStart(current: RuntimeSnapshot): RuntimeError? {
+        val version = current.runtimeVersion ?: return RuntimeError(
+            code = RuntimeErrorCode.RUNTIME_NOT_INSTALLED,
+            message = "runtime version is unavailable; install or repair the embedded runtime before start",
+            recoverable = true,
+        )
+        if (verifiedRuntimeVersionRef.get() == version) return null
+        val verifier = installedVerifier ?: return null
+        val layout = hostLayout ?: return null
+        val versionDir = layout.runtimeVersionRoot(version)
+        val result = try {
+            verifier.verify(versionDir)
+        } catch (error: Throwable) {
+            val runtimeError = RuntimeError(
+                code = RuntimeErrorCode.VERIFY_FAILED,
+                message = "runtime verification failed before start: ${error.message ?: error.javaClass.simpleName}",
+                recoverable = true,
+            )
+            transitionToCorruptedIfAllowed(runtimeError)
+            return runtimeError
+        }
+        return when (result) {
+            is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Success -> {
+                verifiedRuntimeVersionRef.set(version)
+                null
+            }
+            is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Failure -> {
+                val runtimeError = RuntimeError(
+                    code = RuntimeErrorCode.RUNTIME_CORRUPTED,
+                    message = result.message,
+                    recoverable = true,
+                )
+                transitionToCorruptedIfAllowed(runtimeError)
+                runtimeError
+            }
+        }
+    }
+
+    private fun transitionToCorruptedIfAllowed(error: RuntimeError) {
+        val snapshot = stateStore.snapshot()
+        if (RuntimeStateMachine.canTransition(snapshot.state, RuntimeState.CORRUPTED)) {
+            stateStore.update {
+                it.copy(
+                    state = RuntimeState.CORRUPTED,
+                    lastError = error,
+                    activeProfile = null,
+                )
+            }
+        }
+    }
+
     override fun snapshot(): RuntimeSnapshot = stateStore.snapshot()
 
     fun lifecycleSnapshot(): RuntimeServiceLifecycleSnapshot? =
@@ -758,6 +887,7 @@ internal class DefaultRuntimeController(
 
     override fun subscribe(listener: RuntimeListener): RuntimeSubscription = stateStore.subscribe(listener)
 
+    @Synchronized
     override fun install(
         request: RuntimeInstallRequest,
         callback: RuntimeOperationCallback
@@ -769,6 +899,7 @@ internal class DefaultRuntimeController(
         return executeInstall(impl, request, callback)
     }
 
+    @Synchronized
     override fun verify(
         request: RuntimeVerifyRequest,
         callback: RuntimeOperationCallback
@@ -834,14 +965,68 @@ internal class DefaultRuntimeController(
         return null
     }
 
+    @Synchronized
     override fun start(
         request: RuntimeStartRequest,
         callback: RuntimeOperationCallback
     ): RuntimeOperationHandle {
         val operationId = idGenerator.nextOperationId()
         val handle = CompletedOperationHandle(operationId, RuntimeOperationType.START)
+        val requestedProfile = normalizeRuntimeProfile(request.profile)
+        if (requestedProfile == null) {
+            callback.onCompleted(
+                RuntimeOperationResult.Failure(
+                    operationId = operationId,
+                    type = RuntimeOperationType.START,
+                    error = RuntimeError(
+                        code = RuntimeErrorCode.INVALID_REQUEST,
+                        message = "invalid runtime profile: ${request.profile}",
+                        recoverable = false,
+                    ),
+                    snapshot = stateStore.snapshot(),
+                )
+            )
+            return handle
+        }
 
         val current = stateStore.snapshot()
+        val abiError = runtimeAbiError()
+        if (abiError != null) {
+            callback.onCompleted(
+                RuntimeOperationResult.Failure(
+                    operationId = operationId,
+                    type = RuntimeOperationType.START,
+                    error = abiError,
+                    snapshot = current,
+                )
+            )
+            return handle
+        }
+        if (current.state == RuntimeState.READY || current.state == RuntimeState.DEGRADED) {
+            if (current.activeProfile == requestedProfile) {
+                callback.onCompleted(
+                    RuntimeOperationResult.Success(
+                        operationId = operationId,
+                        type = RuntimeOperationType.START,
+                        snapshot = current,
+                    )
+                )
+            } else {
+                callback.onCompleted(
+                    RuntimeOperationResult.Failure(
+                        operationId = operationId,
+                        type = RuntimeOperationType.START,
+                        error = RuntimeError(
+                            code = RuntimeErrorCode.INVALID_STATE,
+                            message = "runtime is already ready with profile ${current.activeProfile ?: "unknown"}; stop it before switching to $requestedProfile",
+                            recoverable = true,
+                        ),
+                        snapshot = current,
+                    )
+                )
+            }
+            return handle
+        }
         if (current.state == RuntimeState.STARTING) {
             callback.onCompleted(
                 RuntimeOperationResult.Failure(
@@ -875,6 +1060,19 @@ internal class DefaultRuntimeController(
             return handle
         }
 
+        val verificationError = verifyRuntimeBeforeStart(current)
+        if (verificationError != null) {
+            callback.onCompleted(
+                RuntimeOperationResult.Failure(
+                    operationId = operationId,
+                    type = RuntimeOperationType.START,
+                    error = verificationError,
+                    snapshot = stateStore.snapshot(),
+                )
+            )
+            return handle
+        }
+
         val ownershipError = startupOwnershipError()
         if (ownershipError != null) {
             callback.onCompleted(
@@ -894,15 +1092,15 @@ internal class DefaultRuntimeController(
         // detector/watchdog and strand the runtime in STARTING.
         cancelServiceSessionWatchdog()
         cancelStartupDetector()
-        cancelPendingRecovery()
+        cancelPendingRecovery(resetBudget = request.reason != RuntimeStartReason.RECOVERY)
 
-        val newSnapshot = stateStore.transitionToStarting()
+        val newSnapshot = stateStore.transitionToStarting(requestedProfile)
         val allocatedGeneration = newSnapshot.generation
 
         expectedStopRef.set(null)
         startServiceSessionWatchdog(allocatedGeneration)
 
-        val startResult = serviceHost.ensureStarted(allocatedGeneration, request.profile)
+        val startResult = serviceHost.ensureStarted(allocatedGeneration, requestedProfile)
         if (startResult is RuntimeServiceResult.Failure) {
             cancelServiceSessionWatchdog()
             val serviceError = RuntimeError(
@@ -944,6 +1142,7 @@ internal class DefaultRuntimeController(
         return handle
     }
 
+    @Synchronized
     override fun stop(
         request: RuntimeStopRequest,
         callback: RuntimeOperationCallback
@@ -995,7 +1194,7 @@ internal class DefaultRuntimeController(
 
             val generationToStop = current.generation
             expectedStopRef.set(ExpectedStopContext(generation = generationToStop))
-            cancelPendingRecovery()
+            cancelPendingRecovery(resetBudget = true)
             cancelServiceSessionWatchdog()
             cancelStartupDetector()
 
@@ -1050,6 +1249,7 @@ internal class DefaultRuntimeController(
         }
     }
 
+    @Synchronized
     override fun repair(
         request: RuntimeRepairRequest,
         callback: RuntimeOperationCallback
@@ -1090,11 +1290,57 @@ internal class DefaultRuntimeController(
     ): RuntimeOperationHandle {
         val operationId = idGenerator.nextOperationId()
         val handle = CompletedOperationHandle(operationId, RuntimeOperationType.INSTALL)
+        val before = stateStore.snapshot()
+        if (before.state != RuntimeState.NOT_INSTALLED && before.state != RuntimeState.FAILED) {
+            callback.onCompleted(
+                RuntimeOperationResult.Failure(
+                    operationId = operationId,
+                    type = RuntimeOperationType.INSTALL,
+                    error = RuntimeError(
+                        code = RuntimeErrorCode.INVALID_STATE,
+                        message = "cannot install runtime from state: ${before.state}",
+                        recoverable = true,
+                    ),
+                    snapshot = before,
+                )
+            )
+            return handle
+        }
+
+        val transitionError = RuntimeStateMachine.requireTransitionTo(before.state, RuntimeState.INSTALLING)
+        if (transitionError != null) {
+            callback.onCompleted(
+                RuntimeOperationResult.Failure(
+                    operationId = operationId,
+                    type = RuntimeOperationType.INSTALL,
+                    error = RuntimeError(
+                        code = RuntimeErrorCode.INVALID_STATE,
+                        message = "runtime cannot enter INSTALLING from ${before.state}",
+                        recoverable = true,
+                    ),
+                    snapshot = before,
+                )
+            )
+            return handle
+        }
+
+        cancelPendingRecovery(resetBudget = true)
+        stateStore.update {
+            it.copy(
+                state = RuntimeState.INSTALLING,
+                activeOperationId = operationId,
+                activeOperationType = RuntimeOperationType.INSTALL,
+                lastError = null,
+                activeProfile = null,
+            )
+        }
+
         try {
             val installResult = installer.install(
                 com.amitia.amitia_app.runtime.install.RuntimeInstallRequest(
                     packageFile = java.io.File(request.packageUri),
-                    expectedRuntimeVersion = request.expectedVersion
+                    expectedRuntimeVersion = request.expectedVersion,
+                    allowRepairExisting = request.allowRepairExisting,
                 )
             )
             when (installResult) {
@@ -1102,24 +1348,36 @@ internal class DefaultRuntimeController(
                 is RuntimeInstallResult.AlreadyInstalled -> {
                     val bootstrapResult = bootstrapper?.bootstrap()
                     if (bootstrapResult !is RuntimeBootstrapResult.InstalledStopped) {
+                        val error = RuntimeError(
+                            code = RuntimeErrorCode.INSTALL_FAILED,
+                            message = when (bootstrapResult) {
+                                is RuntimeBootstrapResult.Failed -> "install committed but runtime authority is inconsistent: ${bootstrapResult.message}"
+                                is RuntimeBootstrapResult.NotInstalled -> "install committed but no active runtime was published"
+                                null -> "install committed but runtime bootstrap authority is unavailable"
+                                else -> "install committed but runtime authority is inconsistent"
+                            },
+                            recoverable = true,
+                        )
+                        finishInstallFailure(error)
                         callback.onCompleted(
                             RuntimeOperationResult.Failure(
                                 operationId = operationId,
                                 type = RuntimeOperationType.INSTALL,
-                                error = RuntimeError(
-                                    code = RuntimeErrorCode.INSTALL_FAILED,
-                                    message = "install succeeded but runtime authority not consistent",
-                                    recoverable = true
-                                ),
-                                snapshot = stateStore.snapshot()
+                                error = error,
+                                snapshot = stateStore.snapshot(),
                             )
                         )
                         return handle
                     }
+                    verifiedRuntimeVersionRef.set(bootstrapResult.runtimeVersion)
                     stateStore.update {
                         it.copy(
-                            state = RuntimeState.STOPPED,
-                            runtimeVersion = bootstrapResult.runtimeVersion
+                            state = RuntimeState.INSTALLED,
+                            runtimeVersion = bootstrapResult.runtimeVersion,
+                            activeOperationId = null,
+                            activeOperationType = null,
+                            lastError = null,
+                            activeProfile = null,
                         )
                     }
                     callback.onCompleted(
@@ -1131,35 +1389,85 @@ internal class DefaultRuntimeController(
                     )
                 }
                 is RuntimeInstallResult.Failure -> {
+                    val error = mapInstallFailure(installResult)
+                    finishInstallFailure(error)
                     callback.onCompleted(
                         RuntimeOperationResult.Failure(
                             operationId = operationId,
                             type = RuntimeOperationType.INSTALL,
-                            error = RuntimeError(
-                                code = RuntimeErrorCode.INSTALL_FAILED,
-                                message = installResult.message,
-                                recoverable = true
-                            ),
+                            error = error,
                             snapshot = stateStore.snapshot()
                         )
                     )
                 }
             }
         } catch (e: Exception) {
+            val error = RuntimeError(
+                code = RuntimeErrorCode.INSTALL_FAILED,
+                message = "install failed: ${e.message ?: e.javaClass.simpleName}",
+                recoverable = true
+            )
+            finishInstallFailure(error)
             callback.onCompleted(
                 RuntimeOperationResult.Failure(
                     operationId = operationId,
                     type = RuntimeOperationType.INSTALL,
-                    error = RuntimeError(
-                        code = RuntimeErrorCode.INSTALL_FAILED,
-                        message = "install failed: ${e.message}",
-                        recoverable = true
-                    ),
+                    error = error,
                     snapshot = stateStore.snapshot()
                 )
             )
         }
         return handle
+    }
+
+    private fun mapInstallFailure(failure: RuntimeInstallResult.Failure): RuntimeError {
+        val code = when (failure.code) {
+            com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.UNSUPPORTED_ABI -> RuntimeErrorCode.UNSUPPORTED_ABI
+            com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.PACKAGE_NOT_FOUND -> RuntimeErrorCode.PACKAGE_NOT_FOUND
+            com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.PACKAGE_INVALID,
+            com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.ARCHIVE_INVALID,
+            com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.ARCHIVE_PATH_INVALID,
+            com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.ARCHIVE_ENTRY_DUPLICATE,
+            com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.ARCHIVE_ENTRY_UNSUPPORTED -> RuntimeErrorCode.PACKAGE_INVALID
+            com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.PACKAGE_HASH_MISMATCH -> RuntimeErrorCode.CHECKSUM_MISMATCH
+            com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.INSUFFICIENT_STORAGE -> RuntimeErrorCode.STORAGE_INSUFFICIENT
+            else -> RuntimeErrorCode.INSTALL_FAILED
+        }
+        val recoverable = code != RuntimeErrorCode.UNSUPPORTED_ABI &&
+            code != RuntimeErrorCode.PACKAGE_INVALID &&
+            code != RuntimeErrorCode.CHECKSUM_MISMATCH
+        return RuntimeError(
+            code = code,
+            message = failure.message,
+            recoverable = recoverable,
+            detailsSource = buildMap {
+                put("installCode", failure.code.name)
+                put("phase", failure.phase.name)
+                failure.transactionId?.let { put("transactionId", it) }
+            },
+        )
+    }
+
+    private fun finishInstallFailure(error: RuntimeError) {
+        verifiedRuntimeVersionRef.set(null)
+        val bootstrap = try { bootstrapper?.bootstrap() } catch (_: Throwable) { null }
+        val target = when (bootstrap) {
+            is RuntimeBootstrapResult.InstalledStopped -> RuntimeState.INSTALLED
+            is RuntimeBootstrapResult.NotInstalled -> RuntimeState.NOT_INSTALLED
+            is RuntimeBootstrapResult.Failed -> RuntimeState.CORRUPTED
+            null -> RuntimeState.FAILED
+        }
+        val version = (bootstrap as? RuntimeBootstrapResult.InstalledStopped)?.runtimeVersion
+        stateStore.update {
+            it.copy(
+                state = target,
+                runtimeVersion = version ?: if (target == RuntimeState.NOT_INSTALLED) null else it.runtimeVersion,
+                activeOperationId = null,
+                activeOperationType = null,
+                lastError = error,
+                activeProfile = null,
+            )
+        }
     }
 
     private fun executeVerify(
@@ -1169,91 +1477,124 @@ internal class DefaultRuntimeController(
     ): RuntimeOperationHandle {
         val operationId = idGenerator.nextOperationId()
         val handle = CompletedOperationHandle(operationId, RuntimeOperationType.VERIFY)
-
         val verifier = installedVerifier
-        if (verifier == null) {
+        val layout = hostLayout
+        if (verifier == null || layout == null) {
             callback.onCompleted(
                 RuntimeOperationResult.Failure(
                     operationId = operationId,
                     type = RuntimeOperationType.VERIFY,
                     error = RuntimeError(
                         code = RuntimeErrorCode.NOT_IMPLEMENTED,
-                        message = "installed runtime verifier not available",
-                        recoverable = false
+                        message = "installed runtime verifier is not available",
+                        recoverable = false,
                     ),
-                    snapshot = stateStore.snapshot()
+                    snapshot = stateStore.snapshot(),
                 )
             )
             return handle
         }
 
-        val bootstrap = bootstrapper?.bootstrap()
-        val runtimeVersion = when (bootstrap) {
-            is RuntimeBootstrapResult.InstalledStopped -> bootstrap.runtimeVersion
-            else -> stateStore.snapshot().runtimeVersion
-        }
-
-        if (runtimeVersion == null) {
+        val before = stateStore.snapshot()
+        val transitionError = RuntimeStateMachine.requireTransitionTo(before.state, RuntimeState.VERIFYING)
+        if (transitionError != null) {
             callback.onCompleted(
                 RuntimeOperationResult.Failure(
                     operationId = operationId,
                     type = RuntimeOperationType.VERIFY,
                     error = RuntimeError(
                         code = RuntimeErrorCode.INVALID_STATE,
-                        message = "no runtime version available to verify",
-                        recoverable = true
+                        message = "cannot verify runtime from state: ${before.state}",
+                        recoverable = true,
                     ),
-                    snapshot = stateStore.snapshot()
+                    snapshot = before,
                 )
             )
             return handle
         }
 
-        val layout = hostLayout
-        if (layout == null) {
-            callback.onCompleted(
-                RuntimeOperationResult.Failure(
-                    operationId = operationId,
-                    type = RuntimeOperationType.VERIFY,
-                    error = RuntimeError(
-                        code = RuntimeErrorCode.NOT_IMPLEMENTED,
-                        message = "host layout not available for verify",
-                        recoverable = false
-                    ),
-                    snapshot = stateStore.snapshot()
-                )
+        stateStore.update {
+            it.copy(
+                state = RuntimeState.VERIFYING,
+                activeOperationId = operationId,
+                activeOperationType = RuntimeOperationType.VERIFY,
             )
+        }
+
+        val bootstrap = try { bootstrapper?.bootstrap() } catch (_: Throwable) { null }
+        val runtimeVersion = (bootstrap as? RuntimeBootstrapResult.InstalledStopped)?.runtimeVersion
+            ?: before.runtimeVersion
+        if (runtimeVersion == null) {
+            val error = RuntimeError(
+                code = RuntimeErrorCode.RUNTIME_NOT_INSTALLED,
+                message = "no runtime version is available to verify",
+                recoverable = true,
+            )
+            stateStore.update {
+                it.copy(
+                    state = RuntimeState.FAILED,
+                    activeOperationId = null,
+                    activeOperationType = null,
+                    lastError = error,
+                    activeProfile = null,
+                )
+            }
+            callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.VERIFY, error, stateStore.snapshot()))
             return handle
         }
 
-        val versionDir = layout.runtimeVersionRoot(runtimeVersion)
-        val verifyResult = verifier.verify(versionDir)
-
-        when (verifyResult) {
-            is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Success -> {
-                callback.onCompleted(
-                    RuntimeOperationResult.Success(
-                        operationId = operationId,
-                        type = RuntimeOperationType.VERIFY,
-                        snapshot = stateStore.snapshot()
+        try {
+            when (val verifyResult = verifier.verify(layout.runtimeVersionRoot(runtimeVersion))) {
+                is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Success -> {
+                    verifiedRuntimeVersionRef.set(runtimeVersion)
+                    stateStore.update {
+                        it.copy(
+                            state = RuntimeState.INSTALLED,
+                            runtimeVersion = runtimeVersion,
+                            activeOperationId = null,
+                            activeOperationType = null,
+                            lastError = null,
+                            activeProfile = null,
+                        )
+                    }
+                    callback.onCompleted(RuntimeOperationResult.Success(operationId, RuntimeOperationType.VERIFY, stateStore.snapshot()))
+                }
+                is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Failure -> {
+                    verifiedRuntimeVersionRef.set(null)
+                    val error = RuntimeError(
+                        code = RuntimeErrorCode.RUNTIME_CORRUPTED,
+                        message = verifyResult.message,
+                        recoverable = true,
                     )
+                    stateStore.update {
+                        it.copy(
+                            state = RuntimeState.CORRUPTED,
+                            activeOperationId = null,
+                            activeOperationType = null,
+                            lastError = error,
+                            activeProfile = null,
+                        )
+                    }
+                    callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.VERIFY, error, stateStore.snapshot()))
+                }
+            }
+        } catch (e: Exception) {
+            verifiedRuntimeVersionRef.set(null)
+            val error = RuntimeError(
+                code = RuntimeErrorCode.VERIFY_FAILED,
+                message = "runtime verification failed: ${e.message ?: e.javaClass.simpleName}",
+                recoverable = true,
+            )
+            stateStore.update {
+                it.copy(
+                    state = RuntimeState.FAILED,
+                    activeOperationId = null,
+                    activeOperationType = null,
+                    lastError = error,
+                    activeProfile = null,
                 )
             }
-            is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Failure -> {
-                stateStore.update { it.copy(state = RuntimeState.FAILED) }
-                callback.onCompleted(
-                    RuntimeOperationResult.Failure(
-                        operationId = operationId,
-                        type = RuntimeOperationType.VERIFY,
-                        error = RuntimeError(
-                            code = RuntimeErrorCode.VERIFY_FAILED,
-                            message = verifyResult.message,
-                            recoverable = true
-                        ),
-                        snapshot = stateStore.snapshot()
-                    )
-                )
-            }
+            callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.VERIFY, error, stateStore.snapshot()))
         }
         return handle
     }
@@ -1265,92 +1606,171 @@ internal class DefaultRuntimeController(
     ): RuntimeOperationHandle {
         val operationId = idGenerator.nextOperationId()
         val handle = CompletedOperationHandle(operationId, RuntimeOperationType.REPAIR)
-        try {
-            val packageFile = request.packageUri?.let { java.io.File(it) }
-            if (packageFile != null) {
-                val installResult = installer.install(
-                    com.amitia.amitia_app.runtime.install.RuntimeInstallRequest(
-                        packageFile = packageFile,
-                        expectedRuntimeVersion = null
-                    )
-                )
-                when (installResult) {
-                    is RuntimeInstallResult.Success,
-                    is RuntimeInstallResult.AlreadyInstalled -> {
-                        val bootstrapResult = bootstrapper?.bootstrap()
-                        if (bootstrapResult !is RuntimeBootstrapResult.InstalledStopped) {
-                            callback.onCompleted(
-                                RuntimeOperationResult.Failure(
-                                    operationId = operationId,
-                                    type = RuntimeOperationType.REPAIR,
-                                    error = RuntimeError(
-                                        code = RuntimeErrorCode.REPAIR_FAILED,
-                                        message = "repair succeeded but runtime authority not consistent",
-                                        recoverable = true
-                                    ),
-                                    snapshot = stateStore.snapshot()
-                                )
-                            )
-                            return handle
-                        }
-                        stateStore.update {
-                            it.copy(
-                                state = RuntimeState.STOPPED,
-                                runtimeVersion = bootstrapResult.runtimeVersion
-                            )
-                        }
-                        callback.onCompleted(
-                            RuntimeOperationResult.Success(
-                                operationId = operationId,
-                                type = RuntimeOperationType.REPAIR,
-                                snapshot = stateStore.snapshot()
-                            )
-                        )
-                    }
-                    is RuntimeInstallResult.Failure -> {
-                        callback.onCompleted(
-                            RuntimeOperationResult.Failure(
-                                operationId = operationId,
-                                type = RuntimeOperationType.REPAIR,
-                                error = RuntimeError(
-                                    code = RuntimeErrorCode.REPAIR_FAILED,
-                                    message = installResult.message,
-                                    recoverable = true
-                                ),
-                                snapshot = stateStore.snapshot()
-                            )
-                        )
-                    }
-                }
-            } else {
-                callback.onCompleted(
-                    RuntimeOperationResult.Failure(
-                        operationId = operationId,
-                        type = RuntimeOperationType.REPAIR,
-                        error = RuntimeError(
-                            code = RuntimeErrorCode.REPAIR_FAILED,
-                            message = "repair requires a package Uri",
-                            recoverable = false
-                        ),
-                        snapshot = stateStore.snapshot()
-                    )
-                )
-            }
-        } catch (e: Exception) {
-            callback.onCompleted(
-                RuntimeOperationResult.Failure(
-                    operationId = operationId,
-                    type = RuntimeOperationType.REPAIR,
-                    error = RuntimeError(
-                        code = RuntimeErrorCode.REPAIR_FAILED,
-                        message = "repair failed: ${e.message}",
-                        recoverable = true
-                    ),
-                    snapshot = stateStore.snapshot()
-                )
+        val before = stateStore.snapshot()
+        val packageUri = request.packageUri?.trim()?.takeIf { it.isNotEmpty() }
+        if (packageUri == null) {
+            val error = RuntimeError(
+                code = RuntimeErrorCode.REPAIR_FAILED,
+                message = "repair requires a runtime package Uri",
+                recoverable = false,
+            )
+            callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.REPAIR, error, before))
+            return handle
+        }
+
+        if (before.state !in setOf(
+                RuntimeState.INSTALLED,
+                RuntimeState.STOPPED,
+                RuntimeState.CORRUPTED,
+                RuntimeState.FAILED,
+            )
+        ) {
+            val error = RuntimeError(
+                code = RuntimeErrorCode.INVALID_STATE,
+                message = "cannot repair runtime from state: ${before.state}; stop the runtime first",
+                recoverable = true,
+            )
+            callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.REPAIR, error, before))
+            return handle
+        }
+
+        val ownershipError = startupOwnershipError()
+        if (ownershipError != null) {
+            callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.REPAIR, ownershipError, before))
+            return handle
+        }
+
+        val transitionError = RuntimeStateMachine.requireTransitionTo(before.state, RuntimeState.REPAIRING)
+        if (transitionError != null) {
+            val error = RuntimeError(
+                code = RuntimeErrorCode.INVALID_STATE,
+                message = "runtime cannot enter REPAIRING from ${before.state}",
+                recoverable = true,
+            )
+            callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.REPAIR, error, before))
+            return handle
+        }
+
+        cancelPendingRecovery(resetBudget = true)
+        cancelServiceSessionWatchdog()
+        cancelStartupDetector()
+        verifiedRuntimeVersionRef.set(null)
+        stateStore.update {
+            it.copy(
+                state = RuntimeState.REPAIRING,
+                activeOperationId = operationId,
+                activeOperationType = RuntimeOperationType.REPAIR,
+                lastError = null,
+                activeProfile = null,
             )
         }
+
+        try {
+            val installResult = installer.install(
+                com.amitia.amitia_app.runtime.install.RuntimeInstallRequest(
+                    packageFile = java.io.File(packageUri),
+                    expectedRuntimeVersion = before.runtimeVersion,
+                    allowRepairExisting = true,
+                )
+            )
+            when (installResult) {
+                is RuntimeInstallResult.Success,
+                is RuntimeInstallResult.AlreadyInstalled -> {
+                    val bootstrapResult = bootstrapper?.bootstrap()
+                    if (bootstrapResult !is RuntimeBootstrapResult.InstalledStopped) {
+                        val error = RuntimeError(
+                            code = RuntimeErrorCode.REPAIR_FAILED,
+                            message = when (bootstrapResult) {
+                                is RuntimeBootstrapResult.Failed -> "repair committed but runtime authority is inconsistent: ${bootstrapResult.message}"
+                                is RuntimeBootstrapResult.NotInstalled -> "repair committed but no active runtime was published"
+                                null -> "repair committed but runtime bootstrap authority is unavailable"
+                                else -> "repair committed but runtime authority is inconsistent"
+                            },
+                            recoverable = true,
+                        )
+                        finishRepairFailure(error, before.runtimeVersion)
+                        callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.REPAIR, error, stateStore.snapshot()))
+                        return handle
+                    }
+
+                    val verifier = installedVerifier
+                    val layout = hostLayout
+                    if (verifier != null && layout != null) {
+                        when (val verified = verifier.verify(layout.runtimeVersionRoot(bootstrapResult.runtimeVersion))) {
+                            is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Failure -> {
+                                val error = RuntimeError(
+                                    code = RuntimeErrorCode.REPAIR_FAILED,
+                                    message = "repaired runtime failed verification: ${verified.message}",
+                                    recoverable = true,
+                                )
+                                finishRepairFailure(error, bootstrapResult.runtimeVersion)
+                                callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.REPAIR, error, stateStore.snapshot()))
+                                return handle
+                            }
+                            is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Success -> Unit
+                        }
+                    }
+
+                    verifiedRuntimeVersionRef.set(bootstrapResult.runtimeVersion)
+                    stateStore.update {
+                        it.copy(
+                            state = RuntimeState.INSTALLED,
+                            runtimeVersion = bootstrapResult.runtimeVersion,
+                            activeOperationId = null,
+                            activeOperationType = null,
+                            lastError = null,
+                            activeProfile = null,
+                        )
+                    }
+                    callback.onCompleted(RuntimeOperationResult.Success(operationId, RuntimeOperationType.REPAIR, stateStore.snapshot()))
+                }
+                is RuntimeInstallResult.Failure -> {
+                    val error = RuntimeError(
+                        code = RuntimeErrorCode.REPAIR_FAILED,
+                        message = installResult.message,
+                        recoverable = true,
+                        detailsSource = buildMap {
+                            put("installCode", installResult.code.name)
+                            put("phase", installResult.phase.name)
+                            installResult.transactionId?.let { put("transactionId", it) }
+                        },
+                    )
+                    finishRepairFailure(error, before.runtimeVersion)
+                    callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.REPAIR, error, stateStore.snapshot()))
+                }
+            }
+        } catch (e: Exception) {
+            val error = RuntimeError(
+                code = RuntimeErrorCode.REPAIR_FAILED,
+                message = "repair failed: ${e.message ?: e.javaClass.simpleName}",
+                recoverable = true,
+            )
+            finishRepairFailure(error, before.runtimeVersion)
+            callback.onCompleted(RuntimeOperationResult.Failure(operationId, RuntimeOperationType.REPAIR, error, stateStore.snapshot()))
+        }
         return handle
+    }
+
+    private fun finishRepairFailure(error: RuntimeError, previousRuntimeVersion: String?) {
+        verifiedRuntimeVersionRef.set(null)
+        val bootstrap = try { bootstrapper?.bootstrap() } catch (_: Throwable) { null }
+        val target = when (bootstrap) {
+            is RuntimeBootstrapResult.InstalledStopped -> RuntimeState.INSTALLED
+            is RuntimeBootstrapResult.NotInstalled -> RuntimeState.NOT_INSTALLED
+            is RuntimeBootstrapResult.Failed -> RuntimeState.CORRUPTED
+            null -> RuntimeState.FAILED
+        }
+        val version = (bootstrap as? RuntimeBootstrapResult.InstalledStopped)?.runtimeVersion ?: previousRuntimeVersion
+        stateStore.update {
+            it.copy(
+                state = target,
+                runtimeVersion = if (target == RuntimeState.NOT_INSTALLED) null else version,
+                activeOperationId = null,
+                activeOperationType = null,
+                lastError = error,
+                activeProfile = null,
+            )
+        }
     }
 
     private class CompletedOperationHandle(

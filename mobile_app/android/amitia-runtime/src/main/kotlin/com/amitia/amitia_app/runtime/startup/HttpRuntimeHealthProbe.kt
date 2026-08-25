@@ -92,9 +92,13 @@ internal class HttpRuntimeHealthProbe(
         fun readBackendStatus(body: String?): String? {
             if (body.isNullOrBlank()) return null
             return try {
-                val dataValue = extractJsonObjectField(body, "data") ?: return null
-                val status = extractJsonStringField(dataValue, "status")?.takeIf { it.isNotBlank() } ?: return null
-                status.lowercase()
+                // Current backend contract nests readiness under data.status.
+                // Accept the legacy top-level status as a compatibility fallback
+                // so mixed mobile/backend rollouts cannot strand the runtime.
+                val dataValue = extractJsonObjectField(body, "data")
+                val nestedStatus = dataValue?.let { extractJsonStringField(it, "status") }
+                val status = nestedStatus ?: extractJsonStringField(body, "status")
+                status?.takeIf { it.isNotBlank() }?.lowercase()
             } catch (_: Throwable) {
                 null
             }

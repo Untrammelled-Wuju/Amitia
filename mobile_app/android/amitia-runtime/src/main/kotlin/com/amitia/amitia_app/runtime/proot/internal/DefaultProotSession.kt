@@ -151,8 +151,10 @@ internal class DefaultProotSession(
 
     override fun activate() {
         if (!activated.compareAndSet(false, true)) return
-        startExitWatcher()
+        stdoutPump.start()
+        stderrPump.start()
         if (isProcessDead()) {
+            awaitOutputDrain()
             val exitCode = process.exitValue()
             val exit = ProotExit(
                 generation = generation,
@@ -164,10 +166,9 @@ internal class DefaultProotSession(
             publishTerminalOnce(exit)
             exitDeferred.complete(exit)
         } else {
-            if (started.compareAndSet(false, true)) {
+            startExitWatcher()
+            if (started.compareAndSet(false, true) && !terminalPublished.get()) {
                 safeNotify(ProotEvent.Started(sessionId, System.currentTimeMillis()))
-                stdoutPump.start()
-                stderrPump.start()
             }
         }
     }
@@ -223,6 +224,7 @@ internal class DefaultProotSession(
         watcherExecutor.execute {
             try {
                 val code = waitForRealExit()
+                awaitOutputDrain()
                 val exit = ProotExit(
                     generation = generation,
                     sessionId = sessionId,
@@ -234,6 +236,7 @@ internal class DefaultProotSession(
                 exitDeferred.complete(exit)
             } catch (e: InterruptedException) {
                 if (isProcessDead()) {
+                    awaitOutputDrain()
                     val exitCode = process.exitValue()
                     val exit = ProotExit(
                         generation = generation,
@@ -250,6 +253,7 @@ internal class DefaultProotSession(
                 }
             } catch (e: Exception) {
                 if (isProcessDead()) {
+                    awaitOutputDrain()
                     val exitCode = process.exitValue()
                     val exit = ProotExit(
                         generation = generation,
@@ -268,6 +272,11 @@ internal class DefaultProotSession(
                 watcherExecutor.shutdown()
             }
         }
+    }
+
+    private fun awaitOutputDrain() {
+        stdoutPump.awaitStopped(IMMEDIATE_EXIT_OUTPUT_DRAIN_MS)
+        stderrPump.awaitStopped(IMMEDIATE_EXIT_OUTPUT_DRAIN_MS)
     }
 
     private fun publishWatcherFailure(message: String) {
@@ -294,12 +303,14 @@ internal class DefaultProotSession(
 
     private companion object {
         const val MAX_WATCHER_RETRY = 3
+        const val IMMEDIATE_EXIT_OUTPUT_DRAIN_MS = 75L
     }
 }
 
 internal interface StreamPump {
     fun start()
     fun stop()
+    fun awaitStopped(timeoutMillis: Long)
 }
 
 internal class InputStreamPump(
@@ -332,5 +343,16 @@ internal class InputStreamPump(
     override fun stop() {
         running.set(false)
         thread?.interrupt()
+    }
+
+    override fun awaitStopped(timeoutMillis: Long) {
+        if (timeoutMillis <= 0L) return
+        val pumpThread = thread ?: return
+        if (pumpThread === Thread.currentThread()) return
+        try {
+            pumpThread.join(timeoutMillis)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
     }
 }
