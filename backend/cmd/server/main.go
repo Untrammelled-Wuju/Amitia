@@ -144,7 +144,7 @@ func main() {
 		os.Exit(1)
 	}
 	var graphSvc graph.Service
-	if policy.GraphStore {
+	if policy.GraphStore && config.AppCfg.Providers.GraphStore.Enabled {
 		graphSvc = initGraph()
 	}
 	if err := bootstrap.RegisterInfrastructure(sqlDB, graphSvc); err != nil {
@@ -264,7 +264,7 @@ func main() {
 			_ = services.DeviceMesh.Stop()
 		}
 	}()
-	if policy.GraphStore {
+	if policy.GraphStore && config.AppCfg.Providers.GraphStore.Enabled {
 		surrealdbDB.SetSurrealRestartCallback(func() {
 			newGraphSvc := initGraph()
 			if newGraphSvc != nil {
@@ -343,9 +343,13 @@ func main() {
 
 	if !policy.VectorStore {
 		log.Info("Qdrant: disabled by runtime profile")
+	} else if !config.AppCfg.Providers.VectorStore.Enabled {
+		log.Info("Qdrant: disabled by provider configuration")
 	}
 	if !policy.GraphStore {
 		log.Info("SurrealDB: disabled by runtime profile")
+	} else if !config.AppCfg.Providers.GraphStore.Enabled {
+		log.Info("SurrealDB: disabled by provider configuration")
 	}
 
 	srv := &http.Server{
