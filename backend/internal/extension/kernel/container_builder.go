@@ -1658,44 +1658,52 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	devModeReloader.SetSessionManager(devModeSessions)
 	devModeReloader.SetCleanupFailureStore(NewSQLiteCleanupFailureStore(db))
 
-	kernelSource := gamehost.NewKernelContributionSource(instRepo, defRepo, contribRepo)
-
-	var archiveUpdater upgrade.KernelArchiveUpdater
+	// GameHost is a device execution plane. Cloud Core keeps the extension
+	// metadata and package state, but must never compose or start a local game
+	// plugin runtime. Enforce the runtime-profile policy at the composition
+	// boundary so downstream services cannot accidentally expose a half-wired
+	// GameHost on cloud deployments.
+	var gameHost *gamehost.GameHostContainer
 	var productionArchiveUpdater *ProductionArchiveUpdater
-	if b.gameHostArchiveUpdater != nil {
-		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapterWithArchivePath(b.gameHostArchiveUpdater.GetPreviousArchivePath, b.gameHostArchiveUpdater.UpdateArchive)
-	} else {
-		productionArchiveUpdater = NewProductionArchiveUpdater()
-		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapterWithArchivePath(productionArchiveUpdater.GetPreviousArchivePath, productionArchiveUpdater.UpdateArchive)
-	}
+	if b.runtimePolicy.DevicePluginRuntime {
+		kernelSource := gamehost.NewKernelContributionSource(instRepo, defRepo, contribRepo)
 
-	gameHost, err := gamehost.ComposeGameHost(gamehost.GameHostComposeOptions{
-		DataRoot:           b.extRoot,
-		KernelSource:       kernelSource,
-		TrustedSupervisor:  trustedSupervisor,
-		NodeResolver:       nodeResolver,
-		GenerationResolver: newGameHostInstalledGenerationResolver(packageGenerationStore),
-		EventService:       eventSvc,
-		HostAPIGateway:     hostAPIGateway,
-		SecretBroker:       kernelSecretBroker,
-		PermissionBroker:   permBroker,
-		ArchiveUpdater:     archiveUpdater,
-		StrictProduction:   true,
+		var archiveUpdater upgrade.KernelArchiveUpdater
+		if b.gameHostArchiveUpdater != nil {
+			archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapterWithArchivePath(b.gameHostArchiveUpdater.GetPreviousArchivePath, b.gameHostArchiveUpdater.UpdateArchive)
+		} else {
+			productionArchiveUpdater = NewProductionArchiveUpdater()
+			archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapterWithArchivePath(productionArchiveUpdater.GetPreviousArchivePath, productionArchiveUpdater.UpdateArchive)
+		}
 
-		KernelPermissionBroker:        permBroker,
-		KernelPermissionSnapshotStore: permSnapshotStore,
-		KernelScopeManager:            scopeManager,
+		gameHost, err = gamehost.ComposeGameHost(gamehost.GameHostComposeOptions{
+			DataRoot:           b.extRoot,
+			KernelSource:       kernelSource,
+			TrustedSupervisor:  trustedSupervisor,
+			NodeResolver:       nodeResolver,
+			GenerationResolver: newGameHostInstalledGenerationResolver(packageGenerationStore),
+			EventService:       eventSvc,
+			HostAPIGateway:     hostAPIGateway,
+			SecretBroker:       kernelSecretBroker,
+			PermissionBroker:   permBroker,
+			ArchiveUpdater:     archiveUpdater,
+			StrictProduction:   true,
 
-		DefinitionReconcile: newGameHostDefinitionReconcile(instRepo, defRepo, contribRepo, typedInstaller),
-		KernelLifecycle:     newGameHostKernelLifecycle(lifecycleMgr),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("kernel: compose gamehost: %w", err)
-	}
-	container.GameHost = gameHost
-	if gameHost.AgentBridge != nil {
-		if err := adapterRegistry.RegisterAdapter(capability.RuntimeTypeGameHost, gameHost.AgentBridge); err != nil {
-			return nil, fmt.Errorf("kernel: register game host runtime adapter: %w", err)
+			KernelPermissionBroker:        permBroker,
+			KernelPermissionSnapshotStore: permSnapshotStore,
+			KernelScopeManager:            scopeManager,
+
+			DefinitionReconcile: newGameHostDefinitionReconcile(instRepo, defRepo, contribRepo, typedInstaller),
+			KernelLifecycle:     newGameHostKernelLifecycle(lifecycleMgr),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("kernel: compose gamehost: %w", err)
+		}
+		container.GameHost = gameHost
+		if gameHost.AgentBridge != nil {
+			if err := adapterRegistry.RegisterAdapter(capability.RuntimeTypeGameHost, gameHost.AgentBridge); err != nil {
+				return nil, fmt.Errorf("kernel: register game host runtime adapter: %w", err)
+			}
 		}
 	}
 

@@ -281,25 +281,26 @@ func (s *ProcessSupervisor) GetDefinition(serviceID string) (*ServiceRuntimeDefi
 	ns := make([]string, len(def.AllowedNamespaces))
 	copy(ns, def.AllowedNamespaces)
 	return &ServiceRuntimeDefinition{
-		ServiceID:         def.ServiceID,
-		ExtensionID:       def.ExtensionID,
-		ModuleID:          def.ModuleID,
-		Name:              def.Name,
-		Description:       def.Description,
-		Publisher:         def.Publisher,
-		TrustLevel:        def.TrustLevel,
-		Executables:       execs,
-		Protocol:          def.Protocol,
-		InstancePolicy:    def.InstancePolicy,
-		HealthCheck:       def.HealthCheck,
-		Recovery:          def.Recovery,
-		Shutdown:          def.Shutdown,
-		Limits:            def.Limits,
-		Network:           def.Network,
-		AllowedNamespaces: ns,
-		ManifestHash:      def.ManifestHash,
-		DefinitionVersion: def.DefinitionVersion,
-		AutoStart:         def.AutoStart,
+		ServiceID:           def.ServiceID,
+		ExtensionID:         def.ExtensionID,
+		ModuleID:            def.ModuleID,
+		Name:                def.Name,
+		Description:         def.Description,
+		Publisher:           def.Publisher,
+		TrustLevel:          def.TrustLevel,
+		Executables:         execs,
+		Protocol:            def.Protocol,
+		InstancePolicy:      def.InstancePolicy,
+		HealthCheck:         def.HealthCheck,
+		Recovery:            def.Recovery,
+		Shutdown:            def.Shutdown,
+		Limits:              def.Limits,
+		Network:             def.Network,
+		AllowedNamespaces:   ns,
+		SandboxReadOnlyRoot: def.SandboxReadOnlyRoot,
+		ManifestHash:        def.ManifestHash,
+		DefinitionVersion:   def.DefinitionVersion,
+		AutoStart:           def.AutoStart,
 	}, nil
 }
 
@@ -421,7 +422,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	}
 
 	env := s.buildSafeEnvironment(exe, def, req.SessionToken, instanceID, req.Generation, tempDir, defaultLogLevel(req.LogLevel), req.SecretLease)
-	launchPath, launchArgs, err := prepareNetworkLaunch(def.Network, fullExePath, args, workingDir, tempDir)
+	launchPath, launchArgs, err := prepareNetworkLaunch(def.Network, fullExePath, args, workingDir, tempDir, def.SandboxReadOnlyRoot)
 	if err != nil {
 		return nil, fmt.Errorf("trusted_service: enforce network policy: %w", err)
 	}

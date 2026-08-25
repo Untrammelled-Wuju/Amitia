@@ -141,9 +141,14 @@ type ServiceRuntimeDefinition struct {
 	Limits            ServiceResourceLimits `json:"limits"`
 	Network           ServiceNetworkPolicy  `json:"network"`
 	AllowedNamespaces []string              `json:"allowed_namespaces"`
-	ManifestHash      string                `json:"manifest_hash"`
-	DefinitionVersion int                   `json:"definition_version"`
-	AutoStart         bool                  `json:"auto_start"`
+	// SandboxReadOnlyRoot is an authoritative host-computed package root. It is
+	// deliberately excluded from JSON so an extension manifest cannot request
+	// arbitrary host filesystem mounts. Strict OS sandboxes may expose this root
+	// read-only to managed interpreters while keeping host data inaccessible.
+	SandboxReadOnlyRoot string `json:"-"`
+	ManifestHash        string `json:"manifest_hash"`
+	DefinitionVersion   int    `json:"definition_version"`
+	AutoStart           bool   `json:"auto_start"`
 }
 
 type ServiceNetworkPolicy struct {

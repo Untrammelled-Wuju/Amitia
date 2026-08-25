@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 var semVerPattern = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?$`)
@@ -265,6 +267,35 @@ func isExecutableModule(mod ModuleMeta) bool {
 	return false
 }
 
+// gamePluginRuntimeModuleIDs discovers executable modules owned by game_plugin
+// contributions before placement normalization. The contribution may live in a
+// different module and may reference a module declared later in the manifest,
+// so placement inference must be order-independent. Invalid specs are ignored
+// here and reported by the normal validation pass.
+func gamePluginRuntimeModuleIDs(m Manifest) map[string]struct{} {
+	ids := make(map[string]struct{})
+	for _, mod := range m.Modules {
+		for _, contribution := range mod.Contributions {
+			if normalizeContributionKind(contribution.Kind) != "game_plugin" {
+				continue
+			}
+			spec, err := gameprotocol.ParsePluginHostSpec(contribution.Spec)
+			if err != nil {
+				continue
+			}
+			if moduleID := strings.TrimSpace(spec.RuntimeModuleID); moduleID != "" {
+				ids[moduleID] = struct{}{}
+			}
+			for _, service := range spec.Services {
+				if moduleID := strings.TrimSpace(service.ModuleID); moduleID != "" {
+					ids[moduleID] = struct{}{}
+				}
+			}
+		}
+	}
+	return ids
+}
+
 func (m Manifest) NormalizeCompatibility() (Manifest, ValidationReport) {
 	report := ValidationReport{}
 	clone := m
@@ -273,6 +304,7 @@ func (m Manifest) NormalizeCompatibility() (Manifest, ValidationReport) {
 		report.AddWarningCode("", "placement_implicit", "extension placement not declared, will be inferred from modules")
 	}
 
+	gameRuntimeModules := gamePluginRuntimeModuleIDs(clone)
 	hasCloudModule := false
 	hasDeviceModule := false
 	for i := range clone.Modules {
@@ -281,12 +313,21 @@ func (m Manifest) NormalizeCompatibility() (Manifest, ValidationReport) {
 			continue
 		}
 		if mod.Placement == "" {
-			mod.Placement = "cloud"
-			report.AddWarningCode(
-				fmt.Sprintf("modules[%d].placement", i),
-				"module_placement_defaulted_to_cloud",
-				fmt.Sprintf("executable module %q placement defaulted to cloud", mod.ID),
-			)
+			if _, gameRuntime := gameRuntimeModules[mod.ID]; gameRuntime {
+				mod.Placement = "device"
+				report.AddWarningCode(
+					fmt.Sprintf("modules[%d].placement", i),
+					"game_plugin_runtime_placement_defaulted_to_device",
+					fmt.Sprintf("game plugin runtime module %q placement defaulted to device", mod.ID),
+				)
+			} else {
+				mod.Placement = "cloud"
+				report.AddWarningCode(
+					fmt.Sprintf("modules[%d].placement", i),
+					"module_placement_defaulted_to_cloud",
+					fmt.Sprintf("executable module %q placement defaulted to cloud", mod.ID),
+				)
+			}
 		}
 		if mod.Placement == "cloud" {
 			hasCloudModule = true
