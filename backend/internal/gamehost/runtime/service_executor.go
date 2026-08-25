@@ -33,6 +33,15 @@ type SecretLeaseAwareServiceExecutor interface {
 	SetServiceLeaseLifecycle(lifecycle ServiceLeaseLifecycle)
 }
 
+// ServiceResourceAdmission is the runtime-facing boundary for resource startup
+// admission. Implementations may validate identity, register per-service limits
+// and return a cleanup function that releases transient startup state. The
+// service executor calls it before any process is spawned.
+type ServiceResourceAdmission interface {
+	PrepareServiceStart(ctx context.Context, execCtx ServiceExecutionContext, definition *trusted_service.ServiceRuntimeDefinition) (finish func(started bool), err error)
+	ReleaseService(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID)
+}
+
 type ServiceStartPermissionGuard interface {
 	AuthorizeServiceStart(ctx context.Context, execCtx ServiceExecutionContext, definition *trusted_service.ServiceRuntimeDefinition) error
 }
@@ -44,6 +53,7 @@ type serviceExecutor struct {
 	definitionResolver ServiceDefinitionBindingResolver
 	startPermission    ServiceStartPermissionGuard
 	leaseLifecycle     ServiceLeaseLifecycle
+	resourceAdmission  ServiceResourceAdmission
 }
 
 func (e *serviceExecutor) SetServiceLeaseLifecycle(lifecycle ServiceLeaseLifecycle) {
@@ -56,6 +66,7 @@ func NewServiceExecutor(
 	topologyStore RuntimeTopologyStore,
 	definitionResolver ServiceDefinitionBindingResolver,
 	startPermission ServiceStartPermissionGuard,
+	resourceAdmission ServiceResourceAdmission,
 ) (ServiceExecutor, error) {
 	if processAdapter == nil {
 		return nil, &TopologyError{Code: ErrInvalidArgument, Message: "process adapter must not be nil"}
@@ -69,12 +80,16 @@ func NewServiceExecutor(
 	if startPermission == nil {
 		return nil, &TopologyError{Code: ErrInvalidArgument, Message: "service start permission guard must not be nil"}
 	}
+	if resourceAdmission == nil {
+		return nil, &TopologyError{Code: ErrInvalidArgument, Message: "service resource admission must not be nil"}
+	}
 	return &serviceExecutor{
 		processAdapter:     processAdapter,
 		externalAdapter:    externalAdapter,
 		topologyStore:      topologyStore,
 		definitionResolver: definitionResolver,
 		startPermission:    startPermission,
+		resourceAdmission:  resourceAdmission,
 	}, nil
 }
 
@@ -175,24 +190,70 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 		}
 	}
 
+	// Resource admission must be part of the actual launch path. Keeping it as
+	// an observability-only helper would allow a process to start even when its
+	// identity/profile is invalid. External services have no host-spawned
+	// process definition, so process resource admission does not apply to them.
+	var finishStartup func(started bool)
+	startupCommitted := false
+	if def != nil {
+		if e.resourceAdmission == nil {
+			return nil, &ExecutionError{
+				Code:         ErrServiceLaunchFailed,
+				RuntimeID:    string(execCtx.RuntimeID),
+				PluginID:     string(execCtx.PluginID),
+				ServiceID:    string(execCtx.ServiceID),
+				DefinitionID: definitionID,
+				Message:      "service resource admission unavailable",
+			}
+		}
+		finishStartup, err = e.resourceAdmission.PrepareServiceStart(ctx, execCtx, def)
+		if err != nil {
+			return nil, &ExecutionError{
+				Code:         ErrServiceLaunchFailed,
+				RuntimeID:    string(execCtx.RuntimeID),
+				PluginID:     string(execCtx.PluginID),
+				ServiceID:    string(execCtx.ServiceID),
+				DefinitionID: definitionID,
+				Message:      "service resource admission denied",
+				Cause:        err,
+			}
+		}
+		if finishStartup != nil {
+			defer func() { finishStartup(startupCommitted) }()
+		}
+	}
+
 	if err := topology.UpdateServiceState(serviceID, ServiceStateStarting, now); err != nil {
 		return nil, err
 	}
+	startCompleted := false
+	defer func() {
+		if !startCompleted {
+			_ = topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
+		}
+	}()
+
 	execCtx.SessionToken, err = newExecutionSessionToken()
 	if err != nil {
 		return nil, &ExecutionError{Code: ErrServiceLaunchFailed, RuntimeID: string(svc.RuntimeID), ServiceID: string(svc.ServiceID), Message: "create execution session token", Cause: err}
 	}
+	leasePrepared := false
 	if e.leaseLifecycle != nil && svc.ServiceKind != domain.ServiceKindExternal {
 		execCtx.SecretLeaseSession, err = e.leaseLifecycle.PrepareServiceStart(ctx, execCtx)
 		if err != nil {
-			topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
 			return nil, &ExecutionError{Code: ErrServiceLaunchFailed, RuntimeID: string(svc.RuntimeID), ServiceID: string(svc.ServiceID), Message: "acquire service secret lease", Cause: err}
 		}
+		leasePrepared = true
+		defer func() {
+			if leasePrepared {
+				e.leaseLifecycle.RevokeServiceLeases(svc.RuntimeID, svc.ServiceID, execCtx.Generation, "service startup failed")
+			}
+		}()
 	}
 
 	if svc.ServiceKind == domain.ServiceKindExternal {
 		if err := e.externalAdapter.Start(ctx, execCtx); err != nil {
-			topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
 			return nil, &ExecutionError{
 				Code:         ErrServiceLaunchFailed,
 				RuntimeID:    string(execCtx.RuntimeID),
@@ -204,22 +265,66 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 			}
 		}
 		if err := topology.UpdateServiceState(serviceID, ServiceStateRunning, time.Now()); err != nil {
+			// The external service has already accepted Start. If topology persistence
+			// fails, roll it back immediately so callers never observe a failed start
+			// while the service continues running outside host ownership. Surface a
+			// rollback failure because the external service may otherwise remain live.
+			if cleanupErr := e.externalAdapter.Stop(context.WithoutCancel(ctx), execCtx); cleanupErr != nil {
+				return nil, fmt.Errorf("persist running external service state: %w; rollback stop failed: %v", err, cleanupErr)
+			}
 			return nil, err
 		}
+		startCompleted = true
 		return &ServiceExecutionHandle{
 			RuntimeID: string(svc.RuntimeID),
 			ServiceID: string(svc.ServiceID),
 		}, nil
 	}
-	_, handle, err := e.processAdapter.StartProcess(ctx, def, execCtx)
+	result, handle, err := e.processAdapter.StartProcess(ctx, def, execCtx)
 	if err != nil {
-		topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
 		return nil, err
+	}
+	if handle == nil {
+		// A successful StartProcess without an ownership handle is an adapter
+		// contract violation. Treat the process as potentially live and make a
+		// best-effort force-stop using the deterministic instance key (plus any
+		// PID/instance data returned by the adapter) before reporting failure.
+		cleanupHandle := ServiceExecutionHandle{
+			RuntimeID:  string(execCtx.RuntimeID),
+			ServiceID:  string(execCtx.ServiceID),
+			InstanceID: BuildProcessInstanceID(execCtx.RuntimeID, execCtx.ServiceID),
+		}
+		if result != nil {
+			if result.InstanceID != "" {
+				cleanupHandle.InstanceID = result.InstanceID
+			}
+			cleanupHandle.PID = result.PID
+		}
+		cleanupErr := e.processAdapter.StopProcess(context.WithoutCancel(ctx), cleanupHandle, true)
+		return nil, &ExecutionError{
+			Code:         ErrServiceLaunchFailed,
+			RuntimeID:    string(execCtx.RuntimeID),
+			PluginID:     string(execCtx.PluginID),
+			ServiceID:    string(execCtx.ServiceID),
+			DefinitionID: definitionID,
+			Message:      "process adapter returned nil execution handle",
+			Cause:        cleanupErr,
+		}
 	}
 
 	if err := topology.UpdateServiceState(serviceID, ServiceStateRunning, time.Now()); err != nil {
+		// Process startup succeeded but durable topology did not. Force-stop the
+		// process before returning the failure; deferred cleanup revokes leases and
+		// releases transient resource admission state. Surface cleanup failure so an
+		// operator is not told that rollback was clean while a process may remain.
+		if cleanupErr := e.processAdapter.StopProcess(context.WithoutCancel(ctx), *handle, true); cleanupErr != nil {
+			return nil, fmt.Errorf("persist running service state: %w; force-stop failed: %v", err, cleanupErr)
+		}
 		return nil, err
 	}
+	startupCommitted = true
+	leasePrepared = false
+	startCompleted = true
 
 	return handle, nil
 }
@@ -251,6 +356,9 @@ func (e *serviceExecutor) Stop(ctx context.Context, handle ServiceExecutionHandl
 	}
 
 	if svc.State == ServiceStateStopped {
+		if e.resourceAdmission != nil {
+			e.resourceAdmission.ReleaseService(runtimeID, serviceID)
+		}
 		return nil
 	}
 
@@ -291,12 +399,18 @@ func (e *serviceExecutor) Stop(ctx context.Context, handle ServiceExecutionHandl
 				Cause:     err,
 			}
 		}
+		if e.resourceAdmission != nil {
+			e.resourceAdmission.ReleaseService(runtimeID, serviceID)
+		}
 		return topology.UpdateServiceState(serviceID, ServiceStateStopped, time.Now())
 	}
 
 	if err := e.processAdapter.StopProcess(ctx, handle, force); err != nil {
 		topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
 		return err
+	}
+	if e.resourceAdmission != nil {
+		e.resourceAdmission.ReleaseService(runtimeID, serviceID)
 	}
 
 	return topology.UpdateServiceState(serviceID, ServiceStateStopped, time.Now())
