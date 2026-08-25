@@ -251,12 +251,13 @@ func TestRegistry_pluginToHost_Direction_PublishAllowed(t *testing.T) {
 	}
 }
 
-func TestRegistry_V1RejectsLegacyOutboundDirections(t *testing.T) {
-	for _, direction := range []protocol.ChannelDirection{"host_to_plugin", "bidirectional"} {
+func TestRegistry_SupportsOutboundAndBidirectionalDeclarations(t *testing.T) {
+	for _, direction := range []protocol.ChannelDirection{protocol.ChannelDirectionHostToPlugin, protocol.ChannelDirectionBidirectional} {
+		reg := NewRegistry(Options{})
 		ch := sampleChannel()
 		ch.Direction = direction
-		if err := ValidateDirection(ch, protocol.ChannelDirectionPluginToHost); err == nil {
-			t.Fatalf("expected v1 direction rejection for %q", direction)
+		if err := reg.Register(context.Background(), ch); err != nil {
+			t.Fatalf("register direction %q: %v", direction, err)
 		}
 	}
 }

@@ -19,21 +19,28 @@ func TestValidateDirection_PluginToHost_AllowsPluginToHost(t *testing.T) {
 	}
 }
 
-func TestValidateDirection_V1RejectsOutboundFlow(t *testing.T) {
+func TestValidateDirection_PluginToHostRejectsOutboundFlow(t *testing.T) {
 	ch := RuntimeChannel{
 		Direction: protocol.ChannelDirectionPluginToHost,
 		Kind:      domain.ChannelKindEvent,
 	}
-	if err := ValidateDirection(ch, protocol.ChannelDirection("host_to_plugin")); err == nil {
-		t.Fatal("protocol v1 must reject host_to_plugin channel flow")
+	if err := ValidateDirection(ch, protocol.ChannelDirectionHostToPlugin); err == nil {
+		t.Fatal("plugin_to_host declaration must reject host_to_plugin flow")
 	}
 }
 
-func TestValidateDirection_V1RejectsLegacyOutboundDirections(t *testing.T) {
-	for _, direction := range []protocol.ChannelDirection{"host_to_plugin", "bidirectional"} {
-		ch := RuntimeChannel{Direction: direction, Kind: domain.ChannelKindEvent}
-		if err := ValidateDirection(ch, protocol.ChannelDirectionPluginToHost); err == nil {
-			t.Fatalf("protocol v1 must reject direction %q", direction)
+func TestValidateDirection_HostToPluginAndBidirectional(t *testing.T) {
+	outbound := RuntimeChannel{Direction: protocol.ChannelDirectionHostToPlugin, Kind: domain.ChannelKindEvent}
+	if err := ValidateDirection(outbound, protocol.ChannelDirectionHostToPlugin); err != nil {
+		t.Fatalf("host_to_plugin should allow outbound flow: %v", err)
+	}
+	if err := ValidateDirection(outbound, protocol.ChannelDirectionPluginToHost); err == nil {
+		t.Fatal("host_to_plugin declaration must reject plugin_to_host flow")
+	}
+	bidirectional := RuntimeChannel{Direction: protocol.ChannelDirectionBidirectional, Kind: domain.ChannelKindEvent}
+	for _, flow := range []protocol.ChannelDirection{protocol.ChannelDirectionPluginToHost, protocol.ChannelDirectionHostToPlugin} {
+		if err := ValidateDirection(bidirectional, flow); err != nil {
+			t.Fatalf("bidirectional should allow %q: %v", flow, err)
 		}
 	}
 }
@@ -473,6 +480,50 @@ func TestReconciler_UpdateChannel(t *testing.T) {
 
 	if len(result.Updated) != 1 {
 		t.Fatalf("expected 1 updated, got %d", len(result.Updated))
+	}
+}
+
+func TestReconciler_UpdateChannelDirectionAndFrequency(t *testing.T) {
+	reg := NewMemoryRegistry(Options{})
+	mapper := NewMapper()
+	rec := NewReconciler(reg, mapper)
+
+	low := protocol.FrequencyHintLow
+	high := protocol.FrequencyHintHigh
+	input1 := []ChannelMappingInput{{
+		PluginID:  "p",
+		RuntimeID: "r",
+		ServiceID: "s",
+		Descriptors: []protocol.ChannelDescriptor{{
+			ID: "events", Kind: "event", Direction: protocol.ChannelDirectionPluginToHost, FrequencyHint: &low,
+		}},
+	}}
+	if _, err := rec.ReconcileRuntimeChannels(context.Background(), "r", input1); err != nil {
+		t.Fatalf("initial reconcile failed: %v", err)
+	}
+
+	input2 := []ChannelMappingInput{{
+		PluginID:  "p",
+		RuntimeID: "r",
+		ServiceID: "s",
+		Descriptors: []protocol.ChannelDescriptor{{
+			ID: "events", Kind: "event", Direction: protocol.ChannelDirectionBidirectional, FrequencyHint: &high,
+		}},
+	}}
+	result, err := rec.ReconcileRuntimeChannels(context.Background(), "r", input2)
+	if err != nil {
+		t.Fatalf("update reconcile failed: %v", err)
+	}
+	if len(result.Updated) != 1 {
+		t.Fatalf("expected 1 updated, got %d", len(result.Updated))
+	}
+
+	stored, err := reg.Resolve(context.Background(), "r", "s", "events")
+	if err != nil {
+		t.Fatalf("resolve updated channel: %v", err)
+	}
+	if stored.Direction != protocol.ChannelDirectionBidirectional || stored.Frequency == nil || *stored.Frequency != high {
+		t.Fatalf("updated channel contract was not persisted: direction=%q frequency=%v", stored.Direction, stored.Frequency)
 	}
 }
 

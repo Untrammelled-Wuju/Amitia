@@ -382,12 +382,22 @@ func buildChannelMappingInputs(descriptor ghdomain.PluginDescriptor, runtimeID g
 			}
 			metadata[key] = encoded
 		}
+		direction := gameprotocol.ChannelDirection(declared.Direction)
+		if direction == "" {
+			direction = gameprotocol.ChannelDirectionPluginToHost
+		}
+		var frequency *gameprotocol.FrequencyHint
+		if declared.Frequency != "" {
+			hint := gameprotocol.FrequencyHint(declared.Frequency)
+			frequency = &hint
+		}
 		byService[declared.ServiceID] = append(byService[declared.ServiceID], gameprotocol.ChannelDescriptor{
-			ID:        gameprotocol.ChannelID(declared.ID),
-			Kind:      gameprotocol.ChannelKind(declared.Kind),
-			SchemaID:  declared.SchemaID,
-			Direction: gameprotocol.ChannelDirectionPluginToHost,
-			Metadata:  metadata,
+			ID:            gameprotocol.ChannelID(declared.ID),
+			Kind:          gameprotocol.ChannelKind(declared.Kind),
+			SchemaID:      declared.SchemaID,
+			Direction:     direction,
+			FrequencyHint: frequency,
+			Metadata:      metadata,
 		})
 	}
 	inputs := make([]channel.ChannelMappingInput, 0, len(byService))
