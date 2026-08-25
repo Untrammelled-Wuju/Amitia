@@ -1,0 +1,123 @@
+name: gamehost
+
+on:
+  push:
+    branches: [develop, master, main]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [develop, master, main]
+    paths:
+      - 'backend/go.mod'
+      - 'backend/go.sum'
+      - 'backend/internal/gamehost/**'
+      - 'backend/pkg/gameplugin/**'
+      - 'backend/internal/extension/kernel/trusted_service/**'
+      - 'backend/internal/platform/process/**'
+      - 'sdk/game-plugin-go/**'
+      - 'scripts/sync_game_plugin_go_sdk.py'
+      - 'testplugins/game-plugin-demo/**'
+      - 'testplugins/mock-amitiax-game-plugin/**'
+      - 'tests/gamehost_external/**'
+      - '.github/workflows/gamehost.yml'
+
+concurrency:
+  group: gamehost-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-host-gate:
+    name: GameHost Go gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.1'
+          cache-dependency-path: backend/go.sum
+      - name: Verify toolchain
+        run: test "$(go version | awk '{print $3}')" = "go1.26.1"
+      - name: Vet GameHost and public protocol
+        working-directory: backend
+        run: |
+          go vet ./internal/gamehost/... ./pkg/gameplugin/... ./internal/extension/kernel/trusted_service/... ./internal/platform/process/...
+      - name: Test GameHost and public protocol
+        working-directory: backend
+        run: |
+          go test -count=1 ./internal/gamehost/... ./pkg/gameplugin/... ./internal/extension/kernel/trusted_service/... ./internal/platform/process/...
+      - name: Race-sensitive GameHost packages
+        working-directory: backend
+        run: |
+          go test -race -count=1 ./internal/gamehost/control/... ./internal/gamehost/ipc/... ./internal/gamehost/resource/... ./internal/gamehost/rpc/... ./internal/gamehost/runtime/...
+      - name: Cross-compile Windows process sandbox boundary
+        working-directory: backend
+        run: |
+          GOOS=windows GOARCH=amd64 go test -c ./internal/platform/process -o /tmp/process-windows.test.exe
+          GOOS=windows GOARCH=amd64 go test -c ./internal/extension/kernel/trusted_service -o /tmp/trusted-service-windows.test.exe
+
+  go-sdk-gate:
+    name: Standalone Go SDK gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.1'
+      - name: Verify generated SDK has no drift
+        run: python3 scripts/sync_game_plugin_go_sdk.py --check
+      - name: Test standalone public SDK
+        working-directory: sdk/game-plugin-go
+        run: |
+          go test ./...
+          if go list -deps ./... | grep -q '^github.com/u-ai/backend'; then
+            echo 'ERROR: standalone Go SDK depends on backend module'
+            exit 1
+          fi
+      - name: Build independent Go game plugin
+        working-directory: testplugins/game-plugin-demo/go
+        run: |
+          go test ./...
+          go build ./cmd/mock-game-plugin
+          if go list -deps ./... | grep -q '^github.com/u-ai/backend'; then
+            echo 'ERROR: independent Go plugin still depends on backend module'
+            exit 1
+          fi
+      - name: Run independent Go protocol conformance
+        working-directory: testplugins/game-plugin-demo/conformance/go
+        run: |
+          go test ./...
+          if go list -deps ./... | grep -q '^github.com/u-ai/backend'; then
+            echo 'ERROR: Go conformance consumer still depends on backend module'
+            exit 1
+          fi
+
+  typescript-sdk-gate:
+    name: TypeScript SDK gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.18.0'
+          cache: npm
+          cache-dependency-path: backend/pkg/gameplugin/sdk/game-plugin/package-lock.json
+      - name: Install SDK dependencies
+        working-directory: backend/pkg/gameplugin/sdk/game-plugin
+        run: npm ci
+      - name: Test and build SDK
+        working-directory: backend/pkg/gameplugin/sdk/game-plugin
+        run: |
+          npm test -- --runInBand
+          npm run build
+      - name: Build packaged external TypeScript plugin
+        working-directory: testplugins/mock-amitiax-game-plugin
+        run: |
+          npm ci
+          npm run build
+          npm run package
+          npm run verify-package
+      - name: Typecheck external E2E harness
+        working-directory: tests/gamehost_external
+        run: |
+          npm ci
+          npx tsc --noEmit
