@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -14,6 +15,8 @@ import (
 // PluginAgentEventPublishID is an opaque host-level event understood only as a
 // wake-up hint. Event Type/Payload remain plugin-defined and untrusted.
 const PluginAgentEventPublishID = "plugin.agent_event"
+
+var ErrAgentEventQueueFull = errors.New("notification: agent event queue full")
 
 type AgentWakeRequest struct {
 	Scope agentbridge.SessionScope
@@ -124,11 +127,36 @@ func (s *AgentEventSink) Publish(ctx context.Context, n Notification) error {
 	}
 	scope, ok := s.sessions.Resolve(n.RuntimeID, event.SessionID)
 	if !ok {
-		return nil
+		// Cold start: the game may publish an event before the Agent has ever
+		// invoked a plugin tool. Preserve the authenticated notification route and
+		// let the host wakeup adapter resolve the default/active Agent target.
+		scope = agentbridge.SessionScope{
+			PluginSessionID: event.SessionID,
+			PluginID:        n.PluginID,
+			RuntimeID:       n.RuntimeID,
+			ServiceID:       n.ServiceID,
+			Generation:      n.Generation,
+		}
+	} else {
+		if scope.PluginID != n.PluginID || scope.ServiceID != n.ServiceID {
+			return fmt.Errorf("notification: plugin event route does not match bound runtime context")
+		}
+		if scope.Generation != n.Generation {
+			// Runtime generations are monotonic. Carry host context forward across a
+			// restart, but never accept a late event from an older generation.
+			if n.Generation <= scope.Generation {
+				return fmt.Errorf("notification: stale plugin event generation %d (bound %d)", n.Generation, scope.Generation)
+			}
+			scope.Generation = n.Generation
+		}
+		if event.SessionID != "" && scope.PluginSessionID == "" {
+			scope.PluginSessionID = event.SessionID
+		}
 	}
-	if scope.PluginID != n.PluginID || scope.ServiceID != n.ServiceID || scope.Generation != n.Generation {
-		return fmt.Errorf("notification: plugin event route does not match bound runtime context")
-	}
+	// Cache the route/context selected above. For cold-start scopes this records
+	// only authenticated runtime identity; an explicit Agent context or the next
+	// tool invocation can enrich it later.
+	s.sessions.Bind(scope)
 	if event.OccurredAt.IsZero() {
 		event.OccurredAt = n.ReceivedAt
 	}
@@ -148,7 +176,7 @@ func (s *AgentEventSink) Publish(ctx context.Context, n Notification) error {
 	case s.queue <- req:
 		return nil
 	default:
-		return nil
+		return ErrAgentEventQueueFull
 	}
 }
 func wakeDisabled(metadata map[string]json.RawMessage) bool {

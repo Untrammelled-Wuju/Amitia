@@ -66,6 +66,11 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 		envelope.Generation = uint64(peer.Generation)
 	}
 
+	// Establish host interaction context before the request is sent. Plugins are
+	// allowed to publish events while handling the very first RPC; binding only
+	// after the response creates a race where those events are dropped.
+	a.bindInvocationContext(peer, invocation)
+
 	timeout := invocation.DeadlineDuration
 	if timeout <= 0 {
 		timeout = defaultToolTimeout
@@ -87,8 +92,6 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 		return failure(invocation.InvocationID, toolID, capability.ErrorCodeExecutionFailed, response.Error.Message, fmt.Errorf("%s", response.Error.Code))
 	}
 
-	a.bindInvocationContext(peer, invocation)
-
 	result := capability.NewToolSuccessResult(invocation.InvocationID, toolID)
 	result.RuntimeID = string(peer.RuntimeID)
 	result.Generation = peer.Generation
@@ -107,6 +110,25 @@ func (a *RuntimeAdapter) SessionRegistry() *SessionRegistry {
 		return nil
 	}
 	return a.sessions
+}
+
+// BindAgentContext explicitly binds a validated GameHost runtime route to an
+// Agent interaction context without requiring a tool call. This is the host
+// entry point for UI/session activation flows and keeps plugin-originated event
+// delivery independent from the first Agent -> plugin invocation.
+func (a *RuntimeAdapter) BindAgentContext(ctx context.Context, binding capability.RuntimeBinding, invocation capability.ToolInvocationContext) error {
+	if a == nil {
+		return fmt.Errorf("game agent bridge: adapter is nil")
+	}
+	if !a.Supports(binding) {
+		return fmt.Errorf("game agent bridge: unsupported runtime binding %q", binding.RuntimeType)
+	}
+	peer, err := a.resolvePeer(ctx, binding)
+	if err != nil {
+		return err
+	}
+	a.bindInvocationContext(peer, invocation)
+	return nil
 }
 
 func (a *RuntimeAdapter) bindInvocationContext(peer ipc.Peer, invocation capability.ToolInvocationContext) {

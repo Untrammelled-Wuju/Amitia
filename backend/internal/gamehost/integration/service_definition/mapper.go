@@ -97,12 +97,13 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 		// Do not publish nominal limits that the current platform supervisor does
 		// not enforce. Community plugins are separately blocked unless the process
 		// manager reports complete CPU/memory/filesystem/network isolation.
-		Limits:            trusted_service.ServiceResourceLimits{},
-		Network:           resolveNetworkPolicy(view.Network),
-		ManifestHash:      computeManifestHash(view),
-		DefinitionVersion: 2,
-		AutoStart:         false,
-		AllowedNamespaces: []string{},
+		Limits:              trusted_service.ServiceResourceLimits{},
+		Network:             resolveNetworkPolicy(view.Network),
+		SandboxReadOnlyRoot: view.SandboxReadOnlyRoot,
+		ManifestHash:        computeManifestHash(view),
+		DefinitionVersion:   2,
+		AutoStart:           false,
+		AllowedNamespaces:   []string{},
 	}, nil
 }
 
@@ -129,6 +130,7 @@ func computeManifestHash(view ServiceRuntimeView) string {
 	h.Write([]byte(view.ExecutablePath))
 	h.Write([]byte(view.ExecutableSHA256))
 	h.Write([]byte(view.IntegrityValue))
+	h.Write([]byte(view.SandboxReadOnlyRoot))
 	for _, dep := range view.Dependencies {
 		h.Write([]byte(dep.Name))
 		h.Write([]byte(dep.Path))
