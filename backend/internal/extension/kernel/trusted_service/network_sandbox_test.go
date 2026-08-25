@@ -103,6 +103,30 @@ func TestBuildDarwinSandboxProfileUnrestrictedDoesNotAllowInbound(t *testing.T) 
 	}
 }
 
+func TestValidateNetworkPolicySupportRejectsLinuxUnrestrictedBeforeLaunch(t *testing.T) {
+	policy := ServiceNetworkPolicy{Mode: "unrestricted", Enforce: true, AllowOutbound: true}
+	if err := validateNetworkPolicySupportForOS(policy, "linux"); !errors.Is(err, ErrGranularNetworkPolicyUnsupported) {
+		t.Fatalf("validateNetworkPolicySupportForOS() error = %v, want ErrGranularNetworkPolicyUnsupported", err)
+	}
+	if err := validateNetworkPolicySupportForOS(policy, "darwin"); err != nil {
+		t.Fatalf("darwin unrestricted policy should pass static capability validation: %v", err)
+	}
+	if err := validateNetworkPolicySupportForOS(policy, "windows"); err != nil {
+		t.Fatalf("windows unrestricted policy should pass static capability validation: %v", err)
+	}
+}
+
+func TestValidateNetworkPolicySupportAcceptsLinuxNoneAndLoopback(t *testing.T) {
+	for _, policy := range []ServiceNetworkPolicy{
+		{Mode: "none", Enforce: true},
+		{Mode: "loopback", Enforce: true, AllowOutbound: true, LoopbackOnly: true},
+	} {
+		if err := validateNetworkPolicySupportForOS(policy, "linux"); err != nil {
+			t.Fatalf("linux mode %q should pass static capability validation: %v", policy.Mode, err)
+		}
+	}
+}
+
 func TestPrepareNetworkLaunchLinuxUnrestrictedFailsClosedWithoutOutboundOnlyBackend(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("linux-specific enforcement behavior")

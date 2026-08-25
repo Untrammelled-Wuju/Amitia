@@ -194,16 +194,44 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 	if len(manifestData) == 0 {
 		return nil, ErrManifestMissing
 	}
-	m, report, err := manifest_v2.ParseValidated(manifestData)
+	// contentTreeHash is allowed to be empty in the archived manifest because
+	// manifest.json is itself covered by integrity/files.json and the content
+	// tree. Embedding the final tree hash into manifest.json would therefore be
+	// circular. Bind the authoritative integrity/content-tree.json value into a
+	// validation-only copy before running the full Manifest v2 schema/semantic
+	// validators. Parse the original first so duplicate JSON keys still fail
+	// closed and unknown fields remain present in the validation copy.
+	parsedManifest, err := manifest_v2.Parse(manifestData)
+	if err != nil {
+		return nil, err
+	}
+	validationManifestData := manifestData
+	if strings.TrimSpace(parsedManifest.Integrity.ContentTreeHash) == "" {
+		if strings.TrimSpace(pkg.Tree.TreeHash) == "" {
+			return nil, fmt.Errorf("%w: content tree hash missing", ErrIntegrityMissing)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(manifestData, &raw); err != nil {
+			return nil, fmt.Errorf("%w: parse manifest for tree binding: %v", ErrInvalidStructure, err)
+		}
+		integrity, ok := raw["integrity"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%w: manifest integrity object missing", ErrIntegrityMissing)
+		}
+		integrity["contentTreeHash"] = pkg.Tree.TreeHash
+		validationManifestData, err = json.Marshal(raw)
+		if err != nil {
+			return nil, fmt.Errorf("%w: bind content tree hash: %v", ErrInvalidStructure, err)
+		}
+	}
+	m, report, err := manifest_v2.ParseValidated(validationManifestData)
 	if err != nil {
 		return nil, err
 	}
 	if report.HasErrors() {
 		return nil, fmt.Errorf("%w: manifest validation failed", manifest_v2.ErrInvalidManifest)
 	}
-	if m.Integrity.ContentTreeHash == "" {
-		m.Integrity.ContentTreeHash = pkg.Tree.TreeHash
-	} else if pkg.Tree.TreeHash != "" && m.Integrity.ContentTreeHash != pkg.Tree.TreeHash {
+	if pkg.Tree.TreeHash != "" && m.Integrity.ContentTreeHash != pkg.Tree.TreeHash {
 		return nil, fmt.Errorf("%w: manifest content tree hash mismatch", ErrIntegrityMismatch)
 	}
 	pkg.Manifest = m
