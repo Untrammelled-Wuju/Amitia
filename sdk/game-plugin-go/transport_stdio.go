@@ -15,6 +15,8 @@ import (
 const (
 	StdioMaxFrameSize    = 16 * 1024 * 1024
 	StdioFrameHeaderSize = 4
+	StdioBinaryFrameFlag = uint32(1 << 31)
+	stdioFrameLengthMask = ^StdioBinaryFrameFlag
 )
 
 type StdioTransport struct {
@@ -88,6 +90,54 @@ func (t *StdioTransport) Send(ctx context.Context, msg protocol.Envelope) error 
 		return fmt.Errorf("write frame data failed: %w", err)
 	}
 
+	return nil
+}
+
+func (t *StdioTransport) SendBinaryFrame(ctx context.Context, message protocol.Envelope, objectID string, offset int64, data []byte) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(data) == 0 {
+		return fmt.Errorf("binary frame payload must not be empty")
+	}
+	header := protocol.BinaryFrameHeader{
+		Protocol:   message.Protocol,
+		ID:         message.ID,
+		RuntimeID:  message.RuntimeID,
+		PluginID:   message.PluginID,
+		ServiceID:  message.ServiceID,
+		Generation: message.Generation,
+		ObjectID:   objectID,
+		Offset:     offset,
+	}
+	if err := header.Validate(); err != nil {
+		return err
+	}
+	headerJSON, err := json.Marshal(header)
+	if err != nil {
+		return fmt.Errorf("marshal binary frame header failed: %w", err)
+	}
+	bodyLen := 4 + len(headerJSON) + len(data)
+	if int64(bodyLen) > t.maxSize || uint64(bodyLen) > uint64(stdioFrameLengthMask) {
+		return fmt.Errorf("binary frame size %d exceeds limit %d", bodyLen, t.maxSize)
+	}
+
+	t.writerMu.Lock()
+	defer t.writerMu.Unlock()
+	frameHeader := make([]byte, 4)
+	binary.BigEndian.PutUint32(frameHeader, StdioBinaryFrameFlag|uint32(bodyLen))
+	metaHeader := make([]byte, 4)
+	binary.BigEndian.PutUint32(metaHeader, uint32(len(headerJSON)))
+	for _, part := range [][]byte{frameHeader, metaHeader, headerJSON, data} {
+		if _, err := t.writer.Write(part); err != nil {
+			return fmt.Errorf("write binary frame failed: %w", err)
+		}
+	}
+	if flusher, ok := t.writer.(interface{ Flush() error }); ok {
+		if err := flusher.Flush(); err != nil {
+			return fmt.Errorf("flush writer failed: %w", err)
+		}
+	}
 	return nil
 }
 
