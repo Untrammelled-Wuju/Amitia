@@ -457,3 +457,161 @@ func TestGamePluginUnrestrictedNetworkRequiresPermission(t *testing.T) {
 		t.Fatalf("expected unrestricted game plugin with network permission to pass, got %v", report.Errors)
 	}
 }
+
+func TestNormalizeGamePluginRuntimeDefaultsToDevice(t *testing.T) {
+	manifest := `{
+		"manifestVersion": 2,
+		"extension": {"id": "com.example/device-default", "name": {"default": "Game"}, "version": "1.0.0"},
+		"publisher": {"id": "com.example", "displayName": "Example"},
+		"modules": [{
+			"id": "runtime",
+			"name": {"default": "Runtime"},
+			"type": "service",
+			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
+			"contributions": [{
+				"id": "game",
+				"kind": "game_plugin",
+				"name": {"default": "Game"},
+				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "none"}}
+			}]
+		}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "test"}
+	}`
+	m, err := Parse([]byte(manifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalized, report := m.NormalizeCompatibility()
+	if report.HasErrors() {
+		t.Fatalf("normalize errors: %v", report.Errors)
+	}
+	if normalized.Placement != "device" {
+		t.Fatalf("expected extension placement device, got %q", normalized.Placement)
+	}
+	if got := normalized.Modules[0].Placement; got != "device" {
+		t.Fatalf("expected game runtime placement device, got %q", got)
+	}
+}
+
+func TestGamePluginRuntimeDeclaredLaterIsAllowed(t *testing.T) {
+	manifest := `{
+		"manifestVersion": 2,
+		"extension": {"id": "com.example/forward-ref", "name": {"default": "Game"}, "version": "1.0.0"},
+		"publisher": {"id": "com.example", "displayName": "Example"},
+		"modules": [
+			{
+				"id": "metadata",
+				"name": {"default": "Metadata"},
+				"type": "data_only",
+				"contributions": [{
+					"id": "game",
+					"kind": "game_plugin",
+					"name": {"default": "Game"},
+					"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "none"}}
+				}]
+			},
+			{
+				"id": "runtime",
+				"name": {"default": "Runtime"},
+				"type": "service",
+				"runtime": {"type": "service", "entryPoint": "bin/runtime"}
+			}
+		],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "test"}
+	}`
+	m, err := Parse([]byte(manifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report := m.Validate(); report.HasErrors() {
+		t.Fatalf("forward runtime reference should be order-independent, got %v", report.Errors)
+	}
+	normalized, report := m.NormalizeCompatibility()
+	if report.HasErrors() {
+		t.Fatalf("normalize errors: %v", report.Errors)
+	}
+	if normalized.Modules[1].Placement != "device" {
+		t.Fatalf("forward-referenced game runtime must normalize to device, got %q", normalized.Modules[1].Placement)
+	}
+}
+
+func TestGamePluginRuntimeExplicitCloudPlacementRejected(t *testing.T) {
+	manifest := `{
+		"manifestVersion": 2,
+		"placement": "cloud",
+		"extension": {"id": "com.example/cloud-game", "name": {"default": "Game"}, "version": "1.0.0"},
+		"publisher": {"id": "com.example", "displayName": "Example"},
+		"modules": [{
+			"id": "runtime",
+			"name": {"default": "Runtime"},
+			"type": "service",
+			"placement": "cloud",
+			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
+			"contributions": [{
+				"id": "game",
+				"kind": "game_plugin",
+				"name": {"default": "Game"},
+				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "none"}}
+			}]
+		}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "test"}
+	}`
+	m, err := Parse([]byte(manifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := m.Validate()
+	if !report.HasErrors() {
+		t.Fatal("expected explicit cloud placement for game runtime to be rejected")
+	}
+	found := false
+	for _, item := range report.Errors {
+		if strings.Contains(item.Message, "must use placement device") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected device-placement error, got %v", report.Errors)
+	}
+}
+
+func TestGamePluginCloudExtensionRejectedEvenBeforeNormalization(t *testing.T) {
+	manifest := `{
+		"manifestVersion": 2,
+		"placement": "cloud",
+		"extension": {"id": "com.example/cloud-game-default-module", "name": {"default": "Game"}, "version": "1.0.0"},
+		"publisher": {"id": "com.example", "displayName": "Example"},
+		"modules": [{
+			"id": "runtime",
+			"name": {"default": "Runtime"},
+			"type": "service",
+			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
+			"contributions": [{
+				"id": "game",
+				"kind": "game_plugin",
+				"name": {"default": "Game"},
+				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "none"}}
+			}]
+		}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "test"}
+	}`
+	m, err := Parse([]byte(manifest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := m.Validate()
+	if !report.HasErrors() {
+		t.Fatal("expected cloud extension containing game_plugin to be rejected before compatibility normalization")
+	}
+	found := false
+	for _, item := range report.Errors {
+		if strings.Contains(item.Message, "game_plugin extensions cannot use placement cloud") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected cloud-extension rejection, got %v", report.Errors)
+	}
+}

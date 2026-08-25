@@ -486,6 +486,8 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		toolSource = capability.ToolSourceBuiltin
 	}
 
+	runtimeBinding := enrichGameHostToolRuntimeBinding(i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID), def.Runtime)
+
 	toolDef := capability.ToolDefinition{
 		ID:           toolID,
 		ModelName:    modelName,
@@ -504,7 +506,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,
 		Scope:        scope,
-		Runtime:      i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID),
+		Runtime:      runtimeBinding,
 	}
 
 	permIDs := make([]string, 0)
@@ -1021,6 +1023,27 @@ func (i *TypedContributionInstaller) registerPage(ctx context.Context, uiDef ui_
 	return i.container.PageHost.RegisterPage(ctx, pageDef)
 }
 
+// enrichGameHostToolRuntimeBinding preserves GameHost route selectors from a
+// tool definition. The generic RuntimeBinding fields do not carry pluginId or
+// serviceId, but those selectors are required to route deterministically when
+// one extension exposes multiple game plugins or executable services.
+func enrichGameHostToolRuntimeBinding(binding capability.RuntimeBinding, runtimeDef map[string]any) capability.RuntimeBinding {
+	if binding.RuntimeType != capability.RuntimeTypeGameHost || len(runtimeDef) == 0 {
+		return binding
+	}
+	if binding.Metadata == nil {
+		binding.Metadata = make(map[string]any)
+	}
+	for _, key := range []string{"pluginId", "serviceId"} {
+		value, _ := runtimeDef[key].(string)
+		value = strings.TrimSpace(value)
+		if value != "" {
+			binding.Metadata[key] = value
+		}
+	}
+	return binding
+}
+
 func (i *TypedContributionInstaller) buildRuntimeBinding(contrib domain.ContributionDefinition) capability.RuntimeBinding {
 	return i.buildRuntimeBindingWithHandler(contrib, "", "")
 }
@@ -1272,6 +1295,14 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		toolSource = capability.ToolSourceBuiltin
 	}
 
+	runtimeBinding := enrichGameHostToolRuntimeBinding(i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID), def.Runtime)
+	enabled := true
+	if runtimeBinding.RuntimeType == capability.RuntimeTypeGameHost && !i.container.RuntimePolicy.DevicePluginRuntime {
+		// Cloud Core may retain/sync the package definition, but it must not
+		// advertise a device-only GameHost tool to the model.
+		enabled = false
+	}
+
 	toolDef := capability.ToolDefinition{
 		ID:           toolID,
 		ModelName:    modelName,
@@ -1284,13 +1315,13 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		Version:      contrib.Version,
 		InputSchema:  def.InputSchema,
 		OutputSchema: def.OutputSchema,
-		Enabled:      true,
+		Enabled:      enabled,
 		Internal:     def.Internal,
 		RiskLevel:    capability.RiskLevel(def.RiskLevel),
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,
 		Scope:        scope,
-		Runtime:      i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID),
+		Runtime:      runtimeBinding,
 	}
 	if err := i.container.ToolRegistry.Replace(ctx, toolDef); err != nil {
 		return fmt.Errorf("activate tool %s: %w", toolID, err)

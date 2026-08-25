@@ -384,8 +384,25 @@ func (m Manifest) Validate() ValidationReport {
 	if len(m.Modules) == 0 {
 		report.AddError("modules", "missing", "at least one module required")
 	}
+	// Build an order-independent module index before validating contributions.
+	// A contribution is allowed to reference a runtime module declared later in
+	// the manifest; declaration order must not change validation semantics.
+	allModuleIDs := make(map[string]bool)
+	allModuleRuntimes := make(map[string]*RuntimeMeta)
+	allModulePlacements := make(map[string]string)
+	for _, mod := range m.Modules {
+		moduleID := strings.TrimSpace(mod.ID)
+		if moduleID == "" {
+			continue
+		}
+		if !allModuleIDs[moduleID] {
+			allModuleIDs[moduleID] = true
+			allModuleRuntimes[moduleID] = mod.Runtime
+			allModulePlacements[moduleID] = strings.ToLower(strings.TrimSpace(mod.Placement))
+		}
+	}
+
 	moduleIDs := make(map[string]bool)
-	moduleRuntimes := make(map[string]*RuntimeMeta)
 	moduleTypes := map[string]bool{
 		"builtin": true, "javascript": true, "data_only": true, "wasm": true,
 		"native": true, "service": true,
@@ -415,7 +432,6 @@ func (m Manifest) Validate() ValidationReport {
 			continue
 		}
 		moduleIDs[mod.ID] = true
-		moduleRuntimes[mod.ID] = mod.Runtime
 		if mod.Name.Default == "" {
 			report.AddError(path+".name.default", "missing", "module name required")
 		}
@@ -451,7 +467,7 @@ func (m Manifest) Validate() ValidationReport {
 				report.AddError(cpath+".name.default", "missing", "contribution name required")
 			}
 			if c.Kind == "game_plugin" {
-				if err := validateGamePluginContribution(c.Spec, c.RequiredPermissions, cpath, moduleIDs, moduleRuntimes); err != nil {
+				if err := validateGamePluginContribution(c.Spec, c.RequiredPermissions, cpath, m.Placement, allModuleIDs, allModuleRuntimes, allModulePlacements); err != nil {
 					report.AddError(cpath+".spec", "invalid_game_plugin", err.Error())
 				}
 			}
@@ -755,7 +771,7 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-func validateGamePluginContribution(spec map[string]any, requiredPermissions []string, cpath string, moduleIDs map[string]bool, moduleRuntimes map[string]*RuntimeMeta) error {
+func validateGamePluginContribution(spec map[string]any, requiredPermissions []string, cpath, extensionPlacement string, moduleIDs map[string]bool, moduleRuntimes map[string]*RuntimeMeta, modulePlacements map[string]string) error {
 	parsed, err := gameprotocol.ParsePluginHostSpec(spec)
 	if err != nil {
 		return fmt.Errorf("%s.spec: %w", cpath, err)
@@ -789,6 +805,10 @@ func validateGamePluginContribution(spec map[string]any, requiredPermissions []s
 		if !moduleIDs[moduleID] {
 			return fmt.Errorf("game_plugin references unknown module: %s", moduleID)
 		}
+		placement := strings.ToLower(strings.TrimSpace(modulePlacements[moduleID]))
+		if placement != "" && placement != "device" {
+			return fmt.Errorf("game_plugin runtime module %s must use placement device, got %q", moduleID, placement)
+		}
 		runtime := moduleRuntimes[moduleID]
 		if runtime == nil {
 			return fmt.Errorf("game_plugin runtime module %s has no runtime definition", moduleID)
@@ -801,6 +821,9 @@ func validateGamePluginContribution(spec map[string]any, requiredPermissions []s
 		default:
 			return fmt.Errorf("game_plugin runtime module %s uses unsupported runtime type %q", moduleID, runtime.Type)
 		}
+	}
+	if strings.EqualFold(strings.TrimSpace(extensionPlacement), "cloud") {
+		return fmt.Errorf("game_plugin extensions cannot use placement cloud; use device or hybrid")
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package trusted_service
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -50,5 +51,28 @@ func TestPrepareNetworkLaunchRejectsAuditWithoutAuditBackend(t *testing.T) {
 	}, "/tmp/runtime", nil, "", "")
 	if !errors.Is(err, ErrNetworkSandboxUnavailable) {
 		t.Fatalf("prepareNetworkLaunch() error = %v, want ErrNetworkSandboxUnavailable", err)
+	}
+}
+
+func TestAppendSandboxParentDirsCreatesParentsInOrderWithoutDuplicates(t *testing.T) {
+	created := map[string]struct{}{`/`: {}}
+	args := appendSandboxParentDirs(nil, `/opt/amitia/plugins/game/index.js`, created)
+	want := []string{`--dir`, `/opt`, `--dir`, `/opt/amitia`, `--dir`, `/opt/amitia/plugins`, `--dir`, `/opt/amitia/plugins/game`}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("appendSandboxParentDirs() = %v, want %v", args, want)
+	}
+	again := appendSandboxParentDirs(args, `/opt/amitia/plugins/game/node_modules/x.js`, created)
+	want = append(want, `--dir`, `/opt/amitia/plugins/game/node_modules`)
+	if !reflect.DeepEqual(again, want) {
+		t.Fatalf("second appendSandboxParentDirs() = %v, want %v", again, want)
+	}
+}
+
+func TestPathWithinRejectsSiblingPrefix(t *testing.T) {
+	if !pathWithin(`/opt/plugin`, `/opt/plugin/dist/index.js`) {
+		t.Fatal("expected descendant to be within root")
+	}
+	if pathWithin(`/opt/plugin`, `/opt/plugin-evil/index.js`) {
+		t.Fatal("sibling prefix must not be treated as within root")
 	}
 }
