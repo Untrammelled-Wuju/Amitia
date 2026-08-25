@@ -45,8 +45,6 @@ internal class DefaultRuntimeStartupDetector(
             )
         }
 
-        cancelledFlag.set(false)
-
         if (!activeRequest.compareAndSet(null, request)) {
             return RuntimeStartupResult.Failed(
                 request.generation,
@@ -54,10 +52,13 @@ internal class DefaultRuntimeStartupDetector(
             )
         }
 
+        cancelledFlag.set(false)
+        workerThread.set(Thread.currentThread())
         try {
             return executeDetectionLoop(request)
         } finally {
-            activeRequest.set(null)
+            workerThread.compareAndSet(Thread.currentThread(), null)
+            activeRequest.compareAndSet(request, null)
         }
     }
 
@@ -122,7 +123,11 @@ internal class DefaultRuntimeStartupDetector(
                 try {
                     Thread.sleep(minOf(POLL_GRANULARITY_MS, sleepTargetMs - clock.nowEpochMillis()))
                 } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
+                    // cancel() interrupts the detector worker to shorten shutdown.
+                    // The interruption is fully consumed here because this loop
+                    // returns Cancelled immediately; re-interrupting would leak a
+                    // stale interrupt flag into callers/tests that invoke the
+                    // detector synchronously.
                     return RuntimeStartupResult.Cancelled(request.generation)
                 }
             }
@@ -148,9 +153,9 @@ internal class DefaultRuntimeStartupDetector(
                 return when (result.error) {
                     is RuntimeHealthProbeError.ConnectionRefused -> SingleProbeOutcome.Continue
                     is RuntimeHealthProbeError.ConnectionTimeout -> SingleProbeOutcome.Continue
-                    is RuntimeHealthProbeError.Unauthorized -> SingleProbeOutcome.ProtocolFailure("readiness probe returned 401")
-                    is RuntimeHealthProbeError.Forbidden -> SingleProbeOutcome.ProtocolFailure("readiness probe returned 403")
-                    is RuntimeHealthProbeError.NotFound -> SingleProbeOutcome.ProtocolFailure("readiness endpoint returned 404")
+                    is RuntimeHealthProbeError.Unauthorized -> SingleProbeOutcome.Fatal(RuntimeStartupError.HealthAuthFailed)
+                    is RuntimeHealthProbeError.Forbidden -> SingleProbeOutcome.Fatal(RuntimeStartupError.HealthAuthFailed)
+                    is RuntimeHealthProbeError.NotFound -> SingleProbeOutcome.Fatal(RuntimeStartupError.HealthEndpointMissing)
                     is RuntimeHealthProbeError.ServerError -> SingleProbeOutcome.Continue
                     is RuntimeHealthProbeError.IOError -> SingleProbeOutcome.Continue
                     is RuntimeHealthProbeError.MalformedResponse -> SingleProbeOutcome.ProtocolFailure("readiness probe io error")
@@ -196,17 +201,17 @@ internal class DefaultRuntimeStartupDetector(
                 SingleProbeOutcome.Continue
             }
             401, 403 -> {
-                SingleProbeOutcome.ProtocolFailure("readness probe returned ${result.statusCode}")
+                SingleProbeOutcome.Fatal(RuntimeStartupError.HealthAuthFailed)
             }
             404 -> {
-                SingleProbeOutcome.ProtocolFailure("readiness endpoint returned 404")
+                SingleProbeOutcome.Fatal(RuntimeStartupError.HealthEndpointMissing)
             }
             301, 302, 303, 307, 308 -> {
                 SingleProbeOutcome.ProtocolFailure("readiness probe rejected: redirect ${result.statusCode}")
             }
             else -> {
                 if (result.statusCode in 400..499) {
-                    SingleProbeOutcome.ProtocolFailure("readness probe returned unsupported ${result.statusCode}")
+                    SingleProbeOutcome.ProtocolFailure("readiness probe returned unsupported ${result.statusCode}")
                 } else {
                     SingleProbeOutcome.Continue
                 }
@@ -216,8 +221,17 @@ internal class DefaultRuntimeStartupDetector(
 
     override fun cancel() {
         cancelledFlag.set(true)
-        activeRequest.set(null)
-        workerThread.getAndSet(null)?.interrupt()
+        val thread = workerThread.get()
+        if (thread != null && thread !== Thread.currentThread() && thread.isAlive) {
+            try {
+                thread.interrupt()
+            } catch (_: Throwable) {
+            }
+        }
+        // Do not clear activeRequest here. The running awaitStartup call owns
+        // that slot until its finally block exits. Clearing it early allows a
+        // new generation to reset cancelledFlag while the old detector is
+        // still alive, which can resurrect stale readiness probes.
     }
 
     private companion object {

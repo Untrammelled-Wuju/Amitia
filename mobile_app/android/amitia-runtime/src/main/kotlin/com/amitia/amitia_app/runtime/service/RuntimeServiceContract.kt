@@ -9,6 +9,9 @@ internal object RuntimeServiceContract {
     const val EXTRA_RUNTIME_GENERATION = "com.amitia.amitia_app.runtime.extra.RUNTIME_GENERATION"
     const val EXTRA_RUNTIME_PROFILE = "com.amitia.amitia_app.runtime.extra.RUNTIME_PROFILE"
     const val EXTRA_TARGET_GENERATION = "com.amitia.amitia_app.runtime.extra.TARGET_GENERATION"
+    const val EXTRA_FAILURE_CAUSE = "com.amitia.amitia_app.runtime.extra.FAILURE_CAUSE"
+    const val EXTRA_FAILURE_MESSAGE = "com.amitia.amitia_app.runtime.extra.FAILURE_MESSAGE"
+    const val EXTRA_FAILURE_PHASE = "com.amitia.amitia_app.runtime.extra.FAILURE_PHASE"
 
     const val NOTIFICATION_CHANNEL_ID = "runtime_service"
     const val NOTIFICATION_ID = 0x52435541

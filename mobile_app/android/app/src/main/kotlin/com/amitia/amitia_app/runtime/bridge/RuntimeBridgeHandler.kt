@@ -13,6 +13,8 @@ import com.amitia.amitia_app.runtime.api.RuntimeStopReason
 import com.amitia.amitia_app.runtime.api.RuntimeVerifyRequest
 import com.amitia.amitia_app.runtime.connection.BackendConnectionAvailability
 import com.amitia.amitia_app.runtime.connection.BackendConnectionProvider
+import com.amitia.amitia_app.runtime.connection.BackendConnectionError
+import com.amitia.amitia_app.runtime.connection.BackendConnectionErrorCode
 import com.amitia.amitia_app.runtime.connection.internal.BackendConnectionMapper
 import com.amitia.amitia_app.runtime.bridge.RuntimeBridgeContract
 import com.amitia.amitia_app.runtime.bridge.RuntimeBridgeErrorMapper
@@ -48,7 +50,7 @@ internal class RuntimeBridgeHandler(
         } catch (e: Exception) {
             result.error(
                 "INTERNAL_ERROR",
-                "Internal error: ${e.message}",
+                "Internal error: ${e.message ?: e.javaClass.simpleName}",
                 null
             )
         }
@@ -71,10 +73,33 @@ internal class RuntimeBridgeHandler(
 
     private fun handleGetBackendConnection(result: MethodChannel.Result) {
         val availability = backendConnectionProvider.current()
+        val snapshot = controller.snapshot()
+        val error = when (availability) {
+            is BackendConnectionAvailability.Available -> null
+            is BackendConnectionAvailability.Resolving -> BackendConnectionError(
+                BackendConnectionErrorCode.BACKEND_NOT_READY,
+                "runtime backend connection is still resolving for generation ${snapshot.generation}",
+            )
+            is BackendConnectionAvailability.Unavailable -> {
+                backendConnectionProvider.lastError() ?:
+                    if (snapshot.state != RuntimeState.READY && snapshot.state != RuntimeState.DEGRADED) {
+                        BackendConnectionError(
+                            BackendConnectionErrorCode.RUNTIME_NOT_READY,
+                            snapshot.lastError?.message
+                                ?: "runtime is ${snapshot.state.name.lowercase()} for generation ${snapshot.generation}",
+                        )
+                    } else {
+                        BackendConnectionError(
+                            BackendConnectionErrorCode.ENDPOINT_UNAVAILABLE,
+                            "runtime is ready but the backend endpoint is unavailable for generation ${snapshot.generation}",
+                        )
+                    }
+            }
+        }
         val mapped = BackendConnectionMapper.toPayload(
             available = availability is BackendConnectionAvailability.Available,
             descriptor = (availability as? BackendConnectionAvailability.Available)?.descriptor,
-            error = null,
+            error = error,
         )
         result.success(mapped)
     }
@@ -207,7 +232,7 @@ internal class RuntimeBridgeHandler(
         val response = LinkedHashMap<String, Any?>()
         response["accepted"] = when (operationResult) {
             is RuntimeOperationResult.Success -> true
-            is RuntimeOperationResult.Failure -> operationResult.error.recoverable
+            is RuntimeOperationResult.Failure -> false
             is RuntimeOperationResult.Cancelled -> false
         }
         response["snapshot"] = mappedSnapshot

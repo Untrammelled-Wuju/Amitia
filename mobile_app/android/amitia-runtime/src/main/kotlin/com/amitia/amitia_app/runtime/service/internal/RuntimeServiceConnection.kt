@@ -21,27 +21,48 @@ internal class RuntimeServiceConnection(
         endpointRef.set(endpoint)
         if (endpoint != null) {
             onConnected?.invoke(endpoint)
+        } else {
+            onDisconnected?.invoke()
         }
     }
 
     override fun onServiceDisconnected(name: ComponentName?) {
-        endpointRef.set(null)
+        clearEndpoint()
+        onDisconnected?.invoke()
+    }
+
+    override fun onBindingDied(name: ComponentName?) {
+        clearEndpoint()
+        onDisconnected?.invoke()
+    }
+
+    override fun onNullBinding(name: ComponentName?) {
+        clearEndpoint()
         onDisconnected?.invoke()
     }
 
     fun endpoint(): RuntimeServiceEndpoint? = endpointRef.get()
 
+    fun clearEndpoint() {
+        endpointRef.set(null)
+    }
+
     companion object {
         fun bind(context: Context, connection: RuntimeServiceConnection): Boolean {
             return try {
-                val intent = android.content.Intent(context, com.amitia.amitia_app.runtime.service.RuntimeService::class.java)
+                val intent = android.content.Intent(
+                    context,
+                    com.amitia.amitia_app.runtime.service.RuntimeService::class.java
+                )
                 context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
             } catch (_: Exception) {
+                connection.clearEndpoint()
                 false
             }
         }
 
         fun unbind(context: Context, connection: RuntimeServiceConnection): Boolean {
+            connection.clearEndpoint()
             return try {
                 context.unbindService(connection)
                 true

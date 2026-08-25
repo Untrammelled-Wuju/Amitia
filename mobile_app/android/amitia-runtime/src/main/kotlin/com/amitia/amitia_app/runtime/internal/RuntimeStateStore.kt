@@ -168,6 +168,7 @@ class RuntimeStateStore(
             val newSnapshot = oldSnapshot.copy(
                 state = RuntimeState.STARTING,
                 generation = newGeneration,
+                lastError = null,
                 updatedAtEpochMillis = clock.nowEpochMillis()
             )
 

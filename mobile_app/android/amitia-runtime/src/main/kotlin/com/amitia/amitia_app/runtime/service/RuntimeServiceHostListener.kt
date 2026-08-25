@@ -36,6 +36,7 @@ sealed interface RuntimeServiceHostEvent {
     data class UnexpectedTermination(
         val generation: Long,
         val cause: RuntimeServiceTerminationCause,
+        val message: String? = null,
     ) : RuntimeServiceHostEvent
     data class StartupFailed(
         val generation: Long,
