@@ -108,17 +108,17 @@ type ClientOption func(*Client)
 const DefaultCompletedCacheSize = 256
 
 type completedEntry struct {
-	response  protocol.Envelope
-	err       error
+	response    protocol.Envelope
+	err         error
 	fingerprint string
-	createdAt time.Time
+	createdAt   time.Time
 }
 
 type CompletedResponseCache struct {
-	mu       sync.Mutex
-	entries  map[string]*completedEntry
-	maxSize  uint64
-	order    []string
+	mu      sync.Mutex
+	entries map[string]*completedEntry
+	maxSize uint64
+	order   []string
 }
 
 func NewCompletedResponseCache() *CompletedResponseCache {
@@ -242,6 +242,41 @@ func (c *Client) SetGeneration(generation uint64) {
 
 func (c *Client) GetGeneration() uint64 {
 	return c.generation
+}
+
+// AdoptPeerRouting binds the client to the authoritative route returned by
+// GameHost after the generation-free bootstrap handshake. Existing non-empty
+// fields cannot be rebound to a different peer.
+func (c *Client) AdoptPeerRouting(envelope protocol.Envelope) error {
+	if envelope.Generation == 0 {
+		return NewValidationError("handshake response is missing a positive generation")
+	}
+	if c.generation != 0 && c.generation != envelope.Generation {
+		return NewValidationError("handshake generation mismatch: expected %d, got %d", c.generation, envelope.Generation)
+	}
+	adopt := func(current *string, incoming string, label string) error {
+		if incoming == "" {
+			return nil
+		}
+		if *current != "" && *current != incoming {
+			return NewValidationError("handshake %s mismatch: expected %s, got %s", label, *current, incoming)
+		}
+		if *current == "" {
+			*current = incoming
+		}
+		return nil
+	}
+	if err := adopt(&c.runtimeID, envelope.RuntimeID, "runtimeId"); err != nil {
+		return err
+	}
+	if err := adopt(&c.pluginID, envelope.PluginID, "pluginId"); err != nil {
+		return err
+	}
+	if err := adopt(&c.serviceID, envelope.ServiceID, "serviceId"); err != nil {
+		return err
+	}
+	c.generation = envelope.Generation
+	return nil
 }
 
 func (c *Client) FillRouting(envelope *protocol.Envelope) {
@@ -720,13 +755,14 @@ func (c *Client) NewError(request protocol.Envelope, code protocol.ErrorCode, me
 	}
 
 	envelope := protocol.Envelope{
-		Protocol:  protocol.ProtocolVersion,
-		Type:      protocol.MessageTypeError,
-		ID:        id,
-		RequestID: request.ID,
-		PluginID:  c.pluginID,
-		RuntimeID: c.runtimeID,
-		ServiceID: c.serviceID,
+		Protocol:   protocol.ProtocolVersion,
+		Type:       protocol.MessageTypeError,
+		ID:         id,
+		RequestID:  request.ID,
+		PluginID:   c.pluginID,
+		RuntimeID:  c.runtimeID,
+		ServiceID:  c.serviceID,
+		Generation: c.generation,
 		Error: &protocol.ProtocolError{
 			Code:      code,
 			Message:   message,
