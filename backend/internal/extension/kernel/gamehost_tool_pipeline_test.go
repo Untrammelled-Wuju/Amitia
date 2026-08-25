@@ -159,7 +159,7 @@ func TestGameHostToolRunsThroughAgentExecutionPipeline(t *testing.T) {
 		t.Fatalf("wrong plugin method: %s", control.lastMethod)
 	}
 
-	bound, found := gameAdapter.SessionRegistry().Resolve(rt.ID, "")
+	bound, found := gameAdapter.SessionRegistry().Resolve(rt.ID, "secondary", "")
 	if !found {
 		t.Fatal("expected Agent context to be bound by the real tool pipeline")
 	}
