@@ -391,6 +391,7 @@ func TestPluginDescriptorHasCapability(t *testing.T) {
 		Capabilities: []Capability{
 			CapabilityStateStreaming,
 			CapabilityEventStreaming,
+			CapabilityBinaryStreaming,
 		},
 	}
 
@@ -400,8 +401,8 @@ func TestPluginDescriptorHasCapability(t *testing.T) {
 	if !desc.HasCapability(CapabilityEventStreaming) {
 		t.Error("expected to find event_streaming capability")
 	}
-	if desc.HasCapability(Capability("binary_streaming")) {
-		t.Error("did not expect unsupported binary_streaming feature")
+	if !desc.HasCapability(CapabilityBinaryStreaming) {
+		t.Error("expected to find binary_streaming capability")
 	}
 }
 

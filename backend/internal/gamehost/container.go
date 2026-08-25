@@ -65,6 +65,8 @@ type GameHostContainer struct {
 	AgentEventSink       *notification.AgentEventSink
 	StateStore           *state.LatestStateStore
 	BinaryObjectRegistry binary.ObjectRegistry
+	BinaryResolver       *binary.Resolver
+	BinaryTransfer       *binary.BinaryTransferService
 	StreamManager        *stream.StreamManager
 
 	HostAPIGateway           host_api.Gateway
@@ -215,6 +217,9 @@ func (c *GameHostContainer) Start(ctx context.Context) error {
 	if c.AgentEventSink != nil {
 		c.AgentEventSink.Start(ctx)
 	}
+	if c.BinaryTransfer != nil {
+		c.BinaryTransfer.Start(ctx)
+	}
 
 	if c.ContributionSync != nil {
 		result := c.ContributionSync.FullSync(ctx)
@@ -260,6 +265,11 @@ func (c *GameHostContainer) Shutdown(ctx context.Context) error {
 	if c.ControlPlane != nil {
 		if err := c.ControlPlane.Shutdown(ctx); err != nil {
 			return fmt.Errorf("gamehost: control plane shutdown: %w", err)
+		}
+	}
+	if c.BinaryTransfer != nil {
+		if err := c.BinaryTransfer.Shutdown(ctx); err != nil {
+			return fmt.Errorf("gamehost: binary transfer shutdown: %w", err)
 		}
 	}
 	if c.ResourceLifecycle != nil {

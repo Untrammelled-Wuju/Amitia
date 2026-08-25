@@ -126,6 +126,15 @@ func (m *mockGenericSink) Publish(ctx context.Context, channel RuntimeChannel, m
 	return nil
 }
 
+type mockBinarySink struct {
+	messages []BinaryChannelMessage
+}
+
+func (m *mockBinarySink) PublishBinary(ctx context.Context, channel RuntimeChannel, message BinaryChannelMessage) (json.RawMessage, error) {
+	m.messages = append(m.messages, message)
+	return copyRawMessage(message.Payload), nil
+}
+
 type mockTargetResolver struct {
 	peers map[ipc.PeerKey]ipc.Peer
 }
@@ -351,7 +360,7 @@ func TestRouter_Route_CustomRoute_PayloadOpaque(t *testing.T) {
 	}
 }
 
-func TestRouter_Route_BinaryChannel_Unsupported(t *testing.T) {
+func TestRouter_Route_BinaryChannel_SinkUnavailable(t *testing.T) {
 	router, reg, _, _ := setupRouter()
 	ch := RuntimeChannel{
 		ID:        NewRuntimeChannelID("runtime-1", "service-a", "frames"),
@@ -367,7 +376,37 @@ func TestRouter_Route_BinaryChannel_Unsupported(t *testing.T) {
 	peer := ipc.Peer{PluginID: "plugin-x", RuntimeID: "runtime-1", ServiceID: "service-a"}
 	err := router.Route(context.Background(), IncomingChannelMessage{Peer: peer, ChannelID: "frames", Payload: []byte("binary")})
 	if err == nil {
-		t.Fatal("expected error for binary kind, got nil")
+		t.Fatal("expected error when binary sink is unavailable, got nil")
+	}
+}
+
+func TestRouter_Route_BinaryChannel_CallsBinarySink(t *testing.T) {
+	reg := NewMemoryRegistry(Options{})
+	binarySink := &mockBinarySink{}
+	router := NewRouter(RouterConfig{Registry: reg, Binary: binarySink})
+	ch := RuntimeChannel{
+		ID:        NewRuntimeChannelID("runtime-1", "service-a", "frames"),
+		PluginID:  "plugin-x",
+		RuntimeID: "runtime-1",
+		ServiceID: "service-a",
+		ChannelID: "frames",
+		Kind:      domain.ChannelKindBinary,
+		Direction: protocol.ChannelDirectionPluginToHost,
+	}
+	if err := reg.Register(context.Background(), ch); err != nil {
+		t.Fatalf("register binary channel: %v", err)
+	}
+
+	peer := ipc.Peer{PluginID: "plugin-x", RuntimeID: "runtime-1", ServiceID: "service-a"}
+	payload := json.RawMessage(`{"id":"bin_0123456789abcdef","kind":"file","size":3,"lifetime":"message"}`)
+	if err := router.Route(context.Background(), IncomingChannelMessage{Peer: peer, ChannelID: "frames", Payload: payload}); err != nil {
+		t.Fatalf("route binary failed: %v", err)
+	}
+	if len(binarySink.messages) != 1 {
+		t.Fatalf("expected one binary publish, got %d", len(binarySink.messages))
+	}
+	if string(binarySink.messages[0].Payload) != string(payload) {
+		t.Fatalf("binary payload changed: %s", binarySink.messages[0].Payload)
 	}
 }
 

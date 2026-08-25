@@ -19,7 +19,7 @@ type GenericChannelSink interface {
 }
 
 type BinarySink interface {
-	PublishBinary(ctx context.Context, channel RuntimeChannel, message BinaryChannelMessage) error
+	PublishBinary(ctx context.Context, channel RuntimeChannel, message BinaryChannelMessage) (json.RawMessage, error)
 }
 
 type BinaryChannelMessage struct {
@@ -83,41 +83,59 @@ func NewRouter(cfg RouterConfig) *Router {
 }
 
 func (r *Router) Route(ctx context.Context, msg IncomingChannelMessage) error {
+	_, err := r.RouteCanonical(ctx, msg)
+	return err
+}
+
+// RouteCanonical validates and routes a plugin-to-host channel message and
+// returns the canonical payload that is safe for downstream persistence/fanout.
+// For ordinary JSON channels the payload is copied unchanged. Binary channels
+// are replaced with a host-authoritative BinaryReference so caller-controlled
+// checksum/mediaType/metadata fields cannot survive validation.
+func (r *Router) RouteCanonical(ctx context.Context, msg IncomingChannelMessage) (json.RawMessage, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
 	if err := msg.Peer.Validate(); err != nil {
-		return err
+		return nil, err
 	}
 
 	channel, err := r.registry.Resolve(ctx, msg.Peer.RuntimeID, msg.Peer.ServiceID, msg.ChannelID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if channel.PluginID != msg.Peer.PluginID {
-		return ErrPluginMismatch
+		return nil, ErrPluginMismatch
 	}
 	if channel.RuntimeID != msg.Peer.RuntimeID {
-		return ErrRuntimeMismatch
+		return nil, ErrRuntimeMismatch
 	}
 
 	if err := ValidateDirection(channel, protocol.ChannelDirectionPluginToHost); err != nil {
-		return err
+		return nil, err
 	}
 
 	switch channel.Kind {
 	case domain.ChannelKindEvent:
-		return r.routeEvent(ctx, channel, msg)
+		if err := r.routeEvent(ctx, channel, msg); err != nil {
+			return nil, err
+		}
 	case domain.ChannelKindState:
-		return r.routeState(ctx, channel, msg)
+		if err := r.routeState(ctx, channel, msg); err != nil {
+			return nil, err
+		}
 	case domain.ChannelKindLog, domain.ChannelKindMetric, domain.ChannelKindCustom:
-		return r.routeGeneric(ctx, channel, msg)
+		if err := r.routeGeneric(ctx, channel, msg); err != nil {
+			return nil, err
+		}
 	case domain.ChannelKindBinary:
 		return r.routeBinary(ctx, channel, msg)
 	default:
-		return ErrKindUnknown
+		return nil, ErrKindUnknown
 	}
+
+	return copyRawMessage(msg.Payload), nil
 }
 
 func (r *Router) routeEvent(ctx context.Context, channel RuntimeChannel, msg IncomingChannelMessage) error {
@@ -167,9 +185,9 @@ func (r *Router) routeState(ctx context.Context, channel RuntimeChannel, msg Inc
 	return err
 }
 
-func (r *Router) routeBinary(ctx context.Context, channel RuntimeChannel, msg IncomingChannelMessage) error {
+func (r *Router) routeBinary(ctx context.Context, channel RuntimeChannel, msg IncomingChannelMessage) (json.RawMessage, error) {
 	if r.binary == nil {
-		return ErrBinaryNotSupported
+		return nil, ErrBinaryNotSupported
 	}
 
 	chMsg := BinaryChannelMessage{

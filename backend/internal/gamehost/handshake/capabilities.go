@@ -15,5 +15,6 @@ func ProductionHostCapabilities() []domain.Capability {
 		domain.CapabilityHostAPI,
 		domain.CapabilitySharedControl,
 		domain.CapabilityMultiService,
+		domain.CapabilityBinaryStreaming,
 	}
 }

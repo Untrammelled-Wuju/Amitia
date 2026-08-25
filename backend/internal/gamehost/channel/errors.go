@@ -19,6 +19,6 @@ var (
 	ErrDirectionNotAllowed = domain.NewHostError(domain.ErrInvalidArgument, "channel: direction not allowed")
 	ErrChannelLimitRuntime = domain.NewHostError(domain.ErrResourceExhausted, "channel: max channels per runtime reached")
 	ErrChannelLimitService = domain.NewHostError(domain.ErrResourceExhausted, "channel: max channels per service reached")
-	ErrBinaryNotSupported  = domain.NewHostError(domain.ErrUnsupported, "channel: binary transport not yet supported (G33)")
+	ErrBinaryNotSupported  = domain.NewHostError(domain.ErrUnsupported, "channel: binary sink is unavailable")
 	ErrMetadataTooLarge    = domain.NewHostError(domain.ErrResourceExhausted, "channel: metadata too large")
 )

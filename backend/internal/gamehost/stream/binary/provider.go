@@ -9,6 +9,7 @@ import (
 type CreateRequest struct {
 	ExpectedSize int64
 	MediaType    string
+	Lifetime     BinaryLifetime
 	Metadata     map[string]json.RawMessage
 }
 
@@ -46,4 +47,5 @@ type WritingHandle struct {
 	ObjectID BinaryObjectID
 	Writer   io.WriteCloser
 	Seal     func(actualSize int64, checksum *Checksum) (BinaryReference, error)
+	Abort    func() error
 }

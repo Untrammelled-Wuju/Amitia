@@ -159,7 +159,7 @@ func TestFileProvider_PathTraversalBlocked(t *testing.T) {
 		_ = fullPath
 	}
 
-	handle, err := prov.Create(context.Background(), owner, CreateRequest{ExpectedSize: 5})
+	handle, err := prov.Create(context.Background(), owner, CreateRequest{ExpectedSize: 4})
 	if err != nil {
 		t.Fatalf("create failed: %v", err)
 	}
@@ -177,9 +177,11 @@ func TestFileProvider_Shutdown_CleansTemp(t *testing.T) {
 	prov, _ := NewFileProvider(tmpDir)
 
 	owner := BinaryOwner{PluginID: "p", RuntimeID: "r", ServiceID: "s", ChannelID: "c"}
-	handle, _ := prov.Create(context.Background(), owner, CreateRequest{ExpectedSize: 5})
+	handle, _ := prov.Create(context.Background(), owner, CreateRequest{ExpectedSize: 4})
 	handle.Writer.Write([]byte("data"))
-	handle.Seal(4, nil)
+	if _, err := handle.Seal(4, nil); err != nil {
+		t.Fatalf("seal failed: %v", err)
+	}
 
 	if err := prov.Shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown failed: %v", err)
@@ -268,4 +270,62 @@ func TestFileProvider_DataPersistsInDirectory(t *testing.T) {
 	}
 
 	_ = ref
+}
+
+func TestFileProvider_SealRejectsDeclaredSizeMismatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	prov, err := NewFileProvider(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := BinaryOwner{PluginID: "p", RuntimeID: "r", ServiceID: "s", ChannelID: "c"}
+	handle, err := prov.Create(context.Background(), owner, CreateRequest{ExpectedSize: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handle.Writer.Write([]byte("data")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handle.Seal(4, nil); err == nil {
+		t.Fatal("seal must reject an actual size that differs from expectedSize")
+	}
+}
+
+func TestFileProvider_SealRejectsCallerSizeThatDoesNotMatchFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	prov, err := NewFileProvider(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := BinaryOwner{PluginID: "p", RuntimeID: "r", ServiceID: "s", ChannelID: "c"}
+	handle, err := prov.Create(context.Background(), owner, CreateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handle.Writer.Write([]byte("data")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handle.Seal(5, nil); err == nil {
+		t.Fatal("seal must verify the physical file size")
+	}
+}
+
+func TestFileProvider_SealRejectsForgedChecksum(t *testing.T) {
+	tmpDir := t.TempDir()
+	prov, err := NewFileProvider(tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := BinaryOwner{PluginID: "p", RuntimeID: "r", ServiceID: "s", ChannelID: "c"}
+	handle, err := prov.Create(context.Background(), owner, CreateRequest{ExpectedSize: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handle.Writer.Write([]byte("data")); err != nil {
+		t.Fatal(err)
+	}
+	_, err = handle.Seal(4, &Checksum{Algorithm: "sha256", Value: "deadbeef"})
+	if err == nil {
+		t.Fatal("seal must verify a supplied checksum instead of trusting it")
+	}
 }

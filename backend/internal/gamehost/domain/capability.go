@@ -33,6 +33,7 @@ const (
 	HostFeatureHostAPI         HostFeature = "host_api"
 	HostFeatureSharedControl   HostFeature = "shared_control"
 	HostFeatureMultiService    HostFeature = "multi_service"
+	HostFeatureBinaryStreaming HostFeature = "binary_streaming"
 )
 
 const (
@@ -43,6 +44,7 @@ const (
 	CapabilityHostAPI         Capability = "host_api"
 	CapabilitySharedControl   Capability = "shared_control"
 	CapabilityMultiService    Capability = "multi_service"
+	CapabilityBinaryStreaming Capability = "binary_streaming"
 )
 
 // Capability is a backwards-compatible alias for HostFeature.
@@ -58,6 +60,7 @@ var knownHostFeatures = map[HostFeature]struct{}{
 	HostFeatureHostAPI:         {},
 	HostFeatureSharedControl:   {},
 	HostFeatureMultiService:    {},
+	HostFeatureBinaryStreaming: {},
 }
 
 // IsKnownHostFeature reports whether the given HostFeature is recognized.

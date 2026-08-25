@@ -559,6 +559,9 @@ func (m *ArtifactManager) resolveRequiredArtifacts(ctx context.Context, extensio
 		if err != nil {
 			return nil, integration.InstalledGeneration{}, err
 		}
+		if err := spec.Validate(); err != nil {
+			return nil, integration.InstalledGeneration{}, fmt.Errorf("artifact: invalid game plugin host spec for %s: %w", extensionID, err)
+		}
 		for _, artifact := range spec.Artifacts {
 			if !artifact.Required {
 				continue
@@ -600,6 +603,9 @@ func (m *ArtifactManager) resolveArtifactsOptional(ctx context.Context, extensio
 		spec, err := gameprotocol.ParsePluginHostSpec(kp.Contribution.Definition)
 		if err != nil {
 			return nil, integration.InstalledGeneration{}, err
+		}
+		if err := spec.Validate(); err != nil {
+			return nil, integration.InstalledGeneration{}, fmt.Errorf("artifact: invalid game plugin host spec for %s: %w", extensionID, err)
 		}
 		for _, artifact := range spec.Artifacts {
 			if platformMatches(artifact.Platforms) && architectureMatches(artifact.Architectures) && versionMatches(artifact.CompatibilityVersions, compatibilityVersion) {
@@ -746,17 +752,6 @@ func architectureMatches(architectures []string) bool {
 			if normalized == "aarch64" {
 				return true
 			}
-		}
-	}
-	return false
-}
-func versionMatches(versions []string, version string) bool {
-	if len(versions) == 0 || strings.TrimSpace(version) == "" {
-		return true
-	}
-	for _, v := range versions {
-		if v == "*" || strings.EqualFold(strings.TrimSpace(v), strings.TrimSpace(version)) {
-			return true
 		}
 	}
 	return false

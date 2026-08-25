@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	binarySubDir = "binary"
+	binarySubDir  = "binary"
 	fileExtension = ".bin"
 )
 
@@ -32,10 +32,14 @@ func NewFileProvider(root string) (*FileProvider, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FileProvider{
+	provider := &FileProvider{
 		root:     cleaned,
 		tempRoot: filepath.Join(cleaned, "writing"),
-	}, nil
+	}
+	if err := provider.cleanupStaleObjects(); err != nil {
+		return nil, err
+	}
+	return provider, nil
 }
 
 func NewFileProviderWithManager(mgr storage.DirectoryManager, runtimeID domain.RuntimeInstanceID) (*FileProvider, error) {
@@ -47,10 +51,40 @@ func NewFileProviderWithManager(mgr storage.DirectoryManager, runtimeID domain.R
 	if err := os.MkdirAll(binaryRoot, 0o700); err != nil {
 		return nil, fmt.Errorf("binary: failed to create binary root: %w", err)
 	}
-	return &FileProvider{
+	provider := &FileProvider{
 		root:     binaryRoot,
 		tempRoot: filepath.Join(binaryRoot, "writing"),
-	}, nil
+	}
+	if err := provider.cleanupStaleObjects(); err != nil {
+		return nil, err
+	}
+	return provider, nil
+}
+
+func (p *FileProvider) cleanupStaleObjects() error {
+	if err := os.MkdirAll(p.root, 0o700); err != nil {
+		return fmt.Errorf("binary: failed to create provider root: %w", err)
+	}
+	if err := os.RemoveAll(p.tempRoot); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("binary: failed to clean stale writes: %w", err)
+	}
+	entries, err := os.ReadDir(p.root)
+	if err != nil {
+		return fmt.Errorf("binary: failed to scan provider root: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasPrefix(name, "bin_") || !strings.HasSuffix(name, fileExtension) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(p.root, name)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("binary: failed to remove stale object %q: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func (p *FileProvider) Kind() BinaryStorageKind {
@@ -86,6 +120,14 @@ func (p *FileProvider) Create(
 		Seal: func(actualSize int64, checksum *Checksum) (BinaryReference, error) {
 			return p.seal(id, owner, request, tmpFile, actualSize, checksum)
 		},
+		Abort: func() error {
+			closeErr := tmpFile.Close()
+			removeErr := os.Remove(tmpFile.Name())
+			if removeErr != nil && !os.IsNotExist(removeErr) {
+				return removeErr
+			}
+			return closeErr
+		},
 	}
 	return handle, nil
 }
@@ -98,13 +140,34 @@ func (p *FileProvider) seal(
 	actualSize int64,
 	checksum *Checksum,
 ) (BinaryReference, error) {
+	if actualSize < 0 {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+		return BinaryReference{}, ErrSizeNegative
+	}
+	if request.ExpectedSize > 0 && actualSize != request.ExpectedSize {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+		return BinaryReference{}, ErrSizeMismatch
+	}
 	if err := tmpFile.Sync(); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
 		return BinaryReference{}, fmt.Errorf("binary: failed to sync file: %w", err)
 	}
+	info, err := tmpFile.Stat()
+	if err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+		return BinaryReference{}, fmt.Errorf("binary: failed to stat file before seal: %w", err)
+	}
+	if info.Size() != actualSize {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+		return BinaryReference{}, ErrSizeMismatch
+	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
 		return BinaryReference{}, fmt.Errorf("binary: failed to close file: %w", err)
 	}
 
@@ -135,20 +198,30 @@ func (p *FileProvider) seal(
 		return BinaryReference{}, fmt.Errorf("binary: failed to publish file: %w", err)
 	}
 
-	var computedChecksum *Checksum
-	if checksum == nil && actualSize >= 0 {
-		computedChecksum = computeSHA256(absFinal)
-	} else if checksum != nil {
-		computedChecksum = checksum
+	computedChecksum, err := computeSHA256(absFinal)
+	if err != nil {
+		_ = os.Remove(absFinal)
+		return BinaryReference{}, err
+	}
+	if checksum != nil {
+		provided := *checksum
+		if err := provided.Validate(); err != nil || !strings.EqualFold(provided.Algorithm, computedChecksum.Algorithm) || !strings.EqualFold(provided.Value, computedChecksum.Value) {
+			_ = os.Remove(absFinal)
+			return BinaryReference{}, ErrChecksumInvalid
+		}
 	}
 
+	lifetime := request.Lifetime
+	if lifetime == "" {
+		lifetime = BinaryLifetimeMessage
+	}
 	return BinaryReference{
 		ID:        id,
 		Kind:      BinaryStorageFile,
 		Size:      actualSize,
 		MediaType: request.MediaType,
 		Checksum:  computedChecksum,
-		Lifetime:  BinaryLifetimeMessage,
+		Lifetime:  lifetime,
 		Metadata:  request.Metadata,
 	}, nil
 }
@@ -274,21 +347,20 @@ func validateRoot(root string) (string, error) {
 	return cleaned, nil
 }
 
-func computeSHA256(path string) *Checksum {
+func computeSHA256(path string) (*Checksum, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("binary: open sealed file for checksum: %w", err)
 	}
 	defer file.Close()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {
-		return nil
+		return nil, fmt.Errorf("binary: checksum sealed file: %w", err)
 	}
 
 	return &Checksum{
 		Algorithm: "sha256",
 		Value:     hex.EncodeToString(hasher.Sum(nil)),
-	}
+	}, nil
 }
-

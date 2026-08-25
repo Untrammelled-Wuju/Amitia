@@ -57,21 +57,31 @@ type channelPublishPayload struct {
 }
 
 func (s *ChannelNotificationSink) Publish(ctx context.Context, n notification.Notification) error {
+	_, err := s.ValidateAndCanonicalize(ctx, n)
+	return err
+}
+
+// ValidateAndCanonicalize applies the complete channel.publish trust boundary and
+// returns a notification safe for downstream persistence/fanout. The plugin's
+// route identity/generation/permission are taken from the authenticated
+// notification envelope, not from payload data. Binary payloads are rewritten
+// to the host-authoritative reference returned by the binary resolver.
+func (s *ChannelNotificationSink) ValidateAndCanonicalize(ctx context.Context, n notification.Notification) (notification.Notification, error) {
 	if n.Method != channelPublishMethod {
-		return nil
+		return n, nil
 	}
 	if s == nil || s.router == nil {
-		return fmt.Errorf("channel notification sink: router is nil")
+		return notification.Notification{}, fmt.Errorf("channel notification sink: router is nil")
 	}
 	var payload channelPublishPayload
 	if err := json.Unmarshal(n.Payload, &payload); err != nil {
-		return fmt.Errorf("channel.publish: decode payload: %w", err)
+		return notification.Notification{}, fmt.Errorf("channel.publish: decode payload: %w", err)
 	}
 	if payload.ChannelID == "" {
-		return domain.NewHostError(domain.ErrInvalidArgument, "channel.publish: channelId is required")
+		return notification.Notification{}, domain.NewHostError(domain.ErrInvalidArgument, "channel.publish: channelId is required")
 	}
 	if s.permissions == nil {
-		return domain.NewHostError(domain.ErrPermissionDenied, "channel.publish: permission checker unavailable")
+		return notification.Notification{}, domain.NewHostError(domain.ErrPermissionDenied, "channel.publish: permission checker unavailable")
 	}
 	permissionResult := s.permissions.CheckServicePermission(
 		ctx,
@@ -85,18 +95,18 @@ func (s *ChannelNotificationSink) Publish(ctx context.Context, n notification.No
 		if permissionResult.Decision == ghpermission.DecisionRequireApproval {
 			message = "channel.publish: approval required"
 		}
-		return domain.NewHostError(domain.ErrPermissionDenied, message)
+		return notification.Notification{}, domain.NewHostError(domain.ErrPermissionDenied, message)
 	}
 	if n.Generation <= 0 {
-		return domain.NewHostError(domain.ErrInvalidArgument, "channel.publish: trusted generation must be positive")
+		return notification.Notification{}, domain.NewHostError(domain.ErrInvalidArgument, "channel.publish: trusted generation must be positive")
 	}
 	if s.generation != nil {
 		currentGeneration, err := s.generation.GetCurrentGeneration(n.RuntimeID)
 		if err != nil || currentGeneration <= 0 {
-			return domain.NewHostErrorWithCause(domain.ErrRuntimeUnavailable, "channel.publish: runtime generation unavailable", err)
+			return notification.Notification{}, domain.NewHostErrorWithCause(domain.ErrRuntimeUnavailable, "channel.publish: runtime generation unavailable", err)
 		}
 		if currentGeneration != n.Generation {
-			return domain.NewHostError(domain.ErrConflict, "channel.publish: stale runtime generation")
+			return notification.Notification{}, domain.NewHostError(domain.ErrConflict, "channel.publish: stale runtime generation")
 		}
 	}
 	if s.admission != nil {
@@ -104,11 +114,12 @@ func (s *ChannelNotificationSink) Publish(ctx context.Context, n notification.No
 			PluginID: string(n.PluginID), RuntimeID: string(n.RuntimeID), ServiceID: string(n.ServiceID), Generation: n.Generation,
 		})
 		if !decision.Allowed {
-			return domain.NewHostError(domain.ErrResourceExhausted, "channel.publish: queue admission denied: "+string(decision.Reason))
+			return notification.Notification{}, domain.NewHostError(domain.ErrResourceExhausted, "channel.publish: queue admission denied: "+string(decision.Reason))
 		}
 		defer release()
 	}
-	return s.router.Route(ctx, channel.IncomingChannelMessage{
+
+	canonicalPayload, err := s.router.RouteCanonical(ctx, channel.IncomingChannelMessage{
 		Peer: ipc.Peer{
 			PluginID:   n.PluginID,
 			RuntimeID:  n.RuntimeID,
@@ -119,4 +130,14 @@ func (s *ChannelNotificationSink) Publish(ctx context.Context, n notification.No
 		Payload:   payload.Payload,
 		Metadata:  payload.Metadata,
 	})
+	if err != nil {
+		return notification.Notification{}, err
+	}
+	payload.Payload = canonicalPayload
+	canonicalEnvelope, err := json.Marshal(payload)
+	if err != nil {
+		return notification.Notification{}, fmt.Errorf("channel.publish: encode canonical payload: %w", err)
+	}
+	n.Payload = canonicalEnvelope
+	return n, nil
 }
