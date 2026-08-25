@@ -24,7 +24,8 @@
     "name": {
       "type": "string",
       "description": "Human-readable service name.",
-      "maxLength": 512
+      "maxLength": 256,
+      "pattern": "^[^\\x00-\\x1f\\x7f]*$"
     },
     "kind": {
       "type": "string",
@@ -44,7 +45,8 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "maxLength": 256
+        "maxLength": 256,
+        "pattern": "^[^\\x00-\\x20\\x7f]+$"
       },
       "uniqueItems": true
     },
@@ -52,9 +54,7 @@
       "type": "array",
       "description": "Capabilities this service provides.",
       "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 256
+        "$ref": "capability.schema.json"
       },
       "uniqueItems": true
     },

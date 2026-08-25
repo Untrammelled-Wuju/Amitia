@@ -20,10 +20,11 @@ const (
 )
 
 const (
-	// Protocol v1 channels are intentionally one-way: plugin -> host. Host ->
-	// plugin delivery uses ordinary RPC until a future protocol major defines
-	// a real outbound/bidirectional channel transport.
-	ChannelDirectionPluginToHost ChannelDirection = "plugin_to_host"
+	// An omitted direction remains plugin_to_host for backward compatibility.
+	// Protocol v1 supports explicit host_to_plugin and bidirectional channels.
+	ChannelDirectionPluginToHost  ChannelDirection = "plugin_to_host"
+	ChannelDirectionHostToPlugin  ChannelDirection = "host_to_plugin"
+	ChannelDirectionBidirectional ChannelDirection = "bidirectional"
 )
 
 const (
@@ -61,6 +62,19 @@ func ValidateChannelID(id ChannelID) error {
 	return nil
 }
 
+func ValidateChannelSchemaID(schemaID string) error {
+	const maxLength = 1024
+	if len(schemaID) > maxLength {
+		return fmt.Errorf("channel schema id exceeds maximum length of %d", maxLength)
+	}
+	for _, r := range schemaID {
+		if r < 32 || r == 127 {
+			return fmt.Errorf("channel schema id contains control character")
+		}
+	}
+	return nil
+}
+
 func ValidateChannelKind(kind ChannelKind) error {
 	switch kind {
 	case ChannelKindEvent, ChannelKindState, ChannelKindLog,
@@ -75,10 +89,12 @@ func ValidateChannelDirection(dir ChannelDirection) error {
 	if dir == "" {
 		return nil
 	}
-	if dir == ChannelDirectionPluginToHost {
+	switch dir {
+	case ChannelDirectionPluginToHost, ChannelDirectionHostToPlugin, ChannelDirectionBidirectional:
 		return nil
+	default:
+		return fmt.Errorf("invalid channel direction %q", dir)
 	}
-	return fmt.Errorf("invalid channel direction %q: amitia-game-host/1 supports plugin_to_host only", dir)
 }
 
 func ValidateFrequencyHint(hint FrequencyHint) error {
@@ -98,6 +114,9 @@ func (c ChannelDescriptor) Validate() error {
 		return fmt.Errorf("invalid channel id: %w", err)
 	}
 	if err := ValidateChannelKind(c.Kind); err != nil {
+		return err
+	}
+	if err := ValidateChannelSchemaID(c.SchemaID); err != nil {
 		return err
 	}
 	if err := ValidateChannelDirection(c.Direction); err != nil {

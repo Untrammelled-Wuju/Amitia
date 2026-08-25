@@ -219,19 +219,11 @@ describe('TypeScript Conformance Suite', () => {
     });
 
     test('all channel directions should be valid', () => {
-      const directions = ['plugin_to_host'];
+      const directions = ['plugin_to_host', 'host_to_plugin', 'bidirectional'];
       for (const dir of directions) {
         const ch: ChannelDescriptor = { id: 'ch-1', kind: 'event', direction: dir as any };
         const errors = validateChannel(ch);
         expect(errors).toHaveLength(0);
-      }
-    });
-
-    test('legacy outbound channel directions should be rejected by protocol v1', () => {
-      for (const direction of ['host_to_plugin', 'bidirectional']) {
-        const ch: ChannelDescriptor = { id: 'ch-legacy', kind: 'event', direction: direction as any };
-        const errors = validateChannel(ch);
-        expect(errors.length).toBeGreaterThan(0);
       }
     });
 

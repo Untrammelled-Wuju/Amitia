@@ -14,7 +14,7 @@
       "description": "Unique channel identifier within the plugin.",
       "minLength": 1,
       "maxLength": 256,
-      "pattern": "^[^\\x00-\\x1f]+$",
+      "pattern": "^[^\\x00-\\x1f\\x7f]+$",
       "examples": [
         "player-events",
         "state-stream",
@@ -45,9 +45,11 @@
     "direction": {
       "type": "string",
       "enum": [
-        "plugin_to_host"
+        "plugin_to_host",
+        "host_to_plugin",
+        "bidirectional"
       ],
-      "description": "Protocol v1 channels are plugin-to-host only. Omit this field or use plugin_to_host; host-to-plugin delivery uses RPC."
+      "description": "Channel flow direction. Omitted defaults to plugin_to_host for backward compatibility."
     },
     "frequencyHint": {
       "type": "string",

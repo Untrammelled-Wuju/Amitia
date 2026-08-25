@@ -60,10 +60,12 @@ export const ChannelKind = {
   BINARY: 'binary' as ChannelKind,
 };
 
-export type ChannelDirection = 'plugin_to_host';
+export type ChannelDirection = 'plugin_to_host' | 'host_to_plugin' | 'bidirectional';
 
 export const ChannelDirection = {
   PLUGIN_TO_HOST: 'plugin_to_host' as ChannelDirection,
+  HOST_TO_PLUGIN: 'host_to_plugin' as ChannelDirection,
+  BIDIRECTIONAL: 'bidirectional' as ChannelDirection,
 };
 
 export type FrequencyHint = 'low' | 'normal' | 'high' | 'realtime';
