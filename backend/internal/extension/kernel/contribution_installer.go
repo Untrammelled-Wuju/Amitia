@@ -487,6 +487,12 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 	}
 
 	runtimeBinding := enrichGameHostToolRuntimeBinding(i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID), def.Runtime)
+	if runtimeBinding.RuntimeType == capability.RuntimeTypeGameHost && toolSource == capability.ToolSourcePlugin {
+		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
+		if def.CapabilityID == "" {
+			capID = capability.CapabilityID(toolID)
+		}
+	}
 
 	toolDef := capability.ToolDefinition{
 		ID:           toolID,
@@ -1023,6 +1029,37 @@ func (i *TypedContributionInstaller) registerPage(ctx context.Context, uiDef ui_
 	return i.container.PageHost.RegisterPage(ctx, pageDef)
 }
 
+// canonicalGameHostToolID gives every third-party GameHost tool a stable
+// extension-owned global ID while allowing manifests to keep concise local
+// names. This prevents unrelated game plugins from colliding on natural names
+// such as move, attack or inspect. Already-namespaced IDs are preserved.
+func contributionUsesGameHostRuntime(contrib domain.ContributionDefinition, defData []byte) bool {
+	var def struct {
+		Runtime map[string]any `json:"runtime,omitempty"`
+	}
+	if err := json.Unmarshal(defData, &def); err != nil {
+		return false
+	}
+	runtimeType, _ := def.Runtime["runtimeType"].(string)
+	return strings.EqualFold(strings.TrimSpace(runtimeType), string(capability.RuntimeTypeGameHost))
+}
+
+func canonicalGameHostToolID(extensionID, toolID string) string {
+	extensionID = strings.Trim(strings.TrimSpace(extensionID), "/")
+	toolID = strings.Trim(strings.TrimSpace(toolID), "/")
+	if extensionID == "" {
+		return toolID
+	}
+	if toolID == "" {
+		return extensionID
+	}
+	prefix := extensionID + "/"
+	if strings.HasPrefix(toolID, prefix) {
+		return toolID
+	}
+	return prefix + toolID
+}
+
 // enrichGameHostToolRuntimeBinding preserves GameHost route selectors from a
 // tool definition. The generic RuntimeBinding fields do not carry pluginId or
 // serviceId, but those selectors are required to route deterministically when
@@ -1296,6 +1333,12 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 	}
 
 	runtimeBinding := enrichGameHostToolRuntimeBinding(i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID), def.Runtime)
+	if runtimeBinding.RuntimeType == capability.RuntimeTypeGameHost && toolSource == capability.ToolSourcePlugin {
+		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
+		if def.CapabilityID == "" {
+			capID = capability.CapabilityID(toolID)
+		}
+	}
 	enabled := true
 	if runtimeBinding.RuntimeType == capability.RuntimeTypeGameHost && !i.container.RuntimePolicy.DevicePluginRuntime {
 		// Cloud Core may retain/sync the package definition, but it must not
@@ -1580,6 +1623,9 @@ func (i *TypedContributionInstaller) deactivateTool(ctx context.Context, contrib
 	toolID := def.ToolID
 	if toolID == "" {
 		toolID = string(contrib.ID)
+	}
+	if contributionUsesGameHostRuntime(contrib, defData) && !isSystemBuiltin(contrib.Metadata) {
+		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
 	}
 	if err := i.container.ToolRegistry.Unregister(ctx, toolID); err != nil {
 		return fmt.Errorf("deactivate tool %s: %w", toolID, err)
@@ -2162,6 +2208,9 @@ func (i *TypedContributionInstaller) discardTool(ctx context.Context, contrib do
 	toolID := def.ToolID
 	if toolID == "" {
 		toolID = string(contrib.ID)
+	}
+	if contributionUsesGameHostRuntime(contrib, defData) && !isSystemBuiltin(contrib.Metadata) {
+		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
 	}
 	_ = i.container.ToolRegistry.Unregister(ctx, toolID)
 	return nil

@@ -193,8 +193,8 @@ func TestValidateTrustCommunityPublisher(t *testing.T) {
 		Executables: []PlatformExecutable{{Path: "x", Sha256: "h", Signature: BinarySignature{Trusted: true, Value: "s"}}},
 		Network:     ServiceNetworkPolicy{LoopbackOnly: true},
 	}
-	if err := ValidateTrust(def, TrustLevelCommunity); err != nil {
-		t.Fatalf("community publisher should pass trust validation before sandbox admission: %v", err)
+	if err := ValidateTrust(def, TrustLevelCommunity); !errors.Is(err, ErrTrustLevelInsufficient) {
+		t.Fatalf("community executable must require explicit user trust promotion, got: %v", err)
 	}
 	if !TrustLevelCommunity.RequiresFullSandbox() {
 		t.Fatal("community publisher must require full sandbox")
@@ -325,8 +325,8 @@ func TestTrustLevelAllowedForService(t *testing.T) {
 	if !TrustLevelTrusted.AllowedForService() {
 		t.Fatalf("trusted should be allowed")
 	}
-	if !TrustLevelCommunity.AllowedForService() {
-		t.Fatalf("community should be allowed behind full sandbox gate")
+	if TrustLevelCommunity.AllowedForService() {
+		t.Fatalf("community executable services must require explicit user trust promotion")
 	}
 	if !TrustLevelCommunity.RequiresFullSandbox() {
 		t.Fatalf("community should require full sandbox")

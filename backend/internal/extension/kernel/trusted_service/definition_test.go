@@ -39,8 +39,8 @@ func TestTrustLevel_AllowedForService(t *testing.T) {
 	if !TrustLevelTrusted.AllowedForService() {
 		t.Fatal("expected trusted to be allowed")
 	}
-	if !TrustLevelCommunity.AllowedForService() {
-		t.Fatal("expected community to be allowed behind full sandbox gate")
+	if TrustLevelCommunity.AllowedForService() {
+		t.Fatal("community executable services must require explicit user trust promotion")
 	}
 	if !TrustLevelCommunity.RequiresFullSandbox() {
 		t.Fatal("expected community to require full sandbox")

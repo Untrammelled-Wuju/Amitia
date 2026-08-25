@@ -349,8 +349,16 @@ const (
 	TrustLevelUnknown   TrustLevel = "unknown"
 )
 
+// AllowedForService is intentionally stricter than package installation trust.
+// Community publishers may be discovered/previewed, but executable services
+// must be explicitly promoted by a user trust decision first. The GameHost
+// mapper converts user_trusted to trusted. This avoids advertising an
+// impossible "full sandbox" guarantee on desktop platforms and never silently
+// weakens isolation to make an untrusted executable run.
 func (t TrustLevel) AllowedForService() bool {
-	return t == TrustLevelOfficial || t == TrustLevelTrusted || t == TrustLevelCommunity
+	return t == TrustLevelOfficial || t == TrustLevelTrusted
 }
 
+// RequiresFullSandbox remains a defense-in-depth marker if a future admission
+// path permits community executables after a platform sandbox implementation.
 func (t TrustLevel) RequiresFullSandbox() bool { return t == TrustLevelCommunity }
