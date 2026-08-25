@@ -17,9 +17,21 @@ var (
 // prepareNetworkLaunch turns an enforceable ServiceNetworkPolicy into an OS
 // launch boundary. Policies are never silently weakened: unsupported restricted
 // policies fail closed instead of starting an unsandboxed process.
-func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args []string, workingDir, tempDir string, readOnlyRoots ...string) (string, []string, error) {
+type sandboxLaunchPlan struct {
+	Path                  string
+	Args                  []string
+	WorkingDir            string
+	FilesystemIsolated    bool
+	NetworkPolicyEnforced bool
+}
+
+func directSandboxLaunch(executable string, args []string, workingDir string) sandboxLaunchPlan {
+	return sandboxLaunchPlan{Path: executable, Args: args, WorkingDir: workingDir}
+}
+
+func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args []string, workingDir, tempDir string, readOnlyRoots ...string) (sandboxLaunchPlan, error) {
 	if !policy.Enforce {
-		return executable, args, nil
+		return directSandboxLaunch(executable, args, workingDir), nil
 	}
 	mode := strings.ToLower(strings.TrimSpace(policy.Mode))
 	if mode == "" {
@@ -35,29 +47,29 @@ func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args [
 		}
 	}
 	if policy.AllowInbound && !policy.LoopbackOnly {
-		return "", nil, fmt.Errorf("%w: non-loopback inbound access is forbidden", ErrUnauthorizedNetwork)
+		return sandboxLaunchPlan{}, fmt.Errorf("%w: non-loopback inbound access is forbidden", ErrUnauthorizedNetwork)
 	}
 	if policy.AuditAll {
-		return "", nil, fmt.Errorf("%w: packet-level network audit backend is unavailable", ErrNetworkSandboxUnavailable)
+		return sandboxLaunchPlan{}, fmt.Errorf("%w: packet-level network audit backend is unavailable", ErrNetworkSandboxUnavailable)
 	}
 
 	switch mode {
 	case "unrestricted":
 		if !policy.AllowOutbound || policy.LoopbackOnly || policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedPorts) > 0 {
-			return "", nil, fmt.Errorf("%w: inconsistent unrestricted policy", ErrUnauthorizedNetwork)
+			return sandboxLaunchPlan{}, fmt.Errorf("%w: inconsistent unrestricted policy", ErrUnauthorizedNetwork)
 		}
-		// Explicit unrestricted mode is the user-approved escape hatch for games
-		// such as Mineflayer that need arbitrary TCP destinations.
-		return executable, args, nil
+		// Network access is unrestricted, but Enforce still means the plugin must
+		// cross the platform filesystem/process sandbox. Do not bypass the sandbox
+		// merely because the user approved outbound networking.
 	case "restricted":
 		// Restricted arbitrary TCP requires a platform firewall/proxy backend.
 		// Until such a backend is present, deny startup rather than degrading to
 		// unrestricted connectivity.
-		return "", nil, fmt.Errorf("%w: domains=%v ports=%v requireProxy=%v", ErrGranularNetworkPolicyUnsupported, policy.AllowedDomains, policy.AllowedPorts, policy.RequireProxy)
+		return sandboxLaunchPlan{}, fmt.Errorf("%w: domains=%v ports=%v requireProxy=%v", ErrGranularNetworkPolicyUnsupported, policy.AllowedDomains, policy.AllowedPorts, policy.RequireProxy)
 	case "none", "loopback":
-		// Continue to OS network namespace isolation below.
+		// Continue to the platform sandbox below.
 	default:
-		return "", nil, fmt.Errorf("%w: unsupported network mode %q", ErrUnauthorizedNetwork, mode)
+		return sandboxLaunchPlan{}, fmt.Errorf("%w: unsupported network mode %q", ErrUnauthorizedNetwork, mode)
 	}
 
 	// Linux bubblewrap creates a separate network namespace, preventing access
@@ -69,8 +81,11 @@ func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args [
 			// root and bind only runtime prerequisites plus its owned work/temp
 			// directories. In particular, user home directories are never mounted.
 			wrapped := []string{
-				"--die-with-parent", "--new-session", "--unshare-net",
+				"--die-with-parent", "--new-session",
 				"--tmpfs", "/", "--dev", "/dev", "--proc", "/proc",
+			}
+			if mode == "none" || mode == "loopback" {
+				wrapped = append(wrapped, "--unshare-net")
 			}
 			createdDirs := map[string]struct{}{
 				"/": {}, "/dev": {}, "/proc": {},
@@ -114,20 +129,20 @@ func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args [
 				}
 				abs, absErr := filepath.Abs(root)
 				if absErr != nil {
-					return "", nil, fmt.Errorf("%w: resolve read-only sandbox root %q: %v", ErrNetworkSandboxUnavailable, root, absErr)
+					return sandboxLaunchPlan{}, fmt.Errorf("%w: resolve read-only sandbox root %q: %v", ErrNetworkSandboxUnavailable, root, absErr)
 				}
 				abs = filepath.Clean(abs)
 				if abs == string(filepath.Separator) {
-					return "", nil, fmt.Errorf("%w: refusing to expose the host filesystem root", ErrNetworkSandboxUnavailable)
+					return sandboxLaunchPlan{}, fmt.Errorf("%w: refusing to expose the host filesystem root", ErrNetworkSandboxUnavailable)
 				}
 				if (work != "" && pathWithin(abs, work)) || (tmp != "" && pathWithin(abs, tmp)) {
-					return "", nil, fmt.Errorf("%w: read-only root %q must not contain writable work/temp directories", ErrNetworkSandboxUnavailable, abs)
+					return sandboxLaunchPlan{}, fmt.Errorf("%w: read-only root %q must not contain writable work/temp directories", ErrNetworkSandboxUnavailable, abs)
 				}
 				if _, duplicate := seenReadOnly[abs]; duplicate {
 					continue
 				}
 				if _, statErr := os.Stat(abs); statErr != nil {
-					return "", nil, fmt.Errorf("%w: read-only sandbox root %q is unavailable: %v", ErrNetworkSandboxUnavailable, abs, statErr)
+					return sandboxLaunchPlan{}, fmt.Errorf("%w: read-only sandbox root %q is unavailable: %v", ErrNetworkSandboxUnavailable, abs, statErr)
 				}
 				seenReadOnly[abs] = struct{}{}
 				wrapped = appendSandboxParentDirs(wrapped, abs, createdDirs)
@@ -154,22 +169,25 @@ func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args [
 					wrapped = append(wrapped, "--ro-bind", executable, executable)
 				}
 			}
+			if mode == "loopback" {
+				// A new Linux network namespace starts with loopback down. Bring only lo
+				// up inside the namespace; no host/public interface is present. This is
+				// still fail-closed if the platform cannot configure the namespace.
+				ip := firstTrustedLauncher("/usr/sbin/ip", "/usr/bin/ip", "/sbin/ip", "/bin/ip")
+				sh := firstTrustedLauncher("/bin/sh", "/usr/bin/sh")
+				if ip == "" || sh == "" {
+					return sandboxLaunchPlan{}, fmt.Errorf("%w: loopback mode requires a trusted ip and sh binary", ErrNetworkSandboxUnavailable)
+				}
+				wrapped = append(wrapped, "--", sh, "-c", `"$1" link set lo up >/dev/null 2>&1 || exit 126; shift; exec "$@"`, "amitia-loopback", ip, executable)
+				wrapped = append(wrapped, args...)
+				return sandboxLaunchPlan{Path: bwrap, Args: wrapped, WorkingDir: workingDir, FilesystemIsolated: true, NetworkPolicyEnforced: true}, nil
+			}
 			wrapped = append(wrapped, "--", executable)
 			wrapped = append(wrapped, args...)
-			return bwrap, wrapped, nil
+			return sandboxLaunchPlan{Path: bwrap, Args: wrapped, WorkingDir: workingDir, FilesystemIsolated: true, NetworkPolicyEnforced: true}, nil
 		}
 
-		// util-linux unshare is a safe fallback for a strict deny-all policy.
-		// It cannot reliably configure loopback inside the namespace, so loopback
-		// mode stays fail-closed unless bubblewrap is available.
-		if mode == "none" {
-			if unshare := firstTrustedLauncher("/usr/bin/unshare", "/bin/unshare"); unshare != "" {
-				wrapped := []string{"--user", "--map-root-user", "--net", "--fork", "--kill-child", "--", executable}
-				wrapped = append(wrapped, args...)
-				return unshare, wrapped, nil
-			}
-		}
-		return "", nil, fmt.Errorf("%w: no compatible linux network namespace launcher is available for mode %s", ErrNetworkSandboxUnavailable, mode)
+		return sandboxLaunchPlan{}, fmt.Errorf("%w: no compatible linux network namespace launcher is available for mode %s", ErrNetworkSandboxUnavailable, mode)
 	}
 
 	// macOS Seatbelt can enforce process-level network policy without granting
@@ -181,18 +199,22 @@ func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args [
 		// PATH entry must not be able to replace the OS sandbox executable.
 		sandboxExec := firstTrustedLauncher("/usr/bin/sandbox-exec")
 		if sandboxExec == "" {
-			return "", nil, fmt.Errorf("%w: /usr/bin/sandbox-exec is unavailable for mode %s", ErrNetworkSandboxUnavailable, mode)
+			return sandboxLaunchPlan{}, fmt.Errorf("%w: /usr/bin/sandbox-exec is unavailable for mode %s", ErrNetworkSandboxUnavailable, mode)
 		}
-		profile := "(version 1)\n(allow default)\n(deny network*)\n"
-		if mode == "loopback" {
-			profile += "(allow network-outbound (remote ip \"localhost:*\"))\n"
+		profile, err := buildDarwinSandboxProfile(mode, executable, workingDir, tempDir, readOnlyRoots...)
+		if err != nil {
+			return sandboxLaunchPlan{}, err
 		}
 		wrapped := []string{"-p", profile, executable}
 		wrapped = append(wrapped, args...)
-		return sandboxExec, wrapped, nil
+		return sandboxLaunchPlan{Path: sandboxExec, Args: wrapped, WorkingDir: workingDir, FilesystemIsolated: true, NetworkPolicyEnforced: true}, nil
 	}
 
-	return "", nil, fmt.Errorf("%w on %s for mode %s", ErrNetworkSandboxUnavailable, runtime.GOOS, mode)
+	if runtime.GOOS == "windows" {
+		return prepareWindowsAppContainerLaunch(mode, executable, args, workingDir, tempDir, readOnlyRoots...)
+	}
+
+	return sandboxLaunchPlan{}, fmt.Errorf("%w on %s for mode %s", ErrNetworkSandboxUnavailable, runtime.GOOS, mode)
 }
 
 func firstTrustedLauncher(candidates ...string) string {
@@ -251,4 +273,85 @@ func pathWithin(root, candidate string) bool {
 		return false
 	}
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+func buildDarwinSandboxProfile(mode, executable, workingDir, tempDir string, readOnlyRoots ...string) (string, error) {
+	if mode != "none" && mode != "loopback" && mode != "unrestricted" {
+		return "", fmt.Errorf("%w: unsupported darwin mode %q", ErrUnauthorizedNetwork, mode)
+	}
+	var b strings.Builder
+	b.WriteString("(version 1)\n")
+	b.WriteString("(deny default)\n")
+	b.WriteString("(allow process*)\n")
+	b.WriteString("(allow signal (target self))\n")
+	b.WriteString("(allow sysctl-read)\n")
+	b.WriteString("(allow mach-lookup)\n")
+	b.WriteString("(allow file-read-metadata)\n")
+	// Runtime/linker/system roots needed by native and managed runtimes. User
+	// homes are deliberately absent; plugin/package roots are added explicitly.
+	for _, root := range []string{"/System", "/usr", "/bin", "/sbin", "/Library", "/private/etc", "/private/var/db", "/dev"} {
+		b.WriteString("(allow file-read* (subpath ")
+		b.WriteString(seatbeltQuote(root))
+		b.WriteString("))\n")
+	}
+	seen := make(map[string]struct{})
+	addRead := func(path string) error {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return nil
+		}
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+		abs = filepath.Clean(abs)
+		if abs == string(filepath.Separator) {
+			return fmt.Errorf("%w: refusing filesystem root", ErrNetworkSandboxUnavailable)
+		}
+		if _, ok := seen[abs]; ok {
+			return nil
+		}
+		seen[abs] = struct{}{}
+		b.WriteString("(allow file-read* (subpath ")
+		b.WriteString(seatbeltQuote(abs))
+		b.WriteString("))\n")
+		return nil
+	}
+	for _, root := range readOnlyRoots {
+		if err := addRead(root); err != nil {
+			return "", err
+		}
+	}
+	if err := addRead(filepath.Dir(executable)); err != nil {
+		return "", err
+	}
+	for _, root := range []string{workingDir, tempDir} {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			return "", err
+		}
+		if err := addRead(abs); err != nil {
+			return "", err
+		}
+		b.WriteString("(allow file-write* (subpath ")
+		b.WriteString(seatbeltQuote(filepath.Clean(abs)))
+		b.WriteString("))\n")
+	}
+	b.WriteString("(allow file-write* (literal \"/dev/null\"))\n")
+	switch mode {
+	case "unrestricted":
+		b.WriteString("(allow network*)\n")
+	case "loopback":
+		b.WriteString("(allow network-outbound (remote ip \"localhost:*\"))\n")
+		b.WriteString("(allow network-inbound (local ip \"localhost:*\"))\n")
+	}
+	return b.String(), nil
+}
+
+func seatbeltQuote(value string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value) + `"`
 }
