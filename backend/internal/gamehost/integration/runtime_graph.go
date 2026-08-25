@@ -293,23 +293,24 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 	for _, bootService := range bootServices {
 		metadata := map[string]string{"protocol": bootService.Protocol, "logicalServiceId": string(bootService.ID)}
 		svcView := service_definition.ServiceRuntimeView{
-			ExtensionID:      string(kp.Extension.ID),
-			ModuleID:         bootService.ModuleID,
-			RuntimeType:      bootService.RuntimeType,
-			Name:             bootService.Name,
-			Description:      bootService.Name,
-			PublisherID:      kp.Extension.Publisher.PublisherID,
-			PublisherTrust:   kp.Extension.Publisher.TrustLevel,
-			EntryPoint:       bootService.EntryPoint,
-			ExecutablePath:   bootService.ExecutablePath,
-			ExecutableSHA256: bootService.ExecutableSHA256,
-			Arguments:        bootService.Arguments,
-			IntegrityValue:   bootService.IntegrityValue,
-			Dependencies:     bootService.Dependencies,
-			Env:              bootService.Env,
-			Metadata:         metadata,
-			Network:          bootService.Network,
-			Enabled:          true,
+			ExtensionID:         string(kp.Extension.ID),
+			ModuleID:            bootService.ModuleID,
+			RuntimeType:         bootService.RuntimeType,
+			Name:                bootService.Name,
+			Description:         bootService.Name,
+			PublisherID:         kp.Extension.Publisher.PublisherID,
+			PublisherTrust:      kp.Extension.Publisher.TrustLevel,
+			EntryPoint:          bootService.EntryPoint,
+			ExecutablePath:      bootService.ExecutablePath,
+			ExecutableSHA256:    bootService.ExecutableSHA256,
+			Arguments:           bootService.Arguments,
+			IntegrityValue:      bootService.IntegrityValue,
+			Dependencies:        bootService.Dependencies,
+			SandboxReadOnlyRoot: bootService.SandboxReadOnlyRoot,
+			Env:                 bootService.Env,
+			Metadata:            metadata,
+			Network:             bootService.Network,
+			Enabled:             true,
 		}
 
 		definitionID := svcView.ToDefinitionID()
@@ -491,19 +492,20 @@ func containsString(values []string, target string) bool {
 }
 
 type bootServiceInfo struct {
-	ID               ghdomain.ServiceID
-	ModuleID         string
-	Name             string
-	RuntimeType      string
-	EntryPoint       string
-	ExecutablePath   string
-	ExecutableSHA256 string
-	Arguments        []string
-	IntegrityValue   string
-	Dependencies     []trusted_service.LibraryDep
-	Protocol         string
-	Env              map[string]string
-	Network          trusted_service.ServiceNetworkPolicy
+	ID                  ghdomain.ServiceID
+	ModuleID            string
+	Name                string
+	RuntimeType         string
+	EntryPoint          string
+	ExecutablePath      string
+	ExecutableSHA256    string
+	Arguments           []string
+	IntegrityValue      string
+	Dependencies        []trusted_service.LibraryDep
+	SandboxReadOnlyRoot string
+	Protocol            string
+	Env                 map[string]string
+	Network             trusted_service.ServiceNetworkPolicy
 }
 
 func (p *RuntimeGraphProvisioner) buildBootService(ctx context.Context, kp KernelGamePlugin) (bootServiceInfo, error) {
@@ -622,6 +624,7 @@ func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp Ke
 		if err := ensureRegularFile(entryPath); err != nil {
 			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, err)
 		}
+		info.SandboxReadOnlyRoot = generation.Path
 	} else if p.extensionRoot != "" {
 		// Compatibility path for isolated tests/legacy embedders only. Production
 		// wiring supplies generationResolver and therefore never guesses paths.
@@ -641,6 +644,7 @@ func (p *RuntimeGraphProvisioner) buildBootServiceFor(ctx context.Context, kp Ke
 		if err := ensureRegularFile(entryPath); err != nil {
 			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, err)
 		}
+		info.SandboxReadOnlyRoot = bundlePath
 	}
 
 	switch info.RuntimeType {

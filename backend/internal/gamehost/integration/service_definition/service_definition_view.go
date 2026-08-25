@@ -5,24 +5,25 @@ import (
 )
 
 type ServiceRuntimeView struct {
-	ExtensionID      string
-	ModuleID         string
-	RuntimeType      string
-	Name             string
-	Description      string
-	PublisherID      string
-	PublisherTrust   string
-	EntryPoint       string
-	ExecutablePath   string
-	ExecutableSHA256 string
-	Arguments        []string
-	IntegrityValue   string
-	Dependencies     []trusted_service.LibraryDep
-	Env              map[string]string
-	Metadata         map[string]string
-	Network          trusted_service.ServiceNetworkPolicy
-	Enabled          bool
-	ExtensionState   string
+	ExtensionID         string
+	ModuleID            string
+	RuntimeType         string
+	Name                string
+	Description         string
+	PublisherID         string
+	PublisherTrust      string
+	EntryPoint          string
+	ExecutablePath      string
+	ExecutableSHA256    string
+	Arguments           []string
+	IntegrityValue      string
+	Dependencies        []trusted_service.LibraryDep
+	SandboxReadOnlyRoot string
+	Env                 map[string]string
+	Metadata            map[string]string
+	Network             trusted_service.ServiceNetworkPolicy
+	Enabled             bool
+	ExtensionState      string
 }
 
 func (v ServiceRuntimeView) ToDefinitionID() string {

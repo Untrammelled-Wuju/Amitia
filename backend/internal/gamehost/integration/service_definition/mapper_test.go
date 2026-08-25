@@ -309,3 +309,32 @@ func TestServiceRuntimeView_ToDefinitionID(t *testing.T) {
 		t.Errorf("expected ext/mod, got %s", id)
 	}
 }
+
+func TestDefinitionMapperPreservesAuthoritativeSandboxReadOnlyRoot(t *testing.T) {
+	mapper := NewDefinitionMapper()
+	view := ServiceRuntimeView{
+		ExtensionID:         "com.example/game",
+		ModuleID:            "runtime",
+		RuntimeType:         "javascript",
+		EntryPoint:          "dist/index.js",
+		ExecutablePath:      "/managed/node",
+		SandboxReadOnlyRoot: "/installed/com.example/game/1.0.0/generation",
+	}
+	def, err := mapper.MapToDefinition(view)
+	if err != nil {
+		t.Fatalf("MapToDefinition() error = %v", err)
+	}
+	if def.SandboxReadOnlyRoot != view.SandboxReadOnlyRoot {
+		t.Fatalf("SandboxReadOnlyRoot = %q, want %q", def.SandboxReadOnlyRoot, view.SandboxReadOnlyRoot)
+	}
+
+	other := view
+	other.SandboxReadOnlyRoot = "/installed/com.example/game/1.0.0/other-generation"
+	otherDef, err := mapper.MapToDefinition(other)
+	if err != nil {
+		t.Fatalf("MapToDefinition(other) error = %v", err)
+	}
+	if def.ManifestHash == otherDef.ManifestHash {
+		t.Fatal("sandbox read-only root must participate in manifest hash so generation changes cannot reuse stale definitions")
+	}
+}

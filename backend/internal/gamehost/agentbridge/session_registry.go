@@ -47,6 +47,40 @@ func (r *SessionRegistry) Bind(scope SessionScope) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.sessions[sessionKey(scope.RuntimeID, scope.PluginSessionID)] = scope
+
+	// A host/Agent context is usually established on the runtime-default route
+	// by a tool invocation or an explicit host binding. If plugin-session routes
+	// were observed earlier during cold-start events, enrich those route-only
+	// entries as well so later events from the same opaque plugin session target
+	// the selected Agent instead of falling back to a global default forever.
+	if scope.PluginSessionID == "" && hasHostAgentContext(scope) {
+		prefix := string(scope.RuntimeID) + "\x00"
+		for key, existing := range r.sessions {
+			if key == sessionKey(scope.RuntimeID, "") || len(key) < len(prefix) || key[:len(prefix)] != prefix {
+				continue
+			}
+			if existing.PluginID != "" && scope.PluginID != "" && existing.PluginID != scope.PluginID {
+				continue
+			}
+			if existing.ServiceID != "" && scope.ServiceID != "" && existing.ServiceID != scope.ServiceID {
+				continue
+			}
+			existing.PluginID = scope.PluginID
+			existing.ServiceID = scope.ServiceID
+			existing.Generation = scope.Generation
+			existing.UserID = scope.UserID
+			existing.CharacterID = scope.CharacterID
+			existing.ConversationID = scope.ConversationID
+			existing.Channel = scope.Channel
+			existing.HostSessionID = scope.HostSessionID
+			existing.UpdatedAt = scope.UpdatedAt
+			r.sessions[key] = existing
+		}
+	}
+}
+
+func hasHostAgentContext(scope SessionScope) bool {
+	return scope.UserID != "" || scope.CharacterID != "" || scope.ConversationID != "" || scope.Channel != "" || scope.HostSessionID != ""
 }
 
 // Resolve first checks an exact opaque plugin session and then falls back to
@@ -84,6 +118,29 @@ func (r *SessionRegistry) RemoveRuntime(runtimeID domain.RuntimeInstanceID) {
 	defer r.mu.Unlock()
 	for key := range r.sessions {
 		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
+			delete(r.sessions, key)
+		}
+	}
+}
+
+// RetainRuntimes removes session/context bindings for runtimes that no longer
+// exist in the authoritative RuntimeManager. Generation restarts keep the same
+// runtime ID and therefore retain context; uninstall/reprovision of a removed
+// runtime cannot accidentally inherit stale Agent state.
+func (r *SessionRegistry) RetainRuntimes(runtimeIDs []domain.RuntimeInstanceID) {
+	if r == nil {
+		return
+	}
+	active := make(map[domain.RuntimeInstanceID]struct{}, len(runtimeIDs))
+	for _, runtimeID := range runtimeIDs {
+		if runtimeID != "" {
+			active[runtimeID] = struct{}{}
+		}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for key, scope := range r.sessions {
+		if _, ok := active[scope.RuntimeID]; !ok {
 			delete(r.sessions, key)
 		}
 	}

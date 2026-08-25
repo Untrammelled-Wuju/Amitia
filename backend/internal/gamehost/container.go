@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/gamehost/agentbridge"
 	"github.com/u-ai/backend/internal/gamehost/channel"
@@ -114,6 +115,7 @@ func (c *GameHostContainer) ReconcileExtension(ctx context.Context, extensionID 
 			return fmt.Errorf("gamehost: reconcile extension %s runtime graph: %w", extensionID, err)
 		}
 	}
+	c.pruneAgentContexts()
 	return nil
 }
 
@@ -153,6 +155,16 @@ func (c *GameHostContainer) QuiesceExtension(ctx context.Context, extensionID st
 	return nil
 }
 
+// BindAgentContext explicitly associates a GameHost runtime/service with the
+// current host Agent scope. It is independent from tool execution, allowing a
+// UI/session coordinator to establish the target before the first game event.
+func (c *GameHostContainer) BindAgentContext(ctx context.Context, binding capability.RuntimeBinding, invocation capability.ToolInvocationContext) error {
+	if c == nil || c.AgentBridge == nil {
+		return fmt.Errorf("gamehost: Agent bridge is unavailable")
+	}
+	return c.AgentBridge.BindAgentContext(ctx, binding, invocation)
+}
+
 func (c *GameHostContainer) SetAgentWakeupPort(port notification.AgentWakeupPort) {
 	if c == nil || c.AgentEventSink == nil {
 		return
@@ -178,6 +190,24 @@ func (c *GameHostContainer) CountRuntimeProcesses(runtimeID domain.RuntimeInstan
 	return count
 }
 
+func (c *GameHostContainer) pruneAgentContexts() {
+	if c == nil || c.AgentBridge == nil || c.RuntimeManager == nil {
+		return
+	}
+	sessions := c.AgentBridge.SessionRegistry()
+	if sessions == nil {
+		return
+	}
+	runtimes := c.RuntimeManager.ListRuntimes()
+	active := make([]domain.RuntimeInstanceID, 0, len(runtimes))
+	for _, runtimeRef := range runtimes {
+		if runtimeRef != nil && runtimeRef.ID != "" {
+			active = append(active, runtimeRef.ID)
+		}
+	}
+	sessions.RetainRuntimes(active)
+}
+
 func (c *GameHostContainer) Start(ctx context.Context) error {
 	if c == nil {
 		return nil
@@ -198,6 +228,7 @@ func (c *GameHostContainer) Start(ctx context.Context) error {
 			return fmt.Errorf("gamehost: runtime graph reconcile: %w", err)
 		}
 	}
+	c.pruneAgentContexts()
 
 	if c.StartupRecovery != nil {
 		report := c.StartupRecovery.RunStartupRecovery(ctx)
