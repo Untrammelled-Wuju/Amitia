@@ -145,11 +145,13 @@ type PluginServiceSpec struct {
 }
 
 type PluginChannelSpec struct {
-	ID        string            `json:"id"`
-	ServiceID string            `json:"serviceId,omitempty"`
-	Kind      string            `json:"kind"`
-	SchemaID  string            `json:"schemaId,omitempty"`
-	Metadata  map[string]string `json:"metadata,omitempty"`
+	ID            string            `json:"id"`
+	ServiceID     string            `json:"serviceId,omitempty"`
+	Kind          string            `json:"kind"`
+	SchemaID      string            `json:"schemaId,omitempty"`
+	Direction     ChannelDirection  `json:"direction,omitempty"`
+	FrequencyHint *FrequencyHint    `json:"frequencyHint,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
 }
 
 type PluginControlEffectSinkSpec struct {
@@ -229,6 +231,12 @@ func (s PluginHostSpec) Validate() error {
 		if id == "" || moduleID == "" {
 			return fmt.Errorf("services[%d] id and moduleId are required", i)
 		}
+		if err := ValidateServiceID(ServiceID(id)); err != nil {
+			return fmt.Errorf("services[%d] id: %w", i, err)
+		}
+		if err := ValidateServiceName(service.Name); err != nil {
+			return fmt.Errorf("services[%d] name: %w", i, err)
+		}
 		if _, exists := seenServices[id]; exists {
 			return fmt.Errorf("duplicate service id %q", id)
 		}
@@ -256,6 +264,9 @@ func (s PluginHostSpec) Validate() error {
 			if dep == "" {
 				return fmt.Errorf("services[%d] contains empty dependsOn id", i)
 			}
+			if err := ValidateServiceID(ServiceID(dep)); err != nil {
+				return fmt.Errorf("services[%d] dependsOn id: %w", i, err)
+			}
 			if dep == strings.TrimSpace(service.ID) {
 				return fmt.Errorf("service %q cannot depend on itself", service.ID)
 			}
@@ -282,8 +293,27 @@ func (s PluginHostSpec) Validate() error {
 		if id == "" || kind == "" {
 			return fmt.Errorf("channels[%d] id and kind are required", i)
 		}
+		if err := ValidateChannelID(ChannelID(id)); err != nil {
+			return fmt.Errorf("channels[%d] id: %w", i, err)
+		}
+		if err := ValidateChannelSchemaID(strings.TrimSpace(channel.SchemaID)); err != nil {
+			return fmt.Errorf("channels[%d] schemaId: %w", i, err)
+		}
+		if err := ValidateChannelDirection(channel.Direction); err != nil {
+			return fmt.Errorf("channels[%d] direction: %w", i, err)
+		}
+		if channel.FrequencyHint != nil {
+			if err := ValidateFrequencyHint(*channel.FrequencyHint); err != nil {
+				return fmt.Errorf("channels[%d] frequencyHint: %w", i, err)
+			}
+		}
 		if len(s.Services) > 1 && serviceID == "" {
 			return fmt.Errorf("channels[%d] serviceId is required when multiple services are declared", i)
+		}
+		if serviceID != "" {
+			if err := ValidateServiceID(ServiceID(serviceID)); err != nil {
+				return fmt.Errorf("channels[%d] serviceId: %w", i, err)
+			}
 		}
 		if serviceID != "" && len(seenServices) > 0 {
 			if _, ok := seenServices[serviceID]; !ok {
@@ -304,10 +334,15 @@ func (s PluginHostSpec) Validate() error {
 		default:
 			return fmt.Errorf("channels[%d] unsupported kind %q", i, kind)
 		}
-		if _, exists := seenChannels[id]; exists {
-			return fmt.Errorf("duplicate channel id %q", id)
+		channelScope := serviceID
+		if channelScope == "" && len(s.Services) == 1 {
+			channelScope = strings.TrimSpace(s.Services[0].ID)
 		}
-		seenChannels[id] = struct{}{}
+		channelKey := channelScope + "\x00" + id
+		if _, exists := seenChannels[channelKey]; exists {
+			return fmt.Errorf("duplicate channel id %q within service %q", id, channelScope)
+		}
+		seenChannels[channelKey] = struct{}{}
 	}
 
 	if len(s.ControlEffectSinks) > 0 {
@@ -328,6 +363,9 @@ func (s PluginHostSpec) Validate() error {
 		serviceID := strings.TrimSpace(sink.ServiceID)
 		if id == "" || serviceID == "" {
 			return fmt.Errorf("controlEffectSinks[%d] id and serviceId are required", i)
+		}
+		if err := ValidateServiceID(ServiceID(serviceID)); err != nil {
+			return fmt.Errorf("controlEffectSinks[%d] serviceId: %w", i, err)
 		}
 		if _, exists := seenSinks[id]; exists {
 			return fmt.Errorf("duplicate control effect sink id %q", id)
