@@ -65,21 +65,31 @@ func isProcessAlive(pid int) bool {
 }
 
 func detectIsolation() PlatformIsolationReport {
+	sandboxAvailable := executableFile("/usr/bin/sandbox-exec")
+	limitations := []string{
+		"hard CPU/memory/process-count limits are not available in the Darwin process backend",
+		"Hardened Runtime check is not implemented",
+		"code signature verification is enforced separately from the process backend",
+	}
+	if !sandboxAvailable {
+		limitations = append(limitations, "sandbox-exec is unavailable; enforced service sandbox launches fail closed")
+	}
 	return PlatformIsolationReport{
 		Platform:             "darwin",
 		ProcessTreeIsolation: true,
 		MemoryLimit:          false,
 		CPULimit:             false,
-		FilesystemIsolation:  false,
-		NetworkIsolation:     false,
+		FilesystemIsolation:  sandboxAvailable,
+		NetworkIsolation:     sandboxAvailable,
 		UserNamespace:        false,
 		Seccomp:              false,
 		AppContainer:         false,
-		SandboxProfile:       false,
-		Limitations: []string{
-			"sandbox-exec profile not applied in first version",
-			"Hardened Runtime check not implemented",
-			"code signature verification not integrated",
-		},
+		SandboxProfile:       sandboxAvailable,
+		Limitations:          limitations,
 	}
+}
+
+func executableFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir() && info.Mode().Perm()&0o111 != 0
 }
