@@ -325,3 +325,39 @@ func TestContextCancellation_SealObject(t *testing.T) {
 }
 
 var _ = domain.PluginID("")
+
+func TestObjectRegistry_ReleasePurgesRecordAndIndices(t *testing.T) {
+	registry := NewObjectRegistry(Options{MaxActiveObjects: 4, MaxActiveBytes: 1024})
+	owner := BinaryOwner{
+		PluginID: "plugin.release", RuntimeID: "runtime.release", ServiceID: "service.release", ChannelID: "binary.release",
+	}
+	record := BinaryObjectRecord{
+		ID: NewBinaryObjectID(), Kind: BinaryStorageFile, Owner: owner, Size: 128, Lifetime: BinaryLifetimeMessage,
+	}
+	ctx := context.Background()
+	if err := registry.InsertWriting(ctx, record); err != nil {
+		t.Fatalf("InsertWriting: %v", err)
+	}
+	if err := registry.SealObject(ctx, record.ID, record.Size, nil); err != nil {
+		t.Fatalf("SealObject: %v", err)
+	}
+	if err := registry.Release(ctx, record.ID); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	if _, err := registry.Get(ctx, record.ID); err != ErrObjectNotFound {
+		t.Fatalf("Get after release error = %v, want ErrObjectNotFound", err)
+	}
+	if got := registry.CountActive(); got != 0 {
+		t.Fatalf("CountActive after release = %d, want 0", got)
+	}
+	if got := registry.ActiveBytes(); got != 0 {
+		t.Fatalf("ActiveBytes after release = %d, want 0", got)
+	}
+	if got := registry.CountByRuntime(owner.RuntimeID); got != 0 {
+		t.Fatalf("CountByRuntime after release = %d, want 0", got)
+	}
+	// Repeated release stays idempotent even though the tombstone is gone.
+	if err := registry.Release(ctx, record.ID); err != nil {
+		t.Fatalf("second Release: %v", err)
+	}
+}

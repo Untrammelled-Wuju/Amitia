@@ -240,16 +240,17 @@ func (a *TempCleanupDirAdapter) RemoveStaleTemp(ctx context.Context, runtimeID d
 }
 
 type BinaryCleanupAdapter struct {
-	binaryReg  binary.ObjectRegistry
-	runtimeMgr interface {
+	binaryReg      binary.ObjectRegistry
+	binaryResolver *binary.Resolver
+	runtimeMgr     interface {
 		ListRuntimes() []*runtime.RuntimeInstanceRef
 	}
 }
 
-func NewBinaryCleanupAdapter(binaryReg binary.ObjectRegistry, runtimeMgr interface {
+func NewBinaryCleanupAdapter(binaryReg binary.ObjectRegistry, binaryResolver *binary.Resolver, runtimeMgr interface {
 	ListRuntimes() []*runtime.RuntimeInstanceRef
 }) *BinaryCleanupAdapter {
-	return &BinaryCleanupAdapter{binaryReg: binaryReg, runtimeMgr: runtimeMgr}
+	return &BinaryCleanupAdapter{binaryReg: binaryReg, binaryResolver: binaryResolver, runtimeMgr: runtimeMgr}
 }
 
 func (a *BinaryCleanupAdapter) ListOrphanBinaries(ctx context.Context) ([]BinaryCandidate, error) {
@@ -281,7 +282,15 @@ func (a *BinaryCleanupAdapter) RemoveOrphanBinary(ctx context.Context, binaryID 
 	if a.binaryReg == nil {
 		return nil
 	}
-	return a.binaryReg.Release(ctx, binary.BinaryObjectID(binaryID))
+	id := binary.BinaryObjectID(binaryID)
+	record, err := a.binaryReg.Get(ctx, id)
+	if err != nil {
+		return nil
+	}
+	if a.binaryResolver != nil {
+		return a.binaryResolver.Release(ctx, record.Owner, id)
+	}
+	return a.binaryReg.Release(ctx, id)
 }
 
 type EndpointCleanupAdapter struct {

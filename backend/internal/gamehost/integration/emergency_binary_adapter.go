@@ -8,28 +8,23 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/stream/binary"
 )
 
-type EmergencyBinaryAdapter struct {
-	registry binary.ObjectRegistry
+type BinaryRuntimeCleaner interface {
+	CleanupRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) error
 }
 
-func NewEmergencyBinaryAdapter(registry binary.ObjectRegistry) *EmergencyBinaryAdapter {
-	return &EmergencyBinaryAdapter{registry: registry}
+type EmergencyBinaryAdapter struct {
+	cleaner BinaryRuntimeCleaner
+}
+
+func NewEmergencyBinaryAdapter(cleaner BinaryRuntimeCleaner) *EmergencyBinaryAdapter {
+	return &EmergencyBinaryAdapter{cleaner: cleaner}
 }
 
 func (a *EmergencyBinaryAdapter) ReleaseRuntimeTransientBinary(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {
-	if a.registry == nil {
+	if a == nil || a.cleaner == nil {
 		return nil
 	}
-	conns, err := a.registry.ListByRuntime(runtimeID)
-	if err != nil {
-		return err
-	}
-	for _, obj := range conns {
-		if err := a.registry.Release(ctx, obj.ID); err != nil {
-			continue
-		}
-	}
-	return nil
+	return a.cleaner.CleanupRuntime(ctx, runtimeID)
 }
 
 var _ control.BinaryReleaser = (*EmergencyBinaryAdapter)(nil)

@@ -163,15 +163,18 @@ func (d *RPCDispatcher) dispatchReserved(ctx context.Context, source ipc.Dispatc
 	}
 
 	req := RPCRequest{
-		ConnectionID: string(source.ConnectionID),
-		ID:           envelope.ID,
-		PluginID:     domain.PluginID(source.Peer.PluginID),
-		RuntimeID:    domain.RuntimeInstanceID(source.Peer.RuntimeID),
-		ServiceID:    domain.ServiceID(source.Peer.ServiceID),
-		Generation:   source.Peer.Generation,
-		Namespace:    namespace,
-		Method:       Method(envelope.Method),
-		Payload:      cloneRawMessage(envelope.Payload),
+		ConnectionID:   string(source.ConnectionID),
+		ID:             envelope.ID,
+		PluginID:       domain.PluginID(source.Peer.PluginID),
+		RuntimeID:      domain.RuntimeInstanceID(source.Peer.RuntimeID),
+		ServiceID:      domain.ServiceID(source.Peer.ServiceID),
+		Generation:     source.Peer.Generation,
+		Namespace:      namespace,
+		Method:         Method(envelope.Method),
+		Payload:        cloneRawMessage(envelope.Payload),
+		BinaryObjectID: envelope.BinaryObjectID,
+		BinaryOffset:   envelope.BinaryOffset,
+		BinaryPayload:  append([]byte(nil), envelope.BinaryPayload...),
 	}
 
 	resp, err := handler.Handle(ctx, req)

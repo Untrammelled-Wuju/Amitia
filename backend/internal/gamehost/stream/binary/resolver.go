@@ -2,6 +2,7 @@ package binary
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -88,6 +89,13 @@ func (r *Resolver) Create(
 		return WritingHandle{}, err
 	}
 
+	if request.Lifetime == "" {
+		request.Lifetime = BinaryLifetimeMessage
+	}
+	if err := request.Lifetime.Validate(); err != nil {
+		return WritingHandle{}, err
+	}
+
 	handle, err := provider.Create(ctx, owner, request)
 	if err != nil {
 		return WritingHandle{}, err
@@ -98,13 +106,17 @@ func (r *Resolver) Create(
 		Kind:      kind,
 		Owner:     owner,
 		Size:      request.ExpectedSize,
-		Lifetime:  BinaryLifetimeMessage,
+		Lifetime:  request.Lifetime,
 		MediaType: request.MediaType,
 		Metadata:  request.Metadata,
 	}
 
 	if err := r.registry.InsertWriting(ctx, record); err != nil {
-		provider.Release(ctx, owner, handle.ObjectID)
+		if handle.Abort != nil {
+			_ = handle.Abort()
+		} else {
+			_ = provider.Release(ctx, owner, handle.ObjectID)
+		}
 		return WritingHandle{}, err
 	}
 
@@ -148,7 +160,8 @@ func (r *Resolver) Resolve(
 
 	if record.Owner.PluginID != consumer.PluginID ||
 		record.Owner.RuntimeID != consumer.RuntimeID ||
-		record.Owner.ServiceID != consumer.ServiceID {
+		record.Owner.ServiceID != consumer.ServiceID ||
+		record.Owner.ChannelID != consumer.ChannelID {
 		return ResolvedBinary{}, ErrOwnerMismatch
 	}
 
@@ -175,8 +188,20 @@ func (r *Resolver) Resolve(
 		ServiceID: record.Owner.ServiceID,
 		ChannelID: record.Owner.ChannelID,
 	}
+	// Never pass caller-controlled metadata/checksum/media type to a provider.
+	// The object registry is the canonical post-seal authority; callers may only
+	// present the opaque id plus immutable routing fields validated above.
+	canonical := BinaryReference{
+		ID:        record.ID,
+		Kind:      record.Kind,
+		Size:      record.Size,
+		MediaType: record.MediaType,
+		Checksum:  record.Checksum,
+		Lifetime:  record.Lifetime,
+		Metadata:  record.Metadata,
+	}
 
-	return provider.Resolve(ctx, owner, ref)
+	return provider.Resolve(ctx, owner, canonical)
 }
 
 func (r *Resolver) Release(
@@ -195,26 +220,56 @@ func (r *Resolver) Release(
 		return ErrOwnerMismatch
 	}
 
-	if err := r.registry.Release(ctx, id); err != nil {
-		return err
-	}
-
 	provider, err := r.providers.Resolve(record.Kind)
 	if err != nil {
 		return err
 	}
-
-	return provider.Release(ctx, record.Owner, id)
+	if err := provider.Release(ctx, record.Owner, id); err != nil {
+		return err
+	}
+	return r.registry.Release(ctx, id)
 }
 
 func (r *Resolver) ReleaseByRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {
-	_, err := r.registry.RemoveByRuntime(ctx, runtimeID)
-	return err
+	records, err := r.registry.ListByRuntime(runtimeID)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, record := range records {
+		if provider, resolveErr := r.providers.Resolve(record.Kind); resolveErr == nil {
+			if releaseErr := provider.Release(ctx, record.Owner, record.ID); releaseErr != nil {
+				errs = append(errs, releaseErr)
+			}
+		} else {
+			errs = append(errs, resolveErr)
+		}
+	}
+	if _, removeErr := r.registry.RemoveByRuntime(ctx, runtimeID); removeErr != nil {
+		errs = append(errs, removeErr)
+	}
+	return errors.Join(errs...)
 }
 
 func (r *Resolver) ReleaseByService(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) error {
-	_, err := r.registry.RemoveByService(ctx, runtimeID, serviceID)
-	return err
+	records, err := r.registry.ListByService(runtimeID, serviceID)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, record := range records {
+		if provider, resolveErr := r.providers.Resolve(record.Kind); resolveErr == nil {
+			if releaseErr := provider.Release(ctx, record.Owner, record.ID); releaseErr != nil {
+				errs = append(errs, releaseErr)
+			}
+		} else {
+			errs = append(errs, resolveErr)
+		}
+	}
+	if _, removeErr := r.registry.RemoveByService(ctx, runtimeID, serviceID); removeErr != nil {
+		errs = append(errs, removeErr)
+	}
+	return errors.Join(errs...)
 }
 
 func (r *Resolver) Shutdown(ctx context.Context) error {

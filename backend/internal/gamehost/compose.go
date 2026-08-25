@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -213,6 +214,13 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	stateStore := state.NewLatestStateStore(state.NewOptions())
 
 	binaryReg := binary.NewObjectRegistry(binary.Options{})
+	binaryProviders := binary.NewProviderRegistry()
+	binaryFileProvider, err := binary.NewFileProvider(filepath.Join(opts.DataRoot, "gamehost", "binary-transfer"))
+	if err != nil {
+		return nil, fmt.Errorf("compose binary file provider: %w", err)
+	}
+	binaryProviders.Register(binaryFileProvider)
+	binaryResolver := binary.NewResolver(binaryReg, binaryProviders)
 
 	channelReg := channel.NewRegistry(channel.Options{})
 
@@ -246,12 +254,26 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	resourceGovernor := newRuntimeLimitGovernor()
 	resourceAdapter := resource.NewResourceAdmissionAdapter(resourceMapper, rpcLifecycle.Registry(), binaryReg, resourceGovernor)
 
+	binaryTransfer, err := binary.NewBinaryTransferService(binaryResolver, binaryReg, channelReg, handshakeMgr, resourceAdapter)
+	if err != nil {
+		return nil, fmt.Errorf("compose binary transfer service: %w", err)
+	}
+	if err := binaryTransfer.Register(hostHandlers); err != nil {
+		return nil, err
+	}
+
 	notifComposite := notification.NewCompositeSink(durableNotifSink)
-	channelRouter := channel.NewRouter(channel.RouterConfig{Registry: channelReg, States: stateStore})
+	channelRouter := channel.NewRouter(channel.RouterConfig{
+		Registry: channelReg,
+		States:   stateStore,
+		Binary:   binary.NewChannelBinarySink(binaryResolver),
+	})
 	channelNotificationSink := integration.NewChannelNotificationSink(channelRouter)
 	channelNotificationSink.SetResourceAdmission(resourceAdapter, runtimeManager)
-	notifComposite.Add(channelNotificationSink)
-	notifBridge := notification.NewBridge(notifComposite)
+	// channel.publish must pass GameHost validation before it reaches durable or
+	// future fan-out sinks. In particular, forged/stale binary references are
+	// rejected before persistence.
+	notifBridge := notification.NewBridge(integration.NewChannelValidatedSink(channelNotificationSink, notifComposite))
 	rpcDispatcher := rpc.NewRPCDispatcher(rpc.DispatcherConfig{
 		Namespaces:    nsReg,
 		HostHandlers:  hostHandlers,
@@ -471,7 +493,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	emergencyReadyAdapter := integration.NewEmergencyReadyAdapter(readyGate, connReg)
 	emergencyStreamAdapter := integration.NewEmergencyStreamAdapter(streamMgr)
 	emergencyChannelAdapter := integration.NewEmergencyChannelAdapter(channelReg)
-	emergencyBinaryAdapter := integration.NewEmergencyBinaryAdapter(binaryReg)
+	emergencyBinaryAdapter := integration.NewEmergencyBinaryAdapter(binaryTransfer)
 	emergencyPendingVerifier := integration.NewEmergencyPendingVerifier(rpcLifecycle.Registry())
 	emergencyConnectionVerifier := integration.NewEmergencyConnectionVerifier(connReg)
 	emergencyStreamVerifier := integration.NewEmergencyStreamVerifier(streamMgr)
@@ -885,6 +907,8 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		AgentEventSink:           agentEventSink,
 		StateStore:               stateStore,
 		BinaryObjectRegistry:     binaryReg,
+		BinaryResolver:           binaryResolver,
+		BinaryTransfer:           binaryTransfer,
 		StreamManager:            streamMgr,
 		procAdapter:              procAdapter,
 		HostAPIGateway:           opts.HostAPIGateway,
@@ -949,7 +973,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 	var binaryCleanup startup.BinaryCleanupProvider
 	if binaryReg != nil && runtimeManager != nil {
-		binaryCleanup = startup.NewBinaryCleanupAdapter(binaryReg, runtimeManager)
+		binaryCleanup = startup.NewBinaryCleanupAdapter(binaryReg, binaryResolver, runtimeManager)
 	}
 
 	if kernelRecon == nil {

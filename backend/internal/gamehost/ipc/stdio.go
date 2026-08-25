@@ -2,6 +2,7 @@ package ipc
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -14,8 +15,10 @@ import (
 )
 
 const (
-	stdioMaxFrameSize = 16 * 1024 * 1024
-	stdioFrameHeaderSize = 4
+	stdioMaxFrameSize           = 16 * 1024 * 1024
+	stdioFrameHeaderSize        = 4
+	stdioBinaryFrameFlag uint32 = 1 << 31
+	stdioFrameLengthMask uint32 = ^stdioBinaryFrameFlag
 )
 
 type StdioTransport struct {
@@ -28,9 +31,9 @@ type StdioTransport struct {
 }
 
 type StdioTransportConfig struct {
-	Reader io.Reader
-	Writer io.Writer
-	Closer io.Closer
+	Reader       io.Reader
+	Writer       io.Writer
+	Closer       io.Closer
 	MaxFrameSize int64
 }
 
@@ -93,7 +96,6 @@ func (t *StdioTransport) Receive(ctx context.Context) (protocol.Envelope, error)
 	}
 
 	headerBuf := make([]byte, stdioFrameHeaderSize)
-
 	if err := t.readFull(headerBuf); err != nil {
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			return protocol.Envelope{}, io.EOF
@@ -101,7 +103,9 @@ func (t *StdioTransport) Receive(ctx context.Context) (protocol.Envelope, error)
 		return protocol.Envelope{}, fmt.Errorf("read frame header failed: %w", err)
 	}
 
-	frameLen := binary.BigEndian.Uint32(headerBuf)
+	rawLength := binary.BigEndian.Uint32(headerBuf)
+	binaryFrame := rawLength&stdioBinaryFrameFlag != 0
+	frameLen := rawLength & stdioFrameLengthMask
 	if frameLen == 0 {
 		return protocol.Envelope{}, fmt.Errorf("invalid frame: zero length")
 	}
@@ -116,13 +120,66 @@ func (t *StdioTransport) Receive(ctx context.Context) (protocol.Envelope, error)
 		}
 		return protocol.Envelope{}, fmt.Errorf("read frame data failed: %w", err)
 	}
+	if binaryFrame {
+		return decodeStdioBinaryFrame(data)
+	}
 
 	var envelope protocol.Envelope
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return protocol.Envelope{}, fmt.Errorf("unmarshal envelope failed: %w", err)
 	}
-
 	return envelope, nil
+}
+
+func decodeStdioBinaryFrame(data []byte) (protocol.Envelope, error) {
+	if len(data) <= 4 {
+		return protocol.Envelope{}, fmt.Errorf("invalid binary frame")
+	}
+	headerLen := binary.BigEndian.Uint32(data[:4])
+	if headerLen == 0 || uint64(headerLen) > uint64(len(data)-4) {
+		return protocol.Envelope{}, fmt.Errorf("invalid binary frame header length")
+	}
+	headerEnd := 4 + int(headerLen)
+	if headerEnd >= len(data) {
+		return protocol.Envelope{}, fmt.Errorf("binary frame payload must not be empty")
+	}
+	var header protocol.BinaryFrameHeader
+	decoder := json.NewDecoder(bytes.NewReader(data[4:headerEnd]))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&header); err != nil {
+		return protocol.Envelope{}, fmt.Errorf("decode binary frame header: %w", err)
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return protocol.Envelope{}, fmt.Errorf("decode binary frame header: %w", err)
+	}
+	if err := header.Validate(); err != nil {
+		return protocol.Envelope{}, err
+	}
+	payload := append([]byte(nil), data[headerEnd:]...)
+	return protocol.Envelope{
+		Protocol:       header.Protocol,
+		Type:           protocol.MessageTypeRequest,
+		ID:             header.ID,
+		Method:         "binary.write",
+		RuntimeID:      header.RuntimeID,
+		PluginID:       header.PluginID,
+		ServiceID:      header.ServiceID,
+		Generation:     header.Generation,
+		BinaryObjectID: header.ObjectID,
+		BinaryOffset:   header.Offset,
+		BinaryPayload:  payload,
+	}, nil
+}
+
+func ensureJSONEOF(decoder *json.Decoder) error {
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("trailing JSON value")
+		}
+		return err
+	}
+	return nil
 }
 
 func (t *StdioTransport) readFull(buf []byte) error {

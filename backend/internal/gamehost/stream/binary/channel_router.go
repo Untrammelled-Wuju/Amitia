@@ -15,18 +15,21 @@ func NewChannelBinarySink(resolver *Resolver) *ChannelBinarySink {
 	return &ChannelBinarySink{resolver: resolver}
 }
 
-func (s *ChannelBinarySink) PublishBinary(ctx context.Context, ch channel.RuntimeChannel, msg channel.BinaryChannelMessage) error {
+func (s *ChannelBinarySink) PublishBinary(ctx context.Context, ch channel.RuntimeChannel, msg channel.BinaryChannelMessage) (json.RawMessage, error) {
+	if s == nil || s.resolver == nil {
+		return nil, channel.ErrBinaryNotSupported
+	}
 	if err := ch.Validate(); err != nil {
-		return err
+		return nil, err
 	}
 
 	var ref BinaryReference
 	if err := parseReference(msg.Payload, &ref); err != nil {
-		return ErrIDEmpty
+		return nil, ErrIDEmpty
 	}
 
 	if err := ref.Validate(); err != nil {
-		return err
+		return nil, err
 	}
 
 	consumer := BinaryOwner{
@@ -38,13 +41,20 @@ func (s *ChannelBinarySink) PublishBinary(ctx context.Context, ch channel.Runtim
 
 	resolved, err := s.resolver.Resolve(ctx, consumer, ref)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if resolved.Reader != nil {
 		defer resolved.Reader.Close()
 	}
 
-	return nil
+	// The resolver returns the registry/provider-authoritative reference. Marshal
+	// that reference rather than the caller's JSON so forged mutable fields do
+	// not cross the validation boundary into durable/fanout sinks.
+	canonical, err := json.Marshal(resolved.Reference)
+	if err != nil {
+		return nil, err
+	}
+	return canonical, nil
 }
 
 func parseReference(data []byte, ref *BinaryReference) error {

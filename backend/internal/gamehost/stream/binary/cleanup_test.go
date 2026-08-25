@@ -201,3 +201,25 @@ func TestDefaultSharedMemoryProvider_Unsupported(t *testing.T) {
 		t.Fatal("default should be unsupported")
 	}
 }
+
+func TestResolver_ChannelOwnerMismatch_Rejected(t *testing.T) {
+	resolver, _ := newTestResolver(t)
+
+	owner := BinaryOwner{PluginID: "p", RuntimeID: "r", ServiceID: "s", ChannelID: "frames"}
+	handle, err := resolver.Create(context.Background(), owner, BinaryStorageFile, CreateRequest{ExpectedSize: 5})
+	if err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+	if _, err := handle.Writer.Write([]byte("hello")); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+	ref, err := handle.Seal(5, nil)
+	if err != nil {
+		t.Fatalf("seal failed: %v", err)
+	}
+
+	wrongChannel := BinaryOwner{PluginID: "p", RuntimeID: "r", ServiceID: "s", ChannelID: "audio"}
+	if _, err := resolver.Resolve(context.Background(), wrongChannel, ref); err == nil {
+		t.Fatal("binary reference must not be reusable across channels")
+	}
+}

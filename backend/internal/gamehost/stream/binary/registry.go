@@ -205,12 +205,13 @@ func (r *memoryObjectRegistry) Release(ctx context.Context, id BinaryObjectID) e
 		return nil
 	}
 
-	now := time.Now().UTC()
-	record.State = ObjectStateReleased
-	record.ReleasedAt = &now
-	r.index[id] = record
-
+	// Provider resources are released before the registry entry reaches this
+	// method. Remove the authoritative record instead of retaining an unbounded
+	// RELEASED tombstone for every frame/audio chunk ever transferred. Random
+	// object IDs make tombstones unnecessary for replay protection, and repeated
+	// release remains idempotent because a missing record already returns nil.
 	r.removeFromIndicesLocked(record.Owner, id)
+	delete(r.index, id)
 	return nil
 }
 
@@ -321,17 +322,14 @@ func (r *memoryObjectRegistry) RemoveByRuntime(ctx context.Context, runtimeID do
 	ids := r.runtimeIndex[runtimeID]
 	count := len(ids)
 	for id := range ids {
-		record := r.index[id]
-		now := time.Now().UTC()
-		record.State = ObjectStateReleased
-		record.ReleasedAt = &now
-		r.index[id] = record
+		record, ok := r.index[id]
+		if !ok {
+			continue
+		}
+		r.removeFromServiceIndexLocked(record.Owner.RuntimeID, record.Owner.ServiceID, id)
+		delete(r.index, id)
 	}
 	delete(r.runtimeIndex, runtimeID)
-	for id := range ids {
-		record := r.index[id]
-		r.removeFromServiceIndexLocked(record.Owner.RuntimeID, record.Owner.ServiceID, id)
-	}
 	return count, nil
 }
 
@@ -359,13 +357,20 @@ func (r *memoryObjectRegistry) RemoveByService(ctx context.Context, runtimeID do
 
 	ids := r.serviceIndex[runtimeID][serviceID]
 	count := len(ids)
+	// Copy IDs first because removeFromIndicesLocked mutates the same service
+	// index map while we remove records. Deleting during map iteration is legal in
+	// Go, but the explicit copy keeps cleanup deterministic and easy to audit.
+	objectIDs := make([]BinaryObjectID, 0, len(ids))
 	for id := range ids {
-		record := r.index[id]
-		now := time.Now().UTC()
-		record.State = ObjectStateReleased
-		record.ReleasedAt = &now
-		r.index[id] = record
+		objectIDs = append(objectIDs, id)
+	}
+	for _, id := range objectIDs {
+		record, ok := r.index[id]
+		if !ok {
+			continue
+		}
 		r.removeFromIndicesLocked(record.Owner, id)
+		delete(r.index, id)
 	}
 	return count, nil
 }

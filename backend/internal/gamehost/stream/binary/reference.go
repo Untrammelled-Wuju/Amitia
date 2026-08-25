@@ -50,23 +50,27 @@ func (c *Checksum) Validate() error {
 	if c.Algorithm != "sha256" {
 		return ErrChecksumInvalid
 	}
-	if c.Value == "" {
+	value := strings.TrimSpace(c.Value)
+	if len(value) != 64 {
 		return ErrChecksumInvalid
 	}
-	if len(c.Value) > 256 {
-		return ErrChecksumInvalid
+	for _, ch := range value {
+		if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+			return ErrChecksumInvalid
+		}
 	}
+	c.Value = strings.ToLower(value)
 	return nil
 }
 
 type BinaryReference struct {
-	ID        BinaryObjectID                `json:"id"`
-	Kind      BinaryStorageKind             `json:"kind"`
-	Size      int64                         `json:"size"`
-	MediaType string                        `json:"mediaType,omitempty"`
-	Checksum  *Checksum                     `json:"checksum,omitempty"`
-	Lifetime  BinaryLifetime                `json:"lifetime"`
-	Metadata  map[string]json.RawMessage    `json:"metadata,omitempty"`
+	ID        BinaryObjectID             `json:"id"`
+	Kind      BinaryStorageKind          `json:"kind"`
+	Size      int64                      `json:"size"`
+	MediaType string                     `json:"mediaType,omitempty"`
+	Checksum  *Checksum                  `json:"checksum,omitempty"`
+	Lifetime  BinaryLifetime             `json:"lifetime"`
+	Metadata  map[string]json.RawMessage `json:"metadata,omitempty"`
 }
 
 const (

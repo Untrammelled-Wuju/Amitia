@@ -62,7 +62,7 @@ func TestBinaryLifetime_UnknownRejected(t *testing.T) {
 }
 
 func TestChecksum_SHA256Valid(t *testing.T) {
-	cs := &Checksum{Algorithm: "sha256", Value: "abc123"}
+	cs := &Checksum{Algorithm: "sha256", Value: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
 	if err := cs.Validate(); err != nil {
 		t.Fatalf("sha256 should be valid: %v", err)
 	}

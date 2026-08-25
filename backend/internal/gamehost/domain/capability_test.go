@@ -4,7 +4,7 @@ import "testing"
 
 func TestValidateCapability(t *testing.T) {
 	validCases := []Capability{
-		CapabilityRealtimeControl, CapabilityStateStreaming, CapabilityEventStreaming, CapabilityCustomRPC, CapabilityHostAPI,
+		CapabilityRealtimeControl, CapabilityStateStreaming, CapabilityEventStreaming, CapabilityCustomRPC, CapabilityHostAPI, CapabilityBinaryStreaming,
 	}
 	for _, cap := range validCases {
 		if err := ValidateCapability(cap); err != nil {
@@ -24,7 +24,7 @@ func TestValidateCapabilityRejectsUnknown(t *testing.T) {
 func TestIsKnownCapability(t *testing.T) {
 	for _, cap := range []Capability{
 		CapabilityRealtimeControl, CapabilityStateStreaming, CapabilityEventStreaming, CapabilityCustomRPC,
-		CapabilityHostAPI, CapabilitySharedControl, CapabilityMultiService,
+		CapabilityHostAPI, CapabilitySharedControl, CapabilityMultiService, CapabilityBinaryStreaming,
 	} {
 		if !IsKnownCapability(cap) {
 			t.Errorf("expected %s to be known", cap)
@@ -39,8 +39,8 @@ func TestIsKnownCapability(t *testing.T) {
 
 func TestAllKnownCapabilities(t *testing.T) {
 	all := AllKnownCapabilities()
-	if len(all) != 7 {
-		t.Fatalf("expected 7 known host features, got %d", len(all))
+	if len(all) != 8 {
+		t.Fatalf("expected 8 known host features, got %d", len(all))
 	}
 	seen := make(map[Capability]struct{}, len(all))
 	for _, cap := range all {
