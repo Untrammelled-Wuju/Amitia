@@ -90,6 +90,7 @@
               "state",
               "log",
               "metric",
+              "binary",
               "custom"
             ]
           },

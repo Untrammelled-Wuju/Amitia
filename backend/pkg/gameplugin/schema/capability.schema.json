@@ -11,6 +11,7 @@
     "custom_rpc",
     "host_api",
     "shared_control",
-    "multi_service"
+    "multi_service",
+    "binary_streaming"
   ]
 }

@@ -75,7 +75,7 @@ export interface PluginServiceSpec {
 export interface PluginChannelSpec {
   id: string;
   serviceId?: string;
-  kind: 'event' | 'state' | 'log' | 'metric' | 'custom';
+  kind: 'event' | 'state' | 'log' | 'metric' | 'custom' | 'binary';
   schemaId?: string;
   metadata?: Record<string, string>;
 }

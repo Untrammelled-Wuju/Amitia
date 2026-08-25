@@ -28,9 +28,10 @@
         "state",
         "log",
         "metric",
+        "binary",
         "custom"
       ],
-      "description": "Channel data type classification. Binary streaming is not part of amitia-game-host/1."
+      "description": "Channel data type classification. The binary kind carries a BinaryReference produced by the negotiated binary_streaming transport."
     },
     "schemaId": {
       "type": "string",

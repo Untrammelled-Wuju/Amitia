@@ -11,3 +11,8 @@ type Transport interface {
 	Receive(ctx context.Context) (protocol.Envelope, error)
 	Close() error
 }
+
+type BinaryFrameTransport interface {
+	Transport
+	SendBinaryFrame(ctx context.Context, message protocol.Envelope, objectID string, offset int64, data []byte) error
+}

@@ -12,6 +12,7 @@ const (
 	HostFeatureHostAPI         = protocol.HostFeatureHostAPI
 	HostFeatureSharedControl   = protocol.HostFeatureSharedControl
 	HostFeatureMultiService    = protocol.HostFeatureMultiService
+	HostFeatureBinaryStreaming = protocol.HostFeatureBinaryStreaming
 )
 
 type PluginSessionOpenRequest = protocol.PluginSessionOpenRequest

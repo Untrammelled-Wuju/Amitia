@@ -88,6 +88,7 @@ const (
 	HostFeatureHostAPI         HostFeature = "host_api"
 	HostFeatureSharedControl   HostFeature = "shared_control"
 	HostFeatureMultiService    HostFeature = "multi_service"
+	HostFeatureBinaryStreaming HostFeature = "binary_streaming"
 )
 
 var knownHostFeatures = map[HostFeature]struct{}{
@@ -98,6 +99,7 @@ var knownHostFeatures = map[HostFeature]struct{}{
 	HostFeatureHostAPI:         {},
 	HostFeatureSharedControl:   {},
 	HostFeatureMultiService:    {},
+	HostFeatureBinaryStreaming: {},
 }
 
 func IsKnownHostFeature(feature HostFeature) bool {
@@ -271,6 +273,7 @@ func (s PluginHostSpec) Validate() error {
 	}
 
 	seenChannels := make(map[string]struct{}, len(s.Channels))
+	hasBinaryChannel := false
 	for i, channel := range s.Channels {
 		id := strings.TrimSpace(channel.ID)
 		serviceID := strings.TrimSpace(channel.ServiceID)
@@ -295,6 +298,8 @@ func (s PluginHostSpec) Validate() error {
 			if _, ok := seenFeatures[HostFeatureEventStreaming]; !ok {
 				return fmt.Errorf("%s channel %q requires hostFeatures to include %q", kind, id, HostFeatureEventStreaming)
 			}
+		case "binary":
+			hasBinaryChannel = true
 		default:
 			return fmt.Errorf("channels[%d] unsupported kind %q", i, kind)
 		}
@@ -307,6 +312,12 @@ func (s PluginHostSpec) Validate() error {
 	if len(s.ControlEffectSinks) > 0 {
 		if _, ok := seenFeatures[HostFeatureRealtimeControl]; !ok {
 			return fmt.Errorf("controlEffectSinks require hostFeatures to include %q", HostFeatureRealtimeControl)
+		}
+	}
+
+	if hasBinaryChannel {
+		if _, ok := seenFeatures[HostFeatureBinaryStreaming]; !ok {
+			return fmt.Errorf("binary channel requires hostFeatures to include %q", HostFeatureBinaryStreaming)
 		}
 	}
 
@@ -363,6 +374,11 @@ func (s PluginHostSpec) Validate() error {
 		}
 		if !safePackageRelativePath(target) {
 			return fmt.Errorf("artifact %q target must be a safe target-relative path", id)
+		}
+		for j, constraint := range artifact.CompatibilityVersions {
+			if err := ValidateCompatibilityConstraint(constraint); err != nil {
+				return fmt.Errorf("artifact %q compatibilityVersions[%d]: %w", id, j, err)
+			}
 		}
 	}
 	return nil
