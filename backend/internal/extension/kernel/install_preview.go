@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (InstallPreview, error) {
@@ -75,6 +78,39 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 		for _, issue := range permIssues {
 			preview.Issues = append(preview.Issues, issue)
 			installable = false
+		}
+	}
+
+	// Game plugins are device-local. Validate network isolation support during
+	// preview so an unsupported host/platform combination is rejected before
+	// installation instead of failing only when the Runtime is started.
+	for moduleIndex, mod := range manifest.Modules {
+		for contributionIndex, contribution := range mod.Contributions {
+			if string(contribution.Kind) != "game_plugin" {
+				continue
+			}
+			spec, specErr := gameprotocol.ParsePluginHostSpec(contribution.Spec)
+			if specErr != nil || spec.Network == nil {
+				continue // manifest validation reports malformed specs separately
+			}
+			mode := strings.ToLower(strings.TrimSpace(spec.Network.Mode))
+			policy := trusted_service.ServiceNetworkPolicy{Mode: mode, Enforce: true}
+			switch mode {
+			case "loopback":
+				policy.AllowOutbound = true
+				policy.LoopbackOnly = true
+			case "unrestricted":
+				policy.AllowOutbound = true
+			}
+			if policyErr := trusted_service.ValidateNetworkPolicySupport(policy); policyErr != nil {
+				installable = false
+				preview.Issues = append(preview.Issues, PreviewIssue{
+					Category: PreviewNotInstallable,
+					Code:     "game_plugin_network_platform_unsupported",
+					Message:  fmt.Sprintf("game plugin network mode %q is unavailable on this host: %v", mode, policyErr),
+					Path:     fmt.Sprintf("modules[%d].contributions[%d].spec.network", moduleIndex, contributionIndex),
+				})
+			}
 		}
 	}
 
