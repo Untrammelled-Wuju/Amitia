@@ -587,7 +587,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	orch.SetDeadlineProvider(func(ctx context.Context, requestID string) (context.Context, context.CancelFunc) {
 		return dp.ContextWithDeadline(ctx, requestID, mindruntime.DeadlineStageGeneration)
 	})
-	resolver := interaction.NewScopeResolverWithDefaultChar(interaction.NewConversationScopeBindingLookup(ctx.DB), &defaultCharacterProvider{repo: charRepo})
+	defaultCharProvider := &defaultCharacterProvider{repo: charRepo}
+	resolver := interaction.NewScopeResolverWithDefaultChar(interaction.NewConversationScopeBindingLookup(ctx.DB), defaultCharProvider)
 	dataLifecycle := mindruntime.NewDataLifecycleCoordinator(ctx.DB)
 	if err := dataLifecycle.InitSchema(); err != nil {
 		log.Error("failed to init data lifecycle schema:", err)
@@ -614,7 +615,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	entry := interaction.NewUnifiedEntry(orch, resolver, temporal.SystemClock{})
 	if kernelContainer != nil && kernelContainer.GameHost != nil {
-		kernelContainer.GameHost.SetAgentWakeupPort(&gameHostAgentWakeupAdapter{entry: entry})
+		kernelContainer.GameHost.SetAgentWakeupPort(&gameHostAgentWakeupAdapter{entry: entry, defaultCharacterProvider: defaultCharProvider})
 	}
 	if kernelContainer != nil && kernelContainer.ExecutionService != nil {
 		entry.SetExecutionService(kernelContainer.ExecutionService)
