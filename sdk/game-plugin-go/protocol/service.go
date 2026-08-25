@@ -7,6 +7,8 @@ import (
 	"unicode"
 )
 
+const maxServiceNameLength = 256
+
 type ServiceID string
 type ServiceKind string
 
@@ -47,6 +49,18 @@ func ValidateServiceID(id ServiceID) error {
 	return nil
 }
 
+func ValidateServiceName(name string) error {
+	if len(name) > maxServiceNameLength {
+		return fmt.Errorf("service name exceeds maximum length of %d", maxServiceNameLength)
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) {
+			return fmt.Errorf("service name contains control character")
+		}
+	}
+	return nil
+}
+
 func ValidateServiceKind(kind ServiceKind) error {
 	switch kind {
 	case ServiceKindProcess:
@@ -60,10 +74,16 @@ func (s ServiceDescriptor) Validate() error {
 	if err := ValidateServiceID(s.ID); err != nil {
 		return fmt.Errorf("invalid service id: %w", err)
 	}
+	if err := ValidateServiceName(s.Name); err != nil {
+		return err
+	}
 	if err := ValidateServiceKind(s.Kind); err != nil {
 		return err
 	}
 	for i, dep := range s.DependsOn {
+		if err := ValidateServiceID(dep); err != nil {
+			return fmt.Errorf("invalid dependency id %q: %w", dep, err)
+		}
 		if dep == s.ID {
 			return fmt.Errorf("service '%s' depends on itself", s.ID)
 		}
@@ -75,6 +95,9 @@ func (s ServiceDescriptor) Validate() error {
 	}
 	seenCaps := make(map[Capability]bool)
 	for _, cap := range s.Capabilities {
+		if err := ValidateCapability(cap); err != nil {
+			return err
+		}
 		if seenCaps[cap] {
 			return fmt.Errorf("duplicate capability '%s'", cap)
 		}
