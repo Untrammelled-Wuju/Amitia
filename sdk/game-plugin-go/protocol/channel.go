@@ -15,6 +15,7 @@ const (
 	ChannelKindState  ChannelKind = "state"
 	ChannelKindLog    ChannelKind = "log"
 	ChannelKindMetric ChannelKind = "metric"
+	ChannelKindBinary ChannelKind = "binary"
 	ChannelKindCustom ChannelKind = "custom"
 )
 
@@ -63,7 +64,7 @@ func ValidateChannelID(id ChannelID) error {
 func ValidateChannelKind(kind ChannelKind) error {
 	switch kind {
 	case ChannelKindEvent, ChannelKindState, ChannelKindLog,
-		ChannelKindMetric, ChannelKindCustom:
+		ChannelKindMetric, ChannelKindBinary, ChannelKindCustom:
 		return nil
 	default:
 		return fmt.Errorf("invalid channel kind: %s", kind)

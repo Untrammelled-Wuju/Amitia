@@ -16,6 +16,7 @@ const (
 	CapabilityHostAPI         = HostFeatureHostAPI
 	CapabilitySharedControl   = HostFeatureSharedControl
 	CapabilityMultiService    = HostFeatureMultiService
+	CapabilityBinaryStreaming = HostFeatureBinaryStreaming
 )
 
 func IsKnownCapability(cap Capability) bool { return IsKnownHostFeature(HostFeature(cap)) }
