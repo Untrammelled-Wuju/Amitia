@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-//go:build !windows && !linux && !darwin
+//go:build !windows && !linux && !darwin && !android && !ios
 
 package process
 
@@ -19,6 +19,14 @@ func configureProcess(command *exec.Cmd) {
 
 func attachProcessTree(cmd *exec.Cmd) (ProcessTreeHandle, error) {
 	return 0, nil
+}
+
+func attachProcessTreeWithLimits(cmd *exec.Cmd, _ ResourceLimits) (ProcessTreeHandle, error) {
+	return attachProcessTree(cmd)
+}
+
+func resourceLimitSupport() ResourceLimitSupport {
+	return ResourceLimitSupport{}
 }
 
 func forceStopProcessTree(pid int, handle ProcessTreeHandle) error {

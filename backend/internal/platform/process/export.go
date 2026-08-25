@@ -10,6 +10,14 @@ func AttachProcessTree(cmd *exec.Cmd) (ProcessTreeHandle, error) {
 	return attachProcessTree(cmd)
 }
 
+func AttachProcessTreeWithLimits(cmd *exec.Cmd, limits ResourceLimits) (ProcessTreeHandle, error) {
+	return attachProcessTreeWithLimits(cmd, limits)
+}
+
+func ResourceLimitsSupported() ResourceLimitSupport {
+	return resourceLimitSupport()
+}
+
 func TerminateProcessTree(pid int, handle ProcessTreeHandle) error {
 	return terminateProcessTree(pid, handle)
 }
