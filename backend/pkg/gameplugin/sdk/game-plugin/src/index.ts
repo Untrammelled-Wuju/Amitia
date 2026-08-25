@@ -3,7 +3,7 @@ export * from './game';
 export * from './descriptor';
 export * from './transport';
 export * from './errors';
-export { Client, ClientOptions, IDGenerator, FixedIDGenerator, UUIDGenerator, withRuntimeID, withPluginID, withServiceID, withMetadata, withTimeout, PendingRequest, DEFAULT_RPC_TIMEOUT_MS } from './client';
+export { Client, ClientOptions, IDGenerator, FixedIDGenerator, UUIDGenerator, withRuntimeID, withPluginID, withServiceID, withGeneration, withMetadata, withTimeout, PendingRequest, DEFAULT_RPC_TIMEOUT_MS } from './client';
 export { createPluginDescriptor } from './descriptor';
 export { Plugin } from './plugin';
 export { StdioTransport, StdioTransportOptions } from './transport_stdio';
