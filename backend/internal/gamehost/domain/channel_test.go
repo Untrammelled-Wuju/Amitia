@@ -68,7 +68,7 @@ func TestChannelDescriptorRejectsControlCharactersInID(t *testing.T) {
 }
 
 func TestChannelDescriptorRejectsTooLongSchemaID(t *testing.T) {
-	longSchema := make([]byte, 300)
+	longSchema := make([]byte, 1025)
 	ch := ChannelDescriptor{
 		ID:        ChannelID("test"),
 		ServiceID: ServiceID("svc"),

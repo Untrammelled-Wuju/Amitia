@@ -112,6 +112,7 @@ func runtimeChannelsEqual(a, b RuntimeChannel) bool {
 		a.ServiceID != b.ServiceID ||
 		a.ChannelID != b.ChannelID ||
 		a.Kind != b.Kind ||
+		a.SchemaID != b.SchemaID ||
 		a.Direction != b.Direction {
 		return false
 	}

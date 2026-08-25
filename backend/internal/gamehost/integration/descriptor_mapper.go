@@ -67,11 +67,21 @@ func (m *DefaultGamePluginContributionMapper) ToDescriptor(
 		if serviceID == "" && len(services) == 1 {
 			serviceID = string(services[0].ID)
 		}
+		direction := ch.Direction
+		if direction == "" {
+			direction = protocol.ChannelDirectionPluginToHost
+		}
+		frequency := gamehostdomain.ChannelFrequency("")
+		if ch.FrequencyHint != nil {
+			frequency = gamehostdomain.ChannelFrequency(*ch.FrequencyHint)
+		}
 		channels = append(channels, gamehostdomain.ChannelDescriptor{
 			ID:        gamehostdomain.ChannelID(strings.TrimSpace(ch.ID)),
 			ServiceID: gamehostdomain.ServiceID(serviceID),
 			Kind:      gamehostdomain.ChannelKind(strings.TrimSpace(ch.Kind)),
 			SchemaID:  strings.TrimSpace(ch.SchemaID),
+			Direction: gamehostdomain.ChannelDirection(direction),
+			Frequency: frequency,
 			Metadata:  cloneStringMap(ch.Metadata),
 		})
 	}
