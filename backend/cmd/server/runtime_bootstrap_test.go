@@ -100,6 +100,28 @@ func TestGraphStoreProviderDescriptor(t *testing.T) {
 	}
 }
 
+func TestVectorStoreProviderDescriptorHonorsConfiguration(t *testing.T) {
+	p := &vectorStoreProviderAdapter{enabled: true, required: true}
+	desc := p.Descriptor()
+	if !desc.Enabled {
+		t.Fatal("vector store descriptor should honor enabled configuration")
+	}
+	if !desc.Required {
+		t.Fatal("vector store descriptor should honor required configuration")
+	}
+}
+
+func TestGraphStoreProviderDescriptorHonorsConfiguration(t *testing.T) {
+	p := &graphStoreProviderAdapter{enabled: true, required: true}
+	desc := p.Descriptor()
+	if !desc.Enabled {
+		t.Fatal("graph store descriptor should honor enabled configuration")
+	}
+	if !desc.Required {
+		t.Fatal("graph store descriptor should honor required configuration")
+	}
+}
+
 func TestRuntimeBootstrapCreatesNodeEnvironmentResolver(t *testing.T) {
 	paths := &util.RuntimePaths{}
 	b, err := newRuntimeBootstrap(paths, runtimeprofile.ProfileLocal)

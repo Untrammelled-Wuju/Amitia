@@ -141,8 +141,10 @@ func (b *runtimeBootstrap) buildPlatformProviders() error {
 }
 
 func (b *runtimeBootstrap) RegisterInfrastructure(sqlDB *sql.DB, graphSvc graph.Service) error {
-	vectorProvider := &vectorStoreProviderAdapter{host: b.host}
-	graphProvider := &graphStoreProviderAdapter{host: b.host, graphSvc: graphSvc}
+	vectorCfg := config.AppCfg.Providers.VectorStore
+	graphCfg := config.AppCfg.Providers.GraphStore
+	vectorProvider := &vectorStoreProviderAdapter{host: b.host, enabled: vectorCfg.Enabled, required: vectorCfg.Required}
+	graphProvider := &graphStoreProviderAdapter{host: b.host, graphSvc: graphSvc, enabled: graphCfg.Enabled, required: graphCfg.Required}
 
 	if err := b.orchestrator.Register(vectorProvider); err != nil {
 		return fmt.Errorf("register vector store: %w", err)
@@ -241,15 +243,17 @@ func (b *runtimeBootstrap) SetAndroidNativeBridge(bridge nativebridge.Bridge) er
 }
 
 type vectorStoreProviderAdapter struct {
-	host runtimehost.RuntimeHost
+	host     runtimehost.RuntimeHost
+	enabled  bool
+	required bool
 }
 
 func (a *vectorStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentDescriptor {
 	return runtimeorchestrator.ComponentDescriptor{
 		ID:           runtimeorchestrator.ComponentVectorStore,
 		Phase:        runtimeorchestrator.PhaseInfrastructure,
-		Enabled:      true,
-		Required:     false,
+		Enabled:      a.enabled,
+		Required:     a.required,
 		Capabilities: []string{"storage.vector"},
 		Dependencies: []runtimeorchestrator.ComponentID{runtimeorchestrator.ComponentSQLite},
 		Profiles:     profilesCore,
@@ -295,14 +299,16 @@ func (a *vectorStoreProviderAdapter) Stop(ctx context.Context) error {
 type graphStoreProviderAdapter struct {
 	host     runtimehost.RuntimeHost
 	graphSvc graph.Service
+	enabled  bool
+	required bool
 }
 
 func (a *graphStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentDescriptor {
 	return runtimeorchestrator.ComponentDescriptor{
 		ID:           runtimeorchestrator.ComponentGraphStore,
 		Phase:        runtimeorchestrator.PhaseInfrastructure,
-		Enabled:      true,
-		Required:     false,
+		Enabled:      a.enabled,
+		Required:     a.required,
 		Capabilities: []string{"storage.graph"},
 		Dependencies: []runtimeorchestrator.ComponentID{runtimeorchestrator.ComponentSQLite},
 		Profiles:     profilesCore,
