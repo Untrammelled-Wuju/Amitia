@@ -499,6 +499,22 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 
 				if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.TakeoverService != nil {
 					controlHandler := management.NewControlHandlerFromFuncs(management.ControlServiceOptions{
+						SupportsControlFn: func(ctx context.Context, runtimeID string) (bool, error) {
+							runtimeRef, err := services.KernelContainer.GameHost.RuntimeManager.GetRuntime(domain.RuntimeInstanceID(runtimeID))
+							if err != nil {
+								return false, err
+							}
+							plugin, err := services.KernelContainer.GameHost.PluginRegistry.Get(ctx, runtimeRef.PluginID)
+							if err != nil {
+								return false, err
+							}
+							for _, feature := range plugin.Capabilities {
+								if feature == domain.HostFeatureRealtimeControl {
+									return true, nil
+								}
+							}
+							return false, nil
+						},
 						TakeoverFn: func(ctx context.Context, runtimeID string) (management.TakeoverResult, error) {
 							_, err := services.KernelContainer.GameHost.TakeoverService.Takeover(ctx, control.TakeoverRequest{
 								RuntimeID: domain.RuntimeInstanceID(runtimeID),
