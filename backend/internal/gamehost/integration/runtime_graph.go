@@ -467,20 +467,21 @@ func buildPluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, permission
 	policy := trusted_service.ServiceNetworkPolicy{Mode: mode, Enforce: true}
 	switch mode {
 	case "none":
-		return policy, nil
 	case "loopback":
 		policy.AllowOutbound = true
 		policy.LoopbackOnly = true
-		return policy, nil
 	case "unrestricted":
 		if !containsString(permissions, "service.network.request") {
 			return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("unrestricted outbound network requires service.network.request")
 		}
 		policy.AllowOutbound = true
-		return policy, nil
 	default:
 		return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("unsupported mode %q", mode)
 	}
+	if err := trusted_service.ValidateNetworkPolicySupport(policy); err != nil {
+		return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("game plugin network mode %q is unavailable on this host: %w", mode, err)
+	}
+	return policy, nil
 }
 
 func containsString(values []string, target string) bool {

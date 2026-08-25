@@ -10,12 +10,17 @@ on:
     paths:
       - 'backend/go.mod'
       - 'backend/go.sum'
+      - 'backend/cmd/server/**'
+      - 'backend/config/**'
+      - 'backend/internal/accountsession/**'
+      - 'backend/internal/extension/**'
       - 'backend/internal/gamehost/**'
+      - 'backend/internal/middleware/security/**'
       - 'backend/pkg/gameplugin/**'
-      - 'backend/internal/extension/kernel/trusted_service/**'
       - 'backend/internal/platform/process/**'
       - 'sdk/game-plugin-go/**'
       - 'scripts/sync_game_plugin_go_sdk.py'
+      - 'scripts/verify_mock_game_plugin_sdk_vendor.py'
       - 'testplugins/game-plugin-demo/**'
       - 'testplugins/mock-amitiax-game-plugin/**'
       - 'tests/gamehost_external/**'
@@ -40,11 +45,11 @@ jobs:
       - name: Vet GameHost and public protocol
         working-directory: backend
         run: |
-          go vet ./internal/gamehost/... ./pkg/gameplugin/... ./internal/extension/kernel/trusted_service/... ./internal/platform/process/...
+          go vet ./internal/gamehost/... ./pkg/gameplugin/... ./internal/extension/kernel/trusted_service/... ./internal/extension/kernel/amitiax/... ./internal/extension/kernel/manifest_v2/... ./internal/platform/process/... ./cmd/server
       - name: Test GameHost and public protocol
         working-directory: backend
         run: |
-          go test -count=1 ./internal/gamehost/... ./pkg/gameplugin/... ./internal/extension/kernel/trusted_service/... ./internal/platform/process/...
+          go test -count=1 ./internal/gamehost/... ./pkg/gameplugin/... ./internal/extension/kernel/trusted_service/... ./internal/extension/kernel/amitiax/... ./internal/extension/kernel/manifest_v2/... ./internal/platform/process/... ./cmd/server
       - name: Race-sensitive GameHost packages
         working-directory: backend
         run: |
@@ -101,6 +106,8 @@ jobs:
           node-version: '20.18.0'
           cache: npm
           cache-dependency-path: backend/pkg/gameplugin/sdk/game-plugin/package-lock.json
+      - name: Verify external plugin SDK vendor is current
+        run: python3 scripts/verify_mock_game_plugin_sdk_vendor.py
       - name: Install SDK dependencies
         working-directory: backend/pkg/gameplugin/sdk/game-plugin
         run: npm ci
@@ -121,3 +128,97 @@ jobs:
         run: |
           npm ci
           npx tsc --noEmit
+
+  external-gamehost-e2e:
+    name: Real external GameHost E2E gate
+    runs-on: ubuntu-latest
+    needs: [go-host-gate, go-sdk-gate, typescript-sdk-gate]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.1'
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.18.0'
+          cache: npm
+          cache-dependency-path: |
+            testplugins/mock-amitiax-game-plugin/package-lock.json
+            tests/gamehost_external/package-lock.json
+      - name: Install Linux sandbox backend
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          bwrap --version
+      - name: Build canonical external plugin v1 and v2 packages
+        working-directory: testplugins/mock-amitiax-game-plugin
+        run: |
+          npm ci
+          npm run build
+          MOCK_PLUGIN_OUTPUT=mock-amitiax-game-plugin-v1.amitiax npm run package
+          MOCK_PLUGIN_OUTPUT=mock-amitiax-game-plugin-v1.amitiax npm run verify-package
+          MOCK_PLUGIN_VERSION=1.1.0 MOCK_PLUGIN_OUTPUT=mock-amitiax-game-plugin-v2.amitiax npm run package
+          MOCK_PLUGIN_OUTPUT=mock-amitiax-game-plugin-v2.amitiax npm run verify-package
+          test -f dist-package/mock-amitiax-game-plugin-v1.amitiax
+          test -f dist-package/mock-amitiax-game-plugin-v2.amitiax
+      - name: Install and typecheck external E2E harness
+        working-directory: tests/gamehost_external
+        run: |
+          npm ci
+          npx tsc --noEmit
+      - name: Build real backend
+        working-directory: backend
+        run: go build -o "$RUNNER_TEMP/amitia-gamehost-e2e-server" ./cmd/server
+      - name: Configure isolated GameHost runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          JWT_SECRET="$(openssl rand -hex 48)"
+          LOCAL_TOKEN="$(openssl rand -hex 32)"
+          {
+            echo "AMITIA_RUNTIME_ROOT=$GITHUB_WORKSPACE"
+            echo "AMITIA_DATA_DIR=$RUNNER_TEMP/gamehost-e2e/data"
+            echo "AMITIA_LOG_DIR=$RUNNER_TEMP/gamehost-e2e/logs"
+            echo "AMITIA_CACHE_DIR=$RUNNER_TEMP/gamehost-e2e/cache"
+            echo "AMITIA_TEMP_DIR=$RUNNER_TEMP/gamehost-e2e/tmp"
+            echo "AMITIA_WORKSPACE_DIR=$GITHUB_WORKSPACE"
+            echo "AMITIA_RUNTIME_PROFILE=local"
+            echo "AMITIA_JWT_SECRET=$JWT_SECRET"
+            echo "AMITIA_LOCAL_TOKEN=$LOCAL_TOKEN"
+            echo "AMITIA_EXTENSION_DEV_MODE=true"
+            echo "AMITIA_VECTOR_STORE_ENABLED=false"
+            echo "AMITIA_GRAPH_STORE_ENABLED=false"
+            echo "AMITIA_TASK_HOST_ENABLED=false"
+            echo "AMITIA_WECHAT_SIDECAR_ENABLED=false"
+            echo "AMITIA_QQ_SIDECAR_ENABLED=false"
+            echo "AMITIA_DESKTOP_PET_RUNTIME_ENABLED=false"
+            echo "AMITIA_NODE_BIN=$(command -v node)"
+            echo "GAMEHOST_BACKEND_BIN=$RUNNER_TEMP/amitia-gamehost-e2e-server"
+            echo "GAMEHOST_BACKEND_PID_FILE=$RUNNER_TEMP/gamehost-e2e/backend.pid"
+            echo "GAMEHOST_BACKEND_LOG=$RUNNER_TEMP/gamehost-e2e/backend.log"
+            echo "GAMEHOST_SERVER_ROOT=http://127.0.0.1:18899"
+            echo "GAMEHOST_BASE_URL=http://127.0.0.1:18899/api"
+            echo "GAMEHOST_BACKEND_RESTART_COMMAND=bash $GITHUB_WORKSPACE/tests/gamehost_external/scripts/restart-backend.sh restart"
+            echo "GAMEHOST_BACKEND_CWD=$GITHUB_WORKSPACE"
+            echo "GAMEHOST_DEV_WORKSPACE_PATH=$GITHUB_WORKSPACE/testplugins/mock-amitiax-game-plugin"
+            echo "MOCK_PLUGIN_ARCHIVE_PATH=$GITHUB_WORKSPACE/testplugins/mock-amitiax-game-plugin/dist-package/mock-amitiax-game-plugin-v1.amitiax"
+            echo "MOCK_PLUGIN_ARCHIVE_PATH_V2=$GITHUB_WORKSPACE/testplugins/mock-amitiax-game-plugin/dist-package/mock-amitiax-game-plugin-v2.amitiax"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/gamehost-e2e/data" "$RUNNER_TEMP/gamehost-e2e/logs" "$RUNNER_TEMP/gamehost-e2e/cache" "$RUNNER_TEMP/gamehost-e2e/tmp"
+      - name: Start real backend
+        shell: bash
+        run: tests/gamehost_external/scripts/restart-backend.sh start
+      - name: Create authenticated developer session
+        run: node tests/gamehost_external/scripts/bootstrap-dev-session.mjs
+      - name: Execute real external plugin lifecycle and fault matrices
+        working-directory: tests/gamehost_external
+        run: npm test
+      - name: Dump backend log on failure
+        if: failure()
+        run: tail -n 500 "$GAMEHOST_BACKEND_LOG" || true
+      - name: Stop E2E backend
+        if: always()
+        shell: bash
+        run: tests/gamehost_external/scripts/restart-backend.sh stop || true
