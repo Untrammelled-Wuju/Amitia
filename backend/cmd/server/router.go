@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -42,6 +43,7 @@ import (
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
+	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
@@ -537,7 +539,16 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					rpcHandler := management.NewRPCHandler(rpcInvoker)
 					management.RegisterRPCRouter(apiGroup, rpcHandler)
 
-					debugHandler := management.NewDebugHandler(services.KernelContainer.GameHost)
+					debugHandler := management.NewDebugHandler(services.KernelContainer.GameHost, func(ctx context.Context, toolID string, input json.RawMessage, scope management.DebugToolScope) (any, bool) {
+						if services.KernelContainer.ToolFacade == nil {
+							return nil, false
+						}
+						result, ok := services.KernelContainer.ToolFacade.ExecuteTool(ctx, capability.CapabilityID(toolID), input, extensionkernel.LegacyScope{
+							UserID: scope.UserID, CharacterID: scope.CharacterID, ConversationID: scope.ConversationID, Channel: scope.Channel, SessionID: scope.SessionID,
+							RequestID: scope.RequestID, ToolCallID: scope.ToolCallID,
+						}, scope.ToolCallID, scope.RequestID)
+						return result, ok
+					})
 					management.RegisterDebugRouter(apiGroup, debugHandler)
 				}
 			}

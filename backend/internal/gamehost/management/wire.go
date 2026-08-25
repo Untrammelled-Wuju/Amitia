@@ -16,7 +16,8 @@ func NewProductionService(container *gamehost.GameHostContainer, kernel KernelMa
 	}
 
 	opts := GameCenterManagementServiceOptions{
-		Kernel: kernel,
+		Kernel:      kernel,
+		AgentBinder: container,
 	}
 
 	if container.PluginRegistry != nil {

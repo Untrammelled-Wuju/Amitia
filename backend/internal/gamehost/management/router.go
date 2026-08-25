@@ -21,6 +21,7 @@ func RegisterGameCenterRouter(group *gin.RouterGroup, service *GameCenterManagem
 		gameCenter.GET("/runtimes/:runtimeId/health", handler.GetRuntimeHealth)
 		gameCenter.GET("/runtimes/:runtimeId/handshake", handler.GetHandshakeStatus)
 		gameCenter.GET("/runtimes/:runtimeId/authority", handler.GetControlAuthority)
+		gameCenter.POST("/runtimes/:runtimeId/agent-context", handler.BindAgentContext)
 
 		gameCenter.GET("/handshake", handler.GetHandshakeStatus)
 		gameCenter.GET("/authority", handler.GetControlAuthority)

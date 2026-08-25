@@ -16,21 +16,21 @@ type GamePluginSummaryDTO struct {
 }
 
 type GamePluginDetailDTO struct {
-	ExtensionID        string                 `json:"extensionId"`
-	PluginID           string                 `json:"pluginId"`
-	Name               string                 `json:"name"`
-	Version            string                 `json:"version"`
-	Description        string                 `json:"description"`
-	Enabled            bool                   `json:"enabled"`
-	InstallState       string                 `json:"installState"`
-	PackageRevision    string                 `json:"packageRevision,omitempty"`
-	DescriptorRevision string                 `json:"descriptorRevision,omitempty"`
-	ManagementTarget   string                 `json:"managementTarget"`
-	Capabilities       []string               `json:"capabilities,omitempty"`
-	Permissions        []string               `json:"permissions,omitempty"`
-	Provider           string                 `json:"provider,omitempty"`
+	ExtensionID        string                  `json:"extensionId"`
+	PluginID           string                  `json:"pluginId"`
+	Name               string                  `json:"name"`
+	Version            string                  `json:"version"`
+	Description        string                  `json:"description"`
+	Enabled            bool                    `json:"enabled"`
+	InstallState       string                  `json:"installState"`
+	PackageRevision    string                  `json:"packageRevision,omitempty"`
+	DescriptorRevision string                  `json:"descriptorRevision,omitempty"`
+	ManagementTarget   string                  `json:"managementTarget"`
+	Capabilities       []string                `json:"capabilities,omitempty"`
+	Permissions        []string                `json:"permissions,omitempty"`
+	Provider           string                  `json:"provider,omitempty"`
 	Runtimes           []GameRuntimeSummaryDTO `json:"runtimes,omitempty"`
-	HealthSummary      *HealthSummaryDTO      `json:"healthSummary,omitempty"`
+	HealthSummary      *HealthSummaryDTO       `json:"healthSummary,omitempty"`
 }
 
 type GameRuntimeSummaryDTO struct {
@@ -80,10 +80,10 @@ type HealthSummaryDTO struct {
 }
 
 type ProcessSummaryDTO struct {
-	Managed          bool   `json:"managed"`
-	Running          bool   `json:"running"`
+	Managed           bool   `json:"managed"`
+	Running           bool   `json:"running"`
 	ProcessGeneration uint64 `json:"processGeneration"`
-	RestartCount     int    `json:"restartCount"`
+	RestartCount      int    `json:"restartCount"`
 }
 
 type ConnectionSummaryDTO struct {
@@ -164,4 +164,13 @@ func (f RuntimeFilter) Normalize() RuntimeFilter {
 		f.PageSize = 100
 	}
 	return f
+}
+
+type AgentContextBindRequest struct {
+	ServiceID      string `json:"serviceId"`
+	UserID         string `json:"userId,omitempty"`
+	CharacterID    string `json:"characterId,omitempty"`
+	ConversationID string `json:"conversationId,omitempty"`
+	Channel        string `json:"channel,omitempty"`
+	SessionID      string `json:"sessionId,omitempty"`
 }

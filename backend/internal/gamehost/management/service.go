@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
@@ -62,6 +63,13 @@ type HealthReader interface {
 	ListServiceHealth(runtimeID string) []runtime.ServiceHealthSnapshot
 }
 
+// AgentContextBinder is implemented by the GameHost container/bridge. It lets
+// the normal Game Center session activation flow bind a runtime+service to the
+// currently selected Agent before any tool invocation occurs.
+type AgentContextBinder interface {
+	BindAgentContext(context.Context, capability.RuntimeBinding, capability.ToolInvocationContext) error
+}
+
 type GameCenterManagementService struct {
 	kernel      KernelManagementReader
 	registry    PluginRegistryReader
@@ -71,6 +79,7 @@ type GameCenterManagementService struct {
 	handshake   HandshakeReader
 	authority   ControlAuthorityReader
 	health      HealthReader
+	agentBinder AgentContextBinder
 }
 
 type GameCenterManagementServiceOptions struct {
@@ -82,6 +91,7 @@ type GameCenterManagementServiceOptions struct {
 	Handshake   HandshakeReader
 	Authority   ControlAuthorityReader
 	Health      HealthReader
+	AgentBinder AgentContextBinder
 }
 
 func NewGameCenterManagementService(opts GameCenterManagementServiceOptions) *GameCenterManagementService {
@@ -94,6 +104,7 @@ func NewGameCenterManagementService(opts GameCenterManagementServiceOptions) *Ga
 		handshake:   opts.Handshake,
 		authority:   opts.Authority,
 		health:      opts.Health,
+		agentBinder: opts.AgentBinder,
 	}
 }
 
@@ -383,6 +394,77 @@ func (s *GameCenterManagementService) GetControlAuthority(ctx context.Context, r
 		Epoch:     snap.Epoch,
 		UpdatedAt: &updatedAt,
 	}, nil
+}
+
+// BindAgentContext binds an active UI/host Agent scope to one or all process
+// services of a GameHost runtime. The runtime identity is validated through
+// the runtime manager and topology; callers cannot bind an arbitrary
+// plugin/service tuple. Omitting serviceId intentionally applies the same host
+// context to every process service so multi-service plugins are safe by
+// default and the UI does not need to understand plugin-internal topology.
+func (s *GameCenterManagementService) BindAgentContext(ctx context.Context, runtimeID string, req AgentContextBindRequest) error {
+	runtimeID = strings.TrimSpace(runtimeID)
+	if runtimeID == "" {
+		return fmt.Errorf("runtimeId required")
+	}
+	if s.agentBinder == nil || s.runtimes == nil {
+		return fmt.Errorf("game-center: Agent context binding is unavailable")
+	}
+	rtRef, err := s.runtimes.GetRuntime(runtimeID)
+	if err != nil || rtRef == nil {
+		return fmt.Errorf("runtime not found")
+	}
+	if s.topology == nil {
+		return fmt.Errorf("runtime topology unavailable")
+	}
+	snapshot, err := s.topology.GetTopologySnapshot(runtimeID)
+	if err != nil {
+		return fmt.Errorf("runtime topology unavailable: %w", err)
+	}
+	requestedServiceID := strings.TrimSpace(req.ServiceID)
+	serviceIDs := make([]string, 0, len(snapshot.Services))
+	for _, svc := range snapshot.Services {
+		if svc.ServiceKind != ghdomain.ServiceKindProcess {
+			continue
+		}
+		serviceID := strings.TrimSpace(string(svc.ServiceID))
+		if serviceID == "" {
+			continue
+		}
+		if requestedServiceID != "" && serviceID != requestedServiceID {
+			continue
+		}
+		serviceIDs = append(serviceIDs, serviceID)
+	}
+	if len(serviceIDs) == 0 {
+		return fmt.Errorf("service not found")
+	}
+	if strings.TrimSpace(req.UserID) == "" && strings.TrimSpace(req.CharacterID) == "" && strings.TrimSpace(req.ConversationID) == "" {
+		return fmt.Errorf("Agent target required")
+	}
+	invocation := capability.ToolInvocationContext{
+		InvocationID:   "gamehost-context-bind",
+		UserID:         strings.TrimSpace(req.UserID),
+		CharacterID:    strings.TrimSpace(req.CharacterID),
+		ConversationID: strings.TrimSpace(req.ConversationID),
+		Channel:        strings.TrimSpace(req.Channel),
+		SessionID:      strings.TrimSpace(req.SessionID),
+		Source:         capability.InvocationSourceUser,
+	}
+	for _, serviceID := range serviceIDs {
+		binding := capability.RuntimeBinding{
+			RuntimeType: capability.RuntimeTypeGameHost,
+			RuntimeID:   runtimeID,
+			Metadata: map[string]any{
+				"pluginId":  string(rtRef.PluginID),
+				"serviceId": serviceID,
+			},
+		}
+		if err := s.agentBinder.BindAgentContext(ctx, binding, invocation); err != nil {
+			return fmt.Errorf("bind Agent context for service %s: %w", serviceID, err)
+		}
+	}
+	return nil
 }
 
 func (s *GameCenterManagementService) aggregatePluginSummary(

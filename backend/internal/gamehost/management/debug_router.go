@@ -9,5 +9,6 @@ func RegisterDebugRouter(group *gin.RouterGroup, debugHandler *DebugHandler) {
 	debug.Use(RequireGameHostDeveloperAccess())
 	{
 		debug.GET("/residue", debugHandler.GetResidueReport)
+		debug.POST("/tools/invoke", debugHandler.InvokeTool)
 	}
 }

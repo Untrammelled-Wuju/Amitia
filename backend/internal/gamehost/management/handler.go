@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 type Handler struct {
@@ -254,4 +255,37 @@ func (h *Handler) GetControlAuthority(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+}
+
+func (h *Handler) BindAgentContext(c *gin.Context) {
+	if h.service == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "service unavailable"})
+		return
+	}
+	runtimeID := strings.TrimSpace(c.Param("runtimeId"))
+	if runtimeID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId required"})
+		return
+	}
+	var req AgentContextBindRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid Agent context payload"})
+		return
+	}
+	// Ownership is always taken from the authenticated request context. Never
+	// trust a client supplied userId here: this endpoint controls where future
+	// plugin-originated events are routed inside the Agent system.
+	req.UserID = requestidentity.NormalizeUserID(requestidentity.ResolveGin(c, ""))
+	if err := h.service.BindAgentContext(c.Request.Context(), runtimeID, req); err != nil {
+		msg := err.Error()
+		status := http.StatusBadRequest
+		if msg == "runtime not found" || msg == "service not found" {
+			status = http.StatusNotFound
+		} else if strings.Contains(msg, "unavailable") {
+			status = http.StatusServiceUnavailable
+		}
+		c.JSON(status, gin.H{"code": status, "msg": msg})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 }
