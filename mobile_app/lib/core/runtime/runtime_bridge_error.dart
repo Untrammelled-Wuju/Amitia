@@ -12,15 +12,25 @@ class RuntimeBridgeError {
   factory RuntimeBridgeError.fromMap(Map<String, dynamic>? map) {
     if (map == null) {
       return const RuntimeBridgeError(
-        code: 'UNKNOWN',
-        message: 'Unknown error',
+        code: 'BRIDGE_ERROR_MISSING',
+        message: 'Runtime error payload is missing.',
         retryable: false,
       );
     }
+
+    final rawCode = map['code'];
+    final normalizedCode = rawCode is String && rawCode.trim().isNotEmpty
+        ? rawCode.trim()
+        : 'BRIDGE_ERROR_INVALID';
+    final rawMessage = map['message'];
+    final normalizedMessage = rawMessage is String && rawMessage.trim().isNotEmpty
+        ? rawMessage.trim()
+        : 'Runtime error: $normalizedCode';
+
     return RuntimeBridgeError(
-      code: map['code'] as String? ?? 'UNKNOWN',
-      message: map['message'] as String? ?? 'Unknown error',
-      retryable: map['retryable'] as bool? ?? false,
+      code: normalizedCode,
+      message: normalizedMessage,
+      retryable: map['retryable'] is bool ? map['retryable'] as bool : false,
     );
   }
 

@@ -455,7 +455,7 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
   }
 
   void _emitStatus(MobileBackendStatus status) {
-    if (_disposed) return;
+    if (_disposed || status == _currentStatus) return;
     _currentStatus = status;
     _statusController.add(status);
   }

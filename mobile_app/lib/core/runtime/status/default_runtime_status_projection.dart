@@ -300,7 +300,10 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
         businessAvailable: false,
         generation: runtime.generation,
         runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
-        primaryError: _mapRuntimeError(runtime.lastError),
+        // STARTING/INSTALLING are active transition states. A previous
+        // generation's failure must never be surfaced here. Real startup
+        // failures transition the runtime to FAILED and are reported there.
+        primaryError: null,
       );
 
     case RuntimeBridgeState.stopping:
@@ -486,10 +489,11 @@ RuntimeStatusError? _deriveConnectionError(
   BackendConnectionAvailability connection,
 ) {
   if (connection is BackendConnectionUnavailable) {
-    return const RuntimeStatusError(
+    final error = connection.error;
+    return RuntimeStatusError(
       source: RuntimeStatusErrorSource.backendConnection,
-      code: 'CONNECTION_UNAVAILABLE',
-      message: 'Backend connection unavailable',
+      code: error?.code.name ?? 'CONNECTION_UNAVAILABLE',
+      message: error?.message ?? 'Backend connection unavailable',
     );
   }
   if (connection is BackendConnectionResolving) {
