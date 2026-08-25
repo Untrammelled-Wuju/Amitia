@@ -1,6 +1,7 @@
 import { createDriver, BackendDriver } from '../backend_driver';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
+const MOCK_EXTENSION_ID = 'mock-developer/mock-amitiax-game-plugin';
 
 function requireArchive(): string {
   if (!ARCHIVE_PATH) {
@@ -26,13 +27,13 @@ describe('G47-F15 Security (Backend Driver)', () => {
         // ignore
       }
     }
-    if (extensionId) {
-      try {
-        await driver.uninstallPlugin(extensionId);
-      } catch {
-        // ignore
-      }
+    try {
+      await driver.uninstallPlugin(extensionId ?? MOCK_EXTENSION_ID);
+    } catch {
+      // Package may not have reached a visible installed state.
     }
+    extensionId = null;
+    runtimeId = null;
   });
 
   it('install enable and acquire control', async () => {

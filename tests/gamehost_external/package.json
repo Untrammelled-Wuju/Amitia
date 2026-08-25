@@ -4,11 +4,11 @@
   "description": "G46-F15 External E2E tests for independent Mock Game Plugin",
   "type": "module",
   "scripts": {
-    "test": "jest",
-    "test:smoke": "jest --testPathPattern=smoke",
-    "test:lifecycle": "jest --testPathPattern=lifecycle",
-    "test:security": "jest --testPathPattern=security",
-    "test:fault": "jest --testPathPattern=fault"
+    "test": "jest --runInBand",
+    "test:smoke": "jest --testPathPattern=smoke --runInBand",
+    "test:lifecycle": "jest --testPathPattern=lifecycle --runInBand",
+    "test:security": "jest --testPathPattern=security --runInBand",
+    "test:fault": "jest --testPathPattern=fault --runInBand"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

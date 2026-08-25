@@ -2,6 +2,7 @@ import { createDriver, BackendDriver } from '../backend_driver';
 import { GameCenterClient } from '../game_center_client';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
+const MOCK_EXTENSION_ID = 'mock-developer/mock-amitiax-game-plugin';
 const ARCHIVE_PATH_V2 = process.env.MOCK_PLUGIN_ARCHIVE_PATH_V2;
 
 function requireArchive(): string {
@@ -35,13 +36,13 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
         // ignore
       }
     }
-    if (extensionId) {
-      try {
-        await driver.uninstallPlugin(extensionId);
-      } catch {
-        // ignore
-      }
+    try {
+      await driver.uninstallPlugin(extensionId ?? MOCK_EXTENSION_ID);
+    } catch {
+      // Package may not have reached a visible installed state.
     }
+    extensionId = null;
+    runtimeId = null;
   });
 
   it('F04: emergency stop prevents runtime restart until rearm', async () => {
@@ -155,12 +156,14 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     const driver = createDriver();
     const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
     const extId = plugin.extensionId;
+    extensionId = extId;
     await client.enablePlugin(extId);
 
     const runtimes = await client.listRuntimes({ pluginId: plugin.pluginId });
     expect(runtimes.items.length).toBeGreaterThan(0);
     const rt = runtimes.items[0];
     const rtId = rt.runtimeId;
+    runtimeId = rtId;
 
     await client.startRuntime(rtId);
     await driver.waitForRuntimeReady(rtId, 30000);
@@ -170,14 +173,7 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     expect(genBefore).toBeGreaterThan(0);
 
     try {
-      await fetch(
-        `${(client as any).baseUrl}/game-center/runtimes/${rtId}/services/mock-game-runtime/rpc`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ method: 'mockgame.fault.crash', payload: {} }),
-        },
-      );
+      await client.invokeRuntimeRPC(rtId, 'mockgame.fault.crash', {});
     } catch {
       // expected: crash may cause connection failure
     }
@@ -204,27 +200,31 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
   }, 180000);
 
   it('restart runtime increments generation', async () => {
+    const archivePath = requireArchive();
     const client = new GameCenterClient();
-    const driver = createDriver();
 
-    const runtimes = await client.listRuntimes();
-    const mockRt = runtimes.items.find(r => r.pluginId && r.pluginId.includes('mock-amitiax-game-plugin'));
-    if (!mockRt) {
-      throw new Error('no mock runtime available for restart test');
-    }
-    const rtId = mockRt.runtimeId;
+    await client.installPlugin(archivePath);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    await client.enablePlugin(extensionId);
 
-    const before = await client.getRuntime(rtId);
+    const runtimes = await client.listRuntimes({ pluginId: plugin.pluginId });
+    expect(runtimes.items.length).toBeGreaterThan(0);
+    runtimeId = runtimes.items[0].runtimeId;
+    await client.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
+
+    const before = await client.getRuntime(runtimeId);
     const genBefore = before.process?.processGeneration ?? 0;
+    expect(genBefore).toBeGreaterThan(0);
 
-    await client.restartRuntime(rtId);
-    await driver.waitForRuntimeReady(rtId, 30000);
+    await client.restartRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
 
-    const after = await client.getRuntime(rtId);
+    const after = await client.getRuntime(runtimeId);
     const genAfter = after.process?.processGeneration ?? 0;
-
     expect(genAfter).toBeGreaterThan(genBefore);
-  }, 90000);
+  }, 120000);
 
   it('zero residue after uninstall', async () => {
     const archivePath = requireArchive();
@@ -317,21 +317,18 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     await client.startRuntime(rtId);
     await driver2.waitForRuntimeReady(rtId, 30000);
 
-    // Exercise RPC, HostAPI, Takeover/Release
-    await fetch(
-      `${(client as any).baseUrl}/game-center/runtimes/${rtId}/services/mock-game-runtime/rpc`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'mockgame.echo', payload: {} }),
-      },
-    );
+    // Exercise authenticated canonical RPC, Takeover/Release.
+    extensionId = extId;
+    runtimeId = rtId;
+    await client.invokeRuntimeRPC(rtId, 'mockgame.echo', {});
 
     await client.takeover(rtId, { targetMode: 'plugin' });
     await client.release(rtId, { targetMode: 'observe' });
 
     await client.stopRuntime(rtId);
     await client.uninstallPlugin(extId);
+    extensionId = null;
+    runtimeId = null;
 
     await driver.assertZeroResidueForExtension(extId);
   }, 120000);
