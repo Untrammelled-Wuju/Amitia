@@ -142,6 +142,9 @@ func (r *Runner) performHandshake(ctx context.Context) (*HelloResponse, error) {
 	if respEnvelope.Type != protocol.MessageTypeResponse {
 		return nil, fmt.Errorf("unexpected handshake response type: %s", respEnvelope.Type)
 	}
+	if respEnvelope.Protocol != protocol.ProtocolVersion {
+		return nil, fmt.Errorf("handshake envelope protocol mismatch: got %s, expected %s", respEnvelope.Protocol, protocol.ProtocolVersion)
+	}
 	if respEnvelope.RequestID != envelope.ID {
 		return nil, fmt.Errorf("handshake response requestId mismatch: got %q, expected %q", respEnvelope.RequestID, envelope.ID)
 	}

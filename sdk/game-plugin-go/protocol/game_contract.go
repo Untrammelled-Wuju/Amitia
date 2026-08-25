@@ -125,10 +125,11 @@ type PluginArtifact struct {
 	SHA256                string   `json:"sha256,omitempty"`
 }
 
-// PluginNetworkPolicy deliberately exposes only policies that GameHost can
-// enforce without silently weakening them. Restricted domain/port filtering
-// and packet auditing are not part of protocol v1 until a real cross-platform
-// backend exists.
+// PluginNetworkPolicy defines the protocol-v1 network intent. Concrete OS
+// backends are host capabilities: provisioning MUST validate the requested
+// mode on the target platform and fail closed rather than silently weaken it.
+// Restricted domain/port filtering and packet auditing are intentionally not
+// part of protocol v1 until a real cross-platform backend exists.
 type PluginNetworkPolicy struct {
 	Mode string `json:"mode,omitempty"`
 }

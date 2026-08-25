@@ -254,27 +254,38 @@ func (c *Client) AdoptPeerRouting(envelope protocol.Envelope) error {
 	if c.generation != 0 && c.generation != envelope.Generation {
 		return NewValidationError("handshake generation mismatch: expected %d, got %d", c.generation, envelope.Generation)
 	}
-	adopt := func(current *string, incoming string, label string) error {
-		if incoming == "" {
-			return nil
+
+	resolve := func(current string, incoming string, label string) (string, error) {
+		if current != "" && incoming != "" && current != incoming {
+			return "", NewValidationError("handshake %s mismatch: expected %s, got %s", label, current, incoming)
 		}
-		if *current != "" && *current != incoming {
-			return NewValidationError("handshake %s mismatch: expected %s, got %s", label, *current, incoming)
+		if incoming != "" {
+			return incoming, nil
 		}
-		if *current == "" {
-			*current = incoming
+		if current != "" {
+			return current, nil
 		}
-		return nil
+		return "", NewValidationError("handshake response is missing %s", label)
 	}
-	if err := adopt(&c.runtimeID, envelope.RuntimeID, "runtimeId"); err != nil {
+
+	runtimeID, err := resolve(c.runtimeID, envelope.RuntimeID, "runtimeId")
+	if err != nil {
 		return err
 	}
-	if err := adopt(&c.pluginID, envelope.PluginID, "pluginId"); err != nil {
+	pluginID, err := resolve(c.pluginID, envelope.PluginID, "pluginId")
+	if err != nil {
 		return err
 	}
-	if err := adopt(&c.serviceID, envelope.ServiceID, "serviceId"); err != nil {
+	serviceID, err := resolve(c.serviceID, envelope.ServiceID, "serviceId")
+	if err != nil {
 		return err
 	}
+
+	// Commit only after every authoritative routing field has validated so a
+	// rejected handshake cannot leave the client partially rebound.
+	c.runtimeID = runtimeID
+	c.pluginID = pluginID
+	c.serviceID = serviceID
 	c.generation = envelope.Generation
 	return nil
 }

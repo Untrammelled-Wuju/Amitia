@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/u-ai/game-plugin-sdk-go/protocol"
@@ -10,7 +11,7 @@ type generationTestIDGenerator struct{ next int }
 
 func (g *generationTestIDGenerator) NewID() string {
 	g.next++
-	return "msg-" + string(rune('0'+g.next))
+	return "msg-" + strconv.Itoa(g.next)
 }
 
 func TestAdoptPeerRoutingBindsEveryEnvelopeType(t *testing.T) {
@@ -64,5 +65,38 @@ func TestAdoptPeerRoutingRejectsRebind(t *testing.T) {
 	}
 	if err := client.AdoptPeerRouting(protocol.Envelope{Generation: 3, PluginID: "other/plugin"}); err == nil {
 		t.Fatal("expected plugin route rebind to be rejected")
+	}
+}
+
+func TestAdoptPeerRoutingRejectsIncompleteRouteWithoutMutation(t *testing.T) {
+	client := NewClient(nil)
+	if err := client.AdoptPeerRouting(protocol.Envelope{
+		RuntimeID:  "rt-partial",
+		Generation: 8,
+	}); err == nil {
+		t.Fatal("expected incomplete authoritative route to be rejected")
+	}
+	if client.runtimeID != "" || client.pluginID != "" || client.serviceID != "" || client.generation != 0 {
+		t.Fatalf("failed handshake partially mutated routing: runtime=%q plugin=%q service=%q generation=%d", client.runtimeID, client.pluginID, client.serviceID, client.generation)
+	}
+}
+
+func TestAdoptPeerRoutingMismatchIsTransactional(t *testing.T) {
+	client := NewClient(nil,
+		WithClientRuntimeID("rt-1"),
+		WithClientPluginID("extension/plugin"),
+		WithClientServiceID("svc-1"),
+		WithClientGeneration(4),
+	)
+	if err := client.AdoptPeerRouting(protocol.Envelope{
+		RuntimeID:  "rt-1",
+		PluginID:   "other/plugin",
+		ServiceID:  "svc-2",
+		Generation: 4,
+	}); err == nil {
+		t.Fatal("expected route mismatch")
+	}
+	if client.runtimeID != "rt-1" || client.pluginID != "extension/plugin" || client.serviceID != "svc-1" || client.generation != 4 {
+		t.Fatalf("rejected rebind mutated client routing: runtime=%q plugin=%q service=%q generation=%d", client.runtimeID, client.pluginID, client.serviceID, client.generation)
 	}
 }
