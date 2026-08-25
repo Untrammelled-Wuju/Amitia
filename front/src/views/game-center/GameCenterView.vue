@@ -81,7 +81,7 @@
             <span>连接状态</span>
             <strong>{{ activeRuntime?.connected ? "在线" : "离线" }}</strong>
           </div>
-          <div class="stat-item">
+          <div v-if="activePluginSupportsControl" class="stat-item">
             <span>控制模式</span>
             <strong>{{ controlModeLabel(activeRuntime?.controlMode) }}</strong>
           </div>
@@ -99,13 +99,13 @@
             去对话使用插件能力
           </el-button>
           <el-button
-            v-if="activeRuntime?.connected && activeRuntime.controlMode !== 'user_control'"
+            v-if="activeRuntime?.connected && activePluginSupportsControl && activeRuntime.controlMode !== 'user_control'"
             size="large"
             :loading="busy === activeRuntime.runtimeId"
             @click="takeManualControl"
           >手动接管</el-button>
           <el-button
-            v-if="activeRuntime?.connected && activeRuntime.controlMode === 'user_control'"
+            v-if="activeRuntime?.connected && activePluginSupportsControl && activeRuntime.controlMode === 'user_control'"
             size="large"
             :loading="busy === activeRuntime.runtimeId"
             @click="releaseManualControl"
@@ -411,17 +411,20 @@
           <div><span>健康</span><strong>{{ healthLabel(runtimeHealth?.status || runtimeDetail.healthSummary?.status) }}</strong></div>
           <div><span>连接</span><strong>{{ runtimeDetail.connection?.connected ? "已连接" : "未连接" }}</strong></div>
           <div><span>Handshake</span><strong>{{ runtimeHandshake?.handshakeState || runtimeDetail.handshake?.handshakeState || "-" }}</strong></div>
-          <div><span>控制模式</span><strong>{{ controlModeLabel(runtimeAuthority?.mode || runtimeDetail.controlAuthority?.mode) }}</strong></div>
-          <div><span>Authority Epoch</span><strong>{{ runtimeAuthority?.epoch ?? runtimeDetail.controlAuthority?.epoch ?? "-" }}</strong></div>
+          <template v-if="selectedRuntimeSupportsControl">
+            <div><span>控制模式</span><strong>{{ controlModeLabel(runtimeAuthority?.mode || runtimeDetail.controlAuthority?.mode) }}</strong></div>
+            <div><span>Authority Epoch</span><strong>{{ runtimeAuthority?.epoch ?? runtimeDetail.controlAuthority?.epoch ?? "-" }}</strong></div>
+          </template>
           <div><span>服务</span><strong>{{ runtimeServices.length }}</strong></div>
         </div>
 
         <div class="developer-actions">
-          <el-button size="small" @click="controlAction(selectedRuntimeId, 'takeover')">接管控制</el-button>
-          <el-button size="small" @click="controlAction(selectedRuntimeId, 'release')">释放控制</el-button>
+          <el-button v-if="selectedRuntimeSupportsControl" size="small" @click="controlAction(selectedRuntimeId, 'takeover')">接管控制</el-button>
+          <el-button v-if="selectedRuntimeSupportsControl" size="small" @click="controlAction(selectedRuntimeId, 'release')">释放控制</el-button>
           <el-button size="small" type="danger" plain @click="controlAction(selectedRuntimeId, 'emergency-stop')">紧急停止</el-button>
           <el-button size="small" @click="controlAction(selectedRuntimeId, 'rearm')">重新解锁</el-button>
         </div>
+        <el-alert v-if="!selectedRuntimeSupportsControl" title="此插件未声明 realtime_control，因此不提供接管/释放控制；紧急停止与重新解锁仍作为运行时安全操作保留。" type="info" :closable="false" show-icon />
 
         <div class="dialog-section-title">运行时服务</div>
         <el-table :data="runtimeServices" border size="small" empty-text="暂无运行时服务">
@@ -438,7 +441,7 @@
     <el-dialog v-if="developerAccess" v-model="rpcDialogVisible" title="Service RPC" width="680px">
       <el-form label-position="top">
         <el-form-item label="Service ID"><el-input :model-value="rpcServiceId" disabled /></el-form-item>
-        <el-form-item label="Method"><el-input v-model="rpcMethod" placeholder="例如 get_state" /></el-form-item>
+        <el-form-item label="Method"><el-input v-model="rpcMethod" placeholder="例如 game.get_state" /></el-form-item>
         <el-form-item label="Payload (JSON)"><el-input v-model="rpcPayload" type="textarea" :rows="8" placeholder="{}" /></el-form-item>
         <el-form-item label="Timeout (ms)"><el-input-number v-model="rpcTimeout" :min="100" :max="120000" /></el-form-item>
       </el-form>
@@ -478,6 +481,7 @@ type Plugin = {
   enabled: boolean;
   health: string;
   runtimeCount: number;
+  capabilities?: string[];
 };
 
 type Runtime = {
@@ -532,6 +536,13 @@ const activePlugin = computed<Plugin | null>(() => {
     if (matched) return matched;
   }
   return plugins.value.find((item) => item.enabled) || plugins.value[0] || null;
+});
+
+const activePluginSupportsControl = computed(() => pluginSupportsCapability(activePlugin.value, "realtime_control"));
+const selectedRuntimeSupportsControl = computed(() => {
+  const runtime = runtimes.value.find((item) => item.runtimeId === selectedRuntimeId.value);
+  const plugin = plugins.value.find((item) => item.pluginId === (runtime?.pluginId || runtimeDetail.value?.pluginId));
+  return pluginSupportsCapability(plugin, "realtime_control");
 });
 
 const pluginDialogVisible = ref(false);
@@ -709,6 +720,10 @@ function pluginRuntime(plugin: Plugin) {
 function runtimeName(runtime: Runtime) {
   const plugin = plugins.value.find((item) => item.pluginId === runtime.pluginId);
   return plugin?.name || runtime.pluginId || "Game Runtime";
+}
+
+function pluginSupportsCapability(plugin: Plugin | null | undefined, capability: string) {
+  return Array.isArray(plugin?.capabilities) && plugin.capabilities.includes(capability);
 }
 
 function stateLabel(value?: string) {
@@ -974,12 +989,13 @@ async function showRuntimeDetail(runtime: Runtime) {
   runtimeServices.value = [];
   try {
     const id = encodeURIComponent(runtime.runtimeId);
+    const supportsControl = pluginSupportsCapability(plugins.value.find((item) => item.pluginId === runtime.pluginId), "realtime_control");
     const [detail, servicesResult, healthResult, handshakeResult, authorityResult] = await Promise.all([
       api.get<Record<string, any>>(`/api/game-center/runtimes/${id}`, runtime.pluginId ? { pluginId: runtime.pluginId } : undefined),
       api.get<{ items?: GameService[] }>(`/api/game-center/runtimes/${id}/services`),
       api.get<Record<string, any>>(`/api/game-center/runtimes/${id}/health`),
       api.get<Record<string, any>>(`/api/game-center/runtimes/${id}/handshake`),
-      api.get<Record<string, any>>(`/api/game-center/runtimes/${id}/authority`),
+      supportsControl ? api.get<Record<string, any>>(`/api/game-center/runtimes/${id}/authority`) : Promise.resolve(null),
     ]);
     runtimeDetail.value = detail;
     runtimeServices.value = servicesResult?.items ?? detail?.services ?? [];
@@ -1016,6 +1032,17 @@ async function invokeRpc() {
     ElMessage.warning("请填写 RPC Method");
     return;
   }
+  const method = rpcMethod.value.trim();
+  const methodParts = method.split(".");
+  const reservedPrefixes = ["host.", "plugin.", "runtime.", "service.", "channel.", "control.", "binary.", "emergency.", "secret.", "artifact.", "permission."];
+  if (methodParts.length < 2 || methodParts.some((part) => !part) || /[A-Z]/.test(method)) {
+    ElMessage.error("RPC Method 必须是至少两段的小写点号命名，例如 game.get_state");
+    return;
+  }
+  if (reservedPrefixes.some((prefix) => method.startsWith(prefix))) {
+    ElMessage.error("RPC Method 不能使用 GameHost 保留命名空间");
+    return;
+  }
   let payload: any = undefined;
   try {
     const text = rpcPayload.value.trim();
@@ -1028,7 +1055,7 @@ async function invokeRpc() {
   try {
     const result = await api.post(
       `/api/game-center/runtimes/${encodeURIComponent(selectedRuntimeId.value)}/services/${encodeURIComponent(rpcServiceId.value)}/rpc`,
-      { method: rpcMethod.value.trim(), payload, timeoutMs: rpcTimeout.value },
+      { method, payload, timeoutMs: rpcTimeout.value },
     );
     rpcResult.value = JSON.stringify(result ?? null, null, 2);
   } catch (err: any) {
@@ -1120,6 +1147,12 @@ async function runtimeAction(runtimeId: string, action: "start" | "stop" | "rest
 
 async function controlAction(runtimeId: string, action: string, successMessage = "控制状态已更新") {
   if (!runtimeId) return;
+  const runtime = runtimes.value.find((item) => item.runtimeId === runtimeId);
+  const plugin = plugins.value.find((item) => item.pluginId === runtime?.pluginId);
+  if ((action === "takeover" || action === "release") && !pluginSupportsCapability(plugin, "realtime_control")) {
+    ElMessage.warning("此插件未声明 realtime_control，不能执行控制权操作");
+    return;
+  }
   busy.value = runtimeId;
   try {
     if (action === "release") {
