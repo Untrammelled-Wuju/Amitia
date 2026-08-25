@@ -428,6 +428,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			topologyStore,
 			topologyStore,
 			serviceStartPermission,
+			integration.NewServiceResourceAdmissionAdapter(resourceAdapter),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("compose service executor: %w", err)

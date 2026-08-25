@@ -143,14 +143,36 @@ type fakeGovernor struct {
 	configs map[string]ServiceResourceLimitsSet
 }
 
-func (g *fakeGovernor) ConfigureResourceLimits(runtimeID string, limits ServiceResourceLimitsSet) error {
+func (g *fakeGovernor) ConfigureResourceLimits(runtimeID, serviceID string, limits ServiceResourceLimitsSet) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.configs == nil {
 		g.configs = make(map[string]ServiceResourceLimitsSet)
 	}
-	g.configs[runtimeID] = limits
+	g.configs[runtimeID+"/"+serviceID] = limits
 	return nil
+}
+
+func (g *fakeGovernor) ClearServiceResourceLimits(runtimeID, serviceID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.configs, runtimeID+"/"+serviceID)
+}
+
+func (g *fakeGovernor) ClearRuntimeResourceLimits(runtimeID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for key := range g.configs {
+		if len(key) > len(runtimeID) && key[:len(runtimeID)] == runtimeID && key[len(runtimeID)] == '/' {
+			delete(g.configs, key)
+		}
+	}
+}
+
+func (g *fakeGovernor) ClearAllResourceLimits() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.configs = make(map[string]ServiceResourceLimitsSet)
 }
 
 func newTestAdapter() (*ResourceAdmissionAdapter, *fakeReader, *fakePending, *fakeBinary, *fakeGovernor) {
@@ -235,6 +257,18 @@ func TestAcquireRuntimeStartup_NegativeMemoryProfileRejected(t *testing.T) {
 	}
 }
 
+func TestAcquireRuntimeStartup_NegativeCPUProfileRejected(t *testing.T) {
+	adapter, reader, _, _, _ := newTestAdapter()
+	reader.AddRuntime("rt-1", "p-1", "ext-1")
+	reader.AddService("rt-1", "s-1", "p-1", "ext-1")
+
+	_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, &RuntimeResourceProfile{MaxCPUPercent: -1})
+	if err != ErrProfileInvalid {
+		t.Fatalf("expected ErrProfileInvalid, got %v", err)
+	}
+}
+
 func TestAcquireRuntimeStartup_CPURateClamped(t *testing.T) {
 	adapter, reader, _, _, gov := newTestAdapter()
 	reader.AddRuntime("rt-1", "p-1", "ext-1")
@@ -246,7 +280,7 @@ func TestAcquireRuntimeStartup_CPURateClamped(t *testing.T) {
 		t.Fatalf("should accept but clamp cpu, got %v", err)
 	}
 	gov.mu.Lock()
-	cfg := gov.configs["rt-1"]
+	cfg := gov.configs["rt-1/s-1"]
 	gov.mu.Unlock()
 	if cfg.MaxCPUPercent != 100 {
 		t.Fatalf("expected CPU clamped to 100, got %d", cfg.MaxCPUPercent)
@@ -391,5 +425,83 @@ func TestResetClearsState(t *testing.T) {
 		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "s-1", Generation: 1}, nil)
 	if err != nil {
 		t.Fatalf("reset should clear shutdown, got %v", err)
+	}
+}
+
+func TestAcquireRuntimeStartup_MultiServiceRollbackAndCommitAreIsolated(t *testing.T) {
+	adapter, reader, _, _, gov := newTestAdapter()
+	reader.AddRuntime("rt-1", "p-1", "ext-1")
+	reader.AddService("rt-1", "svc-a", "p-1", "ext-1")
+	reader.AddService("rt-1", "svc-b", "p-1", "ext-1")
+
+	revertA, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "svc-a", Generation: 1,
+	}, &RuntimeResourceProfile{MaxMemoryMB: 128})
+	if err != nil {
+		t.Fatalf("start svc-a: %v", err)
+	}
+	revertB, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
+		RuntimeID: "rt-1", PluginID: "p-1", ServiceID: "svc-b", Generation: 1,
+	}, &RuntimeResourceProfile{MaxMemoryMB: 256})
+	if err != nil {
+		t.Fatalf("start svc-b: %v", err)
+	}
+
+	if got := len(adapter.ActiveSubjects()); got != 2 {
+		t.Fatalf("active startup subjects = %d, want 2", got)
+	}
+	revertA()
+	if got := len(adapter.ActiveSubjects()); got != 1 {
+		t.Fatalf("active startup subjects after svc-a rollback = %d, want 1", got)
+	}
+	gov.mu.Lock()
+	_, hasA := gov.configs["rt-1/svc-a"]
+	_, hasB := gov.configs["rt-1/svc-b"]
+	gov.mu.Unlock()
+	if hasA || !hasB {
+		t.Fatalf("rollback must clear only svc-a limits: hasA=%v hasB=%v", hasA, hasB)
+	}
+
+	adapter.CommitRuntimeStartup("rt-1", "svc-b")
+	if got := len(adapter.ActiveSubjects()); got != 0 {
+		t.Fatalf("active startup subjects after svc-b commit = %d, want 0", got)
+	}
+	gov.mu.Lock()
+	_, hasB = gov.configs["rt-1/svc-b"]
+	gov.mu.Unlock()
+	if !hasB {
+		t.Fatal("committing svc-b startup must retain running-process limits")
+	}
+
+	// Revert callbacks are idempotent enough for caller cleanup. Invoking the
+	// second callback after commit represents an explicit rollback and clears its
+	// persisted service limits.
+	revertB()
+}
+
+func TestReleaseServiceResourceLimitsClearsOnlyTargetService(t *testing.T) {
+	adapter, reader, _, _, gov := newTestAdapter()
+	reader.AddRuntime("rt-1", "p-1", "ext-1")
+	reader.AddService("rt-1", "svc-a", "p-1", "ext-1")
+	reader.AddService("rt-1", "svc-b", "p-1", "ext-1")
+
+	for _, serviceID := range []string{"svc-a", "svc-b"} {
+		_, err := adapter.AcquireRuntimeStartup(context.Background(), RuntimeIdentitySubject{
+			RuntimeID: "rt-1", PluginID: "p-1", ServiceID: serviceID, Generation: 1,
+		}, &RuntimeResourceProfile{MaxMemoryMB: 128})
+		if err != nil {
+			t.Fatalf("AcquireRuntimeStartup(%s): %v", serviceID, err)
+		}
+		adapter.CommitRuntimeStartup("rt-1", serviceID)
+	}
+
+	adapter.ReleaseService("rt-1", "svc-a")
+
+	gov.mu.Lock()
+	_, hasA := gov.configs["rt-1/svc-a"]
+	_, hasB := gov.configs["rt-1/svc-b"]
+	gov.mu.Unlock()
+	if hasA || !hasB {
+		t.Fatalf("release must clear only svc-a: hasA=%v hasB=%v", hasA, hasB)
 	}
 }

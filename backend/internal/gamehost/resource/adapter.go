@@ -23,7 +23,10 @@ type BinaryRegistry interface {
 }
 
 type RuntimeGovernor interface {
-	ConfigureResourceLimits(runtimeID string, limits ServiceResourceLimitsSet) error
+	ConfigureResourceLimits(runtimeID, serviceID string, limits ServiceResourceLimitsSet) error
+	ClearServiceResourceLimits(runtimeID, serviceID string)
+	ClearRuntimeResourceLimits(runtimeID string)
+	ClearAllResourceLimits()
 }
 
 type ServiceResourceLimitsSet = trusted_service.ServiceResourceLimits
@@ -77,18 +80,47 @@ func (a *ResourceAdmissionAdapter) AcquireRuntimeStartup(ctx context.Context, su
 			MaxFileDescriptors: profile.MaxFileDescriptors, MaxDiskMB: profile.MaxDiskMB,
 			MaxSubprocesses: profile.MaxSubprocesses,
 		}
-		if err := a.governor.ConfigureResourceLimits(subj.RuntimeID, limits); err != nil {
+		if err := a.governor.ConfigureResourceLimits(subj.RuntimeID, subj.ServiceID, limits); err != nil {
 			return nil, ErrProfileInvalid
 		}
 	}
+	startupKey := subjectKey(validated.RuntimeID, subj.ServiceID)
 	a.mu.Lock()
-	a.starting[validated.RuntimeID] = time.Now().UTC()
+	a.starting[startupKey] = time.Now().UTC()
 	a.mu.Unlock()
 	return func() {
 		a.mu.Lock()
-		delete(a.starting, validated.RuntimeID)
+		delete(a.starting, startupKey)
 		a.mu.Unlock()
+		if a.governor != nil {
+			a.governor.ClearServiceResourceLimits(subj.RuntimeID, subj.ServiceID)
+		}
 	}, nil
+}
+
+// CommitRuntimeStartup ends transient per-service startup accounting while
+// retaining configured limits for the lifetime of the running process.
+func (a *ResourceAdmissionAdapter) CommitRuntimeStartup(runtimeID, serviceID string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.starting, subjectKey(runtimeID, serviceID))
+}
+
+// ReleaseService clears transient accounting and the declarative resource
+// profile for one stopped service without disturbing sibling services in the
+// same runtime.
+func (a *ResourceAdmissionAdapter) ReleaseService(runtimeID, serviceID string) {
+	if a == nil {
+		return
+	}
+	if a.governor != nil {
+		a.governor.ClearServiceResourceLimits(runtimeID, serviceID)
+	}
+	key := subjectKey(runtimeID, serviceID)
+	a.mu.Lock()
+	delete(a.starting, key)
+	delete(a.queueInFlight, key)
+	a.mu.Unlock()
 }
 
 func (a *ResourceAdmissionAdapter) validateSubject(subj RuntimeIdentitySubject) (RuntimeIdentitySubject, error) {
@@ -202,12 +234,19 @@ func (a *ResourceAdmissionAdapter) QueueUsage(runtimeID, serviceID string) (curr
 }
 
 func (a *ResourceAdmissionAdapter) MarkStopping(runtimeID string) {
+	if a.governor != nil {
+		a.governor.ClearRuntimeResourceLimits(runtimeID)
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.stopping[runtimeID] = true
-	delete(a.starting, runtimeID)
+	for key := range a.starting {
+		if hasRuntimePrefix(key, runtimeID) {
+			delete(a.starting, key)
+		}
+	}
 	for key := range a.queueInFlight {
-		if len(key) > len(runtimeID) && key[:len(runtimeID)] == runtimeID && key[len(runtimeID)] == '/' {
+		if hasRuntimePrefix(key, runtimeID) {
 			delete(a.queueInFlight, key)
 		}
 	}
@@ -218,6 +257,9 @@ func (a *ResourceAdmissionAdapter) ClearStopping(runtimeID string) {
 	delete(a.stopping, runtimeID)
 }
 func (a *ResourceAdmissionAdapter) Shutdown() {
+	if a.governor != nil {
+		a.governor.ClearAllResourceLimits()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.shutdown = true
@@ -225,6 +267,9 @@ func (a *ResourceAdmissionAdapter) Shutdown() {
 	a.queueInFlight = make(map[string]int)
 }
 func (a *ResourceAdmissionAdapter) Reset() {
+	if a.governor != nil {
+		a.governor.ClearAllResourceLimits()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.shutdown = false
@@ -243,6 +288,14 @@ func (a *ResourceAdmissionAdapter) checkHostState(runtimeID string) error {
 	}
 	return nil
 }
+func subjectKey(runtimeID, serviceID string) string {
+	return runtimeID + "/" + serviceID
+}
+
+func hasRuntimePrefix(key, runtimeID string) bool {
+	return len(key) > len(runtimeID) && key[:len(runtimeID)] == runtimeID && key[len(runtimeID)] == '/'
+}
+
 func decisionDenied(reason DenyReason, _ error) AdmissionDecision {
 	return AdmissionDecision{Allowed: false, Reason: reason}
 }
@@ -250,7 +303,7 @@ func sanitizeProfile(p *RuntimeResourceProfile) error {
 	if p == nil {
 		return nil
 	}
-	if p.MaxMemoryMB < 0 || p.MaxDiskMB < 0 || p.MaxFileDescriptors < 0 || p.MaxSubprocesses < 0 {
+	if p.MaxMemoryMB < 0 || p.MaxCPUPercent < 0 || p.MaxDiskMB < 0 || p.MaxFileDescriptors < 0 || p.MaxSubprocesses < 0 {
 		return ErrProfileInvalid
 	}
 	if !safeLte(0, int64(p.MaxMemoryMB), int64(p.MaxMemoryMB)) {

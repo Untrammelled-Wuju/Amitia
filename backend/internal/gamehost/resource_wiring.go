@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/resource"
 	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/internal/gamehost/storage"
+	platformprocess "github.com/u-ai/backend/internal/platform/process"
 )
 
 // pluginIdentityReader binds resource subjects to the authoritative RuntimeManager
@@ -128,27 +129,54 @@ func (a resourceRequestAdmission) AdmitRequest(ctx context.Context, peer ipc.Pee
 // and observability. OS-level CPU/memory/filesystem enforcement is reported
 // separately by the platform sandbox; declarations are never presented as
 // enforced limits when no backend exists.
+type runtimeResourceKey struct {
+	runtimeID string
+	serviceID string
+}
+
 type runtimeLimitGovernor struct {
 	mu     sync.Mutex
-	limits map[string]resource.ServiceResourceLimitsSet
+	limits map[runtimeResourceKey]resource.ServiceResourceLimitsSet
 }
 
 func newRuntimeLimitGovernor() *runtimeLimitGovernor {
-	return &runtimeLimitGovernor{limits: make(map[string]resource.ServiceResourceLimitsSet)}
+	return &runtimeLimitGovernor{limits: make(map[runtimeResourceKey]resource.ServiceResourceLimitsSet)}
 }
 
-func (g *runtimeLimitGovernor) ConfigureResourceLimits(runtimeID string, limits resource.ServiceResourceLimitsSet) error {
+func (g *runtimeLimitGovernor) ConfigureResourceLimits(runtimeID, serviceID string, limits resource.ServiceResourceLimitsSet) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.limits[runtimeID] = limits
+	g.limits[runtimeResourceKey{runtimeID: runtimeID, serviceID: serviceID}] = limits
 	return nil
 }
 
-func (g *runtimeLimitGovernor) LimitsFor(runtimeID string) (resource.ServiceResourceLimitsSet, bool) {
+func (g *runtimeLimitGovernor) LimitsFor(runtimeID, serviceID string) (resource.ServiceResourceLimitsSet, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	l, ok := g.limits[runtimeID]
+	l, ok := g.limits[runtimeResourceKey{runtimeID: runtimeID, serviceID: serviceID}]
 	return l, ok
+}
+
+func (g *runtimeLimitGovernor) ClearServiceResourceLimits(runtimeID, serviceID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.limits, runtimeResourceKey{runtimeID: runtimeID, serviceID: serviceID})
+}
+
+func (g *runtimeLimitGovernor) ClearRuntimeResourceLimits(runtimeID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for key := range g.limits {
+		if key.runtimeID == runtimeID {
+			delete(g.limits, key)
+		}
+	}
+}
+
+func (g *runtimeLimitGovernor) ClearAllResourceLimits() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.limits = make(map[runtimeResourceKey]resource.ServiceResourceLimitsSet)
 }
 
 // containerViewResolver reports measured usage and declared limits separately.
@@ -179,9 +207,10 @@ func newContainerViewResolver(binaryReg binaryRegistryView, pending resource.Pen
 
 func (r *containerViewResolver) ResolveUsage(runtimeID, serviceID string) map[resource.UsageDimension]resource.UsageSample {
 	out := make(map[resource.UsageDimension]resource.UsageSample)
+	support := platformprocess.ResourceLimitsSupported()
 	limits := resource.ServiceResourceLimitsSet{}
 	if r.governor != nil {
-		if configured, ok := r.governor.LimitsFor(runtimeID); ok {
+		if configured, ok := r.governor.LimitsFor(runtimeID, serviceID); ok {
 			limits = configured
 		}
 	}
@@ -193,25 +222,30 @@ func (r *containerViewResolver) ResolveUsage(runtimeID, serviceID string) map[re
 		if def, err := r.supervisor.GetDefinition(definitionID); err == nil && def != nil {
 			limits = def.Limits
 		}
-		if inst, err := r.supervisor.Get(definitionID); err == nil && inst != nil && inst.PID > 0 {
+		// Supervisor instances are registered under the runtime-scoped process
+		// instance key, not under the reusable definition ID. Looking them up by
+		// definition ID silently made live process usage unavailable for every
+		// GameHost service.
+		supervisorKey := ghruntime.BuildProcessInstanceID(domain.RuntimeInstanceID(runtimeID), domain.ServiceID(serviceID))
+		if inst, err := r.supervisor.Get(supervisorKey); err == nil && inst != nil && inst.PID > 0 {
 			measured := measureLiveProcess(inst.PID)
-			out[resource.UsageMemoryBytes] = resource.UsageSample{Used: measured.memoryBytes, Limit: mibToBytes(limits.MaxMemoryMB), Available: measured.memoryAvailable, Enforced: false}
+			out[resource.UsageMemoryBytes] = resource.UsageSample{Used: measured.memoryBytes, Limit: mibToBytes(limits.MaxMemoryMB), Available: measured.memoryAvailable, Enforced: support.Memory && limits.MaxMemoryMB > 0}
 			out[resource.UsageOpenFiles] = resource.UsageSample{Used: int64(measured.openFiles), Limit: int64(limits.MaxFileDescriptors), Available: measured.openFilesAvailable, Enforced: false}
-			out[resource.UsageSubprocesses] = resource.UsageSample{Used: int64(measured.subprocesses), Limit: int64(limits.MaxSubprocesses), Available: measured.subprocessesAvailable, Enforced: false}
+			out[resource.UsageSubprocesses] = resource.UsageSample{Used: int64(measured.subprocesses), Limit: int64(limits.MaxSubprocesses), Available: measured.subprocessesAvailable, Enforced: support.Processes && limits.MaxSubprocesses > 0}
 		}
 	}
 	if _, ok := out[resource.UsageMemoryBytes]; !ok {
-		out[resource.UsageMemoryBytes] = resource.UsageSample{Limit: mibToBytes(limits.MaxMemoryMB), Available: false, Enforced: false}
+		out[resource.UsageMemoryBytes] = resource.UsageSample{Limit: mibToBytes(limits.MaxMemoryMB), Available: false, Enforced: support.Memory && limits.MaxMemoryMB > 0}
 	}
 	if _, ok := out[resource.UsageOpenFiles]; !ok {
 		out[resource.UsageOpenFiles] = resource.UsageSample{Limit: int64(limits.MaxFileDescriptors), Available: false, Enforced: false}
 	}
 	if _, ok := out[resource.UsageSubprocesses]; !ok {
-		out[resource.UsageSubprocesses] = resource.UsageSample{Limit: int64(limits.MaxSubprocesses), Available: false, Enforced: false}
+		out[resource.UsageSubprocesses] = resource.UsageSample{Limit: int64(limits.MaxSubprocesses), Available: false, Enforced: support.Processes && limits.MaxSubprocesses > 0}
 	}
 	// Live CPU accounting is deliberately unavailable until the platform process
 	// layer exposes a trustworthy counter. Do not manufacture a 0% reading.
-	out[resource.UsageCPUPercent] = resource.UsageSample{Limit: int64(limits.MaxCPUPercent), Available: false, Enforced: false}
+	out[resource.UsageCPUPercent] = resource.UsageSample{Limit: int64(limits.MaxCPUPercent), Available: false, Enforced: support.CPU && limits.MaxCPUPercent > 0}
 
 	if r.dirs != nil && serviceID != "" {
 		if paths, err := r.dirs.ResolveServicePaths(domain.RuntimeInstanceID(runtimeID), domain.ServiceID(serviceID)); err == nil {
