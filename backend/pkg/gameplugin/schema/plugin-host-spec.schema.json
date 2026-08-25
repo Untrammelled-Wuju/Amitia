@@ -34,14 +34,18 @@
         "properties": {
           "id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\x00-\\x20\\x7f]+$"
           },
           "moduleId": {
             "type": "string",
             "minLength": 1
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$"
           },
           "kind": {
             "type": "string",
@@ -57,7 +61,9 @@
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[^\\x00-\\x20\\x7f]+$"
             }
           },
           "metadata": {
@@ -81,7 +87,9 @@
         "properties": {
           "id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\x00-\\x1f\\x7f]+$"
           },
           "kind": {
             "type": "string",
@@ -95,7 +103,8 @@
             ]
           },
           "schemaId": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 1024
           },
           "metadata": {
             "type": "object",
@@ -105,7 +114,28 @@
           },
           "serviceId": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\x00-\\x20\\x7f]+$"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "plugin_to_host",
+              "host_to_plugin",
+              "bidirectional"
+            ],
+            "description": "Channel flow direction. Omitted defaults to plugin_to_host."
+          },
+          "frequencyHint": {
+            "type": "string",
+            "enum": [
+              "low",
+              "normal",
+              "high",
+              "realtime"
+            ],
+            "description": "Informational expected message-frequency hint."
           }
         },
         "additionalProperties": false
@@ -126,7 +156,9 @@
           },
           "serviceId": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\x00-\\x20\\x7f]+$"
           },
           "description": {
             "type": "string"

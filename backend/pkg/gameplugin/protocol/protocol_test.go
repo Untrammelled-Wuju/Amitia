@@ -630,6 +630,33 @@ func TestValidateServiceDescriptor(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "name too long",
+			svc: ServiceDescriptor{
+				ID:   "service-name-long",
+				Name: string(make([]byte, maxServiceNameLength+1)),
+				Kind: ServiceKindProcess,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid dependency id",
+			svc: ServiceDescriptor{
+				ID:        "service-a",
+				Kind:      ServiceKindProcess,
+				DependsOn: []ServiceID{"bad id"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "unknown host feature",
+			svc: ServiceDescriptor{
+				ID:           "service-a",
+				Kind:         ServiceKindProcess,
+				Capabilities: []Capability{"vendor.game.control"},
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -749,13 +776,22 @@ func TestValidateChannelDescriptor(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "legacy bidirectional rejected by v1",
+			name: "valid bidirectional",
 			ch: ChannelDescriptor{
-				ID:        "ch-legacy",
+				ID:        "ch-bidirectional",
 				Kind:      ChannelKindEvent,
-				Direction: ChannelDirection("bidirectional"),
+				Direction: ChannelDirectionBidirectional,
 			},
-			wantErr: true,
+			wantErr: false,
+		},
+		{
+			name: "valid host to plugin",
+			ch: ChannelDescriptor{
+				ID:        "ch-outbound",
+				Kind:      ChannelKindCustom,
+				Direction: ChannelDirectionHostToPlugin,
+			},
+			wantErr: false,
 		},
 		{
 			name: "empty kind",

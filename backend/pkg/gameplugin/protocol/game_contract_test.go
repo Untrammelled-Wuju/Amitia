@@ -19,6 +19,47 @@ func TestPluginHostSpecValidateGenericContract(t *testing.T) {
 	}
 }
 
+func TestPluginHostSpecAllowsServiceScopedChannelIDsAndBidirectionalFlow(t *testing.T) {
+	frequency := FrequencyHintRealtime
+	spec := PluginHostSpec{
+		ProtocolVersion: ProtocolVersion,
+		HostFeatures:    []HostFeature{HostFeatureMultiService, HostFeatureEventStreaming},
+		Services: []PluginServiceSpec{
+			{ID: "one", ModuleID: "module-one"},
+			{ID: "two", ModuleID: "module-two"},
+		},
+		Channels: []PluginChannelSpec{
+			{ID: "events", ServiceID: "one", Kind: "event", Direction: ChannelDirectionBidirectional, FrequencyHint: &frequency},
+			{ID: "events", ServiceID: "two", Kind: "event", Direction: ChannelDirectionHostToPlugin},
+		},
+		Network: &PluginNetworkPolicy{Mode: "none"},
+	}
+	if err := spec.Validate(); err != nil {
+		t.Fatalf("Validate() rejected service-scoped channel ids: %v", err)
+	}
+}
+
+func TestPluginHostSpecRejectsInvalidChannelContractFields(t *testing.T) {
+	tooLongSchema := string(make([]byte, 1025))
+	cases := []PluginChannelSpec{
+		{ID: "bad\x00id", Kind: "event"},
+		{ID: "events", Kind: "event", SchemaID: tooLongSchema},
+		{ID: "events", Kind: "event", Direction: ChannelDirection("sideways")},
+	}
+	for i, channel := range cases {
+		spec := PluginHostSpec{
+			ProtocolVersion: ProtocolVersion,
+			RuntimeModuleID: "runtime",
+			HostFeatures:    []HostFeature{HostFeatureEventStreaming},
+			Channels:        []PluginChannelSpec{channel},
+			Network:         &PluginNetworkPolicy{Mode: "none"},
+		}
+		if err := spec.Validate(); err == nil {
+			t.Fatalf("case %d unexpectedly accepted", i)
+		}
+	}
+}
+
 func TestParsePluginHostSpecRejectsGameSpecificFields(t *testing.T) {
 	_, err := ParsePluginHostSpec(map[string]any{
 		"protocolVersion": ProtocolVersion,
@@ -111,6 +152,66 @@ func TestPluginHostSpecRejectsDuplicateServiceDependency(t *testing.T) {
 	}
 	if err := spec.Validate(); err == nil {
 		t.Fatal("Validate() accepted duplicate service dependency")
+	}
+}
+
+func TestPluginHostSpecRejectsInvalidServiceIDsAcrossReferences(t *testing.T) {
+	tooLong := string(make([]byte, 257))
+	cases := []PluginHostSpec{
+		{
+			ProtocolVersion: ProtocolVersion,
+			Services:        []PluginServiceSpec{{ID: "bad id", ModuleID: "module-a"}},
+			Network:         &PluginNetworkPolicy{Mode: "none"},
+		},
+		{
+			ProtocolVersion: ProtocolVersion,
+			Services:        []PluginServiceSpec{{ID: tooLong, ModuleID: "module-a"}},
+			Network:         &PluginNetworkPolicy{Mode: "none"},
+		},
+		{
+			ProtocolVersion: ProtocolVersion,
+			HostFeatures:    []HostFeature{HostFeatureMultiService},
+			Services: []PluginServiceSpec{
+				{ID: "a", ModuleID: "module-a", DependsOn: []string{"bad id"}},
+				{ID: "b", ModuleID: "module-b"},
+			},
+			Network: &PluginNetworkPolicy{Mode: "none"},
+		},
+		{
+			ProtocolVersion: ProtocolVersion,
+			RuntimeModuleID: "module-a",
+			HostFeatures:    []HostFeature{HostFeatureEventStreaming},
+			Channels:        []PluginChannelSpec{{ID: "events", ServiceID: "bad id", Kind: "event"}},
+			Network:         &PluginNetworkPolicy{Mode: "none"},
+		},
+		{
+			ProtocolVersion: ProtocolVersion,
+			RuntimeModuleID: "module-a",
+			HostFeatures:    []HostFeature{HostFeatureRealtimeControl},
+			ControlEffectSinks: []PluginControlEffectSinkSpec{
+				{ID: "control", ServiceID: "bad id"},
+			},
+			Network: &PluginNetworkPolicy{Mode: "none"},
+		},
+	}
+
+	for i, spec := range cases {
+		if err := spec.Validate(); err == nil {
+			t.Fatalf("case %d unexpectedly accepted invalid service id", i)
+		}
+	}
+}
+
+func TestPluginHostSpecRejectsInvalidServiceName(t *testing.T) {
+	spec := PluginHostSpec{
+		ProtocolVersion: ProtocolVersion,
+		Services: []PluginServiceSpec{
+			{ID: "service-a", ModuleID: "module-a", Name: string(make([]byte, maxServiceNameLength+1))},
+		},
+		Network: &PluginNetworkPolicy{Mode: "none"},
+	}
+	if err := spec.Validate(); err == nil {
+		t.Fatal("Validate() accepted oversized service name")
 	}
 }
 
