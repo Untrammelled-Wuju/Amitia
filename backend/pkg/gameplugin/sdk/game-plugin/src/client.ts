@@ -32,6 +32,12 @@ export function withServiceID(id: string): MessageOption {
   };
 }
 
+export function withGeneration(generation: number): MessageOption {
+  return (envelope: Envelope) => {
+    envelope.generation = generation;
+  };
+}
+
 export function withMetadata(key: string, value: unknown): MessageOption {
   return (envelope: Envelope) => {
     if (!envelope.metadata) {
@@ -104,6 +110,7 @@ export interface ClientOptions {
   pluginId?: string;
   runtimeId?: string;
   serviceId?: string;
+  generation?: number;
 }
 
 export const DEFAULT_RPC_TIMEOUT_MS = 30000;
@@ -114,6 +121,7 @@ export class Client {
   private pluginId: string;
   private runtimeId: string;
   private serviceId: string;
+  private generation: number;
   private pending: Map<string, PendingRequest> = new Map();
   private pendingTimeoutMs: number = DEFAULT_RPC_TIMEOUT_MS;
 
@@ -123,6 +131,10 @@ export class Client {
     this.pluginId = options.pluginId || '';
     this.runtimeId = options.runtimeId || '';
     this.serviceId = options.serviceId || '';
+    this.generation = options.generation || 0;
+    if (!Number.isSafeInteger(this.generation) || this.generation < 0) {
+      throw createValidationError('generation must be a non-negative safe integer');
+    }
   }
 
   getTransport(): Transport {
@@ -131,6 +143,42 @@ export class Client {
 
   getPendingCount(): number {
     return this.pending.size;
+  }
+
+  getGeneration(): number {
+    return this.generation;
+  }
+
+  setGeneration(generation: number): void {
+    if (!Number.isSafeInteger(generation) || generation < 0) {
+      throw createValidationError('generation must be a non-negative safe integer');
+    }
+    this.generation = generation;
+  }
+
+  /**
+   * Adopt the authoritative route assigned by GameHost after the bootstrap
+   * handshake. Existing non-empty route fields may never be rebound.
+   */
+  adoptPeerRouting(envelope: Envelope): void {
+    const generation = envelope.generation;
+    if (!Number.isSafeInteger(generation) || !generation || generation < 1) {
+      throw createValidationError('handshake response is missing a positive generation');
+    }
+    const adopt = (current: string, incoming: string | undefined, label: string): string => {
+      if (!incoming) return current;
+      if (current && current !== incoming) {
+        throw createValidationError(`handshake ${label} mismatch: expected ${current}, got ${incoming}`);
+      }
+      return current || incoming;
+    };
+    if (this.generation && this.generation !== generation) {
+      throw createValidationError(`handshake generation mismatch: expected ${this.generation}, got ${generation}`);
+    }
+    this.runtimeId = adopt(this.runtimeId, envelope.runtimeId, 'runtimeId');
+    this.pluginId = adopt(this.pluginId, envelope.pluginId, 'pluginId');
+    this.serviceId = adopt(this.serviceId, envelope.serviceId, 'serviceId');
+    this.generation = generation;
   }
 
   cancelPendingRequests(reason: string = 'client cancelled'): void {
@@ -324,6 +372,7 @@ export class Client {
       pluginId: this.pluginId,
       runtimeId: this.runtimeId,
       serviceId: this.serviceId,
+      generation: this.generation || undefined,
     };
     opts.forEach((opt) => opt(envelope));
     return envelope;
@@ -340,6 +389,7 @@ export class Client {
       pluginId: this.pluginId,
       runtimeId: this.runtimeId,
       serviceId: this.serviceId,
+      generation: this.generation || undefined,
     };
     opts.forEach((opt) => opt(envelope));
     return envelope;
@@ -356,6 +406,7 @@ export class Client {
       pluginId: this.pluginId,
       runtimeId: this.runtimeId,
       serviceId: this.serviceId,
+      generation: this.generation || undefined,
     };
     opts.forEach((opt) => opt(envelope));
     return envelope;
@@ -378,6 +429,7 @@ export class Client {
       pluginId: this.pluginId,
       runtimeId: this.runtimeId,
       serviceId: this.serviceId,
+      generation: this.generation || undefined,
       error: {
         code,
         message,

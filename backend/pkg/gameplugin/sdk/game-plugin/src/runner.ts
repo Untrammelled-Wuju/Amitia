@@ -48,16 +48,24 @@ export class Runner {
 
     const respEnvelope = await this.client.getTransport().receive();
 
+    if (respEnvelope.error) {
+      throw new Error(`handshake failed: ${respEnvelope.error.code} - ${respEnvelope.error.message}`);
+    }
     if (respEnvelope.type === 'error') {
-      if (respEnvelope.error) {
-        throw new Error(`handshake failed: ${respEnvelope.error.code} - ${respEnvelope.error.message}`);
-      }
       throw new Error('handshake failed with unknown error');
     }
 
     if (respEnvelope.type !== 'response') {
       throw new Error(`unexpected handshake response type: ${respEnvelope.type}`);
     }
+    if (respEnvelope.requestId !== envelope.id) {
+      throw new Error(`handshake response requestId mismatch: got ${respEnvelope.requestId || '<empty>'}, expected ${envelope.id}`);
+    }
+
+    // GameHost owns runtime generation and canonical route identity. The first
+    // hello is deliberately generation-free; the response binds every
+    // subsequent envelope to the authoritative peer route.
+    this.client.adoptPeerRouting(respEnvelope);
 
     const respPayload = respEnvelope.payload as HelloResponse | undefined;
     if (!respPayload) {
