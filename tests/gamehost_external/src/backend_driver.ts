@@ -1,4 +1,4 @@
-import { GameCenterClient, createClient, GameRuntimeDetail, GamePluginSummary } from './game_center_client';
+import { GameCenterClient, createClient, GameRuntimeDetail, GameRuntimeSummary, GamePluginSummary } from './game_center_client';
 import { waitUntil, sleep, TimeoutError } from './waiters';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -131,7 +131,7 @@ export class BackendDriver {
     return resp.items;
   }
 
-  async listRuntimes(filter?: { pluginId?: string; status?: string }): Promise<GameRuntimeDetail[]> {
+  async listRuntimes(filter?: { pluginId?: string; status?: string }): Promise<GameRuntimeSummary[]> {
     const resp = await this.client.listRuntimes(filter);
     for (const runtime of resp.items) {
       if (runtime.extensionId) {
@@ -145,7 +145,7 @@ export class BackendDriver {
         this.knownRuntimeIdsByPlugin.set(runtime.pluginId, set);
       }
     }
-    return resp.items as unknown as GameRuntimeDetail[];
+    return resp.items;
   }
 
   async waitForRuntimeReady(runtimeId: string, timeoutMs: number = 30000): Promise<GameRuntimeDetail> {
@@ -253,8 +253,8 @@ export class BackendDriver {
     return {
       pluginCount: plugins.length,
       runtimeCount: runtimes.length,
-      runningRuntimes: runtimes.filter(r => (r as any).runtimeState === 'running').length,
-      readyRuntimes: runtimes.filter(r => (r as any).ready === true).length,
+      runningRuntimes: runtimes.filter(r => r.state === 'running').length,
+      readyRuntimes: runtimes.filter(r => r.ready === true).length,
     };
   }
 
@@ -292,20 +292,20 @@ export class BackendDriver {
     switch (target.type) {
       case 'extension':
         targetPlugins = plugins.filter(p => p.extensionId === target.extensionId);
-        targetRuntimes = runtimes.filter(r => (r as any).extensionId === target.extensionId);
+        targetRuntimes = runtimes.filter(r => r.extensionId === target.extensionId);
         for (const id of this.knownRuntimeIdsByExtension.get(target.extensionId) ?? []) runtimeIds.add(id);
         break;
       case 'plugin':
         targetPlugins = plugins.filter(p => p.pluginId === target.pluginId);
-        targetRuntimes = runtimes.filter(r => (r as any).pluginId === target.pluginId);
+        targetRuntimes = runtimes.filter(r => r.pluginId === target.pluginId);
         for (const id of this.knownRuntimeIdsByPlugin.get(target.pluginId) ?? []) runtimeIds.add(id);
         break;
       case 'runtime':
-        targetRuntimes = runtimes.filter(r => (r as any).runtimeId === target.runtimeId);
+        targetRuntimes = runtimes.filter(r => r.runtimeId === target.runtimeId);
         runtimeIds.add(target.runtimeId);
         break;
     }
-    for (const runtime of targetRuntimes) runtimeIds.add((runtime as any).runtimeId);
+    for (const runtime of targetRuntimes) runtimeIds.add(runtime.runtimeId);
 
     const parts: string[] = [];
     if (targetPlugins.length) parts.push(`${targetPlugins.length} plugins remain`);
@@ -371,7 +371,7 @@ export class BackendDriver {
         await this.listPlugins();
         if (targetRuntimeId) {
           const runtimes = await this.listRuntimes();
-          const matching = runtimes.filter(r => (r as any).runtimeId === targetRuntimeId);
+          const matching = runtimes.filter(r => r.runtimeId === targetRuntimeId);
           if (matching.length !== 1) throw new Error(`restart recovery: expected exactly one target runtime, got ${matching.length}`);
           await this.waitForRuntimeReady(targetRuntimeId, 5000);
           await this.assertRecoveredRuntimeUnique(targetRuntimeId);

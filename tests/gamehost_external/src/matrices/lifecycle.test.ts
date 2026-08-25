@@ -2,22 +2,11 @@ import { createDriver, BackendDriver } from '../backend_driver';
 import { GameCenterClient } from '../game_center_client';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
+const MOCK_EXTENSION_ID = 'mock-developer/mock-amitiax-game-plugin';
 
 async function invokeRuntimeRPC<T>(client: GameCenterClient, runtimeId: string | null, method: string, payload: unknown = {}): Promise<T> {
   if (!runtimeId) throw new Error(`RPC ${method} requires runtimeId`);
-  const response = await fetch(
-    `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ method, payload }),
-    },
-  );
-  if (!response.ok) throw new Error(`RPC ${method} HTTP ${response.status}`);
-  const body = (await response.json()) as { code: number; msg: string; payload?: T };
-  if (body.code !== 200) throw new Error(`RPC ${method} failed: ${body.code} ${body.msg}`);
-  if (body.payload === undefined) throw new Error(`RPC ${method} returned no payload`);
-  return body.payload;
+  return client.invokeRuntimeRPC<T>(runtimeId, method, payload);
 }
 
 function requireArchive(): string {
@@ -44,13 +33,13 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
         // ignore
       }
     }
-    if (extensionId) {
-      try {
-        await driver.uninstallPlugin(extensionId);
-      } catch {
-        // ignore
-      }
+    try {
+      await driver.uninstallPlugin(extensionId ?? MOCK_EXTENSION_ID);
+    } catch {
+      // Package may not have reached a visible installed state.
     }
+    extensionId = null;
+    runtimeId = null;
   });
 
   it('install plugin and reach ready state', async () => {
@@ -144,13 +133,13 @@ describe('G47-F15 E2E Full Flow', () => {
         // ignore
       }
     }
-    if (extensionId) {
-      try {
-        await driver.uninstallPlugin(extensionId);
-      } catch {
-        // ignore
-      }
+    try {
+      await driver.uninstallPlugin(extensionId ?? MOCK_EXTENSION_ID);
+    } catch {
+      // Package may not have reached a visible installed state.
     }
+    extensionId = null;
+    runtimeId = null;
   });
 
   it('F15-56: full lifecycle Install→Enable→Provision→Handshake→Ready→CustomRPC→HostAPI→Secret→Effect→Takeover/Release→Restart→Crash→EStop→Rearm→Upgrade→Disable→Uninstall', async () => {
@@ -199,18 +188,11 @@ describe('G47-F15 E2E Full Flow', () => {
     expect(agentToolResult).toBeDefined();
     expect(agentToolResult.status).toBe('success');
 
-    // 6. Custom RPC (via new RPC endpoint)
-    const customRpcResp = await fetch(
-      `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'mockgame.echo', payload: { hello: 'world' } }),
-      },
+    // 6. Custom RPC through the authenticated canonical management client.
+    const customRpcBody = await invokeRuntimeRPC<{ echo?: unknown }>(
+      client, runtimeId, 'mockgame.echo', { hello: 'world' },
     );
-    expect(customRpcResp.status).toBe(200);
-    const customRpcBody = (await customRpcResp.json()) as { code: number; msg: string };
-    expect(customRpcBody.code).toBe(200);
+    expect(customRpcBody).toBeDefined();
 
     // 7. HostAPI - RPCInvokeResponse uses payload, not the normal management data envelope.
     const hostApiBody = await invokeRuntimeRPC<{ status?: string; output?: unknown }>(
@@ -281,14 +263,7 @@ describe('G47-F15 E2E Full Flow', () => {
     // 12. Crash via mockgame.fault.crash
     const genBeforeCrash = (await driver.getRuntime(runtimeId)).process?.processGeneration ?? 0;
     try {
-      await fetch(
-        `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ method: 'mockgame.fault.crash', payload: {} }),
-        },
-      );
+      await client.invokeRuntimeRPC(runtimeId!, 'mockgame.fault.crash', {});
     } catch {
       // expected: crash may cause connection failure
     }
