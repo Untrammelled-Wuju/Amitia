@@ -249,6 +249,80 @@ func TestEntryValidatorForbiddenExt(t *testing.T) {
 	}
 }
 
+func TestArchiveInspectorAllowsOnlyDeclaredServiceEntrypointExecutable(t *testing.T) {
+	manifest := []byte(`{"modules":[{"id":"runtime","runtime":{"type":"service","entryPoint":"bin/game"}}]}`)
+	elf := []byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0}
+
+	inspector := NewArchiveInspector(DefaultArchivePolicy())
+	result, err := inspector.Inspect(context.Background(), createTestZIP(map[string][]byte{
+		"manifest.json":            manifest,
+		"modules/runtime/bin/game": elf,
+	}))
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+	if !result.Passed {
+		t.Fatalf("declared service entrypoint must be accepted, errors=%v", result.Errors)
+	}
+
+	result, err = inspector.Inspect(context.Background(), createTestZIP(map[string][]byte{
+		"manifest.json":             manifest,
+		"modules/runtime/bin/other": elf,
+	}))
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+	if result.Passed {
+		t.Fatal("undeclared executable must remain rejected")
+	}
+}
+
+func TestRestrictedArchivePolicyRejectsDeclaredServiceEntrypointExecutable(t *testing.T) {
+	manifest := []byte(`{"modules":[{"id":"runtime","runtime":{"type":"service","entryPoint":"bin/game"}}]}`)
+	elf := []byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0}
+	inspector := NewArchiveInspector(RestrictedArchivePolicy())
+	result, err := inspector.Inspect(context.Background(), createTestZIP(map[string][]byte{
+		"manifest.json":            manifest,
+		"modules/runtime/bin/game": elf,
+	}))
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+	if result.Passed {
+		t.Fatal("restricted policy must reject executable content even when declared")
+	}
+}
+
+func TestSecureExtractorRestoresExecuteBitOnlyForDeclaredServiceEntrypoint(t *testing.T) {
+	manifest := []byte(`{"modules":[{"id":"runtime","runtime":{"type":"service","entryPoint":"bin/game"}}]}`)
+	elf := []byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0}
+	raw := createTestZIP(map[string][]byte{
+		"manifest.json":            manifest,
+		"modules/runtime/bin/game": elf,
+		"modules/runtime/config":   []byte("config"),
+	})
+	root := t.TempDir()
+	extractor := NewSecureExtractor(DefaultArchivePolicy())
+	if _, err := extractor.Extract(context.Background(), raw, root); err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	execInfo, err := os.Stat(filepath.Join(root, "modules", "runtime", "bin", "game"))
+	if err != nil {
+		t.Fatalf("stat executable: %v", err)
+	}
+	if execInfo.Mode().Perm()&0o100 == 0 {
+		t.Fatalf("declared executable is missing owner execute bit: %o", execInfo.Mode().Perm())
+	}
+	configInfo, err := os.Stat(filepath.Join(root, "modules", "runtime", "config"))
+	if err != nil {
+		t.Fatalf("stat config: %v", err)
+	}
+	if configInfo.Mode().Perm()&0o111 != 0 {
+		t.Fatalf("ordinary package file unexpectedly became executable: %o", configInfo.Mode().Perm())
+	}
+}
+
 func TestContentHasherHashArchive(t *testing.T) {
 	h := NewContentHasher()
 	raw := []byte("test data")

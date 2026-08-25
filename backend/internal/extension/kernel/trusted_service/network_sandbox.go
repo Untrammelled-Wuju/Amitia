@@ -72,6 +72,14 @@ func prepareNetworkLaunch(policy ServiceNetworkPolicy, executable string, args [
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: unsupported network mode %q", ErrUnauthorizedNetwork, mode)
 	}
 
+	// Linux bubblewrap can either share the host network namespace (which would
+	// also permit non-loopback inbound listeners) or create a private namespace
+	// with no outbound path. Until an outbound-only slirp/firewall backend is
+	// wired, unrestricted outbound cannot be enforced safely on Linux.
+	if runtime.GOOS == "linux" && mode == "unrestricted" {
+		return sandboxLaunchPlan{}, fmt.Errorf("%w: linux outbound-only unrestricted mode requires a dedicated network backend", ErrGranularNetworkPolicyUnsupported)
+	}
+
 	// Linux bubblewrap creates a separate network namespace, preventing access
 	// to host/public interfaces. The child sees only its private namespace.
 	if runtime.GOOS == "linux" {
@@ -344,7 +352,9 @@ func buildDarwinSandboxProfile(mode, executable, workingDir, tempDir string, rea
 	b.WriteString("(allow file-write* (literal \"/dev/null\"))\n")
 	switch mode {
 	case "unrestricted":
-		b.WriteString("(allow network*)\n")
+		// Outbound approval must never imply permission to bind host-facing
+		// listeners. Seatbelt can express this distinction directly.
+		b.WriteString("(allow network-outbound)\n")
 	case "loopback":
 		b.WriteString("(allow network-outbound (remote ip \"localhost:*\"))\n")
 		b.WriteString("(allow network-inbound (local ip \"localhost:*\"))\n")

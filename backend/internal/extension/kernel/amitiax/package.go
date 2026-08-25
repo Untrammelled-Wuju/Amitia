@@ -247,11 +247,15 @@ func categorizeEntry(name string, layout *PackageLayout) {
 }
 
 func validateStructure(pkg *Package) error {
+	files := make(map[string]bool, len(pkg.Files))
 	for _, f := range pkg.Files {
 		parts := strings.SplitN(f.Path, "/", 2)
 		root := parts[0]
 		if !allowedRootDirs[root] && root != ManifestFile {
 			return fmt.Errorf("%w: unknown root entry %s", ErrInvalidStructure, root)
+		}
+		if !f.IsDir {
+			files[f.Path] = true
 		}
 	}
 	if pkg.Layout.ManifestPath == "" {
@@ -260,6 +264,15 @@ func validateStructure(pkg *Package) error {
 	for _, mod := range pkg.Manifest.Modules {
 		if _, ok := pkg.Layout.Modules[mod.ID]; !ok {
 			return fmt.Errorf("%w: module %s missing directory", ErrInvalidStructure, mod.ID)
+		}
+		if mod.Runtime != nil && strings.TrimSpace(mod.Runtime.EntryPoint) != "" {
+			entry, err := moduleEntrypointPackagePath(mod.ID, mod.Runtime.EntryPoint)
+			if err != nil {
+				return fmt.Errorf("%w: module %s entry point: %v", ErrInvalidStructure, mod.ID, err)
+			}
+			if !files[entry] {
+				return fmt.Errorf("%w: module %s entry point %s missing", ErrInvalidStructure, mod.ID, entry)
+			}
 		}
 	}
 	if pkg.Layout.IntegrityFiles == "" {
@@ -388,14 +401,51 @@ func VerifySignature(pkg *Package, publicKey ed25519.PublicKey) error {
 	return nil
 }
 
+func moduleEntrypointPackagePath(moduleID, entryPoint string) (string, error) {
+	moduleID = strings.TrimSpace(moduleID)
+	entryPoint = strings.TrimSpace(entryPoint)
+	if moduleID == "" || strings.ContainsAny(moduleID, `/\:`) || moduleID == "." || moduleID == ".." {
+		return "", fmt.Errorf("invalid module id %q", moduleID)
+	}
+	if entryPoint == "" || strings.Contains(entryPoint, "\\") || path.IsAbs(entryPoint) || entryPoint == "." {
+		return "", fmt.Errorf("invalid relative entry point %q", entryPoint)
+	}
+	cleaned := path.Clean(entryPoint)
+	if cleaned != entryPoint || cleaned == ".." || strings.HasPrefix(cleaned, "../") || len(entryPoint) >= 2 && entryPoint[1] == ':' {
+		return "", fmt.Errorf("entry point escapes module directory: %q", entryPoint)
+	}
+	return path.Join(ModulesDir, moduleID, entryPoint), nil
+}
+
+func declaredServiceExecutablePaths(pkg *Package) map[string]bool {
+	out := make(map[string]bool)
+	if pkg == nil {
+		return out
+	}
+	for _, mod := range pkg.Manifest.Modules {
+		if mod.Runtime == nil || strings.TrimSpace(mod.Runtime.Type) != "service" || strings.TrimSpace(mod.Runtime.EntryPoint) == "" {
+			continue
+		}
+		if entry, err := moduleEntrypointPackagePath(mod.ID, mod.Runtime.EntryPoint); err == nil {
+			out[entry] = true
+		}
+	}
+	return out
+}
+
 func WritePackageToDir(pkg *Package, archivePath, destDir string) error {
 	reader, err := zip.OpenReader(archivePath)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidArchive, err)
 	}
 	defer reader.Close()
+
+	executables := declaredServiceExecutablePaths(pkg)
 	for _, f := range reader.File {
 		name := normalizePath(f.Name)
+		if err := validateArchivePath(f.Name); err != nil {
+			return err
+		}
 		if err := validatePath(name); err != nil {
 			return err
 		}
@@ -413,18 +463,27 @@ func WritePackageToDir(pkg *Package, archivePath, destDir string) error {
 		if err != nil {
 			return err
 		}
-		out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+		mode := os.FileMode(0o644)
+		if executables[name] {
+			mode = 0o755
+		}
+		out, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 		if err != nil {
 			rc.Close()
 			return err
 		}
-		if _, err := io.Copy(out, rc); err != nil {
-			rc.Close()
-			out.Close()
+		_, copyErr := io.Copy(out, rc)
+		closeErr := out.Close()
+		rc.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		if err := os.Chmod(dest, mode); err != nil {
 			return err
 		}
-		rc.Close()
-		out.Close()
 	}
 	return nil
 }

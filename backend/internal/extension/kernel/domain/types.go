@@ -535,15 +535,17 @@ const (
 )
 
 type RuntimeDefinition struct {
-	Type         RuntimeType       `json:"type"`
-	ServiceID    string            `json:"serviceId,omitempty"`
-	EntryPoint   string            `json:"entryPoint,omitempty"`
-	WorkerCount  int               `json:"workerCount,omitempty"`
-	Timeout      time.Duration     `json:"timeout,omitempty"`
-	Memory       int64             `json:"memory,omitempty"`
-	Permissions  []string          `json:"permissions,omitempty"`
-	Capabilities map[string]bool   `json:"capabilities,omitempty"`
-	Env          map[string]string `json:"env,omitempty"`
+	Type            RuntimeType       `json:"type"`
+	ServiceID       string            `json:"serviceId,omitempty"`
+	EntryPoint      string            `json:"entryPoint,omitempty"`
+	WorkerCount     int               `json:"workerCount,omitempty"`
+	Timeout         time.Duration     `json:"timeout,omitempty"`
+	Memory          int64             `json:"memory,omitempty"`
+	CPUPercent      int               `json:"cpuPercent,omitempty"`
+	MaxSubprocesses int               `json:"maxSubprocesses,omitempty"`
+	Permissions     []string          `json:"permissions,omitempty"`
+	Capabilities    map[string]bool   `json:"capabilities,omitempty"`
+	Env             map[string]string `json:"env,omitempty"`
 }
 
 type RuntimeBinding struct {

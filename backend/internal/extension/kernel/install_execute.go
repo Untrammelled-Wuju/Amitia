@@ -323,6 +323,37 @@ func copyFile(src, dst string) error {
 	return err
 }
 
+func copyInstalledFile(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	mode := os.FileMode(0o644)
+	if info.Mode().Perm()&0o111 != 0 {
+		mode = 0o755
+	}
+
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(dstFile, srcFile)
+	closeErr := dstFile.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Chmod(dst, mode)
+}
+
 func copyDirContents(src, dst string) error {
 	entries, err := os.ReadDir(src)
 	if err != nil {
@@ -342,7 +373,7 @@ func copyDirContents(src, dst string) error {
 			if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
 				return err
 			}
-			if err := copyFile(srcPath, dstPath); err != nil {
+			if err := copyInstalledFile(srcPath, dstPath); err != nil {
 				return err
 			}
 		}

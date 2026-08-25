@@ -605,6 +605,7 @@ func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance
 		stdinPipe.Close()
 		stdoutPipe.Close()
 		stderrPipe.Close()
+		s.rollbackStartedProcess(instance, cmd)
 		return cmd, fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
 	}
 
@@ -704,6 +705,7 @@ func (s *ProcessSupervisor) startPlainService(processCtx context.Context, instan
 
 	handle, attachErr := process.AttachProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
 	if attachErr != nil {
+		s.rollbackStartedProcess(instance, cmd)
 		return cmd, fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
 	}
 
@@ -760,6 +762,7 @@ func (s *ProcessSupervisor) startManagedStdioProtocolService(
 		stdinPipe.Close()
 		stdoutPipe.Close()
 		stderrPipe.Close()
+		s.rollbackStartedProcess(instance, cmd)
 		return cmd, fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
 	}
 
@@ -1157,6 +1160,19 @@ func (s *ProcessSupervisor) waitForProcessExit(inst *ServiceInstance, timeout ti
 		case <-ticker.C:
 		case <-time.After(50 * time.Millisecond):
 		}
+	}
+}
+
+func (s *ProcessSupervisor) rollbackStartedProcess(inst *ServiceInstance, cmd *exec.Cmd) {
+	if inst != nil {
+		s.killProcessTree(inst)
+	} else if cmd != nil && cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	if cmd != nil && cmd.Process != nil {
+		// Reap a process that failed after Start but before the normal supervisor
+		// wait loop was installed. Ignoring the exit status is intentional here.
+		_ = cmd.Wait()
 	}
 }
 
@@ -1585,7 +1601,10 @@ var _ io.Writer = (*logWriter)(nil)
 
 // platformProcessResourceLimits converts manifest declarations to the subset
 // understood by the platform process backend.
-func validateFullSandboxLaunch(serviceID string, def ServiceRuntimeDefinition, plan sandboxLaunchPlan, report process.PlatformIsolationReport, support process.ResourceLimitSupport) error {
+func validateFullSandboxLaunch(serviceID string, def *ServiceRuntimeDefinition, plan sandboxLaunchPlan, report process.PlatformIsolationReport, support process.ResourceLimitSupport) error {
+	if def == nil {
+		return fmt.Errorf("trusted_service: community service %s is missing its runtime definition", serviceID)
+	}
 	if !def.Network.Enforce {
 		return fmt.Errorf("trusted_service: community service %s requires an enforced network policy", serviceID)
 	}
