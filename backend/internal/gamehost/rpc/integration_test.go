@@ -100,7 +100,7 @@ func TestParseMethod_Valid(t *testing.T) {
 }
 
 func TestReservedNamespace(t *testing.T) {
-	reserved := []string{"host", "runtime", "service", "control", "plugin", "channel", "emergency", "secret", "artifact", "permission"}
+	reserved := []string{"host", "runtime", "service", "control", "plugin", "channel", "binary", "emergency", "secret", "artifact", "permission"}
 	for _, ns := range reserved {
 		if !rpc.IsReservedNamespace(rpc.Namespace(ns)) {
 			t.Errorf("expected %q to be reserved", ns)

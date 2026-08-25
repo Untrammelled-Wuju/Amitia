@@ -265,6 +265,28 @@ func TestPluginDescriptorRejectsDuplicateChannelID(t *testing.T) {
 	}
 }
 
+func TestPluginDescriptorAllowsSameChannelIDInDifferentServices(t *testing.T) {
+	desc := PluginDescriptor{
+		ID:              PluginID("test-plugin"),
+		ExtensionID:     "com.example.test",
+		Name:            "Test",
+		Version:         "1.0.0",
+		ProtocolVersion: "amitia-game-host/1",
+		Services: []ServiceDescriptor{
+			{ID: ServiceID("svc-1"), Name: "Service 1", Kind: ServiceKindProcess},
+			{ID: ServiceID("svc-2"), Name: "Service 2", Kind: ServiceKindProcess},
+		},
+		Channels: []ChannelDescriptor{
+			{ID: ChannelID("state"), ServiceID: ServiceID("svc-1"), Kind: ChannelKindState},
+			{ID: ChannelID("state"), ServiceID: ServiceID("svc-2"), Kind: ChannelKindState},
+		},
+	}
+
+	if err := desc.Validate(); err != nil {
+		t.Fatalf("same channel id in different services must be valid: %v", err)
+	}
+}
+
 func TestPluginDescriptorCloneDeepCopy(t *testing.T) {
 	original := PluginDescriptor{
 		ID:              PluginID("test-plugin"),

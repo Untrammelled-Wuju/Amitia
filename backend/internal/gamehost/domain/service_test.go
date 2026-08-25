@@ -130,6 +130,27 @@ func TestServiceDescriptorRejectsControlCharactersInID(t *testing.T) {
 	}
 }
 
+func TestServiceDescriptorRejectsSpaceAndOversizedID(t *testing.T) {
+	for _, id := range []ServiceID{"bad id", ServiceID(string(make([]byte, maxServiceIDLength+1)))} {
+		svc := ServiceDescriptor{ID: id, Name: "Test", Kind: ServiceKindProcess}
+		if err := svc.Validate(); err == nil {
+			t.Fatalf("expected error for invalid service id %q", id)
+		}
+	}
+}
+
+func TestServiceDescriptorRejectsInvalidDependencyID(t *testing.T) {
+	svc := ServiceDescriptor{
+		ID:        ServiceID("svc-1"),
+		Name:      "Test",
+		Kind:      ServiceKindProcess,
+		DependsOn: []ServiceID{"bad id"},
+	}
+	if err := svc.Validate(); err == nil {
+		t.Fatal("expected error for invalid dependency service id")
+	}
+}
+
 func TestServiceDescriptorRejectsControlCharactersInName(t *testing.T) {
 	svc := ServiceDescriptor{
 		ID:   ServiceID("svc-1"),

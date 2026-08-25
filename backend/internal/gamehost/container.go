@@ -60,6 +60,7 @@ type GameHostContainer struct {
 	RPCLifecycle        *rpc.RequestLifecycleManager
 	HostHandlerRegistry rpc.HandlerRegistry
 	ChannelRegistry     channel.Registry
+	OutboundChannels    *channel.OutboundPublisher
 
 	NotificationBridge   *notification.Bridge
 	AgentEventSink       *notification.AgentEventSink

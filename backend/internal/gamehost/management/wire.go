@@ -185,15 +185,19 @@ func NewGameHostPluginRegistryFromContainer(container *gamehost.GameHostContaine
 }
 
 type ControlServiceOptions struct {
-	TakeoverFn      TakeoverFunc
-	ReleaseFn       ReleaseFunc
-	EmergencyStopFn EmergencyStopFunc
-	RearmFn         RearmFunc
+	TakeoverFn        TakeoverFunc
+	ReleaseFn         ReleaseFunc
+	EmergencyStopFn   EmergencyStopFunc
+	RearmFn           RearmFunc
+	SupportsControlFn SupportsControlFunc
 }
 
 func NewControlHandlerFromFuncs(opts ControlServiceOptions) *ControlHandler {
+	var handler *ControlHandler
 	if opts.RearmFn != nil {
-		return NewControlHandlerWithRearm(opts.TakeoverFn, opts.ReleaseFn, opts.EmergencyStopFn, opts.RearmFn)
+		handler = NewControlHandlerWithRearm(opts.TakeoverFn, opts.ReleaseFn, opts.EmergencyStopFn, opts.RearmFn)
+	} else {
+		handler = NewControlHandler(opts.TakeoverFn, opts.ReleaseFn, opts.EmergencyStopFn)
 	}
-	return NewControlHandler(opts.TakeoverFn, opts.ReleaseFn, opts.EmergencyStopFn)
+	return handler.SetSupportsControl(opts.SupportsControlFn)
 }

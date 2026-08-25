@@ -113,7 +113,7 @@ func (p PluginDescriptor) Validate() error {
 		}
 	}
 
-	seenChannelIDs := make(map[ChannelID]struct{})
+	seenChannelIDs := make(map[string]struct{})
 	for _, ch := range p.Channels {
 		if err := ch.Validate(); err != nil {
 			return err
@@ -122,11 +122,12 @@ func (p PluginDescriptor) Validate() error {
 			return NewHostErrorWithCause(ErrInvalidArgument, "channel references unknown service",
 				NewHostError(ErrInvalidArgument, string(ch.ServiceID)))
 		}
-		if _, exists := seenChannelIDs[ch.ID]; exists {
-			return NewHostErrorWithCause(ErrInvalidArgument, "duplicate channel id",
+		channelKey := string(ch.ServiceID) + "\x00" + string(ch.ID)
+		if _, exists := seenChannelIDs[channelKey]; exists {
+			return NewHostErrorWithCause(ErrInvalidArgument, "duplicate channel id within service",
 				NewHostError(ErrInvalidArgument, string(ch.ID)))
 		}
-		seenChannelIDs[ch.ID] = struct{}{}
+		seenChannelIDs[channelKey] = struct{}{}
 	}
 
 	seenSinkIDs := make(map[string]struct{}, len(p.ControlSinks))
@@ -271,13 +272,13 @@ func EqualPluginDescriptor(a, b PluginDescriptor) bool {
 	if len(a.Channels) != len(b.Channels) {
 		return false
 	}
-	chMap := make(map[ChannelID]ChannelDescriptor, len(a.Channels))
+	chMap := make(map[string]ChannelDescriptor, len(a.Channels))
 	for _, ch := range a.Channels {
-		chMap[ch.ID] = ch
+		chMap[string(ch.ServiceID)+"\x00"+string(ch.ID)] = ch
 	}
 	for _, ch := range b.Channels {
-		other, ok := chMap[ch.ID]
-		if !ok || other.ServiceID != ch.ServiceID || other.Kind != ch.Kind || other.SchemaID != ch.SchemaID {
+		other, ok := chMap[string(ch.ServiceID)+"\x00"+string(ch.ID)]
+		if !ok || other.ServiceID != ch.ServiceID || other.Kind != ch.Kind || other.SchemaID != ch.SchemaID || other.Direction != ch.Direction || other.Frequency != ch.Frequency {
 			return false
 		}
 	}

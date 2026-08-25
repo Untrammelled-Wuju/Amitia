@@ -30,12 +30,14 @@ type TakeoverFunc func(ctx context.Context, runtimeID string) (TakeoverResult, e
 type ReleaseFunc func(ctx context.Context, runtimeID string, targetMode string, expectedEpoch uint64) (ReleaseResult, error)
 type EmergencyStopFunc func(ctx context.Context, runtimeID string) (control.EmergencyStopResult, error)
 type RearmFunc func(ctx context.Context, runtimeID string) error
+type SupportsControlFunc func(ctx context.Context, runtimeID string) (bool, error)
 
 type ControlHandler struct {
-	takeoverFn      TakeoverFunc
-	releaseFn       ReleaseFunc
-	emergencyStopFn EmergencyStopFunc
-	rearmFn         RearmFunc
+	takeoverFn        TakeoverFunc
+	releaseFn         ReleaseFunc
+	emergencyStopFn   EmergencyStopFunc
+	rearmFn           RearmFunc
+	supportsControlFn SupportsControlFunc
 }
 
 func NewControlHandler(takeoverFn TakeoverFunc, releaseFn ReleaseFunc, emergencyStopFn EmergencyStopFunc) *ControlHandler {
@@ -53,6 +55,27 @@ func NewControlHandlerWithRearm(takeoverFn TakeoverFunc, releaseFn ReleaseFunc, 
 		emergencyStopFn: emergencyStopFn,
 		rearmFn:         rearmFn,
 	}
+}
+
+func (h *ControlHandler) SetSupportsControl(fn SupportsControlFunc) *ControlHandler {
+	if h != nil {
+		h.supportsControlFn = fn
+	}
+	return h
+}
+
+func (h *ControlHandler) ensureControlSupported(ctx context.Context, runtimeID string) error {
+	if h == nil || h.supportsControlFn == nil {
+		return nil
+	}
+	supported, err := h.supportsControlFn(ctx, runtimeID)
+	if err != nil {
+		return err
+	}
+	if !supported {
+		return errors.New("plugin does not declare realtime_control")
+	}
+	return nil
 }
 
 type ReleaseRequest struct {
@@ -75,6 +98,10 @@ func (h *ControlHandler) Takeover(c *gin.Context) {
 	runtimeID := strings.TrimSpace(c.Param("runtimeId"))
 	if runtimeID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId required"})
+		return
+	}
+	if err := h.ensureControlSupported(c.Request.Context(), runtimeID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 
@@ -100,6 +127,10 @@ func (h *ControlHandler) Release(c *gin.Context) {
 	runtimeID := strings.TrimSpace(c.Param("runtimeId"))
 	if runtimeID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId required"})
+		return
+	}
+	if err := h.ensureControlSupported(c.Request.Context(), runtimeID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 		return
 	}
 

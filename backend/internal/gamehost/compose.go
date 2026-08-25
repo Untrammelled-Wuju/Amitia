@@ -300,6 +300,11 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	rpcDispatcher.SetControlPlane(controlPlane)
 	rpcLifecycle.SetControlPlane(controlPlane)
 
+	outboundChannels, err := channel.NewOutboundPublisher(channelReg, controlPlane, runtimeManager)
+	if err != nil {
+		return nil, fmt.Errorf("compose outbound channel publisher: %w", err)
+	}
+
 	contributionSync, err := integration.NewGamePluginSyncService(
 		pluginReg,
 		integration.NewDefaultGamePluginContributionMapper(),
@@ -924,6 +929,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		RPCLifecycle:             rpcLifecycle,
 		HostHandlerRegistry:      hostHandlers,
 		ChannelRegistry:          channelReg,
+		OutboundChannels:         outboundChannels,
 		NotificationBridge:       notifBridge,
 		AgentEventSink:           agentEventSink,
 		StateStore:               stateStore,
