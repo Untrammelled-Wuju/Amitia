@@ -2,6 +2,7 @@ package service_definition
 
 import (
 	"testing"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 )
@@ -75,6 +76,11 @@ func TestDefinitionMapper_MapToDefinition(t *testing.T) {
 		Env: map[string]string{
 			"PORT": "8080",
 		},
+		Limits: trusted_service.ServiceResourceLimits{
+			MaxMemoryMB:     768,
+			MaxCPUPercent:   45,
+			MaxSubprocesses: 3,
+		},
 		Enabled: true,
 	}
 
@@ -103,6 +109,9 @@ func TestDefinitionMapper_MapToDefinition(t *testing.T) {
 	}
 	if def.Protocol != "amitia-trusted-service/1" {
 		t.Errorf("unexpected Protocol: %s", def.Protocol)
+	}
+	if def.Limits.MaxMemoryMB != 768 || def.Limits.MaxCPUPercent != 45 || def.Limits.MaxSubprocesses != 3 {
+		t.Fatalf("resource limits were not preserved: %+v", def.Limits)
 	}
 }
 
@@ -205,6 +214,31 @@ func TestDefinitionMapper_Stability(t *testing.T) {
 	}
 }
 
+func TestDefinitionMapper_ResourceLimitsAffectManifestHash(t *testing.T) {
+	mapper := NewDefinitionMapper()
+	base := ServiceRuntimeView{
+		ExtensionID: "com.example.test",
+		ModuleID:    "svc-1",
+		RuntimeType: "service",
+		EntryPoint:  "./bin/svc",
+		Limits: trusted_service.ServiceResourceLimits{
+			MaxMemoryMB: 256,
+		},
+	}
+	first, err := mapper.MapToDefinition(base)
+	if err != nil {
+		t.Fatalf("first mapping error: %v", err)
+	}
+	base.Limits.MaxMemoryMB = 512
+	second, err := mapper.MapToDefinition(base)
+	if err != nil {
+		t.Fatalf("second mapping error: %v", err)
+	}
+	if first.ManifestHash == second.ManifestHash {
+		t.Fatal("resource limit change must change manifest hash")
+	}
+}
+
 func TestDefinitionMapper_CrossExtensionDifferentModuleIDs(t *testing.T) {
 	mapper := NewDefinitionMapper()
 
@@ -294,8 +328,13 @@ func TestServiceRuntimeView_IsValidProcessService(t *testing.T) {
 
 	view.EntryPoint = "./bin/svc"
 	view.RuntimeType = "javascript"
+	if !view.IsValidProcessService() {
+		t.Error("expected javascript runtime to be a valid process-backed service")
+	}
+
+	view.RuntimeType = "wasm"
 	if view.IsValidProcessService() {
-		t.Error("expected invalid for non-service type")
+		t.Error("expected unsupported runtime type to be invalid")
 	}
 }
 
@@ -336,5 +375,76 @@ func TestDefinitionMapperPreservesAuthoritativeSandboxReadOnlyRoot(t *testing.T)
 	}
 	if def.ManifestHash == otherDef.ManifestHash {
 		t.Fatal("sandbox read-only root must participate in manifest hash so generation changes cannot reuse stale definitions")
+	}
+}
+
+func TestDefinitionMapper_InvalidResourceLimitsRejected(t *testing.T) {
+	mapper := NewDefinitionMapper()
+	cases := []struct {
+		name   string
+		limits trusted_service.ServiceResourceLimits
+	}{
+		{name: "negative memory", limits: trusted_service.ServiceResourceLimits{MaxMemoryMB: -1}},
+		{name: "negative CPU", limits: trusted_service.ServiceResourceLimits{MaxCPUPercent: -1}},
+		{name: "CPU over 100", limits: trusted_service.ServiceResourceLimits{MaxCPUPercent: 101}},
+		{name: "negative file descriptors", limits: trusted_service.ServiceResourceLimits{MaxFileDescriptors: -1}},
+		{name: "negative disk", limits: trusted_service.ServiceResourceLimits{MaxDiskMB: -1}},
+		{name: "negative subprocesses", limits: trusted_service.ServiceResourceLimits{MaxSubprocesses: -1}},
+		{name: "negative CPU time", limits: trusted_service.ServiceResourceLimits{CPUTime: -time.Second}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := mapper.MapToDefinition(ServiceRuntimeView{
+				ExtensionID: "com.example.test",
+				ModuleID:    "svc",
+				RuntimeType: "service",
+				EntryPoint:  "./bin/svc",
+				Limits:      tc.limits,
+			})
+			if err == nil {
+				t.Fatal("expected invalid resource limits to be rejected")
+			}
+			if !IsServiceDefinitionError(err, ErrDefinitionValidationFailed) {
+				t.Fatalf("expected definition_validation_failed, got %v", err)
+			}
+		})
+	}
+}
+
+func TestDefinitionMapper_AllResourceLimitsAffectManifestHash(t *testing.T) {
+	mapper := NewDefinitionMapper()
+	base := ServiceRuntimeView{
+		ExtensionID: "com.example.test",
+		ModuleID:    "svc",
+		RuntimeType: "service",
+		EntryPoint:  "./bin/svc",
+	}
+	initial, err := mapper.MapToDefinition(base)
+	if err != nil {
+		t.Fatalf("base mapping error: %v", err)
+	}
+	cases := []struct {
+		name  string
+		apply func(*trusted_service.ServiceResourceLimits)
+	}{
+		{name: "memory", apply: func(v *trusted_service.ServiceResourceLimits) { v.MaxMemoryMB = 1 }},
+		{name: "CPU", apply: func(v *trusted_service.ServiceResourceLimits) { v.MaxCPUPercent = 1 }},
+		{name: "file descriptors", apply: func(v *trusted_service.ServiceResourceLimits) { v.MaxFileDescriptors = 1 }},
+		{name: "disk", apply: func(v *trusted_service.ServiceResourceLimits) { v.MaxDiskMB = 1 }},
+		{name: "subprocesses", apply: func(v *trusted_service.ServiceResourceLimits) { v.MaxSubprocesses = 1 }},
+		{name: "CPU time", apply: func(v *trusted_service.ServiceResourceLimits) { v.CPUTime = time.Second }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			view := base
+			tc.apply(&view.Limits)
+			def, err := mapper.MapToDefinition(view)
+			if err != nil {
+				t.Fatalf("mapping error: %v", err)
+			}
+			if def.ManifestHash == initial.ManifestHash {
+				t.Fatal("resource limit change must change manifest hash")
+			}
+		})
 	}
 }

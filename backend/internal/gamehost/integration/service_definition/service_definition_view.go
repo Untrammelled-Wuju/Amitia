@@ -22,6 +22,7 @@ type ServiceRuntimeView struct {
 	Env                 map[string]string
 	Metadata            map[string]string
 	Network             trusted_service.ServiceNetworkPolicy
+	Limits              trusted_service.ServiceResourceLimits
 	Enabled             bool
 	ExtensionState      string
 }

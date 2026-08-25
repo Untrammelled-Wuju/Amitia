@@ -89,8 +89,8 @@ func TestValidateEnvelopePeer_Spoof(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "empty fields allowed",
-			env: protocol.Envelope{},
+			name:    "empty fields allowed",
+			env:     protocol.Envelope{},
 			wantErr: false,
 		},
 	}
@@ -103,6 +103,78 @@ func TestValidateEnvelopePeer_Spoof(t *testing.T) {
 			}
 			if !tt.wantErr && err != nil {
 				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateEnvelopePeer_GenerationBootstrap(t *testing.T) {
+	peer := Peer{
+		PluginID:   "correct.plugin",
+		RuntimeID:  "runtime-a",
+		ServiceID:  "svc-a",
+		Generation: 7,
+	}
+
+	tests := []struct {
+		name    string
+		env     protocol.Envelope
+		wantErr bool
+	}{
+		{
+			name: "initial handshake may bootstrap without generation",
+			env: protocol.Envelope{
+				Type:     protocol.MessageTypeRequest,
+				Method:   HandshakeMethod,
+				PluginID: "correct.plugin",
+			},
+			wantErr: false,
+		},
+		{
+			name: "ordinary request cannot omit generation",
+			env: protocol.Envelope{
+				Type:   protocol.MessageTypeRequest,
+				Method: "vendor.test.action",
+			},
+			wantErr: true,
+		},
+		{
+			name: "handshake cannot spoof nonzero generation",
+			env: protocol.Envelope{
+				Type:       protocol.MessageTypeRequest,
+				Method:     HandshakeMethod,
+				Generation: 6,
+			},
+			wantErr: true,
+		},
+		{
+			name: "matching generation is accepted",
+			env: protocol.Envelope{
+				Type:       protocol.MessageTypeRequest,
+				Method:     "vendor.test.action",
+				Generation: 7,
+			},
+			wantErr: false,
+		},
+		{
+			name: "bootstrap still cannot spoof route identity",
+			env: protocol.Envelope{
+				Type:     protocol.MessageTypeRequest,
+				Method:   HandshakeMethod,
+				PluginID: "wrong.plugin",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateEnvelopePeer(tt.env, peer)
+			if tt.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 		})
 	}

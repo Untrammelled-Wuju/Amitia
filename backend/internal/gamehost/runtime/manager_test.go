@@ -243,3 +243,25 @@ func TestManager_Concurrent_Safe(t *testing.T) {
 		t.Errorf("concurrent Create: got %d runtimes, want 10", len(list))
 	}
 }
+
+func TestManager_DurableEmergencyResolverAlsoExposesLifecycleIntent(t *testing.T) {
+	m := newTestManager()
+	ctx := context.Background()
+	rt, err := m.Create(ctx, "plugin-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.SetEmergencyLatchResolver(func(runtimeID domain.RuntimeInstanceID) bool {
+		return runtimeID == rt.ID
+	})
+	if !m.IsEmergencyLatched(rt.ID) {
+		t.Fatal("expected resolver-backed emergency latch")
+	}
+	intent, err := m.GetLifecycleIntent(rt.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if intent != "emergency" {
+		t.Fatalf("resolver-backed lifecycle intent=%q, want emergency", intent)
+	}
+}

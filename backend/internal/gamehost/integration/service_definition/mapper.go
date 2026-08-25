@@ -31,6 +31,9 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 	if view.EntryPoint == "" {
 		return nil, NewServiceDefinitionError(ErrDefinitionMappingFailed, "entry point must not be empty for process service")
 	}
+	if err := validateResourceLimits(view.Limits); err != nil {
+		return nil, err
+	}
 
 	definitionID := view.ToDefinitionID()
 	envCopy := cloneStringMap(view.Env)
@@ -94,10 +97,10 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 			CleanupChildren: true,
 			RemoveTempDir:   false,
 		},
-		// Do not publish nominal limits that the current platform supervisor does
-		// not enforce. Community plugins are separately blocked unless the process
-		// manager reports complete CPU/memory/filesystem/network isolation.
-		Limits:              trusted_service.ServiceResourceLimits{},
+		// Limits originate from the authoritative installed module runtime and are
+		// enforced (or fail-closed) by the platform supervisor. Never silently drop
+		// a plugin's declared process budget.
+		Limits:              view.Limits,
 		Network:             resolveNetworkPolicy(view.Network),
 		SandboxReadOnlyRoot: view.SandboxReadOnlyRoot,
 		ManifestHash:        computeManifestHash(view),
@@ -119,6 +122,28 @@ func (m *DefinitionMapper) MapToViews(views []ServiceRuntimeView) ([]*trusted_se
 		defs = append(defs, def)
 	}
 	return defs, errs
+}
+
+func validateResourceLimits(limits trusted_service.ServiceResourceLimits) error {
+	if limits.MaxMemoryMB < 0 {
+		return NewServiceDefinitionError(ErrDefinitionValidationFailed, "max memory must not be negative")
+	}
+	if limits.MaxCPUPercent < 0 || limits.MaxCPUPercent > 100 {
+		return NewServiceDefinitionError(ErrDefinitionValidationFailed, "max CPU percent must be between 0 and 100")
+	}
+	if limits.MaxFileDescriptors < 0 {
+		return NewServiceDefinitionError(ErrDefinitionValidationFailed, "max file descriptors must not be negative")
+	}
+	if limits.MaxDiskMB < 0 {
+		return NewServiceDefinitionError(ErrDefinitionValidationFailed, "max disk must not be negative")
+	}
+	if limits.MaxSubprocesses < 0 {
+		return NewServiceDefinitionError(ErrDefinitionValidationFailed, "max subprocesses must not be negative")
+	}
+	if limits.CPUTime < 0 {
+		return NewServiceDefinitionError(ErrDefinitionValidationFailed, "CPU time must not be negative")
+	}
+	return nil
 }
 
 func computeManifestHash(view ServiceRuntimeView) string {
@@ -145,6 +170,15 @@ func computeManifestHash(view ServiceRuntimeView) string {
 	h.Write([]byte(view.PublisherID))
 	h.Write([]byte(view.PublisherTrust))
 	h.Write([]byte(view.Network.Mode))
+	h.Write([]byte(fmt.Sprintf(
+		"mem=%d;cpu=%d;fd=%d;disk=%d;proc=%d;cpu_time=%d",
+		view.Limits.MaxMemoryMB,
+		view.Limits.MaxCPUPercent,
+		view.Limits.MaxFileDescriptors,
+		view.Limits.MaxDiskMB,
+		view.Limits.MaxSubprocesses,
+		view.Limits.CPUTime,
+	)))
 	for _, arg := range view.Arguments {
 		h.Write([]byte(arg))
 	}
