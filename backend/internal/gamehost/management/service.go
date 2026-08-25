@@ -374,6 +374,13 @@ func (s *GameCenterManagementService) GetRuntimeHandshakeStatus(ctx context.Cont
 }
 
 func (s *GameCenterManagementService) GetControlAuthority(ctx context.Context, runtimeID string) (*ControlAuthorityDTO, error) {
+	if s.runtimes != nil && s.registry != nil {
+		if rt, err := s.runtimes.GetRuntime(runtimeID); err == nil && rt != nil {
+			if plugin, pluginErr := s.registry.Get(ctx, string(rt.PluginID)); pluginErr == nil && !pluginHasCapability(plugin, ghdomain.HostFeatureRealtimeControl) {
+				return &ControlAuthorityDTO{RuntimeID: runtimeID, Mode: "unsupported", Epoch: 0}, nil
+			}
+		}
+	}
 	if s.authority == nil {
 		return &ControlAuthorityDTO{Mode: "unavailable", Epoch: 0}, nil
 	}
@@ -477,6 +484,7 @@ func (s *GameCenterManagementService) aggregatePluginSummary(
 	health := s.pluginHealth(string(plugin.ID))
 	enabled := inst.EnablementState == kerneldomain.EnablementEnabled
 	installState := string(inst.InstallationState)
+	caps := pluginCapabilityStrings(plugin)
 
 	return GamePluginSummaryDTO{
 		ExtensionID:      string(def.ID),
@@ -489,6 +497,7 @@ func (s *GameCenterManagementService) aggregatePluginSummary(
 		Health:           health,
 		RuntimeCount:     runtimeCount,
 		ManagementTarget: string(kerneldomain.ManagementTargetGameCenter),
+		Capabilities:     caps,
 	}
 }
 
@@ -498,10 +507,8 @@ func (s *GameCenterManagementService) aggregatePluginDetail(
 	inst kerneldomain.ExtensionInstallation,
 	plugin ghdomain.PluginDescriptor,
 ) GamePluginDetailDTO {
-	caps := make([]string, 0, len(plugin.Capabilities))
-	for _, c := range plugin.Capabilities {
-		caps = append(caps, string(c))
-	}
+	caps := pluginCapabilityStrings(plugin)
+	permissions := append([]string(nil), plugin.RequiredPermissions...)
 
 	runtimes := s.listRuntimeSummariesForPlugin(ctx, string(plugin.ID))
 	health := s.pluginHealth(string(plugin.ID))
@@ -517,6 +524,7 @@ func (s *GameCenterManagementService) aggregatePluginDetail(
 		PackageRevision:  inst.PackageID,
 		ManagementTarget: string(kerneldomain.ManagementTargetGameCenter),
 		Capabilities:     caps,
+		Permissions:      permissions,
 		Provider:         def.Publisher.DisplayName,
 		Runtimes:         runtimes,
 		HealthSummary:    &HealthSummaryDTO{Status: health},
@@ -530,7 +538,10 @@ func (s *GameCenterManagementService) aggregateRuntimeSummary(
 ) GameRuntimeSummaryDTO {
 	serviceCount := s.countServices(string(rt.ID))
 	connected, ready := s.runtimeConnectionState(string(rt.ID))
-	controlMode, epoch := s.runtimeAuthority(ctx, string(rt.ID))
+	controlMode, epoch := "", uint64(0)
+	if pluginHasCapability(plugin, ghdomain.HostFeatureRealtimeControl) {
+		controlMode, epoch = s.runtimeAuthority(ctx, string(rt.ID))
+	}
 	health := s.runtimeHealth(string(rt.ID))
 
 	return GameRuntimeSummaryDTO{
@@ -554,7 +565,10 @@ func (s *GameCenterManagementService) aggregateRuntimeDetail(
 ) GameRuntimeDetailDTO {
 	services, _ := s.ListServices(ctx, string(rt.ID))
 	hs, _ := s.GetHandshakeStatus(ctx, string(rt.ID))
-	authority, _ := s.GetControlAuthority(ctx, string(rt.ID))
+	var authority *ControlAuthorityDTO
+	if pluginHasCapability(plugin, ghdomain.HostFeatureRealtimeControl) {
+		authority, _ = s.GetControlAuthority(ctx, string(rt.ID))
+	}
 	health, _ := s.GetRuntimeHealth(ctx, string(rt.ID))
 
 	return GameRuntimeDetailDTO{
@@ -725,6 +739,23 @@ func (s *GameCenterManagementService) runtimeAuthority(ctx context.Context, runt
 		return "observe_only", 1
 	}
 	return string(snap.Mode), snap.Epoch
+}
+
+func pluginCapabilityStrings(plugin ghdomain.PluginDescriptor) []string {
+	result := make([]string, 0, len(plugin.Capabilities))
+	for _, capability := range plugin.Capabilities {
+		result = append(result, string(capability))
+	}
+	return result
+}
+
+func pluginHasCapability(plugin ghdomain.PluginDescriptor, capability ghdomain.HostFeature) bool {
+	for _, declared := range plugin.Capabilities {
+		if ghdomain.HostFeature(declared) == capability {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *GameCenterManagementService) matchesPluginFilter(summary GamePluginSummaryDTO, filter PluginFilter) bool {

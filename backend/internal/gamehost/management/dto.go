@@ -3,16 +3,17 @@ package management
 import "time"
 
 type GamePluginSummaryDTO struct {
-	ExtensionID      string `json:"extensionId"`
-	PluginID         string `json:"pluginId"`
-	Name             string `json:"name"`
-	Version          string `json:"version"`
-	Description      string `json:"description"`
-	Enabled          bool   `json:"enabled"`
-	InstallState     string `json:"installState"`
-	Health           string `json:"health"`
-	RuntimeCount     int    `json:"runtimeCount"`
-	ManagementTarget string `json:"managementTarget"`
+	ExtensionID      string   `json:"extensionId"`
+	PluginID         string   `json:"pluginId"`
+	Name             string   `json:"name"`
+	Version          string   `json:"version"`
+	Description      string   `json:"description"`
+	Enabled          bool     `json:"enabled"`
+	InstallState     string   `json:"installState"`
+	Health           string   `json:"health"`
+	RuntimeCount     int      `json:"runtimeCount"`
+	ManagementTarget string   `json:"managementTarget"`
+	Capabilities     []string `json:"capabilities,omitempty"`
 }
 
 type GamePluginDetailDTO struct {
