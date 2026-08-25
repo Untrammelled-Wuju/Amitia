@@ -51,7 +51,7 @@ func TestPluginHostSpecRejectsUnknownHostFeature(t *testing.T) {
 	}
 }
 
-func TestPluginNetworkPolicyOnlyExposesEnforceableModes(t *testing.T) {
+func TestPluginNetworkPolicyExposesProtocolV1Modes(t *testing.T) {
 	for _, mode := range []string{"none", "loopback", "unrestricted"} {
 		spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: &PluginNetworkPolicy{Mode: mode}}
 		if err := spec.Validate(); err != nil {
