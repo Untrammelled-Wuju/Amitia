@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"unicode"
 )
@@ -185,6 +186,16 @@ func Decode(data []byte) (Envelope, error) {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&e); err != nil {
 		return Envelope{}, fmt.Errorf("failed to decode envelope: %w", err)
+	}
+	// A stdio frame is exactly one JSON envelope. Accepting a second JSON value
+	// would make host/plugin framing ambiguous and lets a validator inspect only
+	// the first message while transport code sees additional bytes.
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return Envelope{}, fmt.Errorf("failed to decode envelope: trailing JSON value")
+		}
+		return Envelope{}, fmt.Errorf("failed to decode envelope: trailing data: %w", err)
 	}
 	if err := e.Validate(); err != nil {
 		return Envelope{}, err

@@ -230,12 +230,12 @@ func TestOpaquePayloadConformance(t *testing.T) {
 	}
 }
 
-func TestUnknownFieldForwardCompatibility(t *testing.T) {
+func TestUnknownEnvelopeFieldRejectedWithinProtocolMajor(t *testing.T) {
 	data := []byte(`{"protocol":"amitia-game-host/1","type":"notification","id":"n1","method":"vendor.test","futureField":{"foo":1}}`)
 
-	var env map[string]interface{}
-	if err := parseEnvelope(data, &env); err != nil {
-		t.Logf("Note: unknown field handling may fail strict decoding: %v", err)
+	validator := EnvelopeValidator{}
+	if err := validator.Validate(data); err == nil {
+		t.Fatal("amitia-game-host/1 must reject unknown envelope fields; adding wire fields requires an explicit protocol compatibility decision")
 	}
 }
 
@@ -490,5 +490,13 @@ func TestLargeMessageId(t *testing.T) {
 	data := []byte(`{"protocol":"amitia-game-host/1","type":"request","id":"` + largeID + `","method":"vendor.test"}`)
 	if err := validator.Validate(data); err == nil {
 		t.Error("large message id should be rejected")
+	}
+}
+
+func TestEnvelopeRejectsTrailingJSONValue(t *testing.T) {
+	data := []byte(`{"protocol":"amitia-game-host/1","type":"notification","id":"n1","method":"vendor.test"} {"extra":true}`)
+	validator := EnvelopeValidator{}
+	if err := validator.Validate(data); err == nil {
+		t.Fatal("validator must reject multiple JSON values in one protocol frame")
 	}
 }
