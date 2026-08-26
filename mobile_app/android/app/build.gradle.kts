@@ -191,8 +191,65 @@ tasks.register<Copy>("copyFrozenRuntimePackage") {
     }
 }
 
-tasks.named("preBuild").configure {
+tasks.register("validateBundledRuntimePackage") {
+    group = "verification"
+    description = "Rejects stale or incomplete embedded Runtime Packages before APK assembly"
     dependsOn("copyFrozenRuntimePackage")
+
+    doLast {
+        if (allowRuntimelessApk && !bundledRuntimeAsset.asFile.isFile) {
+            logger.lifecycle("validateBundledRuntimePackage: skipped for explicit cloud-only runtimeless APK")
+            return@doLast
+        }
+
+        val packageFile = bundledRuntimeAsset.asFile
+        if (!packageFile.isFile) {
+            throw GradleException(
+                "validateBundledRuntimePackage: embedded Runtime Package is missing: ${packageFile.absolutePath}"
+            )
+        }
+
+        val validator = layout.projectDirectory.file(
+            "../scripts/validate-runtime-package.py"
+        ).asFile
+        if (!validator.isFile) {
+            throw GradleException(
+                "validateBundledRuntimePackage: validator missing: ${validator.absolutePath}"
+            )
+        }
+
+        val configuredPython = System.getenv("PYTHON")?.trim()?.takeIf { it.isNotEmpty() }
+        val python = configuredPython ?: if (
+            System.getProperty("os.name").lowercase().contains("windows")
+        ) {
+            "python.exe"
+        } else {
+            "python3"
+        }
+
+        try {
+            exec {
+                commandLine(
+                    python,
+                    validator.absolutePath,
+                    "--package",
+                    packageFile.absolutePath,
+                )
+            }
+        } catch (error: Exception) {
+            throw GradleException(
+                "Embedded Runtime Package validation failed. " +
+                    "Do not build an APK with a stale source-tree asset. " +
+                    "Regenerate it with scripts/build-apk.ps1 (or provide FROZEN_RUNTIME_PACKAGE_PATH). " +
+                    "Package=${packageFile.absolutePath}",
+                error,
+            )
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("validateBundledRuntimePackage")
 }
 
 flutter {

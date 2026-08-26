@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend_transport/providers/backend_transport_providers.dart';
 import '../backend_transport/state/backend_transport_state.dart';
+import '../runtime/runtime_bootstrap_provider.dart';
 import '../runtime/status/runtime_status_provider.dart';
 import '../runtime/status/runtime_status_snapshot.dart';
 import 'debug_log_service.dart';
@@ -9,6 +10,20 @@ import 'debug_log_service.dart';
 final debugRuntimeLogBridgeProvider = Provider<void>((ref) {
   final logService = ref.read(debugLogServiceProvider);
   String? lastTransportSignature;
+  String? lastBootstrapErrorSignature;
+
+  ref.listen(runtimeBootstrapSnapshotProvider, (prev, next) {
+    final snapshot = next.asData?.value;
+    final error = snapshot?.error;
+    if (error == null) return;
+    final signature = '${error.code}:${error.message}';
+    if (signature == lastBootstrapErrorSignature) return;
+    lastBootstrapErrorSignature = signature;
+    logService.addRuntimeLog(
+      'Bootstrap error [${error.code}]: ${error.message}',
+      DebugLogLevel.error,
+    );
+  });
 
   ref.listen<RuntimeStatusSnapshot>(runtimeStatusCurrentProvider, (prev, next) {
     if (prev?.phase != next.phase ||

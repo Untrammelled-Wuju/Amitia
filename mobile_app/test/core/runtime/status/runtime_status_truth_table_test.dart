@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_snapshot.dart';
+import 'package:amitia_app/core/runtime/runtime_bridge_error.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_state.dart';
 import 'package:amitia_app/core/runtime/status/default_runtime_status_projection.dart';
 import 'package:amitia_app/core/runtime/status/runtime_status_phase.dart';
@@ -63,6 +64,7 @@ void main() {
       required int transportGeneration,
       required BackendHttpState httpState,
       required BackendWebSocketState webSocketState,
+      RuntimeBridgeError? lastError,
     }) async {
       bridge.setSnapshot(RuntimeBridgeSnapshot(
         schemaVersion: 1,
@@ -70,6 +72,7 @@ void main() {
         generation: runtimeGeneration,
         runtimeInstalled: runtimeInstalled,
         runtimeAvailable: runtimeAvailable,
+        lastError: lastError,
       ));
       connectionSource.setAvailability(connection);
 
@@ -146,6 +149,47 @@ void main() {
       expect(snapshot.phase, RuntimeStatusPhase.installRequired);
       expect(snapshot.runtimeInstalled, false);
       expect(snapshot.businessAvailable, false);
+      expect(snapshot.primaryError, isNull);
+    });
+
+    test('Case 6b: Installing without manifest stays starting', () async {
+      final snapshot = await _buildAndSnapshot(
+        runtimeState: RuntimeBridgeState.installing,
+        runtimeGeneration: 0,
+        runtimeInstalled: false,
+        runtimeAvailable: false,
+        connection: BackendConnectionUnavailable(),
+        transportGeneration: 0,
+        httpState: BackendHttpState.unavailable,
+        webSocketState: BackendWebSocketState.disconnected,
+      );
+
+      expect(snapshot.phase, RuntimeStatusPhase.starting);
+      expect(snapshot.runtimeInstalled, false);
+      expect(snapshot.primaryError, isNull);
+    });
+
+    test('Case 6c: Failed before manifest preserves runtime failure', () async {
+      const runtimeError = RuntimeBridgeError(
+        code: 'PACKAGE_INVALID',
+        message: 'runtime package validation failed',
+        retryable: false,
+      );
+      final snapshot = await _buildAndSnapshot(
+        runtimeState: RuntimeBridgeState.failed,
+        runtimeGeneration: 0,
+        runtimeInstalled: false,
+        runtimeAvailable: false,
+        connection: BackendConnectionUnavailable(),
+        transportGeneration: 0,
+        httpState: BackendHttpState.unavailable,
+        webSocketState: BackendWebSocketState.disconnected,
+        lastError: runtimeError,
+      );
+
+      expect(snapshot.phase, RuntimeStatusPhase.failed);
+      expect(snapshot.primaryError?.code, 'PACKAGE_INVALID');
+      expect(snapshot.primaryError?.message, 'runtime package validation failed');
     });
 
     test('Case 7: Runtime unavailable returns unavailable', () async {
