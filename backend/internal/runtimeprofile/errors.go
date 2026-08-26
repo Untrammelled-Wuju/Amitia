@@ -20,6 +20,14 @@ func (e *DuplicateProfileArgError) Error() string {
 	return fmt.Sprintf("duplicate runtime profile argument: %q", e.Value)
 }
 
+type UnexpectedRuntimeArgError struct {
+	Value string
+}
+
+func (e *UnexpectedRuntimeArgError) Error() string {
+	return fmt.Sprintf("unexpected runtime argument: %q", e.Value)
+}
+
 type ProfileSecurityConflictError struct {
 	Profile Profile
 	Detail  string

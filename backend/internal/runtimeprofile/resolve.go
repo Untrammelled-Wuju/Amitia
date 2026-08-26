@@ -31,100 +31,109 @@ type ResolveInput struct {
 const envKey = "AMITIA_RUNTIME_PROFILE"
 const cliFlag = "--runtime-profile"
 
+// Resolve applies the precedence CLI > environment > legacy deploy mode >
+// default. Every explicitly supplied value is fail-closed: malformed, empty,
+// or duplicate CLI values and malformed environment/legacy values are errors
+// instead of silently falling back to local execution.
 func Resolve(input ResolveInput) (Resolution, error) {
-	if profile, src, found := resolveCLI(input.Args); found {
-		if err := validateUniqueCLI(input.Args, profile); err != nil {
+	if profile, found, err := resolveCLI(input.Args); found || err != nil {
+		if err != nil {
 			return Resolution{}, err
 		}
-		return Resolution{Profile: profile, Source: src}, nil
+		return Resolution{Profile: profile, Source: SourceCLI}, nil
 	}
 
-	if profile, found := resolveEnv(input.Env); found {
+	if profile, found, err := resolveEnv(input.Env); found || err != nil {
+		if err != nil {
+			return Resolution{}, err
+		}
 		return Resolution{Profile: profile, Source: SourceEnv}, nil
 	}
 
-	if profile, found := resolveLegacy(input.LegacyDeployMode); found {
+	if profile, found, err := resolveLegacy(input.LegacyDeployMode); found || err != nil {
+		if err != nil {
+			return Resolution{}, err
+		}
 		return Resolution{Profile: profile, Source: SourceLegacy}, nil
 	}
 
 	return Resolution{Profile: Default(), Source: SourceDefault}, nil
 }
 
-func resolveCLI(args []string) (Profile, Source, bool) {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == cliFlag {
-			if i+1 >= len(args) {
-				return "", "", false
-			}
-			p, err := Parse(args[i+1])
-			if err != nil {
-				return "", "", false
-			}
-			return p, SourceCLI, true
-		}
-		if strings.HasPrefix(arg, cliFlag+"=") {
-			val := strings.TrimPrefix(arg, cliFlag+"=")
-			p, err := Parse(val)
-			if err != nil {
-				return "", "", false
-			}
-			return p, SourceCLI, true
-		}
-	}
-	return "", "", false
-}
-
-func validateUniqueCLI(args []string, first Profile) error {
+func resolveCLI(args []string) (Profile, bool, error) {
+	var raw string
 	found := false
+
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		var val string
-		if arg == cliFlag {
+		var value string
+		matched := false
+
+		switch {
+		case arg == cliFlag:
+			matched = true
 			if i+1 >= len(args) {
-				continue
+				value = ""
+			} else {
+				i++
+				value = args[i]
 			}
-			val = args[i+1]
-		} else if strings.HasPrefix(arg, cliFlag+"=") {
-			val = strings.TrimPrefix(arg, cliFlag+"=")
-		} else {
-			continue
+		case strings.HasPrefix(arg, cliFlag+"="):
+			matched = true
+			value = strings.TrimPrefix(arg, cliFlag+"=")
 		}
-		if val == "" {
-			continue
+
+		if !matched {
+			return "", found, &UnexpectedRuntimeArgError{Value: arg}
 		}
 		if found {
-			return &DuplicateProfileArgError{Value: val}
+			return "", true, &DuplicateProfileArgError{Value: value}
 		}
 		found = true
+		raw = value
 	}
-	return nil
+
+	if !found {
+		return "", false, nil
+	}
+
+	profile, err := Parse(raw)
+	if err != nil {
+		return "", true, err
+	}
+	return profile, true, nil
 }
 
-func resolveEnv(env map[string]string) (Profile, bool) {
-	var raw string
+func resolveEnv(env map[string]string) (Profile, bool, error) {
+	var (
+		raw     string
+		present bool
+	)
 	if env != nil {
-		raw = env[envKey]
+		raw, present = env[envKey]
 	} else {
-		raw = os.Getenv(envKey)
+		raw, present = os.LookupEnv(envKey)
 	}
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", false
+	if !present {
+		return "", false, nil
 	}
-	p, err := Parse(raw)
+
+	profile, err := Parse(raw)
 	if err != nil {
-		return "", false
+		return "", true, err
 	}
-	return p, true
+	return profile, true, nil
 }
 
-func resolveLegacy(legacyDeployMode string) (Profile, bool) {
-	p, err := Parse(legacyDeployMode)
-	if err != nil {
-		return "", false
+func resolveLegacy(legacyDeployMode string) (Profile, bool, error) {
+	if strings.TrimSpace(legacyDeployMode) == "" {
+		return "", false, nil
 	}
-	return p, true
+	profile, err := Parse(legacyDeployMode)
+	if err != nil {
+		return "", true, err
+	}
+	return profile, true, nil
 }
 
 func ResolveOrExit(input ResolveInput) Resolution {
