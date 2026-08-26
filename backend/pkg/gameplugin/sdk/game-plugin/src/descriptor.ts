@@ -4,7 +4,7 @@ import {
   PluginSchema,
   ServiceDescriptor,
 } from './protocol';
-import { validateChannel, validateCapability, validateServices } from './validation';
+import { validateCapability, validateChannels, validateServices } from './validation';
 
 export interface Descriptor {
   id: string;
@@ -74,7 +74,7 @@ class DescriptorBuilder {
     const serviceErrors = validateServices(this.descriptor.services);
     errors.push(...serviceErrors);
 
-    const channelErrors = this.descriptor.channels.map(validateChannel).flat();
+    const channelErrors = validateChannels(this.descriptor.channels);
     errors.push(...channelErrors);
 
     const capErrors = validateCapability(this.descriptor.capabilities);

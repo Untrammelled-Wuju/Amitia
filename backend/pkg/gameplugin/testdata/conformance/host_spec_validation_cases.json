@@ -1,0 +1,642 @@
+[
+  {
+    "name": "valid-runtime-only",
+    "valid": true,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "valid-multi-service-scoped-channels",
+    "valid": true,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "module-a",
+      "hostFeatures": [
+        "multi_service",
+        "event_streaming"
+      ],
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a"
+        },
+        {
+          "id": "b",
+          "moduleId": "module-b",
+          "dependsOn": [
+            "a"
+          ]
+        }
+      ],
+      "channels": [
+        {
+          "id": "events",
+          "serviceId": "a",
+          "kind": "event"
+        },
+        {
+          "id": "events",
+          "serviceId": "b",
+          "kind": "custom",
+          "direction": "bidirectional",
+          "frequencyHint": "high"
+        }
+      ],
+      "network": {
+        "mode": "loopback"
+      }
+    }
+  },
+  {
+    "name": "valid-restricted-network-and-artifact",
+    "valid": true,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "artifacts": [
+        {
+          "id": "bridge",
+          "type": "zip",
+          "source": "artifacts/bridge.zip",
+          "target": "mods/bridge",
+          "compatibilityVersions": [
+            ">=1.20.1 <1.22"
+          ]
+        }
+      ],
+      "network": {
+        "mode": "restricted",
+        "allowedDomains": [
+          "api.example.com",
+          "*.cdn.example.com"
+        ],
+        "allowedPorts": [
+          443,
+          8443
+        ]
+      }
+    }
+  },
+  {
+    "name": "invalid-wrong-protocol",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/2",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-missing-runtime-and-services",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-unknown-host-feature",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "hostFeatures": [
+        "vendor_game_feature"
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-duplicate-host-feature",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "hostFeatures": [
+        "custom_rpc",
+        "custom_rpc"
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-multi-service-without-feature",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a"
+        },
+        {
+          "id": "b",
+          "moduleId": "module-b"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-service-name-control",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a",
+          "name": "bad\u0001name"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-dependency-id-space",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "hostFeatures": [
+        "multi_service"
+      ],
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a",
+          "dependsOn": [
+            "bad id"
+          ]
+        },
+        {
+          "id": "b",
+          "moduleId": "module-b"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-unknown-dependency",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "hostFeatures": [
+        "multi_service"
+      ],
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a",
+          "dependsOn": [
+            "missing"
+          ]
+        },
+        {
+          "id": "b",
+          "moduleId": "module-b"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-duplicate-runtime-module",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "hostFeatures": [
+        "multi_service"
+      ],
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a"
+        },
+        {
+          "id": "b",
+          "moduleId": "module-a"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-service-dependency-cycle",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "hostFeatures": [
+        "multi_service"
+      ],
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a",
+          "dependsOn": [
+            "b"
+          ]
+        },
+        {
+          "id": "b",
+          "moduleId": "module-b",
+          "dependsOn": [
+            "a"
+          ]
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-runtime-module-mismatch",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "legacy",
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-oversized-channel-id",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "hostFeatures": [
+        "event_streaming"
+      ],
+      "channels": [
+        {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "kind": "event"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-oversized-schema-id",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "hostFeatures": [
+        "event_streaming"
+      ],
+      "channels": [
+        {
+          "id": "events",
+          "kind": "event",
+          "schemaId": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-duplicate-channel-within-service",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "module-a",
+      "hostFeatures": [
+        "event_streaming"
+      ],
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a"
+        }
+      ],
+      "channels": [
+        {
+          "id": "events",
+          "kind": "event"
+        },
+        {
+          "id": "events",
+          "kind": "custom"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-state-channel-without-feature",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "channels": [
+        {
+          "id": "state",
+          "kind": "state"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-binary-channel-without-feature",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "channels": [
+        {
+          "id": "frames",
+          "kind": "binary"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-control-sink-without-feature",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "services": [
+        {
+          "id": "control",
+          "moduleId": "control-module"
+        }
+      ],
+      "controlEffectSinks": [
+        {
+          "id": "primary",
+          "serviceId": "control"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-restricted-network-missing-port",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "restricted",
+        "allowedDomains": [
+          "api.example.com"
+        ]
+      }
+    }
+  },
+  {
+    "name": "invalid-restricted-network-domain",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "restricted",
+        "allowedDomains": [
+          "https://api.example.com"
+        ],
+        "allowedPorts": [
+          443
+        ]
+      }
+    }
+  },
+  {
+    "name": "invalid-artifact-path-traversal",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "artifacts": [
+        {
+          "id": "bridge",
+          "type": "file",
+          "source": "../bridge.bin",
+          "target": "mods/bridge.bin"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-artifact-compatibility-constraint",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "artifacts": [
+        {
+          "id": "bridge",
+          "type": "file",
+          "source": "bridge.bin",
+          "target": "mods/bridge.bin",
+          "compatibilityVersions": [
+            "1.x.3"
+          ]
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-unknown-top-level-field",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "gameId": "must-remain-plugin-owned",
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-service-descriptor-field-in-plugin-service-spec",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a",
+          "capabilities": [
+            "custom_rpc"
+          ]
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-network-port-type",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "restricted",
+        "allowedDomains": [
+          "api.example.com"
+        ],
+        "allowedPorts": [
+          "443"
+        ]
+      }
+    }
+  },
+  {
+    "name": "invalid-service-metadata-value-type",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "services": [
+        {
+          "id": "a",
+          "moduleId": "module-a",
+          "metadata": {
+            "priority": 1
+          }
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-service-missing-id",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "services": [
+        {
+          "moduleId": "module-a"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-service-missing-module-id",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "services": [
+        {
+          "id": "a"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-channel-missing-kind",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "channels": [
+        {
+          "id": "events"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-control-sink-missing-service-id",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "hostFeatures": [
+        "realtime_control"
+      ],
+      "controlEffectSinks": [
+        {
+          "id": "primary"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  },
+  {
+    "name": "invalid-artifact-missing-source",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "artifacts": [
+        {
+          "id": "bridge",
+          "type": "file",
+          "target": "mods/bridge.bin"
+        }
+      ],
+      "network": {
+        "mode": "none"
+      }
+    }
+  }
+]

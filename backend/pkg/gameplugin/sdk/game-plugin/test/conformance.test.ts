@@ -19,6 +19,7 @@ import {
   validateServices,
   validateChannel,
   validateCapability,
+  validatePluginHostSpec,
 } from '../src/validation';
 
 const FIXTURES_ROOT = path.join(__dirname, '..', '..', '..', 'testdata', 'conformance');
@@ -594,5 +595,24 @@ describe('Request-Response Correlation', () => {
 
     expect(error.requestId).toBe(request.id);
     expect(error.id).toBe('err-100');
+  });
+});
+
+
+describe('Plugin Host Spec Runtime Validation Parity', () => {
+  test('matches the shared Go/TypeScript host-spec validation fixture', () => {
+    const cases = loadFixture('host_spec_validation_cases.json') as Array<{
+      name: string;
+      valid: boolean;
+      spec: PluginHostSpec;
+    }>;
+
+    for (const testCase of cases) {
+      const errors = validatePluginHostSpec(testCase.spec);
+      expect({ name: testCase.name, valid: errors.length === 0 }).toEqual({
+        name: testCase.name,
+        valid: testCase.valid,
+      });
+    }
   });
 });

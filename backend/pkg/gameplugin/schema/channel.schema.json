@@ -40,7 +40,8 @@
       "examples": [
         "example.game.state/v1",
         "vendor.world-map/v2"
-      ]
+      ],
+      "pattern": "^[^\\x00-\\x1f\\x7f]*$"
     },
     "direction": {
       "type": "string",

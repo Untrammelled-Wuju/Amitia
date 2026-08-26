@@ -38,3 +38,54 @@ describe('DescriptorBuilder', () => {
     }).toThrow();
   });
 });
+
+describe('DescriptorBuilder validation parity', () => {
+  test('rejects service names containing control characters', () => {
+    expect(() => {
+      createPluginDescriptor('example.game', 'Example Game', '1.0.0')
+        .withService({ id: 'agent', name: 'bad\u0001name', kind: 'process' })
+        .build();
+    }).toThrow('control character');
+  });
+
+  test('rejects invalid dependency service ids', () => {
+    expect(() => {
+      createPluginDescriptor('example.game', 'Example Game', '1.0.0')
+        .withService({ id: 'agent', kind: 'process', dependsOn: ['bad id'] })
+        .build();
+    }).toThrow('must not contain spaces');
+  });
+
+  test('rejects unknown service host features', () => {
+    expect(() => {
+      createPluginDescriptor('example.game', 'Example Game', '1.0.0')
+        .withService({ id: 'agent', kind: 'process', capabilities: ['vendor.game.feature'] })
+        .build();
+    }).toThrow('unknown host feature');
+  });
+
+  test('rejects duplicate channel ids', () => {
+    expect(() => {
+      createPluginDescriptor('example.game', 'Example Game', '1.0.0')
+        .withChannel({ id: 'events', kind: 'event' })
+        .withChannel({ id: 'events', kind: 'custom' })
+        .build();
+    }).toThrow('duplicate channel id');
+  });
+
+  test('rejects oversized channel ids', () => {
+    expect(() => {
+      createPluginDescriptor('example.game', 'Example Game', '1.0.0')
+        .withChannel({ id: 'a'.repeat(257), kind: 'event' })
+        .build();
+    }).toThrow('maximum length');
+  });
+
+  test('rejects oversized channel schema ids', () => {
+    expect(() => {
+      createPluginDescriptor('example.game', 'Example Game', '1.0.0')
+        .withChannel({ id: 'events', kind: 'event', schemaId: 's'.repeat(1025) })
+        .build();
+    }).toThrow('schema id exceeds maximum length');
+  });
+});
