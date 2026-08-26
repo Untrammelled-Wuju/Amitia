@@ -458,6 +458,38 @@ func TestGamePluginUnrestrictedNetworkRequiresPermission(t *testing.T) {
 	}
 }
 
+func TestGamePluginRestrictedNetworkRequiresPermission(t *testing.T) {
+	manifest := `{
+		"manifestVersion": 2,
+		"extension": {"id": "com.example/restricted-network-game", "name": {"default": "Restricted Network Game"}, "version": "1.0.0"},
+		"publisher": {"id": "com.example", "displayName": "Example"},
+		"modules": [{
+			"id": "runtime",
+			"name": {"default": "Runtime"},
+			"type": "service",
+			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
+			"contributions": [{
+				"id": "game",
+				"kind": "game_plugin",
+				"name": {"default": "Game"},
+				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "restricted", "allowedDomains": ["api.example.com"], "allowedPorts": [443]}}
+			}]
+		}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "test"}
+	}`
+	m, err := Parse([]byte(manifest))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if report := m.Validate(); !report.HasErrors() {
+		t.Fatal("expected restricted game plugin without service.network.request to be rejected")
+	}
+	m.Modules[0].Contributions[0].RequiredPermissions = []string{"service.network.request"}
+	if report := m.Validate(); report.HasErrors() {
+		t.Fatalf("expected restricted game plugin with network permission to pass, got %v", report.Errors)
+	}
+}
+
 func TestNormalizeGamePluginRuntimeDefaultsToDevice(t *testing.T) {
 	manifest := `{
 		"manifestVersion": 2,

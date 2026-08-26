@@ -222,6 +222,14 @@ func (g *DefaultGateway) Call(ctx context.Context, request CallRequest) CallResu
 			code = ErrorCodeInputInvalid
 		case errors.Is(err, ErrOutputInvalid):
 			code = ErrorCodeOutputInvalid
+		case errors.Is(err, ErrPermissionDenied):
+			code = ErrorCodePermissionDenied
+			status = StatusRejected
+		case errors.Is(err, ErrIdentityInvalid):
+			code = ErrorCodeIdentityInvalid
+			status = StatusRejected
+		case errors.Is(err, ErrHostUnavailable):
+			code = ErrorCodeHostUnavailable
 		}
 		output = CallResult{
 			Status: status,

@@ -69,23 +69,24 @@ type ProcessExitObserver interface {
 }
 
 type ProcessSupervisor struct {
-	mu               sync.Mutex
-	instances        map[string]*ServiceInstance
-	defs             map[string]*ServiceRuntimeDefinition
-	verifier         *BinaryVerifier
-	selector         *PlatformSelector
-	envBuilder       *EnvBuilder
-	logger           func(level, msg string, fields map[string]any)
-	healthMon        *HealthMonitor
-	quarantine       *QuarantineManager
-	rootDir          string
-	procMgr          *process.DefaultProcessManager
-	gameHostNotifier GameHostNotifier
-	protocolHandlers map[string]StdioProtocolHandler
-	exitObservers    []ProcessExitObserver
-	ownerStore       *ProcessOwnerStore
-	hostIdentity     HostIdentityProvider
-	ownerStoreErr    error
+	mu                 sync.Mutex
+	instances          map[string]*ServiceInstance
+	defs               map[string]*ServiceRuntimeDefinition
+	verifier           *BinaryVerifier
+	selector           *PlatformSelector
+	envBuilder         *EnvBuilder
+	logger             func(level, msg string, fields map[string]any)
+	healthMon          *HealthMonitor
+	quarantine         *QuarantineManager
+	rootDir            string
+	procMgr            *process.DefaultProcessManager
+	gameHostNotifier   GameHostNotifier
+	protocolHandlers   map[string]StdioProtocolHandler
+	exitObservers      []ProcessExitObserver
+	ownerStore         *ProcessOwnerStore
+	hostIdentity       HostIdentityProvider
+	ownerStoreErr      error
+	sandboxRecoveryErr error
 }
 
 type HostIdentityProvider interface {
@@ -111,6 +112,7 @@ func NewProcessSupervisor(rootDir string) *ProcessSupervisor {
 	if s.ownerStore != nil && s.ownerStore.durable {
 		s.ownerStoreErr = s.ownerStore.load()
 	}
+	s.sandboxRecoveryErr = recoverPlatformSandboxResidue(rootDir)
 	return s
 }
 
@@ -135,6 +137,7 @@ func NewProcessSupervisorWithVerifier(rootDir string, verifier *BinaryVerifier) 
 	if s.ownerStore != nil && s.ownerStore.durable {
 		s.ownerStoreErr = s.ownerStore.load()
 	}
+	s.sandboxRecoveryErr = recoverPlatformSandboxResidue(rootDir)
 	return s
 }
 
@@ -344,6 +347,17 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	if s.ownerStoreErr != nil {
 		return nil, fmt.Errorf("trusted_service: durable process owner store unavailable: %w", s.ownerStoreErr)
 	}
+	if s.sandboxRecoveryErr != nil {
+		// Startup orphan reclamation may have removed a still-running sandbox child
+		// after this supervisor was constructed. Retry residue recovery before
+		// failing closed so a transient "profile in use" condition cannot wedge all
+		// future launches until another host restart.
+		if err := recoverPlatformSandboxResidue(s.rootDir); err != nil {
+			s.sandboxRecoveryErr = err
+			return nil, fmt.Errorf("trusted_service: sandbox residue recovery failed: %w", err)
+		}
+		s.sandboxRecoveryErr = nil
+	}
 	s.mu.Lock()
 	def, exists := s.defs[req.ServiceID]
 	if !exists {
@@ -412,10 +426,11 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	}
 
 	env := s.buildSafeEnvironment(exe, def, req.SessionToken, instanceID, req.Generation, tempDir, defaultLogLevel(req.LogLevel), req.SecretLease)
-	launchPlan, err := prepareNetworkLaunch(def.Network, fullExePath, args, workingDir, tempDir, def.SandboxReadOnlyRoot)
+	launchPlan, err := prepareNetworkLaunchWithStateRoot(def.Network, fullExePath, args, workingDir, tempDir, s.rootDir, def.SandboxReadOnlyRoot)
 	if err != nil {
 		return nil, fmt.Errorf("trusted_service: enforce network policy: %w", err)
 	}
+	defer launchPlan.cleanup()
 	if req.PublisherTrust.RequiresFullSandbox() || TrustLevel(def.TrustLevel).RequiresFullSandbox() {
 		if err := validateFullSandboxLaunch(req.ServiceID, def, launchPlan, s.procMgr.IsolationReport(), process.ResourceLimitsSupported()); err != nil {
 			return nil, err
@@ -489,7 +504,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	isRPC := def.Protocol == "jsonrpc" || def.Protocol == "amitia_jsonrpc_v1"
 
 	if isRPC {
-		startedCmd, err = s.startRPCService(processCtx, instance, def, exe, launchPath, launchArgs, env, launchWorkingDir, req)
+		startedCmd, err = s.startRPCService(processCtx, instance, def, exe, launchPath, launchArgs, env, launchWorkingDir, req, &launchPlan)
 		if err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
@@ -499,7 +514,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 			return nil, err
 		}
 	} else if handler, ok := s.protocolHandlers[def.Protocol]; ok {
-		startedCmd, err = s.startManagedStdioProtocolService(processCtx, ctx, instance, def, exe, launchPath, launchArgs, env, workingDir, req, handler)
+		startedCmd, err = s.startManagedStdioProtocolService(processCtx, ctx, instance, def, exe, launchPath, launchArgs, env, workingDir, req, handler, &launchPlan)
 		if err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
@@ -509,7 +524,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 			return nil, err
 		}
 	} else if def.Protocol == "" || def.Protocol == "plain" {
-		startedCmd, err = s.startPlainService(processCtx, instance, def, exe, launchPath, launchArgs, env, launchWorkingDir, req)
+		startedCmd, err = s.startPlainService(processCtx, instance, def, exe, launchPath, launchArgs, env, launchWorkingDir, req, &launchPlan)
 		if err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
@@ -568,11 +583,26 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	}, nil
 }
 
-func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance *ServiceInstance, def *ServiceRuntimeDefinition, exe *PlatformExecutable, fullExePath string, args, env []string, workingDir string, req StartRequest) (*exec.Cmd, error) {
+func applySandboxLaunchPlan(cmd *exec.Cmd, plan *sandboxLaunchPlan) {
+	if cmd == nil || plan == nil || len(plan.ExtraFiles) == 0 {
+		return
+	}
+	cmd.ExtraFiles = append(cmd.ExtraFiles, plan.ExtraFiles...)
+}
+
+func activateSandboxLaunch(ctx context.Context, cmd *exec.Cmd, plan *sandboxLaunchPlan) error {
+	if plan == nil || plan.AfterStart == nil {
+		return nil
+	}
+	return plan.AfterStart(ctx, cmd)
+}
+
+func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance *ServiceInstance, def *ServiceRuntimeDefinition, exe *PlatformExecutable, fullExePath string, args, env []string, workingDir string, req StartRequest, launchPlan *sandboxLaunchPlan) (*exec.Cmd, error) {
 	cmd := exec.CommandContext(processCtx, fullExePath, args...)
 	cmd.Dir = workingDir
 	cmd.Env = env
 	process.ConfigureProcess(cmd)
+	applySandboxLaunchPlan(cmd, launchPlan)
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
@@ -599,6 +629,9 @@ func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance
 
 	instance.PID = cmd.Process.Pid
 	instance.managedProc = cmd
+	if err := activateSandboxLaunch(processCtx, cmd, launchPlan); err != nil {
+		return cmd, fmt.Errorf("trusted_service: activate network sandbox: %w", err)
+	}
 
 	handle, attachErr := process.AttachProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
 	if attachErr != nil {
@@ -688,13 +721,14 @@ func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance
 	return cmd, nil
 }
 
-func (s *ProcessSupervisor) startPlainService(processCtx context.Context, instance *ServiceInstance, def *ServiceRuntimeDefinition, exe *PlatformExecutable, fullExePath string, args, env []string, workingDir string, req StartRequest) (*exec.Cmd, error) {
+func (s *ProcessSupervisor) startPlainService(processCtx context.Context, instance *ServiceInstance, def *ServiceRuntimeDefinition, exe *PlatformExecutable, fullExePath string, args, env []string, workingDir string, req StartRequest, launchPlan *sandboxLaunchPlan) (*exec.Cmd, error) {
 	cmd := exec.CommandContext(processCtx, fullExePath, args...)
 	cmd.Dir = workingDir
 	cmd.Env = env
 	cmd.Stdout = newLogWriter(s.logger, "info", req.ServiceID)
 	cmd.Stderr = newLogWriter(s.logger, "warn", req.ServiceID)
 	process.ConfigureProcess(cmd)
+	applySandboxLaunchPlan(cmd, launchPlan)
 
 	if err := cmd.Start(); err != nil {
 		return cmd, fmt.Errorf("trusted_service: start process: %w", err)
@@ -702,6 +736,9 @@ func (s *ProcessSupervisor) startPlainService(processCtx context.Context, instan
 
 	instance.PID = cmd.Process.Pid
 	instance.managedProc = cmd
+	if err := activateSandboxLaunch(processCtx, cmd, launchPlan); err != nil {
+		return cmd, fmt.Errorf("trusted_service: activate network sandbox: %w", err)
+	}
 
 	handle, attachErr := process.AttachProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
 	if attachErr != nil {
@@ -725,11 +762,13 @@ func (s *ProcessSupervisor) startManagedStdioProtocolService(
 	workingDir string,
 	req StartRequest,
 	handler StdioProtocolHandler,
+	launchPlan *sandboxLaunchPlan,
 ) (*exec.Cmd, error) {
 	cmd := exec.CommandContext(processCtx, fullExePath, args...)
 	cmd.Dir = workingDir
 	cmd.Env = env
 	process.ConfigureProcess(cmd)
+	applySandboxLaunchPlan(cmd, launchPlan)
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
@@ -756,6 +795,9 @@ func (s *ProcessSupervisor) startManagedStdioProtocolService(
 
 	instance.PID = cmd.Process.Pid
 	instance.managedProc = cmd
+	if err := activateSandboxLaunch(processCtx, cmd, launchPlan); err != nil {
+		return cmd, fmt.Errorf("trusted_service: activate network sandbox: %w", err)
+	}
 
 	handle, attachErr := process.AttachProcessTreeWithLimits(cmd, platformProcessResourceLimits(def.Limits))
 	if attachErr != nil {

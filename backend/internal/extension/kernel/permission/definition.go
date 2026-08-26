@@ -77,6 +77,16 @@ func (r *PermissionDefinitionRegistry) Register(def PermissionDefinition) {
 	r.definitions[def.ID] = def
 }
 
+// RegisterPreservingMetadata registers a subsystem definition only when the ID
+// is not already canonical. A subsystem must never broaden scopes or replace
+// risk/approval/trust metadata owned by the central permission registry.
+func (r *PermissionDefinitionRegistry) RegisterPreservingMetadata(def PermissionDefinition) {
+	if _, ok := r.definitions[def.ID]; ok {
+		return
+	}
+	r.definitions[def.ID] = def
+}
+
 func (r *PermissionDefinitionRegistry) Get(id string) (PermissionDefinition, bool) {
 	def, ok := r.definitions[id]
 	return def, ok

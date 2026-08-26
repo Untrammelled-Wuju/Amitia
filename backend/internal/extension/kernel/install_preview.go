@@ -99,6 +99,11 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 			case "loopback":
 				policy.AllowOutbound = true
 				policy.LoopbackOnly = true
+			case "restricted":
+				policy.RequireProxy = true
+				policy.AllowedDomains = append([]string(nil), spec.Network.AllowedDomains...)
+				policy.AllowedIPs = append([]string(nil), spec.Network.AllowedIPs...)
+				policy.AllowedPorts = append([]int(nil), spec.Network.AllowedPorts...)
 			case "unrestricted":
 				policy.AllowOutbound = true
 			}
