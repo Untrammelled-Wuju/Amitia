@@ -258,13 +258,7 @@ func normalizeArchitecture(v string) string {
 }
 
 func isExecutableModule(mod ModuleMeta) bool {
-	switch mod.Type {
-	case "builtin", "javascript", "wasm", "native", "service":
-		return true
-	case "data_only":
-		return false
-	}
-	return false
+	return IsExecutableModuleType(mod.Type)
 }
 
 // gamePluginRuntimeModuleIDs discovers executable modules owned by game_plugin

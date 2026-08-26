@@ -895,6 +895,9 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf("delete ui contribution records: %w", err))
 		}
 	}
+	if err := r.finalizeGameHostExtensionUninstall(ctx, extensionID); err != nil {
+		cleanupErrs = append(cleanupErrs, fmt.Errorf("cleanup gamehost authority: %w", err))
+	}
 
 	if len(cleanupErrs) > 0 {
 		if inst.InstallationID != "" {

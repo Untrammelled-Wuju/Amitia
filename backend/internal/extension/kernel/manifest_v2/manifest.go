@@ -405,14 +405,6 @@ func (m Manifest) Validate() ValidationReport {
 	}
 
 	moduleIDs := make(map[string]bool)
-	moduleTypes := map[string]bool{
-		"builtin": true, "javascript": true, "data_only": true, "wasm": true,
-		"native": true, "service": true,
-	}
-	runtimeTypes := map[string]bool{
-		"javascript": true, "mcp": true, "workflow": true, "static": true, "wasm": true,
-		"service": true,
-	}
 	contributionKinds := map[string]bool{
 		"tool": true, "agent_skill": true, "workflow": true,
 		"mcp_server": true,
@@ -439,13 +431,13 @@ func (m Manifest) Validate() ValidationReport {
 		}
 		if mod.Type == "" {
 			report.AddError(path+".type", "missing", "module type required")
-		} else if !moduleTypes[mod.Type] {
+		} else if !IsSupportedModuleType(mod.Type) {
 			report.AddError(path+".type", "unknown_type", fmt.Sprintf("unknown module type: %s", mod.Type))
 		}
 		if mod.Runtime != nil {
 			if mod.Runtime.Type == "" {
 				report.AddError(path+".runtime.type", "missing", "runtime type required")
-			} else if !runtimeTypes[mod.Runtime.Type] {
+			} else if !IsSupportedRuntimeType(mod.Runtime.Type) {
 				report.AddError(path+".runtime.type", "unsupported_runtime", fmt.Sprintf(`{"code":"unsupported_runtime","moduleId":"%s","runtimeType":"%s"}`, mod.ID, mod.Runtime.Type))
 			}
 			if mod.Runtime.EntryPoint != "" {

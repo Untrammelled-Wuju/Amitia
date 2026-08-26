@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -234,5 +235,97 @@ func TestInstallRollbackOnFailure(t *testing.T) {
 	})
 	if result.Status != InstallFailed {
 		t.Errorf("expected failed, got %s", result.Status)
+	}
+}
+
+func TestOpenArchiveAllowsCanonicalArtifactsRoot(t *testing.T) {
+	tmp := t.TempDir()
+	archivePath := filepath.Join(tmp, "artifact-package.amitiax")
+	createTestArchive(t, archivePath)
+
+	// Rebuild the fixture with one artifact file and matching integrity docs so
+	// this exercises the canonical package parser rather than a relaxed helper.
+	reader, err := zip.OpenReader(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	staging := t.TempDir()
+	for _, f := range reader.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		rc, openErr := f.Open()
+		if openErr != nil {
+			reader.Close()
+			t.Fatal(openErr)
+		}
+		data, readErr := io.ReadAll(rc)
+		rc.Close()
+		if readErr != nil {
+			reader.Close()
+			t.Fatal(readErr)
+		}
+		dest := filepath.Join(staging, filepath.FromSlash(f.Name))
+		if mkErr := os.MkdirAll(filepath.Dir(dest), 0o755); mkErr != nil {
+			reader.Close()
+			t.Fatal(mkErr)
+		}
+		if writeErr := os.WriteFile(dest, data, 0o644); writeErr != nil {
+			reader.Close()
+			t.Fatal(writeErr)
+		}
+	}
+	reader.Close()
+
+	artifactPath := filepath.Join(staging, "artifacts", "companion.bin")
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(artifactPath, []byte("companion"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	filesDocPath := filepath.Join(staging, "integrity", "files.json")
+	var filesDoc IntegrityFilesDoc
+	filesData, err := os.ReadFile(filesDocPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(filesData, &filesDoc); err != nil {
+		t.Fatal(err)
+	}
+	artifactData := []byte("companion")
+	artifactEntry := FileEntry{
+		Path: "artifacts/companion.bin",
+		Size: int64(len(artifactData)),
+		Hash: hashBytes(artifactData),
+	}
+	filesDoc.Files[artifactEntry.Path] = artifactEntry
+	filesData, _ = json.Marshal(filesDoc)
+	if err := os.WriteFile(filesDocPath, filesData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries := make([]FileEntry, 0, len(filesDoc.Files))
+	for _, entry := range filesDoc.Files {
+		entries = append(entries, entry)
+	}
+	treeDoc := IntegrityTreeDoc{Algorithm: "sha256", TreeHash: ComputeTreeHash(entries), GeneratedAt: time.Now().UTC()}
+	treeData, _ := json.Marshal(treeDoc)
+	if err := os.WriteFile(filepath.Join(staging, "integrity", "content-tree.json"), treeData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := zipDirectory(staging, archivePath); err != nil {
+		t.Fatal(err)
+	}
+
+	pkg, err := OpenArchive(archivePath)
+	if err != nil {
+		t.Fatalf("OpenArchive with artifacts root: %v", err)
+	}
+	if err := VerifyIntegrity(pkg); err != nil {
+		t.Fatalf("VerifyIntegrity with artifacts root: %v", err)
+	}
+	if len(pkg.Layout.Artifacts) != 1 || pkg.Layout.Artifacts[0] != "artifacts/companion.bin" {
+		t.Fatalf("artifacts layout = %v", pkg.Layout.Artifacts)
 	}
 }
