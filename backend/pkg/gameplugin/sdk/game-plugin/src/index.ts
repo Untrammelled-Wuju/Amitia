@@ -1,6 +1,7 @@
 export * from './protocol';
 export * from './game';
 export * from './descriptor';
+export * from './validation';
 export * from './transport';
 export * from './errors';
 export { Client, ClientOptions, IDGenerator, FixedIDGenerator, UUIDGenerator, withRuntimeID, withPluginID, withServiceID, withGeneration, withMetadata, withTimeout, PendingRequest, DEFAULT_RPC_TIMEOUT_MS } from './client';

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://amitia.untrammelled.top/schemas/gamehost/service.schema.json",
   "title": "Game Host Service Descriptor",
-  "description": "Schema for amitia-game-host/1 Service Descriptor. Public protocol for third-party game plugin implementations.",
+  "description": "Schema for the amitia-game-host/1 runtime/handshake ServiceDescriptor. This is distinct from plugin-host-spec.services[] (PluginServiceSpec), which binds a service to a runtime module via moduleId.",
   "type": "object",
   "required": [
     "id",

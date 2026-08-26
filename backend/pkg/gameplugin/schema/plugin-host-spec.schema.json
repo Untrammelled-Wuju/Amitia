@@ -74,7 +74,8 @@
           }
         },
         "additionalProperties": false
-      }
+      },
+      "description": "Install-time process service bindings. These are PluginServiceSpec objects and require moduleId; they are intentionally distinct from the runtime/handshake ServiceDescriptor in service.schema.json."
     },
     "channels": {
       "type": "array",
@@ -104,7 +105,8 @@
           },
           "schemaId": {
             "type": "string",
-            "maxLength": 1024
+            "maxLength": 1024,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$"
           },
           "metadata": {
             "type": "object",
@@ -244,17 +246,29 @@
         "allowedDomains": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1, "maxLength": 253 }
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253
+          }
         },
         "allowedIPs": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 2, "maxLength": 45 }
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 45
+          }
         },
         "allowedPorts": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          }
         }
       },
       "additionalProperties": false,
@@ -263,22 +277,56 @@
       ],
       "allOf": [
         {
-          "if": { "properties": { "mode": { "const": "restricted" } } },
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "restricted"
+              }
+            }
+          },
           "then": {
-            "required": ["allowedPorts"],
+            "required": [
+              "allowedPorts"
+            ],
             "anyOf": [
-              { "required": ["allowedDomains"], "properties": { "allowedDomains": { "minItems": 1 } } },
-              { "required": ["allowedIPs"], "properties": { "allowedIPs": { "minItems": 1 } } }
+              {
+                "required": [
+                  "allowedDomains"
+                ],
+                "properties": {
+                  "allowedDomains": {
+                    "minItems": 1
+                  }
+                }
+              },
+              {
+                "required": [
+                  "allowedIPs"
+                ],
+                "properties": {
+                  "allowedIPs": {
+                    "minItems": 1
+                  }
+                }
+              }
             ],
             "properties": {
-              "allowedPorts": { "minItems": 1 }
+              "allowedPorts": {
+                "minItems": 1
+              }
             }
           },
           "else": {
             "properties": {
-              "allowedDomains": { "maxItems": 0 },
-              "allowedIPs": { "maxItems": 0 },
-              "allowedPorts": { "maxItems": 0 }
+              "allowedDomains": {
+                "maxItems": 0
+              },
+              "allowedIPs": {
+                "maxItems": 0
+              },
+              "allowedPorts": {
+                "maxItems": 0
+              }
             }
           }
         }
