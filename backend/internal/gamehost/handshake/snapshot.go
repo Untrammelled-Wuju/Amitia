@@ -8,13 +8,13 @@ import (
 )
 
 type HandshakeSnapshot struct {
-	Protocol              string
-	Capabilities          []domain.Capability
-	RPCNamespaces         []string
-	Channels              []string
-	SDKName               string
-	SDKVersion            string
-	ReadyAt               time.Time
+	Protocol      string
+	Capabilities  []domain.Capability
+	RPCNamespaces []string
+	Channels      []string
+	SDKName       string
+	SDKVersion    string
+	ReadyAt       time.Time
 }
 
 func NewHandshakeSnapshot(
@@ -45,7 +45,6 @@ func NewHandshakeSnapshot(
 		Channels:      chs,
 		SDKName:       sdkName,
 		SDKVersion:    sdkVersion,
-		ReadyAt:       time.Now().UTC(),
 	}
 }
 
@@ -53,7 +52,7 @@ func (s *HandshakeSnapshot) Clone() *HandshakeSnapshot {
 	if s == nil {
 		return nil
 	}
-	return NewHandshakeSnapshot(
+	clone := NewHandshakeSnapshot(
 		s.Protocol,
 		s.Capabilities,
 		s.RPCNamespaces,
@@ -61,6 +60,8 @@ func (s *HandshakeSnapshot) Clone() *HandshakeSnapshot {
 		s.SDKName,
 		s.SDKVersion,
 	)
+	clone.ReadyAt = s.ReadyAt
+	return clone
 }
 
 func (s *HandshakeSnapshot) HasCapability(name domain.Capability) bool {
@@ -69,6 +70,18 @@ func (s *HandshakeSnapshot) HasCapability(name domain.Capability) bool {
 	}
 	for _, c := range s.Capabilities {
 		if c == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *HandshakeSnapshot) HasChannel(channelID string) bool {
+	if s == nil || channelID == "" {
+		return false
+	}
+	for _, id := range s.Channels {
+		if id == channelID {
 			return true
 		}
 	}
