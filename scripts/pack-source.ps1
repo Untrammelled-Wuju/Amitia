@@ -203,3 +203,5 @@ Write-Host ""
 Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
 Write-Host "Output: $outputFile"
 Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"
+
+Invoke-Item $workspace
