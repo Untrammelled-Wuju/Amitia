@@ -215,6 +215,9 @@ func computeManifestHash(view ServiceRuntimeView) string {
 	for _, domain := range view.Network.AllowedDomains {
 		h.Write([]byte(domain))
 	}
+	for _, ip := range view.Network.AllowedIPs {
+		h.Write([]byte(ip))
+	}
 	for _, port := range view.Network.AllowedPorts {
 		h.Write([]byte(fmt.Sprintf("%d", port)))
 	}
@@ -244,8 +247,9 @@ func authoritativeServiceTrustLevel(raw string) trusted_service.TrustLevel {
 }
 
 func resolveNetworkPolicy(policy trusted_service.ServiceNetworkPolicy) trusted_service.ServiceNetworkPolicy {
-	if policy.Mode != "" || policy.Enforce || policy.AllowInbound || policy.AllowOutbound || policy.LoopbackOnly || policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedPorts) > 0 {
+	if policy.Mode != "" || policy.Enforce || policy.AllowInbound || policy.AllowOutbound || policy.LoopbackOnly || policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedIPs) > 0 || len(policy.AllowedPorts) > 0 {
 		policy.AllowedDomains = append([]string(nil), policy.AllowedDomains...)
+		policy.AllowedIPs = append([]string(nil), policy.AllowedIPs...)
 		policy.AllowedPorts = append([]int(nil), policy.AllowedPorts...)
 		return policy
 	}

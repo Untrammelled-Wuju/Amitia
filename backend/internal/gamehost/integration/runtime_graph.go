@@ -480,6 +480,14 @@ func buildPluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, permission
 	case "loopback":
 		policy.AllowOutbound = true
 		policy.LoopbackOnly = true
+	case "restricted":
+		if !containsString(permissions, "service.network.request") {
+			return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("restricted outbound network requires service.network.request")
+		}
+		policy.RequireProxy = true
+		policy.AllowedDomains = append([]string(nil), spec.AllowedDomains...)
+		policy.AllowedIPs = append([]string(nil), spec.AllowedIPs...)
+		policy.AllowedPorts = append([]int(nil), spec.AllowedPorts...)
 	case "unrestricted":
 		if !containsString(permissions, "service.network.request") {
 			return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("unrestricted outbound network requires service.network.request")

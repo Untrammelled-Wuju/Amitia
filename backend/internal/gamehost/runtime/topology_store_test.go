@@ -180,3 +180,45 @@ func TestTopologyStore_RemoveRuntime_NotFound(t *testing.T) {
 		t.Error("expected error removing nonexistent runtime")
 	}
 }
+
+func TestTopologyStoreResolveServiceIDByModule(t *testing.T) {
+	store := NewTopologyStore()
+	rt, desc := newTestRuntimeAndDescriptor("rt-module", "plugin-module")
+	if err := store.PutRuntimeGraph(rt, desc, map[domain.ServiceID]string{"core": "def-core"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindModuleID("rt-module", "core", "module-core"); err != nil {
+		t.Fatal(err)
+	}
+	serviceID, err := store.ResolveServiceIDByModule("rt-module", "module-core")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if serviceID != "core" {
+		t.Fatalf("service id = %q, want core", serviceID)
+	}
+}
+
+func TestTopologyStoreResolveServiceIDByModuleRejectsAmbiguousMapping(t *testing.T) {
+	store := NewTopologyStore()
+	rt, _ := domain.NewRuntimeInstance("rt-ambiguous", "plugin-ambiguous", time.Now())
+	desc := domain.PluginDescriptor{
+		ID: "plugin-ambiguous", ExtensionID: "ext-test", Name: "Test",
+		Services: []domain.ServiceDescriptor{
+			{ID: "svc-a", Name: "A", Kind: domain.ServiceKindProcess, Required: true},
+			{ID: "svc-b", Name: "B", Kind: domain.ServiceKindProcess, Required: true},
+		},
+	}
+	if err := store.PutRuntimeGraph(rt, desc, map[domain.ServiceID]string{"svc-a": "def-a", "svc-b": "def-b"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindModuleID("rt-ambiguous", "svc-a", "same-module"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindModuleID("rt-ambiguous", "svc-b", "same-module"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ResolveServiceIDByModule("rt-ambiguous", "same-module"); err == nil {
+		t.Fatal("expected ambiguous module mapping to fail closed")
+	}
+}

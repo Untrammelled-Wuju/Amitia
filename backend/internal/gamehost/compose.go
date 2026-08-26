@@ -1062,6 +1062,14 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	container.StartupRecovery = startupRecovery
 
 	if opts.HostAPIGateway != nil {
+		if opts.TrustedSupervisor != nil {
+			if err := hostapi.RegisterNetworkRoute(hostapi.NetworkRouteDeps{
+				Gateway: opts.HostAPIGateway, Topology: topologyStore, Supervisor: opts.TrustedSupervisor,
+			}); err != nil {
+				return nil, fmt.Errorf("register GameHost restricted network Host API route: %w", err)
+			}
+		}
+
 		runtimeReader := integration.NewHostAPIRuntimeAdapter(runtimeManager, pluginReg)
 		topologyReader := integration.NewHostAPITopologyAdapter(topologyStore)
 		generationReader := integration.NewHostAPIGenerationReader(runtimeManager)

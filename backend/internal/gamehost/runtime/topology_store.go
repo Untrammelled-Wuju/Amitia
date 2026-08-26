@@ -154,6 +154,32 @@ func (s *TopologyStore) ResolveModuleID(runtimeID domain.RuntimeInstanceID, serv
 	return moduleID, nil
 }
 
+// ResolveServiceIDByModule performs the reverse lookup required when a Host API
+// call arrives with the Kernel runtime identity (module id) rather than a
+// GameHost service id. Ambiguous mappings fail closed.
+func (s *TopologyStore) ResolveServiceIDByModule(runtimeID domain.RuntimeInstanceID, moduleID string) (domain.ServiceID, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	bindings, ok := s.moduleIDs[runtimeID]
+	if !ok {
+		return "", &TopologyError{Code: ErrNotFound, Message: "runtime module bindings not found", RuntimeID: string(runtimeID)}
+	}
+	var matched domain.ServiceID
+	for serviceID, boundModuleID := range bindings {
+		if boundModuleID != moduleID {
+			continue
+		}
+		if matched != "" {
+			return "", &TopologyError{Code: ErrInvalidArgument, Message: "module maps to multiple services: " + moduleID, RuntimeID: string(runtimeID)}
+		}
+		matched = serviceID
+	}
+	if matched == "" {
+		return "", &TopologyError{Code: ErrNotFound, Message: "service not found for module: " + moduleID, RuntimeID: string(runtimeID)}
+	}
+	return matched, nil
+}
+
 func (s *TopologyStore) ResolveDefinitionID(
 	runtimeID domain.RuntimeInstanceID,
 	serviceID domain.ServiceID,
