@@ -51,14 +51,34 @@ function Get-SurrealDbBinary {
     New-Item -ItemType Directory -Path $cacheRoot -Force | Out-Null
     $archive = Join-Path $cacheRoot ('surreal-v' + $surrealDbVersion + '-linux-arm64.tgz')
     $extractRoot = Join-Path $cacheRoot ('download-' + [guid]::NewGuid().ToString('N'))
-    $url = 'https://github.com/surrealdb/surrealdb/releases/download/v' + $surrealDbVersion + '/surreal-v' + $surrealDbVersion + '.linux-arm64.tgz'
+    $fileName = 'surreal-v' + $surrealDbVersion + '.linux-arm64.tgz'
+    $urls = @(
+        ('https://download.surrealdb.com/v' + $surrealDbVersion + '/' + $fileName),
+        ('https://github.com/surrealdb/surrealdb/releases/download/v' + $surrealDbVersion + '/' + $fileName)
+    )
+    $downloadedFrom = $null
     try {
-        Invoke-WebRequest -Uri $url -OutFile $archive -ErrorAction Stop
+        foreach ($url in $urls) {
+            try {
+                if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+                Invoke-WebRequest -Uri $url -OutFile $archive -ErrorAction Stop
+                if ((Get-Item -LiteralPath $archive).Length -le 0) { throw 'downloaded archive is empty' }
+                $downloadedFrom = $url
+                break
+            }
+            catch {
+                Write-Warning "SurrealDB 下载失败，尝试下一镜像: $url ($($_.Exception.Message))"
+            }
+        }
+        if (-not $downloadedFrom) {
+            throw "SurrealDB $surrealDbVersion linux-arm64 下载失败，官方 CDN 与 GitHub Release 均不可用"
+        }
+
         New-Item -ItemType Directory -Path $extractRoot | Out-Null
         & tar.exe -xzf $archive -C $extractRoot
-        if ($LASTEXITCODE -ne 0) { throw "SurrealDB 解压失败: $url" }
+        if ($LASTEXITCODE -ne 0) { throw "SurrealDB 解压失败: $downloadedFrom" }
         $source = Get-ChildItem -LiteralPath $extractRoot -Recurse -File | Where-Object { $_.Name -eq 'surreal' } | Select-Object -First 1
-        if (-not $source) { throw "SurrealDB 压缩包中没有 surreal 二进制: $url" }
+        if (-not $source) { throw "SurrealDB 压缩包中没有 surreal 二进制: $downloadedFrom" }
         Copy-Item -LiteralPath $source.FullName -Destination $binary -Force
         Test-ElfBinary $binary
     }
@@ -70,7 +90,10 @@ function Get-SurrealDbBinary {
 }
 
 function Test-RuntimePackage([string]$packagePath) {
-    $python = (Get-Command python.exe).Source
+    $pythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
+    if (-not $pythonCommand) { $pythonCommand = Get-Command python -ErrorAction SilentlyContinue }
+    if (-not $pythonCommand) { throw '缺少 Python：Runtime Package 校验器无法运行' }
+    $python = $pythonCommand.Source
     Invoke-Checked $python @($runtimeValidator, '--package', [System.IO.Path]::GetFullPath($packagePath)) $root
 }
 
@@ -104,13 +127,29 @@ function Test-DebugOverlaySource {
 }
 
 function Build-Runtime {
-    $stage = Join-Path 'D:\' ('amitia-runtime-' + [guid]::NewGuid().ToString('N'))
+    $stageRoot = if (Test-Path -LiteralPath 'D:\') { 'D:\' } else { [System.IO.Path]::GetTempPath() }
+    $stage = Join-Path $stageRoot ('amitia-runtime-' + [guid]::NewGuid().ToString('N'))
     $backend = Join-Path $root 'backend'
-    $go = 'C:\Code\Go\bin\go.exe'
-    $node = Join-Path $backend 'node\node.exe'
+    $goCommand = Get-Command go.exe -ErrorAction SilentlyContinue
+    if (-not $goCommand) { $goCommand = Get-Command go -ErrorAction SilentlyContinue }
+    if (-not $goCommand) { throw '缺少 Go 工具链：请将 go/go.exe 加入 PATH' }
+    $go = $goCommand.Source
     $builder = Join-Path $root 'runtime\build\runtime-package\android-arm64\refresh.py'
-    $base = Join-Path $root 'runtime\out\runtime-package\android-arm64\amitia-runtime-1.0.0-android-arm64.zip'
-    foreach ($item in @($go, $node, $builder, $base)) { if (-not (Test-Path -LiteralPath $item)) { throw "缺少构建依赖: $item" } }
+    $generatedBase = Join-Path $root 'runtime\out\runtime-package\android-arm64\amitia-runtime-1.0.0-android-arm64.zip'
+    $embeddedBase = Join-Path $mobile 'android\app\src\main\assets\runtime-package\amitia-runtime-1.0.0.zip'
+    $base = if (Test-Path -LiteralPath $generatedBase -PathType Leaf) { $generatedBase } else { $embeddedBase }
+    foreach ($item in @($builder, $base)) {
+        if (-not (Test-Path -LiteralPath $item -PathType Leaf)) { throw "缺少构建依赖: $item" }
+    }
+
+    $wechat = Join-Path $backend 'sidecar\bundle.mjs'
+    $qq = Join-Path $backend 'qq-sidecar\bundle.mjs'
+    $wechatLauncher = Join-Path $backend 'sidecar\launcher.mjs'
+    $qqLauncher = Join-Path $backend 'qq-sidecar\launcher.mjs'
+    foreach ($item in @($wechat, $qq, $wechatLauncher, $qqLauncher)) {
+        if (-not (Test-Path -LiteralPath $item -PathType Leaf)) { throw "缺少已提交的侧车构建产物: $item" }
+    }
+
     New-Item -ItemType Directory -Path $stage | Out-Null
     try {
         $server = Join-Path $stage 'amitia-server'
@@ -121,28 +160,25 @@ function Build-Runtime {
         }
         finally { $env:GOOS = $oldOs; $env:GOARCH = $oldArch; $env:CGO_ENABLED = $oldCgo }
         Test-ElfBinary $server
-        $wechat = Join-Path $stage 'sidecar-bundle.mjs'; $qq = Join-Path $stage 'qq-sidecar-bundle.mjs'
-        foreach ($name in @('sidecar', 'qq-sidecar')) {
-            $folder = Join-Path $backend $name
-            $esbuild = Get-ChildItem (Join-Path $folder 'node_modules') -Recurse -Filter esbuild.exe | Select-Object -First 1 -ExpandProperty FullName
-            if (-not $esbuild) { throw "缺少侧车构建器: $name" }
-            $out = if ($name -eq 'sidecar') { $wechat } else { $qq }
-            Invoke-Checked $esbuild @('src/index.ts', '--bundle', '--platform=node', '--format=esm', '--target=node20', "--outfile=$out") $folder
-        }
+
         $surreal = Get-SurrealDbBinary
-        $python = (Get-Command python.exe).Source
+        $pythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
+        if (-not $pythonCommand) { $pythonCommand = Get-Command python -ErrorAction SilentlyContinue }
+        if (-not $pythonCommand) { throw '缺少 Python：Runtime Package 刷新器无法运行' }
+        $python = $pythonCommand.Source
         Invoke-Checked $python @(
             $builder,
             '--base-package', $base,
             '--backend', $server,
             '--wechat-bundle', $wechat,
-            '--wechat-launcher', (Join-Path $backend 'sidecar\launcher.mjs'),
+            '--wechat-launcher', $wechatLauncher,
             '--qq-bundle', $qq,
-            '--qq-launcher', (Join-Path $backend 'qq-sidecar\launcher.mjs'),
+            '--qq-launcher', $qqLauncher,
             '--surrealdb', $surreal,
             '--surrealdb-version', $surrealDbVersion,
             '--output', $runtimeOutput
         ) $root
+        Test-RuntimePackage $runtimeOutput
     }
     finally { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }
 }
