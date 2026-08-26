@@ -66,6 +66,7 @@ import (
 	"github.com/u-ai/backend/internal/realtime"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/system"
