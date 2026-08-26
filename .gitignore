@@ -297,3 +297,8 @@ runtime-package/
 *.zip
 
 build_out.txt
+
+# GameHost source/package hygiene
+/backend/pkg/gameplugin/sdk/game-plugin/dist/
+/temp_extract/
+/U-Ai/
