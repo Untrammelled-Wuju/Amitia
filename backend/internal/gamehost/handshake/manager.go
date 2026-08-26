@@ -4,15 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 )
 
 type HandshakeManager struct {
-	mu        sync.Mutex
-	states    map[string]*stateCell
-	snapshots map[string]*HandshakeSnapshot
+	mu              sync.Mutex
+	states          map[string]*stateCell
+	snapshots       map[string]*HandshakeSnapshot
+	namespaceOwners map[string]ipc.Peer
 
 	protocolNegotiator   *ProtocolNegotiator
 	capabilityNegotiator *CapabilityNegotiator
@@ -44,6 +46,7 @@ func NewHandshakeManager(config HandshakeManagerConfig) *HandshakeManager {
 	return &HandshakeManager{
 		states:               make(map[string]*stateCell),
 		snapshots:            make(map[string]*HandshakeSnapshot),
+		namespaceOwners:      make(map[string]ipc.Peer),
 		protocolNegotiator:   pn,
 		capabilityNegotiator: cn,
 		namespaceAdapter:     config.NamespaceAdapter,
@@ -66,10 +69,28 @@ func (m *HandshakeManager) RegisterConnection(id string) *stateCell {
 }
 
 func (m *HandshakeManager) RemoveConnection(id string) {
+	if m == nil || id == "" {
+		return
+	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	state := m.states[id]
+	owner, hasOwner := m.namespaceOwners[id]
 	delete(m.states, id)
 	delete(m.snapshots, id)
+	delete(m.namespaceOwners, id)
+	m.mu.Unlock()
+
+	if state != nil {
+		state.transitionAlways(HandshakeStateClosed)
+	}
+	if hasOwner && m.namespaceAdapter != nil {
+		_ = m.namespaceAdapter.RemoveConnection(
+			context.Background(),
+			string(owner.RuntimeID),
+			string(owner.ServiceID),
+			id,
+		)
+	}
 }
 
 func (m *HandshakeManager) GetState(id string) (HandshakeState, bool) {
@@ -85,7 +106,7 @@ func (m *HandshakeManager) GetState(id string) (HandshakeState, bool) {
 func (m *HandshakeManager) GetSnapshot(id string) *HandshakeSnapshot {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.snapshots[id]
+	return m.snapshots[id].Clone()
 }
 
 // HasNegotiatedCapability reports whether a ready connection negotiated the
@@ -93,11 +114,22 @@ func (m *HandshakeManager) GetSnapshot(id string) *HandshakeSnapshot {
 // gate so a package declaration alone cannot activate a feature that the
 // concrete service connection did not advertise during handshake.
 func (m *HandshakeManager) HasNegotiatedCapability(connectionID string, feature domain.Capability) bool {
-	if m == nil || connectionID == "" {
+	if m == nil || connectionID == "" || !m.IsReady(connectionID) {
 		return false
 	}
 	snapshot := m.GetSnapshot(connectionID)
 	return snapshot != nil && snapshot.HasCapability(feature)
+}
+
+// HasNegotiatedChannel reports whether a fully-ready connection advertised the
+// channel during hello. Runtime delivery gates use this in addition to the
+// descriptor/permission boundary so declaration alone cannot activate traffic.
+func (m *HandshakeManager) HasNegotiatedChannel(connectionID string, channelID domain.ChannelID) bool {
+	if m == nil || connectionID == "" || channelID == "" || !m.IsReady(connectionID) {
+		return false
+	}
+	snapshot := m.GetSnapshot(connectionID)
+	return snapshot != nil && snapshot.HasChannel(string(channelID))
 }
 
 func (m *HandshakeManager) IsReady(id string) bool {
@@ -138,14 +170,20 @@ func (m *HandshakeManager) HandleHello(
 		return nil, err
 	}
 
-	response, err := m.process(ctx, peer, hello)
+	response, err := m.process(ctx, connID, peer, hello)
 	if err != nil {
 		state.transitionAlways(HandshakeStateRejected)
 		return nil, err
 	}
 
 	snap := m.buildSnapshot(hello, response)
-	m.commit(connID, state, snap)
+	if !m.stage(connID, state, snap, peer) {
+		if m.namespaceAdapter != nil {
+			_ = m.namespaceAdapter.RemoveConnection(context.Background(), string(peer.RuntimeID), string(peer.ServiceID), connID)
+		}
+		state.transitionAlways(HandshakeStateRejected)
+		return nil, NewHandshakeError(HandshakeErrorRequired, domain.ErrInvalidState, "handshake could not be staged")
+	}
 
 	return response, nil
 }
@@ -169,6 +207,7 @@ func (m *HandshakeManager) HandleHelloFromEnvelope(
 
 func (m *HandshakeManager) process(
 	ctx context.Context,
+	connID string,
 	peer ipc.Peer,
 	hello *HelloRequest,
 ) (*HelloResponse, error) {
@@ -220,19 +259,32 @@ func (m *HandshakeManager) process(
 		)
 	}
 
-	if m.namespaceAdapter != nil && len(hello.RPCNamespaces) > 0 {
-		_, err := m.namespaceAdapter.Apply(ctx, string(peer.PluginID), string(peer.RuntimeID), string(peer.ServiceID), hello.RPCNamespaces)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if err := validateNegotiatedChannelFeatures(m.descriptorProvider, string(peer.PluginID), string(peer.ServiceID), hello.Channels, negotiatedCaps); err != nil {
 		return nil, err
 	}
 
 	if m.channelAdvertiser != nil {
 		if err := m.channelAdvertiser.ValidateChannelAdvertisement(string(peer.PluginID), string(peer.ServiceID), hello.Channels); err != nil {
+			return nil, err
+		}
+	}
+
+	// Namespace routing is the only handshake step that mutates shared host state.
+	// Apply it last, after every other validation has succeeded, and reconcile even
+	// an empty list so removed namespaces cannot survive an upgrade/reconnect.
+	if m.namespaceAdapter == nil {
+		if len(hello.RPCNamespaces) > 0 {
+			return nil, NewHandshakeError(HandshakeErrorNamespaceInvalid, domain.ErrInternal, "namespace registry is unavailable")
+		}
+	} else {
+		if _, err := m.namespaceAdapter.Apply(
+			ctx,
+			connID,
+			string(peer.PluginID),
+			string(peer.RuntimeID),
+			string(peer.ServiceID),
+			hello.RPCNamespaces,
+		); err != nil {
 			return nil, err
 		}
 	}
@@ -282,9 +334,13 @@ func validateNegotiatedChannelFeatures(provider DescriptorProvider, pluginID, se
 		if !ok {
 			continue // declaration membership is rejected by ChannelAdvertiser below
 		}
-		required := domain.CapabilityEventStreaming
-		if kind == domain.ChannelKindState {
-			required = domain.CapabilityStateStreaming
+		required, known := domain.RequiredCapabilityForChannelKind(kind)
+		if !known {
+			return NewHandshakeError(
+				HandshakeErrorCapabilityMismatch,
+				domain.ErrInvalidArgument,
+				"channel "+ad.ID+" has unsupported kind "+string(kind),
+			)
 		}
 		if _, ok := negotiatedSet[required]; !ok {
 			return NewHandshakeError(
@@ -361,16 +417,41 @@ func (m *HandshakeManager) buildSnapshot(
 	)
 }
 
-func (m *HandshakeManager) commit(connID string, state *stateCell, snap *HandshakeSnapshot) {
-	m.mu.Lock()
-	m.snapshots[connID] = snap
-	m.mu.Unlock()
-
-	if !state.compareAndSwap(HandshakeStateHandshaking, HandshakeStateReady) {
-		m.mu.Lock()
-		delete(m.snapshots, connID)
-		m.mu.Unlock()
+func (m *HandshakeManager) stage(connID string, state *stateCell, snap *HandshakeSnapshot, peer ipc.Peer) bool {
+	if state == nil || state.Get() != HandshakeStateHandshaking {
+		return false
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if current, ok := m.states[connID]; !ok || current != state || state.Get() != HandshakeStateHandshaking {
+		return false
+	}
+	m.snapshots[connID] = snap
+	m.namespaceOwners[connID] = peer
+	return true
+}
+
+// ConfirmReady performs the second phase of the handshake. The connection is
+// not reported ready until the IPC layer has successfully written the hello
+// response to the plugin transport.
+func (m *HandshakeManager) ConfirmReady(connID string) bool {
+	if m == nil || connID == "" {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	state, exists := m.states[connID]
+	if !exists || state == nil || !state.compareAndSwap(HandshakeStateHandshaking, HandshakeStateReady) {
+		return false
+	}
+	snapshot, exists := m.snapshots[connID]
+	if !exists || snapshot == nil {
+		state.transitionAlways(HandshakeStateRejected)
+		return false
+	}
+	snapshot.ReadyAt = time.Now().UTC()
+	return true
 }
 
 func (m *HandshakeManager) descriptorCaps(pluginID domain.PluginID) []domain.Capability {
@@ -411,9 +492,19 @@ func (m *HandshakeManager) Count() int {
 }
 
 func (m *HandshakeManager) Shutdown(ctx context.Context) {
+	if m == nil {
+		return
+	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, s := range m.states {
-		s.transitionAlways(HandshakeStateClosed)
+	ids := make([]string, 0, len(m.states))
+	for id := range m.states {
+		ids = append(ids, id)
+	}
+	m.mu.Unlock()
+	for _, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return
+		}
+		m.RemoveConnection(id)
 	}
 }
