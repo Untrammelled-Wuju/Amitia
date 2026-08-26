@@ -1,5 +1,8 @@
 import { createDriver, BackendDriver } from '../backend_driver';
 import { GameCenterClient } from '../game_center_client';
+import { mkdtemp, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
 const MOCK_EXTENSION_ID = 'mock-developer/mock-amitiax-game-plugin';
@@ -142,7 +145,7 @@ describe('G47-F15 E2E Full Flow', () => {
     runtimeId = null;
   });
 
-  it('F15-56: full lifecycle Install→Enable→Provision→Handshake→Ready→CustomRPC→HostAPI→Secret→Effect→Takeover/Release→Restart→Crash→EStop→Rearm→Upgrade→Disable→Uninstall', async () => {
+  it('F15-56: full protocol lifecycle Install→Ready→MultiService→HierarchicalRPC→Binary→AgentEvent→Artifact→HostAPI→Secret→Control→Restart→Crash→EStop→Upgrade→Uninstall', async () => {
     const archivePath = requireArchive();
 
     // 1. Install
@@ -165,6 +168,63 @@ describe('G47-F15 E2E Full Flow', () => {
     expect(readyDetail.runtimeState).toBe('running');
     expect(readyDetail.handshake?.ready).toBe(true);
 
+    // Protocol-v1 multi-service freeze gate: both required services must have
+    // completed their independent handshake and reached ready before the runtime
+    // is considered usable.
+    const services = await client.listServices(runtimeId);
+    const mainService = services.items.find(item => item.serviceId === 'mock-game-runtime');
+    const supportService = services.items.find(item => item.serviceId === 'mock-game-support');
+    expect(mainService?.ready).toBe(true);
+    expect(mainService?.connected).toBe(true);
+    expect(supportService?.ready).toBe(true);
+    expect(supportService?.connected).toBe(true);
+
+    // Real plugin->host->second-plugin-service custom RPC. This traverses the
+    // NamespaceRegistry and intentionally uses a hierarchical namespace so a
+    // first-segment-only resolver cannot pass this gate.
+    const supportPing = await invokeRuntimeRPC<{ pong?: boolean; serviceId?: string; payload?: unknown }>(
+      client, runtimeId, 'mockgame.namespace.support_ping', { probe: 'hierarchical-namespace' },
+    );
+    expect(supportPing.pong).toBe(true);
+    expect(supportPing.serviceId).toBe('mock-game-support');
+
+    // Binary streaming must complete the actual upload/stat/read/channel/release
+    // path rather than merely appearing in the descriptor/hello capabilities.
+    const binaryMessage = `binary-e2e-${Date.now()}`;
+    const binaryRoundtrip = await invokeRuntimeRPC<{ size?: number; statSize?: number; roundtrip?: string; checksum?: string }>(
+      client, runtimeId, 'mockgame.binary.roundtrip', { message: binaryMessage },
+    );
+    expect(binaryRoundtrip.roundtrip).toBe(binaryMessage);
+    expect(binaryRoundtrip.size).toBe(Buffer.byteLength(binaryMessage, 'utf8'));
+    expect(binaryRoundtrip.statSize).toBe(binaryRoundtrip.size);
+    expect((binaryRoundtrip.checksum ?? '').length).toBeGreaterThan(0);
+
+    // Generic artifact lifecycle: explicit management authorization, deploy,
+    // verify, remove and verify-absent. The target is an opaque temporary root;
+    // this remains game-agnostic and runs unchanged on Linux/Windows/macOS.
+    const artifactTargetRoot = await mkdtemp(join(tmpdir(), 'amitia-gamehost-artifact-e2e-'));
+    try {
+      const grant = await client.authorizeArtifactRoot(extensionId!, artifactTargetRoot);
+      expect(grant.extensionId).toBe(extensionId);
+      expect((grant.generation ?? '').length).toBeGreaterThan(0);
+      const deployedArtifact = await client.deployArtifact(extensionId!, 'mock-companion-file', artifactTargetRoot);
+      expect(deployedArtifact.installed).toBe(true);
+      expect(deployedArtifact.healthy).toBe(true);
+      expect((deployedArtifact.installedHash ?? '').length).toBeGreaterThan(0);
+      const verifiedArtifact = await client.verifyArtifact(extensionId!, 'mock-companion-file', artifactTargetRoot);
+      expect(verifiedArtifact.installed).toBe(true);
+      expect(verifiedArtifact.healthy).toBe(true);
+      await client.removeArtifact(extensionId!, 'mock-companion-file', artifactTargetRoot);
+      const removedArtifact = await client.verifyArtifact(extensionId!, 'mock-companion-file', artifactTargetRoot);
+      expect(removedArtifact.installed).toBe(false);
+    } finally {
+      // Best-effort remove before revoking the authorization so a failed assertion
+      // cannot leave a persistent deployment record pointing at a temp directory.
+      await client.removeArtifact(extensionId!, 'mock-companion-file', artifactTargetRoot).catch(() => undefined);
+      await client.revokeArtifactRoot(extensionId!, artifactTargetRoot).catch(() => undefined);
+      await rm(artifactTargetRoot, { recursive: true, force: true });
+    }
+
     // Canonical Agent Tool E2E: this is deliberately NOT the direct management
     // RPC endpoint. It traverses ToolFacade -> ExecutionPipeline -> GameHost
     // RuntimeAdapter -> ControlPlane -> the external mock process.
@@ -175,6 +235,24 @@ describe('G47-F15 E2E Full Flow', () => {
       channel: 'web',
       sessionId: 'e2e-session',
     });
+
+    // Game -> Agent active event must be accepted by the real host sink after
+    // the runtime has an explicit bound Agent session.
+    const agentEventsBefore = await client.getAgentEventStats();
+    const emittedAgentEvent = await invokeRuntimeRPC<{ published?: boolean; id?: string }>(
+      client, runtimeId, 'mockgame.agent_event.emit', { sessionId: 'e2e-session', value: 'protocol-v1-e2e' },
+    );
+    expect(emittedAgentEvent.published).toBe(true);
+    expect((emittedAgentEvent.id ?? '').length).toBeGreaterThan(0);
+    const agentEventDeadline = Date.now() + 5000;
+    let agentEventsAfter = agentEventsBefore;
+    while (Date.now() < agentEventDeadline) {
+      agentEventsAfter = await client.getAgentEventStats();
+      if (agentEventsAfter.acceptedCount > agentEventsBefore.acceptedCount) break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    expect(agentEventsAfter.acceptedCount).toBeGreaterThan(agentEventsBefore.acceptedCount);
+
     const agentToolResult = await driver.invokeCanonicalTool<any>({
       toolId: 'mock-developer/mock-amitiax-game-plugin/mockgame/move',
       input: { direction: 'north' },
@@ -282,6 +360,11 @@ describe('G47-F15 E2E Full Flow', () => {
     await driver.waitForRuntimeReady(runtimeId, 30000);
     const genAfterRestart = (await driver.getRuntime(runtimeId)).process?.processGeneration ?? 0;
     expect(genAfterRestart).toBeGreaterThan(genBeforeRestart);
+    const supportPingAfterRestart = await invokeRuntimeRPC<{ pong?: boolean; serviceId?: string }>(
+      client, runtimeId, 'mockgame.namespace.support_ping', { probe: 'post-restart' },
+    );
+    expect(supportPingAfterRestart.pong).toBe(true);
+    expect(supportPingAfterRestart.serviceId).toBe('mock-game-support');
 
     // 12. Crash via mockgame.fault.crash
     const genBeforeCrash = (await driver.getRuntime(runtimeId)).process?.processGeneration ?? 0;
@@ -356,6 +439,11 @@ describe('G47-F15 E2E Full Flow', () => {
       expect(oldEffectAfterUpgrade.found).toBe(false);
       expect(oldEffectAfterUpgrade.processed).toBe(false);
       expect(generationAfterUpgrade).toBeGreaterThan(committedGeneration);
+      const supportPingAfterUpgrade = await invokeRuntimeRPC<{ pong?: boolean; serviceId?: string }>(
+        client, runtimeId, 'mockgame.namespace.support_ping', { probe: 'post-upgrade' },
+      );
+      expect(supportPingAfterUpgrade.pong).toBe(true);
+      expect(supportPingAfterUpgrade.serviceId).toBe('mock-game-support');
     }
 
     // 16. Backend Restart - runner-owned command + target uniqueness/orphan proof.

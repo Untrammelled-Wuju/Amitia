@@ -77,6 +77,42 @@ export interface GameRuntimeList {
   total: number;
 }
 
+export interface GameServiceSummary {
+  serviceId: string;
+  runtimeId: string;
+  definitionId: string;
+  moduleId?: string;
+  state: string;
+  health: string;
+  connected: boolean;
+  ready: boolean;
+}
+
+export interface GameServiceList {
+  items: GameServiceSummary[];
+  total: number;
+}
+
+export interface AgentEventStats {
+  acceptedCount: number;
+  deadLetterCount: number;
+}
+
+export interface ArtifactStatus {
+  artifact: { id: string; type?: string; target?: string; required?: boolean };
+  installed: boolean;
+  healthy: boolean;
+  targetPath?: string;
+  installedHash?: string;
+}
+
+export interface ArtifactTargetRootGrant {
+  extensionId: string;
+  targetRoot: string;
+  generation: string;
+  grantedAt: string;
+}
+
 export interface ControlRequest {
   targetMode?: string;
   expectedEpoch?: number;
@@ -235,6 +271,14 @@ export class GameCenterClient {
     return this.request<T>(path, { method: 'DELETE' });
   }
 
+  async deleteWithBody<T = unknown>(path: string, body: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
   async listPlugins(filter?: { page?: number; pageSize?: number; search?: string; status?: string }): Promise<GamePluginList> {
     return this.get('/game-center/plugins', filter as Record<string, string | number | undefined>);
   }
@@ -255,8 +299,45 @@ export class GameCenterClient {
     return this.get(`/game-center/runtimes/${encodeURIComponent(runtimeId)}/health`);
   }
 
+  async listServices(runtimeId: string): Promise<GameServiceList> {
+    return this.get(`/game-center/runtimes/${encodeURIComponent(runtimeId)}/services`);
+  }
+
   async getHandshakeStatus(runtimeId: string): Promise<{ handshakeState: string; ready: boolean }> {
     return this.get(`/game-center/runtimes/${encodeURIComponent(runtimeId)}/handshake`);
+  }
+
+  async getAgentEventStats(): Promise<AgentEventStats> {
+    return this.get('/game-center-debug/agent-events');
+  }
+
+  async authorizeArtifactRoot(extensionId: string, targetRoot: string): Promise<ArtifactTargetRootGrant> {
+    return this.post(`/game-center/extensions/${encodeURIComponent(extensionId)}/artifact-roots/authorize`, { targetRoot });
+  }
+
+  async revokeArtifactRoot(extensionId: string, targetRoot: string): Promise<void> {
+    await this.deleteWithBody(`/game-center/extensions/${encodeURIComponent(extensionId)}/artifact-roots`, { targetRoot });
+  }
+
+  async deployArtifact(extensionId: string, artifactId: string, targetRoot: string): Promise<ArtifactStatus> {
+    return this.post(
+      `/game-center/extensions/${encodeURIComponent(extensionId)}/artifacts/${encodeURIComponent(artifactId)}/deploy`,
+      { targetRoot },
+    );
+  }
+
+  async verifyArtifact(extensionId: string, artifactId: string, targetRoot: string): Promise<ArtifactStatus> {
+    return this.post(
+      `/game-center/extensions/${encodeURIComponent(extensionId)}/artifacts/${encodeURIComponent(artifactId)}/verify`,
+      { targetRoot },
+    );
+  }
+
+  async removeArtifact(extensionId: string, artifactId: string, targetRoot: string): Promise<void> {
+    await this.deleteWithBody(
+      `/game-center/extensions/${encodeURIComponent(extensionId)}/artifacts/${encodeURIComponent(artifactId)}`,
+      { targetRoot },
+    );
   }
 
   private buildInstallConfirmations(preview: PackageImportPreview): Record<string, boolean> {
