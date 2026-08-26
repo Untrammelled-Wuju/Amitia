@@ -11,7 +11,7 @@ import { getAccessToken } from "../stores/refresh-coordinator"
 import { saveCurrentUser } from "../stores/refresh-coordinator"
 import { useSessionStore } from "../stores/session-store"
 import { apiClient } from "../ui-index"
-import { shouldUseHashRouting } from "../runtime/runtime-capabilities"
+import { isRuntimeRouteAvailable, shouldUseHashRouting } from "../runtime/runtime-capabilities"
 import { builtinBusinessRoutes } from "./builtinRoutes"
 
 const TOKEN_CACHE_TTL = 5 * 60 * 1000
@@ -126,6 +126,10 @@ function createAppRouter() {
     const userId = getUserId()
     const PUBLIC_PATHS = ["/login", "/onboarding", "/privacy", "/usage-boundary"]
     const isPublic = PUBLIC_PATHS.includes(to.path)
+
+    if (!isRuntimeRouteAvailable(to.path)) {
+      return next({ path: "/404", query: { reason: "runtime-capability-unavailable" } })
+    }
 
     if (isPublic) {
       if (to.path === "/login") {

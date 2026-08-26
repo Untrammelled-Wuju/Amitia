@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../runtime/runtime-capabilities", () => ({
   shouldUseHashRouting: () => true,
+  isRuntimeRouteAvailable: () => true,
 }));
 
 import router from "../router";

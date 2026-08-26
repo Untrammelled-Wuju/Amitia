@@ -1,3 +1,5 @@
+import { isRuntimeRouteAvailable } from "@/runtime/runtime-capabilities";
+
 export const NAVIGATION_WHITELIST: readonly string[] = [
   "/chat",
   "/dashboard",
@@ -44,6 +46,7 @@ const NAVIGATION_BLACKLIST: readonly string[] = [
 export function isNavigationAllowed(target: string): boolean {
   if (!target || typeof target !== "string") return false;
   const path = target.split("?")[0].split("#")[0];
+  if (!isRuntimeRouteAvailable(path)) return false;
   for (const blocked of NAVIGATION_BLACKLIST) {
     if (path === blocked || path.startsWith(blocked + "/")) return false;
   }

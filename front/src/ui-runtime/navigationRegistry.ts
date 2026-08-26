@@ -21,6 +21,7 @@ import {
   UserFilled,
 } from "@element-plus/icons-vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
+import { isRuntimeCapabilityAvailable, isRuntimeRouteAvailable, type RuntimeCapabilityName } from "@/runtime/runtime-capabilities";
 import type { UIProviderDefinition } from "@/ui-runtime/types";
 import { collectRegistryProviders } from "./providerCollection";
 import { effectiveExtensionRouteKeys, effectiveProviderRouteKeys, shadowsProtectedRoute } from "./providerRoutes";
@@ -37,6 +38,7 @@ export interface UINavigationItem {
   match?: string[];
   mobile?: boolean;
   extensionId?: string;
+  runtimeCapability?: RuntimeCapabilityName;
 }
 
 export interface UINavigationGroup {
@@ -90,7 +92,7 @@ const builtinItems: UINavigationItem[] = [
   { id: "memory.graph", route: "/graph", label: "记忆图谱", icon: Share, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 65 },
   { id: "memory.timeline", route: "/memory-timeline", label: "时间线", icon: Timer, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 70 },
   { id: "memory.logs", route: "/logs", label: "聊天记录", icon: ChatLineRound, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 75 },
-  { id: "workshop.game-center", route: "/game-center", label: "游戏模式", icon: MagicStick, group: "workshop", order: 80 },
+  { id: "workshop.game-center", route: "/game-center", label: "游戏模式", icon: MagicStick, group: "workshop", order: 80, runtimeCapability: "gameMode" },
   { id: "workshop", route: "/creative-workshop", label: "创意工坊", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },
   { id: "extensions", route: "/extensions", label: "扩展中心", icon: Menu, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
 ];
@@ -146,6 +148,7 @@ export function collectExtensionNavigationItems(
       const label = String(row.label ?? "").trim();
       const key = `${provider.extensionId}:${id}`;
       if (!id || !route.startsWith("/") || route === "/" || !label) continue;
+      if (!isRuntimeRouteAvailable(route)) continue;
       if (provider.capability === "route.registry") {
         if (!effectiveRouteKeys.has(`${provider.providerId}\u0000${route}`)) continue;
       } else if (
@@ -189,7 +192,10 @@ function applyIconProvider(store: ReturnType<typeof useExtensionUIStore>, items:
 export function useUINavigationRegistry() {
   const store = useExtensionUIStore();
   const items = computed<UINavigationItem[]>(() => {
-    const merged = applyIconProvider(store, [...builtinItems, ...collectExtensionNavigationItems(store)]);
+    const availableBuiltinItems = builtinItems.filter(
+      (item) => !item.runtimeCapability || isRuntimeCapabilityAvailable(item.runtimeCapability),
+    );
+    const merged = applyIconProvider(store, [...availableBuiltinItems, ...collectExtensionNavigationItems(store)]);
     return merged.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   });
   const groups = computed<UINavigationGroup[]>(() => {

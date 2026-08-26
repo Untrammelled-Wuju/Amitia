@@ -61,7 +61,6 @@ export const desktopNavGroups: AppNavGroup[] = [
   {
     key: "system",
     items: [
-      { key: "gameCenter", to: "/game-center", label: "游戏模式", icon: MagicStick },
       { key: "devices", to: "/devices", label: "我的设备", icon: Connection },
       { key: "workspaces", to: "/workspaces", label: "工作区", icon: Share },
       {
