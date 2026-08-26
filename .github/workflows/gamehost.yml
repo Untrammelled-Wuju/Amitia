@@ -22,6 +22,7 @@ on:
       - 'scripts/sync_game_plugin_go_sdk.py'
       - 'scripts/verify_mock_game_plugin_sdk_vendor.py'
       - 'scripts/verify_game_plugin_contract_parity.py'
+      - 'scripts/verify_gamehost_source_hygiene.py'
       - 'testplugins/game-plugin-demo/**'
       - 'testplugins/mock-amitiax-game-plugin/**'
       - 'tests/gamehost_external/**'
@@ -43,6 +44,8 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: Verify toolchain
         run: test "$(go version | awk '{print $3}')" = "go1.26.1"
+      - name: Verify GameHost source hygiene
+        run: python3 scripts/verify_gamehost_source_hygiene.py
       - name: Vet GameHost and public protocol
         working-directory: backend
         run: |
@@ -114,8 +117,6 @@ jobs:
           cache-dependency-path: backend/pkg/gameplugin/sdk/game-plugin/package-lock.json
       - name: Verify Go / JSON Schema / TypeScript contract parity
         run: python3 scripts/verify_game_plugin_contract_parity.py
-      - name: Verify external plugin SDK vendor is current
-        run: python3 scripts/verify_mock_game_plugin_sdk_vendor.py
       - name: Install SDK dependencies
         working-directory: backend/pkg/gameplugin/sdk/game-plugin
         run: npm ci
@@ -124,6 +125,8 @@ jobs:
         run: |
           npm test -- --runInBand
           npm run build
+      - name: Verify external plugin SDK vendor is current
+        run: python3 scripts/verify_mock_game_plugin_sdk_vendor.py
       - name: Build packaged external TypeScript plugin
         working-directory: testplugins/mock-amitiax-game-plugin
         run: |
