@@ -7,7 +7,7 @@ storage:
   dataDir: "AmitiaData/data"
 
 jwt:
-  secret: "f8b/XN8YQhOvhYzsUvmDPvFiNLkMUmzClPGxSoTitLma3LYbf+VjUFPgSEF05AxXJn8mQaUMqvjwZ0+L4aQ4kQ=="
+  secret: ""
   issuer: "amitia"
   audience: "amitia-api"
   expireDays: 7
@@ -22,7 +22,8 @@ app:
 
 security:
   mode: "local_single_user"
-  localToken: "la7JIwvz-ef688fiAjBP2_06eRArAGslkeJofvyvIJE"
+  localToken: ""
+  localTokenFile: "security/local-token"
   allowedOrigins:
     - "http://localhost:5178"
 

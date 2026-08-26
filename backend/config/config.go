@@ -342,8 +342,13 @@ func loadConfig(configPath string) (*Config, error) {
 		return nil, err
 	}
 
-	if !isStrongSecret(cfg.JWT.Secret) {
-		return nil, fmt.Errorf("JWT Secret 过弱或使用了默认模板值，请在 config.yml 中设置强密钥")
+	securityMode := strings.ToLower(strings.TrimSpace(cfg.Security.Mode))
+	if securityMode == "network" {
+		if !isStrongSecret(cfg.JWT.Secret) {
+			return nil, fmt.Errorf("network 安全模式要求强 JWT Secret，请通过安全配置或 AMITIA_JWT_SECRET 提供")
+		}
+	} else if strings.TrimSpace(cfg.JWT.Secret) != "" && !isStrongSecret(cfg.JWT.Secret) {
+		return nil, fmt.Errorf("JWT Secret 过弱或使用了默认模板值")
 	}
 
 	v.WatchConfig()

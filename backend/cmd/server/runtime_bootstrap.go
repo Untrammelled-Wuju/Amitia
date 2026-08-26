@@ -140,11 +140,16 @@ func (b *runtimeBootstrap) buildPlatformProviders() error {
 	return b.buildPlatformProvidersIOS()
 }
 
-func (b *runtimeBootstrap) RegisterInfrastructure(sqlDB *sql.DB, graphSvc graph.Service) error {
+func (b *runtimeBootstrap) RegisterInfrastructure(sqlDB *sql.DB) error {
 	vectorCfg := config.AppCfg.Providers.VectorStore
 	graphCfg := config.AppCfg.Providers.GraphStore
 	vectorProvider := &vectorStoreProviderAdapter{host: b.host, enabled: vectorCfg.Enabled, required: vectorCfg.Required}
-	graphProvider := &graphStoreProviderAdapter{host: b.host, graphSvc: graphSvc, enabled: graphCfg.Enabled, required: graphCfg.Required}
+	graphProvider := &graphStoreProviderAdapter{
+		host:     b.host,
+		enabled:  graphCfg.Enabled,
+		required: graphCfg.Required,
+		onReady:  b.SetGraphService,
+	}
 
 	if err := b.orchestrator.Register(vectorProvider); err != nil {
 		return fmt.Errorf("register vector store: %w", err)
@@ -301,6 +306,7 @@ type graphStoreProviderAdapter struct {
 	graphSvc graph.Service
 	enabled  bool
 	required bool
+	onReady  func(graph.Service)
 }
 
 func (a *graphStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentDescriptor {
@@ -324,7 +330,22 @@ func (a *graphStoreProviderAdapter) Start(ctx context.Context) error {
 	if regErr := supervisor.Register(spec); regErr != nil {
 		return fmt.Errorf("register surrealdb: %w", regErr)
 	}
-	return supervisor.Start(ctx, spec.ID)
+	if err := supervisor.Start(ctx, spec.ID); err != nil {
+		return fmt.Errorf("start surrealdb: %w", err)
+	}
+	if err := supervisor.WaitReady(ctx, spec.ID); err != nil {
+		return fmt.Errorf("wait for surrealdb ready: %w", err)
+	}
+
+	client, err := graph.NewClient(config.AppCfg.Providers.GraphStore.SurrealDB)
+	if err != nil {
+		return fmt.Errorf("initialize graph client after surrealdb readiness: %w", err)
+	}
+	a.graphSvc = graph.NewService(client)
+	if a.onReady != nil {
+		a.onReady(a.graphSvc)
+	}
+	return nil
 }
 
 func (a *graphStoreProviderAdapter) Ready(ctx context.Context) error {
