@@ -11,6 +11,7 @@ const e2eRoot = join(runnerTemp, 'gamehost-e2e');
 const backendBin = join(runnerTemp, process.platform === 'win32' ? 'amitia-gamehost-e2e-server.exe' : 'amitia-gamehost-e2e-server');
 const backendDir = join(workspace, 'backend');
 const pluginDir = join(workspace, 'testplugins', 'mock-amitiax-game-plugin');
+const nativePluginDir = join(workspace, 'testplugins', 'game-plugin-demo', 'go');
 const restartScript = join(workspace, 'tests', 'gamehost_external', 'scripts', 'restart-backend.mjs');
 
 for (const dir of [e2eRoot, join(e2eRoot, 'data'), join(e2eRoot, 'logs'), join(e2eRoot, 'cache'), join(e2eRoot, 'tmp')]) {
@@ -52,8 +53,13 @@ const values = {
   GAMEHOST_BACKEND_RESTART_SCRIPT: restartScript,
   GAMEHOST_BACKEND_CWD: workspace,
   GAMEHOST_DEV_WORKSPACE_PATH: pluginDir,
+  GAMEHOST_NATIVE_DEV_WORKSPACE_PATH: nativePluginDir,
   MOCK_PLUGIN_ARCHIVE_PATH: join(pluginDir, 'dist-package', 'mock-amitiax-game-plugin-v1.amitiax'),
   MOCK_PLUGIN_ARCHIVE_PATH_V2: join(pluginDir, 'dist-package', 'mock-amitiax-game-plugin-v2.amitiax'),
+  MOCK_PLUGIN_REQUIRED_ARTIFACT_ARCHIVE_PATH: join(pluginDir, 'dist-package', 'mock-amitiax-game-plugin-required.amitiax'),
+  MOCK_PLUGIN_REQUIRED_ARTIFACT_ARCHIVE_PATH_V2: join(pluginDir, 'dist-package', 'mock-amitiax-game-plugin-required-v2.amitiax'),
+  NATIVE_PLUGIN_ARCHIVE_PATH: join(nativePluginDir, 'dist-package', 'mock-game-plugin-go-v1.amitiax'),
+  NATIVE_PLUGIN_ARCHIVE_PATH_V2: join(nativePluginDir, 'dist-package', 'mock-game-plugin-go-v2.amitiax'),
 };
 
 const githubEnv = process.env.GITHUB_ENV;

@@ -1,7 +1,7 @@
 import { createDriver, BackendDriver } from '../backend_driver';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
-const MOCK_EXTENSION_ID = 'mock-developer/mock-amitiax-game-plugin';
+const MOCK_EXTENSION_ID = 'com.mock-developer/mock-amitiax-game-plugin';
 
 function requireArchive(): string {
   if (!ARCHIVE_PATH) {

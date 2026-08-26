@@ -4,12 +4,25 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const defaultWorkspace = resolve(here, '../../../testplugins/mock-amitiax-game-plugin');
+const defaultNativeWorkspace = resolve(here, '../../../testplugins/game-plugin-demo/go');
 const baseUrl = (process.env.GAMEHOST_BASE_URL || 'http://127.0.0.1:18899/api').replace(/\/$/, '');
-const extensionId = process.env.GAMEHOST_DEV_EXTENSION_ID || 'mock-developer/mock-amitiax-game-plugin';
-const workspacePath = resolve(process.env.GAMEHOST_DEV_WORKSPACE_PATH || defaultWorkspace);
-const manifestPath = resolve(process.env.GAMEHOST_DEV_MANIFEST_PATH || resolve(workspacePath, 'amitia-extension.json'));
 const username = process.env.GAMEHOST_BOOTSTRAP_USERNAME || 'gamehost-e2e-admin';
 const password = process.env.GAMEHOST_BOOTSTRAP_PASSWORD || 'GameHost-E2E-Admin-2026!';
+
+const workspaceSpecs = [
+  {
+    envPrefix: 'GAMEHOST',
+    extensionId: process.env.GAMEHOST_DEV_EXTENSION_ID || 'com.mock-developer/mock-amitiax-game-plugin',
+    workspacePath: resolve(process.env.GAMEHOST_DEV_WORKSPACE_PATH || defaultWorkspace),
+    manifestName: 'amitia-extension.json',
+  },
+  {
+    envPrefix: 'GAMEHOST_NATIVE',
+    extensionId: process.env.GAMEHOST_NATIVE_DEV_EXTENSION_ID || 'com.example/mock-game-plugin-go',
+    workspacePath: resolve(process.env.GAMEHOST_NATIVE_DEV_WORKSPACE_PATH || defaultNativeWorkspace),
+    manifestName: 'manifest.json',
+  },
+];
 
 function unwrap(body) {
   if (body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'data')) return body.data;
@@ -67,14 +80,15 @@ async function getAdminToken() {
   }
 }
 
-async function ensureWorkspace(token) {
+async function ensureWorkspace(token, spec) {
+  const manifestPath = resolve(spec.workspacePath, spec.manifestName);
   try {
     const created = await request('/extensions/dev-mode/workspaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        extensionId,
-        path: workspacePath,
+        extensionId: spec.extensionId,
+        path: spec.workspacePath,
         manifestPath,
         watchEnabled: false,
         autoReload: false,
@@ -85,29 +99,39 @@ async function ensureWorkspace(token) {
     if (error?.status !== 409) throw error;
     const listed = await request('/extensions/dev-mode/workspaces', { method: 'GET' }, token);
     const workspaces = Array.isArray(listed?.workspaces) ? listed.workspaces : [];
-    const existing = workspaces.find(item => item?.extensionId === extensionId && item?.path === workspacePath)
-      || workspaces.find(item => item?.extensionId === extensionId);
+    const existing = workspaces.find(item => item?.extensionId === spec.extensionId && item?.path === spec.workspacePath)
+      || workspaces.find(item => item?.extensionId === spec.extensionId);
     if (!existing?.workspaceId) throw error;
     return existing.workspaceId;
   }
 }
 
-async function main() {
-  await waitForBackend();
-  const token = await getAdminToken();
-  const workspaceId = await ensureWorkspace(token);
+async function createSession(token, spec) {
+  const workspaceId = await ensureWorkspace(token, spec);
   await request(`/extensions/dev-mode/workspaces/${encodeURIComponent(workspaceId)}/trust`, { method: 'POST' }, token);
   const session = await request(`/extensions/dev-mode/workspaces/${encodeURIComponent(workspaceId)}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deviceId: 'gamehost-ci', userAgent: 'gamehost-external-e2e' }),
+    body: JSON.stringify({ deviceId: 'gamehost-ci', userAgent: `gamehost-external-e2e/${spec.envPrefix.toLowerCase()}` }),
   }, token);
-  if (!session?.sessionId) throw new Error('developer session endpoint returned no sessionId');
+  if (!session?.sessionId) throw new Error(`developer session endpoint returned no sessionId for ${spec.extensionId}`);
+  return { workspaceId, sessionId: session.sessionId };
+}
 
+async function main() {
+  await waitForBackend();
+  const token = await getAdminToken();
+  const sessions = new Map();
+  for (const spec of workspaceSpecs) sessions.set(spec.envPrefix, await createSession(token, spec));
+
+  const standard = sessions.get('GAMEHOST');
+  const native = sessions.get('GAMEHOST_NATIVE');
   const values = {
     GAMEHOST_AUTH_TOKEN: token,
-    GAMEHOST_DEVELOPER_SESSION_ID: session.sessionId,
-    GAMEHOST_DEV_WORKSPACE_ID: workspaceId,
+    GAMEHOST_DEVELOPER_SESSION_ID: standard.sessionId,
+    GAMEHOST_DEV_WORKSPACE_ID: standard.workspaceId,
+    GAMEHOST_NATIVE_DEVELOPER_SESSION_ID: native.sessionId,
+    GAMEHOST_NATIVE_DEV_WORKSPACE_ID: native.workspaceId,
   };
 
   const githubEnv = process.env.GITHUB_ENV;

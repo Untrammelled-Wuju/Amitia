@@ -22,13 +22,27 @@ function run(args, extraEnv = {}) {
 run(['ci']);
 run(['run', 'build']);
 for (const fixture of [
-  { output: 'mock-amitiax-game-plugin-v1.amitiax', version: '' },
-  { output: 'mock-amitiax-game-plugin-v2.amitiax', version: '1.1.0' },
+  { output: 'mock-amitiax-game-plugin-v1.amitiax', version: '', requiredArtifact: false },
+  { output: 'mock-amitiax-game-plugin-v2.amitiax', version: '1.1.0', requiredArtifact: false },
+  { output: 'mock-amitiax-game-plugin-required.amitiax', version: '', requiredArtifact: true },
+  { output: 'mock-amitiax-game-plugin-required-v2.amitiax', version: '1.1.0', requiredArtifact: true },
 ]) {
   const env = { MOCK_PLUGIN_OUTPUT: fixture.output };
   if (fixture.version) env.MOCK_PLUGIN_VERSION = fixture.version;
+  if (fixture.requiredArtifact) env.MOCK_PLUGIN_REQUIRED_ARTIFACT = '1';
   run(['run', 'package'], env);
   run(['run', 'verify-package'], env);
   const outputPath = join(pluginDir, 'dist-package', fixture.output);
   if (!existsSync(outputPath)) throw new Error(`fixture package missing: ${outputPath}`);
 }
+
+const nativeBuilder = join(workspace, 'tests', 'gamehost_external', 'scripts', 'build-native-service-fixtures.mjs');
+const native = spawnSync(process.execPath, [nativeBuilder], {
+  cwd: workspace,
+  env: process.env,
+  stdio: 'inherit',
+  shell: false,
+});
+if (native.error) throw native.error;
+if (native.status !== 0) throw new Error(`native service fixture build failed with exit code ${native.status}`);
+
