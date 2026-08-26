@@ -11,7 +11,7 @@
 - Node.js >= 18
 - 后端服务运行在 `http://127.0.0.1:18899`（默认端口）
 - 后端必须启用 `AMITIA_EXTENSION_DEV_MODE=true`，因为外部 conformance 包故意保持 unsigned-dev 身份
-- 测试使用真实用户 Access Token 和与 `mock-developer/mock-amitiax-game-plugin` 绑定的 Developer Session；不会绕过 Extension Kernel 安装安全链路
+- 测试使用真实用户 Access Token 和与 `com.mock-developer/mock-amitiax-game-plugin` 绑定的 Developer Session；不会绕过 Extension Kernel 安装安全链路
 
 ### 安装依赖
 

@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
-const MOCK_EXTENSION_ID = 'mock-developer/mock-amitiax-game-plugin';
+const MOCK_EXTENSION_ID = 'com.mock-developer/mock-amitiax-game-plugin';
 
 async function invokeRuntimeRPC<T>(client: GameCenterClient, runtimeId: string | null, method: string, payload: unknown = {}): Promise<T> {
   if (!runtimeId) throw new Error(`RPC ${method} requires runtimeId`);
@@ -49,7 +49,7 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('com.mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
 
     await driver.enablePlugin(extensionId);
@@ -64,7 +64,7 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('com.mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
 
@@ -81,7 +81,7 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('com.mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
 
@@ -98,7 +98,7 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('com.mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
 
@@ -150,7 +150,7 @@ describe('G47-F15 E2E Full Flow', () => {
 
     // 1. Install
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('com.mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
 
     // 2. Enable
@@ -254,7 +254,7 @@ describe('G47-F15 E2E Full Flow', () => {
     expect(agentEventsAfter.acceptedCount).toBeGreaterThan(agentEventsBefore.acceptedCount);
 
     const agentToolResult = await driver.invokeCanonicalTool<any>({
-      toolId: 'mock-developer/mock-amitiax-game-plugin/mockgame/move',
+      toolId: 'com.mock-developer/mock-amitiax-game-plugin/mockgame/move',
       input: { direction: 'north' },
       characterId: 'e2e-character',
       conversationId: 'e2e-conversation',
@@ -416,7 +416,7 @@ describe('G47-F15 E2E Full Flow', () => {
     const upgradeDeadline = Date.now() + 60000;
     let upgradedVersion = v1Version;
     while (Date.now() < upgradeDeadline) {
-      const current = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 5000).catch(() => null);
+      const current = await driver.waitForPluginByExtension('com.mock-developer/mock-amitiax-game-plugin', 5000).catch(() => null);
       if (current && current.version !== v1Version) {
         upgradedVersion = current.version;
         break;

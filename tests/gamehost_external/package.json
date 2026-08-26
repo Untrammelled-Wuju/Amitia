@@ -8,7 +8,9 @@
     "test:smoke": "jest --testPathPattern=smoke --runInBand",
     "test:lifecycle": "jest --testPathPattern=lifecycle --runInBand",
     "test:security": "jest --testPathPattern=security --runInBand",
-    "test:fault": "jest --testPathPattern=fault --runInBand"
+    "test:fault": "jest --testPathPattern=fault --runInBand",
+    "test:native-service": "jest --testPathPattern=native_service --runInBand",
+    "test:required-artifact": "jest --testPathPattern=required_artifact --runInBand"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
