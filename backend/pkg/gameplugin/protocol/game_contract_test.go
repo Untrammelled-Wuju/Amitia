@@ -99,10 +99,26 @@ func TestPluginNetworkPolicyExposesProtocolV1Modes(t *testing.T) {
 			t.Fatalf("mode %s rejected: %v", mode, err)
 		}
 	}
-	for _, mode := range []string{"restricted", "audit"} {
-		spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: &PluginNetworkPolicy{Mode: mode}}
+	restricted := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: &PluginNetworkPolicy{Mode: "restricted", AllowedDomains: []string{"api.example.com", "*.cdn.example.com"}, AllowedPorts: []int{443, 8443}}}
+	if err := restricted.Validate(); err != nil {
+		t.Fatalf("valid restricted mode rejected: %v", err)
+	}
+	ipRestricted := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: &PluginNetworkPolicy{Mode: "restricted", AllowedIPs: []string{"127.0.0.1", "2001:db8::10"}, AllowedPorts: []int{18080}}}
+	if err := ipRestricted.Validate(); err != nil {
+		t.Fatalf("valid exact-IP restricted mode rejected: %v", err)
+	}
+	for _, network := range []*PluginNetworkPolicy{
+		{Mode: "restricted"},
+		{Mode: "restricted", AllowedDomains: []string{"http://example.com"}, AllowedPorts: []int{443}},
+		{Mode: "restricted", AllowedDomains: []string{"example.com"}, AllowedPorts: []int{0}},
+		{Mode: "restricted", AllowedIPs: []string{"not-an-ip"}, AllowedPorts: []int{443}},
+		{Mode: "none", AllowedDomains: []string{"example.com"}},
+		{Mode: "none", AllowedIPs: []string{"127.0.0.1"}},
+		{Mode: "audit"},
+	} {
+		spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: network}
 		if err := spec.Validate(); err == nil {
-			t.Fatalf("mode %s unexpectedly accepted", mode)
+			t.Fatalf("invalid network policy unexpectedly accepted: %+v", network)
 		}
 	}
 }
