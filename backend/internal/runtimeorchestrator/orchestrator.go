@@ -54,7 +54,7 @@ func NewWithProfile(descriptor platform.RuntimeDescriptor, profile runtimeprofil
 
 func (o *RuntimeOrchestrator) RuntimeProfile() runtimeprofile.Profile {
 	if o == nil {
-		return runtimeprofile.ProfileLocal
+		return ""
 	}
 	return o.profile
 }

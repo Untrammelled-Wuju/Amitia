@@ -42,17 +42,18 @@ func Default() Profile {
 	return ProfileLocal
 }
 
+// Parse parses an explicitly supplied runtime profile. It is intentionally
+// strict: an empty string is not a profile. Callers that want the default must
+// decide that the setting is absent first and call Default themselves.
 func Parse(raw string) (Profile, error) {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	switch s {
 	case "local", "desktop-local":
 		return ProfileLocal, nil
-	case "cloud-core", "cloud", "remote-core":
+	case "cloud-core", "cloud", "remote-core", "cloud-web":
 		return ProfileCloudCore, nil
 	case "device-agent", "device":
 		return ProfileDeviceAgent, nil
-	case "":
-		return Default(), nil
 	default:
 		return "", &InvalidProfileError{Raw: raw}
 	}

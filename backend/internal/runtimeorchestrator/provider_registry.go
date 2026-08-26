@@ -139,8 +139,8 @@ func (r *ProviderRegistry) Build(slot ProviderSlot, providerID string, ctx Provi
 }
 
 func isProfileSupported(factory ProfileAwareProviderFactory, profile runtimeprofile.Profile) bool {
-	if profile == "" {
-		profile = runtimeprofile.ProfileLocal
+	if !profile.IsValid() {
+		return false
 	}
 	for _, supported := range factory.SupportedProfiles() {
 		if supported == profile {
