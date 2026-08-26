@@ -100,7 +100,9 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
 
   Future<void> _refreshConnection() async {
     try {
-      final expectedGen = _lastBridge.state == RuntimeBridgeState.ready ? _lastBridge.generation : 0;
+      final expectedGen = _lastBridge.state == RuntimeBridgeState.ready
+          ? _lastBridge.generation
+          : 0;
       final result = await _connectionSource.resolve(expectedRuntimeGeneration: expectedGen);
       if (!_disposed) {
         _lastConnection = result;
@@ -129,13 +131,16 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
     _lastBridge = snapshot;
 
     final generationChanged = snapshot.generation != previousGeneration;
-    final enteredReady = snapshot.state == RuntimeBridgeState.ready && previousState != RuntimeBridgeState.ready;
-    final leftReady = snapshot.state != RuntimeBridgeState.ready && previousState == RuntimeBridgeState.ready;
+    final enteredReady = snapshot.state == RuntimeBridgeState.ready &&
+        previousState != RuntimeBridgeState.ready;
+    final leftReady = snapshot.state != RuntimeBridgeState.ready &&
+        previousState == RuntimeBridgeState.ready;
     final isTerminalState = snapshot.state == RuntimeBridgeState.stopping ||
         snapshot.state == RuntimeBridgeState.stopped ||
         snapshot.state == RuntimeBridgeState.failed;
 
-    if (enteredReady || (snapshot.state == RuntimeBridgeState.ready && generationChanged)) {
+    if (enteredReady ||
+        (snapshot.state == RuntimeBridgeState.ready && generationChanged)) {
       _refreshConnection();
     } else if (leftReady || isTerminalState) {
       _invalidateConnection();
@@ -211,7 +216,8 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
   required BackendConnectionAvailability connection,
   required TransportStateSnapshot transport,
 }) {
-  if (!runtime.runtimeAvailable && runtime.state == RuntimeBridgeState.unavailable) {
+  if (!runtime.runtimeAvailable &&
+      runtime.state == RuntimeBridgeState.unavailable) {
     return RuntimeStatusSnapshot(
       phase: RuntimeStatusPhase.unavailable,
       runtimeState: runtime.state,
@@ -227,22 +233,11 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
     );
   }
 
-  if (!runtime.runtimeInstalled) {
-    return RuntimeStatusSnapshot(
-      phase: RuntimeStatusPhase.installRequired,
-      runtimeState: runtime.state,
-      runtimeReady: false,
-      runtimeInstalled: false,
-      backendConfigured: _isConnectionConfigured(connection),
-      httpAvailable: false,
-      webSocketConnected: false,
-      businessAvailable: false,
-      generation: runtime.generation,
-      runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
-      primaryError: _deriveConnectionError(connection),
-    );
-  }
-
+  // Runtime lifecycle state is authoritative during bootstrap. In particular,
+  // INSTALLING/FAILED can legitimately exist before a manifest is published.
+  // Do not collapse every `runtimeInstalled == false` snapshot into
+  // installRequired or surface the expected missing backend connection as the
+  // primary error; that masks the actual install/start lifecycle.
   switch (runtime.state) {
     case RuntimeBridgeState.unavailable:
       return RuntimeStatusSnapshot(
@@ -265,15 +260,36 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
         runtimeState: runtime.state,
         runtimeReady: false,
         runtimeInstalled: false,
-        backendConfigured: _isConnectionConfigured(connection),
+        backendConfigured: false,
         httpAvailable: false,
         webSocketConnected: false,
         businessAvailable: false,
         generation: runtime.generation,
         runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
+        primaryError: _mapRuntimeError(runtime.lastError),
       );
 
     case RuntimeBridgeState.stopped:
+      if (!runtime.runtimeInstalled) {
+        return RuntimeStatusSnapshot(
+          phase: RuntimeStatusPhase.failed,
+          runtimeState: runtime.state,
+          runtimeReady: false,
+          runtimeInstalled: false,
+          backendConfigured: false,
+          httpAvailable: false,
+          webSocketConnected: false,
+          businessAvailable: false,
+          generation: runtime.generation,
+          runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
+          primaryError: const RuntimeStatusError(
+            source: RuntimeStatusErrorSource.runtime,
+            code: 'RUNTIME_INSTALL_STATE_INCONSISTENT',
+            message:
+                'Runtime is stopped but no installed runtime manifest is available',
+          ),
+        );
+      }
       return RuntimeStatusSnapshot(
         phase: RuntimeStatusPhase.initializing,
         runtimeState: runtime.state,
@@ -341,6 +357,25 @@ RuntimeStatusSnapshot deriveRuntimeStatus({
       );
 
     case RuntimeBridgeState.ready:
+      if (!runtime.runtimeInstalled) {
+        return RuntimeStatusSnapshot(
+          phase: RuntimeStatusPhase.failed,
+          runtimeState: runtime.state,
+          runtimeReady: false,
+          runtimeInstalled: false,
+          backendConfigured: false,
+          httpAvailable: false,
+          webSocketConnected: false,
+          businessAvailable: false,
+          generation: runtime.generation,
+          runtimeVersion: runtime.manifest?.runtimeVersion ?? '',
+          primaryError: const RuntimeStatusError(
+            source: RuntimeStatusErrorSource.runtime,
+            code: 'RUNTIME_MANIFEST_MISSING',
+            message: 'Runtime reported ready without an installed runtime manifest',
+          ),
+        );
+      }
       return _deriveReadyStatus(runtime, connection, transport);
   }
 }

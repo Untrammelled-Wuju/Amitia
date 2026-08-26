@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/native_bridge/providers/native_bridge_relay_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_phase.dart';
+import '../core/runtime/runtime_bootstrap_snapshot.dart';
 import '../core/runtime/runtime_bridge_provider.dart';
 import '../core/runtime/backend/mobile_backend_providers.dart';
 import '../core/runtime/backend/mobile_deployment_mode.dart';
@@ -41,13 +42,21 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
     final runtimeBootstrap = ref.read(runtimeBootstrapProvider);
     await runtimeBootstrap.initialize();
+    final bootstrapSnapshot = await runtimeBootstrap.snapshots.first;
 
     final config = ref.read(mobileDeploymentConfigProvider);
     final lifecycle = ref.read(mobileBackendLifecycleProvider);
     if (mounted) {
       setState(() => _bootstrapInitialized = true);
     }
-    unawaited(lifecycle.reconcile(config));
+
+    final localBootstrapBlocked = config.mode == MobileDeploymentMode.local &&
+        (bootstrapSnapshot.phase == RuntimeBootstrapPhase.installRequired ||
+            bootstrapSnapshot.phase == RuntimeBootstrapPhase.failed ||
+            bootstrapSnapshot.phase == RuntimeBootstrapPhase.unavailable);
+    if (!localBootstrapBlocked) {
+      unawaited(lifecycle.reconcile(config));
+    }
   }
 
   @override
@@ -76,7 +85,7 @@ class _BootstrapGate extends ConsumerWidget {
       } else {
         final bootstrapAsync = ref.watch(runtimeBootstrapSnapshotProvider);
         content = bootstrapAsync.when(
-          data: (snapshot) => _buildAppForPhase(context, ref, snapshot.phase),
+          data: (snapshot) => _buildAppForSnapshot(snapshot),
           loading: () => const _BootstrapInitializingWidget(),
           error: (_, __) => const _BootstrapErrorWidget(),
         );
@@ -86,20 +95,19 @@ class _BootstrapGate extends ConsumerWidget {
     return Directionality(textDirection: TextDirection.ltr, child: content);
   }
 
-  Widget _buildAppForPhase(
-    BuildContext context,
-    WidgetRef ref,
-    RuntimeBootstrapPhase phase,
-  ) {
-    switch (phase) {
+  Widget _buildAppForSnapshot(RuntimeBootstrapSnapshot snapshot) {
+    switch (snapshot.phase) {
       case RuntimeBootstrapPhase.ready:
       case RuntimeBootstrapPhase.stopped:
       case RuntimeBootstrapPhase.starting:
       case RuntimeBootstrapPhase.stopping:
-      case RuntimeBootstrapPhase.installRequired:
-      case RuntimeBootstrapPhase.failed:
-      case RuntimeBootstrapPhase.unavailable:
         return const AmitiaApp();
+      case RuntimeBootstrapPhase.installRequired:
+        return const _BootstrapInstallRequiredWidget();
+      case RuntimeBootstrapPhase.failed:
+        return _BootstrapFailedWidget(message: snapshot.error?.message);
+      case RuntimeBootstrapPhase.unavailable:
+        return const _BootstrapUnavailableWidget();
       case RuntimeBootstrapPhase.initializing:
         return const _BootstrapInitializingWidget();
     }
@@ -159,6 +167,9 @@ class _BootstrapInstallRequiredWidgetState
         setState(() => _errorMessage = result.error!.message);
       } else if (!result.accepted) {
         setState(() => _errorMessage = '安装命令未被接受');
+      } else {
+        final config = ref.read(mobileDeploymentConfigProvider);
+        unawaited(ref.read(mobileBackendLifecycleProvider).reconcile(config));
       }
     } catch (e) {
       if (mounted) {
@@ -217,15 +228,34 @@ class _BootstrapInstallRequiredWidgetState
 }
 
 class _BootstrapFailedWidget extends StatelessWidget {
-  const _BootstrapFailedWidget();
+  final String? message;
+
+  const _BootstrapFailedWidget({this.message});
 
   @override
   Widget build(BuildContext context) {
+    final detail = message?.trim();
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Stack(
         children: [
-          const Scaffold(body: Center(child: Text('Runtime startup failed'))),
+          Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Runtime startup failed'),
+                    if (detail != null && detail.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(detail, textAlign: TextAlign.center),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
           const DebugLogOverlay(),
         ],
       ),
