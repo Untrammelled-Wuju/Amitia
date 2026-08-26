@@ -46,11 +46,12 @@ jobs:
       - name: Vet GameHost and public protocol
         working-directory: backend
         run: |
-          go vet ./internal/gamehost/... ./pkg/gameplugin/... ./internal/extension/kernel/trusted_service/... ./internal/extension/kernel/amitiax/... ./internal/extension/kernel/manifest_v2/... ./internal/platform/process/... ./cmd/server
+          go vet ./internal/gamehost/... ./pkg/gameplugin/... ./internal/extension/kernel ./internal/extension/kernel/trusted_service/... ./internal/extension/kernel/amitiax/... ./internal/extension/kernel/manifest_v2/... ./internal/platform/process/... ./cmd/server
       - name: Test GameHost and public protocol
         working-directory: backend
         run: |
           go test -count=1 ./internal/gamehost/... ./pkg/gameplugin/... ./internal/extension/kernel/trusted_service/... ./internal/extension/kernel/amitiax/... ./internal/extension/kernel/manifest_v2/... ./internal/platform/process/... ./cmd/server
+          go test -count=1 -run '^(TestPackage(CompatibilityUsesManifestRuntimeSourceOfTruth|PlatformAliases|ModuleCompatibilityChecksMinimumHostVersion|GamePluginNetworkPreflightMatchesRuntimePermissionBoundary|GamePluginArtifactSourcesMustExistInArchive)|TestUnsignedDeveloperSession(Bindings|RejectsEnvironmentWorkspacePolicyAndExpiry))$' ./internal/extension/kernel
       - name: Race-sensitive GameHost packages
         working-directory: backend
         run: |
