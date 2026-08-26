@@ -17,6 +17,7 @@ const (
 	ErrInternal           ErrorCode = "internal"
 	ErrTimeout            ErrorCode = "timeout"
 	ErrCancelled          ErrorCode = "cancelled"
+	ErrConflict           ErrorCode = "conflict"
 )
 
 type HostError struct {

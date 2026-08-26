@@ -91,7 +91,7 @@ func (r *SecretRuntimeIdentityReader) ResolveService(
 		return "", "", "", "", fmt.Errorf("resolve runtime %s: %w", runtimeID, err)
 	}
 
-	moduleID, err := r.topologies.ResolveModuleID(domain.RuntimeInstanceID(runtimeID), domain.ServiceID(serviceID))
+	moduleID, err = r.topologies.ResolveModuleID(domain.RuntimeInstanceID(runtimeID), domain.ServiceID(serviceID))
 	if err != nil {
 		return "", "", "", "", fmt.Errorf("resolve module binding for service %s in runtime %s: %w", serviceID, runtimeID, err)
 	}
