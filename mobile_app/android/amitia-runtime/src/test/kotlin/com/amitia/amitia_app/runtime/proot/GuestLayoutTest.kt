@@ -43,13 +43,13 @@ class GuestLayoutTest {
     }
 
     @Test
-    fun tmpRoot_isTmp() {
-        assertEquals("/tmp", GuestLayout.TMP)
+    fun tmpRoot_isRuntimeTmp() {
+        assertEquals("/run/amitia/tmp", GuestLayout.TMP)
     }
 
     @Test
-    fun tmpIsNotWithinRunRoot() {
-        assertFalse("GuestLayout.TMP must not be within RUN", GuestLayout.TMP.startsWith(GuestLayout.RUN))
+    fun tmpIsWithinWritableRunRoot() {
+        assertTrue("GuestLayout.TMP must be within RUN", GuestLayout.TMP.startsWith(GuestLayout.RUN + "/"))
     }
 
     @Test

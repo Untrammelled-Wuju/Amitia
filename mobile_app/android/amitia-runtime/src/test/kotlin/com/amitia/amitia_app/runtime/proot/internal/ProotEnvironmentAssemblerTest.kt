@@ -34,7 +34,10 @@ class ProotEnvironmentAssemblerTest {
         return RuntimeEnvironmentBuilder { request ->
             RuntimeEnvironmentResult.Success(
                 com.amitia.amitia_app.runtime.proot.RuntimeEnvironment(
-                    hostProcess = mapOf("TMPDIR" to request.hostLayout.runRoot.absolutePath + "/tmp"),
+                    hostProcess = mapOf(
+                        "TMPDIR" to request.hostLayout.runRoot.absolutePath + "/tmp",
+                        "PROOT_TMP_DIR" to request.hostLayout.runRoot.absolutePath + "/proot-tmp",
+                    ),
                     guestRuntime = mapOf(
                         "AMITIA_RUNTIME_ROOT" to GuestLayout.PROGRAM,
                         "AMITIA_SERVER_HOST" to "127.0.0.1",
@@ -60,7 +63,7 @@ class ProotEnvironmentAssemblerTest {
         val layout = createLayout()
         val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())
         val spec = assembler.assembleBackendLaunch(createProgramSource(layout))
-        assertEquals(listOf(GuestLayout.BACKEND_SERVER), spec.command)
+        assertEquals(listOf(GuestLayout.BACKEND_SERVER, "--runtime-profile=local"), spec.command)
     }
 
     @Test
@@ -68,8 +71,8 @@ class ProotEnvironmentAssemblerTest {
         val layout = createLayout()
         val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())
         val spec = assembler.assembleBackendLaunch(createProgramSource(layout))
-        val request = assembler.toProotLaunchRequest(spec, "/usr/lib/libamitia_proot.so")
-        assertEquals(listOf(GuestLayout.BACKEND_SERVER), request.command)
+        val request = assembler.toProotLaunchRequest(spec)
+        assertEquals(listOf(GuestLayout.BACKEND_SERVER, "--runtime-profile=local"), request.command)
         assertEquals(GuestLayout.BACKEND_DIR, request.workingDirectory)
     }
 
@@ -146,4 +149,28 @@ class ProotEnvironmentAssemblerTest {
         val spec2 = assembler.assembleBackendLaunch(createProgramSource(layout))
         assertEquals(spec1.bindMounts.map { it.guest }, spec2.bindMounts.map { it.guest })
     }
+    @Test
+    fun hostProcessEnvironmentIsMergedIntoLaunchEnvironment() {
+        val layout = createLayout()
+        val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())
+        val spec = assembler.assembleBackendLaunch(createProgramSource(layout))
+        assertEquals(layout.runRoot.absolutePath + "/proot-tmp", spec.environment.toMap()["PROOT_TMP_DIR"])
+        assertEquals(GuestLayout.PROGRAM, spec.environment.toMap()["AMITIA_RUNTIME_ROOT"])
+    }
+
+    @Test
+    fun assembleCreatesAllWritableHostMountSources() {
+        val layout = createLayout()
+        val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())
+        assembler.assembleBackendLaunch(createProgramSource(layout))
+
+        for (directory in listOf(layout.configRoot, layout.dataRoot, layout.cacheRoot, layout.logRoot, layout.runRoot, layout.homeRoot)) {
+            assertTrue("expected host directory: ${directory.absolutePath}", directory.isDirectory)
+        }
+        assertTrue(File(layout.runRoot, "tmp").isDirectory)
+        assertTrue(File(layout.runRoot, "proot-tmp").isDirectory)
+        assertTrue(File(layout.dataRoot, "security").isDirectory)
+        assertTrue(File(layout.dataRoot, "workspaces").isDirectory)
+    }
+
 }

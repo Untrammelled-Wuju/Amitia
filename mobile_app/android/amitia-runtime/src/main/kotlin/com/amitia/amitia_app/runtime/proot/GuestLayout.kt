@@ -8,7 +8,8 @@ object GuestLayout {
     const val LOGS = "/var/log/amitia"
     const val RUN = "/run/amitia"
     const val HOME = "/home/amitia"
-    const val TMP = "/tmp"
+    const val TMP = "$RUN/tmp"
+    const val WORKSPACES = "$DATA/workspaces"
 
     const val BACKEND_DIR = "$PROGRAM/backend"
     const val BACKEND_SERVER = "$BACKEND_DIR/amitia-server"
@@ -22,6 +23,8 @@ object GuestLayout {
     const val QDRANT_DIR = "$PROGRAM/qdrant"
     const val QDRANT_BIN = "$QDRANT_DIR/bin/qdrant"
 
+    // SurrealDB remains a valid optional runtime component for platforms/packages
+    // that ship it. The Android embedded package does not currently bundle it.
     const val SURREALDB_DIR = "$PROGRAM/surrealdb"
     const val SURREALDB_BIN = "$SURREALDB_DIR/surreal"
 
@@ -43,7 +46,6 @@ object GuestLayout {
     const val SCRIPTS_NODE_DIR = "$SCRIPTS_DIR/node"
 
     const val MANIFEST_DIR = "$PROGRAM/manifest"
-
     const val LICENSES_DIR = "$PROGRAM/licenses"
 
     const val SECURITY_DIR = "$DATA/security"
@@ -61,7 +63,7 @@ object GuestLayout {
 
     val PROGRAM_SUBDIRS = listOf(
         "backend", "node", "qdrant", "sidecar", "qq-sidecar",
-        "surrealdb", "plugin-host", "task-host", "scripts", "manifest", "licenses",
+        "plugin-host", "task-host", "scripts", "manifest", "licenses",
     )
 
     val ALL_ROOTS = listOf(

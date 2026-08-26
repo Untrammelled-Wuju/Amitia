@@ -1,6 +1,5 @@
 package com.amitia.amitia_app.runtime.proot.internal
 
-import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
 import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
 import com.amitia.amitia_app.runtime.proot.GuestLayout
@@ -10,6 +9,7 @@ import com.amitia.amitia_app.runtime.proot.ProotEnvironment
 import com.amitia.amitia_app.runtime.proot.ProotLaunchRequest
 import com.amitia.amitia_app.runtime.proot.ProotLaunchSpec
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentBuilder
+import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentErrorCode
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentRequest
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentResult
 import java.io.File
@@ -20,6 +20,7 @@ internal open class ProotEnvironmentAssembler(
 ) {
 
     fun assembleRootfsProbe(activeProgramSource: File): ProotLaunchSpec {
+        ensureHostRuntimeDirectories()
         val environment = buildEnvironment()
         val bindMounts = buildBindMounts(activeProgramSource)
 
@@ -33,7 +34,11 @@ internal open class ProotEnvironmentAssembler(
         )
     }
 
-    open fun assembleBackendLaunch(activeProgramSource: File, runtimeProfile: String): ProotLaunchSpec {
+    open fun assembleBackendLaunch(
+        activeProgramSource: File,
+        runtimeProfile: String = "local",
+    ): ProotLaunchSpec {
+        ensureHostRuntimeDirectories()
         val environment = buildEnvironment()
         val bindMounts = buildBindMounts(activeProgramSource)
 
@@ -47,7 +52,7 @@ internal open class ProotEnvironmentAssembler(
         )
     }
 
-    fun toProotLaunchRequest(spec: ProotLaunchSpec, binaryPath: String): ProotLaunchRequest {
+    fun toProotLaunchRequest(spec: ProotLaunchSpec): ProotLaunchRequest {
         return ProotLaunchRequest.create(
             rootfsPath = spec.rootfsPath,
             workingDirectory = spec.workingDirectory,
@@ -66,7 +71,15 @@ internal open class ProotEnvironmentAssembler(
         )
         val envResult = environmentBuilder.build(envRequest)
         return when (envResult) {
-            is RuntimeEnvironmentResult.Success -> ProotEnvironment.of(envResult.environment.guestRuntime)
+            is RuntimeEnvironmentResult.Success -> {
+                // Process-level keys (notably PROOT_TMP_DIR) must reach PRoot.
+                // Guest keys are applied last so HOME/TMPDIR resolve to guest
+                // paths while PRoot-specific host keys remain available.
+                val merged = LinkedHashMap<String, String>()
+                merged.putAll(envResult.environment.hostProcess)
+                merged.putAll(envResult.environment.guestRuntime)
+                ProotEnvironment.of(merged)
+            }
             is RuntimeEnvironmentResult.Failure -> throw ProotEnvironmentException(envResult.code, envResult.message)
         }
     }
@@ -75,9 +88,43 @@ internal open class ProotEnvironmentAssembler(
         val contract = MountContract.build(layout, activeProgramSource)
         return contract.toProotBindMounts()
     }
+
+    private fun ensureHostRuntimeDirectories() {
+        val directories = linkedSetOf(
+            layout.configRoot,
+            layout.dataRoot,
+            layout.cacheRoot,
+            layout.logRoot,
+            layout.runRoot,
+            layout.homeRoot,
+            File(layout.runRoot, "tmp"),
+            File(layout.runRoot, "proot-tmp"),
+            File(layout.dataRoot, "security"),
+            File(layout.dataRoot, "workspaces"),
+            File(layout.dataRoot, "providers/qdrant/storage"),
+            File(layout.configRoot, "providers/qdrant"),
+        )
+        for (directory in directories) {
+            if (directory.exists()) {
+                if (!directory.isDirectory) {
+                    throw ProotEnvironmentException(
+                        RuntimeEnvironmentErrorCode.HOST_LAYOUT_INVALID,
+                        "runtime host path is not a directory: ${directory.absolutePath}",
+                    )
+                }
+                continue
+            }
+            if (!directory.mkdirs() && !directory.isDirectory) {
+                throw ProotEnvironmentException(
+                    RuntimeEnvironmentErrorCode.HOST_LAYOUT_INVALID,
+                    "failed to create runtime host directory: ${directory.absolutePath}",
+                )
+            }
+        }
+    }
 }
 
 internal class ProotEnvironmentException(
-    val code: com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentErrorCode,
+    val code: RuntimeEnvironmentErrorCode,
     override val message: String,
 ) : RuntimeException(message)

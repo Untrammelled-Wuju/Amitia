@@ -136,6 +136,19 @@ class DefaultInstalledRuntimeVerifierTest {
         )
     }
 
+
+    @Test
+    fun verify_fails_whenBackendIsNotExecutable() {
+        val runtimeRoot = tempFolder.newFolder("runtime-backend-not-executable")
+        createMinimalRuntimeStructure(runtimeRoot)
+        File(runtimeRoot, "backend/amitia-server").setExecutable(false)
+
+        val result = createVerifier().verify(runtimeRoot)
+
+        assertTrue(result is InstalledRuntimeVerificationResult.Failure)
+        assertTrue((result as InstalledRuntimeVerificationResult.Failure).message.contains("not executable"))
+    }
+
     @Test
     fun verify_succeeds_withCompleteStructure() {
         val runtimeRoot = tempFolder.newFolder("runtime-complete")
@@ -173,23 +186,23 @@ class DefaultInstalledRuntimeVerifierTest {
     ) {
         if (includeBackend) {
             File(root, "backend").mkdirs()
-            File(root, "backend/amitia-server").writeText("dummy backend binary")
+            File(root, "backend/amitia-server").apply { writeText("dummy backend binary"); setExecutable(true) }
         }
         if (includeNode) {
             File(root, "node/bin").mkdirs()
-            File(root, "node/bin/node").writeText("dummy node binary")
+            File(root, "node/bin/node").apply { writeText("dummy node binary"); setExecutable(true) }
             File(root, "node/lib/node_modules/npm/bin").mkdirs()
             File(root, "node/lib/node_modules/npm/bin/npm-cli.js").writeText("npm cli")
             File(root, "node/lib/node_modules/npm/bin/npx-cli.js").writeText("npx cli")
         }
         if (includeScripts) {
             File(root, "scripts/node").mkdirs()
-            File(root, "scripts/node/amitia-node-prepare.sh").writeText("#!/bin/bash")
-            File(root, "scripts/node/amitia-node-probe.sh").writeText("#!/bin/bash")
+            File(root, "scripts/node/amitia-node-prepare.sh").apply { writeText("#!/bin/bash"); setExecutable(true) }
+            File(root, "scripts/node/amitia-node-probe.sh").apply { writeText("#!/bin/bash"); setExecutable(true) }
         }
         if (includeQdrant) {
             File(root, "qdrant/bin").mkdirs()
-            File(root, "qdrant/bin/qdrant").writeText("dummy qdrant binary")
+            File(root, "qdrant/bin/qdrant").apply { writeText("dummy qdrant binary"); setExecutable(true) }
         }
         if (includePluginHost) {
             File(root, "plugin-host/dist").mkdirs()

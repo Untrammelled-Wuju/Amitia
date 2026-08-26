@@ -287,9 +287,10 @@ internal class DefaultRuntimeController(
         }
         if (!session.isAlive()) {
             activeDetectorGeneration.compareAndSet(generation, -1L)
+            val exitCode = session.exit?.exitCode ?: session.awaitExit(0L)
             failSessionReadyPrecondition(
                 generation = generation,
-                message = "startup session exited before detection could start",
+                message = "startup session exited before detection could start (exitCode=${exitCode ?: "unknown"})",
                 phase = "session_ready_dead",
             )
             return

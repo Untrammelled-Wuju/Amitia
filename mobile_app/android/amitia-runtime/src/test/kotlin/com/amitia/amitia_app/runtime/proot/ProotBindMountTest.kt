@@ -1,6 +1,7 @@
-﻿package com.amitia.amitia_app.runtime.proot
+package com.amitia.amitia_app.runtime.proot
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class ProotBindMountTest {
@@ -19,4 +20,10 @@ class ProotBindMountTest {
     @Test(expected = IllegalArgumentException::class) fun guest_nul_fails() { ProotBindMount.create("/host", "/mnt\u0000") }
     @Test(expected = IllegalArgumentException::class) fun host_escape_sdcard_fails() { ProotBindMount.create("/data/local/tmp/../../sdcard", "/mnt") }
     @Test fun valid_runtime_root_bind() { val m = ProotBindMount.create("/data/user/0/app/files/runtime", "/opt/amitia"); assertEquals("/data/user/0/app/files/runtime", m.host); assertEquals("/opt/amitia", m.guest) }
+
+    @Test fun read_only_to_string_is_not_command_syntax() {
+        val m = ProotBindMount.create("/host", "/mnt", readOnly = true)
+        assertEquals("/host:/mnt [readOnly]", m.toString())
+        assertFalse(m.toString().endsWith(":ro"))
+    }
 }
