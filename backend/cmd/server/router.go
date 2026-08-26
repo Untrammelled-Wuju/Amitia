@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -133,7 +132,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 
 	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
 
-	tokenPath := filepath.Join(config.AppCfg.Storage.DataDir, "security", "local-token")
+	tokenPath := configuredLocalCredentialPath(config.AppCfg.Storage.DataDir)
 	localCredentialStore, err := security.NewLocalCredentialStore(tokenPath)
 	if err != nil {
 		return nil, fmt.Errorf("initialize local credential store: %w", err)

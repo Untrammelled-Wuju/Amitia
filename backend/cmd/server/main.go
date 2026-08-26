@@ -73,11 +73,14 @@ func main() {
 	profile := profileResolution.Profile
 	policy := runtimeprofile.PolicyFor(profile)
 
-	resolvedToken := config.AppCfg.Security.LocalToken
-	if resolvedToken == "" && config.AppCfg.Security.LocalTokenFile != "" {
-		if data, rerr := os.ReadFile(config.AppCfg.Security.LocalTokenFile); rerr == nil {
-			resolvedToken = strings.TrimSpace(string(data))
-		}
+	config.AppCfg.Storage.DataDir = util.RuntimeDataDir(runtimeRoot, config.AppCfg.Storage.DataDir)
+	config.AppCfg.Providers.GraphStore.SurrealDB.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Providers.GraphStore.SurrealDB.DataPath)
+
+	resolvedToken, securityBootstrapErr := prepareSecurityMaterial(config.AppCfg.Storage.DataDir)
+	if securityBootstrapErr != nil {
+		log.Error("本地安全材料初始化失败:", securityBootstrapErr)
+		fmt.Fprintf(os.Stderr, "本地安全材料初始化失败: %v\n", securityBootstrapErr)
+		os.Exit(1)
 	}
 
 	secCfg := &security.SecurityConfig{
@@ -106,9 +109,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-
-	config.AppCfg.Storage.DataDir = util.RuntimeDataDir(runtimeRoot, config.AppCfg.Storage.DataDir)
-	config.AppCfg.Providers.GraphStore.SurrealDB.DataPath = util.ResolveRuntimePath(runtimeRoot, config.AppCfg.Providers.GraphStore.SurrealDB.DataPath)
 
 	logDir := util.RuntimeLogDir(runtimeRoot)
 	log.InitLogger(logDir)
@@ -143,11 +143,7 @@ func main() {
 		log.Error("创建运行时宿主失败:", bootErr)
 		os.Exit(1)
 	}
-	var graphSvc graph.Service
-	if policy.GraphStore && config.AppCfg.Providers.GraphStore.Enabled {
-		graphSvc = initGraph()
-	}
-	if err := bootstrap.RegisterInfrastructure(sqlDB, graphSvc); err != nil {
+	if err := bootstrap.RegisterInfrastructure(sqlDB); err != nil {
 		log.Error("基础设施注册失败:", err)
 		os.Exit(1)
 	}
@@ -155,7 +151,7 @@ func main() {
 		log.Error("基础设施启动失败:", err)
 		os.Exit(1)
 	}
-	bootstrap.SetGraphService(graphSvc)
+	graphSvc := bootstrap.GraphService()
 	services, err := NewAppServices(ctx, graphSvc, bootstrap, profile, policy)
 	if err != nil {
 		log.Error("应用服务初始化失败:", err)
