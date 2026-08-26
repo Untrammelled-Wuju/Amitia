@@ -342,6 +342,9 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 		if generationErr == nil && forwardErr == nil {
 			forwardErr = r.rebindPackageInstallationGeneration(context.Background(), stableGeneration, forwardPoint.InstalledPath)
 		}
+		if generationErr == nil && forwardErr == nil {
+			forwardErr = r.prepareGameHostExtensionAfterPackageGenerationChange(context.Background(), extensionID)
+		}
 		if generationErr != nil || forwardErr != nil {
 			detail := errors.Join(cause, generationErr, forwardErr)
 			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "forward_recovery_failed", "PACKAGE_RECOVERY_REQUIRED", detail.Error(), false, guard)
@@ -464,11 +467,21 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	if err := leaseGuard.AssertAlive(ctx); err != nil {
 		return KernelInstallResult{}, compensateRollback("renew_lease", err)
 	}
+	if err := r.prepareGameHostExtensionAfterPackageGenerationChange(ctx, extensionID); err != nil {
+		return KernelInstallResult{}, compensateRollback("prepare_game_host_generation", err)
+	}
 	if err := r.FinalizePackageOperation(ctx, op.OperationID, extensionID, leaseGuard, guard); err != nil {
 		compErr := r.compensatePackageGeneration(context.Background(), stableGeneration, targetGeneration, true)
 		restoreErr := r.restoreForwardPackagePoint(context.Background(), forwardPoint)
-		rebindErr := r.rebindPackageInstallationGeneration(context.Background(), stableGeneration, forwardPoint.InstalledPath)
-		compensationErr := errors.Join(compErr, restoreErr, rebindErr)
+		var rebindErr error
+		if compErr == nil && restoreErr == nil {
+			rebindErr = r.rebindPackageInstallationGeneration(context.Background(), stableGeneration, forwardPoint.InstalledPath)
+		}
+		var gameHostErr error
+		if compErr == nil && restoreErr == nil && rebindErr == nil {
+			gameHostErr = r.prepareGameHostExtensionAfterPackageGenerationChange(context.Background(), extensionID)
+		}
+		compensationErr := errors.Join(compErr, restoreErr, rebindErr, gameHostErr)
 		if compensationErr != nil {
 			return KernelInstallResult{}, errors.Join(err, fmt.Errorf("rollback compensation failed: %w", compensationErr))
 		}
@@ -1238,6 +1251,10 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	if err := r.container.PackageRepository.ReleaseQuarantineMetadata(ctx, finalizeQM.QuarantineID, uninstallGuard); err != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "release_quarantine", PackageErrCodeQuarantineReleaseFailed, err.Error(), false, uninstallGuard)
 		return op, errors.Join(err, persistErr)
+	}
+	if err := r.finalizeGameHostExtensionUninstall(ctx, extensionID); err != nil {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "cleanup_gamehost_authority", "PACKAGE_GAMEHOST_AUTHORITY_CLEANUP_FAILED", err.Error(), false, uninstallGuard)
+		return op, errors.Join(fmt.Errorf("kernel: cleanup gamehost authority after uninstall: %w", err), persistErr)
 	}
 	if err := r.FinalizePackageOperation(ctx, op.OperationID, extensionID, leaseGuard, uninstallGuard); err != nil {
 		return op, err

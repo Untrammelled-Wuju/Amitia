@@ -389,6 +389,9 @@ func (f *PackageRecoveryFinalizer) FinalizeUpdateRecovery(ctx context.Context, o
 			return err
 		}
 	}
+	if err := f.r.prepareGameHostExtensionAfterPackageGenerationChange(ctx, operation.ExtensionID); err != nil {
+		return f.r.requirePackageRecovery(ctx, operation, "update game host generation preparation failed during recovery", err, guard)
+	}
 	if err := f.runRecoveryFinalGate(ctx, operation, guard, completed); err != nil {
 		return f.r.requirePackageRecovery(ctx, operation, "update final gate failed during recovery", err, guard)
 	}
@@ -427,6 +430,9 @@ func (f *PackageRecoveryFinalizer) FinalizeRollbackRecovery(ctx context.Context,
 			return err
 		}
 	}
+	if err := f.r.prepareGameHostExtensionAfterPackageGenerationChange(ctx, operation.ExtensionID); err != nil {
+		return f.r.requirePackageRecovery(ctx, operation, "rollback game host generation preparation failed during recovery", err, guard)
+	}
 	if err := f.runRecoveryFinalGate(ctx, operation, guard, completed); err != nil {
 		return f.r.requirePackageRecovery(ctx, operation, "rollback final gate failed during recovery", err, guard)
 	}
@@ -454,6 +460,9 @@ func (f *PackageRecoveryFinalizer) FinalizeUninstallRecovery(ctx context.Context
 		if err := f.releaseOperationReference(ctx, operation, guard, completed); err != nil {
 			return err
 		}
+	}
+	if err := f.r.finalizeGameHostExtensionUninstall(ctx, operation.ExtensionID); err != nil {
+		return f.r.requirePackageRecovery(ctx, operation, "gamehost authority cleanup failed during uninstall recovery", err, guard)
 	}
 	if err := f.runRecoveryFinalGate(ctx, operation, guard, completed); err != nil {
 		return f.r.requirePackageRecovery(ctx, operation, "uninstall final gate failed during recovery", err, guard)

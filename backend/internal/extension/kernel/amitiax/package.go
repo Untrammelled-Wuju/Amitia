@@ -27,6 +27,7 @@ const (
 	ModulesDir           = "modules/"
 	ResourcesDir         = "resources/"
 	AssetsDir            = "assets/"
+	ArtifactsDir         = "artifacts/"
 	MigrationsDir        = "migrations/"
 	LicensesDir          = "licenses/"
 	DocsDir              = "docs/"
@@ -42,6 +43,7 @@ var allowedRootDirs = map[string]bool{
 	"modules":       true,
 	"resources":     true,
 	"assets":        true,
+	"artifacts":     true,
 	"migrations":    true,
 	"licenses":      true,
 	"docs":          true,
@@ -65,6 +67,7 @@ type PackageLayout struct {
 	Modules         map[string]string
 	Resources       []string
 	Assets          []string
+	Artifacts       []string
 	Migrations      []string
 	Licenses        []string
 	Docs            []string
@@ -263,6 +266,8 @@ func categorizeEntry(name string, layout *PackageLayout) {
 		layout.Resources = append(layout.Resources, name)
 	case "assets":
 		layout.Assets = append(layout.Assets, name)
+	case "artifacts":
+		layout.Artifacts = append(layout.Artifacts, name)
 	case "migrations":
 		layout.Migrations = append(layout.Migrations, name)
 	case "licenses":

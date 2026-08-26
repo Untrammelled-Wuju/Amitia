@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"runtime"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
-	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
-	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (InstallPreview, error) {
@@ -81,42 +79,12 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 		}
 	}
 
-	// Game plugins are device-local. Validate network isolation support during
-	// preview so an unsupported host/platform combination is rejected before
-	// installation instead of failing only when the Runtime is started.
-	for moduleIndex, mod := range manifest.Modules {
-		for contributionIndex, contribution := range mod.Contributions {
-			if string(contribution.Kind) != "game_plugin" {
-				continue
-			}
-			spec, specErr := gameprotocol.ParsePluginHostSpec(contribution.Spec)
-			if specErr != nil || spec.Network == nil {
-				continue // manifest validation reports malformed specs separately
-			}
-			mode := strings.ToLower(strings.TrimSpace(spec.Network.Mode))
-			policy := trusted_service.ServiceNetworkPolicy{Mode: mode, Enforce: true}
-			switch mode {
-			case "loopback":
-				policy.AllowOutbound = true
-				policy.LoopbackOnly = true
-			case "restricted":
-				policy.RequireProxy = true
-				policy.AllowedDomains = append([]string(nil), spec.Network.AllowedDomains...)
-				policy.AllowedIPs = append([]string(nil), spec.Network.AllowedIPs...)
-				policy.AllowedPorts = append([]int(nil), spec.Network.AllowedPorts...)
-			case "unrestricted":
-				policy.AllowOutbound = true
-			}
-			if policyErr := trusted_service.ValidateNetworkPolicySupport(policy); policyErr != nil {
-				installable = false
-				preview.Issues = append(preview.Issues, PreviewIssue{
-					Category: PreviewNotInstallable,
-					Code:     "game_plugin_network_platform_unsupported",
-					Message:  fmt.Sprintf("game plugin network mode %q is unavailable on this host: %v", mode, policyErr),
-					Path:     fmt.Sprintf("modules[%d].contributions[%d].spec.network", moduleIndex, contributionIndex),
-				})
-			}
-		}
+	compatibilityIssueCount := len(preview.Issues)
+	appendPackageHostCompatibilityIssues(manifest, &preview)
+	appendGamePluginNetworkCompatibilityIssues(manifest, &preview)
+	appendGamePluginArtifactPackageIssues(pkg, &preview)
+	if len(preview.Issues) != compatibilityIssueCount {
+		installable = false
 	}
 
 	for _, e := range report.Errors {
@@ -132,17 +100,10 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 		})
 	}
 
-	supportedModuleTypes := map[string]bool{
-		"builtin": true, "javascript": true, "data_only": true,
-	}
-	supportedRuntimeTypes := map[string]bool{
-		"javascript": true, "mcp": true, "workflow": true, "static": true,
-	}
+	platform := normalizePackagePlatform(runtime.GOOS)
+	hostVersion := currentPackageHostVersion()
 	for _, mod := range manifest.Modules {
-		supported := supportedModuleTypes[mod.Type]
-		if mod.Runtime != nil && mod.Runtime.Type != "" {
-			supported = supported && supportedRuntimeTypes[mod.Runtime.Type]
-		}
+		supported := packageModuleSupported(mod, platform, hostVersion)
 		runtimeType := ""
 		if mod.Runtime != nil {
 			runtimeType = mod.Runtime.Type
@@ -154,6 +115,14 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 			Runtime:   runtimeType,
 			Supported: supported,
 		})
+		if !supported {
+			installable = false
+			preview.Issues = append(preview.Issues, PreviewIssue{
+				Category: PreviewPartialUnsupported,
+				Code:     "unsupported_module",
+				Message:  mod.ID,
+			})
+		}
 	}
 
 	if r.container != nil {

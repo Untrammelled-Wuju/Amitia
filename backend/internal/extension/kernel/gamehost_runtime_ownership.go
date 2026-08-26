@@ -78,3 +78,17 @@ func (r *Runtime) reconcileGameHostExtension(ctx context.Context, extensionID st
 	}
 	return r.container.GameHost.ReconcileExtension(ctx, extensionID)
 }
+
+func (r *Runtime) finalizeGameHostExtensionUninstall(ctx context.Context, extensionID string) error {
+	if r == nil || r.container == nil || r.container.GameHost == nil {
+		return nil
+	}
+	return r.container.GameHost.FinalizeExtensionUninstall(ctx, extensionID)
+}
+
+func (r *Runtime) prepareGameHostExtensionAfterPackageGenerationChange(ctx context.Context, extensionID string) error {
+	if r == nil || r.container == nil || r.container.GameHost == nil {
+		return nil
+	}
+	return r.container.GameHost.PrepareExtensionAfterPackageGenerationChange(ctx, extensionID)
+}

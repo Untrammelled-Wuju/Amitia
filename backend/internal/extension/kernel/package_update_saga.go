@@ -387,9 +387,9 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err := r.recordPackageVersionAfterOperation(ctx, op.OperationID, "update", confirmed.session.ExtensionID, confirmed.session.Version, confirmed.artifact.ArtifactID, targetGeneration.GenerationPath, targetGeneration.Current.TreeHash, confirmed.artifact.ArchiveHash, confirmed.artifact.ManifestHash, confirmed.artifact.ContentTreeHash, targetGeneration.Current.GenerationID, guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "record_version", err, compensation, guard)
 	}
-	if err := r.reconcileGameHostExtension(ctx, confirmed.session.ExtensionID); err != nil {
-		failErr := r.failPackageUpdateOperation(op.OperationID, "reconcile_game_host", err, compensation, guard)
-		_ = r.reconcileGameHostExtension(context.Background(), confirmed.session.ExtensionID)
+	if err := r.prepareGameHostExtensionAfterPackageGenerationChange(ctx, confirmed.session.ExtensionID); err != nil {
+		failErr := r.failPackageUpdateOperation(op.OperationID, "prepare_game_host_generation", err, compensation, guard)
+		_ = r.prepareGameHostExtensionAfterPackageGenerationChange(context.Background(), confirmed.session.ExtensionID)
 		return KernelInstallResult{}, failErr
 	}
 	if err := r.FinalizePackageOperation(ctx, op.OperationID, confirmed.session.ExtensionID, leaseGuard, guard); err != nil {
@@ -524,6 +524,11 @@ func (c *packageUpdateCompensation) run() error {
 	}
 	if err := c.runtime.restorePackageMigrationState(context.Background(), c.rollbackPoint); err != nil {
 		failures = append(failures, err)
+	}
+	if c.repositoriesCommitted || c.switched {
+		if err := c.runtime.prepareGameHostExtensionAfterPackageGenerationChange(context.Background(), c.rollbackPoint.ExtensionID); err != nil {
+			failures = append(failures, fmt.Errorf("restore game host generation state: %w", err))
+		}
 	}
 	return errors.Join(failures...)
 }

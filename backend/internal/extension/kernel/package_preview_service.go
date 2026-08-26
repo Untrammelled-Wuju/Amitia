@@ -23,7 +23,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
 )
 
-const packagePolicyVersion = "2026-07-30-v1"
+const packagePolicyVersion = "2026-08-26-v3"
 
 func CurrentPackagePolicyVersion() string {
 	return packagePolicyVersion
@@ -139,6 +139,9 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		preview.TrustDecision = "rejected"
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "trust_policy_rejected", Message: reason})
 	}
+	appendPackageHostCompatibilityIssues(pkg.Manifest, &preview)
+	appendGamePluginNetworkCompatibilityIssues(pkg.Manifest, &preview)
+	appendGamePluginArtifactPackageIssues(pkg, &preview)
 	r.evaluatePackageCompatibilityAndDependencies(ctx, pkg, &preview)
 	r.evaluatePackageUpdateRisks(ctx, &preview)
 	r.evaluatePackageMigrationPreflight(ctx, pkg.Manifest, &preview)
@@ -272,30 +275,10 @@ func (r *Runtime) packageUnsignedDevAllowed(request PackagePreviewRequest, exten
 }
 
 func (r *Runtime) validateUnsignedDeveloperSession(sessionID, userID, extensionID string) error {
-	if !packageDevelopmentModeEnabled() {
-		return fmt.Errorf("kernel: developer mode is disabled")
-	}
-	if sessionID == "" || userID == "" || extensionID == "" || r.container == nil || r.container.DevModeSessions == nil || r.container.DevModeRegistry == nil {
+	if r.container == nil {
 		return fmt.Errorf("kernel: developer session binding unavailable")
 	}
-	session, err := r.container.DevModeSessions.Validate(sessionID)
-	if err != nil {
-		return err
-	}
-	if session.UserID != userID || string(session.ExtensionID) != extensionID || session.PolicyVersion != packagePolicyVersion || session.Environment != "development" || !session.DevTrustSnapshot {
-		return fmt.Errorf("kernel: developer session binding mismatch")
-	}
-	workspace, err := r.container.DevModeRegistry.Get(session.WorkspaceID)
-	if err != nil {
-		return err
-	}
-	if workspace.OwnerUserID != userID || string(workspace.ExtensionID) != extensionID || !workspace.DevTrust || workspace.DevTrustVersion != session.DevTrustVersion {
-		return fmt.Errorf("kernel: developer workspace trust invalid")
-	}
-	if len(session.Scopes) != 1 || session.Scopes[0] != "extensions.install.unsigned" {
-		return fmt.Errorf("kernel: developer session scope invalid")
-	}
-	return nil
+	return validateDeveloperSessionBinding(r.container.DevModeSessions, r.container.DevModeRegistry, sessionID, userID, extensionID)
 }
 
 func (r *Runtime) evaluatePackageUpdateRisks(ctx context.Context, preview *InstallPreview) {
@@ -323,18 +306,13 @@ func (r *Runtime) evaluatePackageUpdateRisks(ctx context.Context, preview *Insta
 }
 
 func (r *Runtime) evaluatePackageCompatibilityAndDependencies(ctx context.Context, pkg *amitiax.Package, preview *InstallPreview) {
-	supportedModules := map[string]bool{"builtin": true, "javascript": true, "data_only": true, "wasm": true}
-	supportedRuntimes := map[string]bool{"javascript": true, "mcp": true, "workflow": true, "static": true, "wasm": true}
-	platform := runtime.GOOS
+	platform := normalizePackagePlatform(runtime.GOOS)
+	hostVersion := currentPackageHostVersion()
 	for _, mod := range pkg.Manifest.Modules {
-		supported := supportedModules[mod.Type]
+		supported := packageModuleSupported(mod, platform, hostVersion)
 		runtimeType := ""
 		if mod.Runtime != nil {
 			runtimeType = mod.Runtime.Type
-			supported = supported && supportedRuntimes[runtimeType]
-		}
-		if mod.Compatibility != nil && len(mod.Compatibility.Platforms) > 0 && !containsPackageString(mod.Compatibility.Platforms, platform) {
-			supported = false
 		}
 		preview.Modules = append(preview.Modules, PreviewModule{ID: mod.ID, Name: mod.Name.Default, Type: mod.Type, Runtime: runtimeType, Supported: supported})
 		if !supported {
@@ -401,13 +379,4 @@ func uniquePackageStrings(values []string) []string {
 	}
 	sort.Strings(result)
 	return result
-}
-
-func containsPackageString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }
