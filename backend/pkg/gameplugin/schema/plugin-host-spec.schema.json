@@ -237,15 +237,53 @@
           "enum": [
             "none",
             "loopback",
+            "restricted",
             "unrestricted"
           ]
+        },
+        "allowedDomains": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 253 }
+        },
+        "allowedIPs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 2, "maxLength": 45 }
+        },
+        "allowedPorts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
         }
       },
       "additionalProperties": false,
       "required": [
         "mode"
       ],
-      "description": "Explicit protocol-v1 network intent. Host/platform support is validated before provisioning and unsupported combinations fail closed; unrestricted additionally requires service.network.request."
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "restricted" } } },
+          "then": {
+            "required": ["allowedPorts"],
+            "anyOf": [
+              { "required": ["allowedDomains"], "properties": { "allowedDomains": { "minItems": 1 } } },
+              { "required": ["allowedIPs"], "properties": { "allowedIPs": { "minItems": 1 } } }
+            ],
+            "properties": {
+              "allowedPorts": { "minItems": 1 }
+            }
+          },
+          "else": {
+            "properties": {
+              "allowedDomains": { "maxItems": 0 },
+              "allowedIPs": { "maxItems": 0 },
+              "allowedPorts": { "maxItems": 0 }
+            }
+          }
+        }
+      ],
+      "description": "Explicit protocol-v1 network intent. Restricted keeps the plugin process network-isolated and allows only host-mediated requests matching allowedDomains/allowedIPs/allowedPorts; restricted and unrestricted require service.network.request."
     },
     "metadata": {
       "type": "object",

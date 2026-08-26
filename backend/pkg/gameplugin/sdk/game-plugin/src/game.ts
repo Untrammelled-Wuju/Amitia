@@ -1,4 +1,4 @@
-import type { HostFeature } from './protocol';
+import type { ChannelDirection, FrequencyHint, HostFeature } from './protocol';
 
 export type PluginSessionStatus = 'created' | 'connecting' | 'ready' | 'paused' | 'closed' | 'failed';
 export type PluginOperationStatus = 'succeeded' | 'failed' | 'cancelled' | 'rejected';
@@ -59,7 +59,13 @@ export interface PluginArtifact {
 }
 
 export interface PluginNetworkPolicy {
-  mode: 'none' | 'loopback' | 'unrestricted';
+  mode: 'none' | 'loopback' | 'restricted' | 'unrestricted';
+  /** Exact hosts or wildcard subdomains such as *.example.com. Restricted mode only. */
+  allowedDomains?: string[];
+  /** Exact IP literals (IPv4 or IPv6). Restricted mode only. */
+  allowedIPs?: string[];
+  /** Explicit destination TCP ports. Restricted mode only. */
+  allowedPorts?: number[];
 }
 
 export interface PluginServiceSpec {
@@ -77,6 +83,10 @@ export interface PluginChannelSpec {
   serviceId?: string;
   kind: 'event' | 'state' | 'log' | 'metric' | 'custom' | 'binary';
   schemaId?: string;
+  /** Channel flow direction. Omitted defaults to plugin_to_host for backward compatibility. */
+  direction?: ChannelDirection;
+  /** Informational expected message-frequency hint; the host does not treat this as rate limiting. */
+  frequencyHint?: FrequencyHint;
   metadata?: Record<string, string>;
 }
 

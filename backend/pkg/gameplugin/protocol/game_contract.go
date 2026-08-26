@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"path"
 	"sort"
 	"strings"
@@ -125,13 +126,15 @@ type PluginArtifact struct {
 	SHA256                string   `json:"sha256,omitempty"`
 }
 
-// PluginNetworkPolicy defines the protocol-v1 network intent. Concrete OS
-// backends are host capabilities: provisioning MUST validate the requested
-// mode on the target platform and fail closed rather than silently weaken it.
-// Restricted domain/port filtering and packet auditing are intentionally not
-// part of protocol v1 until a real cross-platform backend exists.
+// PluginNetworkPolicy defines the protocol-v1 network intent. Restricted
+// mode never grants the plugin process ambient network access: the child stays
+// network-isolated and may only use the host.network.request Host API, which
+// enforces this allowlist again at DNS, redirect, address and port boundaries.
 type PluginNetworkPolicy struct {
-	Mode string `json:"mode,omitempty"`
+	Mode           string   `json:"mode,omitempty"`
+	AllowedDomains []string `json:"allowedDomains,omitempty"`
+	AllowedIPs     []string `json:"allowedIPs,omitempty"`
+	AllowedPorts   []int    `json:"allowedPorts,omitempty"`
 }
 
 type PluginServiceSpec struct {
@@ -379,7 +382,7 @@ func (s PluginHostSpec) Validate() error {
 	}
 
 	if s.Network == nil {
-		return fmt.Errorf("network policy is required; choose none, loopback, or unrestricted explicitly")
+		return fmt.Errorf("network policy is required; choose none, loopback, restricted, or unrestricted explicitly")
 	}
 	mode := strings.ToLower(strings.TrimSpace(s.Network.Mode))
 	if mode == "" {
@@ -387,6 +390,13 @@ func (s PluginHostSpec) Validate() error {
 	}
 	switch mode {
 	case "none", "loopback", "unrestricted":
+		if len(s.Network.AllowedDomains) != 0 || len(s.Network.AllowedIPs) != 0 || len(s.Network.AllowedPorts) != 0 {
+			return fmt.Errorf("network allowlists are only valid for restricted mode")
+		}
+	case "restricted":
+		if err := validateRestrictedNetworkAllowlist(s.Network.AllowedDomains, s.Network.AllowedIPs, s.Network.AllowedPorts); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported network mode %q", s.Network.Mode)
 	}
@@ -421,6 +431,78 @@ func (s PluginHostSpec) Validate() error {
 		}
 	}
 	return nil
+}
+
+func validateRestrictedNetworkAllowlist(domains, ips []string, ports []int) error {
+	if len(domains) == 0 && len(ips) == 0 {
+		return fmt.Errorf("restricted mode requires at least one network.allowedDomains or network.allowedIPs entry")
+	}
+	if len(ports) == 0 {
+		return fmt.Errorf("network.allowedPorts is required for restricted mode")
+	}
+	seenDomains := make(map[string]struct{}, len(domains))
+	for _, raw := range domains {
+		domain := strings.ToLower(strings.TrimSpace(raw))
+		if domain == "" || strings.ContainsAny(domain, "/:@?#\\") || strings.HasSuffix(domain, ".") {
+			return fmt.Errorf("invalid restricted network domain %q", raw)
+		}
+		if strings.HasPrefix(domain, "*.") {
+			domain = strings.TrimPrefix(domain, "*.")
+		}
+		if domain == "" || strings.Contains(domain, "*") || !validDNSName(domain) {
+			return fmt.Errorf("invalid restricted network domain %q", raw)
+		}
+		key := strings.ToLower(strings.TrimSpace(raw))
+		if _, exists := seenDomains[key]; exists {
+			return fmt.Errorf("duplicate restricted network domain %q", raw)
+		}
+		seenDomains[key] = struct{}{}
+	}
+	seenIPs := make(map[netip.Addr]struct{}, len(ips))
+	for _, raw := range ips {
+		value := strings.TrimSpace(raw)
+		addr, err := netip.ParseAddr(value)
+		if err != nil || addr.Zone() != "" {
+			return fmt.Errorf("invalid restricted network IP %q", raw)
+		}
+		addr = addr.Unmap()
+		if !addr.IsValid() || addr.IsUnspecified() || addr.IsMulticast() {
+			return fmt.Errorf("invalid restricted network IP %q", raw)
+		}
+		if _, exists := seenIPs[addr]; exists {
+			return fmt.Errorf("duplicate restricted network IP %q", raw)
+		}
+		seenIPs[addr] = struct{}{}
+	}
+	seenPorts := make(map[int]struct{}, len(ports))
+	for _, port := range ports {
+		if port < 1 || port > 65535 {
+			return fmt.Errorf("invalid restricted network port %d", port)
+		}
+		if _, exists := seenPorts[port]; exists {
+			return fmt.Errorf("duplicate restricted network port %d", port)
+		}
+		seenPorts[port] = struct{}{}
+	}
+	return nil
+}
+
+func validDNSName(value string) bool {
+	if len(value) == 0 || len(value) > 253 {
+		return false
+	}
+	labels := strings.Split(value, ".")
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, ch := range label {
+			if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '-' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func findServiceDependencyCycle(graph map[string][]string) []string {

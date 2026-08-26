@@ -10,6 +10,7 @@ import {
   ErrorCode,
 } from '../src/protocol';
 import { Client, FixedIDGenerator } from '../src/client';
+import type { PluginChannelSpec, PluginHostSpec } from '../src/game';
 import {
   validateMessageId,
   validateMethod,
@@ -313,6 +314,27 @@ describe('TypeScript Conformance Suite', () => {
         expect(env.error!.code).toBe(code);
       }
     });
+  });
+});
+
+describe('Plugin Host Spec Type Conformance', () => {
+  test('public PluginChannelSpec exposes canonical direction and frequencyHint fields', () => {
+    const channels: PluginChannelSpec[] = [
+      { id: 'plugin-events', kind: 'event', direction: 'plugin_to_host', frequencyHint: 'normal' },
+      { id: 'host-commands', kind: 'custom', direction: 'host_to_plugin', frequencyHint: 'high' },
+      { id: 'shared-state', kind: 'state', direction: 'bidirectional', frequencyHint: 'realtime' },
+    ];
+
+    const spec: PluginHostSpec = {
+      protocolVersion: PROTOCOL_VERSION,
+      runtimeModuleId: 'runtime',
+      channels,
+      network: { mode: 'none' },
+    };
+
+    expect(spec.channels).toEqual(channels);
+    expect(spec.channels?.[1].direction).toBe('host_to_plugin');
+    expect(spec.channels?.[2].frequencyHint).toBe('realtime');
   });
 });
 
