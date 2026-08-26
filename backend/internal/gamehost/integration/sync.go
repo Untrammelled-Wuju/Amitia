@@ -76,23 +76,36 @@ func NewGamePluginSyncService(
 }
 
 // FullSync 全量同步，将Kernel中的启用game_plugin同步到Registry，幂等
+// 采用两阶段 Reconcile：Phase 1 构造完整 Desired State，Phase 2 应用变更。
+// 任何 Prepare 阶段错误都不会触发 Registry mutation。
 func (s *GamePluginSyncService) FullSync(ctx context.Context) SyncResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	result := SyncResult{}
 
-	// 1. 从Kernel获取所有启制的game_plugin
-	plugins, err := s.source.ListEnabledGamePlugins(ctx)
+	// Phase 1: Prepare - 纯计算阶段，构造完整 Desired State
+	// 任何失败都直接返回，不执行任何 Registry 操作
+	desired, err := s.buildDesiredState(ctx)
 	if err != nil {
 		result.Failed++
-		result.Errors = append(result.Errors, fmt.Errorf("failed to list enabled game plugins from kernel: %w", err))
+		result.Errors = append(result.Errors, err)
 		return result
 	}
 
-	// 过滤：仅保留game domain的game_plugin
-	validPlugins := make([]KernelGamePlugin, 0, len(plugins))
-	existingPlugins := make(map[gamehostdomain.PluginID]gamehostdomain.PluginDescriptor)
+	// Phase 2: Apply - 只有完整 Desired State 构建成功后才执行
+	return s.applyDesiredState(ctx, desired, &result)
+}
+
+// buildDesiredState Phase 1: 构造完整的 Desired State
+// 纯计算阶段，禁止调用任何 Registry 操作
+func (s *GamePluginSyncService) buildDesiredState(ctx context.Context) (map[gamehostdomain.PluginID]gamehostdomain.PluginDescriptor, error) {
+	plugins, err := s.source.ListEnabledGamePlugins(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("stage=snapshot: list enabled game plugins from kernel: %w", err)
+	}
+
+	desired := make(map[gamehostdomain.PluginID]gamehostdomain.PluginDescriptor)
 	for _, p := range plugins {
 		if p.Extension.Domain != kerneldomain.ExtensionDomainGame {
 			continue
@@ -100,85 +113,72 @@ func (s *GamePluginSyncService) FullSync(ctx context.Context) SyncResult {
 		if p.Contribution.Kind != kerneldomain.ContributionKindGamePlugin {
 			continue
 		}
-		validPlugins = append(validPlugins, p)
 
-		// 先尝试转换Descriptor，失败的记录错误
 		desc, err := s.mapper.ToDescriptor(ctx, p.Extension, p.Contribution)
 		if err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, fmt.Errorf("failed to map game plugin %s/%s: %w", p.Extension.ID, p.Contribution.ID, err))
-			continue
+			return nil, fmt.Errorf("stage=descriptor: plugin=%s/%s: %w", p.Extension.ID, p.Contribution.ID, err)
 		}
-		existingPlugins[desc.ID] = desc
+		desired[desc.ID] = desc
 	}
 
-	// 2. 获取当前Registry中的所有插件
+	return desired, nil
+}
+
+// applyDesiredState Phase 2: 应用 Desired State 到 Registry
+// 顺序：先 Register/Update，最后处理 orphan Unregister
+func (s *GamePluginSyncService) applyDesiredState(
+	ctx context.Context,
+	desired map[gamehostdomain.PluginID]gamehostdomain.PluginDescriptor,
+	result *SyncResult,
+) SyncResult {
+	// 获取当前 Registry 状态
 	currentPlugins, err := s.registry.List(ctx)
 	if err != nil {
 		result.Failed++
-		result.Errors = append(result.Errors, fmt.Errorf("failed to list plugins from registry: %w", err))
-		return result
+		result.Errors = append(result.Errors, fmt.Errorf("stage=reconcile-register: list plugins from registry: %w", err))
+		return *result
+	}
+	currentByID := make(map[gamehostdomain.PluginID]gamehostdomain.PluginDescriptor, len(currentPlugins))
+	for _, cp := range currentPlugins {
+		currentByID[cp.ID] = cp
 	}
 
-	// 3. 计算需要注销的插件：在Registry但不在Kernel当前列表中的
-	toBeUnregistered := make([]gamehostdomain.PluginID, 0)
-	for _, current := range currentPlugins {
-		if _, ok := existingPlugins[current.ID]; !ok {
-			toBeUnregistered = append(toBeUnregistered, current.ID)
-		}
-	}
-
-	// 4. 执行注销
-	for _, id := range toBeUnregistered {
-		if err := s.registry.Unregister(ctx, id); err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, fmt.Errorf("failed to unregister orphan plugin %s: %w", id, err))
-			continue
-		}
-		result.Unregistered++
-	}
-
-	// 5. 同步存在的插件
-	for id, desired := range existingPlugins {
-		// 检查是否已经存在
-		current, err := s.registry.Get(ctx, id)
-		if err != nil {
-			// 不存在，直接注册
-			if err := s.registry.Register(ctx, desired); err != nil {
-				result.Failed++
-				result.Errors = append(result.Errors, fmt.Errorf("failed to register plugin %s: %w", id, err))
-				continue
-			}
-			result.Registered++
-			continue
-		}
-
-		// 存在，比较Descriptor是否一致
-		if gamehostdomain.EqualPluginDescriptor(current, desired) {
+	// 先 Register/Update 所有 desired plugins
+	for id, want := range desired {
+		current, exists := currentByID[id]
+		if exists && gamehostdomain.EqualPluginDescriptor(current, want) {
 			result.Unchanged++
 			continue
 		}
-
-		// 不一致，先注销旧的在注册新的
-		if err := s.registry.Unregister(ctx, id); err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, fmt.Errorf("failed to unregister outdated plugin %s: %w", id, err))
-			continue
-		}
-		if err := s.registry.Register(ctx, desired); err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, fmt.Errorf("failed to register updated plugin %s: %w", id, err))
-			// 尝试回滚，重新注册旧的
-			if err := s.registry.Register(ctx, current); err != nil {
-				result.Errors = append(result.Errors, fmt.Errorf("failed to rollback plugin %s: %w", id, err))
+		if exists {
+			if err := s.registry.Unregister(ctx, id); err != nil {
+				result.Failed++
+				result.Errors = append(result.Errors, fmt.Errorf("stage=reconcile-update: plugin=%s: unregister: %w", id, err))
+				continue
 			}
+		}
+		if err := s.registry.Register(ctx, want); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Errorf("stage=reconcile-register: plugin=%s: register: %w", id, err))
 			continue
 		}
 		result.Registered++
+	}
+
+	// 最后处理 orphan Unregister
+	for _, current := range currentPlugins {
+		if _, ok := desired[current.ID]; ok {
+			continue
+		}
+		if err := s.registry.Unregister(ctx, current.ID); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Errorf("stage=reconcile-unregister: plugin=%s: %w", current.ID, err))
+			continue
+		}
 		result.Unregistered++
 	}
 
-	return result
+	return *result
 }
 
 // SyncExtension 同步单个Extension的game_plugin，保证原子性

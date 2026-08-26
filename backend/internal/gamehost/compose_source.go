@@ -2,6 +2,7 @@ package gamehost
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/gamehost/integration"
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -42,7 +43,7 @@ func newKernelContributionSource(
 func (s *kernelContributionSource) ListEnabledGamePlugins(ctx context.Context) ([]integration.KernelGamePlugin, error) {
 	installations, err := s.instRepo.ListInstallations(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list extension installations: %w", err)
 	}
 
 	var result []integration.KernelGamePlugin
@@ -56,12 +57,12 @@ func (s *kernelContributionSource) ListEnabledGamePlugins(ctx context.Context) (
 
 		def, err := s.defRepo.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("load enabled game plugin definition %q: %w", inst.ExtensionID, err)
 		}
 
 		contribs, err := s.contribRepo.ListContributions(ctx, inst.ExtensionID)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("load enabled game plugin contributions %q: %w", inst.ExtensionID, err)
 		}
 
 		for _, c := range contribs {
