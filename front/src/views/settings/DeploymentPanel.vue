@@ -99,7 +99,7 @@ import type {
   DeploymentModeConfig,
   RuntimeStatus,
 } from "../../runtime/runtime-types";
-import { isDesktopShell } from "../../runtime/runtime-capabilities";
+import { initializeRuntimeCapabilities, isDesktopShell } from "../../runtime/runtime-capabilities";
 
 const formMode = ref<"local" | "cloud">("local");
 const formData = reactive({ serverURL: "" });
@@ -223,6 +223,7 @@ async function handleSave() {
     }
 
     await saveDeploymentConfig(config);
+    await initializeRuntimeCapabilities(true);
     saveSuccess.value = true;
     ElMessage.success("部署配置已保存，部分更改需要重启应用后生效");
 

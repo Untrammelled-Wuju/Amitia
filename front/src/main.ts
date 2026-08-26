@@ -15,7 +15,7 @@ import "./styles/element-overrides.css";
 import App from "./App.vue";
 import router from "./router";
 import { getRuntimeConnection } from "./runtime/runtime-adapter";
-import { shouldRegisterServiceWorker } from "./runtime/runtime-capabilities";
+import { initializeRuntimeCapabilities, shouldRegisterServiceWorker } from "./runtime/runtime-capabilities";
 import { setErrorPanelHandler, setErrorBannerHandler } from "./ui-index";
 import { useExtensionUIStore } from "./stores/extensionUI";
 import { browserClientPluginRuntime, syncBrowserClientSlots } from "./ui-runtime/clientPluginRuntime";
@@ -23,7 +23,11 @@ import { restoreSessionOnStartup } from "./stores/refresh-coordinator";
 
 async function bootstrap() {
   await getRuntimeConnection();
+  const initialCapabilities = await initializeRuntimeCapabilities();
   const isAuthenticated = await restoreSessionOnStartup();
+  if (initialCapabilities.runtimeProfile === "unknown") {
+    await initializeRuntimeCapabilities(true);
+  }
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);
