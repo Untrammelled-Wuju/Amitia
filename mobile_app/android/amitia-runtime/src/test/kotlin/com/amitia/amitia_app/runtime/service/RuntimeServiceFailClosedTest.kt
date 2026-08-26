@@ -274,7 +274,7 @@ class TestProotEnvironmentAssembler : ProotEnvironmentAssembler(
     ),
     environmentBuilder = TestRuntimeEnvironmentBuilder(),
 ) {
-    override fun assembleBackendLaunch(activeProgramSource: java.io.File): com.amitia.amitia_app.runtime.proot.ProotLaunchSpec {
+    override fun assembleBackendLaunch(activeProgramSource: java.io.File, runtimeProfile: String): com.amitia.amitia_app.runtime.proot.ProotLaunchSpec {
         return com.amitia.amitia_app.runtime.proot.ProotLaunchSpec(
             binaryPath = "",
             rootfsPath = "/rootfs",
@@ -293,7 +293,7 @@ class FailingEnvironmentAssembler : ProotEnvironmentAssembler(
     ),
     environmentBuilder = TestRuntimeEnvironmentBuilder(),
 ) {
-    override fun assembleBackendLaunch(activeProgramSource: java.io.File): com.amitia.amitia_app.runtime.proot.ProotLaunchSpec {
+    override fun assembleBackendLaunch(activeProgramSource: java.io.File, runtimeProfile: String): com.amitia.amitia_app.runtime.proot.ProotLaunchSpec {
         throw com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentException(
             com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentErrorCode.BUILD_FAILED,
             "test env failure",

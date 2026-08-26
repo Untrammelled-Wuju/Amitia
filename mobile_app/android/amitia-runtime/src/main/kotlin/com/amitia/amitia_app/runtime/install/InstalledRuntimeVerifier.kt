@@ -41,7 +41,6 @@ internal class DefaultInstalledRuntimeVerifier(
         "node/lib/node_modules/npm/bin/npm-cli.js" to "npm",
         "node/lib/node_modules/npm/bin/npx-cli.js" to "npx",
         "qdrant/bin/qdrant" to "qdrant",
-        "surrealdb/surreal" to "surrealdb",
         "plugin-host/dist/index.js" to "plugin-host",
         "task-host/dist/index.js" to "task-host",
         "scripts/node/amitia-node-prepare.sh" to "node-scripts-prepare",
@@ -51,6 +50,14 @@ internal class DefaultInstalledRuntimeVerifier(
     private val requiredMetadataFiles = listOf(
         "manifest/guest-layout.json" to "guest-layout",
         "manifest/mount-contract.json" to "mount-contract",
+    )
+
+    private val requiredExecutables = listOf(
+        "backend/amitia-server",
+        "node/bin/node",
+        "qdrant/bin/qdrant",
+        "scripts/node/amitia-node-prepare.sh",
+        "scripts/node/amitia-node-probe.sh",
     )
 
     private val forbiddenMutableDirs = listOf(
@@ -81,6 +88,16 @@ internal class DefaultInstalledRuntimeVerifier(
                 return InstalledRuntimeVerificationResult.Failure(
                     RuntimeInstallErrorCode.RUNTIME_VERIFY_FAILED,
                     "required metadata file missing: $relPath"
+                )
+            }
+        }
+
+        for (relPath in requiredExecutables) {
+            val f = File(runtimeRootDir, relPath)
+            if (!f.isFile || !f.canExecute()) {
+                return InstalledRuntimeVerificationResult.Failure(
+                    RuntimeInstallErrorCode.RUNTIME_VERIFY_FAILED,
+                    "required executable is not executable: $relPath"
                 )
             }
         }

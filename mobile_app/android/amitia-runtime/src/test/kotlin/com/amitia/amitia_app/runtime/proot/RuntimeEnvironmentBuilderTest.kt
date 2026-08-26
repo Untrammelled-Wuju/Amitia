@@ -59,7 +59,7 @@ class RuntimeEnvironmentBuilderTest {
         assertEquals("/var/cache/amitia", env.guestRuntime["AMITIA_CACHE_ROOT"])
         assertEquals("/var/log/amitia", env.guestRuntime["AMITIA_LOG_ROOT"])
         assertEquals("/run/amitia", env.guestRuntime["AMITIA_RUN_ROOT"])
-        assertEquals("/tmp", env.guestRuntime["AMITIA_TEMP_ROOT"])
+        assertEquals("/run/amitia/tmp", env.guestRuntime["AMITIA_TEMP_ROOT"])
         assertEquals("/var/lib/amitia/workspaces", env.guestRuntime["AMITIA_WORKSPACE_ROOT"])
         assertEquals("/home/amitia", env.guestRuntime["AMITIA_HOME"])
     }
@@ -321,7 +321,7 @@ class RuntimeEnvironmentBuilderTest {
         )
         val result = builder.build(request) as RuntimeEnvironmentResult.Success
         val tempRoot = result.environment.guestRuntime["AMITIA_TEMP_ROOT"]
-        assertEquals("/tmp", tempRoot)
+        assertEquals("/run/amitia/tmp", tempRoot)
     }
 
     @Test
@@ -363,4 +363,44 @@ class RuntimeEnvironmentBuilderTest {
         assertEquals("127.0.0.1,localhost", result.environment.guestRuntime["NO_PROXY"])
         assertEquals("127.0.0.1,localhost", result.environment.guestRuntime["no_proxy"])
     }
+    @Test
+    fun androidRuntimeModeAndDirectoryAliasesAreExplicit() {
+        val layout = createLayout()
+        val builder = createBuilder()
+        val request = RuntimeEnvironmentRequest(
+            hostLayout = layout,
+            endpoint = BackendEndpointPolicy("127.0.0.1", 18899, "http", "ws")
+        )
+        val result = builder.build(request) as RuntimeEnvironmentResult.Success
+        val guest = result.environment.guestRuntime
+
+        assertEquals("android-proot", guest["AMITIA_RUNTIME_MODE"])
+        assertEquals("local_single_user", guest["AMITIA_SECURITY_MODE"])
+        assertEquals("false", guest["AMITIA_ALLOW_REMOTE_ACCESS"])
+        assertEquals("/etc/amitia", guest["AMITIA_CONFIG_DIR"])
+        assertEquals("/var/lib/amitia", guest["AMITIA_DATA_DIR"])
+        assertEquals("/var/cache/amitia", guest["AMITIA_CACHE_DIR"])
+        assertEquals("/var/log/amitia", guest["AMITIA_LOG_DIR"])
+        assertEquals("/run/amitia/tmp", guest["AMITIA_TEMP_DIR"])
+        assertEquals("/var/lib/amitia/workspaces", guest["AMITIA_WORKSPACE_DIR"])
+        assertEquals("/var/lib/amitia/security/local-token", guest["AMITIA_LOCAL_TOKEN_FILE"])
+        assertEquals("false", guest["AMITIA_GRAPH_STORE_ENABLED"])
+        assertEquals("false", guest["AMITIA_GRAPH_STORE_REQUIRED"])
+    }
+
+    @Test
+    fun hostProcessContainsDedicatedProotTempDirectory() {
+        val layout = createLayout()
+        val builder = createBuilder()
+        val request = RuntimeEnvironmentRequest(
+            hostLayout = layout,
+            endpoint = BackendEndpointPolicy("127.0.0.1", 18899, "http", "ws")
+        )
+        val result = builder.build(request) as RuntimeEnvironmentResult.Success
+        val prootTmp = result.environment.hostProcess["PROOT_TMP_DIR"]
+        assertNotNull(prootTmp)
+        assertTrue(prootTmp!!.endsWith("/run/proot-tmp"))
+        assertFalse(prootTmp.contains("/run/amitia"))
+    }
+
 }

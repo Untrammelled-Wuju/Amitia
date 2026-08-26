@@ -397,7 +397,7 @@ class RuntimeService : Service() {
 
         val request = try {
             val spec = assembler.assembleBackendLaunch(activeProgramSource, profile)
-            assembler.toProotLaunchRequest(spec, "")
+            assembler.toProotLaunchRequest(spec)
         } catch (e: com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentException) {
             teardownAfterStartupFailure(
                 generation = generation,

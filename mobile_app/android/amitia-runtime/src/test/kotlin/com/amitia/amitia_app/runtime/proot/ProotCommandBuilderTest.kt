@@ -1,4 +1,4 @@
-﻿package com.amitia.amitia_app.runtime.proot
+package com.amitia.amitia_app.runtime.proot
 
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotCommandBuilder
 import org.junit.Assert.assertEquals
@@ -153,4 +153,11 @@ class ProotCommandBuilderTest {
         assertEquals("/custom/path/proot", cmd.binaryPath)
         assertEquals("--kill-on-exit", cmd.arguments.first())
     }
+    @Test fun readonly_bind_doesNotUseDockerRoSuffix() {
+        val mount = ProotBindMount.create("/data/runtime", "/opt/amitia", readOnly = true)
+        val cmd = builder.build(spec(command = listOf("/bin/true"), mounts = listOf(mount)))
+        assertTrue(cmd.arguments.contains("/data/runtime:/opt/amitia"))
+        assertFalse(cmd.arguments.any { it.endsWith(":ro") })
+    }
+
 }

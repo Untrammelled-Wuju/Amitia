@@ -1,4 +1,4 @@
-﻿package com.amitia.amitia_app.runtime.proot
+package com.amitia.amitia_app.runtime.proot
 
 class ProotBindMount private constructor(
     val host: String,
@@ -36,5 +36,5 @@ class ProotBindMount private constructor(
         return host == other.host && guest == other.guest && readOnly == other.readOnly
     }
     override fun hashCode(): Int = 31 * (31 * host.hashCode() + guest.hashCode()) + readOnly.hashCode()
-    override fun toString(): String = "$host:$guest${if (readOnly) ":ro" else ""}"
+    override fun toString(): String = if (readOnly) "$host:$guest [readOnly]" else "$host:$guest"
 }
