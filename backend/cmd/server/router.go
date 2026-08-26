@@ -79,6 +79,47 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
+func publicRuntimeCapabilities(services *AppServices) gin.H {
+	if services == nil {
+		return gin.H{
+			"runtimeProfile": "unknown",
+			"capabilities": gin.H{
+				"gameMode":             false,
+				"devicePluginRuntime":  false,
+				"deviceExecutionPlane": false,
+				"localUIEndpoints":     false,
+			},
+		}
+	}
+
+	policy := services.RuntimePolicy
+	profileConsistent := services.RuntimeProfile.IsValid() && policy.Profile == services.RuntimeProfile
+	if !profileConsistent {
+		return gin.H{
+			"runtimeProfile": "unknown",
+			"capabilities": gin.H{
+				"gameMode":             false,
+				"devicePluginRuntime":  false,
+				"deviceExecutionPlane": false,
+				"localUIEndpoints":     false,
+			},
+		}
+	}
+
+	gameHostAvailable := services.KernelContainer != nil && services.KernelContainer.GameHost != nil
+	gameModeAvailable := services.RuntimeProfile == runtimeprofile.ProfileLocal &&
+		policy.FullHTTPAPI && policy.LocalUIEndpoints && policy.DevicePluginRuntime && gameHostAvailable
+	return gin.H{
+		"runtimeProfile": services.RuntimeProfile.String(),
+		"capabilities": gin.H{
+			"gameMode":             gameModeAvailable,
+			"devicePluginRuntime":  policy.DevicePluginRuntime,
+			"deviceExecutionPlane": policy.DeviceExecutionPlane,
+			"localUIEndpoints":     policy.LocalUIEndpoints,
+		},
+	}
+}
+
 func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeBootstrap) (*gin.Engine, error) {
 	if config.AppCfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -155,6 +196,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	public.GET("/onboarding/status", systemHandler.OnboardingStatus)
 	public.POST("/onboarding/complete", systemHandler.OnboardingComplete)
 	public.GET("/health", systemHandler.Health)
+	public.GET("/runtime/capabilities", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"code": 200,
+			"msg":  "操作成功",
+			"data": publicRuntimeCapabilities(services),
+		})
+	})
 
 	chatHandler := chat.NewHandlerWithUnifiedEntry(services.Chat, services.UnifiedEntry)
 	public.POST("/model/detect-models", chatHandler.DetectModels)

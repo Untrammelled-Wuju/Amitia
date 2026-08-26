@@ -108,14 +108,14 @@ func (b *runtimeBootstrap) RuntimeHost() runtimehost.RuntimeHost {
 
 func (b *runtimeBootstrap) RuntimeProfile() runtimeprofile.Profile {
 	if b == nil {
-		return runtimeprofile.ProfileLocal
+		return ""
 	}
 	return b.profile
 }
 
 func (b *runtimeBootstrap) RuntimePolicy() runtimeprofile.Policy {
 	if b == nil {
-		return runtimeprofile.PolicyFor(runtimeprofile.ProfileLocal)
+		return runtimeprofile.Policy{}
 	}
 	return b.policy
 }
