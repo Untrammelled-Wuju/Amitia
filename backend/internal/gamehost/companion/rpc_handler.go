@@ -121,9 +121,7 @@ func (h *ArtifactRPCHandler) Handle(ctx context.Context, request rpc.RPCRequest)
 			return rpc.RPCResponse{}, domain.NewHostError(domain.ErrPermissionDenied, "artifact rpc: deployment permission denied")
 		}
 		if _, err := h.manager.RequireAuthorizedTargetRoot(ctx, descriptor.ExtensionID, canonicalRoot); err != nil {
-			if _, grantErr := h.manager.AuthorizeTargetRoot(ctx, descriptor.ExtensionID, canonicalRoot); grantErr != nil {
-				return rpc.RPCResponse{}, domain.NewHostErrorWithCause(domain.ErrPermissionDenied, "artifact rpc: failed to authorize approved target root", grantErr)
-			}
+			return rpc.RPCResponse{}, domain.NewHostErrorWithCause(domain.ErrPermissionDenied, "artifact rpc: target root requires management authorization", err)
 		}
 	} else {
 		authorizedRoot, err := h.manager.RequireAuthorizedTargetRoot(ctx, descriptor.ExtensionID, canonicalRoot)

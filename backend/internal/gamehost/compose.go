@@ -480,6 +480,24 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			},
 		)
 
+		if artifactManager != nil {
+			if err := runtime.SetRuntimeStartPreparer(runtimeExecutor, runtime.RuntimeStartPreparerFunc(
+				func(ctx context.Context, runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID) error {
+					descriptor, err := pluginReg.Get(ctx, pluginID)
+					if err != nil {
+						return fmt.Errorf("resolve game plugin descriptor: %w", err)
+					}
+					extensionID := strings.TrimSpace(descriptor.ExtensionID)
+					if extensionID == "" {
+						return fmt.Errorf("game plugin %s has no extension id", pluginID)
+					}
+					return artifactManager.DeployRequiredToAuthorizedRoots(ctx, extensionID)
+				},
+			)); err != nil {
+				return nil, fmt.Errorf("compose runtime required-artifact preparer: %w", err)
+			}
+		}
+
 		runtimeHealth, err = runtime.NewHealthAdapter(
 			topologyStore,
 			runtimeManager,
@@ -980,6 +998,13 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("compose upgrade coordinator: %w", err)
+	}
+	if artifactManager != nil {
+		upgradeCoordinator.SetPostUpdatePreparer(upgrade.ExtensionPostUpdatePreparerFunc(
+			func(ctx context.Context, extensionID string) error {
+				return artifactManager.RefreshAuthorizedTargetRootsForCurrentGeneration(ctx, extensionID)
+			},
+		))
 	}
 	container.UpgradeCoordinator = upgradeCoordinator
 

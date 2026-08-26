@@ -108,3 +108,17 @@ func IsValidChannelKind(kind ChannelKind) bool {
 	_, ok := validChannelKinds[kind]
 	return ok
 }
+
+var channelKindRequiredCapability = map[ChannelKind]Capability{
+	ChannelKindEvent:  CapabilityEventStreaming,
+	ChannelKindState:  CapabilityStateStreaming,
+	ChannelKindBinary: CapabilityBinaryStreaming,
+	ChannelKindLog:    CapabilityCustomRPC,
+	ChannelKindMetric: CapabilityCustomRPC,
+	ChannelKindCustom: CapabilityCustomRPC,
+}
+
+func RequiredCapabilityForChannelKind(kind ChannelKind) (Capability, bool) {
+	cap, ok := channelKindRequiredCapability[kind]
+	return cap, ok
+}

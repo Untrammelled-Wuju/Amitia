@@ -103,6 +103,23 @@ type GameHostContainer struct {
 // ReconcileExtension refreshes one extension's plugin registry view and then
 // converges the complete GameHost runtime graph. It is safe to call after
 // enable, disable, update, rollback, or uninstall.
+// PrepareExtensionAfterPackageGenerationChange refreshes host-owned durable
+// state that is explicitly bound to the installed package generation and then
+// reconciles the extension runtime graph. It is used only after a confirmed
+// package generation switch (update/rollback/recovery); it never creates new
+// filesystem grants and therefore cannot widen plugin authority.
+func (c *GameHostContainer) PrepareExtensionAfterPackageGenerationChange(ctx context.Context, extensionID string) error {
+	if c == nil {
+		return nil
+	}
+	if c.ArtifactManager != nil {
+		if err := c.ArtifactManager.RefreshAuthorizedTargetRootsForCurrentGeneration(ctx, extensionID); err != nil {
+			return fmt.Errorf("gamehost: refresh extension %s artifact target grants: %w", extensionID, err)
+		}
+	}
+	return c.ReconcileExtension(ctx, extensionID)
+}
+
 func (c *GameHostContainer) ReconcileExtension(ctx context.Context, extensionID string) error {
 	if c == nil {
 		return nil
@@ -119,6 +136,20 @@ func (c *GameHostContainer) ReconcileExtension(ctx context.Context, extensionID 
 		}
 	}
 	c.pruneAgentContexts()
+	return nil
+}
+
+// FinalizeExtensionUninstall removes GameHost-owned durable authority that
+// must not survive an extension uninstall. It is intentionally separate from
+// ReconcileExtension because disable/update/rollback reconciliation must keep
+// the user's exact target-root grants intact.
+func (c *GameHostContainer) FinalizeExtensionUninstall(ctx context.Context, extensionID string) error {
+	if c == nil || c.ArtifactManager == nil {
+		return nil
+	}
+	if err := c.ArtifactManager.RevokeAllTargetRoots(ctx, extensionID); err != nil {
+		return fmt.Errorf("gamehost: revoke extension %s artifact target grants: %w", extensionID, err)
+	}
 	return nil
 }
 

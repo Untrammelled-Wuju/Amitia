@@ -26,6 +26,19 @@ type RuntimeSubscriptionWatcher interface {
 	OnRuntimeGenerationChanged(runtimeID string, oldGeneration int64)
 }
 
+// RuntimeStartPreparer runs after the runtime identity/state is validated but
+// before any service process is started. Production uses this to satisfy
+// host-managed prerequisites such as required plugin artifacts.
+type RuntimeStartPreparer interface {
+	PrepareRuntimeStart(ctx context.Context, runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID) error
+}
+
+type RuntimeStartPreparerFunc func(ctx context.Context, runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID) error
+
+func (f RuntimeStartPreparerFunc) PrepareRuntimeStart(ctx context.Context, runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID) error {
+	return f(ctx, runtimeID, pluginID)
+}
+
 type RuntimeInstanceRef struct {
 	ID       domain.RuntimeInstanceID
 	PluginID domain.PluginID
@@ -61,12 +74,26 @@ type runtimeExecutor struct {
 	rollbackExecutor  RollbackExecutor
 	resolveDefinition DefinitionResolverFunc
 	runtimeSub        RuntimeSubscriptionWatcher
+	startPreparer     RuntimeStartPreparer
 }
 
 func (e *runtimeExecutor) SetRuntimeSubscriptionWatcher(w RuntimeSubscriptionWatcher) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.runtimeSub = w
+}
+
+// SetRuntimeStartPreparer configures a production pre-start lifecycle gate
+// without widening the RuntimeExecutor interface used by recovery/test fakes.
+func SetRuntimeStartPreparer(executor RuntimeExecutor, preparer RuntimeStartPreparer) error {
+	concrete, ok := executor.(*runtimeExecutor)
+	if !ok || concrete == nil {
+		return &TopologyError{Code: ErrInvalidArgument, Message: "runtime executor does not support start preparer"}
+	}
+	concrete.mu.Lock()
+	concrete.startPreparer = preparer
+	concrete.mu.Unlock()
+	return nil
 }
 
 func NewRuntimeExecutor(
@@ -240,6 +267,19 @@ func (e *runtimeExecutor) startRuntimeLocked(ctx context.Context, runtimeID doma
 			Code:      ErrInvalidState,
 			RuntimeID: string(runtimeID),
 			Message:   "runtime not in startable state: " + string(runtimeInfo.State),
+		}
+	}
+
+	e.mu.Lock()
+	startPreparer := e.startPreparer
+	e.mu.Unlock()
+	if startPreparer != nil {
+		if err := startPreparer.PrepareRuntimeStart(ctx, runtimeID, runtimeInfo.PluginID); err != nil {
+			return &ExecutionError{
+				Code:      ErrDependencyNotSatisfied,
+				RuntimeID: string(runtimeID),
+				Message:   "runtime prerequisites failed: " + err.Error(),
+			}
 		}
 	}
 
