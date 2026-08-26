@@ -1,9 +1,10 @@
 import { GameCenterClient, createClient, GameRuntimeDetail, GameRuntimeSummary, GamePluginSummary } from './game_center_client';
 import { waitUntil, sleep, TimeoutError } from './waiters';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export { TimeoutError } from './waiters';
 
@@ -351,19 +352,29 @@ export class BackendDriver {
   }
 
   async restartBackend(target?: { extensionId?: string; runtimeId?: string }): Promise<void> {
-    const command = process.env.GAMEHOST_BACKEND_RESTART_COMMAND;
-    if (!command) {
-      throw new Error('GAMEHOST_BACKEND_RESTART_COMMAND is required; workstation-specific process discovery is forbidden');
+    const restartScript = process.env.GAMEHOST_BACKEND_RESTART_SCRIPT;
+    const legacyCommand = process.env.GAMEHOST_BACKEND_RESTART_COMMAND;
+    if (!restartScript && !legacyCommand) {
+      throw new Error('GAMEHOST_BACKEND_RESTART_SCRIPT is required; workstation-specific process discovery is forbidden');
     }
     const targetExtensionId = target?.extensionId;
     const targetRuntimeId = target?.runtimeId;
 
-    await execAsync(command, {
-      cwd: process.env.GAMEHOST_BACKEND_CWD || process.cwd(),
-      env: process.env,
-      shell: process.env.ComSpec || process.env.SHELL,
-      timeout: 60000,
-    });
+    if (restartScript) {
+      await execFileAsync(process.execPath, [restartScript, 'restart'], {
+        cwd: process.env.GAMEHOST_BACKEND_CWD || process.cwd(),
+        env: process.env,
+        timeout: 60000,
+        windowsHide: true,
+      });
+    } else {
+      await execAsync(legacyCommand!, {
+        cwd: process.env.GAMEHOST_BACKEND_CWD || process.cwd(),
+        env: process.env,
+        shell: process.env.ComSpec || process.env.SHELL,
+        timeout: 60000,
+      });
+    }
 
     const recoveryDeadline = Date.now() + 60000;
     while (Date.now() < recoveryDeadline) {
