@@ -21,6 +21,7 @@ on:
       - 'sdk/game-plugin-go/**'
       - 'scripts/sync_game_plugin_go_sdk.py'
       - 'scripts/verify_mock_game_plugin_sdk_vendor.py'
+      - 'scripts/verify_game_plugin_contract_parity.py'
       - 'testplugins/game-plugin-demo/**'
       - 'testplugins/mock-amitiax-game-plugin/**'
       - 'tests/gamehost_external/**'
@@ -54,11 +55,15 @@ jobs:
         working-directory: backend
         run: |
           go test -race -count=1 ./internal/gamehost/control/... ./internal/gamehost/ipc/... ./internal/gamehost/resource/... ./internal/gamehost/rpc/... ./internal/gamehost/runtime/...
-      - name: Cross-compile Windows process sandbox boundary
+      - name: Cross-compile Windows and macOS process sandbox boundaries
         working-directory: backend
         run: |
           GOOS=windows GOARCH=amd64 go test -c ./internal/platform/process -o /tmp/process-windows.test.exe
           GOOS=windows GOARCH=amd64 go test -c ./internal/extension/kernel/trusted_service -o /tmp/trusted-service-windows.test.exe
+          GOOS=darwin GOARCH=amd64 go test -c ./internal/platform/process -o /tmp/process-darwin-amd64.test
+          GOOS=darwin GOARCH=amd64 go test -c ./internal/extension/kernel/trusted_service -o /tmp/trusted-service-darwin-amd64.test
+          GOOS=darwin GOARCH=arm64 go test -c ./internal/platform/process -o /tmp/process-darwin-arm64.test
+          GOOS=darwin GOARCH=arm64 go test -c ./internal/extension/kernel/trusted_service -o /tmp/trusted-service-darwin-arm64.test
 
   go-sdk-gate:
     name: Standalone Go SDK gate
@@ -106,6 +111,8 @@ jobs:
           node-version: '20.18.0'
           cache: npm
           cache-dependency-path: backend/pkg/gameplugin/sdk/game-plugin/package-lock.json
+      - name: Verify Go / JSON Schema / TypeScript contract parity
+        run: python3 scripts/verify_game_plugin_contract_parity.py
       - name: Verify external plugin SDK vendor is current
         run: python3 scripts/verify_mock_game_plugin_sdk_vendor.py
       - name: Install SDK dependencies
@@ -130,10 +137,14 @@ jobs:
           npx tsc --noEmit
 
   external-gamehost-e2e:
-    name: Real external GameHost E2E gate
-    runs-on: ubuntu-latest
+    name: Real external GameHost E2E (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     needs: [go-host-gate, go-sdk-gate, typescript-sdk-gate]
-    timeout-minutes: 30
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-26]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -147,69 +158,66 @@ jobs:
           cache-dependency-path: |
             testplugins/mock-amitiax-game-plugin/package-lock.json
             tests/gamehost_external/package-lock.json
+      - name: Verify toolchain
+        run: go version
       - name: Install Linux sandbox backend
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y bubblewrap
+          sudo apt-get install -y bubblewrap iproute2 slirp4netns curl
           bwrap --version
-      - name: Build canonical external plugin v1 and v2 packages
-        working-directory: testplugins/mock-amitiax-game-plugin
+          slirp4netns --version
+          ip -Version
+      - name: Exercise Linux unrestricted outbound sandbox
+        if: runner.os == 'Linux'
+        working-directory: backend
+        env:
+          AMITIA_TEST_LINUX_UNRESTRICTED_NETWORK: '1'
+        run: go test -count=1 -run '^TestLinuxUnrestrictedNetworkSandboxE2E$' ./internal/extension/kernel/trusted_service
+      - name: Exercise native macOS network sandbox
+        if: runner.os == 'macOS'
+        working-directory: backend
+        env:
+          AMITIA_TEST_DARWIN_NETWORK_SANDBOX: '1'
+        run: go test -count=1 -run '^TestDarwinNetworkSandboxE2E$' ./internal/extension/kernel/trusted_service
+      - name: Verify Windows sandbox prerequisites
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          npm ci
-          npm run build
-          MOCK_PLUGIN_OUTPUT=mock-amitiax-game-plugin-v1.amitiax npm run package
-          MOCK_PLUGIN_OUTPUT=mock-amitiax-game-plugin-v1.amitiax npm run verify-package
-          MOCK_PLUGIN_VERSION=1.1.0 MOCK_PLUGIN_OUTPUT=mock-amitiax-game-plugin-v2.amitiax npm run package
-          MOCK_PLUGIN_OUTPUT=mock-amitiax-game-plugin-v2.amitiax npm run verify-package
-          test -f dist-package/mock-amitiax-game-plugin-v1.amitiax
-          test -f dist-package/mock-amitiax-game-plugin-v2.amitiax
+          $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+          if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            throw 'Windows AppContainer unrestricted gate requires an elevated runner for package-scoped firewall enforcement'
+          }
+          foreach ($path in @(
+            "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe",
+            "$env:SystemRoot\System32\icacls.exe",
+            "$env:SystemRoot\System32\CheckNetIsolation.exe"
+          )) {
+            if (-not (Test-Path $path)) { throw "Missing Windows sandbox component: $path" }
+          }
+      - name: Exercise native Windows network sandbox
+        if: runner.os == 'Windows'
+        working-directory: backend
+        env:
+          AMITIA_TEST_WINDOWS_NETWORK_SANDBOX: '1'
+        run: go test -count=1 -run '^TestWindowsNetworkSandboxE2E$' ./internal/extension/kernel/trusted_service
+      - name: Verify Windows crash-control tool
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $taskkill = "$env:SystemRoot\System32\taskkill.exe"
+          if (-not (Test-Path $taskkill)) { throw "Missing Windows crash-control component: $taskkill" }
+      - name: Build canonical external plugin v1 and v2 packages
+        run: node tests/gamehost_external/scripts/build-plugin-fixtures.mjs
       - name: Install and typecheck external E2E harness
         working-directory: tests/gamehost_external
         run: |
           npm ci
           npx tsc --noEmit
-      - name: Build real backend
-        working-directory: backend
-        run: go build -o "$RUNNER_TEMP/amitia-gamehost-e2e-server" ./cmd/server
-      - name: Configure isolated GameHost runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          JWT_SECRET="$(openssl rand -hex 48)"
-          LOCAL_TOKEN="$(openssl rand -hex 32)"
-          {
-            echo "AMITIA_RUNTIME_ROOT=$GITHUB_WORKSPACE"
-            echo "AMITIA_DATA_DIR=$RUNNER_TEMP/gamehost-e2e/data"
-            echo "AMITIA_LOG_DIR=$RUNNER_TEMP/gamehost-e2e/logs"
-            echo "AMITIA_CACHE_DIR=$RUNNER_TEMP/gamehost-e2e/cache"
-            echo "AMITIA_TEMP_DIR=$RUNNER_TEMP/gamehost-e2e/tmp"
-            echo "AMITIA_WORKSPACE_DIR=$GITHUB_WORKSPACE"
-            echo "AMITIA_RUNTIME_PROFILE=local"
-            echo "AMITIA_JWT_SECRET=$JWT_SECRET"
-            echo "AMITIA_LOCAL_TOKEN=$LOCAL_TOKEN"
-            echo "AMITIA_EXTENSION_DEV_MODE=true"
-            echo "AMITIA_VECTOR_STORE_ENABLED=false"
-            echo "AMITIA_GRAPH_STORE_ENABLED=false"
-            echo "AMITIA_TASK_HOST_ENABLED=false"
-            echo "AMITIA_WECHAT_SIDECAR_ENABLED=false"
-            echo "AMITIA_QQ_SIDECAR_ENABLED=false"
-            echo "AMITIA_DESKTOP_PET_RUNTIME_ENABLED=false"
-            echo "AMITIA_NODE_BIN=$(command -v node)"
-            echo "GAMEHOST_BACKEND_BIN=$RUNNER_TEMP/amitia-gamehost-e2e-server"
-            echo "GAMEHOST_BACKEND_PID_FILE=$RUNNER_TEMP/gamehost-e2e/backend.pid"
-            echo "GAMEHOST_BACKEND_LOG=$RUNNER_TEMP/gamehost-e2e/backend.log"
-            echo "GAMEHOST_SERVER_ROOT=http://127.0.0.1:18899"
-            echo "GAMEHOST_BASE_URL=http://127.0.0.1:18899/api"
-            echo "GAMEHOST_BACKEND_RESTART_COMMAND=bash $GITHUB_WORKSPACE/tests/gamehost_external/scripts/restart-backend.sh restart"
-            echo "GAMEHOST_BACKEND_CWD=$GITHUB_WORKSPACE"
-            echo "GAMEHOST_DEV_WORKSPACE_PATH=$GITHUB_WORKSPACE/testplugins/mock-amitiax-game-plugin"
-            echo "MOCK_PLUGIN_ARCHIVE_PATH=$GITHUB_WORKSPACE/testplugins/mock-amitiax-game-plugin/dist-package/mock-amitiax-game-plugin-v1.amitiax"
-            echo "MOCK_PLUGIN_ARCHIVE_PATH_V2=$GITHUB_WORKSPACE/testplugins/mock-amitiax-game-plugin/dist-package/mock-amitiax-game-plugin-v2.amitiax"
-          } >> "$GITHUB_ENV"
-          mkdir -p "$RUNNER_TEMP/gamehost-e2e/data" "$RUNNER_TEMP/gamehost-e2e/logs" "$RUNNER_TEMP/gamehost-e2e/cache" "$RUNNER_TEMP/gamehost-e2e/tmp"
+      - name: Build and configure isolated GameHost runtime
+        run: node tests/gamehost_external/scripts/prepare-e2e.mjs
       - name: Start real backend
-        shell: bash
-        run: tests/gamehost_external/scripts/restart-backend.sh start
+        run: node tests/gamehost_external/scripts/restart-backend.mjs start
       - name: Create authenticated developer session
         run: node tests/gamehost_external/scripts/bootstrap-dev-session.mjs
       - name: Execute real external plugin lifecycle and fault matrices
@@ -217,8 +225,7 @@ jobs:
         run: npm test
       - name: Dump backend log on failure
         if: failure()
-        run: tail -n 500 "$GAMEHOST_BACKEND_LOG" || true
+        run: node tests/gamehost_external/scripts/dump-backend-log.mjs
       - name: Stop E2E backend
         if: always()
-        shell: bash
-        run: tests/gamehost_external/scripts/restart-backend.sh stop || true
+        run: node tests/gamehost_external/scripts/restart-backend.mjs stop
