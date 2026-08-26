@@ -42,8 +42,12 @@ npm run test:fault
 | `GAMEHOST_BASE_URL` | 否 | GameHost API 根地址，默认 `http://127.0.0.1:18899/api` |
 | `GAMEHOST_AUTH_TOKEN` | 是 | `/api/public/auth/setup` 或 `/api/public/auth/login` 返回的用户 Access Token |
 | `GAMEHOST_DEVELOPER_SESSION_ID` | 是 | 通过 `/api/extensions/dev-mode/workspaces` → trust → session 创建的 unsigned-dev 安装会话 |
-| `GAMEHOST_BACKEND_RESTART_COMMAND` | 是（完整 lifecycle） | 由测试运行器提供的后端重启命令；不得在测试内探测/杀本机进程 |
-| `GAMEHOST_BACKEND_CWD` | 否 | 重启命令工作目录，默认当前目录 |
+| `GAMEHOST_BACKEND_RESTART_SCRIPT` | 是（完整 lifecycle） | CI 首选的跨平台 Node 后端控制脚本；仅管理 `GAMEHOST_BACKEND_BIN` 对应的已校验 PID |
+| `GAMEHOST_BACKEND_RESTART_COMMAND` | 否（兼容） | 旧版自定义重启命令，仅在未提供 `GAMEHOST_BACKEND_RESTART_SCRIPT` 时使用 |
+| `GAMEHOST_BACKEND_BIN` | CI/跨平台重启必需 | 真实 GameHost 后端二进制绝对路径 |
+| `GAMEHOST_BACKEND_PID_FILE` | CI/跨平台重启必需 | 后端 PID 文件；重启前会校验 PID 的进程身份 |
+| `GAMEHOST_BACKEND_LOG` | CI/跨平台重启必需 | 后端日志文件 |
+| `GAMEHOST_BACKEND_CWD` | 否 | 后端工作目录，默认当前目录 |
 
 ### 测试矩阵
 
@@ -66,4 +70,4 @@ npm run test:fault
 
 ## 真实 CI 门禁
 
-`.github/workflows/gamehost.yml` 的 `external-gamehost-e2e` job 会启动真实本地 GameHost 后端、创建开发者信任会话、通过 Extension Package 正式生命周期安装 v1/v2 `.amitiax` 包，并串行执行全部 smoke/lifecycle/security/fault 矩阵。后端重启由 `scripts/restart-backend.sh` 模拟宿主异常退出，测试必须证明运行态恢复后没有重复进程、连接或其他 residue。
+`.github/workflows/gamehost.yml` 的 `external-gamehost-e2e` job 会在 Ubuntu、Windows、macOS 三个原生 runner 上启动真实本地 GameHost 后端、创建开发者信任会话、通过 Extension Package 正式生命周期安装 v1/v2 `.amitiax` 包，并串行执行全部 smoke/lifecycle/security/fault 矩阵。进入完整插件链前，各平台还会执行真实网络沙箱 smoke gate：Linux 验证 bwrap + slirp4netns unrestricted 出站，Windows 验证 AppContainer，macOS 验证 Seatbelt，且 Windows/macOS 都同时验证 restricted 子进程没有 ambient socket。后端重启由 `scripts/restart-backend.mjs`（`restart-backend.sh` 仅为 POSIX 兼容包装）跨平台模拟宿主异常退出，测试必须证明运行态恢复后没有重复进程、连接或其他 residue。 CI 使用同一套真实外部插件矩阵运行 Ubuntu、Windows、macOS；Linux 额外验证 bubblewrap + slirp4netns unrestricted 出站，Windows/macOS 额外验证原生 sandbox 的 unrestricted 出站与 restricted 直连阻断。

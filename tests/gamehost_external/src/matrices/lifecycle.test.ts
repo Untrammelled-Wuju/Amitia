@@ -201,6 +201,29 @@ describe('G47-F15 E2E Full Flow', () => {
     expect(hostApiBody.status).toBeDefined();
     expect(hostApiBody.output).toBeDefined();
 
+    // Restricted network E2E: the real plugin process must have no ambient
+    // outbound socket capability, while the host-mediated allowlisted route
+    // succeeds from the trusted host process. This runs unchanged on Linux,
+    // Windows AppContainer, and macOS Seatbelt runners.
+    const networkProbe = await invokeRuntimeRPC<{
+      directSucceeded?: boolean;
+      directError?: string;
+      mediatedStatus?: string;
+      mediatedOutput?: { statusCode?: number; finalUrl?: string; bodyBase64?: string };
+      blockedIpStatus?: string;
+      blockedPortStatus?: string;
+    }>(client, runtimeId, 'mockgame.network.restricted_probe', {});
+    expect(networkProbe.directSucceeded).toBe(false);
+    expect(typeof networkProbe.directError).toBe('string');
+    expect((networkProbe.directError ?? '').length).toBeGreaterThan(0);
+    expect(networkProbe.mediatedStatus).toBe('success');
+    expect(networkProbe.mediatedOutput?.statusCode).toBe(200);
+    expect(networkProbe.mediatedOutput?.finalUrl).toBe('http://127.0.0.1:18899/api/public/health');
+    expect(typeof networkProbe.mediatedOutput?.bodyBase64).toBe('string');
+    expect((networkProbe.mediatedOutput?.bodyBase64 ?? '').length).toBeGreaterThan(0);
+    expect(networkProbe.blockedIpStatus).toBe('rejected');
+    expect(networkProbe.blockedPortStatus).toBe('rejected');
+
     // 8. Secret lease full lifecycle: acquire -> query(active) -> release -> query(inactive).
     const secretBody = await invokeRuntimeRPC<{ granted?: boolean; leaseId?: string }>(
       client, runtimeId, 'mockgame.secret.acquire', {},
