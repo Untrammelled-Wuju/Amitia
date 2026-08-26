@@ -3,12 +3,13 @@
 package trusted_service
 
 import (
-	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -26,17 +27,19 @@ type windowsSandboxConfig struct {
 	FirewallRule string   `json:"firewallRule"`
 	Icacls       string   `json:"icacls"`
 	CheckNet     string   `json:"checkNet"`
+	StateFile    string   `json:"stateFile"`
 }
 
 // prepareWindowsAppContainerLaunch creates an actual AppContainer boundary for
-// enforced game services in none/loopback/unrestricted modes. The trusted
+// enforced game services in none/loopback/restricted/unrestricted modes. The trusted
 // PowerShell wrapper only exists to call Windows AppContainer APIs; the plugin
 // process itself receives the
 // inherited stdio handles and runs inside the AppContainer. ACL grants are
-// scoped to a random per-launch SID and removed when the child exits.
-func prepareWindowsAppContainerLaunch(mode, executable string, args []string, workingDir, tempDir string, readOnlyRoots ...string) (sandboxLaunchPlan, error) {
+// scoped to a deterministic per-service-instance SID and removed when the child exits.
+// Durable state lets the next host start recover resources after forced termination.
+func prepareWindowsAppContainerLaunch(mode, executable string, args []string, workingDir, tempDir, stateRoot string, readOnlyRoots ...string) (sandboxLaunchPlan, error) {
 	mode = strings.ToLower(strings.TrimSpace(mode))
-	if mode != "none" && mode != "loopback" && mode != "unrestricted" {
+	if mode != "none" && mode != "loopback" && mode != "restricted" && mode != "unrestricted" {
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: unsupported windows sandbox mode %q", ErrUnauthorizedNetwork, mode)
 	}
 
@@ -61,10 +64,6 @@ func prepareWindowsAppContainerLaunch(mode, executable string, args []string, wo
 		}
 	}
 
-	profileName, err := randomWindowsSandboxProfileName()
-	if err != nil {
-		return sandboxLaunchPlan{}, err
-	}
 	work, err := cleanWindowsSandboxPath(workingDir, true)
 	if err != nil {
 		return sandboxLaunchPlan{}, err
@@ -79,6 +78,22 @@ func prepareWindowsAppContainerLaunch(mode, executable string, args []string, wo
 	}
 	if work == "" {
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: Windows sandbox requires an explicit plugin working directory", ErrNetworkSandboxUnavailable)
+	}
+	profileName := windowsSandboxProfileName(work, tmp)
+	stateDir, err := windowsSandboxStateDir(stateRoot)
+	if err != nil {
+		return sandboxLaunchPlan{}, err
+	}
+	stateFile := filepath.Join(stateDir, profileName+".json")
+	// A previous host may have been force-terminated before the PowerShell
+	// wrapper reached its finally block. Recover this deterministic instance's
+	// stale AppContainer resources before reusing its identity.
+	if _, statErr := os.Stat(stateFile); statErr == nil {
+		if recoverErr := recoverWindowsSandboxRecord(stateFile); recoverErr != nil {
+			return sandboxLaunchPlan{}, recoverErr
+		}
+	} else if !os.IsNotExist(statErr) {
+		return sandboxLaunchPlan{}, fmt.Errorf("%w: inspect Windows sandbox state %q: %v", ErrNetworkSandboxUnavailable, stateFile, statErr)
 	}
 
 	readOnly := make([]string, 0, len(readOnlyRoots)+1)
@@ -136,10 +151,14 @@ func prepareWindowsAppContainerLaunch(mode, executable string, args []string, wo
 		FirewallRule: "AmitiaGameSandbox-" + strings.TrimPrefix(profileName, "amitia.game."),
 		Icacls:       icacls,
 		CheckNet:     checkNet,
+		StateFile:    stateFile,
 	}
 	payload, err := json.Marshal(cfg)
 	if err != nil {
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: encode Windows sandbox launch config: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	if err := writeWindowsSandboxState(stateFile, payload); err != nil {
+		return sandboxLaunchPlan{}, err
 	}
 	script := strings.ReplaceAll(windowsAppContainerPowerShell, "__AMITIA_CONFIG__", base64.StdEncoding.EncodeToString(payload))
 	// The launcher is host-trusted code and must never be placed in the plugin's
@@ -149,21 +168,25 @@ func prepareWindowsAppContainerLaunch(mode, executable string, args []string, wo
 	// is not granted access to, and let the script delete itself immediately.
 	file, err := os.CreateTemp("", "amitia-gamehost-sandbox-*.ps1")
 	if err != nil {
+		_ = os.Remove(stateFile)
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: create one-shot Windows sandbox launcher: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	launcherPath := file.Name()
 	if err := file.Chmod(0o600); err != nil {
 		_ = file.Close()
 		_ = os.Remove(launcherPath)
+		_ = os.Remove(stateFile)
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: protect one-shot Windows sandbox launcher: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	if _, err = file.WriteString(script); err != nil {
 		_ = file.Close()
 		_ = os.Remove(launcherPath)
+		_ = os.Remove(stateFile)
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: write one-shot Windows sandbox launcher: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	if err = file.Close(); err != nil {
 		_ = os.Remove(launcherPath)
+		_ = os.Remove(stateFile)
 		return sandboxLaunchPlan{}, fmt.Errorf("%w: close one-shot Windows sandbox launcher: %v", ErrNetworkSandboxUnavailable, err)
 	}
 	return sandboxLaunchPlan{
@@ -172,14 +195,140 @@ func prepareWindowsAppContainerLaunch(mode, executable string, args []string, wo
 		WorkingDir:            filepath.Join(systemRoot, "System32"),
 		FilesystemIsolated:    true,
 		NetworkPolicyEnforced: true,
+		// PowerShell deletes the launcher as its first action. Cleanup is still
+		// required for the failure path where cmd.Start never succeeds, otherwise
+		// a security-sensitive one-shot launcher would remain in the host temp dir.
+		Cleanup: func() { _ = os.Remove(launcherPath) },
 	}, nil
 }
-func randomWindowsSandboxProfileName() (string, error) {
-	var id [16]byte
-	if _, err := rand.Read(id[:]); err != nil {
-		return "", fmt.Errorf("%w: generate AppContainer profile id: %v", ErrNetworkSandboxUnavailable, err)
+func windowsSandboxProfileName(workingDir, tempDir string) string {
+	sum := sha256.Sum256([]byte(strings.ToLower(filepath.Clean(workingDir)) + "\x00" + strings.ToLower(filepath.Clean(tempDir))))
+	return "amitia.game." + hex.EncodeToString(sum[:16])
+}
+
+func windowsSandboxStateDir(root string) (string, error) {
+	root = strings.TrimSpace(root)
+	var dir string
+	if root == "" {
+		dir = filepath.Join(os.TempDir(), "amitia-gamehost-sandbox-state", "windows")
+	} else {
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			return "", fmt.Errorf("%w: resolve Windows sandbox state root: %v", ErrNetworkSandboxUnavailable, err)
+		}
+		dir = filepath.Join(filepath.Clean(abs), "sandbox_state", "windows")
 	}
-	return "amitia.game." + hex.EncodeToString(id[:]), nil
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("%w: create Windows sandbox state directory: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return "", fmt.Errorf("%w: protect Windows sandbox state directory: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	return dir, nil
+}
+
+func writeWindowsSandboxState(path string, payload []byte) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, payload, 0o600); err != nil {
+		return fmt.Errorf("%w: write Windows sandbox state: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("%w: protect Windows sandbox state: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("%w: commit Windows sandbox state: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	return nil
+}
+
+func recoverPlatformSandboxResidue(rootDir string) error {
+	dir, err := windowsSandboxStateDir(rootDir)
+	if err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("%w: enumerate Windows sandbox state: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	var failures []string
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		if err := recoverWindowsSandboxRecord(path); err != nil {
+			failures = append(failures, err.Error())
+		}
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf("%w: %s", ErrNetworkSandboxUnavailable, strings.Join(failures, "; "))
+	}
+	return nil
+}
+
+func recoverWindowsSandboxRecord(stateFile string) error {
+	payload, err := os.ReadFile(stateFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("%w: read Windows sandbox state %q: %v", ErrNetworkSandboxUnavailable, stateFile, err)
+	}
+	var cfg windowsSandboxConfig
+	if err := json.Unmarshal(payload, &cfg); err != nil {
+		return fmt.Errorf("%w: decode Windows sandbox state %q: %v", ErrNetworkSandboxUnavailable, stateFile, err)
+	}
+	if !strings.HasPrefix(cfg.ProfileName, "amitia.game.") || filepath.Base(stateFile) != cfg.ProfileName+".json" {
+		return fmt.Errorf("%w: invalid Windows sandbox state identity %q", ErrNetworkSandboxUnavailable, stateFile)
+	}
+	systemRootRaw := strings.TrimSpace(os.Getenv("SystemRoot"))
+	if systemRootRaw == "" || !filepath.IsAbs(systemRootRaw) {
+		return fmt.Errorf("%w: trusted SystemRoot is unavailable during residue recovery", ErrNetworkSandboxUnavailable)
+	}
+	systemRoot := filepath.Clean(systemRootRaw)
+	powershell := filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+	icacls := filepath.Join(systemRoot, "System32", "icacls.exe")
+	checkNet := filepath.Join(systemRoot, "System32", "CheckNetIsolation.exe")
+	for _, path := range []string{powershell, icacls} {
+		info, statErr := os.Stat(path)
+		if statErr != nil || info.IsDir() {
+			return fmt.Errorf("%w: trusted Windows recovery component %q is unavailable", ErrNetworkSandboxUnavailable, path)
+		}
+	}
+	cfg.Icacls = icacls
+	cfg.CheckNet = checkNet
+	cfg.FirewallRule = "AmitiaGameSandbox-" + strings.TrimPrefix(cfg.ProfileName, "amitia.game.")
+	cfg.StateFile = stateFile
+	trustedPayload, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("%w: encode Windows sandbox recovery config: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	script := strings.ReplaceAll(windowsAppContainerRecoveryPowerShell, "__AMITIA_CONFIG__", base64.StdEncoding.EncodeToString(trustedPayload))
+	file, err := os.CreateTemp("", "amitia-gamehost-sandbox-recover-*.ps1")
+	if err != nil {
+		return fmt.Errorf("%w: create Windows sandbox recovery launcher: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	launcherPath := file.Name()
+	defer os.Remove(launcherPath)
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("%w: protect Windows sandbox recovery launcher: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	if _, err := file.WriteString(script); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("%w: write Windows sandbox recovery launcher: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("%w: close Windows sandbox recovery launcher: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	cmd := exec.Command(powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", launcherPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: recover Windows sandbox %s: %v: %s", ErrNetworkSandboxUnavailable, cfg.ProfileName, err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func cleanWindowsSandboxPath(path string, mustExist bool) (string, error) {
@@ -484,6 +633,8 @@ $created = $false
 $loopback = $false
 $firewall = $false
 $sid = $null
+$code = 125
+$cleanupOk = $true
 try {
     $sid = [AmitiaAppContainer]::EnsureProfile([string]$cfg.profileName)
     $created = $true
@@ -513,23 +664,97 @@ try {
     }
     $caps = @($cfg.capabilities | ForEach-Object { [string]$_ })
     $code = [AmitiaAppContainer]::Run([string]$cfg.profileName, [string]$cfg.executable, [string]$cfg.commandLine, [string]$cfg.workingDir, $caps)
-    exit $code
 } finally {
-    if ($firewall) { Remove-NetFirewallRule -DisplayName ([string]$cfg.firewallRule) -ErrorAction SilentlyContinue }
-    if ($loopback) { & $cfg.checkNet LoopbackExempt -d "-n=$($cfg.profileName)" | Out-Null }
+    if ($firewall) {
+        try { Remove-NetFirewallRule -DisplayName ([string]$cfg.firewallRule) -ErrorAction Stop } catch { $cleanupOk = $false }
+    }
+    if ($loopback) {
+        & $cfg.checkNet LoopbackExempt -d "-n=$($cfg.profileName)" | Out-Null
+        if ($LASTEXITCODE -ne 0) { $cleanupOk = $false }
+    }
     if ($sid) {
         foreach ($path in @($cfg.writable) + @($cfg.readOnly)) {
             if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
-            try {
-                $item = Get-Item -LiteralPath ([string]$path) -Force -ErrorAction SilentlyContinue
-                if ($item -and $item.PSIsContainer) {
-                    & $cfg.icacls ([string]$path) /remove:g "*$sid" /T /C /Q | Out-Null
-                } else {
-                    & $cfg.icacls ([string]$path) /remove:g "*$sid" /C /Q | Out-Null
-                }
-            } catch { }
+            $item = Get-Item -LiteralPath ([string]$path) -Force -ErrorAction SilentlyContinue
+            if (-not $item) { continue }
+            if ($item.PSIsContainer) {
+                & $cfg.icacls ([string]$path) /remove:g "*$sid" /T /C /Q | Out-Null
+            } else {
+                & $cfg.icacls ([string]$path) /remove:g "*$sid" /C /Q | Out-Null
+            }
+            if ($LASTEXITCODE -ne 0) { $cleanupOk = $false }
         }
     }
-    if ($created) { [AmitiaAppContainer]::DeleteAppContainerProfile([string]$cfg.profileName) | Out-Null }
+    if ($created) {
+        $deleteResult = [AmitiaAppContainer]::DeleteAppContainerProfile([string]$cfg.profileName)
+        if ($deleteResult -lt 0) { $cleanupOk = $false }
+    }
+    if ($cleanupOk -and -not [string]::IsNullOrWhiteSpace([string]$cfg.stateFile)) {
+        Remove-Item -LiteralPath ([string]$cfg.stateFile) -Force -ErrorAction SilentlyContinue
+    }
 }
+if (-not $cleanupOk) { exit 125 }
+exit $code
+`
+
+const windowsAppContainerRecoveryPowerShell = `$ErrorActionPreference = 'Stop'
+$cfg = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__AMITIA_CONFIG__')) | ConvertFrom-Json
+$self = $MyInvocation.MyCommand.Path
+if ($self) { Remove-Item -LiteralPath $self -Force -ErrorAction SilentlyContinue }
+$native = @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class AmitiaAppContainerRecovery {
+    [DllImport("userenv.dll", CharSet = CharSet.Unicode)]
+    static extern int DeriveAppContainerSidFromAppContainerName(string name, out IntPtr appContainerSid);
+    [DllImport("userenv.dll", CharSet = CharSet.Unicode)]
+    public static extern int DeleteAppContainerProfile(string name);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern bool ConvertSidToStringSid(IntPtr sid, out IntPtr stringSid);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    static extern IntPtr FreeSid(IntPtr sid);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr LocalFree(IntPtr hMem);
+
+    public static string TrySid(string name) {
+        IntPtr sid;
+        int hr = DeriveAppContainerSidFromAppContainerName(name, out sid);
+        if (hr < 0 || sid == IntPtr.Zero) return null;
+        try {
+            IntPtr text;
+            if (!ConvertSidToStringSid(sid, out text)) return null;
+            try { return Marshal.PtrToStringUni(text); }
+            finally { LocalFree(text); }
+        } finally { FreeSid(sid); }
+    }
+}
+'@
+Add-Type -TypeDefinition $native -Language CSharp
+$cleanupOk = $true
+$sid = [AmitiaAppContainerRecovery]::TrySid([string]$cfg.profileName)
+try { Remove-NetFirewallRule -DisplayName ([string]$cfg.firewallRule) -ErrorAction SilentlyContinue } catch { $cleanupOk = $false }
+if ([bool]$cfg.loopback -and (Test-Path -LiteralPath ([string]$cfg.checkNet))) {
+    & $cfg.checkNet LoopbackExempt -d "-n=$($cfg.profileName)" | Out-Null
+}
+if ($sid) {
+    foreach ($path in @($cfg.writable) + @($cfg.readOnly)) {
+        if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
+        $item = Get-Item -LiteralPath ([string]$path) -Force -ErrorAction SilentlyContinue
+        if (-not $item) { continue }
+        if ($item.PSIsContainer) {
+            & $cfg.icacls ([string]$path) /remove:g "*$sid" /T /C /Q | Out-Null
+        } else {
+            & $cfg.icacls ([string]$path) /remove:g "*$sid" /C /Q | Out-Null
+        }
+        if ($LASTEXITCODE -ne 0) { $cleanupOk = $false }
+    }
+    $deleteResult = [AmitiaAppContainerRecovery]::DeleteAppContainerProfile([string]$cfg.profileName)
+    if ($deleteResult -lt 0) { $cleanupOk = $false }
+}
+if ($cleanupOk) {
+    Remove-Item -LiteralPath ([string]$cfg.stateFile) -Force -ErrorAction SilentlyContinue
+    exit 0
+}
+exit 125
 `

@@ -1,6 +1,7 @@
 package host_api
 
 import (
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
@@ -38,6 +39,7 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodClipboardWrite:      {{PermissionID: "clipboard.write", Resource: "clipboard"}},
 		MethodClipboardRead:       {{PermissionID: "clipboard.read", Resource: "clipboard"}},
 		MethodRuntimeHealth:       {{PermissionID: "runtime.health.read", Resource: "runtime"}},
+		MethodNetworkRequest:      {{PermissionID: "service.network.request", Resource: "network"}},
 		MethodMigrationSQLExecute: {},
 		MethodMigrationSQLQuery:   {},
 	}
@@ -109,6 +111,8 @@ func RouteRiskForMethod(method Method) RiskLevel {
 		return RiskMedium
 	case MethodToolExecute:
 		return RiskHigh
+	case MethodNetworkRequest:
+		return RiskMedium
 	case MethodMigrationSQLExecute:
 		return RiskHigh
 	default:
@@ -125,7 +129,7 @@ func RouteSideEffectForMethod(method Method) SideEffectLevel {
 		return SideEffectWrite
 	case MethodEventEmit:
 		return SideEffectWrite
-	case MethodToolExecute:
+	case MethodToolExecute, MethodNetworkRequest:
 		return SideEffectExternal
 	case MethodMigrationSQLExecute:
 		return SideEffectWrite
@@ -137,31 +141,35 @@ func RouteSideEffectForMethod(method Method) SideEffectLevel {
 }
 
 func RegisterPermissionDefinitions(registry *permission.PermissionDefinitionRegistry) {
+	if registry == nil {
+		return
+	}
 	defs := []permission.PermissionDefinition{
-		{ID: "storage.state.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
-		{ID: "storage.state.write", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
-		{ID: "secret.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
-		{ID: "resource.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule, permission.ScopeResource}},
-		{ID: "resource.write", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule, permission.ScopeResource}},
-		{ID: "event.emit", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
-		{ID: "event.subscribe", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
-		{ID: "schedule.create", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
-		{ID: "schedule.manage", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
-		{ID: "tool.invoke", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule, permission.ScopeTool}},
+		{ID: "storage.state.read", Name: "Read Extension State", Description: "Read namespaced extension state", Category: permission.CategoryHostData, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},
+		{ID: "storage.state.write", Name: "Write Extension State", Description: "Create, update, or delete namespaced extension state", Category: permission.CategoryHostData, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
+		{ID: "secret.read", Name: "Read Scoped Secret", Description: "Read a secret exposed to the current extension or module scope", Category: permission.CategoryExtension, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildDeny, TrustedOnly: true, DefaultApproval: permission.ApprovalFullControl},
+		{ID: "resource.read", Name: "Read Host Resource", Description: "Read a host-managed resource through a scoped resource handle", Category: permission.CategoryFilesystem, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule, permission.ScopeResource}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalManual},
+		{ID: "resource.write", Name: "Write Host Resource", Description: "Modify a host-managed resource through a scoped resource handle", Category: permission.CategoryFilesystem, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule, permission.ScopeResource}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
+		{ID: "event.emit", Name: "Emit Host Event", Description: "Publish an event through the host event bus", Category: permission.CategoryExtension, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
+		{ID: "event.subscribe", Name: "Subscribe Host Event", Description: "Subscribe to events visible to the current extension or module scope", Category: permission.CategoryExtension, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},
+		{ID: "schedule.create", Name: "Create Schedule", Description: "Create a namespaced scheduled host task", Category: permission.CategoryWorkflow, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
+		{ID: "schedule.manage", Name: "Manage Schedule", Description: "Cancel or modify a namespaced scheduled host task", Category: permission.CategoryWorkflow, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
+		{ID: "tool.invoke", Name: "Invoke Host Tool", Description: "Invoke a host tool from an extension runtime", Category: permission.CategoryExtension, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule, permission.ScopeTool}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
 		{ID: "character.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeCharacter}},
 		{ID: "conversation.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeConversation, permission.ScopeCharacter}},
 		{ID: "memory.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeCharacter, permission.ScopeConversation}},
-		{ID: "provider.invoke", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension}},
-		{ID: "ui.notify", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
-		{ID: "ui.dialog", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
-		{ID: "ui.navigate", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
-		{ID: "clipboard.write", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
-		{ID: "clipboard.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}},
-		{ID: "runtime.health.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
-		{ID: "migration.sql.execute", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
-		{ID: "migration.sql.query", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}},
+		{ID: "provider.invoke", Name: "Invoke Provider", Description: "Invoke an AI provider through the host provider boundary", Category: permission.CategoryProvider, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalManual},
+		{ID: "ui.notify", Name: "Show Notification", Description: "Display a host notification in the active user session", Category: permission.CategoryDesktop, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},
+		{ID: "ui.dialog", Name: "Show Dialog", Description: "Display an interactive host dialog in the active user session", Category: permission.CategoryDesktop, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
+		{ID: "ui.navigate", Name: "Navigate UI", Description: "Navigate the host UI in the active user session", Category: permission.CategoryDesktop, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},
+		{ID: "clipboard.write", Name: "Write Clipboard", Description: "Write data to the user clipboard", Category: permission.CategoryDesktop, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
+		{ID: "clipboard.read", Name: "Read Clipboard", Description: "Read data from the user clipboard", Category: permission.CategoryDesktop, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildDeny, DefaultApproval: permission.ApprovalManual},
+		{ID: "runtime.health.read", Name: "Read Runtime Health", Description: "Read health state for the current runtime scope", Category: permission.CategoryService, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},
+		{ID: "service.network.request", AllowedScopes: []permission.ScopeType{permission.ScopeExtension, permission.ScopeModule, permission.ScopeGlobal}},
+		{ID: "migration.sql.execute", Name: "Execute Migration SQL", Description: "Execute migration SQL through the host migration boundary", Category: permission.CategoryExtension, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildDeny, TrustedOnly: true, DefaultApproval: permission.ApprovalManual},
+		{ID: "migration.sql.query", Name: "Query Migration SQL", Description: "Query migration state through the host migration boundary", Category: permission.CategoryExtension, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: permission.ChildDeny, TrustedOnly: true, DefaultApproval: permission.ApprovalManual},
 	}
 	for _, d := range defs {
-		registry.Register(d)
+		registry.RegisterPreservingMetadata(d)
 	}
 }

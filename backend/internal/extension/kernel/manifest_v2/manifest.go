@@ -818,17 +818,23 @@ func validateGamePluginContribution(spec map[string]any, requiredPermissions []s
 		return fmt.Errorf("%s.spec: %w", cpath, err)
 	}
 
-	if parsed.Network != nil && strings.EqualFold(strings.TrimSpace(parsed.Network.Mode), "unrestricted") {
-		const networkPermission = "service.network.request"
-		declared := false
-		for _, permissionID := range requiredPermissions {
-			if strings.TrimSpace(permissionID) == networkPermission {
-				declared = true
-				break
-			}
+	if parsed.Network != nil {
+		mode := strings.ToLower(strings.TrimSpace(parsed.Network.Mode))
+		if mode != "restricted" && mode != "unrestricted" {
+			mode = ""
 		}
-		if !declared {
-			return fmt.Errorf("game_plugin network mode unrestricted requires requiredPermissions to include %s", networkPermission)
+		if mode != "" {
+			const networkPermission = "service.network.request"
+			declared := false
+			for _, permissionID := range requiredPermissions {
+				if strings.TrimSpace(permissionID) == networkPermission {
+					declared = true
+					break
+				}
+			}
+			if !declared {
+				return fmt.Errorf("game_plugin network mode %s requires requiredPermissions to include %s", mode, networkPermission)
+			}
 		}
 	}
 

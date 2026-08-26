@@ -82,6 +82,12 @@ var CapabilityMatrix = []CapabilityEntry{
 		Reason:     "host.event.{emit,subscribe,unsubscribe} 已注册；业务事件走此处",
 	},
 	{
+		Name:       "Restricted Network",
+		Route:      string(MethodNetworkRequest),
+		Resolution: ResolutionNewMinimal,
+		Reason:     "restricted 模式保持插件进程无直连网络，由宿主对域名、端口、DNS、地址与重定向逐次校验",
+	},
+	{
 		Name:       "Vision",
 		Route:      "(composed)",
 		Resolution: ResolutionCompose,
@@ -121,8 +127,8 @@ func AllRegisteredMethods() []string {
 		string(MethodClipboardWrite), string(MethodClipboardRead),
 		// Data
 		string(MethodCharacterRead), string(MethodConversationRead), string(MethodMemoryQuery),
-		// Provider / Tool / Runtime
-		string(MethodProviderInvoke), string(MethodToolExecute), string(MethodRuntimeHealth),
+		// Provider / Tool / Runtime / mediated network
+		string(MethodProviderInvoke), string(MethodToolExecute), string(MethodRuntimeHealth), string(MethodNetworkRequest),
 		// Migration
 		string(MethodMigrationSQLExecute), string(MethodMigrationSQLQuery),
 	}

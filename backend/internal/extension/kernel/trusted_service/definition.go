@@ -157,6 +157,7 @@ type ServiceNetworkPolicy struct {
 	AllowInbound   bool     `json:"allow_inbound"`
 	AllowOutbound  bool     `json:"allow_outbound"`
 	AllowedDomains []string `json:"allowed_domains,omitempty"`
+	AllowedIPs     []string `json:"allowed_ips,omitempty"`
 	AllowedPorts   []int    `json:"allowed_ports,omitempty"`
 	LoopbackOnly   bool     `json:"loopback_only"`
 	RequireProxy   bool     `json:"require_proxy"`
