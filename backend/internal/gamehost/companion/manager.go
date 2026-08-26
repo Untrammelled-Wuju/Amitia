@@ -204,6 +204,74 @@ func (m *ArtifactManager) List(ctx context.Context, extensionID, targetRoot, com
 	return out, nil
 }
 
+// DeployRequiredToAuthorizedRoots is the runtime-start lifecycle gate for
+// required artifacts. Required artifacts are never deployed to an arbitrary
+// path: the host only uses target roots explicitly authorized for the current
+// installed generation. If an extension declares required artifacts but has no
+// current-generation grant, startup fails closed instead of silently entering
+// Ready with a missing companion/runtime dependency.
+func (m *ArtifactManager) DeployRequiredToAuthorizedRoots(ctx context.Context, extensionID string) error {
+	if m == nil {
+		return fmt.Errorf("artifact: manager unavailable")
+	}
+	extensionID = strings.TrimSpace(extensionID)
+	if extensionID == "" {
+		return fmt.Errorf("artifact: extension id is required")
+	}
+
+	declared, err := m.hasRequiredArtifacts(ctx, extensionID)
+	if err != nil {
+		return err
+	}
+	if !declared {
+		return nil
+	}
+
+	grants, err := m.ListAuthorizedTargetRoots(ctx, extensionID)
+	if err != nil {
+		return err
+	}
+	if len(grants) == 0 {
+		return fmt.Errorf("artifact: required artifacts need an authorized target root for the current extension generation")
+	}
+	for _, grant := range grants {
+		if err := m.DeployRequired(ctx, extensionID, grant.TargetRoot, grant.CompatibilityVersion); err != nil {
+			return fmt.Errorf("artifact: deploy required artifacts to %s: %w", grant.TargetRoot, err)
+		}
+	}
+	return nil
+}
+
+func (m *ArtifactManager) hasRequiredArtifacts(ctx context.Context, extensionID string) (bool, error) {
+	plugins, err := m.source.ListEnabledGamePlugins(ctx)
+	if err != nil {
+		return false, err
+	}
+	foundExtension := false
+	for _, kp := range plugins {
+		if string(kp.Extension.ID) != extensionID {
+			continue
+		}
+		foundExtension = true
+		spec, err := gameprotocol.ParsePluginHostSpec(kp.Contribution.Definition)
+		if err != nil {
+			return false, err
+		}
+		if err := spec.Validate(); err != nil {
+			return false, fmt.Errorf("artifact: invalid game plugin host spec for %s: %w", extensionID, err)
+		}
+		for _, artifact := range spec.Artifacts {
+			if artifact.Required && platformMatches(artifact.Platforms) && architectureMatches(artifact.Architectures) {
+				return true, nil
+			}
+		}
+	}
+	if !foundExtension {
+		return false, fmt.Errorf("artifact: enabled game plugin extension %s not found", extensionID)
+	}
+	return false, nil
+}
+
 func (m *ArtifactManager) DeployRequired(ctx context.Context, extensionID, targetRoot, compatibilityVersion string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -548,7 +616,7 @@ func (m *ArtifactManager) resolveRequiredArtifacts(ctx context.Context, extensio
 		return nil, integration.InstalledGeneration{}, err
 	}
 	foundExtension := false
-	requiredDeclared := false
+	hostRequiredDeclared := false
 	var required []gameprotocol.PluginArtifact
 	for _, kp := range plugins {
 		if string(kp.Extension.ID) != extensionID {
@@ -566,8 +634,11 @@ func (m *ArtifactManager) resolveRequiredArtifacts(ctx context.Context, extensio
 			if !artifact.Required {
 				continue
 			}
-			requiredDeclared = true
-			if platformMatches(artifact.Platforms) && architectureMatches(artifact.Architectures) && versionMatches(artifact.CompatibilityVersions, compatibilityVersion) {
+			if !platformMatches(artifact.Platforms) || !architectureMatches(artifact.Architectures) {
+				continue
+			}
+			hostRequiredDeclared = true
+			if versionMatches(artifact.CompatibilityVersions, compatibilityVersion) {
 				required = append(required, artifact)
 			}
 		}
@@ -575,7 +646,7 @@ func (m *ArtifactManager) resolveRequiredArtifacts(ctx context.Context, extensio
 	if !foundExtension {
 		return nil, integration.InstalledGeneration{}, fmt.Errorf("artifact: enabled game plugin extension %s not found", extensionID)
 	}
-	if !requiredDeclared {
+	if !hostRequiredDeclared {
 		return nil, integration.InstalledGeneration{}, nil
 	}
 	if len(required) == 0 {

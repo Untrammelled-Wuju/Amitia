@@ -67,6 +67,16 @@ type ConfigValidator interface {
 	Resolve(ctx context.Context, pluginID, runtimeID, serviceID string) (*config.ScopedConfig, []config.ValidationError)
 }
 
+type ExtensionPostUpdatePreparer interface {
+	PrepareExtensionAfterUpdate(ctx context.Context, extensionID string) error
+}
+
+type ExtensionPostUpdatePreparerFunc func(ctx context.Context, extensionID string) error
+
+func (f ExtensionPostUpdatePreparerFunc) PrepareExtensionAfterUpdate(ctx context.Context, extensionID string) error {
+	return f(ctx, extensionID)
+}
+
 type UpgradeCoordinator struct {
 	mu                    sync.Mutex
 	gate                  *UpgradeGate
@@ -81,6 +91,7 @@ type UpgradeCoordinator struct {
 	migrationHooks        *MigrationHookRegistry
 	kernelLifecycle       KernelExtensionLifecycle
 	archiveUpdater        KernelArchiveUpdater
+	postUpdatePreparer    ExtensionPostUpdatePreparer
 }
 
 func NewUpgradeCoordinator(
@@ -144,6 +155,22 @@ func NewUpgradeCoordinator(
 
 func (c *UpgradeCoordinator) RegisterMigrationHook(extensionID string, hook MigrationHook) {
 	c.migrationHooks.Register(extensionID, hook)
+}
+
+func (c *UpgradeCoordinator) SetPostUpdatePreparer(preparer ExtensionPostUpdatePreparer) {
+	c.mu.Lock()
+	c.postUpdatePreparer = preparer
+	c.mu.Unlock()
+}
+
+func (c *UpgradeCoordinator) prepareUpdatedExtension(ctx context.Context, extensionID string) error {
+	c.mu.Lock()
+	preparer := c.postUpdatePreparer
+	c.mu.Unlock()
+	if preparer == nil {
+		return nil
+	}
+	return preparer.PrepareExtensionAfterUpdate(ctx, extensionID)
 }
 
 func (c *UpgradeCoordinator) IsExtensionUpgrading(extensionID string) bool {
@@ -216,6 +243,13 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 	if kernelResult.NewVersion == "" || kernelResult.NewVersion != req.TargetVersion {
 		c.clearUpgradeIntent(runtimeSnapshots)
 		result.Error = fmt.Errorf("kernel package update version mismatch: expected %q, got %q", req.TargetVersion, kernelResult.NewVersion)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+	if err := c.prepareUpdatedExtension(ctx, req.ExtensionID); err != nil {
+		c.clearUpgradeIntent(runtimeSnapshots)
+		result.Error = fmt.Errorf("post-update host preparation failed: %w", err)
 		result.Stage = UpgradeStateFailed
 		c.recordAudit(operationID, req, result, result.Error)
 		return result, result.Error
@@ -363,6 +397,12 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 	if kernelResult.NewVersion == "" {
 		c.clearUpgradeIntent(runtimeSnapshots)
 		archiveErr := fmt.Errorf("kernel package update failed: archive updater returned empty new version")
+		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
+		return archiveErr
+	}
+	if err := c.prepareUpdatedExtension(ctx, extensionID); err != nil {
+		c.clearUpgradeIntent(runtimeSnapshots)
+		archiveErr := fmt.Errorf("post-update host preparation failed: %w", err)
 		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
 		return archiveErr
 	}

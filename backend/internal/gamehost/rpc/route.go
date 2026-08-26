@@ -7,10 +7,11 @@ import (
 )
 
 type Route struct {
-	RuntimeID domain.RuntimeInstanceID
-	PluginID  domain.PluginID
-	ServiceID domain.ServiceID
-	Namespace Namespace
+	RuntimeID    domain.RuntimeInstanceID
+	PluginID     domain.PluginID
+	ServiceID    domain.ServiceID
+	Namespace    Namespace
+	ConnectionID string
 }
 
 func (r Route) OwnerKey() RouteKey {

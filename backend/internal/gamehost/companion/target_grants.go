@@ -12,13 +12,16 @@ import (
 )
 
 // TargetRootGrant records an explicit user/admin authorization for one
-// extension generation to deploy declared artifacts beneath one canonical
-// directory. Plugins cannot create these grants through the plugin RPC surface.
+// extension to deploy declared artifacts beneath one canonical directory.
+// Generation records the package generation most recently validated by the host;
+// trusted host lifecycle code may carry the same exact root forward across a
+// confirmed package update, but plugins cannot create, widen, or migrate grants.
 type TargetRootGrant struct {
-	ExtensionID string    `json:"extensionId"`
-	TargetRoot  string    `json:"targetRoot"`
-	Generation  string    `json:"generation"`
-	GrantedAt   time.Time `json:"grantedAt"`
+	ExtensionID          string    `json:"extensionId"`
+	TargetRoot           string    `json:"targetRoot"`
+	Generation           string    `json:"generation"`
+	CompatibilityVersion string    `json:"compatibilityVersion,omitempty"`
+	GrantedAt            time.Time `json:"grantedAt"`
 }
 
 func targetGrantKey(extensionID, targetRoot string) string {
@@ -65,10 +68,15 @@ func (m *ArtifactManager) saveTargetGrantsLocked() error {
 	return replaceStateFile(tmp, m.targetGrantPath)
 }
 
-// AuthorizeTargetRoot is intentionally a management-side operation. It binds
-// the exact canonical directory to the currently installed generation so an
-// updated plugin cannot inherit arbitrary filesystem access without approval.
+// AuthorizeTargetRoot is intentionally a management-side operation. It grants
+// the extension access to one exact canonical directory. The current package
+// generation is recorded for audit/staleness checks; only host lifecycle code
+// may carry this same root forward after a confirmed extension update.
 func (m *ArtifactManager) AuthorizeTargetRoot(ctx context.Context, extensionID, targetRoot string) (TargetRootGrant, error) {
+	return m.AuthorizeTargetRootForCompatibility(ctx, extensionID, targetRoot, "")
+}
+
+func (m *ArtifactManager) AuthorizeTargetRootForCompatibility(ctx context.Context, extensionID, targetRoot, compatibilityVersion string) (TargetRootGrant, error) {
 	if m == nil {
 		return TargetRootGrant{}, fmt.Errorf("artifact: manager unavailable")
 	}
@@ -91,10 +99,11 @@ func (m *ArtifactManager) AuthorizeTargetRoot(ctx context.Context, extensionID, 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	grant := TargetRootGrant{
-		ExtensionID: extensionID,
-		TargetRoot:  root,
-		Generation:  generation.GenerationID,
-		GrantedAt:   time.Now().UTC(),
+		ExtensionID:          extensionID,
+		TargetRoot:           root,
+		Generation:           generation.GenerationID,
+		CompatibilityVersion: strings.TrimSpace(compatibilityVersion),
+		GrantedAt:            time.Now().UTC(),
 	}
 	key := targetGrantKey(extensionID, root)
 	previous, hadPrevious := m.targetGrants[key]
@@ -131,6 +140,91 @@ func (m *ArtifactManager) RevokeTargetRoot(ctx context.Context, extensionID, tar
 	if err := m.saveTargetGrantsLocked(); err != nil {
 		m.targetGrants[key] = previous
 		return err
+	}
+	return nil
+}
+
+// RevokeAllTargetRoots removes every persisted filesystem authorization owned
+// by one extension. This is a host-lifecycle operation used only after a
+// confirmed uninstall. Keeping these grants after uninstall would allow a
+// later package that reuses the same extension ID to inherit filesystem access
+// that the user granted to a different installation generation.
+func (m *ArtifactManager) RevokeAllTargetRoots(ctx context.Context, extensionID string) error {
+	_ = ctx
+	if m == nil {
+		return fmt.Errorf("artifact: manager unavailable")
+	}
+	extensionID = strings.TrimSpace(extensionID)
+	if extensionID == "" {
+		return fmt.Errorf("artifact: extension id is required")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	previous := make(map[string]TargetRootGrant)
+	for key, grant := range m.targetGrants {
+		if grant.ExtensionID != extensionID {
+			continue
+		}
+		previous[key] = grant
+		delete(m.targetGrants, key)
+	}
+	if len(previous) == 0 {
+		return nil
+	}
+	if err := m.saveTargetGrantsLocked(); err != nil {
+		for key, grant := range previous {
+			m.targetGrants[key] = grant
+		}
+		return fmt.Errorf("artifact: persist target root grant cleanup: %w", err)
+	}
+	return nil
+}
+
+// RefreshAuthorizedTargetRootsForCurrentGeneration is a host-lifecycle-only
+// operation invoked only after the extension kernel has completed a confirmed
+// package update. It preserves durable user/admin consent for the exact same
+// canonical roots across that trusted update while
+// rebinding the audit generation. It never creates a new root and is deliberately
+// not exposed through the plugin RPC surface.
+func (m *ArtifactManager) RefreshAuthorizedTargetRootsForCurrentGeneration(ctx context.Context, extensionID string) error {
+	if m == nil {
+		return fmt.Errorf("artifact: manager unavailable")
+	}
+	extensionID = strings.TrimSpace(extensionID)
+	if extensionID == "" {
+		return fmt.Errorf("artifact: extension id is required")
+	}
+	generation, err := m.generations.ResolveInstalledGeneration(ctx, extensionID)
+	if err != nil {
+		return fmt.Errorf("artifact: resolve installed generation: %w", err)
+	}
+	currentGeneration := strings.TrimSpace(generation.GenerationID)
+	if currentGeneration == "" {
+		return fmt.Errorf("artifact: installed generation id is required")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	changed := false
+	previous := make(map[string]TargetRootGrant)
+	for key, grant := range m.targetGrants {
+		if grant.ExtensionID != extensionID || grant.Generation == currentGeneration {
+			continue
+		}
+		previous[key] = grant
+		grant.Generation = currentGeneration
+		m.targetGrants[key] = grant
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	if err := m.saveTargetGrantsLocked(); err != nil {
+		for key, grant := range previous {
+			m.targetGrants[key] = grant
+		}
+		return fmt.Errorf("artifact: persist refreshed target root grants: %w", err)
 	}
 	return nil
 }

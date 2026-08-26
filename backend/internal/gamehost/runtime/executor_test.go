@@ -252,6 +252,67 @@ func TestRuntimeExecutor_StartRuntime_Success(t *testing.T) {
 	}
 }
 
+func TestRuntimeExecutor_StartPreparerBlocksServiceLaunch(t *testing.T) {
+	rtManager := newFakeRuntimeManager()
+	rtManager.AddRuntime("rt-1", "plugin-1", domain.RuntimeStateCreated)
+
+	topoStore := newFakeTopologyStore()
+	topoStore.SetTopology(RuntimeTopologySnapshot{
+		RuntimeID: "rt-1",
+		PluginID:  "plugin-1",
+		Services: []ServiceInstanceSnapshot{{
+			ID:        "rt-1/main",
+			RuntimeID: "rt-1",
+			PluginID:  "plugin-1",
+			ServiceID: "main",
+			State:     ServiceStateCreated,
+			Required:  true,
+		}},
+	})
+	topoStore.SetGraph(DependencyGraphSnapshot{
+		RuntimeID: "rt-1",
+		Nodes:     []DependencyNodeSnapshot{{ServiceID: "main"}},
+	})
+
+	svcExecutor := &fakeServiceExecutorWithDefs{}
+	exec, err := NewRuntimeExecutor(topoStore, rtManager, svcExecutor, NewLifecyclePlanner())
+	if err != nil {
+		t.Fatalf("NewRuntimeExecutor() error = %v", err)
+	}
+	prepareCalls := 0
+	if err := SetRuntimeStartPreparer(exec, RuntimeStartPreparerFunc(func(ctx context.Context, runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID) error {
+		prepareCalls++
+		if runtimeID != "rt-1" || pluginID != "plugin-1" {
+			t.Fatalf("preparer identity = %s/%s", runtimeID, pluginID)
+		}
+		return errors.New("required artifact authorization missing")
+	})); err != nil {
+		t.Fatalf("SetRuntimeStartPreparer() error = %v", err)
+	}
+
+	err = exec.StartRuntime(context.Background(), "rt-1")
+	if err == nil {
+		t.Fatal("StartRuntime() succeeded even though the pre-start prerequisite failed")
+	}
+	var execErr *ExecutionError
+	if !errors.As(err, &execErr) || execErr.Code != ErrDependencyNotSatisfied {
+		t.Fatalf("StartRuntime() error = %v, want %s", err, ErrDependencyNotSatisfied)
+	}
+	if prepareCalls != 1 {
+		t.Fatalf("preparer calls = %d, want 1", prepareCalls)
+	}
+	if len(svcExecutor.startedSvcs) != 0 {
+		t.Fatalf("services started before prerequisites completed: %v", svcExecutor.startedSvcs)
+	}
+	state, getErr := rtManager.GetRuntime("rt-1")
+	if getErr != nil {
+		t.Fatal(getErr)
+	}
+	if state.State != domain.RuntimeStateCreated {
+		t.Fatalf("runtime state = %q, want created after blocked start", state.State)
+	}
+}
+
 func TestRuntimeExecutor_StartRuntime_InvalidState(t *testing.T) {
 	rtManager := newFakeRuntimeManager()
 	rtManager.AddRuntime("rt-1", "plugin-1", domain.RuntimeStateRunning)

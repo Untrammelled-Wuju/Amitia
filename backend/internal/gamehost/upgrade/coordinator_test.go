@@ -7,11 +7,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration"
 	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
-	"github.com/u-ai/backend/internal/gamehost/config"
 )
 
 type fakePluginRegistry struct {
@@ -71,19 +71,19 @@ func (f *fakePluginRegistry) Count() int {
 }
 
 type fakeRuntimeManager struct {
-	mu        sync.Mutex
-	runtimes  map[domain.RuntimeInstanceID]*runtime.RuntimeInstanceRef
-	stopCount int
+	mu         sync.Mutex
+	runtimes   map[domain.RuntimeInstanceID]*runtime.RuntimeInstanceRef
+	stopCount  int
 	startCount int
-	failStop  domain.RuntimeInstanceID
-	failStart domain.RuntimeInstanceID
-	intents map[domain.RuntimeInstanceID]string
+	failStop   domain.RuntimeInstanceID
+	failStart  domain.RuntimeInstanceID
+	intents    map[domain.RuntimeInstanceID]string
 }
 
 func newFakeRuntimeManager() *fakeRuntimeManager {
 	return &fakeRuntimeManager{
 		runtimes: make(map[domain.RuntimeInstanceID]*runtime.RuntimeInstanceRef),
-		intents: make(map[domain.RuntimeInstanceID]string),
+		intents:  make(map[domain.RuntimeInstanceID]string),
 	}
 }
 
@@ -154,13 +154,13 @@ func (f *fakeRuntimeManager) setState(runtimeID domain.RuntimeInstanceID, state 
 }
 
 type fakeRuntimeExecutor struct {
-	mu           sync.Mutex
-	stopped      []domain.RuntimeInstanceID
-	started      []domain.RuntimeInstanceID
-	failStop     error
-	failStart    error
-	beforeStopFn func(id domain.RuntimeInstanceID)
-	afterStartFn func(id domain.RuntimeInstanceID)
+	mu             sync.Mutex
+	stopped        []domain.RuntimeInstanceID
+	started        []domain.RuntimeInstanceID
+	failStop       error
+	failStart      error
+	beforeStopFn   func(id domain.RuntimeInstanceID)
+	afterStartFn   func(id domain.RuntimeInstanceID)
 	runtimeManager *fakeRuntimeManager
 }
 
@@ -266,9 +266,9 @@ func (f *fakeContributionReconciler) SyncExtension(ctx context.Context, extensio
 }
 
 type fakeConfigValidator struct {
-	mu          sync.Mutex
-	validated   []string
-	failNext    bool
+	mu        sync.Mutex
+	validated []string
+	failNext  bool
 }
 
 func (f *fakeConfigValidator) Resolve(ctx context.Context, pluginID, runtimeID, serviceID string) (*config.ScopedConfig, []config.ValidationError) {
@@ -311,10 +311,10 @@ func (f *fakeKernelLifecycle) requireUpdate(callCount int) bool {
 }
 
 type fakeMigrationHook struct {
-	mu           sync.Mutex
-	executed     []MigrationContext
-	result       MigrationResult
-	err          error
+	mu       sync.Mutex
+	executed []MigrationContext
+	result   MigrationResult
+	err      error
 }
 
 func (f *fakeMigrationHook) ExecuteMigration(ctx context.Context, mc MigrationContext) (MigrationResult, error) {
@@ -368,6 +368,55 @@ func setupTestCoordinator(reg *fakePluginRegistry, rtMgr *fakeRuntimeManager, rt
 		panic(err)
 	}
 	return c, defRec, contribRec, cfgVal, kernel
+}
+
+func TestUpgrade_PostUpdatePreparerRunsOnlyAfterSuccessfulKernelUpdate(t *testing.T) {
+	reg := newFakePluginRegistry()
+	reg.addPlugin("ext-1", domain.PluginDescriptor{ID: "plugin-a", ExtensionID: "ext-1", Name: "A", Version: "1.0.0"})
+	rtMgr := newFakeRuntimeManager()
+	rtMgr.addRuntime("rt-1", "plugin-a", domain.RuntimeStateRunning)
+	rtExec := newFakeRuntimeExecutor()
+	c, _, _, _, _ := setupTestCoordinator(reg, rtMgr, rtExec)
+
+	prepared := 0
+	c.SetPostUpdatePreparer(ExtensionPostUpdatePreparerFunc(func(ctx context.Context, extensionID string) error {
+		prepared++
+		if extensionID != "ext-1" {
+			t.Fatalf("post-update extension id = %q", extensionID)
+		}
+		return nil
+	}))
+
+	result, err := c.ExecuteUpgrade(context.Background(), UpgradeRequest{ExtensionID: "ext-1", TargetVersion: "2.0.0"})
+	if err != nil || !result.Success {
+		t.Fatalf("ExecuteUpgrade() = result=%+v err=%v", result, err)
+	}
+	if prepared != 1 {
+		t.Fatalf("post-update preparer calls = %d, want 1", prepared)
+	}
+	if len(rtExec.started) != 1 || rtExec.started[0] != "rt-1" {
+		t.Fatalf("runtime resume = %v, want [rt-1]", rtExec.started)
+	}
+}
+
+func TestUpgrade_PostUpdatePreparerFailureBlocksRuntimeResume(t *testing.T) {
+	reg := newFakePluginRegistry()
+	reg.addPlugin("ext-1", domain.PluginDescriptor{ID: "plugin-a", ExtensionID: "ext-1", Name: "A", Version: "1.0.0"})
+	rtMgr := newFakeRuntimeManager()
+	rtMgr.addRuntime("rt-1", "plugin-a", domain.RuntimeStateRunning)
+	rtExec := newFakeRuntimeExecutor()
+	c, _, _, _, _ := setupTestCoordinator(reg, rtMgr, rtExec)
+	c.SetPostUpdatePreparer(ExtensionPostUpdatePreparerFunc(func(ctx context.Context, extensionID string) error {
+		return fmt.Errorf("artifact grant migration rejected")
+	}))
+
+	result, err := c.ExecuteUpgrade(context.Background(), UpgradeRequest{ExtensionID: "ext-1", TargetVersion: "2.0.0"})
+	if err == nil || result == nil || result.Stage != UpgradeStateFailed {
+		t.Fatalf("ExecuteUpgrade() result=%+v err=%v, want failed post-update preparation", result, err)
+	}
+	if len(rtExec.started) != 0 {
+		t.Fatalf("runtime resumed after failed post-update preparation: %v", rtExec.started)
+	}
 }
 
 func TestUpgrade_NoActiveRuntime(t *testing.T) {

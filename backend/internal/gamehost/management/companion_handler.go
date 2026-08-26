@@ -132,7 +132,7 @@ func (h *ArtifactHandler) AuthorizeRoot(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	grant, err := h.manager.AuthorizeTargetRoot(c.Request.Context(), c.Param("extensionId"), req.TargetRoot)
+	grant, err := h.manager.AuthorizeTargetRootForCompatibility(c.Request.Context(), c.Param("extensionId"), req.TargetRoot, req.CompatibilityVersion)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

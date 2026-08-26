@@ -19,6 +19,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
+	gamehostnetworkpolicy "github.com/u-ai/backend/internal/gamehost/networkpolicy"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
 	gamehostsecret "github.com/u-ai/backend/internal/gamehost/secret"
@@ -467,68 +468,8 @@ func (p *RuntimeGraphProvisioner) extractSecretManifestGrouped(kp KernelGamePlug
 }
 
 func buildPluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, permissions []string) (trusted_service.ServiceNetworkPolicy, error) {
-	// Cross-platform process isolation capabilities differ. Never infer a network
-	// policy: every game plugin must choose its intended boundary explicitly so
-	// Windows/macOS do not accidentally inherit a Linux-only deny-all default.
-	if spec == nil || strings.TrimSpace(spec.Mode) == "" {
-		return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("explicit game plugin network.mode is required")
-	}
-	mode := strings.ToLower(strings.TrimSpace(spec.Mode))
-	policy := trusted_service.ServiceNetworkPolicy{Mode: mode, Enforce: true}
-	switch mode {
-	case "none":
-	case "loopback":
-		policy.AllowOutbound = true
-		policy.LoopbackOnly = true
-	case "restricted":
-		if !containsString(permissions, "service.network.request") {
-			return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("restricted outbound network requires service.network.request")
-		}
-		policy.RequireProxy = true
-		policy.AllowedDomains = append([]string(nil), spec.AllowedDomains...)
-		policy.AllowedIPs = append([]string(nil), spec.AllowedIPs...)
-		policy.AllowedPorts = append([]int(nil), spec.AllowedPorts...)
-	case "unrestricted":
-		if !containsString(permissions, "service.network.request") {
-			return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("unrestricted outbound network requires service.network.request")
-		}
-		policy.AllowOutbound = true
-	default:
-		return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("unsupported mode %q", mode)
-	}
-	if err := trusted_service.ValidateNetworkPolicySupport(policy); err != nil {
-		return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("game plugin network mode %q is unavailable on this host: %w", mode, err)
-	}
-	return policy, nil
+	return gamehostnetworkpolicy.Build(spec, permissions)
 }
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if strings.TrimSpace(value) == target {
-			return true
-		}
-	}
-	return false
-}
-
-type bootServiceInfo struct {
-	ID                  ghdomain.ServiceID
-	ModuleID            string
-	Name                string
-	RuntimeType         string
-	EntryPoint          string
-	ExecutablePath      string
-	ExecutableSHA256    string
-	Arguments           []string
-	IntegrityValue      string
-	Dependencies        []trusted_service.LibraryDep
-	SandboxReadOnlyRoot string
-	Protocol            string
-	Env                 map[string]string
-	Network             trusted_service.ServiceNetworkPolicy
-	Limits              trusted_service.ServiceResourceLimits
-}
-
 func (p *RuntimeGraphProvisioner) buildBootService(ctx context.Context, kp KernelGamePlugin) (bootServiceInfo, error) {
 	services, err := p.buildBootServices(ctx, kp)
 	if err != nil {
@@ -810,6 +751,24 @@ func resolveGamePluginEntry(bundlePath, moduleID, entryPoint string) (string, er
 		return "", fmt.Errorf("runtime module escapes installed bundle")
 	}
 	return entryAbs, nil
+}
+
+type bootServiceInfo struct {
+	ID                ghdomain.ServiceID
+	ModuleID          string
+	Name              string
+	RuntimeType       string
+	EntryPoint        string
+	Protocol          string
+	Env               map[string]string
+	Arguments         []string
+	Network           trusted_service.ServiceNetworkPolicy
+	Limits            trusted_service.ServiceResourceLimits
+	ExecutablePath    string
+	ExecutableSHA256  string
+	IntegrityValue    string
+	Dependencies      []trusted_service.LibraryDep
+	SandboxReadOnlyRoot string
 }
 
 func bytesToMiBCeil(value int64) int64 {

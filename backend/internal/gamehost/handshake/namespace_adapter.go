@@ -13,7 +13,8 @@ type NamespaceApplyResult struct {
 }
 
 type NamespaceAdapter interface {
-	Apply(ctx context.Context, pluginID, runtimeID, serviceID string, namespaces []string) (*NamespaceApplyResult, error)
+	Apply(ctx context.Context, connectionID, pluginID, runtimeID, serviceID string, namespaces []string) (*NamespaceApplyResult, error)
+	RemoveConnection(ctx context.Context, runtimeID, serviceID, connectionID string) error
 }
 
 type rpcNamespaceAdapter struct {
@@ -28,6 +29,7 @@ func NewNamespaceAdapter(registry rpc.NamespaceRegistry) NamespaceAdapter {
 
 func (a *rpcNamespaceAdapter) Apply(
 	ctx context.Context,
+	connectionID string,
 	pluginID string,
 	runtimeID string,
 	serviceID string,
@@ -51,52 +53,34 @@ func (a *rpcNamespaceAdapter) Apply(
 	rid := domain.RuntimeInstanceID(runtimeID)
 	sid := domain.ServiceID(serviceID)
 
-	currentList, err := a.registry.List(ctx, rid)
+	nsSlice := make([]rpc.Namespace, 0, len(namespaces))
+	for _, ns := range namespaces {
+		nsSlice = append(nsSlice, rpc.Namespace(ns))
+	}
+
+	reconcileResult, err := a.registry.ReconcileService(ctx, domain.PluginID(pluginID), rid, sid, connectionID, nsSlice)
 	if err != nil {
 		return nil, NewHandshakeError(
-			HandshakeErrorNamespaceInvalid,
+			HandshakeErrorNamespaceConflict,
 			domain.ErrInternal,
-			"failed to list existing namespaces",
+			"namespace reconciliation failed: "+err.Error(),
 		)
 	}
-	currentMap := make(map[string]string, len(currentList))
-	for _, route := range currentList {
-		currentMap[string(route.Namespace)] = string(route.ServiceID)
+	for _, ns := range reconcileResult.Registered {
+		result.Registered = append(result.Registered, string(ns))
 	}
-
-	for _, ns := range namespaces {
-		if existing, ok := currentMap[ns]; ok {
-			if existing == serviceID {
-				result.Reused = append(result.Reused, ns)
-				continue
-			}
-			return nil, NewHandshakeError(
-				HandshakeErrorNamespaceConflict,
-				domain.ErrAlreadyExists,
-				"namespace already owned by another service: "+ns+" (owner: "+existing+")",
-			)
-		}
-	}
-
-	for _, ns := range namespaces {
-		err := a.registry.Register(ctx, rpc.Route{
-			PluginID:  domain.PluginID(pluginID),
-			RuntimeID: rid,
-			ServiceID: sid,
-			Namespace: rpc.Namespace(ns),
-		})
-		if err != nil {
-			for _, done := range result.Registered {
-				_ = a.registry.Unregister(ctx, rid, rpc.Namespace(done))
-			}
-			return nil, NewHandshakeError(
-				HandshakeErrorNamespaceConflict,
-				domain.ErrInternal,
-				"namespace registration failed: "+ns+": "+err.Error(),
-			)
-		}
-		result.Registered = append(result.Registered, ns)
+	for _, ns := range reconcileResult.Reused {
+		result.Reused = append(result.Reused, string(ns))
 	}
 
 	return result, nil
+}
+
+func (a *rpcNamespaceAdapter) RemoveConnection(
+	ctx context.Context,
+	runtimeID string,
+	serviceID string,
+	connectionID string,
+) error {
+	return a.registry.UnregisterByConnection(ctx, domain.RuntimeInstanceID(runtimeID), domain.ServiceID(serviceID), connectionID)
 }
