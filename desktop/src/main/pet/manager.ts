@@ -53,15 +53,14 @@ import {
   DesktopRuntimeHandlerV2,
   type RuntimeHandlerConfig,
   type RuntimeHandlerHooks,
+  type RuntimeResumeCursor,
 } from "../../desktop-pet/runtime/runtime-handler-v2";
-import type { RuntimeEnvelope, HelloAckPayload } from "../../desktop-pet/runtime/protocol-v2";
-import type { RuntimeCommandExecutionResult } from "./runtime-v2-command-adapter";
 import type {
-  RuntimeSessionContext,
-  ClickPayload,
-  DragPayload,
-  PlaybackPayload,
-} from "../../shared/runtime-protocol";
+  RuntimeEnvelope,
+  HelloAckPayload,
+  StateSnapshotPayload,
+} from "../../desktop-pet/runtime/protocol-v2";
+import type { RuntimeCommandExecutionResult } from "./runtime-v2-command-adapter";
 import { getBackendSessionClient } from "../backend-session-client";
 import type {
   ClickThroughMode,
@@ -118,7 +117,8 @@ export type PetManagerState =
   | "ready"
   | "enabled"
   | "disabled"
-  | "invalid";
+  | "invalid"
+  | "degraded";
 
 export interface InstallationInfo {
   id: string;
@@ -148,6 +148,7 @@ export interface InstallationInfo {
 
 export interface RuntimeSettingsInfo {
   installationId: string;
+  settingsRevision: number;
   alwaysOnTop: boolean;
   launchOnStartup: boolean;
   scale: number;
@@ -247,6 +248,7 @@ interface ListInstallationsApiPayload {
 
 interface RuntimeSettingsApiPayload {
   installationId: string;
+  settingsRevision: number;
   alwaysOnTop: number;
   launchOnStartup: number;
   scale: number;
@@ -258,6 +260,13 @@ interface RuntimeSettingsApiPayload {
   idleIntervalMaxSeconds: number;
   clickThroughMode: string;
   soundEnabled: number;
+}
+
+interface RuntimeSettingsMutationApiPayload {
+  operationId?: string;
+  status?: string;
+  stage?: string;
+  settings?: RuntimeSettingsApiPayload;
 }
 
 function clampScale(scale: number): number {
@@ -308,6 +317,7 @@ function mapInstallationPayload(payload: InstallationApiPayload): InstallationIn
 function mapRuntimeSettingsPayload(payload: RuntimeSettingsApiPayload): RuntimeSettingsInfo {
   return {
     installationId: payload.installationId,
+    settingsRevision: payload.settingsRevision ?? 0,
     alwaysOnTop: payload.alwaysOnTop !== 0,
     launchOnStartup: payload.launchOnStartup !== 0,
     scale: payload.scale,
@@ -335,6 +345,7 @@ export class DesktopPetManager {
   private state: PetManagerState = "uninitialized";
   private initialized = false;
   private initializing = false;
+  private initializationError: Error | null = null;
   private activeInstallationId: string | null = null;
   private activeInstallation: InstallationInfo | null = null;
   private activeSettings: RuntimeSettingsInfo | null = null;
@@ -356,6 +367,7 @@ export class DesktopPetManager {
   private runtimeHandler: DesktopRuntimeHandlerV2 | null = null;
   private bridgeReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private bridgeStarted = false;
+  private bridgeConnecting = false;
   private currentActionKey: string | null = null;
   private currentDragId: string | null = null;
   private currentPlaybackId: string | null = null;
@@ -363,9 +375,16 @@ export class DesktopPetManager {
   private readonly playbackCommandIds = new Map<string, string>();
   private readonly playbackDecisionIds = new Map<string, string>();
   private lastAppliedDesiredRevision = 0;
+  private lastAppliedSettingsRevision = 0;
+  private runtimeResumeCursor: RuntimeResumeCursor = {
+    lastAppliedDesiredRevision: 0,
+    lastProcessedCommandSequence: 0,
+    lastEventSequence: 0,
+  };
+  private runtimeStateSync: Promise<void> = Promise.resolve();
+  private lifecycleMutationQueue: Promise<void> = Promise.resolve();
   private petInstances: PetInstanceSummary[] = [];
   private rendererHealthy = true;
-  private sessionContext: RuntimeSessionContext | null = null;
 
   private recoveryHandlersAttached = false;
   private recoveryInProgress = false;
@@ -474,38 +493,75 @@ export class DesktopPetManager {
   }
 
   async initialize(): Promise<void> {
-    if (this.initialized || this.initializing) {
+    if (this.initialized) {
+      return;
+    }
+    if (this.initializing) {
+      await this.ensureInitialized();
       return;
     }
     this.initializing = true;
+    const retryingAfterInitializationFailure =
+      this.state === "degraded" &&
+      this.initializationError !== null &&
+      !this.activeInstallationId;
+    this.initializationError = null;
+    if (retryingAfterInitializationFailure) {
+      this.setState("uninitialized", null, "重新初始化");
+    }
     try {
       await this.waitCoreReady();
       await this.registerDeviceIdentity();
       await this.restoreActiveInstallation();
       this.startBridge();
       this.initialized = true;
+      this.initializationError = null;
       if (this.state === "uninitialized") {
         this.setState("ready", null, "初始化完成但无活跃桌宠");
       }
     } catch (err) {
-      console.error("[DesktopPetManager] 初始化失败:", err);
+      const failure = err instanceof Error ? err : new Error(this.errorMessage(err));
+      console.error("[DesktopPetManager] 初始化失败:", failure);
       this.initialized = false;
-      this.setState("ready", null, `初始化失败: ${this.errorMessage(err)}`);
+      this.initializationError = failure;
+      this.setState("degraded", null, `初始化失败: ${failure.message}`);
+      throw failure;
     } finally {
       this.initializing = false;
     }
   }
 
   async enableInstallation(installationId: string): Promise<void> {
+    await this.runLifecycleMutation(() =>
+      this.enableInstallationInternal(installationId, true, false),
+    );
+  }
+
+  private async enableInstallationInternal(
+    installationId: string,
+    notifyBackend: boolean,
+    forceReload: boolean,
+  ): Promise<void> {
     if (!installationId) {
       throw new Error("INSTALLATION_ID_REQUIRED");
     }
     await this.ensureInitialized();
-    if (this.activeInstallationId === installationId && this.state === "enabled") {
-      return;
-    }
-    if (this.activeInstallationId && this.activeInstallationId !== installationId) {
-      await this.disableInternal(false);
+    if (
+      this.activeInstallationId === installationId &&
+      this.state === "enabled"
+    ) {
+      if (!forceReload) {
+        return;
+      }
+      // A release reload must tear down the current player/window before
+      // loading the replacement assets. Re-entering startRuntime on top of an
+      // enabled instance leaks the old runtime and defeats the reload command.
+      await this.disableInternal(false, false);
+    } else if (
+      this.activeInstallationId &&
+      this.activeInstallationId !== installationId
+    ) {
+      await this.disableInternal(false, notifyBackend);
     }
 
     const installation = await this.fetchInstallation(installationId);
@@ -548,7 +604,10 @@ export class DesktopPetManager {
     this.packageRevision += 1;
 
     try {
-      await this.callEnableApi(installationId);
+      if (notifyBackend) {
+        await this.callEnableApi(installationId);
+      }
+      this.markSettingsRevisionApplied(settings?.settingsRevision ?? 0);
       await this.startRuntime(installation, settings, loaded);
       this.setupRecoveryHandlers();
       this.petLogger.logEnable(installationId, installation.name);
@@ -569,22 +628,24 @@ export class DesktopPetManager {
   }
 
   async disableInstallation(): Promise<void> {
-    await this.disableInternal(true);
+    await this.runLifecycleMutation(() => this.disableInternal(true));
   }
 
   async switchInstallation(installationId: string): Promise<void> {
     if (!installationId) {
       throw new Error("INSTALLATION_ID_REQUIRED");
     }
-    await this.ensureInitialized();
-    if (
-      this.activeInstallationId === installationId &&
-      this.state === "enabled"
-    ) {
-      return;
-    }
-    await this.disableInternal(false);
-    await this.enableInstallation(installationId);
+    await this.runLifecycleMutation(async () => {
+      await this.ensureInitialized();
+      if (
+        this.activeInstallationId === installationId &&
+        this.state === "enabled"
+      ) {
+        return;
+      }
+      await this.disableInternal(false);
+      await this.enableInstallationInternal(installationId, true, false);
+    });
   }
 
   async playAction(actionKey: string): Promise<void> {
@@ -632,16 +693,22 @@ export class DesktopPetManager {
     if (this.activeInstallationId) {
       await this.callRecenterApi(this.activeInstallationId);
     }
-    const primary = this.windowAdapter.listScreens().find((s) => s.isPrimary);
-    const target = primary ?? this.windowAdapter.listScreens()[0];
-    if (target) {
-      const width = this.windowAdapter.getOptions().canvasWidth;
-      const height = this.windowAdapter.getOptions().canvasHeight;
-      const x = target.workArea.x + target.workArea.width - width - 40;
-      const y = target.workArea.y + target.workArea.height - height - 40;
-      await this.windowAdapter.setPosition(x, y, target.id);
-    }
+    await this.applyRecenterLocal();
     await this.persistRuntimePosition();
+  }
+
+  private async applyRecenterLocal(): Promise<void> {
+    if (this.state !== "enabled" || !this.windowAdapter) {
+      throw new Error("PET_NOT_ENABLED");
+    }
+    const primary = this.windowAdapter.listScreens().find((screen) => screen.isPrimary);
+    const target = primary ?? this.windowAdapter.listScreens()[0];
+    if (!target) return;
+    const width = this.windowAdapter.getOptions().canvasWidth;
+    const height = this.windowAdapter.getOptions().canvasHeight;
+    const x = target.workArea.x + target.workArea.width - width - 40;
+    const y = target.workArea.y + target.workArea.height - height - 40;
+    await this.windowAdapter.setPosition(x, y, target.id);
   }
 
   async updateSettings(settings: Partial<RuntimeSettingsInfo>): Promise<void> {
@@ -652,10 +719,24 @@ export class DesktopPetManager {
     if (Object.keys(patch).length === 0) {
       return;
     }
-    await this.callUpdateSettingsApi(this.activeInstallationId, patch);
-    const merged = this.mergeSettings(this.activeSettings, settings);
+    const updated = await this.callUpdateSettingsApi(this.activeInstallationId, patch);
+    await this.applyRuntimeSettingsLocal(updated ?? settings, updated?.settingsRevision ?? 0);
+  }
+
+  private async applyRuntimeSettingsLocal(
+    settings: Partial<RuntimeSettingsInfo>,
+    settingsRevision = 0,
+  ): Promise<void> {
+    const revision = Math.max(settingsRevision, settings.settingsRevision ?? 0);
+    const merged = this.mergeSettings(this.activeSettings, {
+      ...settings,
+      settingsRevision: revision > 0
+        ? revision
+        : this.activeSettings?.settingsRevision ?? 0,
+    });
     this.activeSettings = merged;
-    if (this.windowAdapter && merged) {
+    this.markSettingsRevisionApplied(merged.settingsRevision);
+    if (this.windowAdapter) {
       if (typeof settings.scale === "number") {
         await this.windowAdapter.setScale(clampScale(merged.scale));
       }
@@ -672,7 +753,7 @@ export class DesktopPetManager {
         }
       }
     }
-    if (this.idleController && merged) {
+    if (this.idleController) {
       this.idleController.reset();
     }
   }
@@ -738,9 +819,13 @@ export class DesktopPetManager {
       while (this.initializing) {
         await new Promise((r) => setTimeout(r, 50));
       }
-      return;
+      if (this.initialized) return;
+      throw this.initializationError ?? new Error("DESKTOP_PET_INITIALIZATION_FAILED");
     }
     await this.initialize();
+    if (!this.initialized) {
+      throw this.initializationError ?? new Error("DESKTOP_PET_INITIALIZATION_FAILED");
+    }
   }
 
   private async waitCoreReady(timeoutMs = 60000): Promise<void> {
@@ -820,6 +905,7 @@ export class DesktopPetManager {
       this.activeSettings = settings;
       this.loadedInstallation = loaded;
       this.packageRevision += 1;
+      this.markSettingsRevisionApplied(settings?.settingsRevision ?? 0);
       await this.startRuntime(installation, settings, loaded);
       this.setupRecoveryHandlers();
       this.petLogger.logEnable(installation.id, installation.name);
@@ -832,8 +918,17 @@ export class DesktopPetManager {
         "[DesktopPetManager] 恢复活跃桌宠失败:",
         this.errorMessage(err),
       );
+      try {
+        await this.stopRuntime();
+      } catch (stopErr) {
+        this.petLogger.logRuntimeCrash("restoreActiveInstallation.stopRuntime", stopErr);
+      }
+      this.activeInstallationId = null;
+      this.activeInstallation = null;
+      this.activeSettings = null;
+      this.loadedInstallation = null;
       this.setState(
-        "ready",
+        "degraded",
         installation.id,
         `恢复失败: ${this.errorMessage(err)}`,
       );
@@ -915,6 +1010,7 @@ export class DesktopPetManager {
       position,
     };
 
+    this.rendererHealthy = true;
     const windowAdapter = new DesktopPetWindowAdapter(windowOptions);
     const win = await windowAdapter.create();
 
@@ -927,6 +1023,8 @@ export class DesktopPetManager {
       this.scheduleRecovery(RECOVERY_REASON_WINDOW_CLOSED);
     };
     const windowCrashedListener = (): void => {
+      this.rendererHealthy = false;
+      this.syncRuntimeState();
       this.petLogger.logWindowRecovered(
         RECOVERY_REASON_RENDER_RELOAD,
         this.activeInstallationId ?? undefined,
@@ -1179,19 +1277,33 @@ export class DesktopPetManager {
     this.intentionalClose = false;
   }
 
-  private async disableInternal(notifyBackend: boolean): Promise<void> {
+  private runLifecycleMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.lifecycleMutationQueue.then(operation, operation);
+    this.lifecycleMutationQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async disableInternal(
+    notifyBackend: boolean,
+    persistPosition = true,
+  ): Promise<void> {
     if (!this.activeInstallationId) {
       return;
     }
     const installationId = this.activeInstallationId;
     this.teardownRecoveryHandlers();
-    try {
-      await this.persistRuntimePosition();
-    } catch (err) {
-      console.warn(
-        "[DesktopPetManager] 停用前持久化位置失败:",
-        this.errorMessage(err),
-      );
+    if (persistPosition) {
+      try {
+        await this.persistRuntimePosition();
+      } catch (err) {
+        console.warn(
+          "[DesktopPetManager] 停用前持久化位置失败:",
+          this.errorMessage(err),
+        );
+      }
     }
     await this.stopRuntime();
     if (notifyBackend) {
@@ -1282,14 +1394,19 @@ export class DesktopPetManager {
         break;
       case "playback.action_completed":
         if (commandId) {
-          void this.runtimeHandler?.sendPlaybackEnded(
-            playbackId,
-            commandId,
-            event.actionKey ?? "",
-            0,
-            "natural_end",
-            context,
-          );
+          const runtime = this.runtimeHandler;
+          if (runtime) {
+            void runtime.sendPlaybackEnded(
+              playbackId,
+              commandId,
+              event.actionKey ?? "",
+              0,
+              "natural_end",
+              context,
+            ).then(() => this.syncRuntimeState()).catch((err) => {
+              console.warn("[DesktopPetManager] 上报播放完成失败:", this.errorMessage(err));
+            });
+          }
         }
         if (playbackId) {
           this.playbackCommandIds.delete(playbackId);
@@ -1304,14 +1421,19 @@ export class DesktopPetManager {
         break;
       case "playback.action_interrupted":
         if (commandId) {
-          void this.runtimeHandler?.sendPlaybackInterrupted(
-            playbackId,
-            commandId,
-            event.actionKey ?? "",
-            0,
-            event.reason ?? "higher_priority_action",
-            context,
-          );
+          const runtime = this.runtimeHandler;
+          if (runtime) {
+            void runtime.sendPlaybackInterrupted(
+              playbackId,
+              commandId,
+              event.actionKey ?? "",
+              0,
+              event.reason ?? "higher_priority_action",
+              context,
+            ).then(() => this.syncRuntimeState()).catch((err) => {
+              console.warn("[DesktopPetManager] 上报播放中断失败:", this.errorMessage(err));
+            });
+          }
         }
         if (playbackId) {
           this.playbackCommandIds.delete(playbackId);
@@ -1331,14 +1453,19 @@ export class DesktopPetManager {
           event.reason,
         );
         if (commandId) {
-          void this.runtimeHandler?.sendPlaybackFailed(
-            playbackId,
-            commandId,
-            event.actionKey ?? "",
-            event.reason ?? "playback_failed",
-            "playback execution failed",
-            context,
-          );
+          const runtime = this.runtimeHandler;
+          if (runtime) {
+            void runtime.sendPlaybackFailed(
+              playbackId,
+              commandId,
+              event.actionKey ?? "",
+              event.reason ?? "playback_failed",
+              "playback execution failed",
+              context,
+            ).then(() => this.syncRuntimeState()).catch((err) => {
+              console.warn("[DesktopPetManager] 上报播放失败失败:", this.errorMessage(err));
+            });
+          }
         }
         if (playbackId) {
           this.playbackCommandIds.delete(playbackId);
@@ -1378,6 +1505,8 @@ export class DesktopPetManager {
   }
 
   private handleRendererBootstrapped(): void {
+    this.rendererHealthy = true;
+    this.syncRuntimeState();
     this.petLogger.logWindowRecovered(
       "renderer-bootstrapped",
       this.activeInstallationId ?? undefined,
@@ -1391,7 +1520,9 @@ export class DesktopPetManager {
       );
       return;
     }
+    this.rendererHealthy = true;
     this.windowAdapter?.showWhenRuntimeReady();
+    this.syncRuntimeState();
     this.petLogger.logWindowRecovered(
       "runtime-ready",
       this.activeInstallationId ?? undefined,
@@ -1620,10 +1751,14 @@ export class DesktopPetManager {
       scale: snapshot.scale,
     };
     try {
-      await this.callUpdateSettingsApi(
+      const updated = await this.callUpdateSettingsApi(
         this.activeInstallationId,
         this.buildSettingsPatch(patch),
       );
+      if (updated) {
+        this.activeSettings = updated;
+        this.markSettingsRevisionApplied(updated.settingsRevision);
+      }
     } catch (err) {
       console.warn(
         "[DesktopPetManager] 持久化运行时位置失败:",
@@ -1747,9 +1882,14 @@ export class DesktopPetManager {
   private async callUpdateSettingsApi(
     installationId: string,
     patch: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<RuntimeSettingsInfo | null> {
     const path = `${API_BASE_PATH}/installations/${encodeURIComponent(installationId)}/settings`;
-    await this.request("PATCH", path, patch);
+    const response = await this.request<RuntimeSettingsMutationApiPayload>(
+      "PATCH",
+      path,
+      patch,
+    );
+    return response?.settings ? mapRuntimeSettingsPayload(response.settings) : null;
   }
 
   private async markInstallationInvalid(
@@ -1988,14 +2128,6 @@ export class DesktopPetManager {
     screen.on("display-removed", this.boundDisplayRemoved);
     screen.on("display-metrics-changed", this.boundDisplayMetricsChanged);
     app.on("child-process-gone", this.boundChildProcessGone);
-    if (this.windowAdapter) {
-      if (this.recoveryWindowCloseListener) {
-        this.windowAdapter.on("close", this.recoveryWindowCloseListener);
-      }
-      if (this.recoveryWindowCrashedListener) {
-        this.windowAdapter.on("crashed", this.recoveryWindowCrashedListener);
-      }
-    }
   }
 
   private teardownRecoveryHandlers(): void {
@@ -2195,6 +2327,7 @@ export class DesktopPetManager {
   ): RuntimeSettingsInfo {
     const fallback: RuntimeSettingsInfo = {
       installationId: this.activeInstallationId ?? "",
+      settingsRevision: 0,
       alwaysOnTop: true,
       launchOnStartup: false,
       scale: PET_WINDOW_SCALE_DEFAULT,
@@ -2210,6 +2343,10 @@ export class DesktopPetManager {
     const current = base ?? fallback;
     return {
       installationId: current.installationId,
+      settingsRevision:
+        typeof updates.settingsRevision === "number"
+          ? updates.settingsRevision
+          : current.settingsRevision,
       alwaysOnTop:
         typeof updates.alwaysOnTop === "boolean"
           ? updates.alwaysOnTop
@@ -2369,6 +2506,7 @@ export class DesktopPetManager {
       this.bridgeReconnectTimer = null;
     }
     if (this.runtimeHandler) {
+      this.captureRuntimeCursor(this.runtimeHandler);
       try {
         this.runtimeHandler.disconnect();
       } catch {
@@ -2379,18 +2517,33 @@ export class DesktopPetManager {
   }
 
   private async connectBridge(): Promise<void> {
-    if (!this.bridgeStarted) return;
+    if (!this.bridgeStarted || this.bridgeConnecting) return;
+    this.bridgeConnecting = true;
 
     const runtimeId = getRuntimeId();
     const deviceId = getDeviceId();
 
     try {
-      const issued = await createRuntimeBootstrapTicket(
-        deviceId,
-        runtimeId,
-      );
+      if (this.runtimeHandler) {
+        const previousHandler = this.runtimeHandler;
+        this.captureRuntimeCursor(previousHandler);
+        this.runtimeHandler = null;
+        try {
+          previousHandler.disconnect();
+        } catch {
+          void 0;
+        }
+      }
 
+      const issued = await createRuntimeBootstrapTicket(deviceId, runtimeId);
       const wsUrl = this.buildRuntimeV2URL(issued.ticket, runtimeId, deviceId);
+      const resumeCursor: RuntimeResumeCursor = {
+        ...this.runtimeResumeCursor,
+        lastAppliedDesiredRevision: Math.max(
+          this.runtimeResumeCursor.lastAppliedDesiredRevision,
+          this.lastAppliedDesiredRevision,
+        ),
+      };
       const handlerConfig: RuntimeHandlerConfig = {
         url: wsUrl,
         userId: issued.userId,
@@ -2401,19 +2554,25 @@ export class DesktopPetManager {
         autoReconnect: false,
         heartbeatIntervalMs: 15000,
         maxReconnectAttempts: 0,
+        resumeCursor,
       };
 
       const hooks = this.buildRuntimeHooks();
-      this.runtimeHandler = new DesktopRuntimeHandlerV2(handlerConfig, hooks);
-
-      await this.runtimeHandler.connect("initial");
+      const handler = new DesktopRuntimeHandlerV2(handlerConfig, hooks);
+      this.runtimeHandler = handler;
+      const reconnectReason = resumeCursor.lastEventSequence > 0
+        ? "transport_lost"
+        : "initial";
+      await handler.connect(reconnectReason);
+      this.captureRuntimeCursor(handler);
     } catch (error) {
       console.warn(
-        "[DesktopPetManager] runtime ticket 获取失败:",
+        "[DesktopPetManager] runtime ticket/连接失败:",
         this.errorMessage(error),
       );
       this.scheduleBridgeReconnect();
-      return;
+    } finally {
+      this.bridgeConnecting = false;
     }
   }
 
@@ -2454,7 +2613,12 @@ export class DesktopPetManager {
       onState: (state) => {
         if (state === "disconnected") {
           console.warn("[DesktopPetManager] runtime disconnected");
-          if (this.bridgeStarted) {
+          const activeHandler = this.runtimeHandler;
+          if (
+            this.bridgeStarted &&
+            activeHandler &&
+            activeHandler.getState() === "disconnected"
+          ) {
             this.scheduleBridgeReconnect();
           }
         }
@@ -2464,7 +2628,7 @@ export class DesktopPetManager {
           "[DesktopPetManager] runtime connected session=",
           ack.sessionId,
         );
-        this.lastAppliedDesiredRevision = ack.currentDesiredRevision ?? 0;
+        void ack.currentDesiredRevision;
         this.syncRuntimeState();
       },
       onError: (err: Error) => {
@@ -2473,7 +2637,15 @@ export class DesktopPetManager {
       onEvent: (_envelope: RuntimeEnvelope) => {
       },
       onDesiredSync: (revision: number) => {
-        this.lastAppliedDesiredRevision = revision;
+        this.markDesiredRevisionApplied(revision);
+      },
+      onCommandSettled: (result, envelope) => {
+        const command = envelope.payload as { settingsRevision?: number } | undefined;
+        if (result.status === "applied" || result.status === "duplicate") {
+          this.markSettingsRevisionApplied(command?.settingsRevision ?? 0);
+        }
+        this.captureRuntimeCursor(this.runtimeHandler);
+        this.syncRuntimeState();
       },
       onCommand: async (
         command: unknown,
@@ -2535,8 +2707,10 @@ export class DesktopPetManager {
                   appliedRevision: desiredRevision,
                 };
               }
-              await this.enableInstallation(installationId);
-              this.lastAppliedDesiredRevision = desiredRevision;
+              await this.runLifecycleMutation(() =>
+                this.enableInstallationInternal(installationId, false, false),
+              );
+              this.markDesiredRevisionApplied(desiredRevision);
               return {
                 commandId,
                 status: "applied",
@@ -2548,8 +2722,10 @@ export class DesktopPetManager {
             }
             case "destroy":
             case "runtime.command.ensure_absent": {
-              await this.disableInstallation();
-              this.lastAppliedDesiredRevision = desiredRevision;
+              await this.runLifecycleMutation(() =>
+                this.disableInternal(false, false),
+              );
+              this.markDesiredRevisionApplied(desiredRevision);
               return {
                 commandId,
                 status: "applied",
@@ -2563,7 +2739,7 @@ export class DesktopPetManager {
               if (win && !win.isDestroyed()) {
                 win.show();
               }
-              this.lastAppliedDesiredRevision = desiredRevision;
+              this.markDesiredRevisionApplied(desiredRevision);
               return {
                 commandId,
                 status: "applied",
@@ -2578,7 +2754,7 @@ export class DesktopPetManager {
               if (win && !win.isDestroyed()) {
                 win.hide();
               }
-              this.lastAppliedDesiredRevision = desiredRevision;
+              this.markDesiredRevisionApplied(desiredRevision);
               return {
                 commandId,
                 status: "applied",
@@ -2671,25 +2847,25 @@ export class DesktopPetManager {
               if (typeof settings?.soundEnabled === "boolean") {
                 updates.soundEnabled = settings.soundEnabled;
               }
-              await this.updateSettings(updates);
+              await this.applyRuntimeSettingsLocal(updates, cmd.settingsRevision ?? 0);
               return {
                 commandId,
                 status: "applied",
                 errorCode: "",
                 errorMessage: "",
-                appliedRevision: cmd.settingsRevision ?? desiredRevision,
+                appliedRevision: desiredRevision,
                 actualState: this.collectPetInstanceSummary(),
               };
             }
             case "recenter":
             case "runtime.command.recenter_once": {
-              await this.recenter();
+              await this.applyRecenterLocal();
               return {
                 commandId,
                 status: "applied",
                 errorCode: "",
                 errorMessage: "",
-                appliedRevision: cmd.settingsRevision ?? desiredRevision,
+                appliedRevision: desiredRevision,
                 actualState: this.collectPetInstanceSummary(),
               };
             }
@@ -2697,9 +2873,18 @@ export class DesktopPetManager {
               const reloadInstallationId = cmd.payload?.installation?.installationId
                 ?? cmd.installationId
                 ?? "";
-              if (reloadInstallationId) {
-                await this.enableInstallation(reloadInstallationId);
+              if (!reloadInstallationId) {
+                return {
+                  commandId,
+                  status: "rejected",
+                  errorCode: "MISSING_INSTALLATION_ID",
+                  errorMessage: "reload_release payload missing installationId",
+                  appliedRevision: desiredRevision,
+                };
               }
+              await this.runLifecycleMutation(() =>
+                this.enableInstallationInternal(reloadInstallationId, false, true),
+              );
               return {
                 commandId,
                 status: "applied",
@@ -2742,7 +2927,9 @@ export class DesktopPetManager {
             case "sync": {
               const payload = cmd.payload;
               if (payload?.ensureAbsent && this.activeInstallationId) {
-                await this.disableInstallation();
+                await this.runLifecycleMutation(() =>
+                  this.disableInternal(false, false),
+                );
               } else if (
                 payload?.desiredPet?.installation?.installationId
               ) {
@@ -2751,10 +2938,12 @@ export class DesktopPetManager {
                   this.activeInstallationId !== installationId ||
                   this.state !== "enabled"
                 ) {
-                  await this.enableInstallation(installationId);
+                  await this.runLifecycleMutation(() =>
+                    this.enableInstallationInternal(installationId, false, false),
+                  );
                 }
               }
-              this.lastAppliedDesiredRevision = desiredRevision;
+              this.markDesiredRevisionApplied(desiredRevision);
               return {
                 commandId,
                 status: "applied",
@@ -2805,10 +2994,156 @@ export class DesktopPetManager {
     };
   }
 
+  private markDesiredRevisionApplied(revision: number): void {
+    if (!Number.isFinite(revision) || revision <= 0) return;
+    this.lastAppliedDesiredRevision = Math.max(
+      this.lastAppliedDesiredRevision,
+      Math.floor(revision),
+    );
+  }
+
+  private markSettingsRevisionApplied(revision: number): void {
+    if (!Number.isFinite(revision) || revision <= 0) return;
+    this.lastAppliedSettingsRevision = Math.max(
+      this.lastAppliedSettingsRevision,
+      Math.floor(revision),
+    );
+  }
+
+  private captureRuntimeCursor(handler: DesktopRuntimeHandlerV2 | null): void {
+    if (!handler) return;
+    const cursor = handler.getResumeCursor();
+    this.runtimeResumeCursor = {
+      lastAppliedDesiredRevision: Math.max(
+        cursor.lastAppliedDesiredRevision,
+        this.lastAppliedDesiredRevision,
+      ),
+      lastProcessedCommandSequence: Math.max(
+        cursor.lastProcessedCommandSequence,
+        this.runtimeResumeCursor.lastProcessedCommandSequence,
+      ),
+      lastEventSequence: Math.max(
+        cursor.lastEventSequence,
+        this.runtimeResumeCursor.lastEventSequence,
+      ),
+      actualStateHash: cursor.actualStateHash ?? this.runtimeResumeCursor.actualStateHash,
+    };
+  }
+
+  private buildRuntimeStateSnapshot(
+    handler: DesktopRuntimeHandlerV2,
+    summary: PetInstanceSummary | undefined,
+  ): StateSnapshotPayload {
+    const playerState = this.actionPlayer?.getState() ?? "idle";
+    const playbackStatus = playerState === "loading"
+      ? "loading"
+      : playerState === "playing"
+        ? "playing"
+        : playerState === "paused"
+          ? "paused"
+          : playerState === "stopped"
+            ? "stopped"
+            : "idle";
+    const stableActionKey = this.activeInstallation?.defaultActionKey
+      ?? this.loadedInstallation?.defaultAction?.key
+      ?? "";
+    const currentActionKey = this.currentActionKey ?? stableActionKey;
+    const rendererBootstrapped = this.animationIpc?.isBootstrapped() ?? false;
+    const rendererRuntimeReady = this.animationIpc?.isRuntimeReady() ?? false;
+    const instanceStatus = !this.activeInstallationId
+      ? "absent"
+      : this.state === "invalid" || this.state === "degraded"
+        ? "failed"
+        : this.state === "enabled"
+          ? rendererRuntimeReady
+            ? "ready"
+            : "renderer_initializing"
+          : this.state === "uninitialized"
+            ? "starting"
+            : "stopped";
+    const windowStatus = summary?.visible
+      ? "visible"
+      : this.activeInstallationId
+        ? "hidden"
+        : "absent";
+    const rendererStatus = !this.activeInstallationId
+      ? "absent"
+      : !this.rendererHealthy
+        ? "failed"
+        : rendererRuntimeReady
+          ? "runtime_ready"
+          : rendererBootstrapped
+            ? "bootstrapped"
+            : "absent";
+
+    // Hash the same canonical runtime facts that are projected to the server.
+    // Renderer bootstrap/runtime-ready transitions must change the hash even
+    // when the high-level PetManager state remains `enabled`.
+    const actualState = {
+      installationId: this.activeInstallationId ?? "",
+      petId: this.activeInstallation?.petId ?? "",
+      releaseId: this.activeInstallation?.currentReleaseId ?? "",
+      instanceStatus,
+      windowStatus,
+      rendererStatus,
+      playbackStatus,
+      stableActionKey,
+      currentActionKey,
+      playbackInstanceId: this.currentPlaybackId ?? "",
+      currentCommandId: this.currentCommandId ?? "",
+      visible: summary?.visible ?? false,
+      positionX: summary?.positionX ?? 0,
+      positionY: summary?.positionY ?? 0,
+      screenId: summary?.screenId ?? "",
+      scale: summary?.scale ?? PET_WINDOW_SCALE_DEFAULT,
+    };
+    const actualStateHash = "sha256:" + createHash("sha256")
+      .update(JSON.stringify(actualState), "utf8")
+      .digest("hex");
+
+    return {
+      connectionGeneration: Math.max(1, handler.getConnectionGeneration()),
+      eventSequence: handler.getEventSequence() + 1,
+      actualStateHash,
+      instanceStatus,
+      windowStatus,
+      rendererStatus,
+      playbackStatus,
+      appliedDesiredRevision: this.lastAppliedDesiredRevision,
+      appliedSettingsRevision: this.lastAppliedSettingsRevision,
+      installationId: this.activeInstallationId ?? "",
+      petId: this.activeInstallation?.petId ?? "",
+      releaseId: this.activeInstallation?.currentReleaseId ?? "",
+      stableActionKey,
+      currentActionKey,
+      playbackInstanceId: this.currentPlaybackId ?? undefined,
+      currentCommandId: this.currentCommandId ?? undefined,
+      lastProcessedCommandSequence: handler.getLastProcessedCommandSequence(),
+      capturedAt: new Date().toISOString(),
+    };
+  }
+
   private syncRuntimeState(): void {
     const summary = this.collectPetInstanceSummary();
     this.petInstances = summary ? [summary] : [];
-    void this.runtimeHandler?.sendRendererHealth(this.rendererHealthy);
+    const handler = this.runtimeHandler;
+    if (!handler || !handler.isConnected()) return;
+
+    this.runtimeStateSync = this.runtimeStateSync
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.runtimeHandler !== handler || !handler.isConnected()) return;
+        await handler.sendRendererHealth(this.rendererHealthy);
+        if (this.runtimeHandler !== handler || !handler.isConnected()) return;
+        await handler.sendRendererState(this.buildRuntimeStateSnapshot(handler, summary));
+        this.captureRuntimeCursor(handler);
+      })
+      .catch((err) => {
+        console.warn(
+          "[DesktopPetManager] 同步 Runtime v2 权威状态失败:",
+          this.errorMessage(err),
+        );
+      });
   }
 }
 
