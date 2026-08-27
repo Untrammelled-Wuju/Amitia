@@ -3,6 +3,7 @@ package com.amitia.amitia_app.runtime
 import android.content.Context
 import com.amitia.amitia_app.runtime.abi.internal.BuildAndroidAbiProvider
 import com.amitia.amitia_app.runtime.abi.internal.DefaultRuntimeAbiGate
+import com.amitia.amitia_app.runtime.abi.RuntimeAbiGate
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiPolicy
 import com.amitia.amitia_app.runtime.api.RuntimeModule
 import com.amitia.amitia_app.runtime.connection.internal.DefaultBackendConnectionProvider
@@ -31,7 +32,6 @@ import com.amitia.amitia_app.runtime.proot.internal.AndroidProotRawResourceMetad
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotArtifactVerifier
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotCommandBuilder
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotProcessLauncher
-import com.amitia.amitia_app.runtime.proot.internal.ProotMetadataLoaderInternal
 import com.amitia.amitia_app.runtime.recovery.ActiveRuntimeBackedInstalledRuntimeSource
 import com.amitia.amitia_app.runtime.recovery.DefaultRuntimeCrashRecoveryPolicy
 import com.amitia.amitia_app.runtime.recovery.ExecutorRuntimeRecoveryScheduler
@@ -77,7 +77,7 @@ object AndroidRuntimeModule {
         val stateStore = RuntimeStateStore()
         val serviceHost = AndroidRuntimeServiceHost(appContext)
 
-        val prootComponent = createProotComponent(appContext)
+        val prootComponent = createProotComponent(appContext, abiGate)
         cachedProotComponent = prootComponent
         cachedRootfsPath = layout.rootfsRoot.absolutePath
         cachedRuntimeHostLayout = layout
@@ -163,23 +163,20 @@ object AndroidRuntimeModule {
         )
     }
 
-    private fun createProotComponent(context: Context): ProotComponent {
-        val rawResourceId = context.resources.getIdentifier("proot_artifact", "raw", context.packageName)
-        val metadataLoader = if (rawResourceId != 0) {
-            AndroidProotRawResourceMetadataLoader(context, rawResourceId)
-        } else {
-            object : ProotMetadataLoaderInternal {
-                override fun load() = null
-            }
-        }
+    private fun createProotComponent(context: Context, abiGate: RuntimeAbiGate): ProotComponent {
+        // Keep a compile-time reference to the metadata resource. Release builds
+        // enable resource shrinking; a string-only getIdentifier lookup can be
+        // removed by the shrinker and would make every PRoot verification fail as
+        // METADATA_MISSING. The same loader must feed both locator and verifier.
+        val metadataLoader = AndroidProotRawResourceMetadataLoader(context, R.raw.proot_artifact)
         val binaryLocator = AndroidProotBinaryLocator(context, metadataLoader)
-        val artifactVerifier = DefaultProotArtifactVerifier(binaryLocator, null)
+        val artifactVerifier = DefaultProotArtifactVerifier(binaryLocator, metadataLoader)
         return AndroidProotComponent(
             binaryLocator = binaryLocator,
             artifactVerifier = artifactVerifier,
             commandBuilder = DefaultProotCommandBuilder(),
             processLauncher = DefaultProotProcessLauncher(),
-            abiGate = null,
+            abiGate = abiGate,
         )
     }
 
