@@ -24,7 +24,11 @@ internal class DefaultProotCommandBuilder : ProotCommandBuilder {
             args.add("${mount.host}:${mount.guest}")
         }
 
-        args.add("--")
+        // This PRoot 5.4.0 build does not implement the conventional "--"
+        // end-of-options sentinel. Its CLI grammar is [option] ... [command],
+        // and it stops parsing PRoot options at the guest command itself.
+        // Passing a literal "--" makes the native launcher fail immediately
+        // with: "proot error: unknown option '--'."
         args.addAll(spec.command)
         return ProotCommand(spec.binaryPath, args.toList(), spec.environment.toMap())
     }
