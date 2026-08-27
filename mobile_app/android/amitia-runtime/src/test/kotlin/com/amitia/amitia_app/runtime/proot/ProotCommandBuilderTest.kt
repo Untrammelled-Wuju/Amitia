@@ -100,11 +100,11 @@ class ProotCommandBuilderTest {
         assertEquals("/", cmd.arguments[wIdx + 1])
     }
 
-    @Test fun double_dash_separator_present() {
+    @Test fun unsupported_double_dash_separator_absent() {
         val cmd = builder.build(spec(command = listOf("/bin/echo", "hello")))
-        assertTrue(cmd.arguments.contains("--"))
-        val ddIdx = cmd.arguments.indexOf("--")
-        assertTrue(cmd.arguments.indexOf("/bin/echo") > ddIdx)
+        assertFalse(cmd.arguments.contains("--"))
+        assertEquals("/bin/echo", cmd.arguments[cmd.arguments.indexOf("-w") + 2])
+        assertEquals("hello", cmd.arguments.last())
     }
 
     @Test fun argument_order_deterministic() {
@@ -114,12 +114,20 @@ class ProotCommandBuilderTest {
         val rIdx = cmd.arguments.indexOf("-r")
         val wIdx = cmd.arguments.indexOf("-w")
         val bIdx = cmd.arguments.indexOf("-b")
-        val ddIdx = cmd.arguments.indexOf("--")
+        val commandIdx = cmd.arguments.indexOf("/bin/echo")
         assertTrue(killIdx < zeroIdx)
         assertTrue(zeroIdx < rIdx)
         assertTrue(rIdx < wIdx)
         assertTrue(wIdx < bIdx)
-        assertTrue(bIdx < ddIdx)
+        assertTrue(bIdx < commandIdx)
+    }
+
+    @Test fun guest_long_option_stays_after_guest_executable() {
+        val cmd = builder.build(spec(command = listOf("/opt/amitia/backend/amitia-server", "--runtime-profile=local")))
+        val executableIdx = cmd.arguments.indexOf("/opt/amitia/backend/amitia-server")
+        val profileIdx = cmd.arguments.indexOf("--runtime-profile=local")
+        assertTrue(executableIdx >= 0)
+        assertEquals(executableIdx + 1, profileIdx)
     }
 
     @Test fun no_shell_wrapper_in_command() {
