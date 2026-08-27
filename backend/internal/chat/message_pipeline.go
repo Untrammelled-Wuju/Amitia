@@ -14,6 +14,7 @@ import (
 func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest) (*ProcessMessageResponse, error) {
 	computeResult, err := s.ComputeInteraction(ctx, req)
 	if err != nil {
+		s.emitDesktopPetChat(ctx, req, req.CharacterID, req.ConversationID, "", "response.failed", 5)
 		return nil, err
 	}
 	if computeResult.HasExistingUser {
@@ -44,8 +45,10 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 	})
 	if err != nil {
 		s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+		s.emitDesktopPetChat(ctx, req, computeResult.CharacterID, computeResult.ConversationID, computeResult.UserMessageID, "response.failed", 5)
 		return nil, err
 	}
+	s.emitDesktopPetChat(ctx, req, computeResult.CharacterID, computeResult.ConversationID, computeResult.UserMessageID, "response.completed", 5)
 	s.PostCommitActions(ctx, computeResult)
 	s.dispatchPluginAfterReply(req, computeResult, commitResult.MessageIDs)
 	s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
@@ -110,6 +113,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 	}
 	computeResult, err := s.ComputeInteraction(ctx, chatReq)
 	if err != nil {
+		s.emitDesktopPetChat(ctx, chatReq, chatReq.CharacterID, chatReq.ConversationID, "", "response.failed", 5)
 		return nil, err
 	}
 	if computeResult.HasExistingUser {
@@ -137,8 +141,10 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 	})
 	if err != nil {
 		s.db.Model(&Message{}).Where("id = ?", computeResult.UserMessageID).Updates(map[string]interface{}{"status": "failed", "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+		s.emitDesktopPetChat(ctx, chatReq, computeResult.CharacterID, computeResult.ConversationID, computeResult.UserMessageID, "response.failed", 5)
 		return nil, err
 	}
+	s.emitDesktopPetChat(ctx, chatReq, computeResult.CharacterID, computeResult.ConversationID, computeResult.UserMessageID, "response.completed", 5)
 	s.PostCommitActions(ctx, computeResult)
 	s.dispatchPluginAfterReply(chatReq, computeResult, commitResult.MessageIDs)
 	return &interaction.ProcessResponse{

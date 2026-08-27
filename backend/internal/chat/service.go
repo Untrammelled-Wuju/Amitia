@@ -70,6 +70,7 @@ type Service interface {
 	ExportConversation(convID string, format string) (string, error)
 	SetToolRuntime(ModelToolRuntime)
 	SetHookInvoker(HookInvoker)
+	SetDesktopPetLifecycleObserver(DesktopPetLifecycleObserver)
 	SetRelationshipTimeCoordinator(coordinator *temporal.RelationshipTimeCoordinator)
 	SetActionMaterializer(m *interaction.ActionMaterializer)
 	SetActionDispatcher(d interaction.ActionDispatcher)
@@ -152,6 +153,7 @@ type service struct {
 	deliveryStore       DeliveryStore
 	toolRuntime         ModelToolRuntime
 	hookInvoker         HookInvoker
+	desktopPetLifecycle DesktopPetLifecycleObserver
 	actionMaterializer  *interaction.ActionMaterializer
 	actionDispatcher    interaction.ActionDispatcher
 	observationBuilder  interaction.ObservationBuilder
