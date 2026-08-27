@@ -128,13 +128,16 @@ type PluginArtifact struct {
 
 // PluginNetworkPolicy defines the protocol-v1 network intent. Restricted
 // mode never grants the plugin process ambient network access: the child stays
-// network-isolated and may only use the host.network.request Host API, which
-// enforces this allowlist again at DNS, redirect, address and port boundaries.
+// network-isolated and may only use host-mediated HTTP/socket Host APIs. The
+// host revalidates transport, destination, DNS/address and port at connect time.
 type PluginNetworkPolicy struct {
-	Mode           string   `json:"mode,omitempty"`
-	AllowedDomains []string `json:"allowedDomains,omitempty"`
-	AllowedIPs     []string `json:"allowedIPs,omitempty"`
-	AllowedPorts   []int    `json:"allowedPorts,omitempty"`
+	Mode              string   `json:"mode,omitempty"`
+	AllowedDomains    []string `json:"allowedDomains,omitempty"`
+	AllowedIPs        []string `json:"allowedIPs,omitempty"`
+	AllowedPorts      []int    `json:"allowedPorts,omitempty"`
+	AllowedTransports []string `json:"allowedTransports,omitempty"`
+	AllowHostLoopback bool     `json:"allowHostLoopback,omitempty"`
+	MaxConnections    int      `json:"maxConnections,omitempty"`
 }
 
 type PluginServiceSpec struct {
@@ -390,11 +393,11 @@ func (s PluginHostSpec) Validate() error {
 	}
 	switch mode {
 	case "none", "loopback", "unrestricted":
-		if len(s.Network.AllowedDomains) != 0 || len(s.Network.AllowedIPs) != 0 || len(s.Network.AllowedPorts) != 0 {
-			return fmt.Errorf("network allowlists are only valid for restricted mode")
+		if len(s.Network.AllowedDomains) != 0 || len(s.Network.AllowedIPs) != 0 || len(s.Network.AllowedPorts) != 0 || len(s.Network.AllowedTransports) != 0 || s.Network.AllowHostLoopback || s.Network.MaxConnections != 0 {
+			return fmt.Errorf("network allowlists and mediated transport limits are only valid for restricted mode")
 		}
 	case "restricted":
-		if err := validateRestrictedNetworkAllowlist(s.Network.AllowedDomains, s.Network.AllowedIPs, s.Network.AllowedPorts); err != nil {
+		if err := validateRestrictedNetworkAllowlist(s.Network.AllowedDomains, s.Network.AllowedIPs, s.Network.AllowedPorts, s.Network.AllowedTransports, s.Network.AllowHostLoopback, s.Network.MaxConnections); err != nil {
 			return err
 		}
 	default:
@@ -433,9 +436,9 @@ func (s PluginHostSpec) Validate() error {
 	return nil
 }
 
-func validateRestrictedNetworkAllowlist(domains, ips []string, ports []int) error {
-	if len(domains) == 0 && len(ips) == 0 {
-		return fmt.Errorf("restricted mode requires at least one network.allowedDomains or network.allowedIPs entry")
+func validateRestrictedNetworkAllowlist(domains, ips []string, ports []int, transports []string, allowHostLoopback bool, maxConnections int) error {
+	if len(domains) == 0 && len(ips) == 0 && !allowHostLoopback {
+		return fmt.Errorf("restricted mode requires at least one network.allowedDomains, network.allowedIPs, or network.allowHostLoopback destination")
 	}
 	if len(ports) == 0 {
 		return fmt.Errorf("network.allowedPorts is required for restricted mode")
@@ -483,6 +486,22 @@ func validateRestrictedNetworkAllowlist(domains, ips []string, ports []int) erro
 			return fmt.Errorf("duplicate restricted network port %d", port)
 		}
 		seenPorts[port] = struct{}{}
+	}
+	seenTransports := make(map[string]struct{}, len(transports))
+	for _, raw := range transports {
+		transport := strings.ToLower(strings.TrimSpace(raw))
+		switch transport {
+		case "http", "https", "tcp", "udp", "websocket":
+		default:
+			return fmt.Errorf("invalid restricted network transport %q", raw)
+		}
+		if _, exists := seenTransports[transport]; exists {
+			return fmt.Errorf("duplicate restricted network transport %q", raw)
+		}
+		seenTransports[transport] = struct{}{}
+	}
+	if maxConnections < 0 || maxConnections > 64 {
+		return fmt.Errorf("network.maxConnections must be between 0 and 64; 0 uses the host default")
 	}
 	return nil
 }
