@@ -213,6 +213,17 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "runtime_id mismatch")
 	}
 
+	if strings.TrimSpace(payload.RuntimeVersion) == "" {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "runtimeVersion is required")
+	}
+
+	if payload.RuntimeContractVersion != CurrentSchemaVersion {
+		return nil, NewProtocolError(
+			ErrCodeProtocolUnsupported,
+			fmt.Sprintf("unsupported desktop-pet runtime contract version: got %q, want %q", payload.RuntimeContractVersion, CurrentSchemaVersion),
+		)
+	}
+
 	now := time.Now().UTC()
 
 	if h.deviceRuntimeSessions != nil {

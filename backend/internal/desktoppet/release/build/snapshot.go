@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/desktoppet/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 )
 
@@ -122,7 +123,7 @@ func (sc *SnapshotCreator) Create(ctx context.Context, req *CreateSnapshotReques
 		DefaultActionKey:       defaultActionKey,
 		IncludedActionsJSON:    string(actionsJSON),
 		PackageSchemaVersion:   2,
-		RuntimeContractVersion: "1.0.0",
+		RuntimeContractVersion: contracts.RuntimeContractVersion,
 		BuildConfigHash:        buildConfigHash,
 		InputHash:              inputHash,
 		CreatedAt:              formatTimestamp(time.Now()),
