@@ -62,7 +62,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
 	releaserepo "github.com/u-ai/backend/internal/desktoppet/release/repository"
 	releasestorage "github.com/u-ai/backend/internal/desktoppet/release/storage"
-	releaseworker "github.com/u-ai/backend/internal/desktoppet/release/worker"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
@@ -151,7 +150,6 @@ type AppServices struct {
 	InstallationDesiredOutbox    *installation.DesiredStateOutboxWorker
 	NewReleaseService            release.ReleaseService
 	ReleaseRecoveryWorker        *release.ReleaseRecoveryWorker
-	ReleaseBuildWorker           *releaseworker.ReleaseBuildWorker
 	ReleaseEventPublisher        *release.ReleaseEventPublisher
 	DesktopPetRuntimeV2          *runtimev2.RuntimeFacade
 	EditingService               editing.Service
