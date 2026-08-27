@@ -1,17 +1,15 @@
 import { createHash } from "node:crypto";
 import { readFile, stat, readdir } from "node:fs/promises";
-import { join, relative, extname } from "node:path";
+import { dirname, extname, join, relative } from "node:path";
 import { realpathSync } from "node:fs";
 import type {
   NormalizedManifestData,
   RuntimeAction,
-  RuntimeIntegrityFile,
 } from "../../shared/package-schema";
 import { MANIFEST_PSEUDO_ENTRY_PATH } from "../../shared/package-schema";
-import {
-  createPackageError,
-  type PackageValidationError,
-  type PackageErrorCode,
+import type {
+  PackageValidationError,
+  PackageErrorCode,
 } from "../../shared/package-errors";
 
 export interface IntegrityVerificationResult {
@@ -23,6 +21,7 @@ export interface VerifyParams {
   manifestRawText: string;
   manifest: NormalizedManifestData;
   installPath: string;
+  manifestPath: string;
   actions: Map<string, RuntimeAction>;
 }
 
@@ -50,7 +49,7 @@ export class PackageIntegrityVerifier {
   async verify(params: VerifyParams): Promise<IntegrityVerificationResult> {
     const { manifest, installPath } = params;
     const cacheKey = `${manifest.releaseId}:${manifest.integrity.contentRootHash}`;
-    const fingerprint = await this.computeFingerprint(installPath, manifest.integrity.files);
+    const fingerprint = await this.computeFingerprint(installPath, params.manifestRawText);
 
     const cached = this.cache.get(cacheKey);
     if (cached && cached.fingerprint === fingerprint) {
@@ -98,14 +97,13 @@ export class PackageIntegrityVerifier {
       errors.push(this.makeError("PACKAGE_MANIFEST_HASH_MISSING", "manifestHash is missing", "error"));
       return;
     }
-    let parsed: unknown;
+    let canonical: string;
     try {
-      parsed = JSON.parse(manifestRawText);
+      canonical = canonicalManifestJSON(manifestRawText);
     } catch {
       errors.push(this.makeError("PACKAGE_MANIFEST_INVALID", "manifest is not valid JSON", "error"));
       return;
     }
-    const canonical = canonicalJSON(parsed);
     const computed = sha256Hex(canonical);
     if (computed !== declaredHash) {
       errors.push(this.makeError(
@@ -127,7 +125,14 @@ export class PackageIntegrityVerifier {
       errors.push(this.makeError("PACKAGE_INTEGRITY_MISSING", "contentRootHash is missing", "error"));
       return;
     }
-    const manifestBytes = Buffer.byteLength(manifestRawText, "utf8");
+    let canonicalManifest: string;
+    try {
+      canonicalManifest = canonicalManifestJSON(manifestRawText);
+    } catch {
+      errors.push(this.makeError("PACKAGE_MANIFEST_INVALID", "manifest is not valid JSON", "error"));
+      return;
+    }
+    const manifestBytes = Buffer.byteLength(canonicalManifest, "utf8");
     const entries: TreeHashEntry[] = manifest.integrity.files.map((f) => ({
       path: f.path,
       sha256: f.sha256,
@@ -155,7 +160,7 @@ export class PackageIntegrityVerifier {
   ): void {
     const declared = manifest.integrity.fileCount;
     const actual = manifest.integrity.files.length;
-    if (declared > 0 && declared !== actual) {
+    if (declared !== actual) {
       errors.push(this.makeError(
         "PACKAGE_MANIFEST_INVALID",
         `fileCount mismatch: expected ${declared}, got ${actual}`,
@@ -167,7 +172,7 @@ export class PackageIntegrityVerifier {
     for (const f of manifest.integrity.files) {
       totalBytes += f.bytes;
     }
-    if (manifest.integrity.totalBytes > 0 && manifest.integrity.totalBytes !== totalBytes) {
+    if (manifest.integrity.totalBytes !== totalBytes) {
       errors.push(this.makeError(
         "PACKAGE_MANIFEST_INVALID",
         `totalBytes mismatch: expected ${manifest.integrity.totalBytes}, got ${totalBytes}`,
@@ -230,8 +235,18 @@ export class PackageIntegrityVerifier {
     } catch {
       return;
     }
+    const manifestRelativePath = normalizePathKey(relative(installPath, params.manifestPath));
+    if (manifestRelativePath !== "manifest.json") {
+      errors.push(this.makeError(
+        "PACKAGE_MANIFEST_INVALID",
+        `manifest must be located at package root as manifest.json, got ${manifestRelativePath}`,
+        "error",
+        { path: manifestRelativePath },
+      ));
+    }
     for (const relPath of allFiles) {
       const key = normalizePathKey(relPath);
+      if (key === "manifest.json") continue;
       if (!declared.has(key)) {
         errors.push(this.makeError(
           "PACKAGE_FILE_UNDECLARED",
@@ -324,17 +339,19 @@ export class PackageIntegrityVerifier {
   ): Promise<void> {
     const { manifest, installPath, actions } = params;
     for (const [actionKey, action] of actions) {
+      const actionBase = dirname(action.configPath);
       for (const frame of action.frames) {
-        const fullPath = join(installPath, frame.file);
+        const packageRelativeFramePath = normalizePathKey(join(actionBase, frame.file));
+        const fullPath = join(installPath, packageRelativeFramePath);
         let content: Buffer;
         try {
           content = await readFile(fullPath);
         } catch {
           errors.push(this.makeError(
             "FRAME_MISSING",
-            `frame missing: ${frame.file} (action: ${actionKey})`,
+            `frame missing: ${packageRelativeFramePath} (action: ${actionKey})`,
             "error",
-            { path: frame.file, actionKey },
+            { path: packageRelativeFramePath, actionKey },
           ));
           continue;
         }
@@ -342,28 +359,28 @@ export class PackageIntegrityVerifier {
         if (computed !== frame.contentHash) {
           errors.push(this.makeError(
             "FRAME_HASH_MISMATCH",
-            `frame hash mismatch for ${frame.file} (action: ${actionKey})`,
+            `frame hash mismatch for ${packageRelativeFramePath} (action: ${actionKey})`,
             "error",
-            { path: frame.file, actionKey, expected: frame.contentHash, actual: computed },
+            { path: packageRelativeFramePath, actionKey, expected: frame.contentHash, actual: computed },
           ));
         }
         const declared = manifest.integrity.files.find(
-          (f) => normalizePathKey(f.path) === normalizePathKey(frame.file),
+          (f) => normalizePathKey(f.path) === packageRelativeFramePath,
         );
         if (declared && computed !== declared.sha256) {
           errors.push(this.makeError(
             "PACKAGE_RESOURCE_HASH_MISMATCH",
-            `frame resource hash mismatch for ${frame.file} (action: ${actionKey})`,
+            `frame resource hash mismatch for ${packageRelativeFramePath} (action: ${actionKey})`,
             "error",
-            { path: frame.file, actionKey, expected: declared.sha256, actual: computed },
+            { path: packageRelativeFramePath, actionKey, expected: declared.sha256, actual: computed },
           ));
         }
         if (!declared) {
           errors.push(this.makeError(
             "PACKAGE_RESOURCE_NOT_DECLARED",
-            `frame resource not declared: ${frame.file} (action: ${actionKey})`,
+            `frame resource not declared: ${packageRelativeFramePath} (action: ${actionKey})`,
             "error",
-            { path: frame.file, actionKey },
+            { path: packageRelativeFramePath, actionKey },
           ));
         }
       }
@@ -390,21 +407,33 @@ export class PackageIntegrityVerifier {
 
   private async computeFingerprint(
     installPath: string,
-    files: RuntimeIntegrityFile[],
+    manifestRawText: string,
   ): Promise<string> {
     const h = createHash("sha256");
-    for (const f of files) {
-      const fullPath = join(installPath, f.path);
+    h.update(sha256Hex(manifestRawText));
+    h.update("\0");
+    let files: string[] = [];
+    try {
+      files = await listAllFiles(installPath);
+      files.sort();
+    } catch {
+      h.update("list-failed");
+      return h.digest("hex");
+    }
+    for (const relPath of files) {
+      const fullPath = join(installPath, relPath);
       try {
         const s = await stat(fullPath);
-        h.update(f.path);
+        h.update(relPath);
         h.update("\0");
         h.update(String(s.size));
         h.update("\0");
         h.update(String(s.mtimeMs));
         h.update("\0");
+        h.update(String(s.ctimeMs));
+        h.update("\0");
       } catch {
-        h.update(f.path);
+        h.update(relPath);
         h.update("\0missing\0");
       }
     }
@@ -447,12 +476,11 @@ function computeTreeHash(entries: TreeHashEntry[]): string {
     h.update("\0");
     h.update(String(e.bytes));
     h.update("\0");
-    let rawHash: Buffer;
-    try {
-      rawHash = Buffer.from(e.sha256, "hex");
-    } catch {
-      rawHash = Buffer.from(e.sha256, "utf8");
-    }
+    const isDecodableHex =
+      e.sha256.length % 2 === 0 && /^[0-9a-fA-F]*$/.test(e.sha256);
+    const rawHash = isDecodableHex
+      ? Buffer.from(e.sha256, "hex")
+      : Buffer.from(e.sha256, "utf8");
     h.update(rawHash);
     h.update("\0");
   }
@@ -465,7 +493,16 @@ function sha256Hex(data: string | Buffer): string {
 
 function canonicalJSON(value: unknown): string {
   const canonical = canonicalizeValue(value);
-  return JSON.stringify(canonical);
+  // Go's encoding/json escapes HTML-significant characters and U+2028/U+2029
+  // by default. Package v2 hashes are authored by the Go backend, so the
+  // Electron implementation must reproduce those bytes exactly rather than
+  // relying on JavaScript's slightly different JSON.stringify escaping.
+  return JSON.stringify(canonical)
+    .replace(/&/g, "\\u0026")
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 }
 
 function canonicalizeValue(v: unknown): unknown {
@@ -478,6 +515,149 @@ function canonicalizeValue(v: unknown): unknown {
     return keys.map((k) => ({ k, v: canonicalizeValue(obj[k]) }));
   }
   return v;
+}
+
+function canonicalManifestJSON(manifestRawText: string): string {
+  const parsed = JSON.parse(manifestRawText) as Record<string, unknown>;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("manifest must be an object");
+  }
+  return canonicalJSON(projectGoManifestForHash(parsed));
+}
+
+/**
+ * Reproduce the JSON shape produced by Go's packageformat.Manifest before
+ * CanonicalJSON runs. The backend hashes the strongly typed Go struct, not the
+ * original arbitrary JSON object. That distinction matters for zero-value
+ * struct fields and the few `omitempty` fields.
+ */
+function projectGoManifestForHash(raw: Record<string, unknown>): Record<string, unknown> {
+  const author = asRecord(raw.author);
+  const license = asRecord(raw.license);
+  const compatibility = asRecord(raw.compatibility);
+  const binding = asRecord(raw.binding);
+  const canvas = asRecord(raw.canvas);
+  const capabilities = asRecord(raw.capabilities);
+  const integrity = asRecord(raw.integrity);
+  const provenance = asRecord(raw.provenance);
+
+  const projectedCompatibility: Record<string, unknown> = {
+    minRuntimeVersion: asString(compatibility.minRuntimeVersion),
+    renderMode: asString(compatibility.renderMode),
+  };
+  if (typeof compatibility.maxRuntimeVersion === "string") {
+    projectedCompatibility.maxRuntimeVersion = compatibility.maxRuntimeVersion;
+  }
+
+  const rawActions = Array.isArray(raw.actions) ? raw.actions : null;
+  const projectedActions = rawActions === null
+    ? null
+    : rawActions.map((item) => {
+        const action = asRecord(item);
+        return {
+          key: asString(action.key),
+          name: asString(action.name),
+          config: asString(action.config),
+          revisionId: asString(action.revisionId),
+          qualityEvaluationId: asString(action.qualityEvaluationId),
+          qualityVerdict: asString(action.qualityVerdict),
+          playbackMode: asString(action.playbackMode),
+          fps: asInteger(action.fps),
+          frameCount: asInteger(action.frameCount),
+          supportsDefaultIdle: asBoolean(action.supportsDefaultIdle),
+          isStableStateCandidate: asBoolean(action.isStableStateCandidate),
+          isTransitionOnly: asBoolean(action.isTransitionOnly),
+        };
+      });
+
+  const rawFiles = Array.isArray(integrity.files) ? integrity.files : null;
+  const projectedFiles = rawFiles === null
+    ? null
+    : rawFiles.map((item) => {
+        const file = asRecord(item);
+        const projected: Record<string, unknown> = {
+          path: asString(file.path),
+          sha256: asString(file.sha256),
+          bytes: asInteger(file.bytes),
+          mediaType: asString(file.mediaType),
+          role: asString(file.role),
+        };
+        const actionKey = asString(file.actionKey);
+        const frameId = asString(file.frameId);
+        if (actionKey) projected.actionKey = actionKey;
+        if (frameId) projected.frameId = frameId;
+        return projected;
+      });
+
+  return {
+    schemaVersion: asInteger(raw.schemaVersion),
+    manifestFormat: asString(raw.manifestFormat),
+    petId: asString(raw.petId),
+    releaseId: asString(raw.releaseId),
+    version: asString(raw.version),
+    name: asString(raw.name),
+    description: asString(raw.description),
+    author: {
+      name: asString(author.name),
+      id: asString(author.id),
+    },
+    license: {
+      spdx: asString(license.spdx),
+      noticePath: asString(license.noticePath),
+    },
+    compatibility: projectedCompatibility,
+    binding: {
+      policy: asString(binding.policy),
+      sourceCharacterId: asString(binding.sourceCharacterId),
+    },
+    canvas: {
+      width: asInteger(canvas.width),
+      height: asInteger(canvas.height),
+      coordinateSystem: asString(canvas.coordinateSystem),
+    },
+    defaultAction: asString(raw.defaultAction),
+    preview: asString(raw.preview),
+    actions: projectedActions,
+    capabilities: {
+      transparentBackground: asBoolean(capabilities.transparentBackground),
+      frameSequence: asBoolean(capabilities.frameSequence),
+      perFrameDuration: asBoolean(capabilities.perFrameDuration),
+      audio: asBoolean(capabilities.audio),
+    },
+    integrity: {
+      algorithm: asString(integrity.algorithm),
+      manifestHash: "",
+      contentRootHash: "",
+      fileCount: asInteger(integrity.fileCount),
+      totalBytes: asInteger(integrity.totalBytes),
+      files: projectedFiles,
+    },
+    provenance: {
+      sourceType: asString(provenance.sourceType),
+      generationTaskId: asString(provenance.generationTaskId),
+      processingTaskId: asString(provenance.processingTaskId),
+      builtAt: asString(provenance.builtAt),
+      builder: asString(provenance.builder),
+    },
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asInteger(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) ? value : 0;
+}
+
+function asBoolean(value: unknown): boolean {
+  return typeof value === "boolean" ? value : false;
 }
 
 function normalizePathKey(path: string): string {
@@ -517,4 +697,4 @@ async function walkDir(root: string, current: string, results: string[]): Promis
   }
 }
 
-export { computeTreeHash, sha256Hex, canonicalJSON };
+export { computeTreeHash, sha256Hex, canonicalJSON, canonicalManifestJSON };

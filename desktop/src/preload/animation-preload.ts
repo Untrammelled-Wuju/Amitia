@@ -4,6 +4,7 @@ import type {
   PetDragIpcPayload,
   PetHitMaskPayload,
   RuntimeReadyPayload,
+  RuntimeInitFailedPayload,
 } from "../shared/animation-ipc";
 import type { PackagePlaybackSnapshot } from "../desktop-pet/animation/contracts";
 import type { PlaybackEvent, PlaybackSnapshot, PlayActionCommand, PlaybackRecoverySnapshot } from "../desktop-pet/animation/contracts";
@@ -97,6 +98,10 @@ const animationApi = {
 
   sendRuntimeReady(payload: RuntimeReadyPayload): void {
     ipcRenderer.send(ANIMATION_IPC_CHANNELS.runtimeReady, payload);
+  },
+
+  sendRuntimeInitFailed(payload: RuntimeInitFailedPayload): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.runtimeInitFailed, payload);
   },
 
   reportHitMask(payload: PetHitMaskPayload): void {

@@ -12,6 +12,7 @@ import {
   type ActionReadResult,
 } from "../../shared/package-schema";
 import type { PackageContractError } from "../../shared/package-errors";
+import { PackageIntegrityVerifier } from "./package-integrity-verifier";
 
 export type { LoadInstallationRequest };
 
@@ -168,6 +169,7 @@ function isPackageContractError(err: unknown): err is PackageContractError {
 
 export class ResourceLoader {
   private readonly normalizer = new RuntimePackageNormalizer();
+  private readonly integrityVerifier = new PackageIntegrityVerifier();
   private readonly runtimeVersion: string;
 
   constructor(runtimeVersion?: string) {
@@ -283,6 +285,22 @@ export class ResourceLoader {
         throw new Error(`${err.code}: ${msg}`);
       }
       throw new Error(msg);
+    }
+
+    if (manifestData.schemaVersion === 2) {
+      const verification = await this.integrityVerifier.verify({
+        manifestRawText,
+        manifest: manifestData,
+        installPath: request.installPath,
+        manifestPath: request.manifestPath,
+        actions: pkg.actions,
+      });
+      if (!verification.valid) {
+        const firstError = verification.errors.find((item) => item.severity === "error");
+        const code = firstError?.code ?? "PACKAGE_INTEGRITY_INVALID";
+        const message = firstError?.message ?? "package integrity verification failed";
+        throw new Error(`${code}: ${message}`);
+      }
     }
 
     const actions = new Map<string, RuntimeAction>();

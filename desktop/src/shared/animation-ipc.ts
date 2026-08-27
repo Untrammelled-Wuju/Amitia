@@ -22,6 +22,7 @@ export const ANIMATION_IPC_CHANNELS = {
   updateDefaultAction: "pet:animation:update-default-action",
   rendererBootstrapped: "pet:animation:renderer-bootstrapped",
   runtimeReady: "pet:animation:runtime-ready",
+  runtimeInitFailed: "pet:animation:runtime-init-failed",
   hitMask: "pet:animation:hit-mask",
   dragStart: "pet:animation:drag-start",
   dragMove: "pet:animation:drag-move",
@@ -58,4 +59,10 @@ export interface RuntimeReadyPayload {
   packageId: string;
   packageRevision: number;
   defaultActionKey: string;
+}
+
+export interface RuntimeInitFailedPayload {
+  reason: string;
+  packageId?: string;
+  packageRevision?: number;
 }
