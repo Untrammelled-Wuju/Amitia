@@ -269,6 +269,29 @@
             "minimum": 1,
             "maximum": 65535
           }
+        },
+        "allowedTransports": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "http",
+              "https",
+              "tcp",
+              "udp",
+              "websocket"
+            ]
+          }
+        },
+        "allowHostLoopback": {
+          "type": "boolean"
+        },
+        "maxConnections": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64,
+          "description": "Maximum simultaneous host-mediated socket handles for one runtime service/session. 0 or omission uses the host default; hard maximum is 64."
         }
       },
       "additionalProperties": false,
@@ -308,6 +331,16 @@
                     "minItems": 1
                   }
                 }
+              },
+              {
+                "required": [
+                  "allowHostLoopback"
+                ],
+                "properties": {
+                  "allowHostLoopback": {
+                    "const": true
+                  }
+                }
               }
             ],
             "properties": {
@@ -326,12 +359,21 @@
               },
               "allowedPorts": {
                 "maxItems": 0
+              },
+              "allowedTransports": {
+                "maxItems": 0
+              },
+              "allowHostLoopback": {
+                "const": false
+              },
+              "maxConnections": {
+                "not": {}
               }
             }
           }
         }
       ],
-      "description": "Explicit protocol-v1 network intent. Restricted keeps the plugin process network-isolated and allows only host-mediated requests matching allowedDomains/allowedIPs/allowedPorts; restricted and unrestricted require service.network.request."
+      "description": "Explicit protocol-v1 network intent. Restricted keeps the plugin process network-isolated and allows only host-mediated HTTP/TCP/UDP/WebSocket access matching transport, destination and port policy. allowHostLoopback exposes the portable host-loopback target without sharing the host network namespace; restricted and unrestricted require service.network.request."
     },
     "metadata": {
       "type": "object",

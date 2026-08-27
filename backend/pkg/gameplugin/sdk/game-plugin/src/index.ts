@@ -16,6 +16,7 @@ export * from './permission';
 export * from './secret';
 export * from './control';
 export * from './hostapi';
+export * from './network';
 export * from './artifact';
 export * from './security';
 export {

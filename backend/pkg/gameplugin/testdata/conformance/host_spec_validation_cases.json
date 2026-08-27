@@ -83,6 +83,114 @@
     }
   },
   {
+    "name": "valid-restricted-host-loopback-socket-transports",
+    "valid": true,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "restricted",
+        "allowedPorts": [
+          18901,
+          18902,
+          18903
+        ],
+        "allowedTransports": [
+          "tcp",
+          "udp",
+          "websocket"
+        ],
+        "allowHostLoopback": true,
+        "maxConnections": 8
+      }
+    }
+  },
+  {
+    "name": "valid-restricted-explicit-http-transports",
+    "valid": true,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "restricted",
+        "allowedDomains": [
+          "api.example.com"
+        ],
+        "allowedPorts": [
+          80,
+          443
+        ],
+        "allowedTransports": [
+          "http",
+          "https"
+        ]
+      }
+    }
+  },
+  {
+    "name": "invalid-restricted-unknown-transport",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "restricted",
+        "allowedPorts": [
+          18901
+        ],
+        "allowedTransports": [
+          "raw"
+        ],
+        "allowHostLoopback": true
+      }
+    }
+  },
+  {
+    "name": "invalid-restricted-max-connections-over-hard-limit",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "restricted",
+        "allowedPorts": [
+          18901
+        ],
+        "allowedTransports": [
+          "tcp"
+        ],
+        "allowHostLoopback": true,
+        "maxConnections": 65
+      }
+    }
+  },
+  {
+    "name": "invalid-host-loopback-flag-outside-restricted-mode",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "loopback",
+        "allowHostLoopback": true
+      }
+    }
+  },
+  {
+    "name": "invalid-transport-policy-outside-restricted-mode",
+    "valid": false,
+    "spec": {
+      "protocolVersion": "amitia-game-host/1",
+      "runtimeModuleId": "runtime-main",
+      "network": {
+        "mode": "none",
+        "allowedTransports": [
+          "tcp"
+        ]
+      }
+    }
+  },
+  {
     "name": "invalid-wrong-protocol",
     "valid": false,
     "spec": {
