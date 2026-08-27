@@ -166,6 +166,9 @@ type PlayActionPayload struct {
 	MinimumPlayMs    int64   `json:"minimumPlayMs,omitempty"`
 	MaximumPlayMs    int64   `json:"maximumPlayMs,omitempty"`
 	CompletionPolicy string  `json:"completionPolicy,omitempty"`
+	DecisionID       string  `json:"decisionId,omitempty"`
+	Semantic         string  `json:"semantic,omitempty"`
+	ReasonCode       string  `json:"reasonCode,omitempty"`
 }
 
 type CommandAckPayload struct {
