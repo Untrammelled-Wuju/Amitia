@@ -55,7 +55,9 @@ minRuntimeVersion <= maxRuntimeVersion
 
 改为从构建配置或 desktop package.json 的独立字段 `desktopPetRuntimeVersion` 获取。
 
-启动时验证它是合法 SemVer。
+启动时验证它是合法 SemVer。当前桌面端唯一来源为 `desktop/package.json#desktopPetRuntimeVersion`。
+
+Runtime v2 的握手契约版本独立记录在 `desktopPetRuntimeContractVersion`，构建门禁必须校验其与后端 `CurrentSchemaVersion` 一致；服务端在 `Hello` 阶段拒绝不匹配版本，禁止先进入 Ready 再延迟失败。
 
 ## Render Mode
 
