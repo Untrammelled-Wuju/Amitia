@@ -18,8 +18,10 @@ var (
 
 // Build converts the public Game Plugin network contract into the exact trusted
 // service sandbox policy used at process launch. Package preflight and runtime
-// graph construction both call this function so install-time support checks
-// cannot drift from the production execution boundary.
+// graph construction both call this function so policy-shape/platform support
+// checks cannot drift from the production execution boundary. Concrete host
+// launcher/kernel prerequisites are probed separately during package preflight
+// and revalidated at the final trusted-service launch boundary.
 func Build(spec *gameprotocol.PluginNetworkPolicy, permissions []string) (trusted_service.ServiceNetworkPolicy, error) {
 	if spec == nil || strings.TrimSpace(spec.Mode) == "" {
 		return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("%w: explicit game plugin network.mode is required", ErrModeRequired)
