@@ -482,7 +482,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
 		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx, services.PathRegistry)
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
-		readiness.RegisterRouter(apiGroup, ctx.DB, services.Extension)
+		readiness.RegisterRouter(apiGroup, services.Readiness)
 		system.RegisterPsycheAPIRouter(apiGroup)
 		system.RegisterPsycheSnapshotRouter(apiGroup, ctx.DB)
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
