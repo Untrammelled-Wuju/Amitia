@@ -24,8 +24,6 @@ export type InstallationRuntimeStatus =
   | "recovery_required"
   | string;
 
-export type RuntimeStateSnapshot = Record<string, any>;
-
 export interface DesktopPetInstallation {
   id: string;
   userId?: string;
@@ -73,6 +71,14 @@ export interface RuntimeSettings {
   idleIntervalMaxSeconds: number;
   clickThroughMode: string;
   soundEnabled: number;
+  restoreOnAppStart?: number;
+  positionMode?: string;
+  displayFingerprint?: string;
+  relativeX?: number;
+  relativeY?: number;
+  lastWindowWidth?: number;
+  lastWindowHeight?: number;
+  settingsRevision?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -88,19 +94,21 @@ export interface InstallationDetail extends DesktopPetInstallation {
   settings?: RuntimeSettings;
   manifest?: {
     schemaVersion?: number;
-    packageId?: string;
+    manifestFormat?: string;
+    petId?: string;
+    releaseId?: string;
+    version?: string;
     name?: string;
-    characterId?: string;
-    generationTaskId?: string;
-    processingVersion?: number;
-    createdAt?: string;
-    canvas?: { width?: number; height?: number };
+    binding?: { policy?: string; sourceCharacterId?: string };
+    canvas?: { width?: number; height?: number; coordinateSystem?: string };
     defaultAction?: string;
     preview?: string;
     actions?: ManifestActionInfo[];
     capabilities?: {
-      hasTransparentBackground?: boolean;
-      supportsFrameSequence?: boolean;
+      transparentBackground?: boolean;
+      frameSequence?: boolean;
+      perFrameDuration?: boolean;
+      audio?: boolean;
     };
   };
   characterName?: string;
@@ -133,10 +141,29 @@ export interface ListInstallationsResponse {
 
 export interface UpdateSettingsResponse {
   settings: RuntimeSettings;
+  operationId?: string;
+  status?: string;
+  stage?: string;
+}
+
+export interface InstallationOperationResult {
+  operationId: string;
+  installationId?: string;
+  status: string;
+  stage?: string;
+}
+
+interface InstallationOperation {
+  id: string;
+  installationId?: string;
+  status: string;
+  stage?: string;
+  errorCode?: string;
+  errorMessage?: string;
 }
 
 export function useDesktopPetInstallations() {
-  const { get, post, del } = useApi();
+  const { get, post } = useApi();
   const loading = ref(false);
   const submitting = ref(false);
   const installations = ref<DesktopPetInstallation[]>([]);
@@ -147,27 +174,85 @@ export function useDesktopPetInstallations() {
     installationId: string,
     suffix?: string,
   ): string {
-    const base = `/api/desktop-pets/installations/${installationId}`;
+    const base = `/api/desktop-pets/installations/${encodeURIComponent(installationId)}`;
     return suffix ? `${base}${suffix}` : base;
+  }
+
+  function createIdempotencyKey(): string {
+    return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  async function trackOperation(
+    submission: InstallationOperationResult,
+  ): Promise<InstallationOperationResult> {
+    let current = submission;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      if (current?.status === "failed_terminal" || current?.status === "cancelled") {
+        throw new Error("桌宠操作失败");
+      }
+      if (!current?.operationId || !["created", "queued", "running", "failed_retryable", "cancel_requested"].includes(current.status)) {
+        break;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
+      const data = await get<{ operation: InstallationOperation }>(
+        `/api/desktop-pets/operations/${encodeURIComponent(current.operationId)}`,
+      );
+      const op = data?.operation;
+      if (!op) break;
+      current = {
+        operationId: op.id,
+        installationId: op.installationId || current.installationId,
+        status: op.status,
+        stage: op.stage,
+      };
+      if (op.status === "failed_terminal" || op.status === "cancelled") {
+        throw new Error(op.errorMessage || op.errorCode || "桌宠操作失败");
+      }
+    }
+    return current;
+  }
+
+  async function submitOperation(
+    url: string,
+    data: Record<string, any> = {},
+  ): Promise<InstallationOperationResult> {
+    const idempotencyKey = createIdempotencyKey();
+    const result = await post<InstallationOperationResult>(url, data, {
+      headers: { "Idempotency-Key": idempotencyKey },
+    });
+    return trackOperation(result);
+  }
+
+  function showOperationMessage(action: string, result: InstallationOperationResult): void {
+    if (result.status === "completed") {
+      ElMessage.success(`${action}完成`);
+      return;
+    }
+    if (result.status === "waiting_runtime_ack") {
+      ElMessage.info(`${action}已提交，等待桌宠运行时同步`);
+      return;
+    }
+    ElMessage.info(`${action}请求已提交`);
   }
 
   async function install(
     petId: string,
     releaseId: string,
     characterId?: string,
-  ): Promise<DesktopPetInstallation> {
+  ): Promise<InstallationOperationResult> {
     submitting.value = true;
     try {
-      const idempotencyKey =
-        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const data = await post<DesktopPetInstallation>(
-        `/api/desktop-pets/pets/${petId}/releases/${releaseId}/install`,
+      const idempotencyKey = createIdempotencyKey();
+      const data = await post<InstallationOperationResult>(
+        `/api/desktop-pets/pets/${encodeURIComponent(petId)}/releases/${encodeURIComponent(releaseId)}/install`,
         { characterId: characterId || "", idempotencyKey },
+        { headers: { "Idempotency-Key": idempotencyKey } },
       );
-      ElMessage.success("桌宠已安装");
-      return data;
+      const tracked = await trackOperation(data);
+      showOperationMessage("安装", tracked);
+      return tracked;
     } finally {
       submitting.value = false;
     }
@@ -210,8 +295,8 @@ export function useDesktopPetInstallations() {
   async function enable(installationId: string): Promise<void> {
     submitting.value = true;
     try {
-      await post(buildInstallationsUrl(installationId, "/enable"));
-      ElMessage.success("桌宠已启用");
+      const result = await submitOperation(buildInstallationsUrl(installationId, "/enable"));
+      showOperationMessage("启用", result);
     } finally {
       submitting.value = false;
     }
@@ -220,8 +305,8 @@ export function useDesktopPetInstallations() {
   async function disable(installationId: string): Promise<void> {
     submitting.value = true;
     try {
-      await post(buildInstallationsUrl(installationId, "/disable"));
-      ElMessage.success("桌宠已停用");
+      const result = await submitOperation(buildInstallationsUrl(installationId, "/disable"));
+      showOperationMessage("停用", result);
     } finally {
       submitting.value = false;
     }
@@ -233,11 +318,14 @@ export function useDesktopPetInstallations() {
   ): Promise<void> {
     submitting.value = true;
     try {
-      await post(
+      const idempotencyKey = createIdempotencyKey();
+      const res = await apiClient.patch(
         buildInstallationsUrl(installationId, "/default-action"),
-        { action_key: actionKey },
+        { actionKey },
+        { headers: { "Idempotency-Key": idempotencyKey } },
       );
-      ElMessage.success("默认动作已更新");
+      const result = await trackOperation(res.data as InstallationOperationResult);
+      showOperationMessage("默认动作更新", result);
     } finally {
       submitting.value = false;
     }
@@ -249,13 +337,24 @@ export function useDesktopPetInstallations() {
   ): Promise<RuntimeSettings | null> {
     submitting.value = true;
     try {
+      const idempotencyKey = createIdempotencyKey();
       const res = await apiClient.patch(
         buildInstallationsUrl(installationId, "/settings"),
         settings,
+        { headers: { "Idempotency-Key": idempotencyKey } },
       );
-      const updated = (res.data as RuntimeSettings) || null;
-      ElMessage.success("运行配置已更新");
-      return updated;
+      const payload = (res.data as UpdateSettingsResponse) || null;
+      if (payload?.operationId) {
+        const tracked = await trackOperation({
+          operationId: payload.operationId,
+          status: payload.status || "",
+          stage: payload.stage,
+        });
+        showOperationMessage("运行配置更新", tracked);
+      } else {
+        ElMessage.success("运行配置已更新");
+      }
+      return payload?.settings || null;
     } finally {
       submitting.value = false;
     }
@@ -264,8 +363,8 @@ export function useDesktopPetInstallations() {
   async function recenter(installationId: string): Promise<void> {
     submitting.value = true;
     try {
-      await post(buildInstallationsUrl(installationId, "/recenter"));
-      ElMessage.success("桌宠已重置位置");
+      const result = await submitOperation(buildInstallationsUrl(installationId, "/recenter"));
+      showOperationMessage("位置重置", result);
     } finally {
       submitting.value = false;
     }
@@ -277,11 +376,10 @@ export function useDesktopPetInstallations() {
   ): Promise<void> {
     submitting.value = true;
     try {
-      await post(
-        buildInstallationsUrl(installationId, "/play-action"),
-        { actionKey },
+      const result = await submitOperation(
+        buildInstallationsUrl(installationId, `/actions/${encodeURIComponent(actionKey)}/play`),
       );
-      ElMessage.success("动作已触发");
+      showOperationMessage("动作播放", result);
     } finally {
       submitting.value = false;
     }
@@ -290,8 +388,12 @@ export function useDesktopPetInstallations() {
   async function uninstall(installationId: string): Promise<void> {
     submitting.value = true;
     try {
-      await del(buildInstallationsUrl(installationId));
-      ElMessage.success("桌宠已卸载");
+      const idempotencyKey = createIdempotencyKey();
+      const res = await apiClient.delete(buildInstallationsUrl(installationId), {
+        headers: { "Idempotency-Key": idempotencyKey },
+      });
+      const result = await trackOperation(res.data as InstallationOperationResult);
+      showOperationMessage("卸载", result);
     } finally {
       submitting.value = false;
     }
@@ -303,10 +405,11 @@ export function useDesktopPetInstallations() {
   ): Promise<void> {
     submitting.value = true;
     try {
-      await post(buildInstallationsUrl(installationId, "/upgrade"), {
-        targetReleaseId,
-      });
-      ElMessage.success("升级请求已提交");
+      const result = await submitOperation(
+        buildInstallationsUrl(installationId, "/upgrade"),
+        { targetReleaseId },
+      );
+      showOperationMessage("升级", result);
     } finally {
       submitting.value = false;
     }
@@ -317,8 +420,8 @@ export function useDesktopPetInstallations() {
   ): Promise<void> {
     submitting.value = true;
     try {
-      await post(buildInstallationsUrl(installationId, "/switch"));
-      ElMessage.success("切换请求已提交");
+      const result = await submitOperation(buildInstallationsUrl(installationId, "/enable"));
+      showOperationMessage("切换当前桌宠", result);
     } finally {
       submitting.value = false;
     }
@@ -327,32 +430,10 @@ export function useDesktopPetInstallations() {
   async function repair(installationId: string): Promise<void> {
     submitting.value = true;
     try {
-      await post(buildInstallationsUrl(installationId, "/repair"));
-      ElMessage.success("修复请求已提交");
+      const result = await submitOperation(buildInstallationsUrl(installationId, "/repair"));
+      showOperationMessage("修复", result);
     } finally {
       submitting.value = false;
-    }
-  }
-
-  async function getDesiredState(): Promise<RuntimeStateSnapshot> {
-    loading.value = true;
-    try {
-      return await get<RuntimeStateSnapshot>(
-        "/api/desktop-pets/runtime/desired-state",
-      );
-    } finally {
-      loading.value = false;
-    }
-  }
-
-  async function getActualState(): Promise<RuntimeStateSnapshot> {
-    loading.value = true;
-    try {
-      return await get<RuntimeStateSnapshot>(
-        "/api/desktop-pets/runtime/actual-state",
-      );
-    } finally {
-      loading.value = false;
     }
   }
 
@@ -379,8 +460,6 @@ export function useDesktopPetInstallations() {
     upgrade,
     switchInstallation,
     repair,
-    getDesiredState,
-    getActualState,
     refresh,
   };
 }

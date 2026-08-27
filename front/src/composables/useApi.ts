@@ -6,6 +6,7 @@ import { ref } from "vue";
 import type { ApiResponse } from "@/types";
 import { getRuntimeConnection, getDeploymentConfig, getBackendAuthHeaders } from "@/runtime/runtime-adapter";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
+import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
 import { classifyError, displayError } from "./request";
 import { ensureValidToken, initRefreshCoordinator, stopRefreshCoordinator, forceCleanupSession } from "@/stores/refresh-coordinator";
 
@@ -52,6 +53,11 @@ apiClient.interceptors.request.use(async (config) => {
   }
 
   config.headers["X-Amitia-Client-Type"] = "desktop";
+
+  const deviceId = await resolveUIHostDeviceId();
+  if (deviceId) {
+    config.headers["X-Amitia-Device-ID"] = deviceId;
+  }
 
   const token = await ensureValidToken();
   if (token) {
