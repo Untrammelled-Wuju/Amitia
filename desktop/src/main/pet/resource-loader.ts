@@ -1,3 +1,4 @@
+import { DESKTOP_PET_RUNTIME_VERSION } from "../../shared/desktop-pet-runtime-version";
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import {
@@ -170,7 +171,7 @@ export class ResourceLoader {
   private readonly runtimeVersion: string;
 
   constructor(runtimeVersion?: string) {
-    this.runtimeVersion = runtimeVersion ?? "1.0.0";
+    this.runtimeVersion = runtimeVersion ?? DESKTOP_PET_RUNTIME_VERSION;
   }
 
   async loadInstallation(
@@ -313,7 +314,7 @@ export class ResourceLoader {
       packageId: pkg.petId,
       schemaVersion: pkg.schemaVersion,
       name: pkg.displayName,
-      characterId: "",
+      characterId: manifestData.binding.sourceCharacterId ?? "",
       petId: pkg.petId,
       releaseId: pkg.releaseId,
       canvas: { width: pkg.canvas.width, height: pkg.canvas.height },

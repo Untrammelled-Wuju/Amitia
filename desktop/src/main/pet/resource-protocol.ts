@@ -104,7 +104,6 @@ export class PetResourceProtocolRegistry {
   private static instance: PetResourceProtocolRegistry | null = null;
   private registered = false;
   private getActiveInstallation: (() => ActiveInstallationInfo | null) | null = null;
-  private verifiedPaths: Map<string, string> = new Map();
 
   private constructor() {}
 
@@ -119,13 +118,11 @@ export class PetResourceProtocolRegistry {
     getActiveInstallation: () => ActiveInstallationInfo | null,
   ): void {
     this.getActiveInstallation = getActiveInstallation;
-    this.verifiedPaths.clear();
     this.ensureRegistered();
   }
 
   clearActiveInstallationResolver(): void {
     this.getActiveInstallation = null;
-    this.verifiedPaths.clear();
   }
 
   private ensureRegistered(): void {
@@ -216,25 +213,18 @@ export class PetResourceProtocolRegistry {
         });
       }
 
-      const verifyKey = `${active.installationId}:${normalizedRelative}`;
-
       try {
         const content = await readFile(fullPath);
-
-        const isVerified = this.verifiedPaths.get(verifyKey);
-        if (isVerified !== indexEntry.sha256) {
-          const actualHash = computeSha256(content);
-          if (actualHash !== indexEntry.sha256) {
-            return new Response(JSON.stringify({
-              error: "integrity_check_failed",
-              declared: indexEntry.sha256,
-              actual: actualHash,
-            }), {
-              status: 403,
-              headers: { "Content-Type": "application/json; charset=utf-8" },
-            });
-          }
-          this.verifiedPaths.set(verifyKey, indexEntry.sha256);
+        const actualHash = computeSha256(content);
+        if (actualHash !== indexEntry.sha256) {
+          return new Response(JSON.stringify({
+            error: "integrity_check_failed",
+            declared: indexEntry.sha256,
+            actual: actualHash,
+          }), {
+            status: 403,
+            headers: { "Content-Type": "application/json; charset=utf-8" },
+          });
         }
 
         const mimeType = indexEntry.mediaType || "application/octet-stream";
