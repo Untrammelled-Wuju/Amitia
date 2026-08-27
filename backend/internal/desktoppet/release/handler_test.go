@@ -129,6 +129,10 @@ func (s *stubReleaseService) GetPetIdentity(ctx context.Context, userID, petID s
 	return s.getPetIdentityResult, s.getPetIdentityErr
 }
 
+func (s *stubReleaseService) GetReleaseArchivePath(ctx context.Context, releaseID, userID string) (string, *ReleaseData, error) {
+	return "", s.getReleaseResult, s.getReleaseErr
+}
+
 func newTestRouter(svc ReleaseService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -141,7 +145,7 @@ func newTestRouter(svc ReleaseService) *gin.Engine {
 		})
 		c.Next()
 	})
-	RegisterRoutes(r.Group("/api/v2"), svc, &stubOwnershipGuard{})
+	RegisterRoutes(r.Group("/api"), svc, &stubOwnershipGuard{})
 	return r
 }
 
@@ -182,7 +186,7 @@ func TestBuildRelease_Returns400_WhenProcessingTaskIDEmpty(t *testing.T) {
 	svc := &stubReleaseService{}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodPost, "/api/v2/releases/build", map[string]interface{}{
+	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/releases/build", map[string]interface{}{
 		"processingTaskId": "",
 	})
 
@@ -213,7 +217,7 @@ func TestBuildRelease_Returns200_OnSuccess(t *testing.T) {
 	}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodPost, "/api/v2/releases/build", map[string]interface{}{
+	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/releases/build", map[string]interface{}{
 		"processingTaskId": "task-1",
 	})
 
@@ -229,7 +233,7 @@ func TestBuildRelease_ReturnsError_OnServiceError(t *testing.T) {
 	}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodPost, "/api/v2/releases/build", map[string]interface{}{
+	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/releases/build", map[string]interface{}{
 		"processingTaskId": "",
 	})
 
@@ -245,7 +249,7 @@ func TestGetRelease_Returns404_WhenNotFound(t *testing.T) {
 	}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodGet, "/api/v2/releases/"+uuid.NewString(), nil)
+	w := doRequest(t, r, http.MethodGet, "/api/desktop-pets/releases/"+uuid.NewString(), nil)
 
 	resp := parseResponse(t, w.Body.Bytes())
 	if resp.Code != http.StatusNotFound {
@@ -262,7 +266,7 @@ func TestListReleases_Returns200(t *testing.T) {
 	}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodGet, "/api/v2/releases/list", nil)
+	w := doRequest(t, r, http.MethodGet, "/api/desktop-pets/releases", nil)
 
 	resp := parseResponse(t, w.Body.Bytes())
 	if resp.Code != http.StatusOK {
@@ -275,7 +279,7 @@ func TestRevokeRelease_Success(t *testing.T) {
 	svc := &stubReleaseService{}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodPost, "/api/v2/releases/"+releaseID+"/revoke?reason=test", nil)
+	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/releases/"+releaseID+"/revoke?reason=test", nil)
 
 	resp := parseResponse(t, w.Body.Bytes())
 	if resp.Code != http.StatusOK {
@@ -287,7 +291,7 @@ func TestGetPetIdentity_MissingPetID(t *testing.T) {
 	svc := &stubReleaseService{}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodGet, "/api/v2/pets/identity", nil)
+	w := doRequest(t, r, http.MethodGet, "/api/desktop-pets/pets/identity", nil)
 
 	resp := parseResponse(t, w.Body.Bytes())
 	if resp.Code != http.StatusBadRequest {
@@ -307,7 +311,7 @@ func TestGetBuildOperation_Success(t *testing.T) {
 	}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodGet, "/api/v2/releases/operations/"+operationID, nil)
+	w := doRequest(t, r, http.MethodGet, "/api/desktop-pets/releases/operations/"+operationID, nil)
 
 	resp := parseResponse(t, w.Body.Bytes())
 	if resp.Code != http.StatusOK {
@@ -320,7 +324,7 @@ func TestCancelBuildOperation_Success(t *testing.T) {
 	svc := &stubReleaseService{}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodPost, "/api/v2/releases/operations/"+operationID+"/cancel", nil)
+	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/releases/operations/"+operationID+"/cancel", nil)
 
 	resp := parseResponse(t, w.Body.Bytes())
 	if resp.Code != http.StatusOK {
@@ -337,7 +341,7 @@ func TestGetReleaseFiles_Success(t *testing.T) {
 	}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodGet, "/api/v2/releases/"+releaseID+"/files", nil)
+	w := doRequest(t, r, http.MethodGet, "/api/desktop-pets/releases/"+releaseID+"/files", nil)
 
 	resp := parseResponse(t, w.Body.Bytes())
 	if resp.Code != http.StatusOK {
@@ -354,7 +358,7 @@ func TestListReleasesForPet_Success(t *testing.T) {
 	}
 	r := newTestRouter(svc)
 
-	w := doRequest(t, r, http.MethodGet, "/api/v2/releases/pet/pet-123", nil)
+	w := doRequest(t, r, http.MethodGet, "/api/desktop-pets/releases/pet/pet-123", nil)
 
 	resp := parseResponse(t, w.Body.Bytes())
 	if resp.Code != http.StatusOK {

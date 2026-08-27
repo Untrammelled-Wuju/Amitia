@@ -47,6 +47,7 @@ type InstallationRecord struct {
 	ID                string
 	UserID            string
 	DeviceID          string
+	CharacterID       string
 	PetID             string
 	ReleaseID         string
 	Status            string
@@ -483,6 +484,7 @@ func (c *Coordinator) executeInstall(ctx context.Context, req InstallRequest, id
 		ID:                op.InstallationID,
 		UserID:            req.DeviceCtx.UserID,
 		DeviceID:          req.DeviceCtx.DeviceID,
+		CharacterID:       req.CharacterID,
 		PetID:             op.PetID,
 		ReleaseID:         req.TargetReleaseID,
 		Status:            "installed",

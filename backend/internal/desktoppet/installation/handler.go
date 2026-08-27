@@ -3,6 +3,8 @@
 package installation
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	"github.com/u-ai/backend/internal/desktoppet/installation/device"
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
+	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -35,11 +38,28 @@ func requireDeviceID(c *gin.Context) (string, bool) {
 }
 
 type installPackagePayload struct {
-	CharacterID string `json:"character_id"`
+	CharacterID       string `json:"characterId"`
+	LegacyCharacterID string `json:"character_id"`
+	IdempotencyKey    string `json:"idempotencyKey"`
+}
+
+func (p installPackagePayload) resolvedCharacterID() string {
+	if strings.TrimSpace(p.CharacterID) != "" {
+		return strings.TrimSpace(p.CharacterID)
+	}
+	return strings.TrimSpace(p.LegacyCharacterID)
 }
 
 type updateDefaultActionPayload struct {
-	ActionKey string `json:"action_key"`
+	ActionKey       string `json:"actionKey"`
+	LegacyActionKey string `json:"action_key"`
+}
+
+func (p updateDefaultActionPayload) resolvedActionKey() string {
+	if strings.TrimSpace(p.ActionKey) != "" {
+		return strings.TrimSpace(p.ActionKey)
+	}
+	return strings.TrimSpace(p.LegacyActionKey)
 }
 
 type switchReleasePayload struct {
@@ -69,7 +89,8 @@ func (h *Handler) InstallPackage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	if payload.CharacterID == "" {
+	characterID := payload.resolvedCharacterID()
+	if characterID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "角色 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
@@ -79,7 +100,7 @@ func (h *Handler) InstallPackage(c *gin.Context) {
 		return
 	}
 	userID := actorID
-	inst, err := h.service.InstallPackage(packageID, userID, payload.CharacterID)
+	inst, err := h.service.InstallPackage(packageID, userID, characterID)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -208,11 +229,12 @@ func (h *Handler) UpdateDefaultAction(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	if payload.ActionKey == "" {
+	actionKey := payload.resolvedActionKey()
+	if actionKey == "" {
 		util.ErrorResponse(c, response.InvalidParams, "动作 Key 为空", gin.H{"errorCode": ErrCodeActionNotFound})
 		return
 	}
-	if err := h.service.UpdateDefaultAction(installationID, payload.ActionKey); err != nil {
+	if err := h.service.UpdateDefaultAction(installationID, actionKey); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -413,7 +435,8 @@ func (h *CoordinatorHandler) InstallPackage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	if payload.CharacterID == "" {
+	characterID := payload.resolvedCharacterID()
+	if characterID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "角色 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
@@ -423,17 +446,59 @@ func (h *CoordinatorHandler) InstallPackage(c *gin.Context) {
 		return
 	}
 	deviceCtx := h.buildDeviceCtx(c, actorID)
+	if strings.TrimSpace(deviceCtx.DeviceID) == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少设备ID", gin.H{"errorCode": "DEVICE_ID_REQUIRED"})
+		return
+	}
 	result, err := h.coordinator.Install(c.Request.Context(), coordinator.InstallRequest{
 		DeviceCtx:       deviceCtx,
 		TargetReleaseID: packageID,
-		CharacterID:     payload.CharacterID,
-		IdempotencyKey:  strings.TrimSpace(c.GetHeader("Idempotency-Key")),
+		CharacterID:     characterID,
+		IdempotencyKey:  firstNonEmpty(strings.TrimSpace(c.GetHeader("Idempotency-Key")), strings.TrimSpace(payload.IdempotencyKey)),
 	})
 	if err != nil {
 		writeCoordinatorError(c, err)
 		return
 	}
-	util.SuccessMsgResponse(c, "安装任务已创建", gin.H{"operationId": result.OperationID, "status": result.Status})
+	util.SuccessMsgResponse(c, "安装任务已创建", gin.H{"operationId": result.OperationID, "installationId": result.InstallationID, "status": result.Status, "stage": result.Stage})
+}
+
+func (h *CoordinatorHandler) InstallRelease(c *gin.Context) {
+	petID := strings.TrimSpace(c.Param("petId"))
+	releaseID := strings.TrimSpace(c.Param("releaseId"))
+	if petID == "" || releaseID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "petId/releaseId 不能为空", gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	var payload installPackagePayload
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	characterID := payload.resolvedCharacterID()
+	if characterID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "角色 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
+		return
+	}
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceCtx := h.buildDeviceCtx(c, actorID)
+	if strings.TrimSpace(deviceCtx.DeviceID) == "" {
+		util.ErrorResponse(c, response.InvalidParams, "缺少设备ID", gin.H{"errorCode": "DEVICE_ID_REQUIRED"})
+		return
+	}
+	result, err := h.coordinator.Install(c.Request.Context(), coordinator.InstallRequest{
+		DeviceCtx: deviceCtx, PetID: petID, TargetReleaseID: releaseID, CharacterID: characterID,
+		IdempotencyKey: firstNonEmpty(strings.TrimSpace(c.GetHeader("Idempotency-Key")), strings.TrimSpace(payload.IdempotencyKey)),
+	})
+	if err != nil {
+		writeCoordinatorError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "安装任务已创建", gin.H{"operationId": result.OperationID, "installationId": result.InstallationID, "status": result.Status, "stage": result.Stage})
 }
 
 func (h *CoordinatorHandler) ListInstallations(c *gin.Context) {
@@ -481,7 +546,43 @@ func (h *CoordinatorHandler) GetInstallation(c *gin.Context) {
 		writeInstallationError(c, err)
 		return
 	}
-	util.SuccessResponse(c, inst)
+	settings, err := h.repo.GetRuntimeSettingsForUserDevice(string(actor.UserID), deviceID, installationID)
+	if err != nil {
+		writeInstallationError(c, err)
+		return
+	}
+	var manifest *packageformat.Manifest
+	if strings.TrimSpace(inst.CurrentReleaseID) != "" {
+		manifest, err = h.loadInstallationManifest(c.Request.Context(), string(actor.UserID), inst.CurrentReleaseID)
+		if err != nil {
+			writeInstallationError(c, err)
+			return
+		}
+	}
+	util.SuccessResponse(c, &installationDetailResponse{Installation: inst, Settings: settings, Manifest: manifest})
+}
+
+func (h *CoordinatorHandler) GetRuntimeSettings(c *gin.Context) {
+	installationID := strings.TrimSpace(c.Param("installationId"))
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	settings, err := h.repo.GetRuntimeSettingsForUserDevice(string(actor.UserID), deviceID, installationID)
+	if err != nil {
+		writeInstallationError(c, err)
+		return
+	}
+	util.SuccessResponse(c, settings)
 }
 
 func (h *CoordinatorHandler) EnableInstallation(c *gin.Context) {
@@ -576,7 +677,8 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeActionNotFound})
 		return
 	}
-	if payload.ActionKey == "" {
+	actionKey := payload.resolvedActionKey()
+	if actionKey == "" {
 		util.ErrorResponse(c, response.InvalidParams, "动作 Key 为空", gin.H{"errorCode": ErrCodeActionNotFound})
 		return
 	}
@@ -586,7 +688,7 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 			DeviceID: deviceID,
 		},
 		InstallationID:   installationID,
-		DesiredActionKey: payload.ActionKey,
+		DesiredActionKey: actionKey,
 		IdempotencyKey:   strings.TrimSpace(c.GetHeader("Idempotency-Key")),
 	})
 	if err != nil {
@@ -649,7 +751,12 @@ func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
 		writeCoordinatorError(c, err)
 		return
 	}
-	util.SuccessMsgResponse(c, "运行配置已更新", gin.H{"operationId": result.OperationID, "status": result.Status})
+	updatedSettings, readErr := h.repo.GetRuntimeSettingsForUserDevice(string(actor.UserID), deviceID, installationID)
+	if readErr != nil {
+		writeInstallationError(c, readErr)
+		return
+	}
+	util.SuccessMsgResponse(c, "运行配置已更新", gin.H{"operationId": result.OperationID, "status": result.Status, "stage": result.Stage, "settings": updatedSettings})
 }
 
 func (h *CoordinatorHandler) Recenter(c *gin.Context) {
@@ -906,6 +1013,35 @@ func (h *CoordinatorHandler) CancelOperation(c *gin.Context) {
 		return
 	}
 	util.SuccessMsgResponse(c, "取消请求已提交", gin.H{"operationId": operationID, "status": operation.OpStatusCancelRequested})
+}
+
+type installationDetailResponse struct {
+	*Installation
+	Settings *RuntimeSettings        `json:"settings"`
+	Manifest *packageformat.Manifest `json:"manifest"`
+}
+
+func (h *CoordinatorHandler) loadInstallationManifest(ctx context.Context, userID, releaseID string) (*packageformat.Manifest, error) {
+	var row struct {
+		ManifestJSON string `gorm:"column:manifest_json"`
+	}
+	if err := h.repo.DB().WithContext(ctx).Table("desktop_pet_package_releases").Select("manifest_json").Where("id = ? AND owner_user_id = ?", releaseID, userID).Take(&row).Error; err != nil {
+		return nil, err
+	}
+	var manifest packageformat.Manifest
+	if err := json.Unmarshal([]byte(row.ManifestJSON), &manifest); err != nil {
+		return nil, err
+	}
+	return &manifest, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func writeCoordinatorError(c *gin.Context, err error) {

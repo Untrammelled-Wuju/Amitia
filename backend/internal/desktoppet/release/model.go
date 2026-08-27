@@ -341,60 +341,60 @@ type ReleasePreviewSnapshot struct {
 }
 
 type ReleaseData struct {
-	ID                    string
-	PetID                 string
-	OwnerUserID           string
-	Version               string
-	ReleaseSequence       int
-	SchemaVersion         int
-	Lifecycle             string
-	ContentRootHash       string
-	ManifestHash          string
-	StorageKey            string
-	ArchiveStorageKey     string
-	TotalBytes            int64
-	FileCount             int
-	ActionCount           int
-	DefaultActionKey      string
-	MinRuntimeVersion     string
-	SourceType            string
-	SourceProcessingTask  string
-	SourceGenerationTask  string
-	ActiveRevisionSetHash string
-	QualityGateID         string
-	QualityGateHash       string
-	EvaluationSetHash     string
-	BuildSnapshotID       string
-	IntegrityStatus       string
-	CompatibilityStatus   string
-	ManifestJSON          string
-	PublishedAt           string
-	ArchiveHash           string
-	ArchiveBytes          int64
-	LifecycleRevision     int
-	IntegrityRevision     int
-	ArchivedAt            string
-	RevokedAt             string
-	RevocationReason      string
-	LegacyPackageID       string
-	LegacyVersion         int
-	CreatedAt             string
-	UpdatedAt             string
+	ID                    string `json:"id"`
+	PetID                 string `json:"petId"`
+	OwnerUserID           string `json:"ownerUserId"`
+	Version               string `json:"version"`
+	ReleaseSequence       int    `json:"releaseSequence"`
+	SchemaVersion         int    `json:"schemaVersion"`
+	Lifecycle             string `json:"status"`
+	ContentRootHash       string `json:"contentRootHash"`
+	ManifestHash          string `json:"manifestHash"`
+	StorageKey            string `json:"storageKey,omitempty"`
+	ArchiveStorageKey     string `json:"archiveStorageKey,omitempty"`
+	TotalBytes            int64  `json:"totalBytes"`
+	FileCount             int    `json:"fileCount"`
+	ActionCount           int    `json:"actionCount"`
+	DefaultActionKey      string `json:"defaultActionKey"`
+	MinRuntimeVersion     string `json:"minRuntimeVersion"`
+	SourceType            string `json:"sourceType"`
+	SourceProcessingTask  string `json:"sourceProcessingTask"`
+	SourceGenerationTask  string `json:"sourceGenerationTask"`
+	ActiveRevisionSetHash string `json:"activeRevisionSetHash,omitempty"`
+	QualityGateID         string `json:"qualityGateId,omitempty"`
+	QualityGateHash       string `json:"qualityGateHash,omitempty"`
+	EvaluationSetHash     string `json:"evaluationSetHash,omitempty"`
+	BuildSnapshotID       string `json:"buildSnapshotId"`
+	IntegrityStatus       string `json:"integrityStatus"`
+	CompatibilityStatus   string `json:"compatibilityStatus"`
+	ManifestJSON          string `json:"manifestJson,omitempty"`
+	PublishedAt           string `json:"publishedAt,omitempty"`
+	ArchiveHash           string `json:"archiveHash,omitempty"`
+	ArchiveBytes          int64  `json:"archiveBytes,omitempty"`
+	LifecycleRevision     int    `json:"lifecycleRevision"`
+	IntegrityRevision     int    `json:"integrityRevision"`
+	ArchivedAt            string `json:"archivedAt,omitempty"`
+	RevokedAt             string `json:"revokedAt,omitempty"`
+	RevocationReason      string `json:"revocationReason,omitempty"`
+	LegacyPackageID       string `json:"legacyPackageId,omitempty"`
+	LegacyVersion         int    `json:"legacyVersion,omitempty"`
+	CreatedAt             string `json:"createdAt"`
+	UpdatedAt             string `json:"updatedAt"`
 }
 
 func (ReleaseData) TableName() string { return "desktop_pet_package_releases" }
 
 type ReleaseFileData struct {
-	ID        string
-	ReleaseID string
-	Path      string
-	SHA256    string
-	Bytes     int64
-	MediaType string
-	Role      string
-	ActionKey string
-	FrameID   string
-	CreatedAt string
+	ID        string `json:"id"`
+	ReleaseID string `json:"releaseId"`
+	Path      string `json:"path"`
+	SHA256    string `json:"sha256"`
+	Bytes     int64  `json:"bytes"`
+	MediaType string `json:"mediaType"`
+	Role      string `json:"role"`
+	ActionKey string `json:"actionKey,omitempty"`
+	FrameID   string `json:"frameId,omitempty"`
+	CreatedAt string `json:"createdAt"`
 }
 
 func (ReleaseFileData) TableName() string { return "desktop_pet_release_files" }

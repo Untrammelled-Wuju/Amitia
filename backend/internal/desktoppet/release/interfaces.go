@@ -246,17 +246,17 @@ type ReleaseRepository interface {
 }
 
 type PetIdentityData struct {
-	ID                  string
-	OwnerUserID         string
-	SourceCharacterID   string
-	Name                string
-	Slug                string
-	BindingPolicy       string
-	UpstreamPetID       string
-	DefaultActionKey    string
-	NextReleaseSequence int
-	CreatedAt           string
-	UpdatedAt           string
+	ID                  string `json:"id"`
+	OwnerUserID         string `json:"ownerUserId"`
+	SourceCharacterID   string `json:"sourceCharacterId"`
+	Name                string `json:"name"`
+	Slug                string `json:"slug"`
+	BindingPolicy       string `json:"bindingPolicy"`
+	UpstreamPetID       string `json:"upstreamPetId,omitempty"`
+	DefaultActionKey    string `json:"defaultActionKey,omitempty"`
+	NextReleaseSequence int    `json:"nextReleaseSequence"`
+	CreatedAt           string `json:"createdAt"`
+	UpdatedAt           string `json:"updatedAt"`
 }
 
 type ReleaseStoragePort interface {
