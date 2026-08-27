@@ -101,6 +101,29 @@ class RuntimeServiceLifecycleTest {
     }
 
     @Test
+    fun l002b_prootUnavailable_neverPublishesSessionReady() {
+        val component = UnavailableProotComponent()
+        setAndroidRuntimeModule(
+            prootComponent = component,
+            prootRootfsPath = "/rootfs",
+            assembler = LifecycleProotEnvironmentAssembler(),
+            activeRuntimeManager = LifecycleValidActiveRuntimeManager(),
+        )
+
+        service.onStartCommand(Intent().apply {
+            action = RuntimeServiceContract.ACTION_START_HOST
+            putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
+        }, 0, 1)
+
+        assertEquals(0, component.launchCount)
+        assertFalse(events.any { it is RuntimeServiceHostEvent.SessionReady })
+        val failure = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>().single()
+        assertEquals(RuntimeServiceTerminationCause.PROOT_COMPONENT_MISSING, failure.cause)
+        assertTrue(failure.message.contains("METADATA_MISSING"))
+        assertEquals("proot_availability", failure.phase)
+    }
+
+    @Test
     fun l003_listenerLateBinding_replaysLastEvent() {
         setAndroidRuntimeModule(
             prootComponent = LifecycleProotComponent(),
@@ -398,14 +421,39 @@ class RuntimeServiceLifecycleTest {
     }
 }
 
+internal class UnavailableProotComponent : ProotComponent {
+    var launchCount = 0
+        private set
+
+    override fun availability() = com.amitia.amitia_app.runtime.proot.ProotAvailability.Unavailable(
+        com.amitia.amitia_app.runtime.proot.ProotErrorCode.METADATA_MISSING,
+        "proot.metadata.missing",
+    )
+
+    override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
+        launchCount++
+        return LifecycleDeadProotSession(generation)
+    }
+
+    override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
+        launchCount++
+        return LifecycleDeadProotSession(generation)
+    }
+
+    override fun currentSession(): ProotSession? = null
+    override fun stop(): ProotStopResult = ProotStopResult.AlreadyStopped("unavailable", null)
+    override fun close() {}
+}
+
 internal class LifecycleProotComponent : ProotComponent {
     var launchCount = 0
         private set
     var session: LifecycleProotSession? = null
         private set
 
-    override fun availability() = com.amitia.amitia_app.runtime.proot.ProotAvailability.Unavailable(
-        com.amitia.amitia_app.runtime.proot.ProotErrorCode.NOT_PACKAGED, "test"
+    override fun availability() = com.amitia.amitia_app.runtime.proot.ProotAvailability.Available(
+        artifact = com.amitia.amitia_app.runtime.proot.ProotArtifact.create("1.0.0", "a".repeat(64)),
+        absoluteBinaryPath = "/test/proot",
     )
 
     override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
@@ -501,8 +549,9 @@ internal class ImmediatelyDeadProotComponent : ProotComponent {
     var launchCount = 0
         private set
 
-    override fun availability() = com.amitia.amitia_app.runtime.proot.ProotAvailability.Unavailable(
-        com.amitia.amitia_app.runtime.proot.ProotErrorCode.NOT_PACKAGED, "test"
+    override fun availability() = com.amitia.amitia_app.runtime.proot.ProotAvailability.Available(
+        artifact = com.amitia.amitia_app.runtime.proot.ProotArtifact.create("1.0.0", "a".repeat(64)),
+        absoluteBinaryPath = "/test/proot",
     )
 
     override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
@@ -547,8 +596,9 @@ internal class WatcherFailureProotComponent : ProotComponent {
     var session: LifecycleWatcherFailureSession? = null
         private set
 
-    override fun availability() = com.amitia.amitia_app.runtime.proot.ProotAvailability.Unavailable(
-        com.amitia.amitia_app.runtime.proot.ProotErrorCode.NOT_PACKAGED, "test"
+    override fun availability() = com.amitia.amitia_app.runtime.proot.ProotAvailability.Available(
+        artifact = com.amitia.amitia_app.runtime.proot.ProotArtifact.create("1.0.0", "a".repeat(64)),
+        absoluteBinaryPath = "/test/proot",
     )
 
     override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {

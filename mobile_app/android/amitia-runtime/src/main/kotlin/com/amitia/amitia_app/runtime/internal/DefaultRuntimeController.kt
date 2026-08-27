@@ -89,6 +89,7 @@ internal class DefaultRuntimeController(
     private companion object {
         const val SERVICE_SESSION_TIMEOUT_MS = 30_000L
         const val SERVICE_SESSION_POLL_MS = 100L
+        const val SESSION_READY_EXIT_OBSERVATION_MS = 150L
     }
 
     init {
@@ -287,7 +288,11 @@ internal class DefaultRuntimeController(
         }
         if (!session.isAlive()) {
             activeDetectorGeneration.compareAndSet(generation, -1L)
-            val exitCode = session.exit?.exitCode ?: session.awaitExit(0L)
+            // A process may die in the narrow window between the service's
+            // Started event and this controller callback. Give the exit watcher
+            // a short observation window so the real exit code/diagnostics win
+            // over a misleading exitCode=unknown START_FAILED.
+            val exitCode = session.exit?.exitCode ?: session.awaitExit(SESSION_READY_EXIT_OBSERVATION_MS)
             failSessionReadyPrecondition(
                 generation = generation,
                 message = "startup session exited before detection could start (exitCode=${exitCode ?: "unknown"})",

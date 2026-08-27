@@ -10,6 +10,7 @@ import com.amitia.amitia_app.runtime.AndroidRuntimeModule
 import com.amitia.amitia_app.runtime.service.internal.DefaultRuntimeServiceEndpoint
 import com.amitia.amitia_app.runtime.service.internal.RuntimeForegroundNotification
 import com.amitia.amitia_app.runtime.service.internal.RuntimeForegroundNotificationResult
+import com.amitia.amitia_app.runtime.proot.ProotAvailability
 import com.amitia.amitia_app.runtime.proot.ProotEvent
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
@@ -430,6 +431,33 @@ class RuntimeService : Service() {
             return
         }
 
+        val availability = try {
+            component.availability()
+        } catch (e: Exception) {
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.PROOT_COMPONENT_MISSING,
+                message = "failed to verify proot availability: ${e.message ?: e.javaClass.simpleName}",
+                phase = "proot_availability_exception",
+                noProcessCreated = true,
+            )
+            return
+        }
+        if (availability !is ProotAvailability.Available) {
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.PROOT_COMPONENT_MISSING,
+                message = describeProotAvailabilityFailure(availability),
+                phase = "proot_availability",
+                noProcessCreated = true,
+            )
+            return
+        }
+
         val observer = ProotObserver { event -> onProotEvent(event, generation) }
         val session = try {
             component.launch(request, observer, generation)
@@ -470,6 +498,17 @@ class RuntimeService : Service() {
                 message = "failed to activate proot session: ${e.message ?: e.javaClass.simpleName}",
                 phase = "session_activate",
             )
+        }
+    }
+
+    private fun describeProotAvailabilityFailure(availability: ProotAvailability): String {
+        return when (availability) {
+            is ProotAvailability.Unavailable ->
+                "proot runtime unavailable [${availability.errorCode.name}]: ${availability.messageKey}"
+            is ProotAvailability.Invalid ->
+                "proot runtime invalid [${availability.errorCode.name}]: ${availability.messageKey}"
+            ProotAvailability.Closed -> "proot runtime component is closed"
+            is ProotAvailability.Available -> "proot runtime is available"
         }
     }
 

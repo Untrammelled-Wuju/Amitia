@@ -110,6 +110,40 @@ class DefaultRuntimeControllerStartupFailureTest {
     }
 
     @Test
+    fun deadSessionReady_waitsBrieflyForExitCodeBeforeFailing() {
+        val stateStore = createStoppedStateStore()
+        val host = TeardownTrackingServiceHost()
+        val controller = DefaultRuntimeController(
+            stateStore = stateStore,
+            serviceHost = host,
+        )
+
+        assertTrue(startAndCapture(controller) is RuntimeOperationResult.Success)
+        val generation = controller.snapshot().generation
+        host.session = object : ProotSession {
+            override val sessionId: String = "delayed-exit-session"
+            override val exit: ProotExit? = null
+            override fun isAlive(): Boolean = false
+            override fun awaitExit(timeoutMillis: Long): Int? = if (timeoutMillis > 0L) 23 else null
+            override fun activate() {}
+            override fun requestStop() {}
+            override fun stop(graceMillis: Long): ProotStopResult =
+                ProotStopResult.AlreadyStopped(sessionId, 23)
+            override fun terminateAndConfirmExit(
+                gracefulTimeoutMs: Long,
+                forceTimeoutMs: Long,
+            ): ProotTerminationResult = ProotTerminationResult.ConfirmedExited(23)
+            override fun close() {}
+        }
+
+        host.emit(RuntimeServiceHostEvent.SessionReady(generation, host.session!!.sessionId))
+
+        assertEquals(RuntimeState.FAILED, controller.snapshot().state)
+        assertTrue(controller.snapshot().lastError?.message?.contains("exitCode=23") == true)
+        assertEquals(1, host.teardownRequestCount.get())
+    }
+
+    @Test
     fun detectorFailure_isPublishedEvenWhenCleanupEventNeverArrives() {
         val stateStore = createStoppedStateStore()
         val host = TeardownTrackingServiceHost()
