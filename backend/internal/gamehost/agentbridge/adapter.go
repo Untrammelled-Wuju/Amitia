@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
+	"github.com/u-ai/backend/internal/gamehost/readiness"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
@@ -19,18 +20,19 @@ import (
 const defaultToolTimeout = 30 * time.Second
 
 type RuntimeAdapter struct {
-	plugins  *registry.Registry
-	runtimes *ghruntime.Manager
-	topology *ghruntime.TopologyStore
-	control  ipc.ControlPlane
-	sessions *SessionRegistry
+	plugins   *registry.Registry
+	runtimes  *ghruntime.Manager
+	topology  *ghruntime.TopologyStore
+	control   ipc.ControlPlane
+	readiness readiness.Reader
+	sessions  *SessionRegistry
 }
 
-func NewRuntimeAdapter(plugins *registry.Registry, runtimes *ghruntime.Manager, topology *ghruntime.TopologyStore, control ipc.ControlPlane) (*RuntimeAdapter, error) {
-	if plugins == nil || runtimes == nil || topology == nil || control == nil {
-		return nil, fmt.Errorf("game agent bridge: plugin registry, runtime manager, topology store and control plane are required")
+func NewRuntimeAdapter(plugins *registry.Registry, runtimes *ghruntime.Manager, topology *ghruntime.TopologyStore, control ipc.ControlPlane, runtimeReadiness readiness.Reader) (*RuntimeAdapter, error) {
+	if plugins == nil || runtimes == nil || topology == nil || control == nil || runtimeReadiness == nil {
+		return nil, fmt.Errorf("game agent bridge: plugin registry, runtime manager, topology store, control plane and runtime readiness resolver are required")
 	}
-	return &RuntimeAdapter{plugins: plugins, runtimes: runtimes, topology: topology, control: control, sessions: NewSessionRegistry()}, nil
+	return &RuntimeAdapter{plugins: plugins, runtimes: runtimes, topology: topology, control: control, readiness: runtimeReadiness, sessions: NewSessionRegistry()}, nil
 }
 
 func (a *RuntimeAdapter) Supports(binding capability.RuntimeBinding) bool {
@@ -49,6 +51,9 @@ func (a *RuntimeAdapter) Execute(ctx context.Context, binding capability.Runtime
 	peer, err := a.resolvePeer(ctx, binding)
 	if err != nil {
 		return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "plugin runtime is unavailable", err)
+	}
+	if err := a.ensurePeerReady(ctx, peer); err != nil {
+		return failure(invocation.InvocationID, toolID, capability.ErrorCodeRuntimeUnavailable, "plugin runtime is not ready", err)
 	}
 	requestID := invocation.InvocationID
 	if strings.TrimSpace(requestID) == "" {
@@ -143,28 +148,57 @@ func (a *RuntimeAdapter) bindInvocationContext(peer ipc.Peer, invocation capabil
 	})
 }
 
+func (a *RuntimeAdapter) ensurePeerReady(ctx context.Context, peer ipc.Peer) error {
+	if a == nil || a.readiness == nil {
+		return fmt.Errorf("game agent bridge: runtime readiness resolver is unavailable")
+	}
+	snapshot, err := a.readiness.Resolve(ctx, peer.RuntimeID)
+	if err != nil {
+		return fmt.Errorf("game agent bridge: resolve runtime readiness: %w", err)
+	}
+	service, found := snapshot.Service(peer.ServiceID)
+	if !found {
+		return fmt.Errorf("game agent bridge: service %s is not present in runtime %s topology", peer.ServiceID, peer.RuntimeID)
+	}
+	if !snapshot.Ready {
+		return fmt.Errorf("game agent bridge: runtime %s is not ready (%s)", peer.RuntimeID, snapshot.Reason)
+	}
+	if !service.Ready {
+		return fmt.Errorf("game agent bridge: service %s is not ready", peer.ServiceID)
+	}
+	return nil
+}
+
 func (a *RuntimeAdapter) Health(ctx context.Context, binding capability.RuntimeBinding) capability.HealthStatus {
-	if !a.Supports(binding) {
+	if a == nil || !a.Supports(binding) || a.readiness == nil {
 		return capability.HealthUnhealthy
 	}
 	peer, err := a.resolvePeer(ctx, binding)
 	if err != nil {
 		return capability.HealthUnhealthy
 	}
-	runtimeState, err := a.runtimes.GetRuntimeState(peer.RuntimeID)
+	snapshot, err := a.readiness.Resolve(ctx, peer.RuntimeID)
 	if err != nil {
 		return capability.HealthUnhealthy
 	}
-	switch runtimeState {
-	case ghdomain.RuntimeStateRunning:
-		return capability.HealthReady
-	case ghdomain.RuntimeStateDegraded, ghdomain.RuntimeStateStarting, ghdomain.RuntimeStateRestarting:
-		return capability.HealthDegraded
-	case ghdomain.RuntimeStateStopped, ghdomain.RuntimeStateFailed:
+	if snapshot.State == ghdomain.RuntimeStateStopped || snapshot.State == ghdomain.RuntimeStateFailed {
 		return capability.HealthShutdown
-	default:
-		return capability.HealthUnknown
 	}
+	service, found := snapshot.Service(peer.ServiceID)
+	if !found {
+		return capability.HealthUnhealthy
+	}
+	// Runtime readiness is topology-wide, while a capability binding targets a
+	// concrete service. Both must be ready before the capability is advertised
+	// as healthy. RuntimeStateDegraded can represent an unrelated optional
+	// service failure, so it must not make a ready binding non-executable.
+	if snapshot.Ready && service.Ready {
+		return capability.HealthReady
+	}
+	if snapshot.Operational || snapshot.State == ghdomain.RuntimeStateStarting || snapshot.State == ghdomain.RuntimeStateRestarting {
+		return capability.HealthDegraded
+	}
+	return capability.HealthUnknown
 }
 
 func (a *RuntimeAdapter) resolvePeer(ctx context.Context, binding capability.RuntimeBinding) (ipc.Peer, error) {
@@ -261,10 +295,12 @@ func (a *RuntimeAdapter) resolveRuntime(ctx context.Context, binding capability.
 		if runtimes[i].PluginID != pluginID {
 			continue
 		}
-		if runtimes[i].State == ghdomain.RuntimeStateRunning || runtimes[i].State == ghdomain.RuntimeStateDegraded {
-			return runtimes[i].ID, nil
+		if a.readiness != nil {
+			if ready, readyErr := a.readiness.IsReady(ctx, runtimes[i].ID); readyErr == nil && ready {
+				return runtimes[i].ID, nil
+			}
 		}
-		if candidate == nil {
+		if candidate == nil || (readiness.IsOperationalRuntimeState(runtimes[i].State) && !readiness.IsOperationalRuntimeState(candidate.State)) {
 			copy := runtimes[i]
 			candidate = &copy
 		}

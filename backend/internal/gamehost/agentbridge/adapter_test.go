@@ -10,12 +10,43 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
+	"github.com/u-ai/backend/internal/gamehost/readiness"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 type genericControlPlane struct{ methods []string }
+
+type stubReadiness struct{}
+
+func (stubReadiness) Resolve(_ context.Context, runtimeID ghdomain.RuntimeInstanceID) (readiness.Snapshot, error) {
+	return readiness.Snapshot{
+		RuntimeID: runtimeID, Ready: true, Operational: true, Reason: readiness.ReasonReady,
+		Services: []readiness.ServiceSnapshot{{ServiceID: "main", Required: true, State: ghruntime.ServiceStateRunning, Connected: true, HandshakeReady: true, Ready: true}},
+	}, nil
+}
+func (stubReadiness) IsReady(context.Context, ghdomain.RuntimeInstanceID) (bool, error) {
+	return true, nil
+}
+func (stubReadiness) IsServiceReady(context.Context, ghdomain.RuntimeInstanceID, ghdomain.ServiceID) (bool, error) {
+	return true, nil
+}
+
+type snapshotReadiness struct {
+	snapshot readiness.Snapshot
+}
+
+func (r snapshotReadiness) Resolve(context.Context, ghdomain.RuntimeInstanceID) (readiness.Snapshot, error) {
+	return r.snapshot, nil
+}
+func (r snapshotReadiness) IsReady(context.Context, ghdomain.RuntimeInstanceID) (bool, error) {
+	return r.snapshot.Ready, nil
+}
+func (r snapshotReadiness) IsServiceReady(_ context.Context, _ ghdomain.RuntimeInstanceID, serviceID ghdomain.ServiceID) (bool, error) {
+	service, found := r.snapshot.Service(serviceID)
+	return found && service.Ready, nil
+}
 
 func (f *genericControlPlane) Attach(context.Context, ipc.Peer, ipc.Transport) (*ipc.Connection, error) {
 	return nil, fmt.Errorf("not used")
@@ -61,7 +92,7 @@ func TestRuntimeAdapterForwardsOpaquePluginMethods(t *testing.T) {
 		t.Fatal(err)
 	}
 	control := &genericControlPlane{}
-	adapter, err := NewRuntimeAdapter(plugins, runtimes, topology, control)
+	adapter, err := NewRuntimeAdapter(plugins, runtimes, topology, control, stubReadiness{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +132,9 @@ func TestRuntimeAdapterBindAgentContextWithoutToolInvocation(t *testing.T) {
 	if _, err := runtimes.AllocateGeneration(rt.ID); err != nil {
 		t.Fatal(err)
 	}
+	if err := runtimes.UpdateRuntimeState(rt.ID, ghdomain.RuntimeStateStarting, "test", time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	if err := runtimes.UpdateRuntimeState(rt.ID, ghdomain.RuntimeStateRunning, "test", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +142,7 @@ func TestRuntimeAdapterBindAgentContextWithoutToolInvocation(t *testing.T) {
 	if err := topology.PutRuntimeGraph(rt, plugin, map[ghdomain.ServiceID]string{"main": "def-main"}); err != nil {
 		t.Fatal(err)
 	}
-	adapter, err := NewRuntimeAdapter(plugins, runtimes, topology, &genericControlPlane{})
+	adapter, err := NewRuntimeAdapter(plugins, runtimes, topology, &genericControlPlane{}, stubReadiness{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,5 +278,132 @@ func TestSessionRegistryPerServiceQuotaCannotEvictOtherServiceDefault(t *testing
 	}
 	if countA != 2 {
 		t.Fatalf("expected service-a quota to retain 2 sessions, got %d", countA)
+	}
+}
+
+func TestRuntimeAdapterHealthUsesTopologyReadinessNotRuntimeStateAlone(t *testing.T) {
+	ctx := context.Background()
+	plugins := registry.NewRegistry()
+	plugin := ghdomain.PluginDescriptor{
+		ID: "health-plugin", ExtensionID: "com.example/health", Name: "Health", Version: "1.0.0", ProtocolVersion: protocol.ProtocolVersion,
+		Services: []ghdomain.ServiceDescriptor{
+			{ID: "main", Name: "main", Kind: ghdomain.ServiceKindProcess, Required: true},
+			{ID: "telemetry", Name: "telemetry", Kind: ghdomain.ServiceKindProcess, Required: false},
+		},
+	}
+	if err := plugins.Register(ctx, plugin); err != nil {
+		t.Fatal(err)
+	}
+	runtimes := ghruntime.NewManager(ghruntime.ManagerOptions{})
+	rt, _, err := runtimes.EnsurePrimaryRuntime(ctx, plugin.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	generation, err := runtimes.AllocateGeneration(rt.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runtimes.UpdateRuntimeState(rt.ID, ghdomain.RuntimeStateStarting, "test", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtimes.UpdateRuntimeState(rt.ID, ghdomain.RuntimeStateRunning, "test", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtimes.UpdateRuntimeState(rt.ID, ghdomain.RuntimeStateDegraded, "optional_service_impaired", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	topology := ghruntime.NewTopologyStore()
+	if err := topology.PutRuntimeGraph(rt, plugin, map[ghdomain.ServiceID]string{"main": "def-main", "telemetry": "def-telemetry"}); err != nil {
+		t.Fatal(err)
+	}
+
+	readinessSnapshot := readiness.Snapshot{
+		RuntimeID: rt.ID, PluginID: plugin.ID, State: ghdomain.RuntimeStateDegraded, Generation: generation,
+		Operational: true, Connected: true, Ready: true, Reason: readiness.ReasonReady,
+		RequiredServiceCount: 1,
+		Services: []readiness.ServiceSnapshot{
+			{ServiceID: "main", Required: true, State: ghruntime.ServiceStateRunning, Connected: true, HandshakeReady: true, Ready: true, ConnectionGeneration: generation},
+			{ServiceID: "telemetry", Required: false, State: ghruntime.ServiceStateFailed, Ready: false},
+		},
+	}
+	adapter, err := NewRuntimeAdapter(plugins, runtimes, topology, &genericControlPlane{}, snapshotReadiness{snapshot: readinessSnapshot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := capability.RuntimeBinding{
+		RuntimeType: capability.RuntimeTypeGameHost, RuntimeID: string(rt.ID),
+		Metadata: map[string]any{"pluginId": string(plugin.ID), "serviceId": "main"},
+	}
+	if got := adapter.Health(ctx, binding); got != capability.HealthReady {
+		t.Fatalf("ready required service must stay executable while unrelated optional service is degraded: got %s", got)
+	}
+
+	readinessSnapshot.Ready = false
+	readinessSnapshot.Reason = readiness.ReasonRequiredServiceNotReady
+	readinessSnapshot.Services[0].Ready = false
+	adapter, err = NewRuntimeAdapter(plugins, runtimes, topology, &genericControlPlane{}, snapshotReadiness{snapshot: readinessSnapshot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := adapter.Health(ctx, binding); got != capability.HealthDegraded {
+		t.Fatalf("required service that is not ready must not be advertised executable: got %s", got)
+	}
+}
+
+func TestRuntimeAdapterExecuteFailsClosedUntilWholeRuntimeAndTargetServiceAreReady(t *testing.T) {
+	ctx := context.Background()
+	plugins := registry.NewRegistry()
+	plugin := ghdomain.PluginDescriptor{
+		ID: "strict-ready-plugin", ExtensionID: "com.example/strict-ready", Name: "Strict Ready", Version: "1.0.0", ProtocolVersion: protocol.ProtocolVersion,
+		Services: []ghdomain.ServiceDescriptor{
+			{ID: "bridge", Name: "bridge", Kind: ghdomain.ServiceKindProcess, Required: true},
+			{ID: "agent", Name: "agent", Kind: ghdomain.ServiceKindProcess, Required: true},
+		},
+	}
+	if err := plugins.Register(ctx, plugin); err != nil {
+		t.Fatal(err)
+	}
+	runtimes := ghruntime.NewManager(ghruntime.ManagerOptions{})
+	rt, _, err := runtimes.EnsurePrimaryRuntime(ctx, plugin.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	generation, err := runtimes.AllocateGeneration(rt.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runtimes.UpdateRuntimeState(rt.ID, ghdomain.RuntimeStateStarting, "test", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtimes.UpdateRuntimeState(rt.ID, ghdomain.RuntimeStateRunning, "test", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	topology := ghruntime.NewTopologyStore()
+	if err := topology.PutRuntimeGraph(rt, plugin, map[ghdomain.ServiceID]string{"bridge": "def-bridge", "agent": "def-agent"}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := readiness.Snapshot{
+		RuntimeID: rt.ID, PluginID: plugin.ID, State: ghdomain.RuntimeStateRunning, Generation: generation,
+		Operational: true, Connected: true, Ready: false, Reason: readiness.ReasonRequiredServiceDisconnected, RequiredServiceCount: 2,
+		Services: []readiness.ServiceSnapshot{
+			{ServiceID: "bridge", Required: true, State: ghruntime.ServiceStateRunning, Connected: true, HandshakeReady: true, Ready: true, ConnectionGeneration: generation},
+			{ServiceID: "agent", Required: true, State: ghruntime.ServiceStateRunning, Connected: false, Ready: false},
+		},
+	}
+	control := &genericControlPlane{}
+	adapter, err := NewRuntimeAdapter(plugins, runtimes, topology, control, snapshotReadiness{snapshot: snapshot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := capability.RuntimeBinding{
+		RuntimeType: capability.RuntimeTypeGameHost, RuntimeID: string(rt.ID), HandlerName: "vendor.bridge.command",
+		Metadata: map[string]any{"pluginId": string(plugin.ID), "serviceId": "bridge"},
+	}
+	result := adapter.Execute(ctx, binding, capability.ToolInvocationContext{InvocationID: "strict-ready"}, json.RawMessage(`{"command":"go"}`))
+	if result.Status == capability.ToolResultStatusSuccess {
+		t.Fatalf("runtime-wide readiness gap must block execution: %+v", result)
+	}
+	if len(control.methods) != 0 {
+		t.Fatalf("RPC reached control plane before whole runtime was ready: %v", control.methods)
 	}
 }

@@ -33,6 +33,13 @@ type SecretLeaseAwareServiceExecutor interface {
 	SetServiceLeaseLifecycle(lifecycle ServiceLeaseLifecycle)
 }
 
+// ServiceStopObserver receives a teardown callback only after host ownership of
+// the service process has ended (or when topology already records it stopped).
+// GameHost uses this for host-owned resources such as mediated network handles.
+type ServiceStopObserver interface {
+	OnServiceStopped(runtimeID, serviceID string)
+}
+
 // ServiceResourceAdmission is the runtime-facing boundary for resource startup
 // admission. Implementations may validate identity, register per-service limits
 // and return a cleanup function that releases transient startup state. The
@@ -54,10 +61,28 @@ type serviceExecutor struct {
 	startPermission    ServiceStartPermissionGuard
 	leaseLifecycle     ServiceLeaseLifecycle
 	resourceAdmission  ServiceResourceAdmission
+	stopObserver       ServiceStopObserver
 }
 
 func (e *serviceExecutor) SetServiceLeaseLifecycle(lifecycle ServiceLeaseLifecycle) {
 	e.leaseLifecycle = lifecycle
+}
+
+// SetServiceStopObserver wires host-owned resource cleanup without widening the
+// public ServiceExecutor interface used by test/recovery fakes.
+func SetServiceStopObserver(executor ServiceExecutor, observer ServiceStopObserver) error {
+	concrete, ok := executor.(*serviceExecutor)
+	if !ok || concrete == nil {
+		return &TopologyError{Code: ErrInvalidArgument, Message: "service executor does not support stop observer"}
+	}
+	concrete.stopObserver = observer
+	return nil
+}
+
+func (e *serviceExecutor) notifyServiceStopped(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) {
+	if e.stopObserver != nil {
+		e.stopObserver.OnServiceStopped(string(runtimeID), string(serviceID))
+	}
 }
 
 func NewServiceExecutor(
@@ -272,6 +297,7 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 			if cleanupErr := e.externalAdapter.Stop(context.WithoutCancel(ctx), execCtx); cleanupErr != nil {
 				return nil, fmt.Errorf("persist running external service state: %w; rollback stop failed: %v", err, cleanupErr)
 			}
+			e.notifyServiceStopped(execCtx.RuntimeID, execCtx.ServiceID)
 			return nil, err
 		}
 		startCompleted = true
@@ -301,6 +327,9 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 			cleanupHandle.PID = result.PID
 		}
 		cleanupErr := e.processAdapter.StopProcess(context.WithoutCancel(ctx), cleanupHandle, true)
+		if cleanupErr == nil {
+			e.notifyServiceStopped(execCtx.RuntimeID, execCtx.ServiceID)
+		}
 		return nil, &ExecutionError{
 			Code:         ErrServiceLaunchFailed,
 			RuntimeID:    string(execCtx.RuntimeID),
@@ -320,6 +349,7 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 		if cleanupErr := e.processAdapter.StopProcess(context.WithoutCancel(ctx), *handle, true); cleanupErr != nil {
 			return nil, fmt.Errorf("persist running service state: %w; force-stop failed: %v", err, cleanupErr)
 		}
+		e.notifyServiceStopped(execCtx.RuntimeID, execCtx.ServiceID)
 		return nil, err
 	}
 	startupCommitted = true
@@ -359,6 +389,7 @@ func (e *serviceExecutor) Stop(ctx context.Context, handle ServiceExecutionHandl
 		if e.resourceAdmission != nil {
 			e.resourceAdmission.ReleaseService(runtimeID, serviceID)
 		}
+		e.notifyServiceStopped(runtimeID, serviceID)
 		return nil
 	}
 
@@ -402,6 +433,7 @@ func (e *serviceExecutor) Stop(ctx context.Context, handle ServiceExecutionHandl
 		if e.resourceAdmission != nil {
 			e.resourceAdmission.ReleaseService(runtimeID, serviceID)
 		}
+		e.notifyServiceStopped(runtimeID, serviceID)
 		return topology.UpdateServiceState(serviceID, ServiceStateStopped, time.Now())
 	}
 
@@ -412,6 +444,7 @@ func (e *serviceExecutor) Stop(ctx context.Context, handle ServiceExecutionHandl
 	if e.resourceAdmission != nil {
 		e.resourceAdmission.ReleaseService(runtimeID, serviceID)
 	}
+	e.notifyServiceStopped(runtimeID, serviceID)
 
 	return topology.UpdateServiceState(serviceID, ServiceStateStopped, time.Now())
 }

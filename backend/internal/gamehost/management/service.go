@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/control"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/handshake"
+	"github.com/u-ai/backend/internal/gamehost/readiness"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 )
 
@@ -32,19 +33,8 @@ type RuntimeManagerReader interface {
 
 type RuntimeTopologyReader interface {
 	GetTopologySnapshot(runtimeID string) (runtime.RuntimeTopologySnapshot, error)
-}
-
-type ConnectionRegistryReader interface {
-	ListByRuntime(runtimeID string) []*ConnectionSnapshot
-	FindByPeer(runtimeID, serviceID string) (*ConnectionSnapshot, bool)
-}
-
-type ConnectionSnapshot struct {
-	ConnectionID string
-	RuntimeID    string
-	ServiceID    string
-	Connected    bool
-	Protocol     string
+	ResolveDefinitionID(runtimeID, serviceID string) (string, error)
+	ResolveModuleID(runtimeID, serviceID string) (string, error)
 }
 
 type HandshakeReader interface {
@@ -75,10 +65,10 @@ type GameCenterManagementService struct {
 	registry    PluginRegistryReader
 	runtimes    RuntimeManagerReader
 	topology    RuntimeTopologyReader
-	connections ConnectionRegistryReader
 	handshake   HandshakeReader
 	authority   ControlAuthorityReader
 	health      HealthReader
+	readiness   readiness.Reader
 	agentBinder AgentContextBinder
 }
 
@@ -87,10 +77,10 @@ type GameCenterManagementServiceOptions struct {
 	Registry    PluginRegistryReader
 	Runtimes    RuntimeManagerReader
 	Topology    RuntimeTopologyReader
-	Connections ConnectionRegistryReader
 	Handshake   HandshakeReader
 	Authority   ControlAuthorityReader
 	Health      HealthReader
+	Readiness   readiness.Reader
 	AgentBinder AgentContextBinder
 }
 
@@ -100,10 +90,10 @@ func NewGameCenterManagementService(opts GameCenterManagementServiceOptions) *Ga
 		registry:    opts.Registry,
 		runtimes:    opts.Runtimes,
 		topology:    opts.Topology,
-		connections: opts.Connections,
 		handshake:   opts.Handshake,
 		authority:   opts.Authority,
 		health:      opts.Health,
+		readiness:   opts.Readiness,
 		agentBinder: opts.AgentBinder,
 	}
 }
@@ -265,16 +255,25 @@ func (s *GameCenterManagementService) ListServices(ctx context.Context, runtimeI
 		return nil, fmt.Errorf("topology snapshot: %w", err)
 	}
 
+	readinessSnapshot, _ := s.resolveRuntimeReadiness(ctx, runtimeID)
 	services := make([]GameServiceDTO, 0, len(snap.Services))
 	for _, svc := range snap.Services {
+		definitionID, _ := s.topology.ResolveDefinitionID(runtimeID, string(svc.ServiceID))
+		moduleID, _ := s.topology.ResolveModuleID(runtimeID, string(svc.ServiceID))
+		connected, ready := false, false
+		if serviceReadiness, found := readinessSnapshot.Service(svc.ServiceID); found {
+			connected = serviceReadiness.Connected
+			ready = serviceReadiness.Ready
+		}
 		dto := GameServiceDTO{
-			ServiceID:    string(svc.ID),
+			ServiceID:    string(svc.ServiceID),
 			RuntimeID:    string(svc.RuntimeID),
-			DefinitionID: string(svc.ServiceID),
+			DefinitionID: definitionID,
+			ModuleID:     moduleID,
 			State:        string(svc.State),
 			Health:       s.serviceHealth(string(svc.RuntimeID), string(svc.ServiceID)),
-			Connected:    s.serviceConnected(string(svc.RuntimeID), string(svc.ServiceID)),
-			Ready:        s.serviceReady(string(svc.RuntimeID), string(svc.ServiceID)),
+			Connected:    connected,
+			Ready:        ready,
 		}
 		services = append(services, dto)
 	}
@@ -286,32 +285,26 @@ func (s *GameCenterManagementService) ListServices(ctx context.Context, runtimeI
 }
 
 func (s *GameCenterManagementService) GetRuntimeHealth(ctx context.Context, runtimeID string) (*HealthSummaryDTO, error) {
-	if s.health == nil {
+	if s.health == nil || s.topology == nil {
 		return &HealthSummaryDTO{Status: "unknown"}, nil
 	}
-
+	topology, err := s.topology.GetTopologySnapshot(runtimeID)
+	if err != nil {
+		return &HealthSummaryDTO{Status: "unknown"}, nil
+	}
 	services := s.health.ListServiceHealth(runtimeID)
-	if len(services) == 0 {
-		return &HealthSummaryDTO{Status: "unknown"}, nil
-	}
-
-	worst := "healthy"
+	result := runtime.AggregateRuntimeHealth(topology, services)
 	var latest time.Time
 	for _, svc := range services {
-		if svc.Health == "unhealthy" {
-			worst = "unhealthy"
-		} else if svc.Health == "degraded" && worst != "unhealthy" {
-			worst = "degraded"
-		}
 		if svc.LastChangedAt.After(latest) {
 			latest = svc.LastChangedAt
 		}
 	}
-
-	return &HealthSummaryDTO{
-		Status:    worst,
-		UpdatedAt: &latest,
-	}, nil
+	summary := &HealthSummaryDTO{Status: string(result.Health), Message: result.Reason}
+	if !latest.IsZero() {
+		summary.UpdatedAt = &latest
+	}
+	return summary, nil
 }
 
 func (s *GameCenterManagementService) GetHandshakeStatus(ctx context.Context, connectionID string) (*HandshakeSummaryDTO, error) {
@@ -340,34 +333,47 @@ func (s *GameCenterManagementService) GetHandshakeStatus(ctx context.Context, co
 }
 
 func (s *GameCenterManagementService) GetRuntimeHandshakeStatus(ctx context.Context, runtimeID string) (*HandshakeSummaryDTO, error) {
-	if s.connections == nil || s.handshake == nil {
+	if s.readiness == nil || s.handshake == nil {
 		return &HandshakeSummaryDTO{HandshakeState: "unavailable", Ready: false}, nil
 	}
-	connections := s.connections.ListByRuntime(runtimeID)
-	if len(connections) == 0 {
+	runtimeReadiness, err := s.resolveRuntimeReadiness(ctx, runtimeID)
+	if err != nil {
 		return &HandshakeSummaryDTO{HandshakeState: "not_found", Ready: false}, nil
 	}
 
-	result := &HandshakeSummaryDTO{HandshakeState: "ready", Ready: true}
-	for _, conn := range connections {
-		if conn == nil || !conn.Connected {
-			result.HandshakeState = "pending"
-			result.Ready = false
+	result := &HandshakeSummaryDTO{Ready: runtimeReadiness.Ready}
+	switch runtimeReadiness.Reason {
+	case readiness.ReasonReady:
+		result.HandshakeState = string(handshake.HandshakeStateReady)
+	case readiness.ReasonRequiredServiceStale:
+		result.HandshakeState = "stale_generation"
+	case readiness.ReasonRequiredServiceDisconnected:
+		result.HandshakeState = "not_found"
+	case readiness.ReasonRequiredServiceNotRunning, readiness.ReasonRuntimeNotOperational:
+		result.HandshakeState = "blocked"
+	case readiness.ReasonNoActiveGeneration, readiness.ReasonTopologyEmpty, readiness.ReasonNoServiceReady:
+		result.HandshakeState = "pending"
+	default:
+		result.HandshakeState = "pending"
+	}
+
+	for _, service := range runtimeReadiness.Services {
+		if !service.Connected || service.ConnectionID == "" {
 			continue
 		}
-		state, found := s.handshake.GetState(conn.ConnectionID)
-		if !found || state != handshake.HandshakeStateReady {
-			if found {
-				result.HandshakeState = string(state)
-			} else {
-				result.HandshakeState = "not_found"
-			}
-			result.Ready = false
-		}
-		if snap := s.handshake.GetSnapshot(conn.ConnectionID); snap != nil && result.Protocol == "" {
+		if snap := s.handshake.GetSnapshot(string(service.ConnectionID)); snap != nil && result.Protocol == "" {
 			result.Protocol = snap.Protocol
 			result.SDKName = snap.SDKName
 			result.SDKVersion = snap.SDKVersion
+		}
+		// Only surface the concrete connection handshake state when handshake
+		// readiness itself is the runtime blocker. Lifecycle/topology blockers
+		// must never be presented as a misleading runtime-level "ready" state.
+		if runtimeReadiness.Reason != readiness.ReasonRequiredServiceNotReady || !service.Required || service.Ready {
+			continue
+		}
+		if state, found := s.handshake.GetState(string(service.ConnectionID)); found {
+			result.HandshakeState = string(state)
 		}
 	}
 	return result, nil
@@ -537,7 +543,7 @@ func (s *GameCenterManagementService) aggregateRuntimeSummary(
 	plugin ghdomain.PluginDescriptor,
 ) GameRuntimeSummaryDTO {
 	serviceCount := s.countServices(string(rt.ID))
-	connected, ready := s.runtimeConnectionState(string(rt.ID))
+	connected, ready := s.runtimeConnectionState(ctx, string(rt.ID))
 	controlMode, epoch := "", uint64(0)
 	if pluginHasCapability(plugin, ghdomain.HostFeatureRealtimeControl) {
 		controlMode, epoch = s.runtimeAuthority(ctx, string(rt.ID))
@@ -563,21 +569,39 @@ func (s *GameCenterManagementService) aggregateRuntimeDetail(
 	rt *runtime.RuntimeInstanceRef,
 	plugin ghdomain.PluginDescriptor,
 ) GameRuntimeDetailDTO {
-	services, _ := s.ListServices(ctx, string(rt.ID))
-	hs, _ := s.GetHandshakeStatus(ctx, string(rt.ID))
+	services, serviceErr := s.ListServices(ctx, string(rt.ID))
+	if serviceErr != nil || services == nil {
+		services = &GameCenterServiceList{Items: []GameServiceDTO{}, Total: 0}
+	}
+	hs, _ := s.GetRuntimeHandshakeStatus(ctx, string(rt.ID))
+	if hs == nil {
+		hs = &HandshakeSummaryDTO{HandshakeState: "unavailable", Ready: false}
+	}
 	var authority *ControlAuthorityDTO
 	if pluginHasCapability(plugin, ghdomain.HostFeatureRealtimeControl) {
 		authority, _ = s.GetControlAuthority(ctx, string(rt.ID))
 	}
 	health, _ := s.GetRuntimeHealth(ctx, string(rt.ID))
+	if health == nil {
+		health = &HealthSummaryDTO{Status: "unknown"}
+	}
+
+	processRunning := readiness.IsOperationalRuntimeState(rt.State)
+	processGeneration := uint64(0)
+	if runtimeReadiness, err := s.resolveRuntimeReadiness(ctx, string(rt.ID)); err == nil {
+		processRunning = runtimeReadiness.Operational
+		if runtimeReadiness.Generation > 0 {
+			processGeneration = uint64(runtimeReadiness.Generation)
+		}
+	}
 
 	return GameRuntimeDetailDTO{
 		RuntimeID:        string(rt.ID),
 		PluginID:         string(rt.PluginID),
 		ExtensionID:      plugin.ExtensionID,
 		RuntimeState:     string(rt.State),
-		Process:          &ProcessSummaryDTO{Managed: true, Running: rt.State == ghdomain.RuntimeStateRunning},
-		Connection:       s.getConnectionSummary(string(rt.ID)),
+		Process:          &ProcessSummaryDTO{Managed: true, Running: processRunning, ProcessGeneration: processGeneration},
+		Connection:       s.getConnectionSummary(ctx, string(rt.ID)),
 		Handshake:        hs,
 		Services:         services.Items,
 		ControlAuthority: authority,
@@ -634,11 +658,12 @@ func (s *GameCenterManagementService) countServices(runtimeID string) int {
 }
 
 func (s *GameCenterManagementService) pluginHealth(pluginID string) string {
-	if s.runtimes == nil || s.health == nil {
+	if s.runtimes == nil || s.health == nil || s.topology == nil {
 		return "unknown"
 	}
 	all := s.runtimes.ListRuntimes()
 	hasRuntime := false
+	hasUnknown := false
 	worst := "healthy"
 	for _, rt := range all {
 		if string(rt.PluginID) != pluginID {
@@ -646,37 +671,34 @@ func (s *GameCenterManagementService) pluginHealth(pluginID string) string {
 		}
 		hasRuntime = true
 		health := s.runtimeHealth(string(rt.ID))
-		if health == "unhealthy" {
+		switch health {
+		case "unhealthy":
 			return "unhealthy"
-		}
-		if health == "degraded" {
+		case "degraded":
 			worst = "degraded"
+		case "unknown":
+			hasUnknown = true
 		}
 	}
 	if !hasRuntime {
+		return "unknown"
+	}
+	if worst == "healthy" && hasUnknown {
 		return "unknown"
 	}
 	return worst
 }
 
 func (s *GameCenterManagementService) runtimeHealth(runtimeID string) string {
-	if s.health == nil {
+	if s.health == nil || s.topology == nil {
 		return "unknown"
 	}
-	services := s.health.ListServiceHealth(runtimeID)
-	if len(services) == 0 {
+	topology, err := s.topology.GetTopologySnapshot(runtimeID)
+	if err != nil {
 		return "unknown"
 	}
-	worst := "healthy"
-	for _, svc := range services {
-		if svc.Health == "unhealthy" {
-			return "unhealthy"
-		}
-		if svc.Health == "degraded" && worst != "unhealthy" {
-			worst = "degraded"
-		}
-	}
-	return worst
+	result := runtime.AggregateRuntimeHealth(topology, s.health.ListServiceHealth(runtimeID))
+	return string(result.Health)
 }
 
 func (s *GameCenterManagementService) serviceHealth(runtimeID, serviceID string) string {
@@ -690,44 +712,12 @@ func (s *GameCenterManagementService) serviceHealth(runtimeID, serviceID string)
 	return string(snap.Health)
 }
 
-func (s *GameCenterManagementService) serviceConnected(runtimeID, serviceID string) bool {
-	if s.connections == nil {
-		return false
-	}
-	_, found := s.connections.FindByPeer(runtimeID, serviceID)
-	return found
-}
-
-func (s *GameCenterManagementService) serviceReady(runtimeID, serviceID string) bool {
-	if s.connections == nil || s.handshake == nil {
-		return false
-	}
-	conn, found := s.connections.FindByPeer(runtimeID, serviceID)
-	if !found {
-		return false
-	}
-	return s.handshake.IsReady(conn.ConnectionID)
-}
-
-func (s *GameCenterManagementService) runtimeConnectionState(runtimeID string) (connected, ready bool) {
-	if s.connections == nil {
+func (s *GameCenterManagementService) runtimeConnectionState(ctx context.Context, runtimeID string) (connected, ready bool) {
+	runtimeReadiness, err := s.resolveRuntimeReadiness(ctx, runtimeID)
+	if err != nil {
 		return false, false
 	}
-	conns := s.connections.ListByRuntime(runtimeID)
-	if len(conns) == 0 {
-		return false, false
-	}
-	connected = true
-	ready = true
-	for _, conn := range conns {
-		if s.handshake != nil {
-			if s.handshake.IsReady(conn.ConnectionID) {
-				continue
-			}
-		}
-		ready = false
-	}
-	return connected, ready
+	return runtimeReadiness.Connected, runtimeReadiness.Ready
 }
 
 func (s *GameCenterManagementService) runtimeAuthority(ctx context.Context, runtimeID string) (mode string, epoch uint64) {
@@ -786,22 +776,37 @@ func (s *GameCenterManagementService) matchesRuntimeFilter(summary GameRuntimeSu
 	return true
 }
 
-func (s *GameCenterManagementService) getConnectionSummary(runtimeID string) *ConnectionSummaryDTO {
-	if s.connections == nil {
+func (s *GameCenterManagementService) getConnectionSummary(ctx context.Context, runtimeID string) *ConnectionSummaryDTO {
+	runtimeReadiness, err := s.resolveRuntimeReadiness(ctx, runtimeID)
+	if err != nil {
 		return &ConnectionSummaryDTO{Connected: false}
 	}
-	conns := s.connections.ListByRuntime(runtimeID)
-	if len(conns) == 0 {
-		return &ConnectionSummaryDTO{Connected: false}
+	result := &ConnectionSummaryDTO{Connected: runtimeReadiness.Connected}
+	if !runtimeReadiness.Connected {
+		return result
 	}
-	result := &ConnectionSummaryDTO{Connected: true}
-	if s.handshake != nil && len(conns) > 0 {
-		snap := s.handshake.GetSnapshot(conns[0].ConnectionID)
-		if snap != nil {
-			result.ProtocolVersion = snap.Protocol
+	if runtimeReadiness.Generation > 0 {
+		result.PeerGeneration = uint64(runtimeReadiness.Generation)
+	}
+	if s.handshake != nil {
+		for _, service := range runtimeReadiness.Services {
+			if !service.Connected || service.ConnectionID == "" {
+				continue
+			}
+			if snap := s.handshake.GetSnapshot(string(service.ConnectionID)); snap != nil {
+				result.ProtocolVersion = snap.Protocol
+				break
+			}
 		}
 	}
 	return result
+}
+
+func (s *GameCenterManagementService) resolveRuntimeReadiness(ctx context.Context, runtimeID string) (readiness.Snapshot, error) {
+	if s == nil || s.readiness == nil {
+		return readiness.Snapshot{}, fmt.Errorf("runtime readiness resolver not available")
+	}
+	return s.readiness.Resolve(ctx, ghdomain.RuntimeInstanceID(runtimeID))
 }
 
 func paginate[T any](items []T, page, pageSize int) []T {

@@ -9,7 +9,6 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/control"
 	dom "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/handshake"
-	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 )
@@ -100,6 +99,26 @@ func (t *GameHostTopologyStore) GetTopologySnapshot(runtimeID string) (runtime.R
 	return t.store.GetTopologySnapshot(dom.RuntimeInstanceID(runtimeID))
 }
 
+func (t *GameHostTopologyStore) ResolveDefinitionID(runtimeID, serviceID string) (string, error) {
+	resolver, ok := t.store.(interface {
+		ResolveDefinitionID(dom.RuntimeInstanceID, dom.ServiceID) (string, error)
+	})
+	if !ok {
+		return "", fmt.Errorf("topology definition resolver not available")
+	}
+	return resolver.ResolveDefinitionID(dom.RuntimeInstanceID(runtimeID), dom.ServiceID(serviceID))
+}
+
+func (t *GameHostTopologyStore) ResolveModuleID(runtimeID, serviceID string) (string, error) {
+	resolver, ok := t.store.(interface {
+		ResolveModuleID(dom.RuntimeInstanceID, dom.ServiceID) (string, error)
+	})
+	if !ok {
+		return "", fmt.Errorf("topology module resolver not available")
+	}
+	return resolver.ResolveModuleID(dom.RuntimeInstanceID(runtimeID), dom.ServiceID(serviceID))
+}
+
 type GameHostHandshakeManager struct {
 	manager *handshake.HandshakeManager
 }
@@ -119,47 +138,6 @@ func (h *GameHostHandshakeManager) GetSnapshot(connectionID string) *handshake.H
 
 func (h *GameHostHandshakeManager) IsReady(connectionID string) bool {
 	return h.manager.IsReady(connectionID)
-}
-
-type GameHostConnectionRegistry struct {
-	registry *ipc.ConnectionRegistry
-}
-
-func NewGameHostConnectionRegistry(registry *ipc.ConnectionRegistry) *GameHostConnectionRegistry {
-	return &GameHostConnectionRegistry{registry: registry}
-}
-
-func (r *GameHostConnectionRegistry) ListByRuntime(runtimeID string) []*ConnectionSnapshot {
-	conns := r.registry.ListByRuntime(dom.RuntimeInstanceID(runtimeID))
-	result := make([]*ConnectionSnapshot, 0, len(conns))
-	for _, conn := range conns {
-		if !conn.IsActive() {
-			continue
-		}
-		snap := &ConnectionSnapshot{
-			ConnectionID: string(conn.ID),
-			RuntimeID:    string(conn.Peer.RuntimeID),
-			ServiceID:    string(conn.Peer.ServiceID),
-			Connected:    true,
-			Protocol:     "",
-		}
-		result = append(result, snap)
-	}
-	return result
-}
-
-func (r *GameHostConnectionRegistry) FindByPeer(runtimeID, serviceID string) (*ConnectionSnapshot, bool) {
-	conn, found := r.registry.FindByPeer(dom.RuntimeInstanceID(runtimeID), dom.ServiceID(serviceID))
-	if !found {
-		return nil, false
-	}
-	return &ConnectionSnapshot{
-		ConnectionID: string(conn.ID),
-		RuntimeID:    string(conn.Peer.RuntimeID),
-		ServiceID:    string(conn.Peer.ServiceID),
-		Connected:    conn.IsActive(),
-		Protocol:     "",
-	}, true
 }
 
 type GameHostAuthorityManager struct {

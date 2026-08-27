@@ -21,6 +21,14 @@ type RuntimeGenerationLeaseRevoker interface {
 	RevokeRuntimeGenerationLeases(runtimeID string, generation int64, reason string)
 }
 
+// RuntimeGenerationNetworkCloser releases host-owned mediated network handles
+// for an exited service generation before recovery is allowed to create a new
+// process. Keeping this boundary in runtime avoids coupling recovery to the
+// concrete Host API implementation.
+type RuntimeGenerationNetworkCloser interface {
+	CloseRuntimeGenerationNetwork(runtimeID, moduleID string, generation int64) int
+}
+
 type processExitBridgeImpl struct {
 	mu            sync.Mutex
 	supervisor    *trusted_service.ProcessSupervisor
@@ -29,12 +37,19 @@ type processExitBridgeImpl struct {
 	registry      *Manager
 	registered    bool
 	leaseRevoker  RuntimeGenerationLeaseRevoker
+	networkCloser RuntimeGenerationNetworkCloser
 }
 
 func (b *processExitBridgeImpl) SetRuntimeGenerationLeaseRevoker(revoker RuntimeGenerationLeaseRevoker) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.leaseRevoker = revoker
+}
+
+func (b *processExitBridgeImpl) SetRuntimeGenerationNetworkCloser(closer RuntimeGenerationNetworkCloser) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.networkCloser = closer
 }
 
 func NewProcessExitBridge(
@@ -97,6 +112,32 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 		runtimeID = resolved
 	}
 
+	generation := event.Generation
+	if generation == 0 {
+		var genErr error
+		generation, genErr = b.registry.GetCurrentGeneration(runtimeID)
+		if genErr != nil {
+			log.Printf("[process-exit-bridge] could not determine generation for runtime %s: %v", runtimeID, genErr)
+		}
+	}
+
+	// Network handles are host-owned resources and must be released for every
+	// unexpected exit before any branch suppresses recovery. A crashed process
+	// must never leave a game-side socket alive merely because the runtime was
+	// already stopping, emergency-latched, disabled, or uninstalling.
+	b.mu.Lock()
+	networkCloser := b.networkCloser
+	revoker := b.leaseRevoker
+	b.mu.Unlock()
+	if networkCloser != nil {
+		// generation==0 deliberately means fail-safe cleanup for the runtime/module
+		// when legacy supervisor metadata cannot recover the exact generation.
+		networkCloser.CloseRuntimeGenerationNetwork(string(runtimeID), event.ModuleID, generation)
+	}
+	if revoker != nil && generation > 0 {
+		revoker.RevokeRuntimeGenerationLeases(string(runtimeID), generation, "unexpected process exit")
+	}
+
 	state, err := b.registry.GetRuntimeState(runtimeID)
 	if err == nil && (state == domain.RuntimeStateRestarting || state == domain.RuntimeStateStopping || state == domain.RuntimeStateStopped) {
 		return
@@ -110,22 +151,6 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 	if err == nil && (intent == "emergency" || intent == "disable" || intent == "uninstall") {
 		log.Printf("[process-exit-bridge] recovery suppressed: runtime %s lifecycle intent=%q", runtimeID, intent)
 		return
-	}
-
-	generation := event.Generation
-	if generation == 0 {
-		var genErr error
-		generation, genErr = b.registry.GetCurrentGeneration(runtimeID)
-		if genErr != nil {
-			log.Printf("[process-exit-bridge] could not determine generation for runtime %s: %v", runtimeID, genErr)
-		}
-	}
-
-	b.mu.Lock()
-	revoker := b.leaseRevoker
-	b.mu.Unlock()
-	if revoker != nil && generation > 0 {
-		revoker.RevokeRuntimeGenerationLeases(string(runtimeID), generation, "unexpected process exit")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
