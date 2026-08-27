@@ -3,6 +3,7 @@ import { GameCenterClient } from '../game_center_client';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { spawn } from 'child_process';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
 const MOCK_EXTENSION_ID = 'com.mock-developer/mock-amitiax-game-plugin';
@@ -17,6 +18,43 @@ function requireArchive(): string {
     throw new Error('MOCK_PLUGIN_ARCHIVE_PATH environment variable is required for F15 lifecycle tests');
   }
   return ARCHIVE_PATH;
+}
+
+async function startGenericGameFixture(): Promise<{ stop: () => Promise<void> }> {
+  const script = join(process.cwd(), 'scripts', 'generic-game-fixture.mjs');
+  const child = spawn(process.execPath, [script], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`generic game fixture readiness timeout: ${stderr}`)), 10000);
+      const onExit = (code: number | null) => {
+        clearTimeout(timer);
+        reject(new Error(`generic game fixture exited before readiness code=${code}: ${stderr}`));
+      };
+      child.once('exit', onExit);
+      child.stdout.on('data', (chunk) => {
+        if (chunk.toString().includes('"ready":true')) {
+          clearTimeout(timer);
+          child.off('exit', onExit);
+          resolve();
+        }
+      });
+    });
+  } catch (error) {
+    if (child.exitCode === null) child.kill();
+    throw error;
+  }
+  return {
+    stop: async () => {
+      if (child.exitCode !== null) return;
+      child.kill();
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 3000);
+        child.once('exit', () => { clearTimeout(timer); resolve(); });
+      });
+    },
+  };
 }
 
 describe('G47-F15 Lifecycle (Backend Driver)', () => {
@@ -301,6 +339,30 @@ describe('G47-F15 E2E Full Flow', () => {
     expect((networkProbe.mediatedOutput?.bodyBase64 ?? '').length).toBeGreaterThan(0);
     expect(networkProbe.blockedIpStatus).toBe('rejected');
     expect(networkProbe.blockedPortStatus).toBe('rejected');
+
+    // Generic host-game transport E2E. A completely independent Node process
+    // owns TCP/UDP/WebSocket loopback endpoints; the sandboxed game plugin can
+    // reach them only through host.network.* using the portable host-loopback
+    // target. This intentionally contains no Minecraft or game-specific model.
+    const genericGame = await startGenericGameFixture();
+    try {
+      const socketProbe = await invokeRuntimeRPC<{
+        tcpRoundtrip?: string;
+        udpRoundtrip?: string;
+        websocketRoundtrip?: string;
+        websocketMessageType?: string;
+        blockedPortStatus?: string;
+        blockedTargetStatus?: string;
+      }>(client, runtimeId, 'mockgame.network.socket_probe', {});
+      expect(socketProbe.tcpRoundtrip).toBe('game-tcp:generic-game-tcp');
+      expect(socketProbe.udpRoundtrip).toBe('game-udp:generic-game-udp');
+      expect(socketProbe.websocketRoundtrip).toBe('game-ws:generic-game-websocket');
+      expect(socketProbe.websocketMessageType).toBe('text');
+      expect(socketProbe.blockedPortStatus).toBe('rejected');
+      expect(socketProbe.blockedTargetStatus).toBe('rejected');
+    } finally {
+      await genericGame.stop();
+    }
 
     // 8. Secret lease full lifecycle: acquire -> query(active) -> release -> query(inactive).
     const secretBody = await invokeRuntimeRPC<{ granted?: boolean; leaseId?: string }>(
