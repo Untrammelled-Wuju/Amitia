@@ -4,6 +4,7 @@ package recovery
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/journal"
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/projection"
+	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	security "github.com/u-ai/backend/internal/desktoppet/security"
 	"gorm.io/gorm"
@@ -140,36 +142,105 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 		targetReleaseID = firstNonEmpty(targetReleaseID, j.TargetReleaseID, op.TargetReleaseID)
 		petID := firstNonEmpty(op.PetID, j.PetID)
 		now := time.Now().UTC().Format("2006-01-02 15:04:05")
+		presentation, err := loadRecoveryReleasePresentation(tx.DB(), targetReleaseID)
+		if err != nil {
+			return err
+		}
+		installRel, _ := security.DefaultRelativePath(security.RootInstallations)
+		installPath := filepath.ToSlash(filepath.Join(installRel, filepath.FromSlash(j.StagingPathKey)))
+		manifestPath := filepath.ToSlash(filepath.Join(installPath, "manifest.json"))
+		previewPath := ""
+		if presentation.Manifest.Preview != "" {
+			previewPath = filepath.ToSlash(filepath.Join(installPath, filepath.FromSlash(presentation.Manifest.Preview)))
+		}
+		defaultActionKey := presentation.Manifest.DefaultAction
 
 		var inst installation.Installation
 		err = tx.DB().Where("id = ? AND user_id = ? AND device_id = ?", installationID, op.UserID, op.DeviceID).First(&inst).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		characterID := presentation.Manifest.Binding.SourceCharacterID
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			inst = installation.Installation{
-				ID: installationID, UserID: op.UserID, DeviceID: op.DeviceID, PetID: petID,
-				CurrentReleaseID: targetReleaseID, Status: installation.StatusInstalled, IsActive: 1,
-				InstallPath: j.StagingPathKey, InstallStorageKey: j.StagingPathKey,
-				LifecycleState: installation.LifecycleInstalled, IntegrityStatus: installation.IntegrityVerified,
-				DesiredState: installation.DesiredEnabled, RuntimeSyncState: installation.SyncPending,
-				InstalledAt: now, CreatedAt: now, UpdatedAt: now,
+				ID:                     installationID,
+				UserID:                 op.UserID,
+				DeviceID:               op.DeviceID,
+				PetID:                  petID,
+				CharacterID:            characterID,
+				PackageID:              targetReleaseID,
+				PackageVersion:         presentation.Version,
+				Name:                   presentation.Manifest.Name,
+				CurrentReleaseID:       targetReleaseID,
+				Status:                 installation.StatusEnabled,
+				IsActive:               1,
+				InstallPath:            installPath,
+				ManifestPath:           manifestPath,
+				PreviewPath:            previewPath,
+				PreviewArtifactPath:    previewPath,
+				DefaultActionKey:       defaultActionKey,
+				DefaultActionReleaseID: targetReleaseID,
+				CanvasWidth:            presentation.Manifest.Canvas.Width,
+				CanvasHeight:           presentation.Manifest.Canvas.Height,
+				PackageHash:            presentation.ContentRootHash,
+				InstalledContentHash:   presentation.ContentRootHash,
+				InstallStorageKey:      j.StagingPathKey,
+				LifecycleState:         installation.LifecycleInstalled,
+				IntegrityStatus:        installation.IntegrityVerified,
+				DesiredState:           installation.DesiredEnabled,
+				RuntimeSyncState:       installation.SyncPending,
+				InstalledAt:            now,
+				CreatedAt:              now,
+				UpdatedAt:              now,
 			}
 			if err := tx.CreateInstallationTx(tx.DB(), &inst); err != nil {
 				return err
 			}
 		} else {
+			inst.PetID = petID
+			inst.CharacterID = firstNonEmpty(inst.CharacterID, characterID)
+			inst.PackageID = targetReleaseID
+			inst.PackageVersion = presentation.Version
+			inst.Name = presentation.Manifest.Name
 			inst.CurrentReleaseID = targetReleaseID
-			inst.InstallPath = j.StagingPathKey
+			inst.Status = installation.StatusEnabled
+			inst.IsActive = 1
+			inst.InstallPath = installPath
+			inst.ManifestPath = manifestPath
+			inst.PreviewPath = previewPath
+			inst.PreviewArtifactPath = previewPath
+			inst.DefaultActionKey = defaultActionKey
+			inst.DefaultActionReleaseID = targetReleaseID
+			inst.CanvasWidth = presentation.Manifest.Canvas.Width
+			inst.CanvasHeight = presentation.Manifest.Canvas.Height
+			inst.PackageHash = presentation.ContentRootHash
+			inst.InstalledContentHash = presentation.ContentRootHash
 			inst.InstallStorageKey = j.StagingPathKey
 			inst.LifecycleState = installation.LifecycleInstalled
 			inst.IntegrityStatus = installation.IntegrityVerified
 			inst.DesiredState = installation.DesiredEnabled
 			inst.RuntimeSyncState = installation.SyncPending
 			inst.UpdatedAt = now
+			if inst.InstalledAt == "" {
+				inst.InstalledAt = now
+			}
 			if err := tx.UpdateInstallationTx(tx.DB(), &inst); err != nil {
 				return err
 			}
+		}
+		if err := tx.DB().Model(&installation.Installation{}).Where("user_id = ? AND device_id = ? AND id <> ? AND is_active = 1", op.UserID, op.DeviceID, installationID).Updates(map[string]interface{}{
+			"is_active": 0, "status": installation.StatusDisabled, "desired_state": installation.DesiredDisabled, "last_disabled_at": now, "updated_at": now,
+		}).Error; err != nil {
+			return err
+		}
+
+		settings, err := ensureRecoveryRuntimeSettings(tx, installationID, now)
+		if err != nil {
+			return err
+		}
+		settingsJSON, err := json.Marshal(settings)
+		if err != nil {
+			return err
 		}
 
 		existing, err := tx.GetRuntimeDesiredStateTx(tx.DB(), op.UserID, op.DeviceID)
@@ -188,12 +259,8 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 			UserID: op.UserID, DeviceID: op.DeviceID, RuntimeID: op.RuntimeID,
 			InstallationID: installationID, PetID: petID, ReleaseID: targetReleaseID,
 			DesiredEnabled: true, DesiredVisible: true, DesiredRevision: revision,
-			OperationID: op.ID, CreatedAt: now, UpdatedAt: now,
-		}
-		if existing != nil {
-			state.DesiredActionKey = existing.DesiredActionKey
-			state.SettingsRevision = existing.SettingsRevision
-			state.SettingsSnapshotJSON = existing.SettingsSnapshotJSON
+			DesiredActionKey: defaultActionKey, SettingsRevision: int64(settings.SettingsRevision),
+			SettingsSnapshotJSON: string(settingsJSON), OperationID: op.ID, CreatedAt: now, UpdatedAt: now,
 		}
 		if _, err := tx.UpsertRuntimeDesiredStateCAS(tx.DB(), op.UserID, op.DeviceID, state, expected); err != nil {
 			return err
@@ -211,6 +278,49 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 		op.Stage = operation.OpStageDatabaseCommitted
 		return tx.UpdateOperationTx(tx.DB(), op)
 	})
+}
+
+type recoveryReleasePresentation struct {
+	Version         string
+	ContentRootHash string
+	Manifest        packageformat.Manifest
+}
+
+func loadRecoveryReleasePresentation(db *gorm.DB, releaseID string) (*recoveryReleasePresentation, error) {
+	var row struct {
+		Version         string `gorm:"column:version"`
+		ContentRootHash string `gorm:"column:content_root_hash"`
+		ManifestJSON    string `gorm:"column:manifest_json"`
+	}
+	if err := db.Table("desktop_pet_package_releases").Select("version, content_root_hash, manifest_json").Where("id = ?", releaseID).Take(&row).Error; err != nil {
+		return nil, err
+	}
+	var manifest packageformat.Manifest
+	if err := json.Unmarshal([]byte(row.ManifestJSON), &manifest); err != nil {
+		return nil, err
+	}
+	return &recoveryReleasePresentation{Version: row.Version, ContentRootHash: row.ContentRootHash, Manifest: manifest}, nil
+}
+
+func ensureRecoveryRuntimeSettings(tx installation.RepositoryV2, installationID, now string) (*installation.RuntimeSettings, error) {
+	var settings installation.RuntimeSettings
+	err := tx.DB().Where("installation_id = ?", installationID).First(&settings).Error
+	if err == nil {
+		return &settings, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	settings = installation.RuntimeSettings{
+		ID: "rts_" + uuid.NewString(), InstallationID: installationID, AlwaysOnTop: 1, Scale: 1.0,
+		IdleEnabled: 1, IdleIntervalMinSeconds: 30, IdleIntervalMaxSeconds: 120,
+		ClickThroughMode: "off", SettingsRevision: 0, RestoreOnAppStart: 1, PositionMode: "absolute",
+		RelativeX: 0.5, RelativeY: 0.5, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := tx.CreateRuntimeSettingsTx(tx.DB(), &settings); err != nil {
+		return nil, err
+	}
+	return &settings, nil
 }
 
 func (p *ProductionDBRepo) DBMarkDatabaseCommitted(opID string) error {

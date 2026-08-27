@@ -8,18 +8,20 @@ import (
 )
 
 const (
-	clickThroughModeOff   = "off"
-	clickThroughModeFull  = "full"
-	clickThroughModeAlpha = "alpha"
-	positionModeAbsolute  = "absolute"
-	positionModeRelative  = "relative"
-	positionModeRecenter  = "recenter"
+	clickThroughModeOff         = "off"
+	clickThroughModeFull        = "full"
+	clickThroughModeAlpha       = "alpha"
+	clickThroughModeBoundingBox = "boundingBox"
+	positionModeAbsolute        = "absolute"
+	positionModeRelative        = "relative"
+	positionModeRecenter        = "recenter"
 )
 
 var validClickThroughModes = map[string]bool{
-	clickThroughModeOff:   true,
-	clickThroughModeFull:  true,
-	clickThroughModeAlpha: true,
+	clickThroughModeOff:         true,
+	clickThroughModeFull:        true,
+	clickThroughModeAlpha:       true,
+	clickThroughModeBoundingBox: true,
 }
 
 var validPositionModes = map[string]bool{
@@ -85,7 +87,7 @@ func (r *UpdateRuntimeSettingsRequest) Validate() error {
 		v := strings.ToLower(*r.ClickThroughMode)
 		if !validClickThroughModes[v] {
 			return NewInstallationError(ErrCodeInstallationInvalid,
-				fmt.Sprintf("clickThroughMode 无效: %s (允许: off/full/alpha)", *r.ClickThroughMode), ErrInstallationInvalid)
+				fmt.Sprintf("clickThroughMode 无效: %s (允许: off/full/alpha/boundingBox)", *r.ClickThroughMode), ErrInstallationInvalid)
 		}
 		r.ClickThroughMode = &v
 	}

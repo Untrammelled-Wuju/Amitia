@@ -249,15 +249,13 @@ func (h *Handler) DownloadRelease(c *gin.Context) {
 		writeReleaseOwnershipError(c, err)
 		return
 	}
-	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, string(actor.UserID))
+	archivePath, releaseData, err := h.svc.GetReleaseArchivePath(c.Request.Context(), releaseID, string(actor.UserID))
 	if err != nil {
 		writeReleaseError(c, err)
 		return
 	}
-	util.SuccessResponse(c, gin.H{
-		"downloadUrl": "/api/v2/releases/" + releaseID + "/archive",
-		"release":     release,
-	})
+	filename := "desktop-pet-" + releaseData.ID + ".zip"
+	c.FileAttachment(archivePath, filename)
 }
 
 func writeReleaseOwnershipError(c *gin.Context, err error) {
@@ -279,7 +277,7 @@ func writeReleaseError(c *gin.Context, err error) {
 		case "OPERATION_CONFLICT", "RELEASE_INTEGRITY_MISMATCH":
 			util.ErrorResponse(c, response.BusinessError, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code})
 		case "LEGACY_PACKAGE_WRITE_DISABLED":
-			util.ErrorResponse(c, response.BusinessError, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code, "successor": "/api/v2/releases/build"})
+			util.ErrorResponse(c, response.BusinessError, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code, "successor": "/api/desktop-pets/releases/build"})
 		default:
 			util.ErrorResponse(c, response.InternalError, releaseErr.Msg, gin.H{"errorCode": releaseErr.Code})
 		}

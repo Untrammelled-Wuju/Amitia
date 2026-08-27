@@ -79,9 +79,11 @@ type PackageBuildRequest struct {
 }
 
 type PackageBuildResult struct {
-	Package     *Package
-	Manifest    *Manifest
-	PackageHash string
+	Package      *Package
+	Manifest     *Manifest
+	PackageHash  string
+	PackageDir   string
+	ManifestData []byte
 }
 
 type PackageMetadata struct {
@@ -111,6 +113,17 @@ func NewPackager(repo Repository, dataDir string) *Packager {
 }
 
 func (p *Packager) BuildPackage(req *PackageBuildRequest) (*PackageBuildResult, error) {
+	return p.buildPackage(req, true)
+}
+
+// BuildReleaseSource builds the same validated package artifact without creating a
+// legacy desktop_pet_packages record. The caller owns PackageDir and must remove it
+// after the V2 Release has copied/published the artifact.
+func (p *Packager) BuildReleaseSource(req *PackageBuildRequest) (*PackageBuildResult, error) {
+	return p.buildPackage(req, false)
+}
+
+func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bool) (*PackageBuildResult, error) {
 	if req == nil {
 		return nil, &PackageError{Code: ErrCodePackageBuildFailed, Message: "构建请求为空"}
 	}
@@ -123,6 +136,14 @@ func (p *Packager) BuildPackage(req *PackageBuildRequest) (*PackageBuildResult, 
 	packageDir := p.packageDir(req.GenerationTaskID, packageID)
 	if err := os.MkdirAll(packageDir, 0755); err != nil {
 		return nil, &PackageError{Code: ErrCodePackageBuildFailed, Message: "创建包目录失败", Err: err}
+	}
+	completed := false
+	if !persistLegacyRecord {
+		defer func() {
+			if !completed {
+				_ = os.RemoveAll(packageDir)
+			}
+		}()
 	}
 
 	if err := p.copyActionFiles(req.GenerationTaskID, packageID, req.IncludedActions, req.ProcessingVersion); err != nil {
@@ -192,14 +213,24 @@ func (p *Packager) BuildPackage(req *PackageBuildRequest) (*PackageBuildResult, 
 	pkg.PackagePath = p.packageDirRelPath(req.GenerationTaskID, packageID)
 	pkg.Status = "ready"
 
-	if err := p.repo.CreatePackage(pkg); err != nil {
-		return nil, &PackageError{Code: ErrCodePackageBuildFailed, Message: "写入包记录失败", Err: err}
+	if persistLegacyRecord {
+		if err := p.repo.CreatePackage(pkg); err != nil {
+			return nil, &PackageError{Code: ErrCodePackageBuildFailed, Message: "写入包记录失败", Err: err}
+		}
 	}
 
+	manifestData, err := os.ReadFile(filepath.Join(packageDir, packageManifestFile))
+	if err != nil {
+		return nil, &PackageError{Code: ErrCodePackageFileMissing, Message: "读取 manifest.json 失败", Err: err}
+	}
+
+	completed = true
 	return &PackageBuildResult{
-		Package:     pkg,
-		Manifest:    manifest,
-		PackageHash: hash,
+		Package:      pkg,
+		Manifest:     manifest,
+		PackageHash:  hash,
+		PackageDir:   packageDir,
+		ManifestData: manifestData,
 	}, nil
 }
 

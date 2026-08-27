@@ -96,42 +96,42 @@ var validTransitions = map[string]map[string]bool{
 }
 
 type InstallationOperation struct {
-	ID string
+	ID string `json:"id"`
 
-	OperationType string
+	OperationType string `json:"operationType"`
 
-	UserID    string
-	DeviceID  string
-	RuntimeID string
+	UserID    string `json:"userId"`
+	DeviceID  string `json:"deviceId"`
+	RuntimeID string `json:"runtimeId"`
 
-	InstallationID string
-	PetID          string
+	InstallationID string `json:"installationId"`
+	PetID          string `json:"petId"`
 
-	SourceReleaseID string
-	TargetReleaseID string
+	SourceReleaseID string `json:"sourceReleaseId"`
+	TargetReleaseID string `json:"targetReleaseId"`
 
-	IdempotencyKey string
-	RequestHash    string
+	IdempotencyKey string `json:"idempotencyKey"`
+	RequestHash    string `json:"requestHash"`
 
-	Status string
-	Stage  string
+	Status string `json:"status"`
+	Stage  string `json:"stage"`
 
-	AttemptNumber int
+	AttemptNumber int `json:"attemptNumber"`
 
-	ExecutionID    string
-	LeaseOwner     string
-	LeaseExpiresAt string
-	HeartbeatAt    string
+	ExecutionID    string `json:"executionId"`
+	LeaseOwner     string `json:"leaseOwner"`
+	LeaseExpiresAt string `json:"leaseExpiresAt"`
+	HeartbeatAt    string `json:"heartbeatAt"`
 
-	DesiredRevision int64
+	DesiredRevision int64 `json:"desiredRevision"`
 
-	ErrorCode    string
-	ErrorMessage string
+	ErrorCode    string `json:"errorCode"`
+	ErrorMessage string `json:"errorMessage"`
 
-	CreatedAt   string
-	StartedAt   string
-	UpdatedAt   string
-	CompletedAt string
+	CreatedAt   string `json:"createdAt"`
+	StartedAt   string `json:"startedAt"`
+	UpdatedAt   string `json:"updatedAt"`
+	CompletedAt string `json:"completedAt"`
 }
 
 func (o InstallationOperation) TableName() string {

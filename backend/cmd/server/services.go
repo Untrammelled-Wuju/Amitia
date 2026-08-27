@@ -667,6 +667,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, providerRegistry)
 	processingRepo := processing.NewRepository(ctx.DB, ctx)
 	processingDataDir := mcpDataDirectory(ctx)
+	processingService := processing.NewService(processingRepo, ctx.DB, ctx, processingDataDir)
 
 	bgRegistry := backgroundremoval.NewRegistry()
 	if err := bgRegistry.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
@@ -801,7 +802,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
 	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
-	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
+	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher, newGeneratedReleasePackageSource(processingService))
 
 	pathRegistry := desktoppetsecurity.NewPathRootRegistry()
 	if err := desktoppetsecurity.EnsureAllRequiredRoots(pathRegistry, config.AppCfg.Storage.DataDir); err != nil {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/desired"
 	"github.com/u-ai/backend/internal/desktoppet/installation/journal"
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
+	"github.com/u-ai/backend/internal/desktoppet/packageformat"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"gorm.io/gorm"
 )
 
@@ -141,29 +144,61 @@ func (a *CoordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 	err := a.repo.Transaction(ctx, func(tx RepositoryV2) error {
 		now := nowInstallation()
 		var existing Installation
-		err := tx.DB().Where("id = ? AND user_id = ? AND device_id = ?", install.ID, install.UserID, install.DeviceID).First(&existing).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		existingErr := tx.DB().Where("id = ? AND user_id = ? AND device_id = ?", install.ID, install.UserID, install.DeviceID).First(&existing).Error
+		if existingErr != nil && !errors.Is(existingErr, gorm.ErrRecordNotFound) {
+			return existingErr
+		}
+		isNewInstallation := errors.Is(existingErr, gorm.ErrRecordNotFound)
+		presentation, err := loadReleasePresentationTx(tx.DB(), install.ReleaseID)
+		if err != nil {
 			return err
+		}
+		installRel, _ := security.DefaultRelativePath(security.RootInstallations)
+		installPath := filepath.ToSlash(filepath.Join(installRel, filepath.FromSlash(stagingPathKey)))
+		manifestPath := filepath.ToSlash(filepath.Join(installPath, "manifest.json"))
+		previewPath := ""
+		if presentation.Manifest.Preview != "" {
+			previewPath = filepath.ToSlash(filepath.Join(installPath, filepath.FromSlash(presentation.Manifest.Preview)))
+		}
+		characterID := install.CharacterID
+		if characterID == "" {
+			characterID = presentation.Manifest.Binding.SourceCharacterID
 		}
 		model := &Installation{
 			ID:                     install.ID,
 			UserID:                 install.UserID,
 			DeviceID:               install.DeviceID,
+			CharacterID:            characterID,
+			PackageID:              install.ReleaseID,
+			PackageVersion:         presentation.Version,
+			Name:                   presentation.Manifest.Name,
 			PetID:                  install.PetID,
 			CurrentReleaseID:       install.ReleaseID,
-			Status:                 StatusInstalled,
+			Status:                 StatusEnabled,
 			IsActive:               1,
-			InstallPath:            stagingPathKey,
+			InstallPath:            installPath,
+			ManifestPath:           manifestPath,
+			PreviewPath:            previewPath,
+			PreviewArtifactPath:    previewPath,
 			InstallStorageKey:      stagingPathKey,
 			DefaultActionKey:       install.DefaultActionKey,
 			DefaultActionReleaseID: install.ReleaseID,
+			CanvasWidth:            presentation.Manifest.Canvas.Width,
+			CanvasHeight:           presentation.Manifest.Canvas.Height,
+			PackageHash:            presentation.ContentRootHash,
+			InstalledContentHash:   presentation.ContentRootHash,
 			LifecycleState:         LifecycleInstalled,
 			IntegrityStatus:        IntegrityVerified,
 			DesiredState:           DesiredEnabled,
 			RuntimeSyncState:       SyncPending,
 			UpdatedAt:              now,
 		}
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := tx.DB().Model(&Installation{}).Where("user_id = ? AND device_id = ? AND id <> ? AND is_active = 1", install.UserID, install.DeviceID, install.ID).Updates(map[string]interface{}{
+			"is_active": 0, "status": StatusDisabled, "desired_state": DesiredDisabled, "last_disabled_at": now, "updated_at": now,
+		}).Error; err != nil {
+			return err
+		}
+		if isNewInstallation {
 			model.CreatedAt = now
 			model.InstalledAt = now
 			if err := tx.CreateInstallationTx(tx.DB(), model); err != nil {
@@ -239,17 +274,28 @@ func (a *CoordinatorRepoAdapter) UpdateDesiredEnabled(ctx context.Context, op *o
 		desiredRevision = revision
 		inst.DesiredState = DesiredDisabled
 		inst.Status = StatusDisabled
+		inst.IsActive = 0
 		if enabled {
+			now := nowInstallation()
+			if err := tx.DB().Model(&Installation{}).Where("user_id = ? AND device_id = ? AND id <> ? AND is_active = 1", inst.UserID, inst.DeviceID, inst.ID).Updates(map[string]interface{}{
+				"is_active": 0, "status": StatusDisabled, "desired_state": DesiredDisabled, "last_disabled_at": now, "updated_at": now,
+			}).Error; err != nil {
+				return err
+			}
 			inst.DesiredState = DesiredEnabled
 			inst.Status = StatusEnabled
-			inst.LastEnabledAt = nowInstallation()
+			inst.IsActive = 1
+			inst.LastEnabledAt = now
 			if err := a.upsertBindingTx(tx, inst.UserID, inst.DeviceID, inst.ID, inst.PetID, inst.CurrentReleaseID, revision, op.ID, binding.BoundReasonEnable); err != nil {
 				return err
 			}
 		} else {
 			inst.LastDisabledAt = nowInstallation()
-			if err := tx.DeleteActiveBindingTx(tx.DB(), inst.UserID, inst.DeviceID); err != nil {
-				return err
+			active, bindErr := tx.GetActiveBindingForUserDeviceTx(tx.DB(), inst.UserID, inst.DeviceID)
+			if bindErr == nil && active != nil && active.InstallationID == inst.ID {
+				if err := tx.DeleteActiveBindingTx(tx.DB(), inst.UserID, inst.DeviceID); err != nil {
+					return err
+				}
 			}
 		}
 		return tx.UpdateInstallationTx(tx.DB(), inst)
@@ -279,11 +325,30 @@ func (a *CoordinatorRepoAdapter) SwitchRelease(ctx context.Context, op *operatio
 		}
 		desiredRevision = revision
 
+		presentation, err := loadReleasePresentationTx(tx.DB(), targetReleaseID)
+		if err != nil {
+			return err
+		}
+		installRel, _ := security.DefaultRelativePath(security.RootInstallations)
+		installPath := filepath.ToSlash(filepath.Join(installRel, filepath.FromSlash(stagingPathKey)))
 		inst.CurrentReleaseID = targetReleaseID
+		inst.PackageID = targetReleaseID
+		inst.PackageVersion = presentation.Version
+		inst.Name = presentation.Manifest.Name
 		inst.DefaultActionKey = defaultActionKey
 		inst.DefaultActionReleaseID = targetReleaseID
-		inst.InstallPath = stagingPathKey
+		inst.InstallPath = installPath
+		inst.ManifestPath = filepath.ToSlash(filepath.Join(installPath, "manifest.json"))
+		inst.PreviewPath = ""
+		if presentation.Manifest.Preview != "" {
+			inst.PreviewPath = filepath.ToSlash(filepath.Join(installPath, filepath.FromSlash(presentation.Manifest.Preview)))
+		}
+		inst.PreviewArtifactPath = inst.PreviewPath
 		inst.InstallStorageKey = stagingPathKey
+		inst.CanvasWidth = presentation.Manifest.Canvas.Width
+		inst.CanvasHeight = presentation.Manifest.Canvas.Height
+		inst.PackageHash = presentation.ContentRootHash
+		inst.InstalledContentHash = presentation.ContentRootHash
 		inst.RuntimeSyncState = SyncPending
 		if err := tx.UpdateInstallationTx(tx.DB(), inst); err != nil {
 			return err
@@ -373,6 +438,7 @@ func (a *CoordinatorRepoAdapter) MarkUninstallDesired(ctx context.Context, op *o
 		inst.Status = StatusUninstalling
 		inst.LifecycleState = LifecycleUninstalling
 		inst.DesiredState = DesiredDisabled
+		inst.IsActive = 0
 		inst.RuntimeSyncState = SyncPending
 		return tx.UpdateInstallationTx(tx.DB(), inst)
 	})
@@ -674,11 +740,34 @@ func loadInstallationTx(db *gorm.DB, userID, deviceID, installationID string) (*
 	return &inst, nil
 }
 
+type releasePresentation struct {
+	Version         string
+	ContentRootHash string
+	Manifest        packageformat.Manifest
+}
+
+func loadReleasePresentationTx(db *gorm.DB, releaseID string) (*releasePresentation, error) {
+	var row struct {
+		Version         string `gorm:"column:version"`
+		ContentRootHash string `gorm:"column:content_root_hash"`
+		ManifestJSON    string `gorm:"column:manifest_json"`
+	}
+	if err := db.Table("desktop_pet_package_releases").Select("version, content_root_hash, manifest_json").Where("id = ?", releaseID).Take(&row).Error; err != nil {
+		return nil, err
+	}
+	var manifest packageformat.Manifest
+	if err := json.Unmarshal([]byte(row.ManifestJSON), &manifest); err != nil {
+		return nil, err
+	}
+	return &releasePresentation{Version: row.Version, ContentRootHash: row.ContentRootHash, Manifest: manifest}, nil
+}
+
 func installationRecord(inst *Installation) *coordinator.InstallationRecord {
 	return &coordinator.InstallationRecord{
 		ID:                inst.ID,
 		UserID:            inst.UserID,
 		DeviceID:          inst.DeviceID,
+		CharacterID:       inst.CharacterID,
 		PetID:             inst.PetID,
 		ReleaseID:         inst.CurrentReleaseID,
 		Status:            inst.Status,

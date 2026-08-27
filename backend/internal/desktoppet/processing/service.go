@@ -64,6 +64,7 @@ type Service interface {
 	CancelProcessingTask(id string) error
 	RetryProcessingAction(processingTaskID, actionKey string) error
 	CreatePackage(req *CreatePackageRequest) (*CreatePackageResponse, error)
+	BuildReleasePackageSource(req *CreatePackageRequest) (*ReleasePackageSourceResponse, error)
 	SwitchAttempt(processingTaskID, actionKey string, attemptNumber int) error
 	ExcludeAction(processingTaskID, actionKey string) error
 	GetProcessedFrameImage(processingTaskID, actionKey string, frameIndex int) (fullPath, mimeType string, err error)
@@ -150,6 +151,15 @@ type CreatePackageResponse struct {
 	PackageID   string `json:"packageId"`
 	PackageHash string `json:"packageHash"`
 	Status      string `json:"status"`
+}
+
+// ReleasePackageSourceResponse is an ephemeral conversion artifact for Release V2.
+// It never creates a desktop_pet_packages row; PackageDir must be deleted by the caller.
+type ReleasePackageSourceResponse struct {
+	PackageID    string
+	PackageHash  string
+	PackageDir   string
+	ManifestData []byte
 }
 
 func wrapValidationError(err error) error {
@@ -571,7 +581,7 @@ func (s *service) RetryProcessingAction(processingTaskID, actionKey string) erro
 	return nil
 }
 
-func (s *service) CreatePackage(req *CreatePackageRequest) (*CreatePackageResponse, error) {
+func (s *service) preparePackageBuildRequest(req *CreatePackageRequest) (*PackageBuildRequest, error) {
 	if req == nil || req.ProcessingTaskID == "" {
 		return nil, NewProcessingError(ErrCodeProcessingTaskNotFound, "处理任务 ID 为空")
 	}
@@ -686,15 +696,39 @@ func (s *service) CreatePackage(req *CreatePackageRequest) (*CreatePackageRespon
 		SucceededActions:  availableActions,
 	}
 
+	return buildReq, nil
+}
+
+func (s *service) CreatePackage(req *CreatePackageRequest) (*CreatePackageResponse, error) {
+	buildReq, err := s.preparePackageBuildRequest(req)
+	if err != nil {
+		return nil, err
+	}
 	result, err := s.packager.BuildPackage(buildReq)
 	if err != nil {
 		return nil, err
 	}
-
 	return &CreatePackageResponse{
 		PackageID:   result.Package.ID,
 		PackageHash: result.PackageHash,
 		Status:      "ready",
+	}, nil
+}
+
+func (s *service) BuildReleasePackageSource(req *CreatePackageRequest) (*ReleasePackageSourceResponse, error) {
+	buildReq, err := s.preparePackageBuildRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.packager.BuildReleaseSource(buildReq)
+	if err != nil {
+		return nil, err
+	}
+	return &ReleasePackageSourceResponse{
+		PackageID:    result.Package.ID,
+		PackageHash:  result.PackageHash,
+		PackageDir:   result.PackageDir,
+		ManifestData: result.ManifestData,
 	}, nil
 }
 
