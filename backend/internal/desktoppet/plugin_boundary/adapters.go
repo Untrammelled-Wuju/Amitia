@@ -289,25 +289,6 @@ func defaultAdapters() []ContributionAdapter {
 	}
 }
 
-var _ KernelContributionSource = (*adapterBridge)(nil)
-
-type adapterBridge struct {
-	inner func(ctx context.Context, extID domain.ExtensionID) ([]domain.ContributionDefinition, error)
-}
-
-func (b *adapterBridge) ListContributions(ctx context.Context, extID domain.ExtensionID) ([]domain.ContributionDefinition, error) {
-	if b.inner != nil {
-		return b.inner(ctx, extID)
-	}
-	return nil, nil
-}
-
-func (b *adapterBridge) GetInstallation(ctx context.Context, id domain.ExtensionID) (domain.ExtensionInstallation, error) {
-	return domain.ExtensionInstallation{}, fmt.Errorf("not implemented")
-}
-
-var _ = KernelContributionSource(nil)
-
 type containerSource struct {
 	contribs sqlite.ContributionRepository
 	installs domain.InstallationRepository
