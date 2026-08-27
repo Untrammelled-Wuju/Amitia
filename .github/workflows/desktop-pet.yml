@@ -150,10 +150,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9.12.0
+          version: 11.17.0
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.18.0'
+          node-version: '22.16.0'
           cache: pnpm
           cache-dependency-path: '${{ matrix.workspace }}/pnpm-lock.yaml'
       - name: Install dependencies
@@ -167,6 +167,27 @@ jobs:
       - name: Build
         run: pnpm --dir ${{ matrix.workspace }} build
 
+  desktop-package:
+    name: Desktop Package Gate
+    runs-on: windows-latest
+    needs: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: pnpm
+          cache-dependency-path: 'desktop/pnpm-lock.yaml'
+      - name: Install desktop dependencies
+        run: |
+          corepack enable
+          pnpm --dir desktop install --frozen-lockfile
+      - name: Build and verify packaged Electron desktop pet
+        run: pnpm --dir desktop run package:ci
+
   final-gate:
     name: Final Gate
     runs-on: ubuntu-latest
@@ -179,6 +200,7 @@ jobs:
       - desktop-pet-migration
       - desktop-pet-security
       - frontend
+      - desktop-package
     steps:
       - name: Verify all required jobs passed
         run: |
