@@ -110,8 +110,6 @@ export default defineConfig({
       preload: {
         input: {
           index: resolve(__dirname, "src/preload/index.ts"),
-          "pet-preload": resolve(__dirname, "src/preload/pet-preload.ts"),
-          "pet-combined-preload": resolve(__dirname, "src/preload/pet-combined-preload.ts"),
           "animation-preload": resolve(__dirname, "src/preload/animation-preload.ts"),
         },
         vite: {

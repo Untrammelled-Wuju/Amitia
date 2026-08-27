@@ -68,16 +68,18 @@ function checkBundleNonEmpty(path, label) {
 }
 
 function checkPreloadOutputs() {
-  const requiredPreloads = [
-    "index.cjs",
-    "pet-preload.cjs",
-    "pet-combined-preload.cjs",
-    "animation-preload.cjs",
-  ];
+  const requiredPreloads = ["index.cjs", "animation-preload.cjs"];
   for (const name of requiredPreloads) {
     const p = resolve(preloadDir, name);
     if (!existsSync(p)) {
-      warnings.push(`PRELOAD MISSING: ${name} (may not be needed for this build)`);
+      errors.push(`PRELOAD MISSING: ${name}`);
+    }
+  }
+
+  for (const forbidden of ["pet-preload.cjs", "pet-combined-preload.cjs"]) {
+    const p = resolve(preloadDir, forbidden);
+    if (existsSync(p)) {
+      errors.push(`FORBIDDEN PRELOAD: ${forbidden}`);
     }
   }
 }
