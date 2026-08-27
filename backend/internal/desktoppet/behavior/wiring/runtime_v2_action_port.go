@@ -29,9 +29,28 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "v2 runtime facade unavailable")
 	}
 
+	queuePolicy := "enqueue"
+	if cmd.InterruptPolicy == "force" {
+		queuePolicy = "replace_current"
+	}
+	returnTo := cmd.ReturnPolicy
+	if returnTo == "" {
+		returnTo = "default"
+	}
 	payload := runtimev2.PlayActionPayload{
-		ActionKey: cmd.ActionKey,
-		Priority:  cmd.Priority,
+		ActionKey:        cmd.ActionKey,
+		PlaybackMode:     "once",
+		Priority:         cmd.Priority,
+		QueuePolicy:      queuePolicy,
+		Interruptible:    cmd.InterruptPolicy != "uninterruptible",
+		ReturnTo:         returnTo,
+		PlaybackRate:     1,
+		MinimumPlayMs:    cmd.MinimumPlayMS,
+		MaximumPlayMs:    cmd.MaximumPlayMS,
+		CompletionPolicy: "report",
+		DecisionID:       cmd.DecisionID,
+		Semantic:         cmd.Semantic,
+		ReasonCode:       cmd.ReasonCode,
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -50,8 +69,42 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		idempotencyKey = "behavior_" + cmd.DecisionID
 	}
 
+	if cmd.UserID == "" || cmd.DeviceID == "" {
+		return &behavior.CommandReceipt{
+			CommandID:  "",
+			Accepted:   false,
+			Status:     behavior.CmdOffline,
+			Error:      "runtime route identity is incomplete",
+			ReceivedAt: time.Now(),
+		}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "runtime route identity is incomplete")
+	}
+
+	targetOnline := false
+	for _, conn := range a.facade.ListConnections(cmd.UserID) {
+		if conn == nil || conn.State != runtimev2.ConnStateConnected {
+			continue
+		}
+		if string(conn.DeviceID) != cmd.DeviceID {
+			continue
+		}
+		if cmd.RuntimeID != "" && string(conn.RuntimeID) != cmd.RuntimeID {
+			continue
+		}
+		targetOnline = true
+		break
+	}
+	if !targetOnline {
+		return &behavior.CommandReceipt{
+			CommandID:  "",
+			Accepted:   false,
+			Status:     behavior.CmdOffline,
+			Error:      "target desktop pet runtime is offline",
+			ReceivedAt: time.Now(),
+		}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "target desktop pet runtime is offline")
+	}
+
 	v2Cmd, err := a.facade.Commands().CreateEphemeralCommand(
-		"", "", string(runtimev2.CommandTypePlayAction), idempotencyKey, payloadBytes,
+		cmd.UserID, cmd.DeviceID, string(runtimev2.CommandTypePlayAction), idempotencyKey, payloadBytes,
 	)
 	if err != nil {
 		log.Logger.Warnf("wiring/runtime_v2_action_port: create command failed decisionId=%s actionKey=%s err=%v",

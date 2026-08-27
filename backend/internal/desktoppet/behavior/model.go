@@ -243,12 +243,16 @@ type BehaviorRuntimeCommand struct {
 	CommandID            string     `json:"commandId"`
 	DecisionID           string     `json:"decisionId"`
 	IdempotencyKey       string     `json:"idempotencyKey,omitempty"`
+	UserID               string     `json:"userId,omitempty"`
+	DeviceID             string     `json:"deviceId,omitempty"`
+	CharacterID          string     `json:"characterId,omitempty"`
 	RuntimeID            string     `json:"runtimeId,omitempty"`
 	PetInstanceID        string     `json:"petInstanceId,omitempty"`
 	InstallationID       string     `json:"installationId,omitempty"`
 	InstallationRevision int64      `json:"installationRevision"`
 	ContextRevision      int64      `json:"contextRevision"`
 	ActionKey            string     `json:"actionKey"`
+	Semantic             string     `json:"semantic,omitempty"`
 	Priority             int        `json:"priority"`
 	InterruptPolicy      string     `json:"interruptPolicy,omitempty"`
 	MinimumPlayMS        int64      `json:"minimumPlayMs,omitempty"`
@@ -317,6 +321,9 @@ type ActionCapability struct {
 }
 
 type ActivePetSnapshot struct {
+	UserID         string                      `json:"userId"`
+	DeviceID       string                      `json:"deviceId,omitempty"`
+	RuntimeID      string                      `json:"runtimeId,omitempty"`
 	InstallationID string                      `json:"installationId"`
 	ReleaseID      string                      `json:"releaseId,omitempty"`
 	PetInstanceID  string                      `json:"petInstanceId"`

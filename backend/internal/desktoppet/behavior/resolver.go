@@ -107,7 +107,7 @@ func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event Behavi
 	if len(ctx.ActiveTools) > 0 {
 		hasWork := false
 		for _, tool := range ctx.ActiveTools {
-			if tool.DisplayClass == "research" || tool.DisplayClass == "work" {
+			if tool.DisplayClass == "research" || tool.DisplayClass == "researching" || tool.DisplayClass == "work" || tool.DisplayClass == "working" || tool.DisplayClass == "organizing" {
 				hasWork = true
 				break
 			}
@@ -270,7 +270,7 @@ func (r *Resolver) resolveActivityCandidate(ctx *BehaviorContextSnapshot, event 
 
 func (r *Resolver) resolveToolCandidate(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope, now time.Time) *CandidateAction {
 	for _, tool := range ctx.ActiveTools {
-		if tool.DisplayClass == "research" || tool.DisplayClass == "work" {
+		if tool.DisplayClass == "research" || tool.DisplayClass == "researching" || tool.DisplayClass == "work" || tool.DisplayClass == "working" || tool.DisplayClass == "organizing" {
 			return &CandidateAction{
 				Semantic: "working", PreferredKeys: []string{"work", "study", "thinking"},
 				SourceEventID: event.EventID, SourceLayer: "tool", Priority: 680,

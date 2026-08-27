@@ -30,38 +30,72 @@ func NewV2ActivePetAdapter(installRepo installation.Repository, facade *runtimev
 }
 
 func (a *V2ActivePetAdapter) ResolveActivePet(ctx context.Context, userID, characterID string) (*behavior.ActivePetSnapshot, error) {
-	install, err := a.installRepo.GetActiveInstallation(userID)
-	if err != nil {
-		if err == installation.ErrInstallationNotFound {
-			return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "no active installation")
-		}
-		return nil, err
+	if a.installRepo == nil {
+		return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "installation repository unavailable")
 	}
 
-	if install.Status != installation.StatusEnabled {
-		return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "active installation not enabled")
-	}
-
+	var selected *installation.Installation
+	var selectedDeviceID string
+	var selectedRuntimeID string
 	runtimeOnline := false
-	petInstanceID := ""
 
 	if a.facade != nil {
-		conns := a.facade.ListConnections(userID)
-		for _, conn := range conns {
-			if conn != nil && conn.State == runtimev2.ConnStateConnected {
+		for _, conn := range a.facade.ListConnections(userID) {
+			if conn == nil || conn.State != runtimev2.ConnStateConnected {
+				continue
+			}
+			deviceID := string(conn.DeviceID)
+			installations, err := a.installRepo.ListInstallationsForUserDevice(userID, deviceID)
+			if err != nil {
+				continue
+			}
+			for _, candidate := range installations {
+				if candidate == nil || candidate.Status != installation.StatusEnabled || candidate.IsActive != 1 {
+					continue
+				}
+				if characterID != "" && candidate.CharacterID != characterID {
+					continue
+				}
+				selected = candidate
+				selectedDeviceID = deviceID
+				selectedRuntimeID = string(conn.RuntimeID)
 				runtimeOnline = true
-				petInstanceID = string(conn.RuntimeID)
+				break
+			}
+			if selected != nil {
 				break
 			}
 		}
 	}
 
+	if selected == nil {
+		installations, err := a.installRepo.ListInstallationsByUser(userID)
+		if err != nil {
+			return nil, err
+		}
+		for _, candidate := range installations {
+			if candidate == nil || candidate.Status != installation.StatusEnabled || candidate.IsActive != 1 {
+				continue
+			}
+			if characterID != "" && candidate.CharacterID != characterID {
+				continue
+			}
+			selected = candidate
+			selectedDeviceID = candidate.DeviceID
+			break
+		}
+	}
+
+	if selected == nil {
+		return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "no active installation for character")
+	}
+
 	manifest, err := a.manifestReader(
-		filepath.Join(a.dataDir, filepath.FromSlash(install.InstallPath)),
-		filepath.Join(a.dataDir, filepath.FromSlash(install.ManifestPath)),
+		filepath.Join(a.dataDir, filepath.FromSlash(selected.InstallPath)),
+		filepath.Join(a.dataDir, filepath.FromSlash(selected.ManifestPath)),
 	)
 	if err != nil {
-		log.Logger.Warnf("wiring/active_pet_v2_port: failed to read manifest installationId=%s err=%v", install.ID, err)
+		log.Logger.Warnf("wiring/active_pet_v2_port: failed to read manifest installationId=%s err=%v", selected.ID, err)
 	}
 
 	actions := make(map[string]behavior.ActionCapability)
@@ -76,16 +110,18 @@ func (a *V2ActivePetAdapter) ResolveActivePet(ctx context.Context, userID, chara
 		}
 	}
 
-	stateRevision := int64(install.StateRevision)
-
+	stateRevision := int64(selected.StateRevision)
 	return &behavior.ActivePetSnapshot{
-		InstallationID: install.ID,
-		ReleaseID:      install.CurrentReleaseID,
-		PetInstanceID:  petInstanceID,
-		CharacterID:    install.CharacterID,
+		UserID:         userID,
+		DeviceID:       selectedDeviceID,
+		RuntimeID:      selectedRuntimeID,
+		InstallationID: selected.ID,
+		ReleaseID:      selected.CurrentReleaseID,
+		PetInstanceID:  selectedRuntimeID,
+		CharacterID:    selected.CharacterID,
 		RuntimeOnline:  runtimeOnline,
 		StateRevision:  stateRevision,
-		DefaultAction:  install.DefaultActionKey,
+		DefaultAction:  selected.DefaultActionKey,
 		Actions:        actions,
 	}, nil
 }
