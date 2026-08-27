@@ -10,28 +10,28 @@ import (
 )
 
 type ContinuousVoiceSession struct {
-	SessionID          string                        `json:"sessionId"`
-	ConversationID     string                        `json:"conversationId"`
-	CharacterID        string                        `json:"characterId"`
-	Mode               ContinuousVoiceSessionMode    `json:"mode"`
-	State              ContinuousVoiceSessionStatus  `json:"state"`
-	UserID             string                        `json:"userId"`
-	Platform           Platform                      `json:"platform"`
-	ProfileID          string                        `json:"profileId"`
-	Plan               *VoiceExecutionPlan           `json:"plan,omitempty"`
+	SessionID      string                       `json:"sessionId"`
+	ConversationID string                       `json:"conversationId"`
+	CharacterID    string                       `json:"characterId"`
+	Mode           ContinuousVoiceSessionMode   `json:"mode"`
+	State          ContinuousVoiceSessionStatus `json:"state"`
+	UserID         string                       `json:"userId"`
+	Platform       Platform                     `json:"platform"`
+	ProfileID      string                       `json:"profileId"`
+	Plan           *VoiceExecutionPlan          `json:"plan,omitempty"`
 
 	CurrentTurnID      string `json:"currentTurnId"`
 	CurrentPlaybackID  string `json:"currentPlaybackId"`
 	CaptureGeneration  uint64 `json:"captureGeneration"`
 	PlaybackGeneration uint64 `json:"playbackGeneration"`
 
-	WakeArmed          bool      `json:"wakeArmed"`
-	LastActivityAt     time.Time `json:"lastActivityAt"`
-	CreatedAt          time.Time `json:"createdAt"`
-	EndedAt            time.Time `json:"endedAt,omitempty"`
+	WakeArmed      bool      `json:"wakeArmed"`
+	LastActivityAt time.Time `json:"lastActivityAt"`
+	CreatedAt      time.Time `json:"createdAt"`
+	EndedAt        time.Time `json:"endedAt,omitempty"`
 
-	mu                 sync.RWMutex
-	cancelFn           context.CancelFunc
+	mu       sync.RWMutex
+	cancelFn context.CancelFunc
 
 	vad                VoiceActivityDetector
 	endpoint           *EndpointDetector
@@ -53,10 +53,10 @@ type Service interface {
 }
 
 type ServiceStatus struct {
-	ActiveSessions    int       `json:"activeSessions"`
-	WakeArmedSessions int       `json:"wakeArmedSessions"`
-	Healthy           bool      `json:"healthy"`
-	UptimeSeconds     int64     `json:"uptimeSeconds"`
+	ActiveSessions    int   `json:"activeSessions"`
+	WakeArmedSessions int   `json:"wakeArmedSessions"`
+	Healthy           bool  `json:"healthy"`
+	UptimeSeconds     int64 `json:"uptimeSeconds"`
 }
 
 type service struct {
@@ -152,6 +152,10 @@ func (s *service) StartSession(ctx context.Context, sessionID string) error {
 	}
 
 	sess.LastActivityAt = time.Now()
+	emitDesktopPetVoice(ctx, sess, "session.started")
+	if sess.State == ContinuousVoiceSessionStatusListening {
+		emitDesktopPetVoice(ctx, sess, "listening.started")
+	}
 	return nil
 }
 
@@ -185,6 +189,7 @@ func (s *service) StopSession(ctx context.Context, sessionID string) error {
 
 	sess.State = ContinuousVoiceSessionStatusEnded
 	sess.EndedAt = time.Now()
+	emitDesktopPetVoice(ctx, sess, "session.ended")
 
 	return nil
 }
@@ -202,12 +207,16 @@ func (s *service) InterruptSession(ctx context.Context, sessionID string) error 
 		sess.PlaybackGeneration++
 		sess.State = ContinuousVoiceSessionStatusListening
 		sess.LastActivityAt = time.Now()
+		emitDesktopPetVoice(ctx, sess, "turn.interrupted")
+		emitDesktopPetVoice(ctx, sess, "listening.started")
 		return nil
 	}
 
 	if sess.State == ContinuousVoiceSessionStatusProcessing {
 		sess.State = ContinuousVoiceSessionStatusListening
 		sess.LastActivityAt = time.Now()
+		emitDesktopPetVoice(ctx, sess, "turn.interrupted")
+		emitDesktopPetVoice(ctx, sess, "listening.started")
 		return nil
 	}
 
@@ -293,6 +302,7 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 				sess.State = ContinuousVoiceSessionStatusTranscribing
 				sess.CurrentTurnID = uuid.New().String()
 				sess.CaptureGeneration++
+				emitDesktopPetVoice(ctx, sess, "listening.activity")
 			}
 		}
 
@@ -302,6 +312,8 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 			if err == nil && vadResult.SpeechEnded {
 				sess.State = ContinuousVoiceSessionStatusProcessing
 				sess.PlaybackGeneration++
+				emitDesktopPetVoice(ctx, sess, "listening.ended")
+				emitDesktopPetVoice(ctx, sess, "processing.started")
 			}
 		}
 
@@ -313,6 +325,8 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 				sess.PlaybackGeneration++
 				sess.CurrentTurnID = uuid.New().String()
 				sess.CaptureGeneration++
+				emitDesktopPetVoice(ctx, sess, "turn.interrupted")
+				emitDesktopPetVoice(ctx, sess, "listening.started")
 			}
 		}
 	}
