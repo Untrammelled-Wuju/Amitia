@@ -112,11 +112,10 @@ jobs:
 
   desktop-pet-migration:
     name: Desktop Pet Migration Tests
-    runs-on: ubuntu-latest
     needs: backend-build-vet
     strategy:
-        matrix:
-            os: [ubuntu-latest, windows-latest]
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -145,8 +144,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: toolchain
     strategy:
-        matrix:
-            workspace: [front, desktop]
+      matrix:
+        workspace: [front, desktop]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -154,8 +153,9 @@ jobs:
           version: 9.12.0
       - uses: actions/setup-node@v4
         with:
-          node-version-file: '.nvmrc'
+          node-version: '20.18.0'
           cache: pnpm
+          cache-dependency-path: '${{ matrix.workspace }}/pnpm-lock.yaml'
       - name: Install dependencies
         run: |
           corepack enable
@@ -163,7 +163,7 @@ jobs:
       - name: Typecheck
         run: pnpm --dir ${{ matrix.workspace }} typecheck
       - name: Test
-        run: pnpm --dir ${{ matrix.workspace }} test --run
+        run: pnpm --dir ${{ matrix.workspace }} test
       - name: Build
         run: pnpm --dir ${{ matrix.workspace }} build
 
