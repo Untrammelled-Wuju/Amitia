@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,7 +33,7 @@ function main() {
   const actualMainPath = existsSync(mainJs) ? mainJs : mainJsAlt;
 
   if (!mainExists) {
-    warnings.push(`MISSING: dist/main/index.cjs (可能还未构建)`);
+    errors.push(`MISSING: dist/main/index.cjs`);
   } else {
     try {
       const mainContent = readFileSync(actualMainPath, "utf8");
@@ -47,6 +47,9 @@ function main() {
       warnings.push("WARN: 无法读取 dist/main/index.cjs");
     }
   }
+
+  const indexPreload = resolve(distPreload, "index.cjs");
+  checkExists(indexPreload, "dist/preload/index.cjs");
 
   const animationPreload = resolve(distPreload, "animation-preload.cjs");
   checkExists(animationPreload, "dist/preload/animation-preload.cjs");

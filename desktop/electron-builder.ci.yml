@@ -1,0 +1,18 @@
+appId: cn.amitia.desktop
+productName: Amitia
+directories:
+  output: release-ci
+files:
+  - dist/**/*
+  - resources/icon*.ico
+  - resources/tray*.png
+  - package.json
+asar: true
+compression: normal
+win:
+  signExecutable: false
+  icon: ../Logo/amitia-character-dark-white-256.ico
+  target:
+    - target: dir
+      arch:
+        - x64
