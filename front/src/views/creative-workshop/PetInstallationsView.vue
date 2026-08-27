@@ -2,11 +2,6 @@
 SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
-<!--
-Deprecated: Legacy extension architecture.
-Do not add new capabilities. This view is retained only for
-compatibility, maintenance, testing, and migration to Extension Kernel.
--->
 <template>
   <main class="pet-installations">
     <ExtensionPageHeader
