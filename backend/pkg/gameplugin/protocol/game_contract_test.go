@@ -107,6 +107,10 @@ func TestPluginNetworkPolicyExposesProtocolV1Modes(t *testing.T) {
 	if err := ipRestricted.Validate(); err != nil {
 		t.Fatalf("valid exact-IP restricted mode rejected: %v", err)
 	}
+	hostLoopback := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: &PluginNetworkPolicy{Mode: "restricted", AllowedPorts: []int{25575, 28016}, AllowedTransports: []string{"tcp", "udp", "websocket"}, AllowHostLoopback: true, MaxConnections: 8}}
+	if err := hostLoopback.Validate(); err != nil {
+		t.Fatalf("valid host-mediated loopback policy rejected: %v", err)
+	}
 	for _, network := range []*PluginNetworkPolicy{
 		{Mode: "restricted"},
 		{Mode: "restricted", AllowedDomains: []string{"http://example.com"}, AllowedPorts: []int{443}},
@@ -114,6 +118,9 @@ func TestPluginNetworkPolicyExposesProtocolV1Modes(t *testing.T) {
 		{Mode: "restricted", AllowedIPs: []string{"not-an-ip"}, AllowedPorts: []int{443}},
 		{Mode: "none", AllowedDomains: []string{"example.com"}},
 		{Mode: "none", AllowedIPs: []string{"127.0.0.1"}},
+		{Mode: "loopback", AllowHostLoopback: true},
+		{Mode: "restricted", AllowHostLoopback: true, AllowedPorts: []int{25575}, AllowedTransports: []string{"raw"}},
+		{Mode: "restricted", AllowHostLoopback: true, AllowedPorts: []int{25575}, MaxConnections: 65},
 		{Mode: "audit"},
 	} {
 		spec := PluginHostSpec{ProtocolVersion: ProtocolVersion, RuntimeModuleID: "runtime", Network: network}

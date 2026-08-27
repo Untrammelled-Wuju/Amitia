@@ -64,8 +64,14 @@ export interface PluginNetworkPolicy {
   allowedDomains?: string[];
   /** Exact IP literals (IPv4 or IPv6). Restricted mode only. */
   allowedIPs?: string[];
-  /** Explicit destination TCP ports. Restricted mode only. */
+  /** Explicit destination ports. Restricted mode only. */
   allowedPorts?: number[];
+  /** Host-mediated transports. Omitted in restricted mode defaults to HTTP/HTTPS for compatibility. */
+  allowedTransports?: ('http' | 'https' | 'tcp' | 'udp' | 'websocket')[];
+  /** Allow the portable `host-loopback` destination without sharing the host network namespace. */
+  allowHostLoopback?: boolean;
+  /** Maximum simultaneously open host-mediated socket handles for this service (1..64, default 16). */
+  maxConnections?: number;
 }
 
 export interface PluginServiceSpec {

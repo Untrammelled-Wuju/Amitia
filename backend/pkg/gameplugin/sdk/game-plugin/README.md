@@ -37,6 +37,14 @@ assertPluginHostSpec(spec);
 
 `validatePluginHostSpec` follows the same semantic rules as the Go host validator, including service dependency topology, service-scoped channel uniqueness, feature requirements, network policy allowlists, companion artifact paths, and compatibility constraints.
 
+## Host-mediated game networking
+
+For portable access to a game, companion, RCON bridge, telemetry endpoint, or other local service, use `network.mode: 'restricted'` with `service.network.request`. The plugin process remains network-isolated; the host owns the real sockets and enforces the declared transport, destination, and port policy.
+
+`allowedTransports` may contain `http`, `https`, `tcp`, `udp`, or `websocket`. Set `allowHostLoopback: true` to allow the portable target `host-loopback`, which always means the host machine rather than the plugin sandbox/network namespace. `maxConnections` bounds simultaneous host-owned socket handles for one runtime service/session; omission or `0` uses the host default.
+
+The SDK exports `networkRequest`, TCP open/read/write/close, UDP open/receive/send/close, and WebSocket open/receive/send/close helpers. Socket handles are generation/session-bound and are invalidated when the owning service stops, crashes, restarts, or the host shuts down. Long-lived connections are not terminated merely for being idle.
+
 ## Descriptor helpers
 
 `createPluginDescriptor` builds the runtime/handshake descriptor and validates `ServiceDescriptor`, `ChannelDescriptor`, and host features before returning it. Invalid IDs, control characters, unknown host features, duplicate channels, oversized channel IDs, and oversized schema IDs are rejected locally.

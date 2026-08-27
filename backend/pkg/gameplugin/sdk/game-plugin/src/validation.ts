@@ -308,10 +308,13 @@ function validateRestrictedNetworkAllowlist(
   domains: readonly string[] = [],
   ips: readonly string[] = [],
   ports: readonly number[] = [],
+  transports: readonly string[] = [],
+  allowHostLoopback = false,
+  maxConnections = 0,
 ): string[] {
   const errors: string[] = [];
-  if (domains.length === 0 && ips.length === 0) {
-    errors.push('restricted mode requires at least one network.allowedDomains or network.allowedIPs entry');
+  if (domains.length === 0 && ips.length === 0 && !allowHostLoopback) {
+    errors.push('restricted mode requires at least one network.allowedDomains, network.allowedIPs, or network.allowHostLoopback destination');
   }
   if (ports.length === 0) {
     errors.push('network.allowedPorts is required for restricted mode');
@@ -354,6 +357,20 @@ function validateRestrictedNetworkAllowlist(
     if (seenPorts.has(port)) errors.push(`duplicate restricted network port ${port}`);
     seenPorts.add(port);
   }
+
+  const seenTransports = new Set<string>();
+  for (const raw of transports) {
+    const transport = raw.toLowerCase().trim();
+    if (!['http', 'https', 'tcp', 'udp', 'websocket'].includes(transport)) {
+      errors.push(`invalid restricted network transport '${raw}'`);
+      continue;
+    }
+    if (seenTransports.has(transport)) errors.push(`duplicate restricted network transport '${raw}'`);
+    seenTransports.add(transport);
+  }
+  if (!Number.isInteger(maxConnections) || maxConnections < 0 || maxConnections > 64) {
+    errors.push('network.maxConnections must be between 0 and 64; 0 uses the host default');
+  }
   return errors;
 }
 
@@ -367,12 +384,15 @@ function validateNetworkPolicy(network: PluginNetworkPolicy | undefined): string
   const domains = network.allowedDomains ?? [];
   const ips = network.allowedIPs ?? [];
   const ports = network.allowedPorts ?? [];
+  const transports = network.allowedTransports ?? [];
+  const allowHostLoopback = network.allowHostLoopback ?? false;
+  const maxConnections = network.maxConnections ?? 0;
   if (mode === 'restricted') {
-    return validateRestrictedNetworkAllowlist(domains, ips, ports);
+    return validateRestrictedNetworkAllowlist(domains, ips, ports, transports, allowHostLoopback, maxConnections);
   }
   if (mode === 'none' || mode === 'loopback' || mode === 'unrestricted') {
-    if (domains.length || ips.length || ports.length) {
-      return ['network allowlists are only valid for restricted mode'];
+    if (domains.length || ips.length || ports.length || transports.length || allowHostLoopback || maxConnections) {
+      return ['network allowlists and mediated transport limits are only valid for restricted mode'];
     }
     return [];
   }
@@ -636,10 +656,15 @@ function validatePluginHostSpecShape(input: unknown): string[] {
     if (!isRecord(raw)) {
       errors.push('PluginHostSpec.network must be an object');
     } else {
-      rejectUnknownKeys(raw, new Set(['mode', 'allowedDomains', 'allowedIPs', 'allowedPorts']), 'PluginHostSpec.network', errors);
+      rejectUnknownKeys(raw, new Set(['mode', 'allowedDomains', 'allowedIPs', 'allowedPorts', 'allowedTransports', 'allowHostLoopback', 'maxConnections']), 'PluginHostSpec.network', errors);
       validateOptionalString(raw, 'mode', 'PluginHostSpec.network', errors);
       validateOptionalStringArray(raw, 'allowedDomains', 'PluginHostSpec.network', errors);
       validateOptionalStringArray(raw, 'allowedIPs', 'PluginHostSpec.network', errors);
+      validateOptionalStringArray(raw, 'allowedTransports', 'PluginHostSpec.network', errors);
+      validateOptionalBoolean(raw, 'allowHostLoopback', 'PluginHostSpec.network', errors);
+      if (raw.maxConnections !== undefined && (typeof raw.maxConnections !== 'number' || !Number.isInteger(raw.maxConnections))) {
+        errors.push('PluginHostSpec.network.maxConnections must be an integer');
+      }
       if (raw.allowedPorts !== undefined) {
         if (!Array.isArray(raw.allowedPorts) || raw.allowedPorts.some((item) => typeof item !== 'number' || !Number.isInteger(item))) {
           errors.push('PluginHostSpec.network.allowedPorts must be an array of integers');
