@@ -206,7 +206,7 @@ export class GameCenterClient {
     this.developerSessionId = developerSessionId.trim();
   }
 
-  private headers(extra?: HeadersInit): Headers {
+  private headers(extra?: RequestInit['headers']): Headers {
     const headers = new Headers(extra);
     if (this.authToken) headers.set('Authorization', `Bearer ${this.authToken}`);
     return headers;
