@@ -12,6 +12,7 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import http from "node:http";
 import { URL } from "node:url";
 import { getAmitiaDataDir } from "../path-manager";
+import { DESKTOP_PET_RUNTIME_VERSION } from "../../shared/desktop-pet-runtime-version";
 import { createRuntimeBootstrapTicket } from "../backend-session-client";
 import { ResourceLoader } from "./resource-loader";
 import type {
@@ -340,6 +341,7 @@ export class DesktopPetManager {
   private readonly resourceCache: ResourceCache;
   private readonly alphaThreshold: number;
   private readonly petLogger: PetLogger;
+  private readonly runtimeVersion: string;
 
   private authToken: string | null = null;
   private state: PetManagerState = "uninitialized";
@@ -405,7 +407,8 @@ export class DesktopPetManager {
     this.userId = opts.userId ?? DEFAULT_USER_ID;
     this.coreHost = opts.coreHost ?? CORE_BASE_HOST;
     this.corePort = opts.corePort ?? CORE_BASE_PORT;
-    this.resourceLoader = opts.resourceLoader ?? new ResourceLoader(opts.runtimeVersion);
+    this.runtimeVersion = opts.runtimeVersion ?? DESKTOP_PET_RUNTIME_VERSION;
+    this.resourceLoader = opts.resourceLoader ?? new ResourceLoader(this.runtimeVersion);
     this.resourceCache = opts.resourceCache ?? new ResourceCache();
     this.alphaThreshold =
       typeof opts.alphaThreshold === "number"
@@ -1358,7 +1361,7 @@ export class DesktopPetManager {
       decisionId?: string;
     } = {
       installationId: this.activeInstallationId ?? this.activeInstallation?.id ?? "",
-      characterId: this.activeInstallation?.characterId ?? this.loadedInstallation?.characterId ?? "",
+      characterId: this.activeInstallation?.characterId ?? this.loadedInstallation?.manifest.characterId ?? "",
       petInstanceId: getRuntimeId(),
     };
     if (decisionId) {
@@ -2549,8 +2552,7 @@ export class DesktopPetManager {
         userId: issued.userId,
         deviceId,
         runtimeId,
-        contractVersion: "2.0.0",
-        runtimeVersion: "2.0.0",
+        runtimeVersion: this.runtimeVersion,
         autoReconnect: false,
         heartbeatIntervalMs: 15000,
         maxReconnectAttempts: 0,

@@ -22,7 +22,7 @@ const currentDir = dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL =
   process.env.VITE_DEV_SERVER_URL ||
   process.env.AMITIA_DESKTOP_DEV_SERVER_URL ||
-  "http://127.0.0.1:5178";
+  "";
 
 const VISIBLE_MARGIN = 20;
 const EDGE_OFFSET = 40;
@@ -196,8 +196,8 @@ export class DesktopPetWindowAdapter {
       }, LOAD_TIMEOUT_MS);
 
       const doLoad = async (): Promise<void> => {
-        if (isDevMode()) {
-          const petDevUrl = `${DEV_SERVER_URL}/pet.html`;
+        if (isDevMode() && DEV_SERVER_URL) {
+          const petDevUrl = `${DEV_SERVER_URL.replace(/\/$/, "")}/pet.html`;
           try {
             await win.loadURL(petDevUrl);
           } catch {
