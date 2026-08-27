@@ -21,9 +21,10 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 )
 
-const packagePolicyVersion = "2026-08-26-v3"
+const packagePolicyVersion = "2026-08-27-v4"
 
 func CurrentPackagePolicyVersion() string {
 	return packagePolicyVersion
@@ -139,8 +140,6 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		preview.TrustDecision = "rejected"
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "trust_policy_rejected", Message: reason})
 	}
-	appendPackageHostCompatibilityIssues(pkg.Manifest, &preview)
-	appendGamePluginNetworkCompatibilityIssues(pkg.Manifest, &preview)
 	appendGamePluginArtifactPackageIssues(pkg, &preview)
 	r.evaluatePackageCompatibilityAndDependencies(ctx, pkg, &preview)
 	r.evaluatePackageUpdateRisks(ctx, &preview)
@@ -306,6 +305,20 @@ func (r *Runtime) evaluatePackageUpdateRisks(ctx context.Context, preview *Insta
 }
 
 func (r *Runtime) evaluatePackageCompatibilityAndDependencies(ctx context.Context, pkg *amitiax.Package, preview *InstallPreview) {
+	r.evaluatePackageCompatibilityAndDependenciesWithHostValidator(ctx, pkg, preview, trusted_service.ValidateNetworkSandboxPrerequisites)
+}
+
+func (r *Runtime) evaluatePackageCompatibilityAndDependenciesWithHostValidator(ctx context.Context, pkg *amitiax.Package, preview *InstallPreview, validateHost func(trusted_service.ServiceNetworkPolicy) error) {
+	if pkg == nil || preview == nil {
+		return
+	}
+	// Keep preview and execute-time compatibility checks on the same canonical
+	// path. In particular, GameHost sandbox prerequisites are host-state
+	// sensitive and must be revalidated immediately before install/update/rollback
+	// so a stale preview cannot authorize a package after the environment changed.
+	appendPackageHostCompatibilityIssues(pkg.Manifest, preview)
+	appendGamePluginNetworkCompatibilityIssuesWithHostValidator(pkg.Manifest, preview, validateHost)
+
 	platform := normalizePackagePlatform(runtime.GOOS)
 	hostVersion := currentPackageHostVersion()
 	for _, mod := range pkg.Manifest.Modules {

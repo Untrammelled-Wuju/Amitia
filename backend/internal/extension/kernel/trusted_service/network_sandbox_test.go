@@ -2,6 +2,8 @@ package trusted_service
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -159,6 +161,88 @@ func TestValidateNetworkPolicySupportAcceptsLinuxNoneAndLoopback(t *testing.T) {
 		if err := validateNetworkPolicySupportForOS(policy, "linux"); err != nil {
 			t.Fatalf("linux mode %q should pass static capability validation: %v", policy.Mode, err)
 		}
+	}
+}
+
+func TestNetworkSandboxExecutableRequirementsLinuxModes(t *testing.T) {
+	cases := []struct {
+		mode string
+		want []string
+	}{
+		{mode: "none", want: []string{"bubblewrap"}},
+		{mode: "restricted", want: []string{"bubblewrap"}},
+		{mode: "loopback", want: []string{"bubblewrap", "ip", "sh"}},
+		{mode: "unrestricted", want: []string{"bubblewrap", "slirp4netns"}},
+	}
+	for _, tc := range cases {
+		requirements, err := networkSandboxExecutableRequirements("linux", tc.mode, "")
+		if err != nil {
+			t.Fatalf("linux %s requirements error = %v", tc.mode, err)
+		}
+		got := make([]string, 0, len(requirements))
+		for _, requirement := range requirements {
+			got = append(got, requirement.Name)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("linux %s requirements = %v, want %v", tc.mode, got, tc.want)
+		}
+	}
+}
+
+func TestNetworkSandboxExecutableRequirementsDarwin(t *testing.T) {
+	requirements, err := networkSandboxExecutableRequirements("darwin", "none", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, 0, len(requirements))
+	for _, requirement := range requirements {
+		got = append(got, requirement.Name)
+	}
+	if !reflect.DeepEqual(got, []string{"sandbox-exec", "true"}) {
+		t.Fatalf("darwin requirements = %v", got)
+	}
+}
+
+func TestNetworkSandboxExecutableRequirementsWindowsModes(t *testing.T) {
+	for _, tc := range []struct {
+		mode string
+		want []string
+	}{
+		{mode: "none", want: []string{"powershell", "icacls"}},
+		{mode: "restricted", want: []string{"powershell", "icacls"}},
+		{mode: "loopback", want: []string{"powershell", "icacls", "CheckNetIsolation"}},
+		{mode: "unrestricted", want: []string{"powershell", "icacls", "CheckNetIsolation"}},
+	} {
+		requirements, err := networkSandboxExecutableRequirements("windows", tc.mode, "/Windows")
+		if err != nil {
+			t.Fatalf("windows %s requirements error = %v", tc.mode, err)
+		}
+		got := make([]string, 0, len(requirements))
+		for _, requirement := range requirements {
+			got = append(got, requirement.Name)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("windows %s requirements = %v, want %v", tc.mode, got, tc.want)
+		}
+	}
+}
+
+func TestFirstTrustedHostComponentWindowsDoesNotRequirePOSIXExecuteBits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "powershell.exe")
+	if err := os.WriteFile(path, []byte("stub"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := firstTrustedHostComponent("windows", path); got != path {
+		t.Fatalf("windows host component = %q, want %q", got, path)
+	}
+	if got := firstTrustedHostComponent("linux", path); got != "" {
+		t.Fatalf("unix launcher unexpectedly accepted non-executable file: %q", got)
+	}
+}
+
+func TestValidateNetworkSandboxPrerequisitesSkipsUnenforcedPolicies(t *testing.T) {
+	if err := ValidateNetworkSandboxPrerequisites(ServiceNetworkPolicy{Mode: "unrestricted", Enforce: false, AllowOutbound: true}); err != nil {
+		t.Fatalf("unenforced policy must not require sandbox backend: %v", err)
 	}
 }
 
