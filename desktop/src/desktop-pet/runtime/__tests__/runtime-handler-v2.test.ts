@@ -72,7 +72,13 @@ function helloAckEnvelope(): RuntimeEnvelope {
 
 async function connectHandler(
   onCommand: () => Promise<RuntimeCommandExecutionResult>,
-): Promise<{ handler: DesktopRuntimeHandlerV2; ws: FakeWebSocket }> {
+  resumeCursor?: {
+    lastAppliedDesiredRevision?: number;
+    lastProcessedCommandSequence?: number;
+    lastEventSequence?: number;
+    actualStateHash?: string;
+  },
+): Promise<{ handler: DesktopRuntimeHandlerV2; ws: FakeWebSocket; hello: RuntimeEnvelope }> {
   const handler = new DesktopRuntimeHandlerV2(
     {
       url: "ws://127.0.0.1/runtime?ticket=ticket-1&deviceId=device-1&runtimeId=runtime-1",
@@ -82,6 +88,7 @@ async function connectHandler(
       autoReconnect: false,
       heartbeatIntervalMs: 60_000,
       connectTimeoutMs: 5_000,
+      resumeCursor,
     },
     {
       onState: () => undefined,
@@ -108,7 +115,7 @@ async function connectHandler(
   ws.message(helloAckEnvelope());
   await connecting;
   await flushAsync();
-  return { handler, ws };
+  return { handler, ws, hello };
 }
 
 describe("DesktopRuntimeHandlerV2", () => {
@@ -237,7 +244,6 @@ describe("DesktopRuntimeHandlerV2", () => {
     expect(acks.map((ack) => ack.status)).toEqual([
       "runtime_received",
       "runtime_accepted",
-      "renderer_accepted",
       "failed_terminal",
     ]);
     expect(acks.at(-1)).toMatchObject({
@@ -246,6 +252,137 @@ describe("DesktopRuntimeHandlerV2", () => {
       rejectErrorCode: "RENDERER_FAILED",
       rejectReason: "renderer refused command",
     });
+    handler.disconnect();
+  });
+
+
+  it("keeps resume cursors separate from the server desired target", async () => {
+    const { handler, hello } = await connectHandler(
+      async () => ({
+        commandId: "unused",
+        status: "applied",
+        errorCode: "",
+        errorMessage: "",
+        appliedRevision: 0,
+      }),
+      {
+        lastAppliedDesiredRevision: 5,
+        lastProcessedCommandSequence: 40,
+        lastEventSequence: 80,
+        actualStateHash: "sha256:resume",
+      },
+    );
+
+    expect(hello.sequence).toBe(81);
+    expect(hello.payload).toMatchObject({
+      lastAppliedDesiredRevision: 5,
+      lastProcessedCommandSequence: 40,
+      lastEventSequence: 80,
+      actualStateHash: "sha256:resume",
+    });
+    // hello_ack advertises currentDesiredRevision=7, but that is a target, not
+    // proof that revision 7 has been applied by this runtime.
+    expect(handler.getLastAppliedDesiredRevision()).toBe(5);
+    expect(handler.getLastProcessedCommandSequence()).toBe(40);
+    handler.disconnect();
+  });
+
+  it("advances an accepted playback command only after a terminal playback event", async () => {
+    const { handler, ws } = await connectHandler(async () => ({
+      commandId: "cmd-play",
+      status: "accepted",
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+      acceptedAction: "wave",
+      playbackRequestId: "playback-1",
+    }));
+
+    ws.sent = [];
+    ws.message(
+      buildEnvelope(
+        "command",
+        "runtime.command.play_action",
+        "user-1",
+        "device-1",
+        "runtime-1",
+        "session-1",
+        1,
+        4,
+        {
+          commandId: "cmd-play",
+          commandType: "runtime.command.play_action",
+          commandSequence: 44,
+          desiredRevision: 9,
+          payload: { actionKey: "wave" },
+        },
+      ),
+    );
+    await flushAsync();
+
+    expect(handler.getLastProcessedCommandSequence()).toBe(0);
+    expect(handler.getLastAppliedDesiredRevision()).toBe(0);
+
+    await handler.sendPlaybackEnded(
+      "playback-1",
+      "cmd-play",
+      "wave",
+      1000,
+      "natural_end",
+    );
+    expect(handler.getLastProcessedCommandSequence()).toBe(44);
+
+    await handler.sendRendererState({
+      connectionGeneration: handler.getConnectionGeneration(),
+      eventSequence: 0,
+      actualStateHash: "sha256:state",
+      instanceStatus: "ready",
+      windowStatus: "visible",
+      rendererStatus: "runtime_ready",
+      playbackStatus: "idle",
+      appliedDesiredRevision: 0,
+      appliedSettingsRevision: 0,
+      installationId: "inst-1",
+      petId: "pet-1",
+      releaseId: "release-1",
+      stableActionKey: "idle",
+      currentActionKey: "idle",
+      lastProcessedCommandSequence: handler.getLastProcessedCommandSequence(),
+      capturedAt: new Date().toISOString(),
+    });
+
+    const snapshots = ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageName === "runtime.state.snapshot");
+    expect(snapshots.at(-1)?.payload).toMatchObject({
+      lastProcessedCommandSequence: 44,
+      actualStateHash: "sha256:state",
+    });
+    handler.disconnect();
+  });
+
+  it("emits the canonical health-changed payload and suppresses duplicate healthy events", async () => {
+    const { handler, ws } = await connectHandler(async () => ({
+      commandId: "unused",
+      status: "applied",
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+
+    ws.sent = [];
+    await handler.sendRendererHealth(true);
+    await handler.sendRendererHealth(true);
+    const healthEvents = ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageName === "runtime.health.changed");
+
+    expect(healthEvents).toHaveLength(1);
+    expect(healthEvents[0]?.payload).toMatchObject({
+      previousStatus: "unknown",
+      currentStatus: "healthy",
+    });
+    expect((healthEvents[0]?.payload as { changedAt?: string }).changedAt).toBeTruthy();
     handler.disconnect();
   });
 
