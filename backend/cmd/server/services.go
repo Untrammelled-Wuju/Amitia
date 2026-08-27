@@ -1571,38 +1571,36 @@ func (s *BehaviorRuntimeEventSink) OnRuntimeEvent(ctx context.Context, event run
 	characterID, petInstanceID := s.resolveCharacterAndPet(event)
 	now := time.Now()
 
+	canonicalEventType := event.EventType
 	switch event.EventType {
 	case "clicked":
-		builder := events.NewEnvelope("runtime.pointer.clicked", behavior.OriginDesktop).
-			UserID(event.UserID).
-			CharacterID(characterID).
-			PetInstanceID(petInstanceID).
-			InstallationID(event.InstallationID).
-			OccurredAt(event.Timestamp).
-			DedupKey(events.BuildDedupKey(petInstanceID, event.EventType, event.Timestamp.Format(time.RFC3339Nano)))
-		if len(event.Payload) > 0 {
-			builder.PayloadRaw(event.Payload)
-		}
-		return s.engine.SubmitEvent(ctx, builder.Build(now))
-
+		canonicalEventType = "runtime.pointer.clicked"
 	case "dragged":
-		builder := events.NewEnvelope("runtime.drag.completed", behavior.OriginDesktop).
+		canonicalEventType = "runtime.drag.completed"
+	case "playback_completed":
+		canonicalEventType = "runtime.playback.action_completed"
+	case "playback_interrupted":
+		canonicalEventType = "runtime.playback.action_interrupted"
+	}
+
+	switch canonicalEventType {
+	case "runtime.pointer.clicked", "runtime.pointer.double_clicked", "runtime.pointer.hovered",
+		"runtime.drag.started", "runtime.drag.moved", "runtime.drag.completed":
+		builder := events.NewEnvelope(canonicalEventType, behavior.OriginDesktop).
 			UserID(event.UserID).
 			CharacterID(characterID).
 			PetInstanceID(petInstanceID).
 			InstallationID(event.InstallationID).
 			OccurredAt(event.Timestamp).
-			DedupKey(events.BuildDedupKey(petInstanceID, "drag_completed", event.Timestamp.Format(time.RFC3339Nano)))
+			DedupKey(events.BuildDedupKey(petInstanceID, canonicalEventType, event.Timestamp.Format(time.RFC3339Nano)))
 		if len(event.Payload) > 0 {
 			builder.PayloadRaw(event.Payload)
 		}
 		return s.engine.SubmitEvent(ctx, builder.Build(now))
 
-	case "playback_completed":
-		return s.submitPlaybackEvent(ctx, event, characterID, petInstanceID, "runtime.playback.action_completed", now)
-
-	case "playback_interrupted":
-		return s.submitPlaybackEvent(ctx, event, characterID, petInstanceID, "runtime.playback.action_interrupted", now)
+	case "runtime.playback.action_started", "runtime.playback.action_completed",
+		"runtime.playback.action_interrupted", "runtime.playback.action_failed":
+		return s.submitPlaybackEvent(ctx, event, characterID, petInstanceID, canonicalEventType, now)
 	}
 
 	return nil
@@ -1612,6 +1610,7 @@ func (s *BehaviorRuntimeEventSink) submitPlaybackEvent(ctx context.Context, even
 	commandID := ""
 	decisionID := ""
 	actionKey := ""
+	errorClass := ""
 	if len(event.Payload) > 0 {
 		var payload map[string]interface{}
 		if json.Unmarshal(event.Payload, &payload) == nil {
@@ -1624,6 +1623,11 @@ func (s *BehaviorRuntimeEventSink) submitPlaybackEvent(ctx context.Context, even
 			if v, ok := payload["actionKey"].(string); ok {
 				actionKey = v
 			}
+			if v, ok := payload["errorClass"].(string); ok {
+				errorClass = v
+			} else if v, ok := payload["errorCode"].(string); ok {
+				errorClass = v
+			}
 		}
 	}
 
@@ -1633,7 +1637,7 @@ func (s *BehaviorRuntimeEventSink) submitPlaybackEvent(ctx context.Context, even
 		PetInstanceID(petInstanceID).
 		InstallationID(event.InstallationID).
 		OccurredAt(event.Timestamp).
-		DedupKey(events.BuildDedupKey(commandID, eventType))
+		DedupKey(events.BuildDedupKey(commandID, eventType, event.Timestamp.Format(time.RFC3339Nano)))
 
 	if commandID != "" {
 		builder.PayloadField("commandId", commandID)
@@ -1641,8 +1645,11 @@ func (s *BehaviorRuntimeEventSink) submitPlaybackEvent(ctx context.Context, even
 	if decisionID != "" {
 		builder.PayloadField("decisionId", decisionID)
 	}
-	if actionKey != "" {
+	if actionKey != "" && (eventType == "runtime.playback.action_started" || eventType == "runtime.playback.action_completed") {
 		builder.PayloadField("actionKey", actionKey)
+	}
+	if errorClass != "" && eventType == "runtime.playback.action_failed" {
+		builder.PayloadField("errorClass", errorClass)
 	}
 
 	return s.engine.SubmitEvent(ctx, builder.Build(now))
@@ -1659,6 +1666,10 @@ func (s *BehaviorRuntimeEventSink) resolveCharacterAndPet(event runtime.RuntimeD
 				petInstanceID = v
 			}
 		}
+	}
+
+	if petInstanceID == "" {
+		petInstanceID = event.RuntimeID
 	}
 
 	if characterID == "" && event.InstallationID != "" && s.installRepo != nil {
