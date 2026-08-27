@@ -38,7 +38,11 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		returnTo = "default"
 	}
 	payload := runtimev2.PlayActionPayload{
+		RuntimeID:        cmd.RuntimeID,
 		ActionKey:        cmd.ActionKey,
+		CharacterID:      cmd.CharacterID,
+		PetInstanceID:    cmd.PetInstanceID,
+		InstallationID:   cmd.InstallationID,
 		PlaybackMode:     "once",
 		Priority:         cmd.Priority,
 		QueuePolicy:      queuePolicy,
@@ -116,6 +120,29 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 			Error:      err.Error(),
 			ReceivedAt: time.Now(),
 		}, nil
+	}
+
+	updates := map[string]interface{}{}
+	if cmd.RuntimeID != "" {
+		updates["runtime_id"] = cmd.RuntimeID
+	}
+	if cmd.InstallationID != "" {
+		updates["installation_id"] = cmd.InstallationID
+	}
+	if len(updates) > 0 {
+		if err := a.facade.Commands().DB().Model(&runtimev2.RuntimeCommand{}).Where("id = ?", v2Cmd.ID).Updates(updates).Error; err != nil {
+			log.Logger.Warnf("wiring/runtime_v2_action_port: pin command route failed commandId=%s runtimeId=%s err=%v", v2Cmd.ID, cmd.RuntimeID, err)
+			_ = a.facade.Commands().MarkFailed(v2Cmd.ID, "runtime_route_persist_failed", err.Error(), time.Now())
+			return &behavior.CommandReceipt{
+				CommandID:  v2Cmd.ID,
+				Accepted:   false,
+				Status:     behavior.CmdRejected,
+				Error:      "persist runtime route failed",
+				ReceivedAt: time.Now(),
+			}, nil
+		}
+		v2Cmd.RuntimeID = cmd.RuntimeID
+		v2Cmd.InstallationID = cmd.InstallationID
 	}
 
 	return &behavior.CommandReceipt{

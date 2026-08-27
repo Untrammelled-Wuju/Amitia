@@ -53,15 +53,14 @@ func NewV2ActualStateEventOutbox(
 }
 
 func (o *v2StateEventOutbox) Append(ctx context.Context, event RuntimeDomainEvent) error {
-	payload := event.Payload
-	if len(payload) == 0 {
-		raw, err := json.Marshal(event)
-		if err != nil {
-			return err
-		}
-		payload = raw
+	// Always persist the complete domain envelope. Persisting only event.Payload
+	// loses user/device/session/installation identity and makes downstream
+	// Behavior consumers unable to correlate runtime feedback reliably.
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return err
 	}
-	_, err := o.appendFn(
+	_, err = o.appendFn(
 		event.EventType,
 		event.RuntimeID,
 		payload,
