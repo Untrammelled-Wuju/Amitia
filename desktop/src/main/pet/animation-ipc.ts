@@ -4,6 +4,7 @@ import { ANIMATION_IPC_CHANNELS } from "../../shared/animation-ipc";
 import type {
   PetDragIpcPayload,
   PetHitMaskPayload,
+  RuntimeInitFailedPayload,
   RuntimeReadyPayload,
 } from "../../shared/animation-ipc";
 import type {
@@ -152,6 +153,15 @@ function isValidRuntimeReadyPayload(payload: unknown): payload is RuntimeReadyPa
   return true;
 }
 
+function isValidRuntimeInitFailedPayload(payload: unknown): payload is RuntimeInitFailedPayload {
+  if (!payload || typeof payload !== "object") return false;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.reason !== "string" || p.reason.length === 0 || p.reason.length > MAX_STRING_LENGTH) return false;
+  if (p.packageId !== undefined && (typeof p.packageId !== "string" || p.packageId.length > MAX_STRING_LENGTH)) return false;
+  if (p.packageRevision !== undefined && (typeof p.packageRevision !== "number" || p.packageRevision < 0)) return false;
+  return true;
+}
+
 function buildPackageSnapshot(
   installation: InstallationInfo,
   loaded: LoadedInstallation,
@@ -232,6 +242,7 @@ export interface AnimationIpcAdapterDeps {
   onHitMask?: (payload: PetHitMaskPayload) => void;
   onRendererBootstrapped?: () => void;
   onRuntimeReady?: (payload: RuntimeReadyPayload) => void;
+  onRuntimeInitFailed?: (payload: RuntimeInitFailedPayload) => void;
   onDeliveryFailed?: (reason: RendererDeliveryFailureReason, command?: PlayActionCommand) => void;
   onDragStart?: (payload: PetDragIpcPayload) => void;
   onDragMove?: (payload: PetDragIpcPayload) => void;
@@ -245,14 +256,17 @@ export class AnimationIpcAdapter {
   private powerMonitorListenersAttached = false;
   private bootstrapped = false;
   private runtimeReady = false;
+  private runtimeReadyPayload: RuntimeReadyPayload | null = null;
+  private runtimeInitFailure: RuntimeInitFailedPayload | null = null;
   private pendingCommands: PendingPlayCommand[] = [];
   private durable: DurableState = {
     packageSnapshot: null,
     defaultActionKey: null,
     windowVisible: true,
   };
-  private runtimeReadyPromise: Promise<RuntimeReadyPayload | null> | null = null;
-  private runtimeReadyResolve: ((payload: RuntimeReadyPayload | null) => void) | null = null;
+  private runtimeReadyPromise: Promise<RuntimeReadyPayload> | null = null;
+  private runtimeReadyResolve: ((payload: RuntimeReadyPayload) => void) | null = null;
+  private runtimeReadyReject: ((error: Error) => void) | null = null;
   private runtimeReadyTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(deps: AnimationIpcAdapterDeps) {
@@ -329,16 +343,26 @@ export class AnimationIpcAdapter {
     if (!this.isCurrentPetRenderer(event)) return;
     if (!isValidRuntimeReadyPayload(payload)) return;
     this.runtimeReady = true;
+    this.runtimeReadyPayload = payload;
+    this.runtimeInitFailure = null;
     this.flushPendingCommands();
     this.deps.onRuntimeReady?.(payload);
-    if (this.runtimeReadyResolve) {
-      this.runtimeReadyResolve(payload);
-      this.runtimeReadyResolve = null;
-    }
-    if (this.runtimeReadyTimeout) {
-      clearTimeout(this.runtimeReadyTimeout);
-      this.runtimeReadyTimeout = null;
-    }
+    this.resolveRuntimeReady(payload);
+  };
+
+  private readonly onRuntimeInitFailed = (
+    event: Electron.IpcMainEvent,
+    payload: RuntimeInitFailedPayload,
+  ): void => {
+    if (!this.isCurrentPetRenderer(event)) return;
+    if (!isValidRuntimeInitFailedPayload(payload)) return;
+    this.runtimeReady = false;
+    this.runtimeReadyPayload = null;
+    this.runtimeInitFailure = payload;
+    this.deps.onRuntimeInitFailed?.(payload);
+    this.rejectRuntimeReady(
+      new Error(`RUNTIME_INIT_FAILED: ${payload.reason}`),
+    );
   };
 
   private readonly onHitMask = (
@@ -446,6 +470,8 @@ export class AnimationIpcAdapter {
     this.registered = true;
     this.bootstrapped = false;
     this.runtimeReady = false;
+    this.runtimeReadyPayload = null;
+    this.runtimeInitFailure = null;
 
     const registry = PetResourceProtocolRegistry.getInstance();
     registry.setActiveInstallationResolver(() => {
@@ -471,6 +497,7 @@ export class AnimationIpcAdapter {
     ipcMain.on(ANIMATION_IPC_CHANNELS.sendHover, this.onSendHover);
     ipcMain.on(ANIMATION_IPC_CHANNELS.rendererBootstrapped, this.onRendererBootstrapped);
     ipcMain.on(ANIMATION_IPC_CHANNELS.runtimeReady, this.onRuntimeReady);
+    ipcMain.on(ANIMATION_IPC_CHANNELS.runtimeInitFailed, this.onRuntimeInitFailed);
     ipcMain.on(ANIMATION_IPC_CHANNELS.hitMask, this.onHitMask);
     ipcMain.on(ANIMATION_IPC_CHANNELS.dragStart, this.onDragStart);
     ipcMain.on(ANIMATION_IPC_CHANNELS.dragMove, this.onDragMove);
@@ -502,17 +529,23 @@ export class AnimationIpcAdapter {
     return this.runtimeReady;
   }
 
-  waitForRuntimeReady(timeoutMs: number = RUNTIME_READY_TIMEOUT_MS): Promise<RuntimeReadyPayload | null> {
-    if (this.runtimeReady) {
-      return Promise.resolve(null);
+  waitForRuntimeReady(timeoutMs: number = RUNTIME_READY_TIMEOUT_MS): Promise<RuntimeReadyPayload> {
+    if (this.runtimeReady && this.runtimeReadyPayload) {
+      return Promise.resolve(this.runtimeReadyPayload);
+    }
+    if (this.runtimeInitFailure) {
+      return Promise.reject(
+        new Error(`RUNTIME_INIT_FAILED: ${this.runtimeInitFailure.reason}`),
+      );
     }
     if (!this.runtimeReadyPromise) {
-      this.runtimeReadyPromise = new Promise<RuntimeReadyPayload | null>((resolve) => {
+      this.runtimeReadyPromise = new Promise<RuntimeReadyPayload>((resolve, reject) => {
         this.runtimeReadyResolve = resolve;
+        this.runtimeReadyReject = reject;
         this.runtimeReadyTimeout = setTimeout(() => {
-          this.runtimeReadyResolve = null;
-          this.runtimeReadyTimeout = null;
-          resolve(null);
+          this.rejectRuntimeReady(
+            new Error(`RUNTIME_READY_TIMEOUT: ${timeoutMs}ms`),
+          );
         }, timeoutMs);
       });
     }
@@ -522,13 +555,34 @@ export class AnimationIpcAdapter {
   resetRendererReady(): void {
     this.bootstrapped = false;
     this.runtimeReady = false;
+    this.runtimeReadyPayload = null;
+    this.runtimeInitFailure = null;
     this.cancelAllPendingCommands("renderer_reset");
+    this.rejectRuntimeReady(new Error("RUNTIME_READY_RESET"));
+  }
+
+  private resolveRuntimeReady(payload: RuntimeReadyPayload): void {
     if (this.runtimeReadyTimeout) {
       clearTimeout(this.runtimeReadyTimeout);
       this.runtimeReadyTimeout = null;
     }
+    const resolve = this.runtimeReadyResolve;
     this.runtimeReadyResolve = null;
+    this.runtimeReadyReject = null;
     this.runtimeReadyPromise = null;
+    resolve?.(payload);
+  }
+
+  private rejectRuntimeReady(error: Error): void {
+    if (this.runtimeReadyTimeout) {
+      clearTimeout(this.runtimeReadyTimeout);
+      this.runtimeReadyTimeout = null;
+    }
+    const reject = this.runtimeReadyReject;
+    this.runtimeReadyResolve = null;
+    this.runtimeReadyReject = null;
+    this.runtimeReadyPromise = null;
+    reject?.(error);
   }
 
   private cancelAllPendingCommands(reason: RendererDeliveryFailureReason): void {
@@ -696,6 +750,7 @@ export class AnimationIpcAdapter {
     ipcMain.removeListener(ANIMATION_IPC_CHANNELS.sendHover, this.onSendHover);
     ipcMain.removeListener(ANIMATION_IPC_CHANNELS.rendererBootstrapped, this.onRendererBootstrapped);
     ipcMain.removeListener(ANIMATION_IPC_CHANNELS.runtimeReady, this.onRuntimeReady);
+    ipcMain.removeListener(ANIMATION_IPC_CHANNELS.runtimeInitFailed, this.onRuntimeInitFailed);
     ipcMain.removeListener(ANIMATION_IPC_CHANNELS.hitMask, this.onHitMask);
     ipcMain.removeListener(ANIMATION_IPC_CHANNELS.dragStart, this.onDragStart);
     ipcMain.removeListener(ANIMATION_IPC_CHANNELS.dragMove, this.onDragMove);
@@ -706,13 +761,10 @@ export class AnimationIpcAdapter {
     this.powerMonitorListenersAttached = false;
     this.bootstrapped = false;
     this.runtimeReady = false;
+    this.runtimeReadyPayload = null;
+    this.runtimeInitFailure = null;
     this.cancelAllPendingCommands("renderer_reset");
-    if (this.runtimeReadyTimeout) {
-      clearTimeout(this.runtimeReadyTimeout);
-      this.runtimeReadyTimeout = null;
-    }
-    this.runtimeReadyResolve = null;
-    this.runtimeReadyPromise = null;
+    this.rejectRuntimeReady(new Error("RUNTIME_READY_UNREGISTERED"));
   }
 }
 

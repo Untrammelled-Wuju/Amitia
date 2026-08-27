@@ -7,8 +7,8 @@ import {
   type Display,
 } from "electron";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, stat, readdir } from "node:fs/promises";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
 import http from "node:http";
 import { URL } from "node:url";
 import { getAmitiaDataDir } from "../path-manager";
@@ -24,7 +24,7 @@ import { ResourceCache } from "./resource-cache";
 import type { PlaybackSnapshot } from "../../desktop-pet/animation/contracts";
 import { DesktopPetWindowAdapter } from "./window-adapter";
 import { AnimationIpcAdapter } from "./animation-ipc";
-import type { PetDragIpcPayload, PetHitMaskPayload, RuntimeReadyPayload } from "../../shared/animation-ipc";
+import type { PetDragIpcPayload, PetHitMaskPayload, RuntimeInitFailedPayload, RuntimeReadyPayload } from "../../shared/animation-ipc";
 import { AnimationPlayerBridge } from "./animation-player-bridge";
 import {
   DesktopPetActionScheduler,
@@ -102,6 +102,8 @@ const CORRUPTION_PACKAGE_HASH_MISMATCH = "CORRUPTION_PACKAGE_HASH_MISMATCH";
 const CORRUPTION_ACTION_CONFIG_INVALID = "CORRUPTION_ACTION_CONFIG_INVALID";
 
 const RECOVERY_DEBOUNCE_MS = 800;
+const RECOVERY_RETRY_MAX_ATTEMPTS = 3;
+const RECOVERY_RETRY_BASE_DELAY_MS = 1500;
 const RECOVERY_REASON_RENDER_RELOAD = "render-process-gone";
 const RECOVERY_REASON_WINDOW_CLOSED = "window-closed";
 const RECOVERY_REASON_GPU_CRASHED = "gpu-process-crashed";
@@ -111,7 +113,6 @@ const RECOVERY_REASON_DISPLAY_CHANGED = "display-changed";
 const RUNTIME_BRIDGE_WS_PATH = "/internal/desktop-pet/runtime/ws";
 const BRIDGE_RECONNECT_DELAY_MS = 2000;
 
-const HASH_EXCLUDED_FILES = new Set(["metadata.json", "integrity.json"]);
 
 export type PetManagerState =
   | "uninitialized"
@@ -386,11 +387,13 @@ export class DesktopPetManager {
   private runtimeStateSync: Promise<void> = Promise.resolve();
   private lifecycleMutationQueue: Promise<void> = Promise.resolve();
   private petInstances: PetInstanceSummary[] = [];
-  private rendererHealthy = true;
+  private rendererHealthy = false;
 
   private recoveryHandlersAttached = false;
   private recoveryInProgress = false;
   private recoveryDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryRetryCount = 0;
   private intentionalClose = false;
   private recoveryWindowCloseListener:
     | ((...args: unknown[]) => void)
@@ -606,9 +609,11 @@ export class DesktopPetManager {
     this.loadedInstallation = loaded;
     this.packageRevision += 1;
 
+    let backendEnableCommitted = false;
     try {
       if (notifyBackend) {
         await this.callEnableApi(installationId);
+        backendEnableCommitted = true;
       }
       this.markSettingsRevisionApplied(settings?.settingsRevision ?? 0);
       await this.startRuntime(installation, settings, loaded);
@@ -617,10 +622,21 @@ export class DesktopPetManager {
       this.setState("enabled", installationId);
     } catch (err) {
       this.petLogger.logRuntimeCrash("enableInstallation", err);
+      this.teardownRecoveryHandlers();
       try {
         await this.stopRuntime();
       } catch (stopErr) {
         this.petLogger.logRuntimeCrash("enableInstallation.stopRuntime", stopErr);
+      }
+      if (backendEnableCommitted) {
+        try {
+          await this.callDisableApi(installationId);
+        } catch (rollbackErr) {
+          this.petLogger.logRuntimeCrash(
+            "enableInstallation.rollbackBackendEnable",
+            rollbackErr,
+          );
+        }
       }
       this.activeInstallationId = null;
       this.activeInstallation = null;
@@ -709,8 +725,8 @@ export class DesktopPetManager {
     if (!target) return;
     const width = this.windowAdapter.getOptions().canvasWidth;
     const height = this.windowAdapter.getOptions().canvasHeight;
-    const x = target.workArea.x + target.workArea.width - width - 40;
-    const y = target.workArea.y + target.workArea.height - height - 40;
+    const x = (target.workArea.x - target.bounds.x) + target.workArea.width - width - 40;
+    const y = (target.workArea.y - target.bounds.y) + target.workArea.height - height - 40;
     await this.windowAdapter.setPosition(x, y, target.id);
   }
 
@@ -958,7 +974,7 @@ export class DesktopPetManager {
         releaseId: installation.currentReleaseId,
         installPath,
         manifestPath,
-        expectedContentRootHash: installation.installedContentHash,
+        expectedContentRootHash: installation.installedContentHash || installation.packageHash,
       };
       const loaded = await this.resourceLoader.loadInstallation(request);
       if (!loaded.defaultAction || !loaded.defaultAction.available) {
@@ -1013,9 +1029,13 @@ export class DesktopPetManager {
       position,
     };
 
-    this.rendererHealthy = true;
+    this.rendererHealthy = false;
     const windowAdapter = new DesktopPetWindowAdapter(windowOptions);
-    const win = await windowAdapter.create();
+    // Build and wire the entire main-process runtime before navigation. The
+    // renderer invokes animation IPC during its bootstrap, so loading it first
+    // creates a race where the initial snapshot request can arrive before the
+    // handlers exist.
+    const win = windowAdapter.createWindow();
 
     const windowCloseListener = (): void => {
       if (this.intentionalClose) return;
@@ -1043,7 +1063,7 @@ export class DesktopPetManager {
       getActiveInstallation: () => this.activeInstallation,
       getLoadedInstallation: () => this.loadedInstallation,
       getPackageRevision: () => this.packageRevision,
-      getPetWindow: () => this.windowAdapter?.getNativeWindow() ?? null,
+      getPetWindow: () => windowAdapter.getNativeWindow(),
       onPlaybackEvent: (event) => this.handlePlaybackEvent(event),
       onSnapshotUpdate: (snapshot) => this.handleSnapshotUpdate(snapshot),
       onClick: (x, y) => {
@@ -1063,6 +1083,7 @@ export class DesktopPetManager {
       onHitMask: (payload) => this.handleHitMask(payload),
       onRendererBootstrapped: () => this.handleRendererBootstrapped(),
       onRuntimeReady: (payload) => this.handleRuntimeReady(payload),
+      onRuntimeInitFailed: (payload) => this.handleRuntimeInitFailed(payload),
       onDeliveryFailed: (reason, command) =>
         this.handleDeliveryFailed(reason, command),
       onDragStart: (payload) => { this.vitalityController?.notifyInteraction("drag"); this.dragController?.handleDragStart(payload); },
@@ -1070,7 +1091,6 @@ export class DesktopPetManager {
       onDragEnd: (payload) => this.dragController?.handleDragEnd(payload),
       onDragCancel: (payload) => this.dragController?.handleDragCancel(payload),
     });
-    animationIpc.register();
 
     const actionPlayer = new AnimationPlayerBridge({
       onActionSwitch: (newKey, oldKey, playbackId) =>
@@ -1153,11 +1173,27 @@ export class DesktopPetManager {
 
     this.registerChatStateIpc();
 
+    // The IPC adapter must be live before the renderer is loaded. The initial
+    // package snapshot is durable inside the adapter and will be flushed after
+    // renderer bootstrap.
+    animationIpc.register();
     this.sendInitialPackageSnapshot();
+    await windowAdapter.loadRenderer();
+
+    const readyPayload = await animationIpc.waitForRuntimeReady();
+    if (
+      readyPayload.packageRevision !== this.packageRevision ||
+      readyPayload.packageId !== loaded.manifest.packageId
+    ) {
+      throw new Error(
+        `RUNTIME_READY_PACKAGE_MISMATCH: expected package=${loaded.manifest.packageId} revision=${this.packageRevision}, got package=${readyPayload.packageId} revision=${readyPayload.packageRevision}`,
+      );
+    }
 
     idleController.start();
     vitalityController.start();
     worldController.start();
+    windowAdapter.showWhenRuntimeReady();
   }
 
   private async stopRuntime(): Promise<void> {
@@ -1277,6 +1313,7 @@ export class DesktopPetManager {
     this.currentCommandId = null;
     this.playbackCommandIds.clear();
     this.playbackDecisionIds.clear();
+    this.rendererHealthy = false;
     this.intentionalClose = false;
   }
 
@@ -1508,7 +1545,7 @@ export class DesktopPetManager {
   }
 
   private handleRendererBootstrapped(): void {
-    this.rendererHealthy = true;
+    this.rendererHealthy = false;
     this.syncRuntimeState();
     this.petLogger.logWindowRecovered(
       "renderer-bootstrapped",
@@ -1524,11 +1561,19 @@ export class DesktopPetManager {
       return;
     }
     this.rendererHealthy = true;
-    this.windowAdapter?.showWhenRuntimeReady();
     this.syncRuntimeState();
     this.petLogger.logWindowRecovered(
       "runtime-ready",
       this.activeInstallationId ?? undefined,
+    );
+  }
+
+  private handleRuntimeInitFailed(payload: RuntimeInitFailedPayload): void {
+    this.rendererHealthy = false;
+    this.syncRuntimeState();
+    this.petLogger.logRuntimeCrash(
+      "renderer-runtime-init",
+      new Error(payload.reason),
     );
   }
 
@@ -1966,7 +2011,7 @@ export class DesktopPetManager {
         releaseId: installation.currentReleaseId,
         installPath,
         manifestPath,
-        expectedContentRootHash: installation.installedContentHash,
+        expectedContentRootHash: installation.installedContentHash || installation.packageHash,
       };
       loaded = await this.resourceLoader.loadInstallation(request);
     } catch (err) {
@@ -2002,6 +2047,19 @@ export class DesktopPetManager {
           detail: `默认动作丢失: ${message}`,
         };
       }
+      if (
+        message.includes("PACKAGE_HASH_MISMATCH") ||
+        message.includes("PACKAGE_MANIFEST_HASH_MISMATCH") ||
+        message.includes("PACKAGE_FILE_UNDECLARED") ||
+        message.includes("PACKAGE_RESOURCE_HASH_MISMATCH") ||
+        message.includes("FRAME_HASH_MISMATCH")
+      ) {
+        return {
+          corrupted: true,
+          errorCode: CORRUPTION_PACKAGE_HASH_MISMATCH,
+          detail: `Package v2 完整性校验失败: ${message}`,
+        };
+      }
       return {
         corrupted: true,
         errorCode: CORRUPTION_ACTION_CONFIG_INVALID,
@@ -2017,88 +2075,19 @@ export class DesktopPetManager {
       };
     }
 
-    const hashMatch = await this.verifyPackageHash(installation, installPath);
-    if (!hashMatch.ok) {
+    if (
+      installation.packageHash &&
+      installation.installedContentHash &&
+      installation.packageHash !== installation.installedContentHash
+    ) {
       return {
         corrupted: true,
         errorCode: CORRUPTION_PACKAGE_HASH_MISMATCH,
-        detail: hashMatch.detail,
+        detail: `安装记录哈希语义不一致 packageHash=${installation.packageHash.slice(0, 12)}... installedContentHash=${installation.installedContentHash.slice(0, 12)}...`,
       };
     }
 
     return { corrupted: false, errorCode: "", detail: "" };
-  }
-
-  private async verifyPackageHash(
-    installation: InstallationInfo,
-    installPath: string,
-  ): Promise<{ ok: boolean; detail: string }> {
-    if (!installation.packageHash) {
-      return { ok: true, detail: "" };
-    }
-    try {
-      const recomputed = await this.recomputePackageHash(installPath);
-      if (!recomputed) {
-        return { ok: true, detail: "hash 计算跳过" };
-      }
-      if (recomputed !== installation.packageHash) {
-        return {
-          ok: false,
-          detail: `packageHash 不一致 expected=${installation.packageHash.slice(0, 12)}... actual=${recomputed.slice(0, 12)}...`,
-        };
-      }
-    } catch (err) {
-      return {
-        ok: false,
-        detail: `hash 重算失败: ${this.errorMessage(err)}`,
-      };
-    }
-    return { ok: true, detail: "" };
-  }
-
-  private async recomputePackageHash(installPath: string): Promise<string> {
-    const files = await this.listInstallationFilesForHash(installPath);
-    files.sort();
-    const hasher = createHash("sha256");
-    for (const relPath of files) {
-      hasher.update(relPath);
-      hasher.update("\0");
-      const absPath = join(installPath, relPath);
-      const content = await readFile(absPath);
-      hasher.update(content);
-      hasher.update("\0");
-    }
-    return hasher.digest("hex");
-  }
-
-  private async listInstallationFilesForHash(
-    root: string,
-  ): Promise<string[]> {
-    const result: string[] = [];
-    const stack: string[] = [root];
-    while (stack.length > 0) {
-      const current = stack.pop() as string;
-      let entries: import("node:fs").Dirent[];
-      try {
-        entries = await readdir(current, { withFileTypes: true });
-      } catch {
-        continue;
-      }
-      for (const entry of entries) {
-        const entryName = entry.name;
-        if (entryName.startsWith(".")) continue;
-        const absPath = join(current, entryName);
-        if (entry.isDirectory()) {
-          stack.push(absPath);
-          continue;
-        }
-        if (!entry.isFile()) continue;
-        const rel = relative(root, absPath).split(sep).join("/");
-        if (HASH_EXCLUDED_FILES.has(rel)) continue;
-        result.push(rel);
-      }
-    }
-    return result;
   }
 
   private async handleCorruption(
@@ -2110,6 +2099,7 @@ export class DesktopPetManager {
       detection.errorCode,
       detection.detail,
     );
+    this.teardownRecoveryHandlers();
     try {
       await this.stopRuntime();
     } catch (err) {
@@ -2134,7 +2124,10 @@ export class DesktopPetManager {
   }
 
   private teardownRecoveryHandlers(): void {
-    if (!this.recoveryHandlersAttached) return;
+    if (!this.recoveryHandlersAttached) {
+      this.clearRecoveryTimers();
+      return;
+    }
     this.recoveryHandlersAttached = false;
     try {
       powerMonitor.off("resume", this.boundPowerResume);
@@ -2161,15 +2154,27 @@ export class DesktopPetManager {
     } catch {
       void 0;
     }
+    this.clearRecoveryTimers();
+    this.recoveryInProgress = false;
+  }
+
+  private clearRecoveryTimers(): void {
     if (this.recoveryDebounceTimer) {
       clearTimeout(this.recoveryDebounceTimer);
       this.recoveryDebounceTimer = null;
     }
-    this.recoveryInProgress = false;
+    if (this.recoveryRetryTimer) {
+      clearTimeout(this.recoveryRetryTimer);
+      this.recoveryRetryTimer = null;
+    }
+    this.recoveryRetryCount = 0;
   }
 
   private scheduleRecovery(reason: RecoveryReason): void {
-    if (!this.activeInstallationId || this.state !== "enabled") {
+    if (
+      !this.activeInstallationId ||
+      (this.state !== "enabled" && this.state !== "degraded")
+    ) {
       return;
     }
     if (this.recoveryDebounceTimer) {
@@ -2181,6 +2186,27 @@ export class DesktopPetManager {
     }, RECOVERY_DEBOUNCE_MS);
     if (typeof this.recoveryDebounceTimer.unref === "function") {
       this.recoveryDebounceTimer.unref();
+    }
+  }
+
+  private scheduleRecoveryRetry(reason: RecoveryReason): void {
+    if (
+      !this.activeInstallationId ||
+      this.recoveryRetryCount >= RECOVERY_RETRY_MAX_ATTEMPTS
+    ) {
+      return;
+    }
+    this.recoveryRetryCount += 1;
+    const delay = RECOVERY_RETRY_BASE_DELAY_MS * (2 ** (this.recoveryRetryCount - 1));
+    if (this.recoveryRetryTimer) {
+      clearTimeout(this.recoveryRetryTimer);
+    }
+    this.recoveryRetryTimer = setTimeout(() => {
+      this.recoveryRetryTimer = null;
+      void this.recoverRuntime(reason);
+    }, delay);
+    if (typeof this.recoveryRetryTimer.unref === "function") {
+      this.recoveryRetryTimer.unref();
     }
   }
 
@@ -2264,6 +2290,11 @@ export class DesktopPetManager {
       this.loadedInstallation = loaded;
       await this.startRuntime(installation, settings, loaded);
       this.setupRecoveryHandlers();
+      this.recoveryRetryCount = 0;
+      if (this.recoveryRetryTimer) {
+        clearTimeout(this.recoveryRetryTimer);
+        this.recoveryRetryTimer = null;
+      }
       this.petLogger.logWindowRecovered(reason, installationId);
       this.setState("enabled", installationId, `恢复完成 reason=${reason}`);
     } catch (err) {
@@ -2272,11 +2303,19 @@ export class DesktopPetManager {
         "[DesktopPetManager] 运行时恢复失败:",
         this.errorMessage(err),
       );
+      try {
+        await this.stopRuntime();
+      } catch (stopErr) {
+        this.petLogger.logRuntimeCrash("recoverRuntime.stopRuntime", stopErr);
+      }
+      this.activeInstallationId = installationId;
+      this.activeInstallation = installation;
       this.setState(
-        "ready",
+        "degraded",
         installationId,
         `恢复失败: ${this.errorMessage(err)}`,
       );
+      this.scheduleRecoveryRetry(reason);
     } finally {
       this.recoveryInProgress = false;
     }

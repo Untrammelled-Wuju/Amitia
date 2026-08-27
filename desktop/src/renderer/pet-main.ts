@@ -290,15 +290,17 @@ function attachDragListeners(api: PetAnimationApi): () => void {
 }
 
 async function main(): Promise<void> {
-  const canvas = document.getElementById("pet-canvas") as HTMLCanvasElement | null;
-  if (!canvas) {
-    console.error("[PetAnimation] canvas element not found");
-    return;
-  }
-
   const api = window.petAnimationApi;
   if (!api) {
     console.error("[PetAnimation] petAnimationApi not available");
+    return;
+  }
+
+  const canvas = document.getElementById("pet-canvas") as HTMLCanvasElement | null;
+  if (!canvas) {
+    const reason = "canvas element not found";
+    console.error(`[PetAnimation] ${reason}`);
+    api.sendRuntimeInitFailed({ reason });
     return;
   }
 
@@ -457,10 +459,24 @@ async function main(): Promise<void> {
       console.warn("[PetAnimation] no package snapshot available, waiting...");
     }
   } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
     console.error("[PetAnimation] initialization failed:", error);
+    api.sendRuntimeInitFailed({
+      reason: reason.slice(0, 2048),
+      packageRevision: currentPackageRevision || undefined,
+    });
   }
 }
 
 main().catch((error) => {
+  const reason = error instanceof Error ? error.message : String(error);
   console.error("[PetAnimation] uncaught error:", error);
+  try {
+    window.petAnimationApi?.sendRuntimeInitFailed({
+      reason: reason.slice(0, 2048),
+      packageRevision: currentPackageRevision || undefined,
+    });
+  } catch {
+    void 0;
+  }
 });
