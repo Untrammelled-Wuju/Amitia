@@ -1,12 +1,10 @@
 import type {
   RuntimeEnvelope,
-  HelloPayload,
   HelloAckPayload,
   CommandAckPayload,
   PlaybackEventPayload,
   StateSnapshotPayload,
   CommandStatus,
-  SessionStatus,
   RuntimeMessageType,
 } from "./protocol-v2";
 import {
@@ -46,6 +44,13 @@ export interface RuntimeEventContext {
   decisionId?: string;
 }
 
+export interface RuntimeResumeCursor {
+  lastAppliedDesiredRevision: number;
+  lastProcessedCommandSequence: number;
+  lastEventSequence: number;
+  actualStateHash?: string;
+}
+
 export interface RuntimeHandlerConfig {
   url: string;
   userId: string;
@@ -60,6 +65,7 @@ export interface RuntimeHandlerConfig {
   maxReconnectAttempts?: number;
   reconnectBaseDelayMs?: number;
   reconnectMaxDelayMs?: number;
+  resumeCursor?: Partial<RuntimeResumeCursor>;
 }
 
 export interface RuntimeHandlerHooks {
@@ -69,6 +75,7 @@ export interface RuntimeHandlerHooks {
   onError: (err: Error) => void;
   onDesiredSync: (revision: number) => void;
   onCommand: (command: unknown, envelope: RuntimeEnvelope) => Promise<RuntimeCommandExecutionResult>;
+  onCommandSettled?: (result: RuntimeCommandExecutionResult, envelope: RuntimeEnvelope) => void | Promise<void>;
 }
 
 export interface RuntimeCommandAttempt {
@@ -84,17 +91,27 @@ const DEFAULT_MAX_RECONNECT = 5;
 const DEFAULT_RECONNECT_BASE_MS = 1000;
 const DEFAULT_RECONNECT_MAX_MS = 30000;
 
+function sanitizeCursor(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
+}
+
 export class DesktopRuntimeHandlerV2 {
-  private readonly config: Required<RuntimeHandlerConfig>;
+  private readonly config: Required<Omit<RuntimeHandlerConfig, "resumeCursor">>;
   private readonly hooks: RuntimeHandlerHooks;
 
   private ws: WebSocket | null = null;
   private state: RuntimeHandlerState = "disconnected";
   private sessionId = "";
   private connectionGeneration = 0;
-  private eventSequence = 0;
-  private commandSequence = 0;
+  private outboundSequence = 0;
+  private lastEventSequence = 0;
+  private lastProcessedCommandSequence = 0;
   private lastAppliedDesiredRevision = 0;
+  private actualStateHash = "";
+  private lastReportedHealthStatus = "unknown";
+  private readonly trackedCommandSequences = new Map<string, number>();
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -129,6 +146,12 @@ export class DesktopRuntimeHandlerV2 {
       reconnectBaseDelayMs: config.reconnectBaseDelayMs ?? DEFAULT_RECONNECT_BASE_MS,
       reconnectMaxDelayMs: config.reconnectMaxDelayMs ?? DEFAULT_RECONNECT_MAX_MS,
     };
+    const resume = config.resumeCursor ?? {};
+    this.lastAppliedDesiredRevision = sanitizeCursor(resume.lastAppliedDesiredRevision);
+    this.lastProcessedCommandSequence = sanitizeCursor(resume.lastProcessedCommandSequence);
+    this.lastEventSequence = sanitizeCursor(resume.lastEventSequence);
+    this.outboundSequence = this.lastEventSequence;
+    this.actualStateHash = typeof resume.actualStateHash === "string" ? resume.actualStateHash : "";
     this.hooks = hooks;
   }
 
@@ -141,7 +164,28 @@ export class DesktopRuntimeHandlerV2 {
   }
 
   getEventSequence(): number {
-    return this.eventSequence;
+    return this.lastEventSequence;
+  }
+
+  getLastProcessedCommandSequence(): number {
+    return this.lastProcessedCommandSequence;
+  }
+
+  getLastAppliedDesiredRevision(): number {
+    return this.lastAppliedDesiredRevision;
+  }
+
+  getActualStateHash(): string {
+    return this.actualStateHash;
+  }
+
+  getResumeCursor(): RuntimeResumeCursor {
+    return {
+      lastAppliedDesiredRevision: this.lastAppliedDesiredRevision,
+      lastProcessedCommandSequence: this.lastProcessedCommandSequence,
+      lastEventSequence: this.lastEventSequence,
+      actualStateHash: this.actualStateHash || undefined,
+    };
   }
 
   getConnectionGeneration(): number {
@@ -265,6 +309,7 @@ export class DesktopRuntimeHandlerV2 {
       occurredAt: new Date().toISOString(),
     };
     await this.sendRuntimeEvent("runtime.playback.action_completed", payload);
+    this.markTrackedCommandProcessed(commandId);
   }
 
   async sendPlaybackInterrupted(
@@ -287,6 +332,7 @@ export class DesktopRuntimeHandlerV2 {
       occurredAt: new Date().toISOString(),
     };
     await this.sendRuntimeEvent("runtime.playback.action_interrupted", payload);
+    this.markTrackedCommandProcessed(commandId);
   }
 
   async sendPlaybackFailed(
@@ -309,18 +355,49 @@ export class DesktopRuntimeHandlerV2 {
       occurredAt: new Date().toISOString(),
     };
     await this.sendRuntimeEvent("runtime.playback.action_failed", payload);
+    this.markTrackedCommandProcessed(commandId);
   }
 
   async sendRendererState(snapshot: StateSnapshotPayload): Promise<void> {
-    await this.sendRuntimeEvent("runtime.state.snapshot", snapshot);
+    const normalized: StateSnapshotPayload = {
+      ...snapshot,
+      connectionGeneration: Math.max(1, this.connectionGeneration),
+      eventSequence: this.outboundSequence + 1,
+      appliedDesiredRevision: Math.max(snapshot.appliedDesiredRevision, this.lastAppliedDesiredRevision),
+      lastProcessedCommandSequence: Math.max(
+        snapshot.lastProcessedCommandSequence,
+        this.lastProcessedCommandSequence,
+      ),
+      actualStateHash: snapshot.actualStateHash || this.actualStateHash,
+      capturedAt: snapshot.capturedAt || new Date().toISOString(),
+    };
+    await this.sendRuntimeEvent("runtime.state.snapshot", normalized);
+    this.lastAppliedDesiredRevision = Math.max(
+      this.lastAppliedDesiredRevision,
+      normalized.appliedDesiredRevision,
+    );
+    this.lastProcessedCommandSequence = Math.max(
+      this.lastProcessedCommandSequence,
+      normalized.lastProcessedCommandSequence,
+    );
+    if (normalized.actualStateHash) {
+      this.actualStateHash = normalized.actualStateHash;
+    }
   }
 
   async sendRendererHealth(healthy: boolean, errorCode?: string): Promise<void> {
+    const currentStatus = healthy ? "healthy" : "failed";
+    if (currentStatus === this.lastReportedHealthStatus && !errorCode) {
+      return;
+    }
+    const previousStatus = this.lastReportedHealthStatus;
     await this.sendRuntimeEvent("runtime.health.changed", {
-      healthy,
-      errorCode,
-      occurredAt: new Date().toISOString(),
+      previousStatus,
+      currentStatus,
+      reason: errorCode || undefined,
+      changedAt: new Date().toISOString(),
     });
+    this.lastReportedHealthStatus = currentStatus;
   }
 
   isConnected(): boolean {
@@ -340,7 +417,7 @@ export class DesktopRuntimeHandlerV2 {
     if (!allowHandshake && this.state !== "connected") {
       throw new Error("runtime session not ready");
     }
-    this.commandSequence += 1;
+    this.outboundSequence += 1;
     const envelope = buildEnvelope(
       type,
       name,
@@ -349,12 +426,12 @@ export class DesktopRuntimeHandlerV2 {
       this.config.runtimeId,
       this.sessionId,
       Math.max(1, this.connectionGeneration),
-      this.commandSequence,
+      this.outboundSequence,
       payload,
     );
     ws.send(JSON.stringify(envelope));
     if (type === "runtime_event" || type === "command_ack") {
-      this.eventSequence = this.commandSequence;
+      this.lastEventSequence = this.outboundSequence;
     }
   }
 
@@ -373,6 +450,10 @@ export class DesktopRuntimeHandlerV2 {
 
     switch (envelope.messageType) {
       case "hello_ack":
+        this.connectionGeneration = Math.max(
+          this.connectionGeneration,
+          envelope.connectionGeneration,
+        );
         await this.handleHelloAck(envelope.payload as HelloAckPayload);
         break;
       case "command":
@@ -403,7 +484,6 @@ export class DesktopRuntimeHandlerV2 {
     }
 
     this.sessionId = ack.sessionId ?? "";
-    this.lastAppliedDesiredRevision = ack.currentDesiredRevision ?? 0;
     this.lastServerTime = ack.serverTime ?? "";
     this.reconnectAttempts = 0;
     this.setState("connected");
@@ -445,16 +525,42 @@ export class DesktopRuntimeHandlerV2 {
           result.errorMessage || "command execution failed",
         );
       } else {
-        await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, ackStatus);
+        await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "renderer_accepted");
+        if (ackStatus !== "renderer_accepted") {
+          await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, ackStatus);
+        }
       }
+      this.recordCommandResult(
+        command.commandId,
+        command.commandSequence ?? 0,
+        command.desiredRevision ?? 0,
+        result,
+        ackStatus,
+      );
+      await this.hooks.onCommandSettled?.(result, envelope);
     } catch (err) {
+      const failure: RuntimeCommandExecutionResult = {
+        commandId: command.commandId,
+        status: "failed",
+        errorCode: "RENDERER_REJECTED",
+        errorMessage: err instanceof Error ? err.message : String(err),
+        appliedRevision: 0,
+      };
       await this.sendCommandAck(
         command.commandId,
         command.commandSequence ?? 0,
         "failed_terminal",
-        "RENDERER_REJECTED",
-        err instanceof Error ? err.message : String(err),
+        failure.errorCode,
+        failure.errorMessage,
       );
+      this.recordCommandResult(
+        command.commandId,
+        command.commandSequence ?? 0,
+        command.desiredRevision ?? 0,
+        failure,
+        "failed_terminal",
+      );
+      await this.hooks.onCommandSettled?.(failure, envelope);
     }
   }
 
@@ -469,9 +575,6 @@ export class DesktopRuntimeHandlerV2 {
   }
 
   private handleStateSnapshot(snapshot: StateSnapshotPayload): void {
-    if (snapshot.eventSequence > this.eventSequence) {
-      this.eventSequence = snapshot.eventSequence;
-    }
     this.hooks.onEvent({
       envelopeVersion: 2,
       protocol: "amitia.desktop-pet.runtime",
@@ -483,7 +586,7 @@ export class DesktopRuntimeHandlerV2 {
       runtimeId: this.config.runtimeId,
       runtimeSessionId: this.sessionId,
       connectionGeneration: snapshot.connectionGeneration,
-      sequence: this.eventSequence,
+      sequence: snapshot.eventSequence,
       payloadSchemaVersion: 1,
       payloadHash: computePayloadHash(snapshot),
       sentAt: new Date().toISOString(),
@@ -529,6 +632,44 @@ export class DesktopRuntimeHandlerV2 {
       case "cancelled":
       default:
         return "failed_terminal";
+    }
+  }
+
+  private recordCommandResult(
+    commandId: string,
+    commandSequence: number,
+    desiredRevision: number,
+    result: RuntimeCommandExecutionResult,
+    ackStatus: CommandStatus,
+  ): void {
+    if (desiredRevision > 0 && (result.status === "applied" || result.status === "duplicate")) {
+      this.lastAppliedDesiredRevision = Math.max(
+        this.lastAppliedDesiredRevision,
+        desiredRevision,
+      );
+      this.hooks.onDesiredSync(this.lastAppliedDesiredRevision);
+    }
+
+    if (isCommandTerminal(ackStatus)) {
+      this.lastProcessedCommandSequence = Math.max(
+        this.lastProcessedCommandSequence,
+        commandSequence,
+      );
+      this.trackedCommandSequences.delete(commandId);
+      return;
+    }
+
+    if (commandId && commandSequence > 0) {
+      this.trackedCommandSequences.set(commandId, commandSequence);
+    }
+  }
+
+  private markTrackedCommandProcessed(commandId: string): void {
+    if (!commandId) return;
+    const seq = this.trackedCommandSequences.get(commandId);
+    if (typeof seq === "number") {
+      this.lastProcessedCommandSequence = Math.max(this.lastProcessedCommandSequence, seq);
+      this.trackedCommandSequences.delete(commandId);
     }
   }
 
@@ -581,8 +722,9 @@ export class DesktopRuntimeHandlerV2 {
       runtimeId: this.config.runtimeId,
       capabilities: this.runtimeCapabilitiesList(),
       lastAppliedDesiredRevision: this.lastAppliedDesiredRevision,
-      lastProcessedCommandSequence: this.commandSequence,
-      lastEventSequence: this.eventSequence,
+      lastProcessedCommandSequence: this.lastProcessedCommandSequence,
+      lastEventSequence: this.lastEventSequence,
+      actualStateHash: this.actualStateHash || undefined,
       runtimeVersion: this.config.runtimeVersion,
     });
     await this.sendEnvelope("hello", "hello", payload, true);
