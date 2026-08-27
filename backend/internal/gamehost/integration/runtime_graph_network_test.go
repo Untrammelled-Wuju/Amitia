@@ -9,6 +9,7 @@ import (
 func TestBuildPluginNetworkPolicyRestrictedIsHostMediated(t *testing.T) {
 	policy, err := buildPluginNetworkPolicy(&gameprotocol.PluginNetworkPolicy{
 		Mode: "restricted", AllowedDomains: []string{"api.example.com", "*.cdn.example.com"}, AllowedIPs: []string{"127.0.0.1"}, AllowedPorts: []int{443, 8443},
+		AllowedTransports: []string{"http", "tcp", "websocket"}, AllowHostLoopback: true, MaxConnections: 12,
 	}, []string{"service.network.request"})
 	if err != nil {
 		t.Fatal(err)
@@ -16,8 +17,8 @@ func TestBuildPluginNetworkPolicyRestrictedIsHostMediated(t *testing.T) {
 	if policy.AllowOutbound || policy.AllowInbound || policy.LoopbackOnly || !policy.RequireProxy || !policy.Enforce {
 		t.Fatalf("restricted policy grants ambient network access: %+v", policy)
 	}
-	if len(policy.AllowedDomains) != 2 || len(policy.AllowedIPs) != 1 || len(policy.AllowedPorts) != 2 {
-		t.Fatalf("restricted allowlist lost: %+v", policy)
+	if len(policy.AllowedDomains) != 2 || len(policy.AllowedIPs) != 1 || len(policy.AllowedPorts) != 2 || len(policy.AllowedTransports) != 3 || !policy.AllowHostLoopback || policy.MaxConnections != 12 {
+		t.Fatalf("restricted allowlist/transport policy lost: %+v", policy)
 	}
 }
 

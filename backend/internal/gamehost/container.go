@@ -19,6 +19,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
 	"github.com/u-ai/backend/internal/gamehost/permission"
+	"github.com/u-ai/backend/internal/gamehost/readiness"
 	"github.com/u-ai/backend/internal/gamehost/recovery"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	"github.com/u-ai/backend/internal/gamehost/resource"
@@ -46,6 +47,7 @@ type GameHostContainer struct {
 
 	RuntimeManager       *runtime.Manager
 	RuntimeTopologyStore *runtime.TopologyStore
+	RuntimeReadiness     *readiness.Resolver
 	RuntimeHealth        runtime.HealthAdapter
 	RuntimeExecutor      runtime.RuntimeExecutor
 	RuntimeProvisioner   *integration.RuntimeGraphProvisioner
@@ -73,6 +75,7 @@ type GameHostContainer struct {
 	HostAPIGateway           host_api.Gateway
 	HostAPIAdapter           *hostapi.HostAPIAdapter
 	HostAPIInvocationTracker *integration.HostAPIInvocationTracker
+	NetworkLifecycle         *hostapi.NetworkLifecycle
 
 	ResourceAdapter     resource.AdmissionAdapter
 	ResourceViewer      *resource.ResourcePolicyViewer
@@ -287,6 +290,12 @@ func (c *GameHostContainer) Shutdown(ctx context.Context) error {
 	}
 	if c.StartupGate != nil {
 		c.StartupGate.Close()
+	}
+	if c.ProcessExitBridge != nil {
+		c.ProcessExitBridge.UnregisterObserver()
+	}
+	if c.NetworkLifecycle != nil {
+		c.NetworkLifecycle.Shutdown()
 	}
 	if c.SecretLeaseAdapter != nil {
 		c.SecretLeaseAdapter.Shutdown()

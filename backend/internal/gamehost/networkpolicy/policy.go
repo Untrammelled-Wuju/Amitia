@@ -39,6 +39,9 @@ func Build(spec *gameprotocol.PluginNetworkPolicy, permissions []string) (truste
 		policy.AllowedDomains = append([]string(nil), spec.AllowedDomains...)
 		policy.AllowedIPs = append([]string(nil), spec.AllowedIPs...)
 		policy.AllowedPorts = append([]int(nil), spec.AllowedPorts...)
+		policy.AllowedTransports = append([]string(nil), spec.AllowedTransports...)
+		policy.AllowHostLoopback = spec.AllowHostLoopback
+		policy.MaxConnections = spec.MaxConnections
 	case "unrestricted":
 		if !containsPermission(permissions, "service.network.request") {
 			return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("%w: unrestricted outbound network requires service.network.request", ErrPermissionRequired)

@@ -42,6 +42,7 @@ func (g *networkTestGateway) ListMethods(context.Context) []kernelhostapi.Method
 
 type networkTestTopology struct {
 	serviceID    ghdomain.ServiceID
+	moduleID     string
 	definitionID string
 	err          error
 }
@@ -57,6 +58,15 @@ func (t networkTestTopology) ResolveDefinitionID(ghdomain.RuntimeInstanceID, ghd
 		return "", t.err
 	}
 	return t.definitionID, nil
+}
+func (t networkTestTopology) ResolveModuleID(ghdomain.RuntimeInstanceID, ghdomain.ServiceID) (string, error) {
+	if t.err != nil {
+		return "", t.err
+	}
+	if t.moduleID != "" {
+		return t.moduleID, nil
+	}
+	return "runtime-module", nil
 }
 
 type networkTestDefinitions struct {
@@ -86,7 +96,7 @@ func gameRuntimeIdentity() runtime_supervisor.RuntimeIdentity {
 
 func TestRegisterNetworkRouteGovernance(t *testing.T) {
 	gateway := &networkTestGateway{}
-	err := RegisterNetworkRoute(NetworkRouteDeps{
+	lifecycle, err := RegisterNetworkRouteWithLifecycle(NetworkRouteDeps{
 		Gateway:    gateway,
 		Topology:   networkTestTopology{serviceID: "runtime-service", definitionID: "definition-1"},
 		Supervisor: networkTestDefinitions{definition: restrictedTestDefinition()},
@@ -94,15 +104,24 @@ func TestRegisterNetworkRouteGovernance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	route, ok := gateway.QueryCapability(context.Background(), kernelhostapi.MethodNetworkRequest)
-	if !ok {
-		t.Fatal("host.network.request was not registered")
+	defer lifecycle.Shutdown()
+	methods := []kernelhostapi.Method{
+		kernelhostapi.MethodNetworkRequest,
+		kernelhostapi.MethodNetworkTCPOpen, kernelhostapi.MethodNetworkTCPRead, kernelhostapi.MethodNetworkTCPWrite, kernelhostapi.MethodNetworkTCPClose,
+		kernelhostapi.MethodNetworkUDPOpen, kernelhostapi.MethodNetworkUDPReceive, kernelhostapi.MethodNetworkUDPSend, kernelhostapi.MethodNetworkUDPClose,
+		kernelhostapi.MethodNetworkWebSocketOpen, kernelhostapi.MethodNetworkWebSocketReceive, kernelhostapi.MethodNetworkWebSocketSend, kernelhostapi.MethodNetworkWebSocketClose,
 	}
-	if len(route.Permission) != 1 || route.Permission[0].Name != "service.network.request" {
-		t.Fatalf("unexpected permission mapping: %+v", route.Permission)
-	}
-	if route.RiskLevel != kernelhostapi.RiskMedium || route.SideEffectLevel != kernelhostapi.SideEffectExternal {
-		t.Fatalf("unexpected route governance: risk=%s sideEffect=%s", route.RiskLevel, route.SideEffectLevel)
+	for _, method := range methods {
+		route, ok := gateway.QueryCapability(context.Background(), method)
+		if !ok {
+			t.Fatalf("%s was not registered", method)
+		}
+		if len(route.Permission) != 1 || route.Permission[0].Name != "service.network.request" {
+			t.Fatalf("%s unexpected permission mapping: %+v", method, route.Permission)
+		}
+		if route.RiskLevel != kernelhostapi.RiskMedium || route.SideEffectLevel != kernelhostapi.SideEffectExternal {
+			t.Fatalf("%s unexpected route governance: risk=%s sideEffect=%s", method, route.RiskLevel, route.SideEffectLevel)
+		}
 	}
 }
 

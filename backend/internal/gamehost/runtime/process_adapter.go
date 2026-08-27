@@ -180,5 +180,6 @@ func cloneServiceRuntimeDefinition(in *trusted_service.ServiceRuntimeDefinition)
 	out.Network.AllowedDomains = append([]string(nil), in.Network.AllowedDomains...)
 	out.Network.AllowedIPs = append([]string(nil), in.Network.AllowedIPs...)
 	out.Network.AllowedPorts = append([]int(nil), in.Network.AllowedPorts...)
+	out.Network.AllowedTransports = append([]string(nil), in.Network.AllowedTransports...)
 	return &out
 }

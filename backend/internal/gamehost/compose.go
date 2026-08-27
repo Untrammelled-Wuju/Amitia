@@ -30,6 +30,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
 	"github.com/u-ai/backend/internal/gamehost/permission"
+	"github.com/u-ai/backend/internal/gamehost/readiness"
 	"github.com/u-ai/backend/internal/gamehost/recovery"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	"github.com/u-ai/backend/internal/gamehost/resource"
@@ -247,6 +248,11 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		DescriptorProvider:     pluginReg,
 	})
 
+	runtimeReadiness, err := readiness.NewResolver(runtimeManager, topologyStore, connReg, handshakeMgr)
+	if err != nil {
+		return nil, fmt.Errorf("compose runtime readiness resolver: %w", err)
+	}
+
 	hostHandlers := rpc.NewHostHandlerRegistry()
 	rpcLifecycle := rpc.NewLifecycleManager(rpc.LifecycleManagerConfig{})
 
@@ -334,7 +340,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	}
 
 	topologyAdapter := integration.NewControlTopologyAdapter(topologyStore)
-	runtimeAdapter := integration.NewControlRuntimeAdapter(runtimeManager)
+	runtimeAdapter := integration.NewControlRuntimeAdapter(runtimeManager, runtimeReadiness)
 	hostPolicyAdapter := integration.NewControlHostPolicyAdapter(runtimeManager)
 
 	var auditSink control.AuthorityAuditSink
@@ -917,7 +923,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		return nil, fmt.Errorf("compose recovery coordinator: %w", err)
 	}
 
-	gameAgentBridge, err := agentbridge.NewRuntimeAdapter(pluginReg, runtimeManager, topologyStore, controlPlane)
+	gameAgentBridge, err := agentbridge.NewRuntimeAdapter(pluginReg, runtimeManager, topologyStore, controlPlane, runtimeReadiness)
 	if err != nil {
 		return nil, fmt.Errorf("compose game agent bridge: %w", err)
 	}
@@ -934,6 +940,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		ContributionSync:         contributionSync,
 		RuntimeManager:           runtimeManager,
 		RuntimeTopologyStore:     topologyStore,
+		RuntimeReadiness:         runtimeReadiness,
 		RuntimeHealth:            runtimeHealth,
 		RuntimeExecutor:          runtimeExecutor,
 		RuntimeProvisioner:       runtimeProvisioner,
@@ -1086,12 +1093,28 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	}
 	container.StartupRecovery = startupRecovery
 
+	var networkLifecycle *hostapi.NetworkLifecycle
+	networkLifecycleTransferred := false
+	defer func() {
+		if !networkLifecycleTransferred && networkLifecycle != nil {
+			networkLifecycle.Shutdown()
+		}
+	}()
 	if opts.HostAPIGateway != nil {
 		if opts.TrustedSupervisor != nil {
-			if err := hostapi.RegisterNetworkRoute(hostapi.NetworkRouteDeps{
+			registeredNetworkLifecycle, routeErr := hostapi.RegisterNetworkRouteWithLifecycle(hostapi.NetworkRouteDeps{
 				Gateway: opts.HostAPIGateway, Topology: topologyStore, Supervisor: opts.TrustedSupervisor,
-			}); err != nil {
-				return nil, fmt.Errorf("register GameHost restricted network Host API route: %w", err)
+			})
+			if routeErr != nil {
+				return nil, fmt.Errorf("register GameHost restricted network Host API route: %w", routeErr)
+			}
+			networkLifecycle = registeredNetworkLifecycle
+			container.NetworkLifecycle = registeredNetworkLifecycle
+			if serviceExecutor != nil {
+				if err := runtime.SetServiceStopObserver(serviceExecutor, registeredNetworkLifecycle); err != nil {
+					registeredNetworkLifecycle.Shutdown()
+					return nil, fmt.Errorf("wire GameHost network lifecycle to service executor: %w", err)
+				}
 			}
 		}
 
@@ -1171,10 +1194,18 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 				leaseAwareBridge.SetRuntimeGenerationLeaseRevoker(secretLifecycle)
 			}
 		}
+		if networkLifecycle != nil {
+			if networkAwareBridge, ok := exitBridge.(interface {
+				SetRuntimeGenerationNetworkCloser(runtime.RuntimeGenerationNetworkCloser)
+			}); ok {
+				networkAwareBridge.SetRuntimeGenerationNetworkCloser(networkLifecycle)
+			}
+		}
 		exitBridge.RegisterObserver()
 		container.ProcessExitBridge = exitBridge
 	}
 
+	networkLifecycleTransferred = true
 	return container, nil
 }
 

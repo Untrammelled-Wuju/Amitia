@@ -448,3 +448,44 @@ func TestDefinitionMapper_AllResourceLimitsAffectManifestHash(t *testing.T) {
 		})
 	}
 }
+
+func TestDefinitionMapper_MediatedNetworkPolicyAffectsManifestHash(t *testing.T) {
+	mapper := NewDefinitionMapper()
+	base := ServiceRuntimeView{
+		ExtensionID: "com.example.test",
+		ModuleID:    "svc",
+		RuntimeType: "service",
+		EntryPoint:  "./bin/svc",
+		Network: trusted_service.ServiceNetworkPolicy{
+			Mode: "restricted", Enforce: true, RequireProxy: true,
+			AllowedDomains: []string{"api.example.com"}, AllowedPorts: []int{443},
+		},
+	}
+	initial, err := mapper.MapToDefinition(base)
+	if err != nil {
+		t.Fatalf("base mapping error: %v", err)
+	}
+	cases := []struct {
+		name  string
+		apply func(*trusted_service.ServiceNetworkPolicy)
+	}{
+		{name: "transports", apply: func(v *trusted_service.ServiceNetworkPolicy) { v.AllowedTransports = []string{"https", "tcp"} }},
+		{name: "host loopback", apply: func(v *trusted_service.ServiceNetworkPolicy) { v.AllowHostLoopback = true }},
+		{name: "max connections", apply: func(v *trusted_service.ServiceNetworkPolicy) { v.MaxConnections = 8 }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			view := base
+			view.Network.AllowedDomains = append([]string(nil), base.Network.AllowedDomains...)
+			view.Network.AllowedPorts = append([]int(nil), base.Network.AllowedPorts...)
+			tc.apply(&view.Network)
+			def, err := mapper.MapToDefinition(view)
+			if err != nil {
+				t.Fatalf("mapping error: %v", err)
+			}
+			if def.ManifestHash == initial.ManifestHash {
+				t.Fatal("mediated network policy change must change manifest hash")
+			}
+		})
+	}
+}

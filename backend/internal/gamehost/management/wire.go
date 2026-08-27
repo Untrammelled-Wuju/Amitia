@@ -36,8 +36,8 @@ func NewProductionService(container *gamehost.GameHostContainer, kernel KernelMa
 		opts.Health = NewGameHostHealthAdapter(container.RuntimeHealth)
 	}
 
-	if container.ConnectionRegistry != nil {
-		opts.Connections = NewGameHostConnectionRegistry(container.ConnectionRegistry)
+	if container.RuntimeReadiness != nil {
+		opts.Readiness = container.RuntimeReadiness
 	}
 
 	if container.HandshakeManager != nil {

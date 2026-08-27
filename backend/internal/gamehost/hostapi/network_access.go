@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,6 +17,15 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 )
+
+var errNetworkPolicyDenied = errors.New("host-mediated network policy denied")
+
+func networkPolicyDenied(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%w: %v", errNetworkPolicyDenied, err)
+}
 
 const (
 	defaultNetworkResponseLimit int64 = 4 << 20
@@ -172,6 +182,9 @@ func (c *restrictedHTTPClient) validateURL(ctx context.Context, target *url.URL)
 	if scheme != "http" && scheme != "https" {
 		return fmt.Errorf("only http and https are allowed")
 	}
+	if !c.transportAllowed(scheme) {
+		return fmt.Errorf("network transport %q is not allowed", scheme)
+	}
 	host := strings.ToLower(strings.TrimSuffix(target.Hostname(), "."))
 	if host == "" {
 		return fmt.Errorf("destination host is required")
@@ -227,6 +240,13 @@ func (c *restrictedHTTPClient) dialContext(ctx context.Context, network, address
 // gap: a hostname may change between validation and connect, but every address
 // used for the socket must independently satisfy the current policy.
 func (c *restrictedHTTPClient) resolveAllowedAddresses(ctx context.Context, host string) ([]netip.Addr, error) {
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	if host == "host-loopback" {
+		if !c.policy.AllowHostLoopback {
+			return nil, fmt.Errorf("host-loopback destination is not allowed")
+		}
+		return []netip.Addr{netip.MustParseAddr("127.0.0.1"), netip.MustParseAddr("::1")}, nil
+	}
 	if literal, err := netip.ParseAddr(host); err == nil {
 		literal = literal.Unmap()
 		if literal.Zone() != "" || !c.ipAllowed(literal) {
@@ -305,6 +325,66 @@ func (c *restrictedHTTPClient) portAllowed(port int) bool {
 		}
 	}
 	return false
+}
+
+func (c *restrictedHTTPClient) transportAllowed(transport string) bool {
+	transport = strings.ToLower(strings.TrimSpace(transport))
+	if len(c.policy.AllowedTransports) == 0 {
+		// Compatibility for protocol-v1 restricted manifests created before
+		// mediated raw transports existed. They remain HTTP/HTTPS-only.
+		return transport == "http" || transport == "https"
+	}
+	for _, raw := range c.policy.AllowedTransports {
+		if strings.ToLower(strings.TrimSpace(raw)) == transport {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *restrictedHTTPClient) maxConnections() int {
+	if c.policy.MaxConnections > 0 {
+		return c.policy.MaxConnections
+	}
+	return 16
+}
+
+func (c *restrictedHTTPClient) resolveSocketAddresses(ctx context.Context, transport, target string, port int) ([]netip.Addr, error) {
+	transport = strings.ToLower(strings.TrimSpace(transport))
+	if !c.transportAllowed(transport) {
+		return nil, fmt.Errorf("network transport %q is not allowed", transport)
+	}
+	if port < 1 || port > 65535 || !c.portAllowed(port) {
+		return nil, fmt.Errorf("destination port %d is not allowed", port)
+	}
+	target = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(target), "."))
+	if target == "" {
+		return nil, fmt.Errorf("destination target is required")
+	}
+	return c.resolveAllowedAddresses(ctx, target)
+}
+
+func (c *restrictedHTTPClient) dialApproved(ctx context.Context, transport, network, target string, port int, timeout time.Duration) (net.Conn, error) {
+	addresses, err := c.resolveSocketAddresses(ctx, transport, target, port)
+	if err != nil {
+		return nil, networkPolicyDenied(err)
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	dialer := net.Dialer{Timeout: timeout, KeepAlive: 30 * time.Second}
+	var lastErr error
+	for _, addr := range addresses {
+		conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(addr.String(), strconv.Itoa(port)))
+		if dialErr == nil {
+			return conn, nil
+		}
+		lastErr = dialErr
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no approved destination address")
+	}
+	return nil, lastErr
 }
 
 func isPublicDestinationIP(ip net.IP) bool {
