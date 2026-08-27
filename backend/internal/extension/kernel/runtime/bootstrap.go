@@ -149,9 +149,9 @@ func HostAPIReplacements() []HostAPIReplacement {
 	return []HostAPIReplacement{
 		{
 			Category:     "network",
-			APIPath:      "host.network.request",
-			Description:  "HTTP/HTTPS 请求由宿主代理，执行域名约束、方法、Header、Secret、代理、TLS、响应大小、审计和取消",
-			DeniedNative: []string{"http", "https", "net", "dns"},
+			APIPath:      "host.network.*",
+			Description:  "HTTP/HTTPS/TCP/UDP/WebSocket 由宿主代理，执行 transport、目标、端口、DNS/IP、连接数、消息大小、审计和取消约束；本机游戏通过 host-loopback 抽象访问",
+			DeniedNative: []string{"http", "https", "net", "dns", "dgram", "websocket"},
 		},
 		{
 			Category:     "file",

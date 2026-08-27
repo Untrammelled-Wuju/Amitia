@@ -12,10 +12,29 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/agentbridge"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
+	"github.com/u-ai/backend/internal/gamehost/readiness"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
+
+type pipelineReadiness struct{}
+
+func (pipelineReadiness) Resolve(_ context.Context, runtimeID ghdomain.RuntimeInstanceID) (readiness.Snapshot, error) {
+	return readiness.Snapshot{
+		RuntimeID: runtimeID, Ready: true, Operational: true, Reason: readiness.ReasonReady,
+		Services: []readiness.ServiceSnapshot{
+			{ServiceID: "primary", Required: true, State: ghruntime.ServiceStateRunning, Connected: true, HandshakeReady: true, Ready: true},
+			{ServiceID: "secondary", Required: true, State: ghruntime.ServiceStateRunning, Connected: true, HandshakeReady: true, Ready: true},
+		},
+	}, nil
+}
+func (pipelineReadiness) IsReady(context.Context, ghdomain.RuntimeInstanceID) (bool, error) {
+	return true, nil
+}
+func (pipelineReadiness) IsServiceReady(context.Context, ghdomain.RuntimeInstanceID, ghdomain.ServiceID) (bool, error) {
+	return true, nil
+}
 
 type pipelineGameControlPlane struct {
 	lastPeer   ipc.Peer
@@ -71,6 +90,9 @@ func TestGameHostToolRunsThroughAgentExecutionPipeline(t *testing.T) {
 	if _, err := runtimes.AllocateGeneration(rt.ID); err != nil {
 		t.Fatal(err)
 	}
+	if err := runtimes.UpdateRuntimeState(rt.ID, ghdomain.RuntimeStateStarting, "test", time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	if err := runtimes.UpdateRuntimeState(rt.ID, ghdomain.RuntimeStateRunning, "test", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +106,7 @@ func TestGameHostToolRunsThroughAgentExecutionPipeline(t *testing.T) {
 	}
 
 	control := &pipelineGameControlPlane{}
-	gameAdapter, err := agentbridge.NewRuntimeAdapter(plugins, runtimes, topology, control)
+	gameAdapter, err := agentbridge.NewRuntimeAdapter(plugins, runtimes, topology, control, pipelineReadiness{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,36 +12,48 @@ type PermissionMappingEntry struct {
 
 func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 	return map[Method][]PermissionMappingEntry{
-		MethodStateGet:            {{PermissionID: "storage.state.read", Resource: "state"}},
-		MethodStateCAS:            {{PermissionID: "storage.state.write", Resource: "state"}},
-		MethodStateDelete:         {{PermissionID: "storage.state.write", Resource: "state"}},
-		MethodStateList:           {{PermissionID: "storage.state.read", Resource: "state"}},
-		MethodSecretGet:           {{PermissionID: "secret.read", Resource: "secret"}},
-		MethodResourceOpen:        {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodResourceRead:        {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodResourceWrite:       {{PermissionID: "resource.write", Resource: "resource"}},
-		MethodResourceClose:       {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodResourceStat:        {{PermissionID: "resource.read", Resource: "resource"}},
-		MethodEventEmit:           {{PermissionID: "event.emit", Resource: "event"}},
-		MethodEventSubscribe:      {{PermissionID: "event.subscribe", Resource: "event"}},
-		MethodEventUnsubscribe:    {{PermissionID: "event.subscribe", Resource: "event"}},
-		MethodScheduleCreate:      {{PermissionID: "schedule.create", Resource: "schedule"}},
-		MethodScheduleCancel:      {{PermissionID: "schedule.manage", Resource: "schedule"}},
-		MethodScheduleList:        {{PermissionID: "schedule.create", Resource: "schedule"}},
-		MethodToolExecute:         {{PermissionID: "tool.invoke", Resource: "tool"}},
-		MethodCharacterRead:       {{PermissionID: "character.read", Resource: "character"}},
-		MethodConversationRead:    {{PermissionID: "conversation.read", Resource: "conversation"}},
-		MethodMemoryQuery:         {{PermissionID: "memory.read", Resource: "memory"}},
-		MethodProviderInvoke:      {{PermissionID: "provider.invoke", Resource: "provider"}},
-		MethodUINotify:            {{PermissionID: "ui.notify", Resource: "ui"}},
-		MethodUIDialog:            {{PermissionID: "ui.dialog", Resource: "ui"}},
-		MethodUINavigate:          {{PermissionID: "ui.navigate", Resource: "ui"}},
-		MethodClipboardWrite:      {{PermissionID: "clipboard.write", Resource: "clipboard"}},
-		MethodClipboardRead:       {{PermissionID: "clipboard.read", Resource: "clipboard"}},
-		MethodRuntimeHealth:       {{PermissionID: "runtime.health.read", Resource: "runtime"}},
-		MethodNetworkRequest:      {{PermissionID: "service.network.request", Resource: "network"}},
-		MethodMigrationSQLExecute: {},
-		MethodMigrationSQLQuery:   {},
+		MethodStateGet:                {{PermissionID: "storage.state.read", Resource: "state"}},
+		MethodStateCAS:                {{PermissionID: "storage.state.write", Resource: "state"}},
+		MethodStateDelete:             {{PermissionID: "storage.state.write", Resource: "state"}},
+		MethodStateList:               {{PermissionID: "storage.state.read", Resource: "state"}},
+		MethodSecretGet:               {{PermissionID: "secret.read", Resource: "secret"}},
+		MethodResourceOpen:            {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceRead:            {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceWrite:           {{PermissionID: "resource.write", Resource: "resource"}},
+		MethodResourceClose:           {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodResourceStat:            {{PermissionID: "resource.read", Resource: "resource"}},
+		MethodEventEmit:               {{PermissionID: "event.emit", Resource: "event"}},
+		MethodEventSubscribe:          {{PermissionID: "event.subscribe", Resource: "event"}},
+		MethodEventUnsubscribe:        {{PermissionID: "event.subscribe", Resource: "event"}},
+		MethodScheduleCreate:          {{PermissionID: "schedule.create", Resource: "schedule"}},
+		MethodScheduleCancel:          {{PermissionID: "schedule.manage", Resource: "schedule"}},
+		MethodScheduleList:            {{PermissionID: "schedule.create", Resource: "schedule"}},
+		MethodToolExecute:             {{PermissionID: "tool.invoke", Resource: "tool"}},
+		MethodCharacterRead:           {{PermissionID: "character.read", Resource: "character"}},
+		MethodConversationRead:        {{PermissionID: "conversation.read", Resource: "conversation"}},
+		MethodMemoryQuery:             {{PermissionID: "memory.read", Resource: "memory"}},
+		MethodProviderInvoke:          {{PermissionID: "provider.invoke", Resource: "provider"}},
+		MethodUINotify:                {{PermissionID: "ui.notify", Resource: "ui"}},
+		MethodUIDialog:                {{PermissionID: "ui.dialog", Resource: "ui"}},
+		MethodUINavigate:              {{PermissionID: "ui.navigate", Resource: "ui"}},
+		MethodClipboardWrite:          {{PermissionID: "clipboard.write", Resource: "clipboard"}},
+		MethodClipboardRead:           {{PermissionID: "clipboard.read", Resource: "clipboard"}},
+		MethodRuntimeHealth:           {{PermissionID: "runtime.health.read", Resource: "runtime"}},
+		MethodNetworkRequest:          {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkTCPOpen:          {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkTCPRead:          {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkTCPWrite:         {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkTCPClose:         {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkUDPOpen:          {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkUDPReceive:       {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkUDPSend:          {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkUDPClose:         {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkWebSocketOpen:    {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkWebSocketReceive: {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkWebSocketSend:    {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodNetworkWebSocketClose:   {{PermissionID: "service.network.request", Resource: "network"}},
+		MethodMigrationSQLExecute:     {},
+		MethodMigrationSQLQuery:       {},
 	}
 }
 
@@ -111,7 +123,9 @@ func RouteRiskForMethod(method Method) RiskLevel {
 		return RiskMedium
 	case MethodToolExecute:
 		return RiskHigh
-	case MethodNetworkRequest:
+	case MethodNetworkRequest, MethodNetworkTCPOpen, MethodNetworkTCPRead, MethodNetworkTCPWrite, MethodNetworkTCPClose,
+		MethodNetworkUDPOpen, MethodNetworkUDPReceive, MethodNetworkUDPSend, MethodNetworkUDPClose,
+		MethodNetworkWebSocketOpen, MethodNetworkWebSocketReceive, MethodNetworkWebSocketSend, MethodNetworkWebSocketClose:
 		return RiskMedium
 	case MethodMigrationSQLExecute:
 		return RiskHigh
@@ -129,7 +143,9 @@ func RouteSideEffectForMethod(method Method) SideEffectLevel {
 		return SideEffectWrite
 	case MethodEventEmit:
 		return SideEffectWrite
-	case MethodToolExecute, MethodNetworkRequest:
+	case MethodToolExecute, MethodNetworkRequest, MethodNetworkTCPOpen, MethodNetworkTCPRead, MethodNetworkTCPWrite, MethodNetworkTCPClose,
+		MethodNetworkUDPOpen, MethodNetworkUDPReceive, MethodNetworkUDPSend, MethodNetworkUDPClose,
+		MethodNetworkWebSocketOpen, MethodNetworkWebSocketReceive, MethodNetworkWebSocketSend, MethodNetworkWebSocketClose:
 		return SideEffectExternal
 	case MethodMigrationSQLExecute:
 		return SideEffectWrite

@@ -152,16 +152,19 @@ type ServiceRuntimeDefinition struct {
 }
 
 type ServiceNetworkPolicy struct {
-	Mode           string   `json:"mode,omitempty"`
-	Enforce        bool     `json:"enforce,omitempty"`
-	AllowInbound   bool     `json:"allow_inbound"`
-	AllowOutbound  bool     `json:"allow_outbound"`
-	AllowedDomains []string `json:"allowed_domains,omitempty"`
-	AllowedIPs     []string `json:"allowed_ips,omitempty"`
-	AllowedPorts   []int    `json:"allowed_ports,omitempty"`
-	LoopbackOnly   bool     `json:"loopback_only"`
-	RequireProxy   bool     `json:"require_proxy"`
-	AuditAll       bool     `json:"audit_all"`
+	Mode              string   `json:"mode,omitempty"`
+	Enforce           bool     `json:"enforce,omitempty"`
+	AllowInbound      bool     `json:"allow_inbound"`
+	AllowOutbound     bool     `json:"allow_outbound"`
+	AllowedDomains    []string `json:"allowed_domains,omitempty"`
+	AllowedIPs        []string `json:"allowed_ips,omitempty"`
+	AllowedPorts      []int    `json:"allowed_ports,omitempty"`
+	AllowedTransports []string `json:"allowed_transports,omitempty"`
+	AllowHostLoopback bool     `json:"allow_host_loopback,omitempty"`
+	MaxConnections    int      `json:"max_connections,omitempty"`
+	LoopbackOnly      bool     `json:"loopback_only"`
+	RequireProxy      bool     `json:"require_proxy"`
+	AuditAll          bool     `json:"audit_all"`
 }
 
 type ServiceInstance struct {
