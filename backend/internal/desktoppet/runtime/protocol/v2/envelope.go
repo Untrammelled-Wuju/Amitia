@@ -1,19 +1,20 @@
 package v2
 
 import (
+	"github.com/u-ai/backend/internal/desktoppet/contracts"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 )
 
 var Descriptor = protocol.Descriptor{
 	Name:            "amitia.desktop-pet.runtime",
 	EnvelopeVersion: 2,
-	SchemaVersion:   "2.0.0",
+	SchemaVersion:   contracts.RuntimeContractVersion,
 }
 
 const (
 	EnvelopeVersion      = 2
 	ProtocolName         = "amitia.desktop-pet.runtime"
-	CurrentSchemaVersion = "2.0.0"
+	CurrentSchemaVersion = contracts.RuntimeContractVersion
 )
 
 type MessageType = protocol.MessageType

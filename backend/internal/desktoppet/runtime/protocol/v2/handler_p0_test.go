@@ -22,6 +22,38 @@ func newHandlerP0DB(t *testing.T) (*gorm.DB, *Services, *Handler) {
 	return db, services, NewHandler(services)
 }
 
+func TestHandleHelloRejectsUnsupportedRuntimeContractBeforeSessionAcquire(t *testing.T) {
+	db, _, handler := newHandlerP0DB(t)
+	conn := &Connection{
+		ID:        "conn-version-gate",
+		UserID:    "user-version-gate",
+		DeviceID:  "device-version-gate",
+		RuntimeID: "runtime-version-gate",
+		State:     ConnStateHandshake,
+	}
+	payload := &HelloPayload{
+		RuntimeVersion:         "2.0.0",
+		RuntimeContractVersion: "3.0.0",
+		DeviceID:               conn.DeviceID,
+		RuntimeID:              conn.RuntimeID,
+	}
+
+	if _, err := handler.HandleHello(conn, payload); err == nil {
+		t.Fatal("expected unsupported runtime contract to be rejected")
+	}
+
+	var sessions int64
+	if err := db.Model(&RuntimeSession{}).Count(&sessions).Error; err != nil {
+		t.Fatal(err)
+	}
+	if sessions != 0 {
+		t.Fatalf("unsupported hello must not create a runtime session, got %d", sessions)
+	}
+	if conn.SessionIDValue() != "" || conn.GetState() != ConnStateHandshake {
+		t.Fatalf("unsupported hello mutated connection state: session=%q state=%s", conn.SessionIDValue(), conn.GetState())
+	}
+}
+
 func TestHandlerCommandAckUsesRuntimeEnvelopeSequenceAndTerminalStatus(t *testing.T) {
 	db, services, handler := newHandlerP0DB(t)
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")

@@ -47,9 +47,24 @@ func TestRuntimeCompatibilityInvalidSemVerIsHardError(t *testing.T) {
 }
 
 func TestParseSemVerRejectsNegativeAndMalformedValues(t *testing.T) {
-	for _, value := range []string{"", "1", "1.x.0", "-1.2.3", "1.2.3.4.5"} {
+	for _, value := range []string{"", "1", "1.2", "1.x.0", "01.2.3", "1.2.03", "1.2.3.4", "-1.2.3", "1.2.3.4.5", "1.2.3-01", "1.2.3+"} {
 		if got := parseSemVer(value); got != nil {
 			t.Fatalf("parseSemVer(%q)=%v, want nil", value, got)
 		}
+	}
+}
+
+func TestCompareSemVerHonorsPrereleaseOrdering(t *testing.T) {
+	alpha := parseSemVer("2.0.0-alpha.1")
+	releaseVersion := parseSemVer("2.0.0")
+	buildMetadata := parseSemVer("2.0.0+build.7")
+	if alpha == nil || releaseVersion == nil || buildMetadata == nil {
+		t.Fatal("expected valid strict SemVer values")
+	}
+	if compareSemVer(alpha, releaseVersion) >= 0 {
+		t.Fatal("prerelease must sort before the final release")
+	}
+	if compareSemVer(releaseVersion, buildMetadata) != 0 {
+		t.Fatal("build metadata must not affect precedence")
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/desktoppet/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	"gorm.io/gorm"
 )
@@ -459,7 +460,7 @@ func (s *service) createSnapshot(ctx context.Context, req *BuildReleaseRequest, 
 		ExcludedActionsJSON:    "[]",
 		ActionSnapshotsJSON:    "[]",
 		PackageSchemaVersion:   packageformat.ManifestSchemaVersion,
-		RuntimeContractVersion: "1.0.0",
+		RuntimeContractVersion: contracts.RuntimeContractVersion,
 		InputHash:              s.computeInputHash(req, op.IdempotencyKey),
 		CreatedAt:              now,
 	}
@@ -530,7 +531,7 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 	}
 	manifest.Author = packageformat.ManifestAuthor{Name: "Amitia User", ID: record.OwnerUserID}
 	manifest.License = packageformat.ManifestLicense{SPDX: "AGPL-3.0-only"}
-	manifest.Compatibility = packageformat.ManifestCompatibility{MinRuntimeVersion: "1.0.0", RenderMode: packageformat.RenderModeSprite}
+	manifest.Compatibility = packageformat.ManifestCompatibility{MinRuntimeVersion: contracts.RuntimeVersion, RenderMode: packageformat.RenderModeSprite}
 	manifest.Binding = packageformat.ManifestBinding{Policy: packageformat.BindingPolicyBound, SourceCharacterID: identity.SourceCharacterID}
 	manifest.Canvas.CoordinateSystem = packageformat.CoordinateSystemTopLeft
 	manifest.Capabilities = packageformat.ManifestCapabilities{TransparentBackground: true, FrameSequence: true, PerFrameDuration: true, Audio: false}
