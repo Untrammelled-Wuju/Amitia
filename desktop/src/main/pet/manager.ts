@@ -355,6 +355,8 @@ export class DesktopPetManager {
   private currentDragId: string | null = null;
   private currentPlaybackId: string | null = null;
   private currentCommandId: string | null = null;
+  private readonly playbackCommandIds = new Map<string, string>();
+  private readonly playbackDecisionIds = new Map<string, string>();
   private lastAppliedDesiredRevision = 0;
   private petInstances: PetInstanceSummary[] = [];
   private rendererHealthy = true;
@@ -1174,6 +1176,10 @@ export class DesktopPetManager {
     this.clickThroughController = null;
     this.loadedInstallation = null;
     this.currentActionKey = null;
+    this.currentPlaybackId = null;
+    this.currentCommandId = null;
+    this.playbackCommandIds.clear();
+    this.playbackDecisionIds.clear();
     this.intentionalClose = false;
   }
 
@@ -1231,38 +1237,96 @@ export class DesktopPetManager {
     }
   }
 
+  private runtimeEventContext(decisionId = ""): {
+    installationId: string;
+    characterId: string;
+    petInstanceId: string;
+    decisionId?: string;
+  } {
+    const context: {
+      installationId: string;
+      characterId: string;
+      petInstanceId: string;
+      decisionId?: string;
+    } = {
+      installationId: this.activeInstallationId ?? this.activeInstallation?.id ?? "",
+      characterId: this.activeInstallation?.characterId ?? this.loadedInstallation?.characterId ?? "",
+      petInstanceId: getRuntimeId(),
+    };
+    if (decisionId) {
+      context.decisionId = decisionId;
+    }
+    return context;
+  }
+
   private handlePlaybackEvent(event: { type: string; actionKey?: string; reason?: string; playbackInstanceId?: string; frameIndex?: number }): void {
     if (this.actionPlayer && this.actionPlayer instanceof AnimationPlayerBridge) {
       this.actionPlayer.handlePlaybackEvent(event);
     }
+
+    const playbackId = event.playbackInstanceId ?? this.currentPlaybackId ?? "";
+    const commandId = playbackId
+      ? (this.playbackCommandIds.get(playbackId) ?? "")
+      : (this.currentCommandId ?? "");
+    const decisionId = (playbackId ? this.playbackDecisionIds.get(playbackId) : undefined)
+      ?? this.scheduler?.getCurrent()?.metadata?.runtimeDecisionId
+      ?? "";
+    const context = this.runtimeEventContext(decisionId);
+
     switch (event.type) {
       case "playback.action_started":
-        if (event.actionKey) {
+        if (playbackId && commandId) {
           void this.runtimeHandler?.sendPlaybackStarted(
-            this.currentPlaybackId ?? "",
-            this.currentCommandId ?? "",
+            playbackId,
+            commandId,
+            event.actionKey ?? "",
+            context,
           );
         }
         break;
       case "playback.action_completed":
-        void this.runtimeHandler?.sendPlaybackEnded(
-          this.currentPlaybackId ?? "",
-          this.currentCommandId ?? "",
-          event.actionKey ?? "",
-          0,
-          "completed",
-        );
+        if (commandId) {
+          void this.runtimeHandler?.sendPlaybackEnded(
+            playbackId,
+            commandId,
+            event.actionKey ?? "",
+            0,
+            "natural_end",
+            context,
+          );
+        }
+        if (playbackId) {
+          this.playbackCommandIds.delete(playbackId);
+          this.playbackDecisionIds.delete(playbackId);
+          if (this.currentPlaybackId === playbackId) {
+            this.currentPlaybackId = null;
+          }
+        }
+        if (this.currentCommandId === commandId) {
+          this.currentCommandId = null;
+        }
         break;
       case "playback.action_interrupted":
-        void this.runtimeHandler?.sendRuntimeEvent("playback.interrupted", {
-          actionKey: event.actionKey ?? "",
-          playbackInstanceId: this.currentPlaybackId ?? "",
-          commandId: this.currentCommandId ?? undefined,
-          interruptReason: "higher_priority_action",
-          frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
-          cycleIndex: this.actionPlayer?.getLoopCount() ?? 0,
-          interruptedAt: new Date().toISOString(),
-        });
+        if (commandId) {
+          void this.runtimeHandler?.sendPlaybackInterrupted(
+            playbackId,
+            commandId,
+            event.actionKey ?? "",
+            0,
+            event.reason ?? "higher_priority_action",
+            context,
+          );
+        }
+        if (playbackId) {
+          this.playbackCommandIds.delete(playbackId);
+          this.playbackDecisionIds.delete(playbackId);
+          if (this.currentPlaybackId === playbackId) {
+            this.currentPlaybackId = null;
+          }
+        }
+        if (this.currentCommandId === commandId) {
+          this.currentCommandId = null;
+        }
         break;
       case "playback.action_failed":
         console.warn(
@@ -1270,13 +1334,26 @@ export class DesktopPetManager {
           event.actionKey,
           event.reason,
         );
-        void this.runtimeHandler?.sendPlaybackFailed(
-          this.currentPlaybackId ?? "",
-          this.currentCommandId ?? "",
-          event.actionKey ?? "",
-          event.reason ?? "playback_failed",
-          "playback execution failed",
-        );
+        if (commandId) {
+          void this.runtimeHandler?.sendPlaybackFailed(
+            playbackId,
+            commandId,
+            event.actionKey ?? "",
+            event.reason ?? "playback_failed",
+            "playback execution failed",
+            context,
+          );
+        }
+        if (playbackId) {
+          this.playbackCommandIds.delete(playbackId);
+          this.playbackDecisionIds.delete(playbackId);
+          if (this.currentPlaybackId === playbackId) {
+            this.currentPlaybackId = null;
+          }
+        }
+        if (this.currentCommandId === commandId) {
+          this.currentCommandId = null;
+        }
         break;
     }
   }
@@ -1337,7 +1414,10 @@ export class DesktopPetManager {
   }
 
   private handleClick(x: number, y: number): void {
-    void this.runtimeHandler?.sendRuntimeEvent("click.reported", {
+    void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.clicked", {
+      ...this.runtimeEventContext(),
+      gestureId: randomUUID(),
+      sequence: Date.now(),
       button: "left",
       clickCount: 1,
       canvasX: x,
@@ -1346,11 +1426,15 @@ export class DesktopPetManager {
       screenY: y,
       frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
       actionKey: this.currentActionKey ?? "",
+      occurredAt: new Date().toISOString(),
     });
   }
 
   private handleDoubleClick(x: number, y: number): void {
-    void this.runtimeHandler?.sendRuntimeEvent("click.reported", {
+    void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.double_clicked", {
+      ...this.runtimeEventContext(),
+      gestureId: randomUUID(),
+      sequence: Date.now(),
       button: "left",
       clickCount: 2,
       canvasX: x,
@@ -1359,15 +1443,20 @@ export class DesktopPetManager {
       screenY: y,
       frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
       actionKey: this.currentActionKey ?? "",
+      occurredAt: new Date().toISOString(),
     });
   }
 
   private handleHover(x: number, y: number): void {
-    void this.runtimeHandler?.sendRuntimeEvent("hover.moved", {
+    void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.hovered", {
+      ...this.runtimeEventContext(),
+      gestureId: randomUUID(),
+      sequence: Date.now(),
       x,
       y,
       actionKey: this.currentActionKey ?? "",
       frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
+      occurredAt: new Date().toISOString(),
     });
   }
 
@@ -1375,6 +1464,15 @@ export class DesktopPetManager {
     this.currentActionKey = newKey;
     if (playbackId) {
       this.currentPlaybackId = playbackId;
+      const request = this.scheduler?.getCurrent();
+      const commandId = request?.metadata?.runtimeCommandId ?? "";
+      const decisionId = request?.metadata?.runtimeDecisionId ?? "";
+      if (commandId) {
+        this.playbackCommandIds.set(playbackId, commandId);
+      }
+      if (decisionId) {
+        this.playbackDecisionIds.set(playbackId, decisionId);
+      }
     }
     this.petLogger.logActionSwitch(newKey, oldKey, "scheduler");
   }
@@ -1384,6 +1482,10 @@ export class DesktopPetManager {
     request: DesktopPetActionRequest,
     action: RuntimeAction | null,
   ): void {
+    if (event === "action-started") {
+      this.currentCommandId = request.metadata?.runtimeCommandId ?? null;
+      return;
+    }
     if (event === "action-rejected") {
       console.warn(
         "[DesktopPetManager] 动作请求被拒绝:",
@@ -1421,25 +1523,33 @@ export class DesktopPetManager {
       this.worldController?.setDragging(true);
       this.currentDragId = randomUUID();
       this.petLogger.logDragStart(this.activeInstallationId ?? undefined);
-      void this.runtimeHandler?.sendRuntimeEvent("drag.started", {
+      void this.runtimeHandler?.sendRuntimeEvent("runtime.drag.started", {
+        ...this.runtimeEventContext(),
+        gestureId: this.currentDragId,
+        sequence: Date.now(),
         dragId: this.currentDragId,
         startX: state.startX,
         startY: state.startY,
         currentX: state.currentX,
         currentY: state.currentY,
         displayId: state.startScreenId,
+        occurredAt: new Date().toISOString(),
       });
     } else if (event === "drag-end") {
       this.worldController?.setDragging(false);
       this.worldController?.onDrop();
       this.petLogger.logDragEnd(this.activeInstallationId ?? undefined);
-      void this.runtimeHandler?.sendRuntimeEvent("drag.completed", {
+      void this.runtimeHandler?.sendRuntimeEvent("runtime.drag.completed", {
+        ...this.runtimeEventContext(),
+        gestureId: this.currentDragId ?? "",
+        sequence: Date.now(),
         dragId: this.currentDragId ?? "",
         startX: state.startX,
         startY: state.startY,
         currentX: state.currentX,
         currentY: state.currentY,
         displayId: state.currentScreenId,
+        occurredAt: new Date().toISOString(),
       });
       this.currentDragId = null;
       void this.persistRuntimePosition();
@@ -2394,6 +2504,9 @@ export class DesktopPetManager {
             decisionId?: string;
             semantic?: string;
             reasonCode?: string;
+            characterId?: string;
+            petInstanceId?: string;
+            installationId?: string;
             settings?: {
               alwaysOnTop?: boolean;
               scale?: number;
@@ -2508,9 +2621,13 @@ export class DesktopPetManager {
                   minimumPlayMs: String(cmd.payload?.minimumPlayMs ?? 0),
                   maximumPlayMs: String(cmd.payload?.maximumPlayMs ?? 0),
                   returnTo: cmd.payload?.returnTo ?? "default",
+                  runtimeCommandId: commandId,
+                  runtimeDecisionId: cmd.payload?.decisionId ?? "",
+                  runtimeInstallationId: cmd.payload?.installationId ?? this.activeInstallationId ?? "",
+                  runtimeCharacterId: cmd.payload?.characterId ?? this.activeInstallation?.characterId ?? "",
+                  runtimePetInstanceId: cmd.payload?.petInstanceId ?? getRuntimeId(),
                 },
               };
-              this.currentCommandId = commandId;
               this.applyVitalityForBehaviorSemantic(semantic);
               const scheduleResult = this.scheduler.submit(request);
               if (scheduleResult === "rejected") {
@@ -2524,7 +2641,7 @@ export class DesktopPetManager {
               }
               return {
                 commandId,
-                status: "applied",
+                status: "accepted",
                 errorCode: "",
                 errorMessage: "",
                 appliedRevision: desiredRevision,

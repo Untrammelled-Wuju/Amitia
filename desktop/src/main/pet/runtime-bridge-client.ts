@@ -310,9 +310,9 @@ export class RuntimeBridgeClient {
 
   reportClick(payload: ClickPayload): void {
     if (!this.handler?.isConnected()) return;
-    const clickType = payload.clickCount >= 2 ? "desktop.pet.double_clicked" : "desktop.pet.clicked";
+    const clickType = payload.clickCount >= 2 ? "runtime.pointer.double_clicked" : "runtime.pointer.clicked";
     void this.handler.sendRendererHealth(this.rendererHealthy).catch(() => {});
-    void this.sendEvent("interaction.click", {
+    void this.sendEvent(clickType, {
       button: payload.button,
       clickCount: payload.clickCount,
       canvasX: payload.canvasX,
@@ -328,7 +328,16 @@ export class RuntimeBridgeClient {
 
   reportDrag(payload: DragPayload): void {
     if (!this.handler?.isConnected()) return;
-    void this.sendEvent("interaction.drag", {
+    const eventName = payload.phase === "started"
+      ? "runtime.drag.started"
+      : payload.phase === "moved"
+        ? "runtime.drag.moved"
+        : payload.phase === "cancelled"
+          ? "runtime.drag.cancelled"
+          : "runtime.drag.completed";
+    void this.sendEvent(eventName, {
+      gestureId: payload.dragId,
+      sequence: Date.now(),
       dragId: payload.dragId,
       phase: payload.phase,
       startX: payload.startX,
@@ -349,6 +358,7 @@ export class RuntimeBridgeClient {
       void this.handler.sendPlaybackStarted(
         payload.playbackId,
         payload.commandId ?? "",
+        payload.actionKey,
       ).catch(() => {});
     } else if (payload.completedAt) {
       void this.handler.sendPlaybackEnded(
@@ -359,12 +369,12 @@ export class RuntimeBridgeClient {
         "natural_end",
       ).catch(() => {});
     } else if (payload.interruptReason) {
-      void this.handler.sendPlaybackEnded(
+      void this.handler.sendPlaybackInterrupted(
         payload.playbackId,
         payload.commandId ?? "",
         payload.actionKey,
         0,
-        "interrupted",
+        payload.interruptReason,
       ).catch(() => {});
     } else if (payload.errorCode) {
       void this.handler.sendPlaybackFailed(
