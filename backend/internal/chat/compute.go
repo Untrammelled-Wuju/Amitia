@@ -43,6 +43,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	if requestID == "" {
 		requestID = uuid.New().String()
 	}
+	req.RequestID = requestID
 	channel := strings.TrimSpace(req.Channel)
 	if channel == "" {
 		channel = "web"
@@ -156,6 +157,9 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			"status":          "processing",
 		}, "process message user message reused")
 	}
+
+	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "message.received", 1)
+	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "context.loading", 2)
 
 	cfg, err := s.repo.GetActiveModel()
 	if err != nil {
@@ -394,10 +398,13 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			}, nil
 		}
 	}
+	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.started", 3)
 	reply, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.UserID, req.SessionID, req.ExecContext, toolDefs, seenTools, toolExecCtx)
 	if llmErr != nil {
+		s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.failed", 4)
 		return nil, llmErr
 	}
+	s.emitDesktopPetChat(ctx, req, charID, convID, userMsgID, "response.ready", 4)
 	if reply == "" {
 		applog.TraceWarn(trace.WithStage("reply_fallback"), nil, "process message reply fallback")
 		reply = "操作已完成"
