@@ -3,6 +3,7 @@
 package realtime
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -64,6 +65,8 @@ func HandleSession(c *gin.Context) {
 
 	conversationId := c.Query("conversationId")
 	dialogId := c.Query("dialogId")
+	desktopPetCharacterID := ""
+	desktopPetUserID := ""
 
 	systemRole := ""
 	botName := "AI"
@@ -71,6 +74,17 @@ func HandleSession(c *gin.Context) {
 		var conv struct{ CID string }
 		dbInstance.Table("conversations").Where("id = ?", conversationId).Select("character_id as cid").First(&conv)
 		if conv.CID != "" {
+			desktopPetCharacterID = conv.CID
+			var activePet struct {
+				UserID string `gorm:"column:user_id"`
+			}
+			dbInstance.Table("desktop_pet_installations").
+				Where("character_id = ? AND is_active = 1", conv.CID).
+				Order("updated_at DESC").
+				Select("user_id").
+				First(&activePet)
+			desktopPetUserID = activePet.UserID
+
 			var ch struct{ N, SP, SS, VT, CVID, VM string }
 			dbInstance.Table("characters").Where("id = ?", conv.CID).Select("name as n, character_base as sp, speaking_style as ss, voice_type as vt, custom_voice_id as cvid, voice_mode as vm").First(&ch)
 			if ch.VM == "clone" && ch.CVID != "" {
@@ -131,7 +145,15 @@ func HandleSession(c *gin.Context) {
 	appLog.Info("volc dial success, sending StartConnection...")
 
 	sessID := uuid.New().String()
-
+	desktopPetVoiceSession := &ContinuousVoiceSession{
+		SessionID:      sessID,
+		ConversationID: conversationId,
+		CharacterID:    desktopPetCharacterID,
+		UserID:         desktopPetUserID,
+		CurrentTurnID:  "turn-" + sessID,
+		State:          ContinuousVoiceSessionStatusListening,
+		LastActivityAt: time.Now(),
+	}
 	connFrame := buildEventFrame(MsgTypeFullClient, EvtStartConnection, "", []byte("{}"))
 	if err := volcanoConn.WriteMessage(websocket.BinaryMessage, connFrame); err != nil {
 		browserConn.WriteJSON(gin.H{"event": "error", "data": "StartConnection failed: " + err.Error()})
@@ -208,6 +230,10 @@ func HandleSession(c *gin.Context) {
 		}
 	}
 	browserConn.WriteJSON(gin.H{"event": "connected", "data": "ok", "dialogId": respDialogId})
+	if desktopPetVoiceSession.CharacterID != "" && desktopPetVoiceSession.UserID != "" {
+		emitDesktopPetVoice(c.Request.Context(), desktopPetVoiceSession, "session.started")
+		emitDesktopPetVoice(c.Request.Context(), desktopPetVoiceSession, "listening.started")
+	}
 
 	voiceSession := GetOrCreateVoiceSession(sessID, conversationId, "")
 	if voiceSession.CurrentTurn == nil {
@@ -216,6 +242,18 @@ func HandleSession(c *gin.Context) {
 	defer func() {
 		voiceSession.EndSession()
 		RemoveVoiceSession(sessID)
+	}()
+	desktopPetSpeaking := false
+	defer func() {
+		if desktopPetVoiceSession.CharacterID == "" || desktopPetVoiceSession.UserID == "" {
+			return
+		}
+		if desktopPetSpeaking {
+			desktopPetVoiceSession.State = ContinuousVoiceSessionStatusListening
+			desktopPetVoiceSession.LastActivityAt = time.Now()
+			emitDesktopPetVoice(context.Background(), desktopPetVoiceSession, "speaking.ended")
+		}
+		emitDesktopPetVoice(context.Background(), desktopPetVoiceSession, "session.ended")
 	}()
 
 	var wg sync.WaitGroup
@@ -250,8 +288,21 @@ func HandleSession(c *gin.Context) {
 			appLog.Info("volc evt:", frame.EventCode)
 			switch frame.EventCode {
 			case 352:
+				if !desktopPetSpeaking && desktopPetVoiceSession.CharacterID != "" && desktopPetVoiceSession.UserID != "" {
+					desktopPetSpeaking = true
+					desktopPetVoiceSession.State = ContinuousVoiceSessionStatusSpeaking
+					desktopPetVoiceSession.PlaybackGeneration++
+					desktopPetVoiceSession.LastActivityAt = time.Now()
+					emitDesktopPetVoice(context.Background(), desktopPetVoiceSession, "speaking.started")
+				}
 				browserConn.WriteJSON(gin.H{"event": "audio", "data": base64.StdEncoding.EncodeToString(frame.Payload)})
 			case 359:
+				if desktopPetSpeaking && desktopPetVoiceSession.CharacterID != "" && desktopPetVoiceSession.UserID != "" {
+					desktopPetSpeaking = false
+					desktopPetVoiceSession.State = ContinuousVoiceSessionStatusListening
+					desktopPetVoiceSession.LastActivityAt = time.Now()
+					emitDesktopPetVoice(context.Background(), desktopPetVoiceSession, "speaking.ended")
+				}
 				browserConn.WriteJSON(gin.H{"event": "tts_ended"})
 			case 150, 151, 552:
 				browserConn.WriteJSON(gin.H{"event": "evt_" + itoa(frame.EventCode), "data": json.RawMessage(frame.Payload)})
