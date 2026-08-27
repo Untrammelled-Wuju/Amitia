@@ -886,82 +886,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	safeModeCtrl := readiness.NewSafeModeController()
 	var readinessSvc *readiness.ReadinessService
-	if runtimeV2Facade != nil {
-		readinessSvc, err = readiness.NewFullStartupReadinessService(readiness.StartupReadinessDeps{
-			DB:        ctx.DB,
-			Extension: extensionRuntime,
-			DesktopSessionReady: func() error {
-				sqlDB, err := ctx.DB.DB()
-				if err != nil {
-					return fmt.Errorf("get underlying db: %w", err)
-				}
-				return sqlDB.PingContext(context.Background())
-			},
-			OwnershipReady: func() error {
-				if ownershipGuard == nil {
-					return fmt.Errorf("ownership guard is nil")
-				}
-				return nil
-			},
-			RuntimeTicketReady: func() error {
-				return bootstrapTicketRepo.ReadinessCheck(context.Background())
-			},
-			RuntimeGatewayReady: func() error {
-				if runtimeV2Facade == nil {
-					return fmt.Errorf("runtime v2 facade is nil")
-				}
-				return nil
-			},
-			PathGuardReady: func() error {
-				if pathRegistry == nil {
-					return fmt.Errorf("path registry is nil")
-				}
-				return pathRegistry.Validate()
-			},
-			GenerationWorkerReady: func() error {
-				if desktopPetWorker == nil {
-					return fmt.Errorf("generation worker is nil")
-				}
-				return nil
-			},
-			ProcessingWorkerReady: func() error {
-				if processingWorker == nil {
-					return fmt.Errorf("processing worker is nil")
-				}
-				return nil
-			},
-			QualityWorkerReady: func() error {
-				if qualityWorker == nil {
-					return fmt.Errorf("quality worker is nil")
-				}
-				return nil
-			},
-			InstallationWorkerReady: func() error {
-				if installationCoordinator == nil {
-					return fmt.Errorf("installation coordinator is nil")
-				}
-				return nil
-			},
-			BehaviorWorkerReady: func() error {
-				if behaviorSvc == nil {
-					return fmt.Errorf("behavior service is nil")
-				}
-				return nil
-			},
-			MigrationReady: func() error {
-				return checkMigrationState(ctx.DB)
-			},
-			LegacyChainReady: func() error {
-				if !desktoppet.LegacyPackageWritesDisabled {
-					return fmt.Errorf("legacy package writes not disabled")
-				}
-				return nil
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("initialize readiness service: %w", err)
-		}
-	}
 
 	leaseManager := releasebuild.NewLeaseManager()
 	journalManager := releasebuild.NewPublishJournalManager(releaseRepo)
@@ -1173,10 +1097,138 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		services.DeviceMesh = deviceMeshRuntime
 	}
 
+	if runtimeV2Facade != nil {
+		readinessSvc, err = readiness.NewFullStartupReadinessService(readiness.StartupReadinessDeps{
+			DB:        ctx.DB,
+			Extension: extensionRuntime,
+			DesktopSessionReady: func() error {
+				sqlDB, err := ctx.DB.DB()
+				if err != nil {
+					return fmt.Errorf("get underlying db: %w", err)
+				}
+				return sqlDB.PingContext(context.Background())
+			},
+			OwnershipReady: func() error {
+				if services.OwnershipGuard == nil {
+					return fmt.Errorf("ownership guard is nil")
+				}
+				return nil
+			},
+			RuntimeTicketReady: func() error {
+				return bootstrapTicketRepo.ReadinessCheck(context.Background())
+			},
+			RuntimeGatewayReady: func() error {
+				if services.DesktopPetRuntimeV2 == nil {
+					return fmt.Errorf("runtime v2 facade is nil")
+				}
+				return nil
+			},
+			PathGuardReady: func() error {
+				if services.PathRegistry == nil {
+					return fmt.Errorf("path registry is nil")
+				}
+				return services.PathRegistry.Validate()
+			},
+			GenerationWorkerReady: func() error {
+				if services.DesktopPetWorker == nil {
+					return fmt.Errorf("generation worker is nil")
+				}
+				return nil
+			},
+			ProcessingWorkerReady: func() error {
+				if services.ProcessingWorker == nil {
+					return fmt.Errorf("processing worker is nil")
+				}
+				return nil
+			},
+			QualityWorkerReady: func() error {
+				if services.QualityWorker == nil {
+					return fmt.Errorf("quality worker is nil")
+				}
+				return nil
+			},
+			InstallationWorkerReady: func() error {
+				if services.InstallationCoordinator == nil {
+					return fmt.Errorf("installation coordinator is nil")
+				}
+				return nil
+			},
+			BehaviorWorkerReady: func() error {
+				if services.BehaviorService == nil {
+					return fmt.Errorf("behavior service is nil")
+				}
+				return nil
+			},
+			MigrationReady: func() error {
+				return checkMigrationState(ctx.DB)
+			},
+			LegacyChainReady: func() error {
+				if !desktoppet.LegacyPackageWritesDisabled {
+					return fmt.Errorf("legacy package writes not disabled")
+				}
+				return nil
+			},
+			CanonicalCutoverReady: func() error {
+				if services.DesktopPetRuntimeV2 == nil || services.InstallationRepo == nil {
+					return fmt.Errorf("desktop pet canonical v2 wiring is incomplete")
+				}
+				if !desktoppet.LegacyPackageWritesDisabled {
+					return fmt.Errorf("legacy desktop pet package writes are still enabled")
+				}
+				if err := runCanonicalBuildAssertions(services); err != nil {
+					return fmt.Errorf("canonical build assertions: %w", err)
+				}
+				return nil
+			},
+			MeshReady: func() error {
+				return checkDesktopPetMeshReadiness(services)
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("initialize readiness service: %w", err)
+		}
+		services.Readiness = readinessSvc
+	}
+
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
 	}
 	return services, nil
+}
+
+func checkDesktopPetMeshReadiness(services *AppServices) error {
+	if services == nil || services.DeviceMesh == nil {
+		return fmt.Errorf("device mesh runtime is nil")
+	}
+	mesh := services.DeviceMesh
+	if services.RuntimeProfile.IsDeviceAgent() {
+		if mesh.LocalHandler == nil {
+			return fmt.Errorf("device-agent mesh local handler is nil")
+		}
+		if mesh.GetDispatcher() == nil {
+			return fmt.Errorf("device-agent mesh dispatcher is nil")
+		}
+		if mesh.GetTaskRuntime() == nil {
+			return fmt.Errorf("device-agent mesh task runtime is nil")
+		}
+		return nil
+	}
+	if mesh.DB == nil {
+		return fmt.Errorf("cloud/local mesh database is nil")
+	}
+	if mesh.BootstrapSvc == nil || mesh.CredentialSvc == nil {
+		return fmt.Errorf("cloud/local mesh bootstrap or credential service is nil")
+	}
+	if mesh.Hub == nil || mesh.Handler == nil || mesh.Probe == nil {
+		return fmt.Errorf("cloud/local mesh transport wiring is incomplete")
+	}
+	if mesh.DeviceReg == nil || mesh.GetSessions() == nil {
+		return fmt.Errorf("cloud/local mesh device registry or session service is nil")
+	}
+	if mesh.GetDispatcher() == nil {
+		return fmt.Errorf("cloud/local mesh dispatcher is nil")
+	}
+	return nil
 }
 
 func platformFromGOOS(goos string) runtimeidentity.Platform {
