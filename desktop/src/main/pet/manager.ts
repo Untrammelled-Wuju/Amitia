@@ -35,6 +35,8 @@ import type {
   SchedulerEvent,
 } from "./action-scheduler";
 import { IdleController } from "./idle-controller";
+import { DesktopPetVitalityController } from "./vitality-controller";
+import { DesktopPetWorldController } from "./world-controller";
 import { DesktopPetEventBridge } from "./event-bridge";
 import {
   ChatStateBridge,
@@ -339,6 +341,8 @@ export class DesktopPetManager {
   private animationIpc: AnimationIpcAdapter | null = null;
   private scheduler: DesktopPetActionScheduler | null = null;
   private idleController: IdleController | null = null;
+  private vitalityController: DesktopPetVitalityController | null = null;
+  private worldController: DesktopPetWorldController | null = null;
   private eventBridge: DesktopPetEventBridge | null = null;
   private chatStateBridge: ChatStateBridge | null = null;
   private dragController: DragController | null = null;
@@ -944,6 +948,7 @@ export class DesktopPetManager {
       onPlaybackEvent: (event) => this.handlePlaybackEvent(event),
       onSnapshotUpdate: (snapshot) => this.handleSnapshotUpdate(snapshot),
       onClick: (x, y) => {
+        this.vitalityController?.notifyInteraction("click");
         this.handleClick(x, y);
         this.eventBridge?.handleClick(x, y);
       },
@@ -952,6 +957,7 @@ export class DesktopPetManager {
         this.eventBridge?.handleDoubleClick(x, y);
       },
       onHover: (x, y) => {
+        this.vitalityController?.notifyInteraction("hover");
         this.handleHover(x, y);
         this.eventBridge?.handleHover(x, y);
       },
@@ -960,7 +966,7 @@ export class DesktopPetManager {
       onRuntimeReady: (payload) => this.handleRuntimeReady(payload),
       onDeliveryFailed: (reason, command) =>
         this.handleDeliveryFailed(reason, command),
-      onDragStart: (payload) => this.dragController?.handleDragStart(payload),
+      onDragStart: (payload) => { this.vitalityController?.notifyInteraction("drag"); this.dragController?.handleDragStart(payload); },
       onDragMove: (payload) => this.dragController?.handleDragMove(payload),
       onDragEnd: (payload) => this.dragController?.handleDragEnd(payload),
       onDragCancel: (payload) => this.dragController?.handleDragCancel(payload),
@@ -1002,7 +1008,7 @@ export class DesktopPetManager {
     });
     scheduler.attachLoaded(loaded);
 
-    const idleController = new IdleController(actionPlayer, scheduler, {
+    const idleController = new IdleController(scheduler, {
       enabled: settings?.idleEnabled ?? true,
       minIntervalSeconds: settings?.idleIntervalMinSeconds ?? 30,
       maxIntervalSeconds: settings?.idleIntervalMaxSeconds ?? 120,
@@ -1010,6 +1016,9 @@ export class DesktopPetManager {
       recentActionWeight: 0.3,
     });
     idleController.attachLoaded(loaded);
+
+    const vitalityController = new DesktopPetVitalityController(scheduler, windowAdapter);
+    const worldController = new DesktopPetWorldController(scheduler, windowAdapter);
 
     const clickThroughController = new ClickThroughController(
       windowAdapter,
@@ -1035,6 +1044,8 @@ export class DesktopPetManager {
     this.animationIpc = animationIpc;
     this.scheduler = scheduler;
     this.idleController = idleController;
+    this.vitalityController = vitalityController;
+    this.worldController = worldController;
     this.clickThroughController = clickThroughController;
     this.dragController = dragController;
     this.eventBridge = eventBridge;
@@ -1046,6 +1057,8 @@ export class DesktopPetManager {
     this.sendInitialPackageSnapshot();
 
     idleController.start();
+    vitalityController.start();
+    worldController.start();
   }
 
   private async stopRuntime(): Promise<void> {
@@ -1072,6 +1085,20 @@ export class DesktopPetManager {
     } catch (err) {
       console.warn("[DesktopPetManager] 停止拖动控制器失败:", err);
     }
+
+    try {
+      this.worldController?.stop();
+    } catch (err) {
+      console.warn("[DesktopPetManager] 停止桌面世界控制器失败:", err);
+    }
+    this.worldController = null;
+
+    try {
+      this.vitalityController?.stop();
+    } catch (err) {
+      console.warn("[DesktopPetManager] 停止桌宠活力控制器失败:", err);
+    }
+    this.vitalityController = null;
 
     try {
       this.idleController?.stop();
@@ -1391,6 +1418,7 @@ export class DesktopPetManager {
 
   private handleDragEvent(event: DragEvent, state: DragState): void {
     if (event === "drag-start") {
+      this.worldController?.setDragging(true);
       this.currentDragId = randomUUID();
       this.petLogger.logDragStart(this.activeInstallationId ?? undefined);
       void this.runtimeHandler?.sendRuntimeEvent("drag.started", {
@@ -1402,6 +1430,8 @@ export class DesktopPetManager {
         displayId: state.startScreenId,
       });
     } else if (event === "drag-end") {
+      this.worldController?.setDragging(false);
+      this.worldController?.onDrop();
       this.petLogger.logDragEnd(this.activeInstallationId ?? undefined);
       void this.runtimeHandler?.sendRuntimeEvent("drag.completed", {
         dragId: this.currentDragId ?? "",
@@ -1413,6 +1443,64 @@ export class DesktopPetManager {
       });
       this.currentDragId = null;
       void this.persistRuntimePosition();
+    }
+  }
+
+  private resolveBehaviorEventSource(semantic: string): DesktopPetActionRequest["source"] {
+    if (semantic.includes("speaking")) return EventSources.CHAT_SPEAKING;
+    if (semantic.includes("listening")) return EventSources.CHAT_LISTENING;
+    if (semantic.includes("thinking") || semantic.includes("processing")) {
+      return EventSources.CHAT_THINKING;
+    }
+    if (semantic.startsWith("tool_") || semantic.includes("work")) {
+      return EventSources.TOOL_WORKING;
+    }
+    if (semantic.startsWith("affect_") || semantic.startsWith("emotion_")) {
+      return EventSources.EMOTION;
+    }
+    if (semantic.startsWith("proactive_")) return EventSources.PROACTIVE;
+    if (semantic.startsWith("gesture_")) return EventSources.SYSTEM;
+    return EventSources.SYSTEM;
+  }
+
+  private resolveBehaviorPriority(semantic: string, backendPriority?: number): number {
+    if (semantic.includes("drag")) return ActionPriorities.DRAG;
+    if (semantic.includes("drop") || semantic.includes("fall")) return ActionPriorities.FALL;
+    if (semantic.includes("speaking")) return ActionPriorities.SPEAKING;
+    if (semantic.includes("listening") || semantic.includes("thinking") || semantic.startsWith("tool_")) {
+      return ActionPriorities.THINKING;
+    }
+    if (semantic.startsWith("affect_") || semantic.startsWith("emotion_")) {
+      return ActionPriorities.EMOTION;
+    }
+    if (semantic.startsWith("proactive_")) return ActionPriorities.GREETING;
+    if (semantic.startsWith("activity_") || semantic.startsWith("life_")) {
+      return ActionPriorities.LIFE;
+    }
+    if (typeof backendPriority === "number" && Number.isFinite(backendPriority)) {
+      if (backendPriority >= 800) return ActionPriorities.SPEAKING;
+      if (backendPriority >= 600) return ActionPriorities.THINKING;
+      if (backendPriority >= 400) return ActionPriorities.EMOTION;
+      return ActionPriorities.LIFE;
+    }
+    return ActionPriorities.EMOTION;
+  }
+
+  private applyVitalityForBehaviorSemantic(semantic: string): void {
+    if (!this.vitalityController) return;
+    if (semantic.includes("speaking") || semantic.includes("listening")) {
+      this.vitalityController.notifyInteraction("voice");
+      this.vitalityController.setActivity("attentive");
+      return;
+    }
+    if (semantic.includes("thinking") || semantic.startsWith("tool_") || semantic.includes("work")) {
+      this.vitalityController.notifyInteraction("tool");
+      this.vitalityController.setActivity("working");
+      return;
+    }
+    if (semantic.startsWith("dialogue_") || semantic.startsWith("proactive_")) {
+      this.vitalityController.notifyInteraction("chat");
+      this.vitalityController.setActivity("attentive");
     }
   }
 
@@ -2296,6 +2384,16 @@ export class DesktopPetManager {
             installation?: { installationId?: string };
             desiredPet?: { installation?: { installationId?: string } };
             ensureAbsent?: boolean;
+            actionKey?: string;
+            priority?: number;
+            queuePolicy?: string;
+            interruptible?: boolean;
+            minimumPlayMs?: number;
+            maximumPlayMs?: number;
+            returnTo?: string;
+            decisionId?: string;
+            semantic?: string;
+            reasonCode?: string;
             settings?: {
               alwaysOnTop?: boolean;
               scale?: number;
@@ -2383,9 +2481,47 @@ export class DesktopPetManager {
             }
             case "play_action":
             case "runtime.command.play_action": {
-              const actionKey = cmd.actionKey ?? "";
+              const actionKey = cmd.payload?.actionKey ?? cmd.actionKey ?? "";
+              if (!actionKey || !this.scheduler || !this.loadedInstallation) {
+                return {
+                  commandId,
+                  status: "rejected",
+                  errorCode: !actionKey ? "MISSING_ACTION_KEY" : "PET_NOT_READY",
+                  errorMessage: !actionKey
+                    ? "play_action payload missing actionKey"
+                    : "desktop pet scheduler is not ready",
+                  appliedRevision: desiredRevision,
+                };
+              }
+
+              const semantic = cmd.payload?.semantic ?? "";
+              const source = this.resolveBehaviorEventSource(semantic);
+              const request: DesktopPetActionRequest = {
+                actionKey,
+                source,
+                priority: this.resolveBehaviorPriority(semantic, cmd.payload?.priority),
+                interrupt: cmd.payload?.queuePolicy === "replace_current",
+                dedupeKey: cmd.payload?.decisionId || `runtime_${commandId}`,
+                metadata: {
+                  semantic,
+                  reasonCode: cmd.payload?.reasonCode ?? "",
+                  minimumPlayMs: String(cmd.payload?.minimumPlayMs ?? 0),
+                  maximumPlayMs: String(cmd.payload?.maximumPlayMs ?? 0),
+                  returnTo: cmd.payload?.returnTo ?? "default",
+                },
+              };
               this.currentCommandId = commandId;
-              await this.playAction(actionKey);
+              this.applyVitalityForBehaviorSemantic(semantic);
+              const scheduleResult = this.scheduler.submit(request);
+              if (scheduleResult === "rejected") {
+                return {
+                  commandId,
+                  status: "rejected",
+                  errorCode: "ACTION_REJECTED",
+                  errorMessage: `scheduler rejected action ${actionKey}`,
+                  appliedRevision: desiredRevision,
+                };
+              }
               return {
                 commandId,
                 status: "applied",
@@ -2393,6 +2529,7 @@ export class DesktopPetManager {
                 errorMessage: "",
                 appliedRevision: desiredRevision,
                 acceptedAction: actionKey,
+                playbackRequestId: cmd.payload?.decisionId ?? commandId,
               };
             }
             case "update_settings": {
