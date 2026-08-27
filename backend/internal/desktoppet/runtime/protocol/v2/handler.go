@@ -384,6 +384,12 @@ func (h *Handler) HandleEvent(conn *Connection, env *Envelope) (*EventRecord, er
 	if err != nil {
 		return nil, fmt.Errorf("append runtime event: %w", err)
 	}
+	if err := h.applyRuntimeEventCommandProgress(env); err != nil {
+		return nil, fmt.Errorf("apply runtime playback progress: %w", err)
+	}
+	if err := h.appendRuntimeDomainEvent(conn, env); err != nil {
+		return nil, fmt.Errorf("append runtime behavior event: %w", err)
+	}
 	processedSeq, appliedRevision, actualStateHash := runtimeEventCursor(env)
 	if err := h.persistAuthoritativeCursor(conn, env.Sequence, processedSeq, appliedRevision, actualStateHash); err != nil {
 		return nil, err
@@ -408,6 +414,123 @@ func extractEventCommandID(payload []byte) string {
 		return ""
 	}
 	return strings.TrimSpace(body.CommandID)
+}
+
+type runtimeEventMetadata struct {
+	CommandID          string `json:"commandId"`
+	PlaybackInstanceID string `json:"playbackInstanceId"`
+	InstallationID     string `json:"installationId"`
+	CharacterID        string `json:"characterId"`
+	PetInstanceID      string `json:"petInstanceId"`
+	DecisionID         string `json:"decisionId"`
+	ErrorCode          string `json:"errorCode"`
+	ErrorMessage       string `json:"errorMessage"`
+	OccurredAt         string `json:"occurredAt"`
+}
+
+func decodeRuntimeEventMetadata(payload []byte) runtimeEventMetadata {
+	var meta runtimeEventMetadata
+	if len(payload) > 0 {
+		_ = json.Unmarshal(payload, &meta)
+	}
+	meta.CommandID = strings.TrimSpace(meta.CommandID)
+	meta.PlaybackInstanceID = strings.TrimSpace(meta.PlaybackInstanceID)
+	meta.InstallationID = strings.TrimSpace(meta.InstallationID)
+	meta.CharacterID = strings.TrimSpace(meta.CharacterID)
+	meta.PetInstanceID = strings.TrimSpace(meta.PetInstanceID)
+	return meta
+}
+
+func runtimeEventOccurredAt(meta runtimeEventMetadata) time.Time {
+	if meta.OccurredAt != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, meta.OccurredAt); err == nil {
+			return parsed.UTC()
+		}
+		if parsed, err := time.Parse(time.RFC3339, meta.OccurredAt); err == nil {
+			return parsed.UTC()
+		}
+	}
+	return time.Now().UTC()
+}
+
+func (h *Handler) applyRuntimeEventCommandProgress(env *Envelope) error {
+	if env == nil {
+		return nil
+	}
+	meta := decodeRuntimeEventMetadata(env.Payload)
+	if meta.CommandID == "" {
+		return nil
+	}
+	now := runtimeEventOccurredAt(meta)
+	switch env.MessageName {
+	case EventPlaybackActionStarted:
+		return h.commands.MarkPlaybackStarted(meta.CommandID, meta.PlaybackInstanceID, now)
+	case EventPlaybackActionCompleted, EventPlaybackActionInterrupted:
+		return h.commands.MarkCompleted(meta.CommandID, meta.PlaybackInstanceID, now)
+	case EventPlaybackActionFailed:
+		code := strings.TrimSpace(meta.ErrorCode)
+		if code == "" {
+			code = "PLAYBACK_FAILED"
+		}
+		message := strings.TrimSpace(meta.ErrorMessage)
+		if message == "" {
+			message = "desktop pet playback failed"
+		}
+		return h.commands.MarkFailed(meta.CommandID, code, message, now)
+	default:
+		return nil
+	}
+}
+
+func (h *Handler) appendRuntimeDomainEvent(conn *Connection, env *Envelope) error {
+	if h.states == nil || conn == nil || env == nil {
+		return nil
+	}
+	sessionID := conn.SessionIDValue()
+	if sessionID == "" {
+		return ErrConnectionClosed
+	}
+	meta := decodeRuntimeEventMetadata(env.Payload)
+	if meta.InstallationID == "" && meta.CommandID != "" {
+		if cmd, err := h.commands.GetCommand(meta.CommandID); err == nil && cmd != nil {
+			meta.InstallationID = strings.TrimSpace(cmd.InstallationID)
+		}
+	}
+	occurredAt := runtimeEventOccurredAt(meta)
+	payload := struct {
+		EventType      string          `json:"EventType"`
+		RuntimeID      string          `json:"RuntimeID"`
+		SessionID      string          `json:"SessionID"`
+		DeviceID       string          `json:"DeviceID"`
+		InstallationID string          `json:"InstallationID"`
+		UserID         string          `json:"UserID"`
+		CharacterID    string          `json:"CharacterID"`
+		Timestamp      time.Time       `json:"Timestamp"`
+		Payload        json.RawMessage `json:"Payload"`
+	}{
+		EventType:      env.MessageName,
+		RuntimeID:      string(conn.RuntimeID),
+		SessionID:      sessionID,
+		DeviceID:       string(conn.DeviceID),
+		InstallationID: meta.InstallationID,
+		UserID:         string(conn.UserID),
+		CharacterID:    meta.CharacterID,
+		Timestamp:      occurredAt,
+		Payload:        json.RawMessage(env.Payload),
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	idempotencyKey := fmt.Sprintf("runtime_event:%s:%d", sessionID, env.Sequence)
+	_, err = h.states.AppendDomainEvent(
+		env.MessageName,
+		string(conn.RuntimeID),
+		body,
+		occurredAt,
+		&idempotencyKey,
+	)
+	return err
 }
 
 func runtimeEventCursor(env *Envelope) (processedSeq, appliedRevision int64, actualStateHash string) {

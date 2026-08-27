@@ -101,12 +101,18 @@ func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, ide
 }
 
 func (s *commandService) CreateEphemeralCommand(userID, deviceID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error) {
+	return s.createEphemeralCommand(userID, deviceID, "", "", commandType, idempotencyKey, payload)
+}
+
+func (s *commandService) createEphemeralCommand(userID, deviceID, runtimeID, installationID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	hash := ComputePayloadHash(payload)
 	cmd := &RuntimeCommand{
 		ID:                   "rtcmdv2_" + uuid.NewString(),
 		UserID:               userID,
 		DeviceID:             deviceID,
+		RuntimeID:            runtimeID,
+		InstallationID:       installationID,
 		CommandType:          commandType,
 		Durability:           "ephemeral",
 		Status:               string(CommandStatusQueued),

@@ -67,6 +67,17 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 			continue
 		}
 
+		targetRuntimeID := cmd.RuntimeID
+		if targetRuntimeID == "" && cmd.CommandType == string(CommandTypePlayAction) {
+			var playPayload PlayActionPayload
+			if err := json.Unmarshal([]byte(cmd.PayloadJSON), &playPayload); err == nil {
+				targetRuntimeID = playPayload.RuntimeID
+			}
+		}
+		if targetRuntimeID != "" && targetRuntimeID != string(conn.RuntimeID) {
+			continue
+		}
+
 		if err := d.commands.MarkDispatching(cmd.ID, string(conn.RuntimeID), time.Now()); err != nil {
 			continue
 		}

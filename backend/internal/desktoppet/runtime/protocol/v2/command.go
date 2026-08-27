@@ -155,7 +155,11 @@ type SyncDesiredStatePayload struct {
 }
 
 type PlayActionPayload struct {
+	RuntimeID        string  `json:"runtimeId,omitempty"`
 	ActionKey        string  `json:"actionKey"`
+	CharacterID      string  `json:"characterId,omitempty"`
+	PetInstanceID    string  `json:"petInstanceId,omitempty"`
+	InstallationID   string  `json:"installationId,omitempty"`
 	ActionSpecHash   string  `json:"actionSpecHash,omitempty"`
 	PlaybackMode     string  `json:"playbackMode"`
 	Priority         int     `json:"priority"`
