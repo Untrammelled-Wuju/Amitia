@@ -368,6 +368,14 @@ func (h *Handler) HandleEvent(conn *Connection, env *Envelope) (*EventRecord, er
 	if !conn.IsInboundSequenceNew(env.Sequence) {
 		return nil, nil
 	}
+	// Validate state snapshots before appending the event record. Otherwise an
+	// invalid snapshot could consume its sequence in the event store and become
+	// impossible to repair by retrying the same envelope.
+	if env.MessageName == EventStateSnapshot {
+		if _, err := h.runtimeActualStateFromSnapshot(conn, env); err != nil {
+			return nil, err
+		}
+	}
 
 	var commandID *string
 	if id := extractEventCommandID(env.Payload); id != "" {
@@ -389,6 +397,9 @@ func (h *Handler) HandleEvent(conn *Connection, env *Envelope) (*EventRecord, er
 	}
 	if err := h.appendRuntimeDomainEvent(conn, env); err != nil {
 		return nil, fmt.Errorf("append runtime behavior event: %w", err)
+	}
+	if err := h.persistActualStateSnapshot(conn, env); err != nil {
+		return nil, err
 	}
 	processedSeq, appliedRevision, actualStateHash := runtimeEventCursor(env)
 	if err := h.persistAuthoritativeCursor(conn, env.Sequence, processedSeq, appliedRevision, actualStateHash); err != nil {
@@ -531,6 +542,155 @@ func (h *Handler) appendRuntimeDomainEvent(conn *Connection, env *Envelope) erro
 		&idempotencyKey,
 	)
 	return err
+}
+
+func (h *Handler) persistActualStateSnapshot(conn *Connection, env *Envelope) error {
+	if conn == nil || env == nil || env.MessageName != EventStateSnapshot {
+		return nil
+	}
+	state, err := h.runtimeActualStateFromSnapshot(conn, env)
+	if err != nil {
+		return err
+	}
+	if h.states == nil {
+		return fmt.Errorf("runtime actual state service is unavailable")
+	}
+	if err := h.states.Upsert(state); err != nil {
+		return fmt.Errorf("persist runtime actual state snapshot: %w", err)
+	}
+	return nil
+}
+
+func (h *Handler) runtimeActualStateFromSnapshot(conn *Connection, env *Envelope) (*RuntimeActualState, error) {
+	if conn == nil {
+		return nil, ErrConnectionClosed
+	}
+	if env == nil || env.MessageName != EventStateSnapshot {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "runtime.state.snapshot envelope is required")
+	}
+	var snapshot StateSnapshotPayload
+	if err := json.Unmarshal(env.Payload, &snapshot); err != nil {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "invalid runtime.state.snapshot payload")
+	}
+	sessionID, generation := conn.SessionSnapshot()
+	if sessionID == "" || generation <= 0 {
+		return nil, ErrConnectionClosed
+	}
+	if snapshot.ConnectionGeneration != generation {
+		return nil, NewProtocolError(
+			ErrCodeEnvelopeInvalid,
+			fmt.Sprintf("state snapshot generation mismatch: payload=%d envelope=%d", snapshot.ConnectionGeneration, generation),
+		)
+	}
+	if snapshot.EventSequence != env.Sequence {
+		return nil, NewProtocolError(
+			ErrCodeEnvelopeInvalid,
+			fmt.Sprintf("state snapshot event sequence mismatch: payload=%d envelope=%d", snapshot.EventSequence, env.Sequence),
+		)
+	}
+	if strings.TrimSpace(snapshot.ActualStateHash) == "" {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "state snapshot actualStateHash is required")
+	}
+	if snapshot.AppliedDesiredRevision < 0 || snapshot.AppliedSettingsRevision < 0 || snapshot.LastProcessedCommandSequence < 0 {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "state snapshot revisions and command cursor must be non-negative")
+	}
+	if !validInstanceStatus(snapshot.InstanceStatus) || !validWindowStatus(snapshot.WindowStatus) ||
+		!validRendererStatus(snapshot.RendererStatus) || !validPlaybackStatus(snapshot.PlaybackStatus) {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "state snapshot contains unsupported runtime status")
+	}
+
+	instanceStatus := strings.TrimSpace(snapshot.InstanceStatus)
+	windowStatus := strings.TrimSpace(snapshot.WindowStatus)
+	rendererStatus := strings.TrimSpace(snapshot.RendererStatus)
+	playbackStatus := strings.TrimSpace(snapshot.PlaybackStatus)
+	state := &RuntimeActualState{
+		UserID:                  string(conn.UserID),
+		DeviceID:                string(conn.DeviceID),
+		RuntimeID:               string(conn.RuntimeID),
+		RuntimeSessionID:        sessionID,
+		ConnectionGeneration:    generation,
+		LastEventSequence:       env.Sequence,
+		AppliedDesiredRevision:  snapshot.AppliedDesiredRevision,
+		AppliedDesiredHash:      strings.TrimSpace(snapshot.AppliedDesiredHash),
+		AppliedSettingsRevision: snapshot.AppliedSettingsRevision,
+		InstallationID:          strings.TrimSpace(snapshot.InstallationID),
+		PetID:                   strings.TrimSpace(snapshot.PetID),
+		ReleaseID:               strings.TrimSpace(snapshot.ReleaseID),
+		InstanceStatus:          instanceStatus,
+		WindowStatus:            windowStatus,
+		RendererStatus:          rendererStatus,
+		PlaybackStatus:          playbackStatus,
+		Visible:                 windowStatus == WindowStatusVisible,
+		StableActionKey:         strings.TrimSpace(snapshot.StableActionKey),
+		CurrentActionKey:        strings.TrimSpace(snapshot.CurrentActionKey),
+		PlaybackInstanceID:      strings.TrimSpace(snapshot.PlaybackInstanceID),
+		CurrentCommandID:        strings.TrimSpace(snapshot.CurrentCommandID),
+		ActualStateHash:         strings.TrimSpace(snapshot.ActualStateHash),
+	}
+	state.HealthStatus = deriveActualStateHealth(state)
+	return state, nil
+}
+
+func validInstanceStatus(value string) bool {
+	switch strings.TrimSpace(value) {
+	case InstanceStatusAbsent, InstanceStatusStarting, InstanceStatusLoadingRelease,
+		InstanceStatusWindowCreated, InstanceStatusRendererInitializing, InstanceStatusReady,
+		InstanceStatusStopping, InstanceStatusStopped, InstanceStatusFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func validWindowStatus(value string) bool {
+	switch strings.TrimSpace(value) {
+	case WindowStatusAbsent, WindowStatusHidden, WindowStatusVisible, WindowStatusDestroyed, WindowStatusFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func validRendererStatus(value string) bool {
+	switch strings.TrimSpace(value) {
+	case RendererStatusAbsent, RendererStatusBootstrapped, RendererStatusRuntimeReady,
+		RendererStatusUnresponsive, RendererStatusCrashed, RendererStatusFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func validPlaybackStatus(value string) bool {
+	switch strings.TrimSpace(value) {
+	case PlaybackStatusIdle, PlaybackStatusLoading, PlaybackStatusPlaying, PlaybackStatusHolding,
+		PlaybackStatusPaused, PlaybackStatusStopped, PlaybackStatusFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func deriveActualStateHealth(state *RuntimeActualState) string {
+	if state == nil {
+		return HealthStatusFailed
+	}
+	if state.InstanceStatus == InstanceStatusAbsent || state.InstanceStatus == InstanceStatusStopped {
+		return HealthStatusOnlineNoPet
+	}
+	if state.InstanceStatus == InstanceStatusFailed || state.WindowStatus == WindowStatusFailed ||
+		state.RendererStatus == RendererStatusCrashed || state.RendererStatus == RendererStatusFailed ||
+		state.PlaybackStatus == PlaybackStatusFailed {
+		return HealthStatusFailed
+	}
+	if state.RendererStatus == RendererStatusUnresponsive {
+		return HealthStatusDegraded
+	}
+	if state.InstanceStatus == InstanceStatusReady && state.RendererStatus == RendererStatusRuntimeReady &&
+		(state.WindowStatus == WindowStatusVisible || state.WindowStatus == WindowStatusHidden) {
+		return HealthStatusHealthy
+	}
+	return HealthStatusSyncing
 }
 
 func runtimeEventCursor(env *Envelope) (processedSeq, appliedRevision int64, actualStateHash string) {
