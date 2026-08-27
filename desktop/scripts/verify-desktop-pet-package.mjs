@@ -7,6 +7,8 @@ const projectRoot = resolve(__dirname, "..");
 const distMain = resolve(projectRoot, "dist/main");
 const distPreload = resolve(projectRoot, "dist/preload");
 const distRenderer = resolve(projectRoot, "dist/renderer");
+const repositoryRoot = resolve(projectRoot, "..");
+const strictSemVer = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 const errors = [];
 const warnings = [];
@@ -26,6 +28,50 @@ function checkExists(path, label, isWarning = false) {
 
 function main() {
   console.log("[verify-desktop-pet-package] 开始检查...");
+
+  try {
+    const desktopPackage = JSON.parse(readFileSync(resolve(projectRoot, "package.json"), "utf8"));
+    const runtimeVersion = desktopPackage.desktopPetRuntimeVersion;
+    const contractVersion = desktopPackage.desktopPetRuntimeContractVersion;
+    if (!strictSemVer.test(runtimeVersion ?? "")) {
+      errors.push("INVALID: package.json desktopPetRuntimeVersion 必须是严格 SemVer");
+    }
+    if (!strictSemVer.test(contractVersion ?? "")) {
+      errors.push("INVALID: package.json desktopPetRuntimeContractVersion 必须是严格 SemVer");
+    }
+
+    const backendVersions = readFileSync(
+      resolve(repositoryRoot, "backend/internal/desktoppet/contracts/runtime_version.go"),
+      "utf8",
+    );
+    const backendRuntime = backendVersions.match(/RuntimeVersion\s*=\s*"([^"]+)"/)?.[1];
+    const backendContract = backendVersions.match(/RuntimeContractVersion\s*=\s*"([^"]+)"/)?.[1];
+    if (!backendRuntime || backendRuntime !== runtimeVersion) {
+      errors.push(`MISMATCH: desktop runtime=${runtimeVersion ?? "missing"}, backend=${backendRuntime ?? "missing"}`);
+    }
+    if (!backendContract || backendContract !== contractVersion) {
+      errors.push(`MISMATCH: desktop runtime contract=${contractVersion ?? "missing"}, backend=${backendContract ?? "missing"}`);
+    }
+
+    const backendEnvelope = readFileSync(
+      resolve(repositoryRoot, "backend/internal/desktoppet/runtime/protocol/v2/envelope.go"),
+      "utf8",
+    );
+    if (!/CurrentSchemaVersion\s*=\s*contracts\.RuntimeContractVersion/.test(backendEnvelope)) {
+      errors.push("MISMATCH: Runtime v2 CurrentSchemaVersion 未绑定后端唯一契约常量");
+    }
+  } catch (error) {
+    errors.push(`FAILED: 无法验证桌宠 Runtime 版本源 (${error instanceof Error ? error.message : String(error)})`);
+  }
+
+  try {
+    const legacyPetHtml = readFileSync(resolve(repositoryRoot, "front/pet.html"), "utf8");
+    if (/@fs[A-Za-z]:[\\/]/.test(legacyPetHtml) || /[A-Za-z]:\\[^\n<]+pet-main\.ts/.test(legacyPetHtml)) {
+      errors.push("FORBIDDEN: front/pet.html 包含机器相关绝对路径");
+    }
+  } catch (error) {
+    errors.push(`FAILED: 无法检查 front/pet.html (${error instanceof Error ? error.message : String(error)})`);
+  }
 
   const mainJs = resolve(distMain, "index.cjs");
   const mainJsAlt = resolve(distMain, "index.js");

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import vue from "@vitejs/plugin-vue"
@@ -6,13 +7,31 @@ import type { ViteDevServer } from "vite"
 import electron from "vite-plugin-electron/simple"
 
 function petDevServerPlugin() {
+  const petHtmlPath = resolve(__dirname, "src/renderer/pet.html")
+  const petMainPath = resolve(__dirname, "src/renderer/pet-main.ts").replace(/\\/g, "/")
+  const petMainDevUrl = `/@fs/${petMainPath}`
+
   return {
     name: "pet-dev-server",
     configureServer(server: ViteDevServer) {
       server.middlewares.use(
         "/pet.html",
-        (_req: IncomingMessage, _res: ServerResponse, next: () => void) => {
-          next()
+        async (_req: IncomingMessage, res: ServerResponse) => {
+          try {
+            const source = readFileSync(petHtmlPath, "utf8")
+            const devHtml = source.replace(
+              'src="./pet-main.js"',
+              `src="${petMainDevUrl}"`,
+            )
+            const html = await server.transformIndexHtml("/pet.html", devHtml)
+            res.statusCode = 200
+            res.setHeader("Content-Type", "text/html; charset=utf-8")
+            res.end(html)
+          } catch (error) {
+            res.statusCode = 500
+            res.setHeader("Content-Type", "text/plain; charset=utf-8")
+            res.end(error instanceof Error ? error.message : String(error))
+          }
         },
       )
     },
