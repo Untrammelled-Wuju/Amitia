@@ -61,7 +61,11 @@ export class PlaybackEventBridge {
       return;
     }
 
-    void this.runtime.sendPlaybackStarted(this.lastPlaybackId, this.lastCommandId);
+    void this.runtime.sendPlaybackStarted(
+      this.lastPlaybackId,
+      this.lastCommandId,
+      event.actionKey ?? this.lastActionKey,
+    );
   }
 
   private handleActionCompleted(event: PlaybackEvent): void {
@@ -86,12 +90,12 @@ export class PlaybackEventBridge {
     }
 
     const playedMs = event.playedDurationMs ?? (Date.now() - this.playbackStartedAt);
-    void this.runtime.sendPlaybackEnded(
+    void this.runtime.sendPlaybackInterrupted(
       event.playbackInstanceId ?? this.lastPlaybackId,
       event.commandId ?? this.lastCommandId,
       event.actionKey ?? this.lastActionKey,
       playedMs,
-      event.reason ?? "interrupted",
+      event.reason ?? "higher_priority_action",
     );
   }
 

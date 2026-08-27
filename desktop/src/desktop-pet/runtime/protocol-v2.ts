@@ -136,8 +136,12 @@ export interface PlaybackEventPayload {
   type: string;
   playbackInstanceId?: string;
   commandId?: string;
+  decisionId?: string;
   actionKey?: string;
   triggerSource?: string;
+  installationId?: string;
+  characterId?: string;
+  petInstanceId?: string;
   frameIndex?: number;
   cycleIndex?: number;
   startedAt?: string;

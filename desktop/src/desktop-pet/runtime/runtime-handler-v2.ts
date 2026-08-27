@@ -39,6 +39,13 @@ export interface RuntimeCapabilities {
   arch: string;
 }
 
+export interface RuntimeEventContext {
+  installationId?: string;
+  characterId?: string;
+  petInstanceId?: string;
+  decisionId?: string;
+}
+
 export interface RuntimeHandlerConfig {
   url: string;
   userId: string;
@@ -220,15 +227,22 @@ export class DesktopRuntimeHandlerV2 {
     this.setState("disconnected");
   }
 
-  async sendPlaybackStarted(playbackId: string, commandId: string): Promise<void> {
+  async sendPlaybackStarted(
+    playbackId: string,
+    commandId: string,
+    actionKey: string,
+    context: RuntimeEventContext = {},
+  ): Promise<void> {
     const payload: PlaybackEventPayload = {
-      type: "playback.started",
+      type: "runtime.playback.action_started",
       playbackInstanceId: playbackId,
       commandId,
+      actionKey,
+      ...context,
       startedAt: new Date().toISOString(),
       occurredAt: new Date().toISOString(),
     };
-    await this.sendRuntimeEvent("playback.started", payload);
+    await this.sendRuntimeEvent("runtime.playback.action_started", payload);
   }
 
   async sendPlaybackEnded(
@@ -237,18 +251,42 @@ export class DesktopRuntimeHandlerV2 {
     actionKey: string,
     playedMs: number,
     completionReason: string,
+    context: RuntimeEventContext = {},
   ): Promise<void> {
     const payload: PlaybackEventPayload = {
-      type: "playback.ended",
+      type: "runtime.playback.action_completed",
       playbackInstanceId: playbackId,
       commandId,
       actionKey,
+      ...context,
       playedMs,
       completionReason,
       completedAt: new Date().toISOString(),
       occurredAt: new Date().toISOString(),
     };
-    await this.sendRuntimeEvent("playback.ended", payload);
+    await this.sendRuntimeEvent("runtime.playback.action_completed", payload);
+  }
+
+  async sendPlaybackInterrupted(
+    playbackId: string,
+    commandId: string,
+    actionKey: string,
+    playedMs: number,
+    interruptReason: string,
+    context: RuntimeEventContext = {},
+  ): Promise<void> {
+    const payload: PlaybackEventPayload = {
+      type: "runtime.playback.action_interrupted",
+      playbackInstanceId: playbackId,
+      commandId,
+      actionKey,
+      ...context,
+      playedMs,
+      interruptReason,
+      interruptedAt: new Date().toISOString(),
+      occurredAt: new Date().toISOString(),
+    };
+    await this.sendRuntimeEvent("runtime.playback.action_interrupted", payload);
   }
 
   async sendPlaybackFailed(
@@ -257,26 +295,28 @@ export class DesktopRuntimeHandlerV2 {
     actionKey: string,
     errorCode: string,
     errorMessage: string,
+    context: RuntimeEventContext = {},
   ): Promise<void> {
     const payload: PlaybackEventPayload = {
-      type: "playback.failed",
+      type: "runtime.playback.action_failed",
       playbackInstanceId: playbackId,
       commandId,
       actionKey,
+      ...context,
       errorCode,
       errorMessage,
       failedAt: new Date().toISOString(),
       occurredAt: new Date().toISOString(),
     };
-    await this.sendRuntimeEvent("playback.failed", payload);
+    await this.sendRuntimeEvent("runtime.playback.action_failed", payload);
   }
 
   async sendRendererState(snapshot: StateSnapshotPayload): Promise<void> {
-    await this.sendRuntimeEvent("render.state", snapshot);
+    await this.sendRuntimeEvent("runtime.state.snapshot", snapshot);
   }
 
   async sendRendererHealth(healthy: boolean, errorCode?: string): Promise<void> {
-    await this.sendRuntimeEvent("render.health", {
+    await this.sendRuntimeEvent("runtime.health.changed", {
       healthy,
       errorCode,
       occurredAt: new Date().toISOString(),
@@ -313,6 +353,9 @@ export class DesktopRuntimeHandlerV2 {
       payload,
     );
     ws.send(JSON.stringify(envelope));
+    if (type === "runtime_event" || type === "command_ack") {
+      this.eventSequence = this.commandSequence;
+    }
   }
 
   async sendRuntimeEvent(name: string, payload: unknown): Promise<void> {
@@ -390,11 +433,10 @@ export class DesktopRuntimeHandlerV2 {
     await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "runtime_accepted");
 
     try {
-      const execution = this.hooks.onCommand(envelope.payload, envelope);
-      await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "renderer_accepted");
-      const result = await execution;
+      const result = await this.hooks.onCommand(envelope.payload, envelope);
       const ackStatus = this.mapCommandExecutionStatus(result.status);
-      if (result.status === "failed" || result.status === "rejected") {
+      if (result.status === "failed" || result.status === "rejected" ||
+          result.status === "expired" || result.status === "cancelled") {
         await this.sendCommandAck(
           command.commandId,
           command.commandSequence ?? 0,
@@ -477,19 +519,14 @@ export class DesktopRuntimeHandlerV2 {
   private mapCommandExecutionStatus(status: string): CommandStatus {
     switch (status) {
       case "applied":
+      case "duplicate":
         return "completed";
       case "accepted":
         return "renderer_accepted";
       case "failed":
-        return "failed_terminal";
       case "rejected":
-        return "failed_terminal";
-      case "duplicate":
-        return "superseded";
       case "expired":
-        return "expired";
       case "cancelled":
-        return "cancelled";
       default:
         return "failed_terminal";
     }
