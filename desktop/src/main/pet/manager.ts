@@ -240,6 +240,11 @@ interface InstallationApiPayload {
   installedContentHash: string;
 }
 
+interface ListInstallationsApiPayload {
+  items: InstallationApiPayload[];
+  total: number;
+}
+
 interface RuntimeSettingsApiPayload {
   installationId: string;
   alwaysOnTop: number;
@@ -484,8 +489,8 @@ export class DesktopPetManager {
       }
     } catch (err) {
       console.error("[DesktopPetManager] 初始化失败:", err);
+      this.initialized = false;
       this.setState("ready", null, `初始化失败: ${this.errorMessage(err)}`);
-      this.initialized = true;
     } finally {
       this.initializing = false;
     }
@@ -708,11 +713,9 @@ export class DesktopPetManager {
 
   async listInstallations(): Promise<InstallationInfo[]> {
     const path = `${API_BASE_PATH}/installations`;
-    const payload = await this.request<InstallationApiPayload[]>("GET", path);
-    if (!Array.isArray(payload)) {
-      return [];
-    }
-    return payload.map(mapInstallationPayload);
+    const payload = await this.request<ListInstallationsApiPayload>("GET", path);
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    return items.map(mapInstallationPayload);
   }
 
   async getInstallation(installationId: string): Promise<InstallationInfo | null> {
@@ -777,11 +780,9 @@ export class DesktopPetManager {
   }
 
   private async restoreActiveInstallation(): Promise<void> {
-    const path = `${API_BASE_PATH}/installations?active=true&userId=${encodeURIComponent(this.userId)}`;
-    let installations: InstallationApiPayload[];
+    let installations: InstallationInfo[];
     try {
-      const data = await this.request<InstallationApiPayload[]>("GET", path);
-      installations = Array.isArray(data) ? data : [];
+      installations = await this.listInstallations();
     } catch (err) {
       console.warn(
         "[DesktopPetManager] 查询活跃安装失败, 跳过桌宠恢复:",
@@ -789,19 +790,14 @@ export class DesktopPetManager {
       );
       return;
     }
-    if (installations.length === 0) {
-      return;
-    }
-    const active = installations[0];
-    if (!active) return;
-    if (active.status !== INSTALLATION_STATUS_ENABLED) {
-      console.warn(
-        `[DesktopPetManager] 活跃安装状态非 enabled (实际 ${active.status}), 跳过恢复`,
-      );
+    const installation =
+      installations.find(
+        (item) => item.isActive && item.status === INSTALLATION_STATUS_ENABLED,
+      ) ?? installations.find((item) => item.status === INSTALLATION_STATUS_ENABLED);
+    if (!installation) {
       return;
     }
     try {
-      const installation = mapInstallationPayload(active);
       const settings = await this.fetchRuntimeSettings(installation.id);
       const detection = await this.detectCorruption(installation);
       if (detection.corrupted) {
@@ -831,14 +827,14 @@ export class DesktopPetManager {
       this.setState("enabled", installation.id, "恢复完成");
     } catch (err) {
       this.petLogger.logRuntimeCrash("restoreActiveInstallation", err);
-      this.petLogger.logInstallFailed(active.id, this.errorMessage(err));
+      this.petLogger.logInstallFailed(installation.id, this.errorMessage(err));
       console.error(
         "[DesktopPetManager] 恢复活跃桌宠失败:",
         this.errorMessage(err),
       );
       this.setState(
         "ready",
-        active.id,
+        installation.id,
         `恢复失败: ${this.errorMessage(err)}`,
       );
     }
@@ -2156,39 +2152,39 @@ export class DesktopPetManager {
   ): Record<string, unknown> {
     const patch: Record<string, unknown> = {};
     if (typeof settings.alwaysOnTop === "boolean") {
-      patch.always_on_top = settings.alwaysOnTop ? 1 : 0;
+      patch.alwaysOnTop = settings.alwaysOnTop ? 1 : 0;
     }
     if (typeof settings.launchOnStartup === "boolean") {
-      patch.launch_on_startup = settings.launchOnStartup ? 1 : 0;
+      patch.launchOnStartup = settings.launchOnStartup ? 1 : 0;
     }
     if (typeof settings.scale === "number" && Number.isFinite(settings.scale)) {
       patch.scale = settings.scale;
     }
     if (typeof settings.positionX === "number") {
-      patch.position_x = Math.round(settings.positionX);
+      patch.positionX = Math.round(settings.positionX);
     }
     if (typeof settings.positionY === "number") {
-      patch.position_y = Math.round(settings.positionY);
+      patch.positionY = Math.round(settings.positionY);
     }
     if (typeof settings.screenId === "string") {
-      patch.screen_id = settings.screenId;
+      patch.screenId = settings.screenId;
     }
     if (typeof settings.idleEnabled === "boolean") {
-      patch.idle_enabled = settings.idleEnabled ? 1 : 0;
+      patch.idleEnabled = settings.idleEnabled ? 1 : 0;
     }
     if (typeof settings.idleIntervalMinSeconds === "number") {
-      patch.idle_interval_min_seconds = settings.idleIntervalMinSeconds;
+      patch.idleIntervalMinSeconds = settings.idleIntervalMinSeconds;
     }
     if (typeof settings.idleIntervalMaxSeconds === "number") {
-      patch.idle_interval_max_seconds = settings.idleIntervalMaxSeconds;
+      patch.idleIntervalMaxSeconds = settings.idleIntervalMaxSeconds;
     }
     if (typeof settings.clickThroughMode !== "undefined") {
-      patch.click_through_mode = clickThroughModeToApiValue(
+      patch.clickThroughMode = clickThroughModeToApiValue(
         settings.clickThroughMode,
       );
     }
     if (typeof settings.soundEnabled === "boolean") {
-      patch.sound_enabled = settings.soundEnabled ? 1 : 0;
+      patch.soundEnabled = settings.soundEnabled ? 1 : 0;
     }
     return patch;
   }
