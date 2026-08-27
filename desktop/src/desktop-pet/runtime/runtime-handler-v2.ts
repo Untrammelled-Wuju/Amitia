@@ -14,6 +14,7 @@ import {
   computePayloadHash,
 } from "./protocol-v2";
 import type { RuntimeCommandExecutionResult } from "../../main/pet/runtime-v2-command-adapter";
+import { DESKTOP_PET_RUNTIME_VERSION } from "../../shared/desktop-pet-runtime-version";
 
 export type RuntimeHandlerState =
   | "disconnected"
@@ -56,7 +57,6 @@ export interface RuntimeHandlerConfig {
   userId: string;
   deviceId: string;
   runtimeId: string;
-  contractVersion?: string;
   runtimeVersion?: string;
   capabilities?: RuntimeCapabilities;
   autoReconnect?: boolean;
@@ -129,8 +129,7 @@ export class DesktopRuntimeHandlerV2 {
       userId: config.userId,
       deviceId: config.deviceId,
       runtimeId: config.runtimeId,
-      contractVersion: config.contractVersion ?? "2.0.0",
-      runtimeVersion: config.runtimeVersion ?? "2.0.0",
+      runtimeVersion: config.runtimeVersion ?? DESKTOP_PET_RUNTIME_VERSION,
       capabilities: config.capabilities ?? {
         devicePixelRatio: 1,
         supportsHighDpi: false,

@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
+import {
+  DESKTOP_PET_RUNTIME_CONTRACT_VERSION,
+  DESKTOP_PET_RUNTIME_VERSION,
+} from "../../shared/desktop-pet-runtime-version";
 
 export const RUNTIME_PROTOCOL_VERSION = "amitia.desktop-pet.runtime";
 export const RUNTIME_ENVELOPE_VERSION = 2;
-export const RUNTIME_CONTRACT_VERSION = "2.0.0";
+export const RUNTIME_CONTRACT_VERSION = DESKTOP_PET_RUNTIME_CONTRACT_VERSION;
 
 export type RuntimeMessageType =
   | "hello"
@@ -221,7 +225,7 @@ export function buildHelloPayload(input: {
   runtimeVersion?: string;
 }): HelloPayload {
   return {
-    runtimeVersion: input.runtimeVersion ?? "2.0.0",
+    runtimeVersion: input.runtimeVersion ?? DESKTOP_PET_RUNTIME_VERSION,
     runtimeContractVersion: RUNTIME_CONTRACT_VERSION,
     deviceId: input.deviceId,
     runtimeId: input.runtimeId,
