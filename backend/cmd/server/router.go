@@ -473,6 +473,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		qq.RegisterQQRouter(apiGroup, ctx)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
+		if services.AdapterManager != nil {
+			realtime.SetDesktopPetVoiceObserver(newDesktopPetLifecycleBridge(services.AdapterManager))
+		}
 		realtime.RegisterRealtimeRouter(apiGroup, ctx)
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)

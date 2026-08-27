@@ -980,6 +980,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		if behaviorSvc != nil {
 			behaviorSvc.SetAdapterManager(adapterManager)
 		}
+		if servicesChat := chatSvc; servicesChat != nil {
+			servicesChat.SetDesktopPetLifecycleObserver(newDesktopPetLifecycleBridge(adapterManager))
+		}
 	}
 
 	migrationRepo := migration.NewDBRepository(ctx.DB)
