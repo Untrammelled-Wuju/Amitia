@@ -136,6 +136,10 @@ func packageGamePluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, requ
 }
 
 func appendGamePluginNetworkCompatibilityIssues(manifest manifest_v2.Manifest, preview *InstallPreview) {
+	appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest, preview, trusted_service.ValidateNetworkSandboxPrerequisites)
+}
+
+func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manifest_v2.Manifest, preview *InstallPreview, validateHost func(trusted_service.ServiceNetworkPolicy) error) {
 	if preview == nil {
 		return
 	}
@@ -148,7 +152,13 @@ func appendGamePluginNetworkCompatibilityIssues(manifest manifest_v2.Manifest, p
 			if err != nil {
 				continue // Manifest validation owns malformed contribution specs.
 			}
-			_, code, policyErr := packageGamePluginNetworkPolicy(spec.Network, contribution.RequiredPermissions)
+			policy, code, policyErr := packageGamePluginNetworkPolicy(spec.Network, contribution.RequiredPermissions)
+			if policyErr == nil && validateHost != nil {
+				if hostErr := validateHost(policy); hostErr != nil {
+					code = "game_plugin_network_sandbox_unavailable"
+					policyErr = fmt.Errorf("game plugin network sandbox prerequisites are unavailable on this host: %w", hostErr)
+				}
+			}
 			if policyErr == nil {
 				continue
 			}

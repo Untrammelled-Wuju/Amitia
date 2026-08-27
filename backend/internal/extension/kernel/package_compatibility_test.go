@@ -1,10 +1,13 @@
 package kernel
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
@@ -88,6 +91,73 @@ func TestPackageGamePluginNetworkPreflightMatchesRuntimePermissionBoundary(t *te
 	}
 	if !policy.Enforce || policy.Mode != "none" {
 		t.Fatalf("unexpected deny-all network policy: %+v", policy)
+	}
+}
+
+func TestPackageGamePluginNetworkPreflightRejectsMissingHostSandboxPrerequisite(t *testing.T) {
+	manifest := manifest_v2.Manifest{Modules: []manifest_v2.ModuleMeta{{
+		ID:   "runtime",
+		Type: "service",
+		Contributions: []manifest_v2.ContributionMeta{{
+			ID:   "game-plugin",
+			Kind: "game_plugin",
+			Spec: map[string]any{
+				"protocolVersion": "amitia-game-host/1",
+				"runtimeModuleId": "runtime",
+				"network":         map[string]any{"mode": "none"},
+			},
+		}},
+	}}}
+	preview := InstallPreview{}
+	appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest, &preview, func(policy trusted_service.ServiceNetworkPolicy) error {
+		if !policy.Enforce || policy.Mode != "none" {
+			t.Fatalf("unexpected canonical policy passed to host validator: %+v", policy)
+		}
+		return trusted_service.ErrNetworkSandboxUnavailable
+	})
+	if len(preview.Issues) != 1 {
+		t.Fatalf("network prerequisite issues = %+v, want exactly one", preview.Issues)
+	}
+	issue := preview.Issues[0]
+	if issue.Category != PreviewNotInstallable || issue.Code != "game_plugin_network_sandbox_unavailable" {
+		t.Fatalf("unexpected prerequisite issue: %+v", issue)
+	}
+	if !strings.Contains(issue.Message, trusted_service.ErrNetworkSandboxUnavailable.Error()) {
+		t.Fatalf("missing prerequisite failure detail: %+v", issue)
+	}
+	if issue.Path != "modules[0].contributions[0].spec.network" {
+		t.Fatalf("unexpected prerequisite issue path: %q", issue.Path)
+	}
+}
+
+func TestPackageCompatibilityExecuteRecheckUsesHostSandboxPrerequisites(t *testing.T) {
+	pkg := &amitiax.Package{Manifest: manifest_v2.Manifest{Modules: []manifest_v2.ModuleMeta{{
+		ID:   "runtime",
+		Type: "service",
+		Contributions: []manifest_v2.ContributionMeta{{
+			ID:   "game-plugin",
+			Kind: "game_plugin",
+			Spec: map[string]any{
+				"protocolVersion": "amitia-game-host/1",
+				"runtimeModuleId": "runtime",
+				"network":         map[string]any{"mode": "none"},
+			},
+		}},
+	}}}}
+	preview := InstallPreview{}
+	runtime := &Runtime{}
+	runtime.evaluatePackageCompatibilityAndDependenciesWithHostValidator(context.Background(), pkg, &preview, func(policy trusted_service.ServiceNetworkPolicy) error {
+		return trusted_service.ErrNetworkSandboxUnavailable
+	})
+	found := false
+	for _, issue := range preview.Issues {
+		if issue.Code == "game_plugin_network_sandbox_unavailable" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("execute-time compatibility recheck did not include host sandbox prerequisite issue: %+v", preview.Issues)
 	}
 }
 

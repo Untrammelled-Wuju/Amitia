@@ -58,6 +58,203 @@ func ValidateNetworkPolicySupport(policy ServiceNetworkPolicy) error {
 	return validateNetworkPolicySupportForOS(policy, runtime.GOOS)
 }
 
+// ValidateNetworkSandboxPrerequisites validates the concrete host runtime
+// dependencies required by the current OS sandbox backend. Unlike
+// ValidateNetworkPolicySupport, which only validates policy shape and whether
+// the OS family has an implementation, this probe is intentionally host-state
+// sensitive: package preview/install uses it to reject a Game Plugin before
+// installation when required launchers, kernel namespace support, or privileged
+// Windows firewall support are unavailable. The final process launch performs
+// the same fail-closed checks again, so a host change after preflight cannot
+// silently weaken isolation.
+func ValidateNetworkSandboxPrerequisites(policy ServiceNetworkPolicy) error {
+	if err := ValidateNetworkPolicySupport(policy); err != nil {
+		return err
+	}
+	if !policy.Enforce {
+		return nil
+	}
+
+	mode := normalizedNetworkMode(policy)
+	requirements, err := networkSandboxExecutableRequirements(runtime.GOOS, mode, os.Getenv("SystemRoot"))
+	if err != nil {
+		return err
+	}
+	resolved := make(map[string]string, len(requirements))
+	for _, requirement := range requirements {
+		path := firstTrustedHostComponent(runtime.GOOS, requirement.Candidates...)
+		if path == "" {
+			return fmt.Errorf("%w: %s is required for %s %s mode", ErrNetworkSandboxUnavailable, requirement.Name, runtime.GOOS, mode)
+		}
+		resolved[requirement.Name] = path
+	}
+
+	switch runtime.GOOS {
+	case "linux":
+		if err := probeLinuxNetworkSandbox(mode, resolved); err != nil {
+			return err
+		}
+	case "darwin":
+		if err := probeDarwinNetworkSandbox(mode, resolved); err != nil {
+			return err
+		}
+	case "windows":
+		if err := probeWindowsNetworkSandbox(mode, resolved); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type networkSandboxExecutableRequirement struct {
+	Name       string
+	Candidates []string
+}
+
+func networkSandboxExecutableRequirements(goos, mode, systemRoot string) ([]networkSandboxExecutableRequirement, error) {
+	goos = strings.ToLower(strings.TrimSpace(goos))
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch goos {
+	case "linux":
+		requirements := []networkSandboxExecutableRequirement{{Name: "bubblewrap", Candidates: []string{"/usr/bin/bwrap", "/bin/bwrap"}}}
+		switch mode {
+		case "loopback":
+			requirements = append(requirements,
+				networkSandboxExecutableRequirement{Name: "ip", Candidates: []string{"/usr/sbin/ip", "/usr/bin/ip", "/sbin/ip", "/bin/ip"}},
+				networkSandboxExecutableRequirement{Name: "sh", Candidates: []string{"/bin/sh", "/usr/bin/sh"}},
+			)
+		case "unrestricted":
+			requirements = append(requirements, networkSandboxExecutableRequirement{Name: "slirp4netns", Candidates: []string{"/usr/bin/slirp4netns", "/bin/slirp4netns"}})
+		}
+		return requirements, nil
+	case "darwin":
+		return []networkSandboxExecutableRequirement{
+			{Name: "sandbox-exec", Candidates: []string{"/usr/bin/sandbox-exec"}},
+			{Name: "true", Candidates: []string{"/usr/bin/true"}},
+		}, nil
+	case "windows":
+		root := strings.TrimSpace(systemRoot)
+		if root == "" || !filepath.IsAbs(root) {
+			return nil, fmt.Errorf("%w: trusted SystemRoot is unavailable", ErrNetworkSandboxUnavailable)
+		}
+		requirements := []networkSandboxExecutableRequirement{
+			{Name: "powershell", Candidates: []string{filepath.Join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")}},
+			{Name: "icacls", Candidates: []string{filepath.Join(root, "System32", "icacls.exe")}},
+		}
+		if mode == "loopback" || mode == "unrestricted" {
+			requirements = append(requirements, networkSandboxExecutableRequirement{Name: "CheckNetIsolation", Candidates: []string{filepath.Join(root, "System32", "CheckNetIsolation.exe")}})
+		}
+		return requirements, nil
+	default:
+		return nil, fmt.Errorf("%w on %s", ErrNetworkSandboxUnavailable, goos)
+	}
+}
+
+func probeLinuxNetworkSandbox(mode string, resolved map[string]string) error {
+	bwrap := resolved["bubblewrap"]
+	truePath := firstTrustedLauncher("/usr/bin/true", "/bin/true")
+	if truePath == "" {
+		return fmt.Errorf("%w: trusted true binary is unavailable for Linux sandbox capability probe", ErrNetworkSandboxUnavailable)
+	}
+	// This executes only a host-owned no-op binary. It proves that bubblewrap can
+	// actually create the private network namespace on this host, catching
+	// disabled unprivileged user namespaces and container/runtime restrictions
+	// that a mere executable existence check cannot detect.
+	probeArgs := []string{
+		"--die-with-parent", "--new-session", "--unshare-net",
+		"--ro-bind", "/", "/",
+	}
+	if mode == "loopback" {
+		probeArgs = append(probeArgs, "--", resolved["sh"], "-c", `"$1" link set lo up >/dev/null 2>&1`, "amitia-sandbox-probe", resolved["ip"])
+	} else {
+		probeArgs = append(probeArgs, "--", truePath)
+	}
+	if err := runNetworkSandboxProbe(bwrap, probeArgs...); err != nil {
+		return fmt.Errorf("%w: Linux bubblewrap network namespace probe failed for mode %s: %v", ErrNetworkSandboxUnavailable, mode, err)
+	}
+	if mode == "unrestricted" {
+		if err := runNetworkSandboxProbe(resolved["slirp4netns"], "--version"); err != nil {
+			return fmt.Errorf("%w: Linux slirp4netns probe failed: %v", ErrNetworkSandboxUnavailable, err)
+		}
+	}
+	return nil
+}
+
+func probeDarwinNetworkSandbox(mode string, resolved map[string]string) error {
+	truePath := resolved["true"]
+	profile, err := buildDarwinSandboxProfile(mode, truePath, os.TempDir(), os.TempDir())
+	if err != nil {
+		return fmt.Errorf("%w: build macOS sandbox capability probe: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	if err := runNetworkSandboxProbe(resolved["sandbox-exec"], "-p", profile, truePath); err != nil {
+		return fmt.Errorf("%w: macOS sandbox-exec capability probe failed for mode %s: %v", ErrNetworkSandboxUnavailable, mode, err)
+	}
+	return nil
+}
+
+func probeWindowsNetworkSandbox(mode string, resolved map[string]string) error {
+	powershell := resolved["powershell"]
+	if powershell == "" {
+		return fmt.Errorf("%w: trusted Windows PowerShell is unavailable", ErrNetworkSandboxUnavailable)
+	}
+	// The AppContainer launcher compiles a small host-owned C# bridge via Add-Type.
+	// Probe that exact capability instead of merely proving powershell.exe starts;
+	// constrained-language or policy environments must fail during package
+	// preflight rather than after installation.
+	runtimeProbe := `$code = 'public static class AmitiaSandboxProbe { public static int Value() { return 1; } }'; try { Add-Type -TypeDefinition $code -Language CSharp -ErrorAction Stop; if ([AmitiaSandboxProbe]::Value() -ne 1) { exit 7 } } catch { Write-Error $_; exit 7 }; exit 0`
+	if err := runNetworkSandboxProbe(powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", runtimeProbe); err != nil {
+		return fmt.Errorf("%w: Windows PowerShell/AppContainer bridge probe failed: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	// Exercise the exact trusted system utilities without changing machine state.
+	// Reading the temp directory ACL proves icacls can actually execute; listing
+	// loopback exemptions does the same for CheckNetIsolation before the runtime
+	// later performs the privileged add/remove operations.
+	if err := runNetworkSandboxProbe(resolved["icacls"], os.TempDir()); err != nil {
+		return fmt.Errorf("%w: Windows icacls capability probe failed: %v", ErrNetworkSandboxUnavailable, err)
+	}
+	if mode == "loopback" || mode == "unrestricted" {
+		if err := runNetworkSandboxProbe(resolved["CheckNetIsolation"], "LoopbackExempt", "-s"); err != nil {
+			return fmt.Errorf("%w: Windows CheckNetIsolation capability probe failed: %v", ErrNetworkSandboxUnavailable, err)
+		}
+		// CheckNetIsolation LoopbackExempt changes machine network-isolation state
+		// and requires elevation. Unrestricted mode additionally installs a
+		// package-scoped inbound firewall block before outbound capabilities are
+		// granted, so verify that command is available as part of the same probe.
+		adminProbe := `$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent()); if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 5 }; exit 0`
+		message := "Windows loopback AppContainer mode requires elevation"
+		if mode == "unrestricted" {
+			adminProbe = `$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent()); if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 5 }; if (-not (Get-Command New-NetFirewallRule -ErrorAction SilentlyContinue)) { exit 6 }; exit 0`
+			message = "Windows unrestricted AppContainer mode requires elevation and New-NetFirewallRule support"
+		}
+		if err := runNetworkSandboxProbe(powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", adminProbe); err != nil {
+			return fmt.Errorf("%w: %s: %v", ErrNetworkSandboxUnavailable, message, err)
+		}
+	}
+	return nil
+}
+
+func runNetworkSandboxProbe(path string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, args...)
+	process.ConfigureProcess(cmd)
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		return fmt.Errorf("probe timeout: %w", ctx.Err())
+	}
+	if err == nil {
+		return nil
+	}
+	message := strings.TrimSpace(string(output))
+	if len(message) > 512 {
+		message = message[:512] + "..."
+	}
+	if message == "" {
+		return err
+	}
+	return fmt.Errorf("%v: %s", err, message)
+}
+
 func validateNetworkPolicySupportForOS(policy ServiceNetworkPolicy, goos string) error {
 	if !policy.Enforce {
 		return nil
@@ -523,6 +720,29 @@ func prepareLinuxSlirpLaunch(bwrap string, wrapped []string, executable string, 
 		return nil
 	}
 	return plan, nil
+}
+
+// firstTrustedHostComponent resolves a host-owned sandbox prerequisite.
+// Windows executability is determined by the PE association/loader rather than
+// POSIX mode bits (Go reports ordinary Windows files without 0111), so Windows
+// validates an absolute, existing non-directory path. Unix launchers retain the
+// executable-bit requirement used by the final launcher.
+func firstTrustedHostComponent(goos string, candidates ...string) string {
+	if strings.EqualFold(strings.TrimSpace(goos), "windows") {
+		for _, candidate := range candidates {
+			candidate = filepath.Clean(strings.TrimSpace(candidate))
+			if candidate == "" || !filepath.IsAbs(candidate) {
+				continue
+			}
+			info, err := os.Stat(candidate)
+			if err != nil || info.IsDir() {
+				continue
+			}
+			return candidate
+		}
+		return ""
+	}
+	return firstTrustedLauncher(candidates...)
 }
 
 func firstTrustedLauncher(candidates ...string) string {
