@@ -12,6 +12,12 @@ export type EventSource =
   | "chat_listening"
   | "chat_thinking"
   | "chat_speaking"
+  | "voice_listening"
+  | "voice_speaking"
+  | "tool_working"
+  | "emotion"
+  | "proactive"
+  | "autonomous"
   | "manual"
   | "recovery";
 
@@ -51,6 +57,12 @@ export const EventSources = {
   CHAT_LISTENING: "chat_listening",
   CHAT_THINKING: "chat_thinking",
   CHAT_SPEAKING: "chat_speaking",
+  VOICE_LISTENING: "voice_listening",
+  VOICE_SPEAKING: "voice_speaking",
+  TOOL_WORKING: "tool_working",
+  EMOTION: "emotion",
+  PROACTIVE: "proactive",
+  AUTONOMOUS: "autonomous",
   MANUAL: "manual",
   RECOVERY: "recovery",
 } as const;
@@ -77,6 +89,16 @@ export const FallbackMappings: Record<string, string[]> = {
   dragged: ["picked_up", "idle", "idle_normal", "idle_breathing"],
   land: ["idle", "idle_normal", "idle_breathing"],
   dropped: ["fall", "land", "idle", "idle_normal", "idle_breathing"],
+  listening: ["dialogue_listening", "idle_look_around", "idle_normal"],
+  working: ["work", "thinking", "study", "idle_normal"],
+  researching: ["read", "study", "thinking", "idle_normal"],
+  organizing: ["write", "work", "thinking", "idle_normal"],
+  happy: ["excited", "wave", "idle_normal"],
+  tired: ["sleep", "sit", "idle_breathing", "idle_normal"],
+  greeting: ["wave", "bow", "idle_normal"],
+  walk_left: ["walk", "move", "idle_normal"],
+  walk_right: ["walk", "move", "idle_normal"],
+  fall: ["dropped", "dragged", "idle_normal"],
 };
 
 const MAX_QUEUE_SIZE = 5;
@@ -97,6 +119,12 @@ const SOURCE_COOLDOWN_MS: Record<EventSource, number> = {
   chat_listening: 0,
   chat_thinking: 0,
   chat_speaking: 0,
+  voice_listening: 0,
+  voice_speaking: 0,
+  tool_working: 0,
+  emotion: 1000,
+  proactive: 3000,
+  autonomous: 5000,
   manual: 0,
   recovery: 0,
 };

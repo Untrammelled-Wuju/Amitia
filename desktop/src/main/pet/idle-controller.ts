@@ -1,6 +1,5 @@
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
-import type { DesktopPetPlayerPort } from "./player-port";
-import type { DesktopPetActionScheduler } from "./action-scheduler";
+import { ActionPriorities, EventSources, type DesktopPetActionScheduler } from "./action-scheduler";
 
 export interface IdleControllerConfig {
   enabled: boolean;
@@ -27,7 +26,6 @@ interface WeightedCandidate {
 }
 
 export class IdleController {
-  private player: DesktopPetPlayerPort;
   private scheduler: DesktopPetActionScheduler;
   private loaded: LoadedInstallation | null = null;
   private config: IdleControllerConfig;
@@ -38,11 +36,9 @@ export class IdleController {
   private running = false;
 
   constructor(
-    player: DesktopPetPlayerPort,
     scheduler: DesktopPetActionScheduler,
     config?: Partial<IdleControllerConfig>,
   ) {
-    this.player = player;
     this.scheduler = scheduler;
     this.config = { ...DEFAULT_IDLE_CONFIG, ...(config ?? {}) };
   }
@@ -88,7 +84,13 @@ export class IdleController {
     if (!defaultAction) return;
     if (!defaultAction.available) return;
     if (defaultAction.loopType !== "loop") return;
-    this.player.play(defaultAction);
+    this.scheduler.submit({
+      actionKey: defaultAction.key,
+      source: EventSources.IDLE,
+      priority: ActionPriorities.DEFAULT_IDLE,
+      interrupt: false,
+      dedupeKey: `default_idle_${defaultAction.key}`,
+    });
   }
 
   playRandomIdle(): void {
@@ -105,7 +107,13 @@ export class IdleController {
       this.lastRandomAction = action.key;
       this.lastRandomRepeatCount = 1;
     }
-    this.player.play(action);
+    this.scheduler.submit({
+      actionKey: action.key,
+      source: EventSources.IDLE,
+      priority: ActionPriorities.RANDOM_IDLE,
+      interrupt: false,
+      dedupeKey: `random_idle_${action.key}`,
+    });
   }
 
   private selectRandomAction(): RuntimeAction | null {
@@ -123,6 +131,10 @@ export class IdleController {
     for (const action of this.loaded.actions.values()) {
       if (!action.available) continue;
       if (action.loopType !== "loop") continue;
+      const category = (action.category ?? "").toLowerCase();
+      const key = action.key.toLowerCase();
+      const idleEligible = action.supportsDefaultIdle === true || category === "idle" || key.startsWith("idle_") || key === "idle";
+      if (!idleEligible) continue;
       result.push(action);
     }
     return result;
