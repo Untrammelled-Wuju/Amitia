@@ -85,7 +85,7 @@ var CapabilityMatrix = []CapabilityEntry{
 		Name:       "Restricted Network",
 		Route:      string(MethodNetworkRequest),
 		Resolution: ResolutionNewMinimal,
-		Reason:     "restricted 模式保持插件进程无直连网络，由宿主对域名、端口、DNS、地址与重定向逐次校验",
+		Reason:     "restricted 模式保持插件进程无直连网络，由宿主统一代理 HTTP/TCP/UDP/WebSocket 并逐次校验 transport、目标、DNS/IP 与端口",
 	},
 	{
 		Name:       "Vision",
@@ -129,6 +129,9 @@ func AllRegisteredMethods() []string {
 		string(MethodCharacterRead), string(MethodConversationRead), string(MethodMemoryQuery),
 		// Provider / Tool / Runtime / mediated network
 		string(MethodProviderInvoke), string(MethodToolExecute), string(MethodRuntimeHealth), string(MethodNetworkRequest),
+		string(MethodNetworkTCPOpen), string(MethodNetworkTCPRead), string(MethodNetworkTCPWrite), string(MethodNetworkTCPClose),
+		string(MethodNetworkUDPOpen), string(MethodNetworkUDPReceive), string(MethodNetworkUDPSend), string(MethodNetworkUDPClose),
+		string(MethodNetworkWebSocketOpen), string(MethodNetworkWebSocketReceive), string(MethodNetworkWebSocketSend), string(MethodNetworkWebSocketClose),
 		// Migration
 		string(MethodMigrationSQLExecute), string(MethodMigrationSQLQuery),
 	}

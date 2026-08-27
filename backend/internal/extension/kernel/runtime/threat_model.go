@@ -73,7 +73,7 @@ func ThreatModel() []Threat {
 			Category:    ThreatCategoryNetworkAccess,
 			Description: "插件直接发起任意网络请求",
 			Vector:      "通过 http/https/net 模块绕过域名和审计",
-			Mitigation:  "禁止原生网络 API、统一 host.network.request、域名约束、审计",
+			Mitigation:  "禁止原生网络 API、统一 host.network.*、transport/目标/端口约束、审计",
 			Severity:    "high",
 		},
 		{

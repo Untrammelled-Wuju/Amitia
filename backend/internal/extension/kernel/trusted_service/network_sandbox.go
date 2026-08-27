@@ -19,8 +19,8 @@ import (
 var (
 	ErrNetworkSandboxUnavailable = errors.New("trusted_service: network sandbox unavailable")
 	// ErrGranularNetworkPolicyUnsupported is retained for callers compiled against
-	// the previous API. Restricted HTTP(S) policies are now enforced through the
-	// host-mediated network route; unsupported policy shapes fail closed with the
+	// the previous API. Restricted network policies are now enforced through the
+	// host-mediated network routes; unsupported policy shapes fail closed with the
 	// more specific sandbox/authorization errors.
 	ErrGranularNetworkPolicyUnsupported = errors.New("trusted_service: granular network policy requires a network proxy/firewall backend")
 )
@@ -78,17 +78,17 @@ func validateNetworkPolicySupportForOS(policy ServiceNetworkPolicy, goos string)
 
 	switch mode {
 	case "unrestricted":
-		if !policy.AllowOutbound || policy.LoopbackOnly || policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedIPs) > 0 || len(policy.AllowedPorts) > 0 {
+		if !policy.AllowOutbound || policy.LoopbackOnly || policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedIPs) > 0 || len(policy.AllowedPorts) > 0 || len(policy.AllowedTransports) > 0 || policy.AllowHostLoopback || policy.MaxConnections > 0 {
 			return fmt.Errorf("%w: inconsistent unrestricted policy", ErrUnauthorizedNetwork)
 		}
 	case "restricted":
 		// Restricted mode is deliberately host-mediated: the plugin child itself
 		// remains in the same no-network sandbox as mode=none. The allowlist is
-		// enforced by host.network.request, not by ambient child sockets.
+		// enforced by host.network.*, not by ambient child sockets.
 		if policy.AllowOutbound || policy.AllowInbound || policy.LoopbackOnly || !policy.RequireProxy {
 			return fmt.Errorf("%w: inconsistent restricted policy", ErrUnauthorizedNetwork)
 		}
-		if err := validateRestrictedAllowlist(policy.AllowedDomains, policy.AllowedIPs, policy.AllowedPorts); err != nil {
+		if err := validateRestrictedAllowlist(policy.AllowedDomains, policy.AllowedIPs, policy.AllowedPorts, policy.AllowedTransports, policy.AllowHostLoopback, policy.MaxConnections); err != nil {
 			return err
 		}
 	case "none", "loopback":
@@ -99,9 +99,9 @@ func validateNetworkPolicySupportForOS(policy ServiceNetworkPolicy, goos string)
 	return nil
 }
 
-func validateRestrictedAllowlist(domains, ips []string, ports []int) error {
-	if (len(domains) == 0 && len(ips) == 0) || len(ports) == 0 {
-		return fmt.Errorf("%w: restricted mode requires a non-empty domain/IP allowlist and port allowlist", ErrUnauthorizedNetwork)
+func validateRestrictedAllowlist(domains, ips []string, ports []int, transports []string, allowHostLoopback bool, maxConnections int) error {
+	if (len(domains) == 0 && len(ips) == 0 && !allowHostLoopback) || len(ports) == 0 {
+		return fmt.Errorf("%w: restricted mode requires a non-empty destination allowlist and port allowlist", ErrUnauthorizedNetwork)
 	}
 	seenDomains := make(map[string]struct{}, len(domains))
 	for _, raw := range domains {
@@ -153,6 +153,22 @@ func validateRestrictedAllowlist(domains, ips []string, ports []int) error {
 		}
 		seenPorts[port] = struct{}{}
 	}
+	seenTransports := make(map[string]struct{}, len(transports))
+	for _, raw := range transports {
+		transport := strings.ToLower(strings.TrimSpace(raw))
+		switch transport {
+		case "http", "https", "tcp", "udp", "websocket":
+		default:
+			return fmt.Errorf("%w: invalid restricted transport %q", ErrUnauthorizedNetwork, raw)
+		}
+		if _, ok := seenTransports[transport]; ok {
+			return fmt.Errorf("%w: duplicate restricted transport %q", ErrUnauthorizedNetwork, raw)
+		}
+		seenTransports[transport] = struct{}{}
+	}
+	if maxConnections < 0 || maxConnections > 64 {
+		return fmt.Errorf("%w: max_connections must be between 0 and 64; 0 uses the host default", ErrUnauthorizedNetwork)
+	}
 	return nil
 }
 
@@ -164,7 +180,7 @@ func normalizedNetworkMode(policy ServiceNetworkPolicy) string {
 	switch {
 	case policy.LoopbackOnly:
 		return "loopback"
-	case policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedIPs) > 0 || len(policy.AllowedPorts) > 0:
+	case policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedIPs) > 0 || len(policy.AllowedPorts) > 0 || len(policy.AllowedTransports) > 0 || policy.AllowHostLoopback || policy.MaxConnections > 0:
 		return "restricted"
 	case policy.AllowOutbound:
 		return "unrestricted"
