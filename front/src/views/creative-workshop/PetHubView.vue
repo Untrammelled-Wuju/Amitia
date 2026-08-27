@@ -2,33 +2,11 @@
 SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
-<!--
-Deprecated: Legacy extension architecture.
-Do not add new capabilities. This view is retained only for
-compatibility, maintenance, testing, and migration to Extension Kernel.
--->
 <template>
   <main class="pet-hub">
     <ExtensionPageHeader title="桌宠" description="管理桌宠制作、安装与记录" parent-title="创意工坊" parent-path="/creative-workshop" />
 
-    <section v-if="showDisclaimer" class="disclaimer-overlay">
-      <div class="disclaimer-card">
-        <div class="disclaimer-icon">
-          <el-icon :size="48"><WarningFilled /></el-icon>
-        </div>
-        <h1 class="disclaimer-title">实验性功能</h1>
-        <p class="disclaimer-desc">桌宠功能目前处于实验阶段，正在持续优化中，不确保功能的完整性和可用性。部分功能可能存在异常或不可用的情况。</p>
-        <div class="disclaimer-actions">
-          <el-checkbox v-model="dontShowAgain" label="不再提示" />
-          <div class="disclaimer-buttons">
-            <el-button @click="goBackToWorkshop">返回创意工坊</el-button>
-            <el-button type="primary" @click="confirmEnter">确认进入</el-button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section v-else class="entry-grid">
+    <section class="entry-grid">
       <router-link
         v-for="entry in entries"
         :key="entry.to"
@@ -47,33 +25,9 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
-import { ArrowRight, Star, Clock, Box, WarningFilled } from "@element-plus/icons-vue";
+import { ArrowRight, Star, Clock, Box } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "../extensions/components/ExtensionPageHeader.vue";
 
-const DISCLAIMER_KEY = "pet-disclaimer-dismissed";
-
-const router = useRouter();
-const showDisclaimer = ref(true);
-const dontShowAgain = ref(false);
-
-onMounted(() => {
-  if (sessionStorage.getItem(DISCLAIMER_KEY) === "1") {
-    showDisclaimer.value = false;
-  }
-});
-
-function confirmEnter() {
-  if (dontShowAgain.value) {
-    sessionStorage.setItem(DISCLAIMER_KEY, "1");
-  }
-  showDisclaimer.value = false;
-}
-
-function goBackToWorkshop() {
-  router.push("/creative-workshop");
-}
 
 const entries = [
   {
@@ -101,55 +55,6 @@ const entries = [
 .pet-hub {
   height: 100%;
   overflow: auto;
-}
-
-.disclaimer-overlay {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: calc(100% - 80px);
-  padding: 24px;
-}
-
-.disclaimer-card {
-  max-width: 480px;
-  width: 100%;
-  padding: 40px 36px;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 12px;
-  background: var(--ac-color-surface);
-  text-align: center;
-}
-
-.disclaimer-icon {
-  color: var(--el-color-warning);
-  margin-bottom: 16px;
-}
-
-.disclaimer-title {
-  margin: 0 0 16px;
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--console-text);
-}
-
-.disclaimer-desc {
-  margin: 0 0 28px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.8;
-  font-size: 14px;
-}
-
-.disclaimer-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
-
-.disclaimer-buttons {
-  display: flex;
-  gap: 12px;
 }
 
 .entry-grid {
@@ -201,10 +106,6 @@ const entries = [
 }
 
 @media (max-width: 720px) {
-  .disclaimer-card {
-    padding: 28px 20px;
-  }
-
   .entry-card {
     min-height: 120px;
   }
