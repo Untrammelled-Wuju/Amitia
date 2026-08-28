@@ -131,6 +131,15 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 
 	result, err := p.ports.PendingInvocations.WaitForResult(ctx, request.Invocation.InvocationID)
 	if err != nil {
+		reasonCode := CancellationReasonCallerContext
+		if ctx.Err() == context.DeadlineExceeded {
+			reasonCode = CancellationReasonDeadlineExceeded
+		}
+		// Best-effort remote cancellation. The pending invocation is already
+		// leaving the caller's wait path; notify the device as well so a local
+		// management handler cannot continue mutating GameHost state after the
+		// cloud request has timed out or been disconnected.
+		_ = p.Cancel(context.Background(), request, ToolCancellationReason{Code: reasonCode})
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,
 			Status:       ToolResultStatusFailed,
