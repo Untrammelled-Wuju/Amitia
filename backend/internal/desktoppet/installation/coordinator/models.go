@@ -219,6 +219,7 @@ type ReleaseValidationResult struct {
 	StagingPathKey   string
 	PublishedPathKey string
 	DefaultActionKey string
+	ActionKeys       []string
 	SettingsRevision int
 	DesiredSettings  settings.SettingsSnapshot
 	ErrorMessage     string
@@ -252,6 +253,9 @@ var (
 	ErrInvalidRecenterRequest      = errors.New("coordinator: invalid recenter request")
 	ErrCoordinatorInternal         = errors.New("coordinator: internal error")
 	ErrOwnershipMismatch           = errors.New("coordinator: ownership mismatch")
+	ErrPetNotEnabled               = errors.New("coordinator: desktop pet is not enabled")
+	ErrActionNotFound              = errors.New("coordinator: action not found")
+	ErrRuntimeUnavailable          = errors.New("coordinator: desktop pet runtime is unavailable")
 	ErrReleaseNotInstallable       = errors.New("coordinator: release not installable")
 	ErrOperationFailedRetryable    = errors.New("coordinator: operation failed retryable")
 	ErrOperationFailedTerminal     = errors.New("coordinator: operation failed terminal")

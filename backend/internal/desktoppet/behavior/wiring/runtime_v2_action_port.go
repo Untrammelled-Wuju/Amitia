@@ -29,9 +29,9 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "v2 runtime facade unavailable")
 	}
 
-	queuePolicy := "enqueue"
+	queuePolicy := runtimev2.PlayActionQueueEnqueue
 	if cmd.InterruptPolicy == "force" {
-		queuePolicy = "replace_current"
+		queuePolicy = runtimev2.PlayActionQueueReplaceCurrent
 	}
 	returnTo := cmd.ReturnPolicy
 	if returnTo == "" {
@@ -51,7 +51,7 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		PlaybackRate:     1,
 		MinimumPlayMs:    cmd.MinimumPlayMS,
 		MaximumPlayMs:    cmd.MaximumPlayMS,
-		CompletionPolicy: "report",
+		CompletionPolicy: runtimev2.PlayActionCompletionOnStarted,
 		DecisionID:       cmd.DecisionID,
 		Semantic:         cmd.Semantic,
 		ReasonCode:       cmd.ReasonCode,
