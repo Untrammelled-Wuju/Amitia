@@ -364,6 +364,28 @@ func (c *Coordinator) PlayAction(ctx context.Context, deviceCtx device.DeviceCon
 	if inst == nil || inst.UserID != deviceCtx.UserID || inst.DeviceID != deviceCtx.DeviceID {
 		return ErrOwnershipMismatch
 	}
+	if !inst.Enabled {
+		return fmt.Errorf("%w: %s", ErrPetNotEnabled, installationID)
+	}
+
+	validation, err := c.releaseValidator.ValidateRelease(ctx, deviceCtx.UserID, inst.ReleaseID)
+	if err != nil {
+		return fmt.Errorf("validate release for play action: %w", err)
+	}
+	if validation == nil || !validation.IsInstallable || !validation.ManifestValid {
+		return fmt.Errorf("%w: release %s manifest is unavailable", ErrReleaseNotInstallable, inst.ReleaseID)
+	}
+	actionFound := false
+	for _, key := range validation.ActionKeys {
+		if key == actionKey {
+			actionFound = true
+			break
+		}
+	}
+	if !actionFound {
+		return fmt.Errorf("%w: %s", ErrActionNotFound, actionKey)
+	}
+
 	return c.runtimePublisher.PublishPlayAction(ctx, deviceCtx, installationID, actionKey)
 }
 

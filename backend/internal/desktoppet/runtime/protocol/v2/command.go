@@ -21,6 +21,16 @@ const (
 	CommandTypeRecenterOnce     CommandType = "runtime.command.recenter_once"
 )
 
+const (
+	PlayActionQueueEnqueue        = "enqueue"
+	PlayActionQueueReplaceCurrent = "replace_current"
+
+	PlayActionCompletionOnStarted     = "on_started"
+	PlayActionCompletionOnFirstCycle  = "on_first_cycle"
+	PlayActionCompletionOnInterrupted = "on_interrupted"
+	PlayActionCompletionManualStop    = "manual_stop"
+)
+
 func (c CommandType) IsDurable() bool {
 	switch c {
 	case CommandTypeSyncDesiredState, CommandTypeEnsureAbsent, CommandTypeReloadRelease:

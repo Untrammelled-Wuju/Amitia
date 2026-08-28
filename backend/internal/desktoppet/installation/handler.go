@@ -394,6 +394,7 @@ func mapInstallationErrorCode(code string) int {
 		ErrCodeInstallationInvalid,
 		ErrCodePurgeNotConfirmed,
 		ErrCodeRevisionConflict,
+		ErrCodeRuntimeDeliveryFailed,
 		ErrCodePackageQualityGateBlocked:
 		return response.BusinessError
 	case ErrCodeInstallationFailed:
@@ -416,8 +417,9 @@ func NewCoordinatorHandler(coord coordinator.InstallationCoordinator, repo Repos
 func (h *CoordinatorHandler) buildDeviceCtx(c *gin.Context, actorID string) device.DeviceContext {
 	deviceID := strings.TrimSpace(c.GetHeader("X-Amitia-Device-ID"))
 	return device.DeviceContext{
-		UserID:   actorID,
-		DeviceID: deviceID,
+		UserID:    actorID,
+		DeviceID:  deviceID,
+		RuntimeID: strings.TrimSpace(c.GetHeader("X-Amitia-Runtime-ID")),
 	}
 }
 
@@ -817,7 +819,9 @@ func (h *CoordinatorHandler) PlayAction(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.coordinator.PlayAction(c.Request.Context(), device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID}, installationID, actionKey); err != nil {
+	deviceCtx := h.buildDeviceCtx(c, string(actor.UserID))
+	deviceCtx.DeviceID = deviceID
+	if err := h.coordinator.PlayAction(c.Request.Context(), deviceCtx, installationID, actionKey); err != nil {
 		writeCoordinatorError(c, err)
 		return
 	}
@@ -1048,6 +1052,20 @@ func writeCoordinatorError(c *gin.Context, err error) {
 	var ie *InstallationError
 	if errors.As(err, &ie) {
 		writeInstallationError(c, err)
+		return
+	}
+	switch {
+	case errors.Is(err, coordinator.ErrPetNotEnabled):
+		writeInstallationError(c, NewInstallationError(ErrCodePetNotEnabled, "桌宠未启用", ErrPetNotEnabled))
+		return
+	case errors.Is(err, coordinator.ErrActionNotFound):
+		writeInstallationError(c, NewInstallationError(ErrCodeActionNotFound, "动作不存在", ErrActionNotFound))
+		return
+	case errors.Is(err, coordinator.ErrReleaseNotInstallable):
+		writeInstallationError(c, NewInstallationError(ErrCodePackageNotReady, "桌宠发布包不可用", ErrPackageNotReady))
+		return
+	case errors.Is(err, coordinator.ErrRuntimeUnavailable):
+		writeInstallationError(c, NewInstallationError(ErrCodeRuntimeDeliveryFailed, "桌宠运行时离线，动作命令未送达", err))
 		return
 	}
 	util.ErrorResponse(c, response.InternalError, err.Error(), gin.H{"errorCode": ErrCodeInstallationFailed})
