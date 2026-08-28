@@ -19,6 +19,12 @@ import (
 	"github.com/u-ai/backend/log"
 )
 
+const (
+	runtimeV2WebSocketSubprotocol     = "amitia.runtime.v2"
+	runtimeV2BootstrapProtocolPrefix  = "amitia.runtime.bootstrap."
+	maxRuntimeBootstrapProtocolLength = 256
+)
+
 type BootstrapTicketConsumer func(
 	ctx context.Context,
 	rawTicket string,
@@ -179,11 +185,20 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rawTicket := strings.TrimSpace(r.URL.Query().Get("ticket"))
+	if strings.TrimSpace(r.URL.Query().Get("ticket")) != "" {
+		http.Error(w, "runtime bootstrap credential transport rejected", http.StatusBadRequest)
+		return
+	}
+	if !websocket.IsWebSocketUpgrade(r) {
+		http.Error(w, "websocket upgrade required", http.StatusUpgradeRequired)
+		return
+	}
+
+	selectedProtocol, rawTicket, ok := parseRuntimeBootstrapSubprotocol(r)
 	deviceID := runtimeidentity.ParseDeviceID(r.URL.Query().Get("deviceId"))
 	runtimeID := runtimeidentity.ParseRuntimeID(r.URL.Query().Get("runtimeId"))
 
-	if rawTicket == "" || deviceID == "" || runtimeID == "" {
+	if !ok || rawTicket == "" || deviceID == "" || runtimeID == "" {
 		http.Error(w, "runtime bootstrap credentials required", http.StatusUnauthorized)
 		return
 	}
@@ -199,7 +214,9 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wsConn, err := h.upgrader.Upgrade(w, r, nil)
+	upgrader := h.upgrader
+	upgrader.Subprotocols = []string{selectedProtocol}
+	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Warn("[v2-ws] upgrade failed: ", err)
 		return
@@ -230,6 +247,36 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go dispatcher.Run(dispatchCtx, conn, ctx.SendEnvelope)
 
 	ctx.readLoop()
+}
+
+func parseRuntimeBootstrapSubprotocol(r *http.Request) (selectedProtocol, rawTicket string, ok bool) {
+	if r == nil {
+		return "", "", false
+	}
+
+	hasRuntimeProtocol := false
+	bootstrapProtocol := ""
+	for _, candidate := range websocket.Subprotocols(r) {
+		protocolName := strings.TrimSpace(candidate)
+		switch {
+		case protocolName == runtimeV2WebSocketSubprotocol:
+			hasRuntimeProtocol = true
+		case strings.HasPrefix(protocolName, runtimeV2BootstrapProtocolPrefix):
+			if bootstrapProtocol != "" || len(protocolName) > maxRuntimeBootstrapProtocolLength {
+				return "", "", false
+			}
+			bootstrapProtocol = protocolName
+		}
+	}
+
+	if !hasRuntimeProtocol || bootstrapProtocol == "" {
+		return "", "", false
+	}
+	rawTicket = strings.TrimSpace(strings.TrimPrefix(bootstrapProtocol, runtimeV2BootstrapProtocolPrefix))
+	if rawTicket == "" {
+		return "", "", false
+	}
+	return runtimeV2WebSocketSubprotocol, rawTicket, true
 }
 
 type wsConnContext struct {

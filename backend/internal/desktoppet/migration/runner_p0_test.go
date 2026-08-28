@@ -126,6 +126,7 @@ func TestWriteCutoverRecordsBothLegacyWriteGates(t *testing.T) {
 		},
 	}
 	runner.RegisterPlan(plan)
+	runner.SetLegacyWriteRefresh(func() error { return nil })
 	op := createRunnerOperation(t, repo, plan.ID, StageReadCutover)
 	if err := repo.RecordReadCutover(context.Background(), op.ID, "v2_read_path"); err != nil {
 		t.Fatalf("record read: %v", err)
@@ -243,5 +244,99 @@ func TestWriteCutoverFailureDoesNotPersistVerifiedRecordOrAdvanceStage(t *testin
 	}
 	if count != 0 {
 		t.Fatalf("write cutover rows=%d want=0", count)
+	}
+}
+
+func TestLegacyWriteDisabledRequiresDurableBlockedOrCompletedOperation(t *testing.T) {
+	repo := newRunnerTestRepo(t)
+	op := createRunnerOperation(t, repo, "desktop-pet-v2-cutover", StageWriteCutover)
+	for _, stepName := range []string{"installation", "editing"} {
+		if err := repo.RecordWriteCutover(context.Background(), op.ID, stepName); err != nil {
+			t.Fatalf("record %s cutover: %v", stepName, err)
+		}
+		if err := repo.MarkWriteCutoverVerified(context.Background(), op.ID, stepName); err != nil {
+			t.Fatalf("verify %s cutover: %v", stepName, err)
+		}
+	}
+
+	installationDisabled, err := repo.LegacyInstallationWriteDisabled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	editingDisabled, err := repo.LegacyEditingWriteDisabled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installationDisabled || editingDisabled {
+		t.Fatalf("verified rows before durable block must not disable legacy writers: installation=%v editing=%v", installationDisabled, editingDisabled)
+	}
+
+	ok, err := repo.UpdateOperationStageCAS(context.Background(), op.ID, StageWriteCutover, StageLegacyWriteBlocked, nil)
+	if err != nil || !ok {
+		t.Fatalf("advance to legacy_write_blocked: ok=%v err=%v", ok, err)
+	}
+	installationDisabled, err = repo.LegacyInstallationWriteDisabled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	editingDisabled, err = repo.LegacyEditingWriteDisabled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !installationDisabled || !editingDisabled {
+		t.Fatalf("durably blocked operation must disable both legacy writers: installation=%v editing=%v", installationDisabled, editingDisabled)
+	}
+}
+
+func TestLegacyWriteRefreshRunsAfterDurableBlockStage(t *testing.T) {
+	repo := newRunnerTestRepo(t)
+	runner := NewRunner(repo)
+	plan := DomainMigrationOperationPlan{ID: "desktop-pet-v2-cutover"}
+	runner.RegisterPlan(plan)
+	op := createRunnerOperation(t, repo, plan.ID, StageWriteCutover)
+	if err := repo.RecordReadCutover(context.Background(), op.ID, "v2_read_path"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.MarkReadCutoverVerified(context.Background(), op.ID, "v2_read_path"); err != nil {
+		t.Fatal(err)
+	}
+	for _, stepName := range []string{"installation", "editing"} {
+		if err := repo.RecordWriteCutover(context.Background(), op.ID, stepName); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.MarkWriteCutoverVerified(context.Background(), op.ID, stepName); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	refreshCalls := 0
+	runner.SetLegacyWriteRefresh(func() error {
+		refreshCalls++
+		installationDisabled, err := repo.LegacyInstallationWriteDisabled()
+		if err != nil {
+			return err
+		}
+		editingDisabled, err := repo.LegacyEditingWriteDisabled()
+		if err != nil {
+			return err
+		}
+		if !installationDisabled || !editingDisabled {
+			return errors.New("refresh observed legacy writers before durable block stage")
+		}
+		return nil
+	})
+
+	if err := runner.RequestCutover(context.Background(), op.ID, "write"); err != nil {
+		t.Fatalf("write cutover: %v", err)
+	}
+	if refreshCalls != 1 {
+		t.Fatalf("refresh calls=%d want=1", refreshCalls)
+	}
+	got, err := repo.GetOperation(context.Background(), op.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Stage != StageCompleted {
+		t.Fatalf("stage=%s want=%s", got.Stage, StageCompleted)
 	}
 }

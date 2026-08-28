@@ -3,7 +3,6 @@ package migrationplans
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/migration"
 	"gorm.io/gorm"
@@ -173,10 +172,10 @@ WHERE i.status IN ('active','installed') AND d.id IS NULL`).Scan(&broken).Error;
 						return fmt.Errorf("%s write cutover is not verified", stepName)
 					}
 				}
-				nowStr := time.Now().Format("2006-01-02 15:04:05")
-				if err := deps.DB.Exec("INSERT OR REPLACE INTO desktop_pet_migration_flags (flag_name, flag_value, updated_at) VALUES (?, ?, ?)", "legacy_writes_blocked", "true", nowStr).Error; err != nil {
-					return fmt.Errorf("block legacy writes: %w", err)
-				}
+				// The durable authority for blocking legacy writes is the migration
+				// operation stage itself. The runner advances to legacy_write_blocked
+				// only after both verified cutovers above succeed, then refreshes the
+				// in-process guards from that durable state.
 				return nil
 			},
 		},
