@@ -52,10 +52,9 @@ void main() {
     }
 
     test('businessAvailable=true allows access', () {
-      final projection = _FakeProjection(_makeSnapshot(
-        businessAvailable: true,
-        generation: 5,
-      ));
+      final projection = _FakeProjection(
+        _makeSnapshot(businessAvailable: true, generation: 5),
+      );
       final gate = BusinessBackendAccess(projection);
 
       expect(gate.businessAvailable, true);
@@ -64,21 +63,25 @@ void main() {
     });
 
     test('businessAvailable=false throws typed error', () {
-      final projection = _FakeProjection(_makeSnapshot(
-        businessAvailable: false,
-        generation: 5,
-        phase: RuntimeStatusPhase.degraded,
-        primaryError: const RuntimeStatusError(
-          source: RuntimeStatusErrorSource.http,
-          code: 'HTTP_UNAVAILABLE',
-          message: 'HTTP transport unavailable',
+      final projection = _FakeProjection(
+        _makeSnapshot(
+          businessAvailable: false,
+          generation: 5,
+          phase: RuntimeStatusPhase.degraded,
+          primaryError: const RuntimeStatusError(
+            source: RuntimeStatusErrorSource.http,
+            code: 'HTTP_UNAVAILABLE',
+            message: 'HTTP transport unavailable',
+          ),
         ),
-      ));
+      );
       final gate = BusinessBackendAccess(projection);
 
       expect(gate.businessAvailable, false);
-      expect(() => gate.requireBusinessAvailable(),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => gate.requireBusinessAvailable(),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
 
       try {
         gate.requireBusinessAvailable();
@@ -91,10 +94,9 @@ void main() {
     });
 
     test('acquireApi returns api when available and generation matches', () {
-      final projection = _FakeProjection(_makeSnapshot(
-        businessAvailable: true,
-        generation: 5,
-      ));
+      final projection = _FakeProjection(
+        _makeSnapshot(businessAvailable: true, generation: 5),
+      );
       final gate = BusinessBackendAccess(projection);
       final api = _FakeBackendServiceApi(5);
 
@@ -103,55 +105,57 @@ void main() {
     });
 
     test('acquireApi throws when business unavailable', () {
-      final projection = _FakeProjection(_makeSnapshot(
-        businessAvailable: false,
-        generation: 5,
-      ));
+      final projection = _FakeProjection(
+        _makeSnapshot(businessAvailable: false, generation: 5),
+      );
       final gate = BusinessBackendAccess(projection);
       final api = _FakeBackendServiceApi(5);
 
-      expect(() => gate.acquireApi(api),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => gate.acquireApi(api),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
     });
 
     test('acquireApi throws when rawApi is null', () {
-      final projection = _FakeProjection(_makeSnapshot(
-        businessAvailable: true,
-        generation: 5,
-      ));
+      final projection = _FakeProjection(
+        _makeSnapshot(businessAvailable: true, generation: 5),
+      );
       final gate = BusinessBackendAccess(projection);
 
-      expect(() => gate.acquireApi(null),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => gate.acquireApi(null),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
     });
 
     test('acquireApi throws when generation mismatch', () {
-      final projection = _FakeProjection(_makeSnapshot(
-        businessAvailable: true,
-        generation: 8,
-      ));
+      final projection = _FakeProjection(
+        _makeSnapshot(businessAvailable: true, generation: 8),
+      );
       final gate = BusinessBackendAccess(projection);
       final api = _FakeBackendServiceApi(7);
 
-      expect(() => gate.acquireApi(api),
-          throwsA(isA<BusinessBackendUnavailable>()));
+      expect(
+        () => gate.acquireApi(api),
+        throwsA(isA<BusinessBackendUnavailable>()),
+      );
     });
 
     test('snapshot reflects current projection state', () {
-      final projection = _FakeProjection(_makeSnapshot(
-        businessAvailable: false,
-        generation: 0,
-        phase: RuntimeStatusPhase.unavailable,
-      ));
+      final projection = _FakeProjection(
+        _makeSnapshot(
+          businessAvailable: false,
+          generation: 0,
+          phase: RuntimeStatusPhase.unavailable,
+        ),
+      );
       final gate = BusinessBackendAccess(projection);
 
       expect(gate.snapshot.phase, RuntimeStatusPhase.unavailable);
       expect(gate.snapshot.generation, 0);
 
-      projection.update(_makeSnapshot(
-        businessAvailable: true,
-        generation: 10,
-      ));
+      projection.update(_makeSnapshot(businessAvailable: true, generation: 10));
 
       expect(gate.snapshot.phase, RuntimeStatusPhase.ready);
       expect(gate.snapshot.generation, 10);
@@ -171,22 +175,60 @@ class _FakeBackendServiceApi implements BackendServiceApi {
   int get generation => _generation;
 
   @override
-  Future<T?> deleteWithResponse<T>(String path,
-      {Object? data, T Function(dynamic)? fromJson}) async => null;
+  Future<T?> deleteWithResponse<T>(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
 
   @override
-  Future<void> delete(String path) async {}
+  Future<void> delete(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+  }) async {}
 
   @override
-  Future<T?> get<T>(String path,
-      {Map<String, dynamic>? queryParameters,
-      T Function(dynamic)? fromJson}) async => null;
+  Future<T?> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
 
   @override
-  Future<T?> post<T>(String path,
-      {Object? data, T Function(dynamic)? fromJson}) async => null;
+  Future<T?> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
 
   @override
-  Future<T?> put<T>(String path,
-      {Object? data, T Function(dynamic)? fromJson}) async => null;
+  Future<T?> postPayload<T>(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
+
+  @override
+  Future<T?> put<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
+
+  @override
+  Future<T?> patch<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
 }

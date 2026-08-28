@@ -3,42 +3,49 @@ import '../runtime/status/runtime_status_snapshot.dart';
 import 'backend_service_api.dart';
 
 typedef BackendServiceApiResolver = BackendServiceApi? Function();
+typedef BusinessApiAvailabilityResolver =
+    bool Function(RuntimeStatusSnapshot status, BackendServiceApi? api);
+typedef BusinessBackendUnavailableListener =
+    void Function(BusinessBackendUnavailable error);
 
 final class DynamicBackendServiceApiProxy implements BackendServiceApi {
   DynamicBackendServiceApiProxy({
     required BackendServiceApiResolver currentApi,
     required RuntimeStatusSnapshot Function() currentStatus,
-  })  : _currentApi = currentApi,
-        _currentStatus = currentStatus;
+    BusinessApiAvailabilityResolver? canUseApi,
+    BusinessBackendUnavailableListener? onUnavailable,
+  }) : _currentApi = currentApi,
+       _currentStatus = currentStatus,
+       _canUseApi = canUseApi ?? _defaultCanUseApi,
+       _onUnavailable = onUnavailable;
 
   final BackendServiceApiResolver _currentApi;
   final RuntimeStatusSnapshot Function() _currentStatus;
+  final BusinessApiAvailabilityResolver _canUseApi;
+  final BusinessBackendUnavailableListener? _onUnavailable;
 
   BackendServiceApi _requireCurrentApi() {
     final status = _currentStatus();
-    if (!status.businessAvailable) {
-      throw BusinessBackendUnavailable(
-        phase: status.phase,
-        generation: status.generation,
-        primaryError: status.primaryError,
-      );
-    }
     final api = _currentApi();
-    if (api == null) {
-      throw BusinessBackendUnavailable(
+    if (!_canUseApi(status, api)) {
+      final error = BusinessBackendUnavailable(
         phase: status.phase,
         generation: status.generation,
         primaryError: status.primaryError,
       );
+      _onUnavailable?.call(error);
+      throw error;
     }
-    if (api.generation != status.generation) {
-      throw BusinessBackendUnavailable(
-        phase: status.phase,
-        generation: status.generation,
-        primaryError: status.primaryError,
-      );
-    }
-    return api;
+    return api!;
+  }
+
+  static bool _defaultCanUseApi(
+    RuntimeStatusSnapshot status,
+    BackendServiceApi? api,
+  ) {
+    return status.businessAvailable &&
+        api != null &&
+        api.generation == status.generation;
   }
 
   @override
@@ -86,7 +93,12 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     T Function(dynamic)? fromJson,
   }) {
     final api = _requireCurrentApi();
-    return api.postPayload<T>(path, data: data, headers: headers, fromJson: fromJson);
+    return api.postPayload<T>(
+      path,
+      data: data,
+      headers: headers,
+      fromJson: fromJson,
+    );
   }
 
   @override
@@ -126,7 +138,11 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
   }
 
   @override
-  Future<void> delete(String path, {Map<String, dynamic>? queryParameters, Map<String, String>? headers}) {
+  Future<void> delete(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+  }) {
     final api = _requireCurrentApi();
     return api.delete(path, queryParameters: queryParameters, headers: headers);
   }
@@ -139,6 +155,11 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     T Function(dynamic)? fromJson,
   }) {
     final api = _requireCurrentApi();
-    return api.deleteWithResponse<T>(path, data: data, headers: headers, fromJson: fromJson);
+    return api.deleteWithResponse<T>(
+      path,
+      data: data,
+      headers: headers,
+      fromJson: fromJson,
+    );
   }
 }

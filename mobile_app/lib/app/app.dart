@@ -46,16 +46,17 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
     final config = ref.read(mobileDeploymentConfigProvider);
     final lifecycle = ref.read(mobileBackendLifecycleProvider);
-    if (mounted) {
-      setState(() => _bootstrapInitialized = true);
-    }
-
-    final localBootstrapBlocked = config.mode == MobileDeploymentMode.local &&
+    final localBootstrapBlocked =
+        config.mode == MobileDeploymentMode.local &&
         (bootstrapSnapshot.phase == RuntimeBootstrapPhase.installRequired ||
             bootstrapSnapshot.phase == RuntimeBootstrapPhase.failed ||
             bootstrapSnapshot.phase == RuntimeBootstrapPhase.unavailable);
     if (!localBootstrapBlocked) {
-      unawaited(lifecycle.reconcile(config));
+      await lifecycle.reconcile(config);
+    }
+
+    if (mounted) {
+      setState(() => _bootstrapInitialized = true);
     }
   }
 
@@ -79,8 +80,7 @@ class _BootstrapGate extends ConsumerWidget {
     } else {
       final deployment = ref.watch(mobileDeploymentConfigProvider);
 
-      if (deployment.mode == MobileDeploymentMode.cloud ||
-          deployment.mode == MobileDeploymentMode.hybrid) {
+      if (deployment.mode == MobileDeploymentMode.cloud) {
         content = const AmitiaApp();
       } else {
         final bootstrapAsync = ref.watch(runtimeBootstrapSnapshotProvider);
@@ -308,7 +308,9 @@ class AmitiaApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final runtimeSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
     if (runtimeSnapshot == null) {
-      Future.microtask(() => ref.read(uiRuntimeProvider.notifier).ensureLoaded());
+      Future.microtask(
+        () => ref.read(uiRuntimeProvider.notifier).ensureLoaded(),
+      );
     }
     final visualProviders = <UIProviderDefinition?>[
       runtimeSnapshot?.resolve(UICapability.theme),
@@ -324,6 +326,7 @@ class AmitiaApp extends ConsumerWidget {
       }
       return result;
     }
+
     final lightTheme = applyVisualProviders(AppTheme.lightTheme());
     final darkTheme = applyVisualProviders(AppTheme.darkTheme());
 
@@ -336,7 +339,10 @@ class AmitiaApp extends ConsumerWidget {
       routerConfig: router,
       builder: (context, child) {
         return Stack(
-          children: [if (child != null) child, const DebugLogOverlay()],
+          children: [
+            if (child case final Widget currentChild) currentChild,
+            const DebugLogOverlay(),
+          ],
         );
       },
     );
