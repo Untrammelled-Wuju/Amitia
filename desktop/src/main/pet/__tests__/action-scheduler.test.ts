@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { ActionPlayer as ActionPlayerType } from "../action-player";
-import type { PlayerCallbacks } from "../action-player";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import type { LoadedInstallation, RuntimeAction } from "../resource-loader";
+import type { DesktopPetPlayerPort, PlayerLifecyclePort, PlayerState } from "../player-port";
 import {
   ActionPriorities,
   DesktopPetActionScheduler,
@@ -15,7 +15,87 @@ import {
   type ManualRafController,
 } from "./helpers";
 
-let ActionPlayer: typeof import("../action-player").ActionPlayer;
+
+
+class SchedulerTestPlayer implements DesktopPetPlayerPort, PlayerLifecyclePort {
+  private loaded: LoadedInstallation | null = null;
+  private currentAction: RuntimeAction | null = null;
+  private state: PlayerState = "idle";
+  private loopCount = 0;
+  private sustainedActionMap = new Map<string, string>();
+
+  attachLoaded(loaded: LoadedInstallation): void {
+    this.loaded = loaded;
+    this.currentAction = null;
+    this.state = "idle";
+    this.loopCount = 0;
+  }
+
+  detachLoaded(): void {
+    this.loaded = null;
+    this.currentAction = null;
+    this.state = "stopped";
+    this.loopCount = 0;
+  }
+
+  setSustainedActionMap(map: Record<string, string>): void {
+    this.sustainedActionMap = new Map(Object.entries(map));
+  }
+
+  play(action: RuntimeAction): void {
+    this.currentAction = action;
+    this.state = "playing";
+    this.loopCount = 0;
+  }
+
+  switchAction(action: RuntimeAction): void {
+    this.play(action);
+  }
+
+  pause(): void {
+    if (this.state === "playing") this.state = "paused";
+  }
+
+  resume(): void {
+    if (this.state === "paused") this.state = "playing";
+  }
+
+  stop(): void {
+    this.currentAction = null;
+    this.state = "stopped";
+    this.loopCount = 0;
+  }
+
+  getCurrentAction(): RuntimeAction | null {
+    return this.currentAction;
+  }
+
+  getState(): PlayerState {
+    return this.state;
+  }
+
+  getLoopCount(): number {
+    return this.loopCount;
+  }
+
+  getFallbackChain(action: RuntimeAction, loaded?: LoadedInstallation | null): RuntimeAction[] {
+    const source = loaded ?? this.loaded;
+    if (!source) return [];
+    const result: RuntimeAction[] = [];
+    const seen = new Set<string>();
+    const push = (candidate: RuntimeAction | undefined | null) => {
+      if (!candidate || !candidate.available || seen.has(candidate.key) || candidate.key === action.key) return;
+      seen.add(candidate.key);
+      result.push(candidate);
+    };
+    if (action.returnAction) push(source.actions.get(action.returnAction));
+    const sustained = this.sustainedActionMap.get(action.key);
+    if (sustained) push(source.actions.get(sustained));
+    push(source.defaultAction);
+    for (const candidate of source.actions.values()) push(candidate);
+    return result;
+  }
+}
 
 interface SchedulerSpy {
   events: Array<{
@@ -43,18 +123,14 @@ function makeRequest(
 }
 
 describe("DesktopPetActionScheduler", () => {
-  let player: ActionPlayerType;
+  let player: SchedulerTestPlayer;
   let raf: ManualRafController;
   let spy: SchedulerSpy;
   let scheduler: DesktopPetActionScheduler;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     raf = installManualRaf();
-    vi.resetModules();
-    const mod = await import("../action-player");
-    ActionPlayer = mod.ActionPlayer;
-    const callbacks: PlayerCallbacks = {};
-    player = new ActionPlayer(callbacks);
+    player = new SchedulerTestPlayer();
     spy = makeSpy();
     scheduler = new DesktopPetActionScheduler(player, {
       onEvent: (event, request, action) => {
@@ -71,7 +147,6 @@ describe("DesktopPetActionScheduler", () => {
     scheduler.dispose();
     player.stop();
     raf.restore();
-    vi.resetModules();
   });
 
   function attachAndAdvance(): ReturnType<typeof makeLoadedInstallation> {

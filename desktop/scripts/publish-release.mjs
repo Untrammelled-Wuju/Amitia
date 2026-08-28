@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   readFileSync,
   existsSync,
@@ -11,6 +11,7 @@ import { join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import https from "node:https";
+import { verifyReleaseGateStamp } from "./release-integrity.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const configPath = join(__dirname, ".publish-config.json");
@@ -72,6 +73,29 @@ async function main() {
   }
 
   const config = JSON.parse(readFileSync(configPath, "utf-8"));
+
+  try {
+    const verified = verifyReleaseGateStamp();
+    console.log(
+      `[release-gate] verified source + artifacts for ${verified.stamp.packageVersion} (${verified.stamp.sourceGateSha256.slice(0, 12)}...)`,
+    );
+  } catch (error) {
+    console.error(
+      `发布被阻止：${error instanceof Error ? error.message : String(error)}`,
+    );
+    console.error("请重新运行 pnpm dist:win，通过完整桌宠发布门禁后再上传。");
+    process.exit(1);
+  }
+
+  const packagedVerify = spawnSync(
+    process.execPath,
+    [join(__dirname, "verify-packaged-desktop-pet.mjs"), join(releaseDir, "win-unpacked")],
+    { stdio: "inherit" },
+  );
+  if (packagedVerify.error || packagedVerify.status !== 0) {
+    console.error("发布被阻止：win-unpacked 桌宠完整性验证未通过，请重新构建。");
+    process.exit(1);
+  }
 
   if (!existsSync(releaseDir)) {
     console.error("release 目录不存在，请先运行 pnpm dist:win 构建");
