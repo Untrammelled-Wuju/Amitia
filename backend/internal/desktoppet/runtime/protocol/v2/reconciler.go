@@ -61,6 +61,22 @@ func (r *Reconciler) ExpireCommands(now time.Time, timeoutSec int) (int64, error
 		if cmd.Status == string(CommandStatusExpired) {
 			continue
 		}
+		if cmd.IsDurable() {
+			status := CommandStatus(cmd.Status)
+			// Durable desired-state commands are at-least-once. Queued commands
+			// may remain offline indefinitely; in-flight commands that miss their
+			// acknowledgement deadline return to retryable instead of becoming a
+			// terminal expired intent.
+			switch status {
+			case CommandStatusCreated, CommandStatusQueued, CommandStatusFailedRetryable:
+				continue
+			default:
+				if err := r.commands.MarkFailedRetryable(cmd.ID, "ACK_TIMEOUT", "durable command acknowledgement timed out", now); err != nil {
+					return expired, fmt.Errorf("mark durable command %s retryable: %w", cmd.ID, err)
+				}
+				continue
+			}
+		}
 		if err := r.commands.MarkExpired(cmd.ID, now); err != nil {
 			return expired, fmt.Errorf("mark command %s expired: %w", cmd.ID, err)
 		}

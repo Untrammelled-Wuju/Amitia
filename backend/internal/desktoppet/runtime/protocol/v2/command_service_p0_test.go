@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,11 +12,11 @@ import (
 
 func newCommandServiceTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:command-service-%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&RuntimeCommand{}); err != nil {
+	if err := db.AutoMigrate(&RuntimeCommand{}, &DeviceCommandSequence{}); err != nil {
 		t.Fatalf("migrate runtime command: %v", err)
 	}
 	return db
@@ -73,5 +75,277 @@ func TestCompletedCommandCannotBeOverwrittenByLateFailure(t *testing.T) {
 	}
 	if got.Status != string(CommandStatusCompleted) {
 		t.Fatalf("terminal status overwritten: got %s", got.Status)
+	}
+}
+
+func TestCompletedCommandCannotReenterDispatching(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	now := time.Now().UTC()
+	cmd := &RuntimeCommand{
+		ID: "cmd-no-redispatch", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1",
+		CommandType: string(CommandTypeSyncDesiredState), Durability: "durable", Status: string(CommandStatusCompleted),
+		DeviceSequence: 8, PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1,
+		CreatedAt: now.Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05"), CompletedAt: now.Format("2006-01-02 15:04:05"),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatalf("create completed command: %v", err)
+	}
+	if err := svc.MarkDispatching(cmd.ID, "runtime-1", now.Add(time.Second)); err == nil {
+		t.Fatal("completed command must not re-enter dispatching")
+	}
+	got, err := svc.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatalf("get command: %v", err)
+	}
+	if got.Status != string(CommandStatusCompleted) {
+		t.Fatalf("completed command changed status: %s", got.Status)
+	}
+}
+
+func TestExpiredDurableDuplicateRevivesSameCommand(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	payload := SyncDesiredStatePayload{
+		DesiredRevision: 12,
+		DesiredHash:     "hash-12",
+		InstallationID:  "inst-1",
+		PetID:           "pet-1",
+		ReleaseID:       "release-1",
+	}
+	cmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:12", "desired:d", 12, payload)
+	if err != nil {
+		t.Fatalf("create durable: %v", err)
+	}
+	if err := svc.MarkExpired(cmd.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("expire durable: %v", err)
+	}
+	revived, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:12", "desired:d", 13, payload)
+	if err != nil {
+		t.Fatalf("revive expired durable: %v", err)
+	}
+	if revived.ID != cmd.ID {
+		t.Fatalf("recovery must revive the same idempotent command: got=%s want=%s", revived.ID, cmd.ID)
+	}
+	if revived.Status != string(CommandStatusQueued) || revived.DeviceSequence != 13 || revived.RuntimeSessionID != "" {
+		t.Fatalf("revived command not dispatchable: status=%s seq=%d session=%q", revived.Status, revived.DeviceSequence, revived.RuntimeSessionID)
+	}
+}
+
+func TestEphemeralCommandGetsDeviceSequence(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	cmd, err := svc.CreateEphemeralCommand("u", "d", string(CommandTypeRecenterOnce), "recenter:1", []byte(`{}`))
+	if err != nil {
+		t.Fatalf("create ephemeral: %v", err)
+	}
+	if cmd.DeviceSequence <= 0 {
+		t.Fatalf("ephemeral command must have a replay sequence: %d", cmd.DeviceSequence)
+	}
+}
+
+func TestScopedDispatchDoesNotHeadOfLineBlockAcrossDevices(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	now := time.Now().UTC().Add(-2 * time.Second).Format("2006-01-02 15:04:05")
+
+	for i := 0; i < 150; i++ {
+		cmd := &RuntimeCommand{
+			ID: "offline-" + fmt.Sprint(i), UserID: "u", DeviceID: "offline", RuntimeID: "runtime-1",
+			CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral", Status: string(CommandStatusQueued),
+			DeviceSequence: int64(i + 1), PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)),
+			PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now,
+		}
+		if err := db.Create(cmd).Error; err != nil {
+			t.Fatalf("create offline command %d: %v", i, err)
+		}
+	}
+	online := &RuntimeCommand{
+		ID: "online", UserID: "u", DeviceID: "online", RuntimeID: "runtime-1",
+		CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral", Status: string(CommandStatusQueued),
+		DeviceSequence: 151, PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)),
+		PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(online).Error; err != nil {
+		t.Fatalf("create online command: %v", err)
+	}
+
+	cmds, err := svc.ListCommandsToDispatchForConnection("u", "online", "runtime-1", 10)
+	if err != nil {
+		t.Fatalf("list scoped commands: %v", err)
+	}
+	if len(cmds) != 1 || cmds[0].ID != "online" {
+		t.Fatalf("online device was head-of-line blocked: %#v", cmds)
+	}
+}
+
+func TestDurableTransportFailureBecomesRetryableAndDispatchable(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	now := time.Now().UTC()
+	cmd := &RuntimeCommand{
+		ID: "durable-retry", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1",
+		CommandType: string(CommandTypeSyncDesiredState), Durability: "durable", Status: string(CommandStatusTransportDispatched),
+		DeviceSequence: 7, PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1,
+		RuntimeSessionID: "old-session", CreatedAt: now.Add(-time.Minute).Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05"),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatalf("create command: %v", err)
+	}
+	if err := svc.MarkFailedRetryable(cmd.ID, "TRANSPORT_WRITE_FAILED", "socket lost", now); err != nil {
+		t.Fatalf("mark retryable: %v", err)
+	}
+	if err := db.Model(&RuntimeCommand{}).Where("id = ?", cmd.ID).Update("updated_at", now.Add(-2*time.Second).Format("2006-01-02 15:04:05")).Error; err != nil {
+		t.Fatalf("age retryable command: %v", err)
+	}
+	cmds, err := svc.ListCommandsToDispatchForConnection("u", "d", "runtime-1", 10)
+	if err != nil {
+		t.Fatalf("list retryable: %v", err)
+	}
+	if len(cmds) != 1 || cmds[0].ID != cmd.ID || cmds[0].RuntimeSessionID != "" {
+		t.Fatalf("durable command not retryable after transport loss: %#v", cmds)
+	}
+}
+
+func TestHelloReconciliationUsesAuthoritativeDesiredStateAndRequeuesInflight(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	if err := db.Exec(`CREATE TABLE desktop_pet_runtime_desired_states (
+		user_id TEXT, device_id TEXT, runtime_id TEXT, installation_id TEXT, pet_id TEXT, release_id TEXT,
+		desired_enabled INTEGER, desired_visible INTEGER, desired_action_key TEXT,
+		settings_snapshot_json TEXT, settings_revision INTEGER, desired_revision INTEGER, desired_hash TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create desired table: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO desktop_pet_runtime_desired_states
+		(user_id, device_id, runtime_id, installation_id, pet_id, release_id, desired_enabled, desired_visible, desired_action_key, settings_snapshot_json, settings_revision, desired_revision, desired_hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"u", "d", "runtime-1", "inst-1", "pet-1", "release-1", 1, 1, "idle", `{"scale":1}`, 4, 9, "hash-9").Error; err != nil {
+		t.Fatalf("insert desired state: %v", err)
+	}
+	if err := db.AutoMigrate(&DeviceCommandSequence{}); err != nil {
+		t.Fatalf("migrate sequence: %v", err)
+	}
+
+	payload := SyncDesiredStatePayload{DesiredRevision: 9, DesiredHash: "hash-9", InstallationID: "inst-1", PetID: "pet-1", ReleaseID: "release-1"}
+	cmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:9", "desired:d", 1, payload)
+	if err != nil {
+		t.Fatalf("create durable: %v", err)
+	}
+	if err := svc.MarkDispatching(cmd.ID, "runtime-1", time.Now().UTC()); err != nil {
+		t.Fatalf("mark dispatching: %v", err)
+	}
+	if err := svc.MarkRuntimeReceived(cmd.ID, "runtime-1", "old-session", time.Now().UTC()); err != nil {
+		t.Fatalf("mark runtime received: %v", err)
+	}
+
+	revision, err := svc.ReconcileDesiredStateOnHello("u", "d", "runtime-1", 0, 2)
+	if err != nil {
+		t.Fatalf("reconcile hello: %v", err)
+	}
+	if revision != 9 {
+		t.Fatalf("authoritative revision=%d want=9", revision)
+	}
+	got, err := svc.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatalf("get requeued command: %v", err)
+	}
+	if got.Status != string(CommandStatusQueued) || got.RuntimeSessionID != "" {
+		t.Fatalf("in-flight desired command was not requeued: status=%s session=%q", got.Status, got.RuntimeSessionID)
+	}
+}
+
+func TestExpiredOlderDesiredCommandDoesNotReviveAfterNewerRevisionExists(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	oldPayload := SyncDesiredStatePayload{
+		DesiredRevision: 20,
+		DesiredHash:     "hash-20",
+		InstallationID:  "inst-1",
+		PetID:           "pet-1",
+		ReleaseID:       "release-20",
+	}
+	oldCmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:20", "desired:d", 20, oldPayload)
+	if err != nil {
+		t.Fatalf("create old durable: %v", err)
+	}
+	if err := svc.MarkExpired(oldCmd.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("expire old durable: %v", err)
+	}
+
+	newPayload := SyncDesiredStatePayload{
+		DesiredRevision: 21,
+		DesiredHash:     "hash-21",
+		InstallationID:  "inst-1",
+		PetID:           "pet-1",
+		ReleaseID:       "release-21",
+	}
+	newCmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:21", "desired:d", 21, newPayload)
+	if err != nil {
+		t.Fatalf("create newer durable: %v", err)
+	}
+
+	stale, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:20", "desired:d", 22, oldPayload)
+	if !errors.Is(err, ErrCommandDuplication) {
+		t.Fatalf("stale recovery must be deduplicated after newer revision: %v", err)
+	}
+	if stale == nil || stale.ID != oldCmd.ID {
+		t.Fatalf("stale recovery returned wrong command: %#v", stale)
+	}
+	got, err := svc.GetCommand(oldCmd.ID)
+	if err != nil {
+		t.Fatalf("get stale command: %v", err)
+	}
+	if got.Status != string(CommandStatusSuperseded) || got.SupersededByCommandID != newCmd.ID || got.CompletedAt == "" {
+		t.Fatalf("stale command was revived instead of superseded: status=%s supersededBy=%s completedAt=%q", got.Status, got.SupersededByCommandID, got.CompletedAt)
+	}
+}
+
+func TestHelloReconciliationRetargetsQueuedDesiredCommandToCurrentRuntime(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	if err := db.Exec(`CREATE TABLE desktop_pet_runtime_desired_states (
+		user_id TEXT, device_id TEXT, runtime_id TEXT, installation_id TEXT, pet_id TEXT, release_id TEXT,
+		desired_enabled INTEGER, desired_visible INTEGER, desired_action_key TEXT,
+		settings_snapshot_json TEXT, settings_revision INTEGER, desired_revision INTEGER, desired_hash TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create desired table: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO desktop_pet_runtime_desired_states
+		(user_id, device_id, runtime_id, installation_id, pet_id, release_id, desired_enabled, desired_visible, desired_action_key, settings_snapshot_json, settings_revision, desired_revision, desired_hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"u", "d", "runtime-old", "inst-1", "pet-1", "release-1", 1, 1, "idle", `{}`, 1, 30, "hash-30").Error; err != nil {
+		t.Fatalf("insert desired state: %v", err)
+	}
+
+	payload := SyncDesiredStatePayload{DesiredRevision: 30, DesiredHash: "hash-30", InstallationID: "inst-1", PetID: "pet-1", ReleaseID: "release-1"}
+	cmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:30", "desired:d", 30, payload)
+	if err != nil {
+		t.Fatalf("create durable: %v", err)
+	}
+	if err := db.Model(&RuntimeCommand{}).Where("id = ?", cmd.ID).Update("runtime_id", "runtime-old").Error; err != nil {
+		t.Fatalf("bind old runtime: %v", err)
+	}
+
+	revision, err := svc.ReconcileDesiredStateOnHello("u", "d", "runtime-new", 0, 3)
+	if err != nil {
+		t.Fatalf("reconcile hello: %v", err)
+	}
+	if revision != 30 {
+		t.Fatalf("authoritative revision=%d want=30", revision)
+	}
+	got, err := svc.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatalf("get command: %v", err)
+	}
+	if got.Status != string(CommandStatusQueued) || got.RuntimeID != "runtime-new" {
+		t.Fatalf("queued desired command was not retargeted: status=%s runtime=%s", got.Status, got.RuntimeID)
+	}
+	cmds, err := svc.ListCommandsToDispatchForConnection("u", "d", "runtime-new", 10)
+	if err != nil {
+		t.Fatalf("list dispatchable commands: %v", err)
+	}
+	if len(cmds) != 1 || cmds[0].ID != cmd.ID {
+		t.Fatalf("retargeted command not dispatchable on new runtime: %#v", cmds)
 	}
 }

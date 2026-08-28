@@ -52,7 +52,7 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 	// snapshot and command delivery.
 	conn.fenceMu.RLock()
 	defer conn.fenceMu.RUnlock()
-	if conn.GetState() != ConnStateConnected {
+	if conn.GetState() != ConnStateConnected || !conn.IsHandshakeAcked() {
 		return
 	}
 	sessionID, generation := conn.SessionSnapshot()
@@ -60,7 +60,12 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 		return
 	}
 
-	cmds, err := d.commands.ListCommandsToDispatch(100)
+	cmds, err := d.commands.ListCommandsToDispatchForConnection(
+		string(conn.UserID),
+		string(conn.DeviceID),
+		string(conn.RuntimeID),
+		100,
+	)
 	if err != nil {
 		log.Warn("[v2-dispatcher] list commands failed: ", err)
 		return
@@ -69,10 +74,6 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 	now := time.Now().Format("2006-01-02 15:04:05")
 
 	for _, cmd := range cmds {
-		if cmd.UserID != string(conn.UserID) || cmd.DeviceID != string(conn.DeviceID) {
-			continue
-		}
-
 		targetRuntimeID := cmd.RuntimeID
 		if targetRuntimeID == "" && cmd.CommandType == string(CommandTypePlayAction) {
 			var playPayload PlayActionPayload
@@ -125,6 +126,13 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 		)
 		if err != nil {
 			log.Warn("[v2-dispatcher] create envelope failed: ", err)
+			if cmd.IsDurable() {
+				if markErr := d.commands.MarkFailedRetryable(cmd.ID, "ENVELOPE_CREATE_FAILED", err.Error(), time.Now().UTC()); markErr != nil {
+					log.Warn("[v2-dispatcher] mark retryable envelope failure failed: ", markErr)
+				}
+			} else if markErr := d.commands.MarkFailed(cmd.ID, "ENVELOPE_CREATE_FAILED", err.Error(), time.Now().UTC()); markErr != nil {
+				log.Warn("[v2-dispatcher] mark terminal envelope failure failed: ", markErr)
+			}
 			continue
 		}
 
@@ -134,10 +142,17 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 
 		if err := send(envelope, now); err != nil {
 			log.Warn("[v2-dispatcher] send failed: ", err)
+			if cmd.IsDurable() {
+				if markErr := d.commands.MarkFailedRetryable(cmd.ID, "TRANSPORT_WRITE_FAILED", err.Error(), time.Now().UTC()); markErr != nil {
+					log.Warn("[v2-dispatcher] mark retryable transport failure failed: ", markErr)
+				}
+			} else if markErr := d.commands.MarkFailed(cmd.ID, "TRANSPORT_WRITE_FAILED", err.Error(), time.Now().UTC()); markErr != nil {
+				log.Warn("[v2-dispatcher] mark terminal transport failure failed: ", markErr)
+			}
 			continue
 		}
 
-		if err := d.commands.MarkTransportDispatched(cmd.ID, string(conn.RuntimeID), time.Now()); err != nil {
+		if err := d.commands.MarkTransportDispatched(cmd.ID, string(conn.RuntimeID), time.Now().UTC()); err != nil {
 			log.Warn("[v2-dispatcher] mark transport dispatched failed: ", err)
 		}
 	}
