@@ -603,6 +603,11 @@ export class DesktopPetWindowAdapter {
     });
     win.webContents.on("render-process-gone", () => this.emit("crashed"));
     win.webContents.on("unresponsive", () => this.emit("crashed"));
+    // The pet renderer is a closed local surface. It never needs renderer-
+    // initiated top-level navigation or popup windows; deny both so a compromised
+    // asset cannot turn this privileged Electron surface into a general browser.
+    win.webContents.on("will-navigate", (event) => event.preventDefault());
+    win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   }
 
   private registerScreenEvents(): void {

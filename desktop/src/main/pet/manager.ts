@@ -2578,7 +2578,7 @@ export class DesktopPetManager {
       }
 
       const issued = await createRuntimeBootstrapTicket(deviceId, runtimeId);
-      const wsUrl = this.buildRuntimeV2URL(issued.ticket, runtimeId, deviceId);
+      const wsUrl = this.buildRuntimeV2URL(runtimeId, deviceId);
       const resumeCursor: RuntimeResumeCursor = {
         ...this.runtimeResumeCursor,
         lastAppliedDesiredRevision: Math.max(
@@ -2588,6 +2588,7 @@ export class DesktopPetManager {
       };
       const handlerConfig: RuntimeHandlerConfig = {
         url: wsUrl,
+        bootstrapTicket: issued.ticket,
         userId: issued.userId,
         deviceId,
         runtimeId,
@@ -2617,10 +2618,9 @@ export class DesktopPetManager {
     }
   }
 
-  private buildRuntimeV2URL(ticket: string, runtimeId: string, deviceId: string): string {
+  private buildRuntimeV2URL(runtimeId: string, deviceId: string): string {
     const wsBase = `ws://${this.coreHost}:${this.corePort}${RUNTIME_BRIDGE_WS_PATH}`;
     const url = new URL(wsBase);
-    url.searchParams.set("ticket", ticket);
     url.searchParams.set("deviceId", deviceId);
     url.searchParams.set("runtimeId", runtimeId);
     return url.toString();

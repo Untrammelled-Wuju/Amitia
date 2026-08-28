@@ -13,6 +13,7 @@ class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
 
   readonly url: string;
+  readonly protocols: string[];
   readyState = FakeWebSocket.CONNECTING;
   sent: string[] = [];
   onopen: (() => void) | null = null;
@@ -20,8 +21,13 @@ class FakeWebSocket {
   onerror: (() => void) | null = null;
   onclose: ((event: { code: number; reason: string }) => void) | null = null;
 
-  constructor(url: string) {
+  constructor(url: string, protocols?: string | string[]) {
     this.url = url;
+    this.protocols = Array.isArray(protocols)
+      ? [...protocols]
+      : protocols
+        ? [protocols]
+        : [];
     FakeWebSocket.instances.push(this);
   }
 
@@ -81,7 +87,8 @@ async function connectHandler(
 ): Promise<{ handler: DesktopRuntimeHandlerV2; ws: FakeWebSocket; hello: RuntimeEnvelope }> {
   const handler = new DesktopRuntimeHandlerV2(
     {
-      url: "ws://127.0.0.1/runtime?ticket=ticket-1&deviceId=device-1&runtimeId=runtime-1",
+      url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
+      bootstrapTicket: "ticket-1",
       userId: "user-1",
       deviceId: "device-1",
       runtimeId: "runtime-1",
@@ -126,6 +133,23 @@ describe("DesktopRuntimeHandlerV2", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("keeps bootstrap credentials out of the websocket URL", async () => {
+    const { handler, ws } = await connectHandler(async () => ({
+      commandId: "unused",
+      status: "applied",
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+
+    expect(new URL(ws.url).searchParams.has("ticket")).toBe(false);
+    expect(ws.protocols).toEqual([
+      "amitia.runtime.v2",
+      "amitia.runtime.bootstrap.ticket-1",
+    ]);
+    handler.disconnect();
   });
 
   it("resolves connect when hello_ack is accepted during handshaking", async () => {
