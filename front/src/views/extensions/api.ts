@@ -595,6 +595,7 @@ export async function previewExtensionPackage(
   scopeId: string,
   extensionId = "",
   onProgress?: (percent: number) => void,
+  managementTarget?: "game-center",
 ) {
   const data = new FormData();
   data.append("file", file);
@@ -602,6 +603,7 @@ export async function previewExtensionPackage(
   data.append("scopeId", scopeId);
   if (extensionId) data.append("expectedExtensionId", extensionId);
   const response = await apiClient.post("/api/extensions/packages/artifacts", data, {
+    headers: managementTarget ? { "X-Amitia-Management-Target": managementTarget } : undefined,
     onUploadProgress: (event) =>
       onProgress?.(
         event.total ? Math.round((event.loaded * 100) / event.total) : 0,
@@ -651,6 +653,7 @@ export async function installExtensionPackage(
     configMigration: boolean;
   },
   upgradeId = "",
+  managementTarget?: "game-center",
 ) {
   const confirmationMap: Record<string, boolean> = {};
   for (const key of preview.capabilityConfirmations ?? []) {
@@ -670,6 +673,7 @@ export async function installExtensionPackage(
       scopeId: preview.scopeId,
       confirmations: confirmationMap,
     },
+    managementTarget ? { headers: { "X-Amitia-Management-Target": managementTarget } } : undefined,
   );
   const response = await apiClient.post(
     upgradeId
@@ -682,6 +686,7 @@ export async function installExtensionPackage(
       confirmationToken: confirmed.data.confirmationToken,
       expectedExtensionId: upgradeId || undefined,
     },
+    managementTarget ? { headers: { "X-Amitia-Management-Target": managementTarget } } : undefined,
   );
   return response.data as PackageOperationResult;
 }

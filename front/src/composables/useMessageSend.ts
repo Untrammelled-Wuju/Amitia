@@ -3,10 +3,8 @@
 import { ref, type Ref } from "vue";
 import { ElMessage } from "element-plus";
 import { useApi } from "./useApi";
-import {
-  createAuthorizedRequestInit,
-  resolveApiUrl,
-} from "../runtime/runtime-adapter";
+import { resolveApiUrl } from "../runtime/runtime-adapter";
+import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { createRequestEnvelope } from "../utils/requestEnvelope";
 
 export function useMessageSend(
@@ -45,7 +43,7 @@ export function useMessageSend(
       formData.append("audio", blob, "voice.webm");
       const [url, init] = await Promise.all([
         resolveApiUrl("/api/voice/upload"),
-        createAuthorizedRequestInit({ method: "POST", body: formData }),
+        createAuthenticatedFetchInit("/api/voice/upload", { method: "POST", body: formData }),
       ]);
       const res = await fetch(url, init);
       if (!res.ok) throw new Error("Voice upload failed");
@@ -159,7 +157,7 @@ export function useMessageSend(
       };
       const [url, init] = await Promise.all([
         resolveApiUrl("/api/web-chat/send-stream"),
-        createAuthorizedRequestInit({
+        createAuthenticatedFetchInit("/api/web-chat/send-stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

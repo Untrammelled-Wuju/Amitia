@@ -59,7 +59,7 @@ export function parseRuntimeCapabilitiesPayload(payload: unknown): RuntimeCapabi
   return {
     runtimeProfile,
     capabilities: {
-      gameMode: profileKnown && runtimeProfile === "local" && asBoolean(rawCapabilities.gameMode),
+      gameMode: profileKnown && asBoolean(rawCapabilities.gameMode),
       devicePluginRuntime: profileKnown && asBoolean(rawCapabilities.devicePluginRuntime),
       deviceExecutionPlane: profileKnown && asBoolean(rawCapabilities.deviceExecutionPlane),
       localUIEndpoints: profileKnown && asBoolean(rawCapabilities.localUIEndpoints),

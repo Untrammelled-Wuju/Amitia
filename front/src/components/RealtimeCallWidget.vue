@@ -53,6 +53,7 @@ import { ref, computed, watch, onUnmounted } from "vue";
 import { Phone } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { resolveWebSocketUrl } from "../runtime/runtime-adapter";
+import { notifyDesktopPetChatState } from "../runtime/desktop-pet-chat-state";
 
 const props = defineProps<{
   visible: boolean;
@@ -81,6 +82,7 @@ let scriptNode: ScriptProcessorNode | null = null;
 let durationTimer: ReturnType<typeof setInterval> | null = null;
 let nextPlayTime = 0;
 let isAiSpeaking = false;
+let petSpeakingDrainTimer: ReturnType<typeof setTimeout> | null = null;
 const statusLabel = computed(() => {
   const map: Record<string, string> = {
     idle: "未连接",
@@ -136,6 +138,7 @@ async function start() {
     errorMsg.value = "麦克风访问失败";
     callState.value = "error";
     emit("stateChange", "error");
+    notifyDesktopPetChatState("assistant_error", props.conversationId || undefined);
     return;
   }
 
@@ -197,9 +200,19 @@ async function start() {
         case "connected":
           callState.value = "connected";
           emit("stateChange", "connected");
+          notifyDesktopPetChatState(
+            "assistant_listening",
+            props.conversationId || undefined,
+          );
           break;
         case "error":
           errorMsg.value = msg.data || "连接错误";
+          callState.value = "error";
+          emit("stateChange", "error");
+          notifyDesktopPetChatState(
+            "assistant_error",
+            props.conversationId || undefined,
+          );
           ElMessage.error(msg.data || "实时通话连接失败");
           cleanupCall();
           break;
@@ -208,10 +221,15 @@ async function start() {
   };
 
   ws.onclose = () => {
+    const failed = callState.value === "error";
     cleanupCall();
-    if (callState.value !== "idle" && callState.value !== "error") {
+    if (!failed && callState.value !== "idle") {
       callState.value = "idle";
       emit("stateChange", "idle");
+      notifyDesktopPetChatState(
+        "assistant_finished",
+        props.conversationId || undefined,
+      );
     }
   };
 
@@ -219,6 +237,10 @@ async function start() {
     errorMsg.value = "WebSocket连接失败";
     callState.value = "error";
     emit("stateChange", "error");
+    notifyDesktopPetChatState(
+      "assistant_error",
+      props.conversationId || undefined,
+    );
     cleanupCall();
   };
 }
@@ -236,6 +258,10 @@ function stop() {
   cleanupCall();
   callState.value = "idle";
   emit("stateChange", "idle");
+  notifyDesktopPetChatState(
+    "assistant_finished",
+    props.conversationId || undefined,
+  );
   callDuration.value = 0;
 }
 
@@ -255,6 +281,10 @@ function cleanupCall() {
   }
   nextPlayTime = 0;
   isAiSpeaking = false;
+  if (petSpeakingDrainTimer) {
+    clearTimeout(petSpeakingDrainTimer);
+    petSpeakingDrainTimer = null;
+  }
   if (playCtx && playCtx.state !== "closed") {
     setTimeout(() => {
       try {
@@ -316,15 +346,30 @@ function playAudio(base64Data: string) {
     const now = playCtx.currentTime;
     nextPlayTime = Math.max(now, nextPlayTime);
     src.start(nextPlayTime);
-    isAiSpeaking = true;
-    const chunkEnd = nextPlayTime + audioBuffer.duration;
-    setTimeout(
-      () => {
-        if (playCtx && nextPlayTime <= chunkEnd) isAiSpeaking = false;
-      },
-      audioBuffer.duration * 1000 + 100,
-    );
-    nextPlayTime = nextPlayTime + audioBuffer.duration;
+    if (!isAiSpeaking) {
+      isAiSpeaking = true;
+      notifyDesktopPetChatState(
+        "assistant_speaking",
+        props.conversationId || undefined,
+      );
+    }
+    nextPlayTime += audioBuffer.duration;
+    if (petSpeakingDrainTimer) {
+      clearTimeout(petSpeakingDrainTimer);
+    }
+    const remainingMs = Math.max(0, (nextPlayTime - playCtx.currentTime) * 1000);
+    petSpeakingDrainTimer = setTimeout(() => {
+      petSpeakingDrainTimer = null;
+      if (!playCtx || playCtx.state === "closed") return;
+      if (playCtx.currentTime + 0.05 < nextPlayTime) return;
+      isAiSpeaking = false;
+      if (callState.value === "connected") {
+        notifyDesktopPetChatState(
+          "assistant_listening",
+          props.conversationId || undefined,
+        );
+      }
+    }, remainingMs + 120);
   } catch {}
 }
 

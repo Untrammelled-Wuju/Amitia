@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, onUnmounted } from "vue";
 import { useApi, apiClient } from "./useApi";
-import { resolveApiUrl } from "@/runtime/runtime-adapter";
+import { consumeAuthenticatedSSE } from "@/runtime/authenticated-sse";
 import { ElMessage } from "element-plus";
 
 export type ProcessingTaskStatus =
@@ -171,7 +171,7 @@ export function useProcessingTask(options: UseProcessingTaskOptions = {}) {
 
   const objectUrls = reactive<Set<string>>(new Set());
 
-  let eventSource: EventSource | null = null;
+  let eventAbortController: AbortController | null = null;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let stopped = true;
   let refreshing = false;
@@ -226,100 +226,92 @@ export function useProcessingTask(options: UseProcessingTaskOptions = {}) {
   }
 
   function disconnectSSE() {
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
+    eventAbortController?.abort();
+    eventAbortController = null;
     isConnected.value = false;
+  }
+
+  function handleSSEFailure(controller: AbortController, error?: unknown) {
+    if (controller.signal.aborted || eventAbortController !== controller) return;
+    sseFailed = true;
+    eventAbortController = null;
+    isConnected.value = false;
+    if (error) currentCallbacks?.onError?.(new Event("error"));
+    if (!stopped && !pollTimer) {
+      schedulePoll();
+    }
   }
 
   async function connectSSE(processingTaskId: string | number) {
     disconnectSSE();
-    try {
-      const url = await resolveApiUrl(
-        `/api/desktop-pets/processing-tasks/${processingTaskId}/events`,
-      );
-      const source = new EventSource(url);
-      eventSource = source;
-      source.onopen = () => {
-        if (stopped) {
-          disconnectSSE();
+    const controller = new AbortController();
+    eventAbortController = controller;
+    const path = `/api/desktop-pets/processing-tasks/${processingTaskId}/events`;
+
+    void consumeAuthenticatedSSE(path, {
+      signal: controller.signal,
+      onOpen: () => {
+        if (stopped || eventAbortController !== controller) {
+          controller.abort();
           return;
         }
         isConnected.value = true;
         sseFailed = false;
-      };
-      source.addEventListener("connected", (event: MessageEvent) => {
-        try {
-          const data = JSON.parse(event.data);
-          currentCallbacks?.onConnected?.({ taskId: data?.taskId });
-        } catch {
-          currentCallbacks?.onConnected?.({});
-        }
-      });
-      source.addEventListener("ping", () => {
-        // heartbeat, no-op
-      });
-      source.addEventListener("processing.progress", (event: MessageEvent) => {
-        try {
-          const data = JSON.parse(event.data);
-          currentCallbacks?.onProgress?.({
-            progress: data?.progress,
-            stage: data?.stage,
-          });
-        } catch {}
-      });
-      source.addEventListener("processing.action", (event: MessageEvent) => {
-        try {
-          const data = JSON.parse(event.data);
-          currentCallbacks?.onAction?.({
-            actionKey: data?.actionKey,
-            status: data?.status,
-          });
-        } catch {}
-      });
-      source.addEventListener(
-        "processing.action.progress",
-        (event: MessageEvent) => {
+      },
+      onEvent: ({ event, data: rawData }) => {
+        if (stopped) return;
+        if (event === "ping") return;
+
+        let data: any = {};
+        if (rawData) {
           try {
-            const data = JSON.parse(event.data);
+            data = JSON.parse(rawData);
+          } catch {
+            data = {};
+          }
+        }
+
+        switch (event) {
+          case "connected":
+            currentCallbacks?.onConnected?.({ taskId: data?.taskId });
+            break;
+          case "processing.progress":
+            currentCallbacks?.onProgress?.({
+              progress: data?.progress,
+              stage: data?.stage,
+            });
+            break;
+          case "processing.action":
+            currentCallbacks?.onAction?.({
+              actionKey: data?.actionKey,
+              status: data?.status,
+            });
+            break;
+          case "processing.action.progress":
             currentCallbacks?.onActionProgress?.({
               actionKey: data?.actionKey,
               progress: data?.progress,
               stage: data?.stage,
             });
-          } catch {}
-        },
-      );
-      source.addEventListener(
-        "processing.completed",
-        (event: MessageEvent) => {
-          try {
-            const data = JSON.parse(event.data);
+            break;
+          case "processing.completed":
             currentCallbacks?.onCompleted?.({
               status: data?.status,
               succeeded: data?.succeeded,
               failed: data?.failed,
               total: data?.total,
             });
-          } catch {}
-          void safeRefresh().then(() => {
-            checkTerminalAndMaybeStop();
-          });
-        },
-      );
-      source.onerror = (err: Event) => {
-        sseFailed = true;
-        disconnectSSE();
-        currentCallbacks?.onError?.(err);
-        if (!stopped && !pollTimer) {
-          schedulePoll();
+            void safeRefresh().then(() => {
+              checkTerminalAndMaybeStop();
+            });
+            break;
+          default:
+            break;
         }
-      };
-    } catch {
-      sseFailed = true;
-      disconnectSSE();
-    }
+      },
+    })
+      .then(() => handleSSEFailure(controller))
+      .catch((error) => handleSSEFailure(controller, error));
   }
 
   async function refreshState() {

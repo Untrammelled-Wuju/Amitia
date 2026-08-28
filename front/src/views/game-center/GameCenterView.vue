@@ -880,6 +880,7 @@ async function buildPackagePreview() {
       "",
       updateTarget.value?.extensionId || "",
       (percent) => { uploadProgress.value = percent; },
+      "game-center",
     );
     installPreview.value = preview;
     if (preview.managementTarget !== "game_center" && !preview.contributionKinds?.includes("game_plugin")) {
@@ -915,6 +916,7 @@ async function commitPackageInstall() {
         configMigration: acknowledged,
       },
       installMode.value === "update" ? updateTarget.value?.extensionId || "" : "",
+      "game-center",
     );
     await waitForPackageOperation(result.operationId);
     ElMessage.success(installMode.value === "update" ? "游戏扩展已更新" : "游戏扩展已安装");
@@ -930,7 +932,11 @@ async function commitPackageInstall() {
 async function waitForPackageOperation(operationId?: string) {
   if (!operationId) return;
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const operation = await api.get<PackageOperationView>(`/api/extensions/packages/operations/${encodeURIComponent(operationId)}`);
+    const operation = await api.get<PackageOperationView>(
+      `/api/extensions/packages/operations/${encodeURIComponent(operationId)}`,
+      undefined,
+      { headers: { "X-Amitia-Management-Target": "game-center" } },
+    );
     const status = String(operation?.status || "").toLowerCase();
     if (status === "completed") return;
     if (status === "failed" || status === "requires_recovery") {
@@ -1084,6 +1090,7 @@ async function uninstall(plugin: Plugin) {
     const preview = await api.post<Record<string, any>>(
       "/api/extensions/kernel/extensions/uninstall/preview",
       { extensionId: plugin.extensionId, scopeType: "global", scopeId: "" },
+      { headers: { "X-Amitia-Management-Target": "game-center" } },
     );
     if (preview?.uninstallable === false) {
       throw new Error("后端判定当前游戏扩展不可卸载");
@@ -1111,16 +1118,21 @@ async function uninstall(plugin: Plugin) {
         scopeId: "",
         confirmations: Object.fromEntries(required.map((key) => [key, true])),
       },
+      { headers: { "X-Amitia-Management-Target": "game-center" } },
     );
     const confirmationToken = String(confirmation?.confirmationToken || "");
     if (!confirmationToken) throw new Error("卸载确认令牌缺失");
 
-    const result = await api.post<{ operationId?: string }>("/api/extensions/kernel/extensions/uninstall", {
-      extensionId: plugin.extensionId,
-      scopeType: "global",
-      scopeId: "",
-      confirmationToken,
-    });
+    const result = await api.post<{ operationId?: string }>(
+      "/api/extensions/kernel/extensions/uninstall",
+      {
+        extensionId: plugin.extensionId,
+        scopeType: "global",
+        scopeId: "",
+        confirmationToken,
+      },
+      { headers: { "X-Amitia-Management-Target": "game-center" } },
+    );
     await waitForPackageOperation(result?.operationId);
     ElMessage.success("游戏扩展已卸载");
     await refresh();

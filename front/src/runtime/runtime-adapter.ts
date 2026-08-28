@@ -3,6 +3,20 @@ import type { RuntimeConnection, DeploymentModeConfig } from "./runtime-types";
 let cachedConnection: RuntimeConnection | null = null;
 let cachedConfig: DeploymentModeConfig | null = null;
 
+export const LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899";
+
+export function isDeviceLocalApiPath(path: string): boolean {
+  const normalized = String(path || "").split("?", 1)[0];
+  return normalized === "/api/desktop-pets" || normalized.startsWith("/api/desktop-pets/");
+}
+
+export async function getApiBaseURLForPath(path: string): Promise<string> {
+  if (window.amitiaDesktop && isDeviceLocalApiPath(path)) {
+    return LOCAL_DEVICE_RUNTIME_BASE_URL;
+  }
+  return getApiBaseURL();
+}
+
 function normalizeHTTPBaseURL(raw: string): string {
   const url = new URL(raw);
   return url.toString().replace(/\/+$/, "");
@@ -74,32 +88,13 @@ export async function getQQApiBaseURL(): Promise<string> {
 }
 
 export async function resolveApiUrl(path: string): Promise<string> {
-  const base = await getApiBaseURL();
+  const base = await getApiBaseURLForPath(path);
   return base + path;
 }
 
 export async function resolveWebSocketUrl(path: string): Promise<string> {
   const conn = await getRuntimeConnection();
   return conn.websocketBaseURL + path;
-}
-
-export async function createAuthorizedRequestInit(
-  init?: RequestInit,
-): Promise<RequestInit> {
-  const deployment = await getDeploymentConfig();
-  const headers: Record<string, string> = {};
-
-  if (deployment.mode === "local" && window.amitiaDesktop) {
-    Object.assign(headers, await getBackendAuthHeaders());
-  }
-
-  return {
-    ...init,
-    headers: {
-      ...headers,
-      ...((init?.headers as Record<string, string>) || {}),
-    },
-  };
 }
 
 export async function getBackendAuthHeaders(): Promise<

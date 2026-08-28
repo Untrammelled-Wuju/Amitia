@@ -75,6 +75,16 @@ export interface AmitiaDesktopAPI {
   zoomReset(): Promise<void>;
   getZoomFactor(): Promise<number>;
   writeClipboardText(text: string): Promise<void>;
+  notifyDesktopPetChatState(payload: {
+    state:
+      | "assistant_listening"
+      | "assistant_thinking"
+      | "assistant_speaking"
+      | "assistant_finished"
+      | "assistant_error";
+    roundId?: string;
+    error?: string;
+  }): void;
   getAutoLaunch(): Promise<boolean>;
   setAutoLaunch(enabled: boolean): Promise<boolean>;
   onAutoLaunchChanged(callback: (enabled: boolean) => void): () => void;
