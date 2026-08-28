@@ -164,6 +164,7 @@ type SettingsResult struct {
 	OperationID      string
 	SettingsRevision int
 	Status           string
+	Stage            string
 	ErrorCode        string
 	ErrorMessage     string
 	DesiredRevision  int64
