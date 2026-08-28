@@ -44,7 +44,7 @@ function clampScale(scale: number): number {
 }
 
 function isClickThroughMode(value: unknown): value is ClickThroughMode {
-  return value === "alpha" || value === "boundingBox" || value === "none";
+  return value === "alpha" || value === "boundingBox" || value === "full" || value === "none";
 }
 
 export class DesktopPetWindowAdapter {
@@ -536,6 +536,9 @@ export class DesktopPetWindowAdapter {
     switch (mode) {
       case "none":
         win.setIgnoreMouseEvents(false);
+        break;
+      case "full":
+        win.setIgnoreMouseEvents(true, { forward: true });
         break;
       case "alpha":
       case "boundingBox":

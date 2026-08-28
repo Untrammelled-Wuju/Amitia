@@ -52,7 +52,7 @@ function settings(overrides: Partial<RuntimeSettingsInfo> = {}): RuntimeSettings
     installationId: "install-1",
     settingsRevision: 1,
     alwaysOnTop: true,
-    launchOnStartup: false,
+    restoreOnAppStart: true,
     scale: 1,
     positionX: 10,
     positionY: 20,
@@ -62,6 +62,12 @@ function settings(overrides: Partial<RuntimeSettingsInfo> = {}): RuntimeSettings
     idleIntervalMaxSeconds: 120,
     clickThroughMode: "none",
     soundEnabled: false,
+    positionMode: "absolute",
+    displayFingerprint: "",
+    relativeX: 0,
+    relativeY: 0,
+    lastWindowWidth: 0,
+    lastWindowHeight: 0,
     ...overrides,
   };
 }
@@ -158,6 +164,298 @@ describe("DesktopPetManager runtime settings", () => {
     ).rejects.toThrow("position failed");
     expect(internal.activeSettings).toBe(initial);
     expect(internal.lastAppliedSettingsRevision).toBe(1);
+  });
+});
+
+describe("DesktopPetManager app-start restore policy", () => {
+  it("disables authoritative desired state before Runtime v2 connects when restore is off", async () => {
+    const manager = makeManager();
+    const internal = manager as never as {
+      listInstallations: ReturnType<typeof vi.fn>;
+      fetchRuntimeSettings: ReturnType<typeof vi.fn>;
+      callDisableApi: ReturnType<typeof vi.fn>;
+      detectCorruption: ReturnType<typeof vi.fn>;
+      loadAndValidateInstallation: ReturnType<typeof vi.fn>;
+      setState: ReturnType<typeof vi.fn>;
+      restoreActiveInstallation: () => Promise<void>;
+    };
+    internal.listInstallations = vi.fn(async () => [{
+      id: "install-1",
+      isActive: true,
+      status: "enabled",
+    }]);
+    internal.fetchRuntimeSettings = vi.fn(async () =>
+      settings({ restoreOnAppStart: false }),
+    );
+    internal.callDisableApi = vi.fn(async () => undefined);
+    internal.detectCorruption = vi.fn();
+    internal.loadAndValidateInstallation = vi.fn();
+    internal.setState = vi.fn();
+
+    await internal.restoreActiveInstallation();
+
+    expect(internal.callDisableApi).toHaveBeenCalledWith("install-1");
+    expect(internal.detectCorruption).not.toHaveBeenCalled();
+    expect(internal.loadAndValidateInstallation).not.toHaveBeenCalled();
+    expect(internal.setState).toHaveBeenCalledWith(
+      "ready",
+      null,
+      "启动恢复已关闭",
+    );
+  });
+});
+
+describe("DesktopPetManager desired-state convergence", () => {
+  it("applies settings and default action for an already-running installation", async () => {
+    const manager = makeManager();
+    const idleRuntime = { key: "idle", available: true };
+    const waveRuntime = { key: "wave", available: true };
+    const internal = manager as never as {
+      activeInstallationId: string;
+      state: string;
+      activeInstallation: { currentReleaseId: string; defaultActionKey: string };
+      activeSettings: RuntimeSettingsInfo;
+      loadedInstallation: {
+        defaultAction: typeof idleRuntime;
+        actions: Map<string, typeof idleRuntime>;
+      };
+      animationIpc: { sendUpdateDefaultAction: ReturnType<typeof vi.fn> };
+      idleController: {
+        playDefaultIdle: ReturnType<typeof vi.fn>;
+        updateConfig: ReturnType<typeof vi.fn>;
+      };
+      windowAdapter: {
+        setScale: ReturnType<typeof vi.fn>;
+        setAlwaysOnTop: ReturnType<typeof vi.fn>;
+        setPosition: ReturnType<typeof vi.fn>;
+        setSoundEnabled: ReturnType<typeof vi.fn>;
+        setClickThroughMode: ReturnType<typeof vi.fn>;
+      };
+      clickThroughController: { setMode: ReturnType<typeof vi.fn> };
+      enableInstallationInternal: ReturnType<typeof vi.fn>;
+      runLifecycleMutation: <T>(fn: () => Promise<T>) => Promise<T>;
+      applyDesiredStateCommand: (command: unknown) => Promise<void>;
+    };
+    internal.activeInstallationId = "install-1";
+    internal.state = "enabled";
+    internal.activeInstallation = {
+      currentReleaseId: "release-1",
+      defaultActionKey: "idle",
+    };
+    internal.activeSettings = settings();
+    internal.loadedInstallation = {
+      defaultAction: idleRuntime,
+      actions: new Map([
+        ["idle", idleRuntime],
+        ["wave", waveRuntime],
+      ]),
+    };
+    internal.animationIpc = {
+      sendUpdateDefaultAction: vi.fn(() => ({ status: "delivered" })),
+    };
+    internal.idleController = {
+      playDefaultIdle: vi.fn(),
+      updateConfig: vi.fn(),
+    };
+    internal.windowAdapter = {
+      setScale: vi.fn(async () => undefined),
+      setAlwaysOnTop: vi.fn(async () => undefined),
+      setPosition: vi.fn(async () => undefined),
+      setSoundEnabled: vi.fn(async () => undefined),
+      setClickThroughMode: vi.fn(async () => undefined),
+    };
+    internal.clickThroughController = { setMode: vi.fn() };
+    internal.enableInstallationInternal = vi.fn(async () => undefined);
+    internal.runLifecycleMutation = async <T>(fn: () => Promise<T>) => fn();
+
+    await internal.applyDesiredStateCommand({
+      installationId: "install-1",
+      releaseId: "release-1",
+      settingsRevision: 7,
+      payload: {
+        installationId: "install-1",
+        releaseId: "release-1",
+        defaultActionKey: "wave",
+        settingsRevision: 7,
+        settingsSnapshot: {
+          installationId: "install-1",
+          settingsRevision: 7,
+          alwaysOnTop: 0,
+          restoreOnAppStart: 1,
+          scale: 1.5,
+          positionX: 101,
+          positionY: 202,
+          screenId: "2",
+          idleEnabled: 0,
+          idleIntervalMinSeconds: 8,
+          idleIntervalMaxSeconds: 16,
+          clickThroughMode: "alpha",
+          soundEnabled: 1,
+          positionMode: "absolute",
+          displayFingerprint: "",
+          relativeX: 0,
+          relativeY: 0,
+          lastWindowWidth: 0,
+          lastWindowHeight: 0,
+        },
+      },
+    });
+
+    expect(internal.enableInstallationInternal).toHaveBeenCalledWith(
+      "install-1",
+      false,
+      false,
+    );
+    expect(internal.windowAdapter.setScale).toHaveBeenCalledWith(1.5);
+    expect(internal.windowAdapter.setAlwaysOnTop).toHaveBeenCalledWith(false);
+    expect(internal.windowAdapter.setPosition).toHaveBeenCalledWith(101, 202, "2");
+    expect(internal.idleController.updateConfig).toHaveBeenCalledWith({
+      enabled: false,
+      minIntervalSeconds: 8,
+      maxIntervalSeconds: 16,
+    });
+    expect(internal.animationIpc.sendUpdateDefaultAction).toHaveBeenCalledWith("wave");
+    expect(internal.activeInstallation.defaultActionKey).toBe("wave");
+    expect(internal.loadedInstallation.defaultAction).toBe(waveRuntime);
+    expect(internal.activeSettings.settingsRevision).toBe(7);
+  });
+
+  it("waits for renderer readiness before committing a queued default action", async () => {
+    const manager = makeManager();
+    const idleRuntime = { key: "idle", available: true };
+    const waveRuntime = { key: "wave", available: true };
+    const sendUpdateDefaultAction = vi.fn()
+      .mockReturnValueOnce({ status: "queued" })
+      .mockReturnValueOnce({ status: "delivered" });
+    const waitForRuntimeReady = vi.fn(async () => ({
+      packageId: "pkg",
+      packageRevision: 1,
+    }));
+    const internal = manager as never as {
+      activeInstallation: { defaultActionKey: string };
+      loadedInstallation: {
+        defaultAction: typeof idleRuntime;
+        actions: Map<string, typeof idleRuntime>;
+      };
+      animationIpc: {
+        sendUpdateDefaultAction: typeof sendUpdateDefaultAction;
+        waitForRuntimeReady: typeof waitForRuntimeReady;
+      };
+      idleController: { playDefaultIdle: ReturnType<typeof vi.fn> };
+      applyDefaultActionLocal: (actionKey: string) => Promise<void>;
+    };
+    internal.activeInstallation = { defaultActionKey: "idle" };
+    internal.loadedInstallation = {
+      defaultAction: idleRuntime,
+      actions: new Map([
+        ["idle", idleRuntime],
+        ["wave", waveRuntime],
+      ]),
+    };
+    internal.animationIpc = { sendUpdateDefaultAction, waitForRuntimeReady };
+    internal.idleController = { playDefaultIdle: vi.fn() };
+
+    const promise = internal.applyDefaultActionLocal("wave");
+    expect(internal.activeInstallation.defaultActionKey).toBe("idle");
+    await promise;
+
+    expect(waitForRuntimeReady).toHaveBeenCalledTimes(1);
+    expect(sendUpdateDefaultAction).toHaveBeenCalledTimes(2);
+    expect(internal.activeInstallation.defaultActionKey).toBe("wave");
+    expect(internal.loadedInstallation.defaultAction).toBe(waveRuntime);
+  });
+
+  it("falls back to authoritative settings when a desired snapshot is incomplete", async () => {
+    const manager = makeManager();
+    const fetched = settings({
+      settingsRevision: 5,
+      alwaysOnTop: false,
+      scale: 2,
+      clickThroughMode: "full",
+    });
+    const internal = manager as never as {
+      activeInstallationId: string;
+      activeSettings: RuntimeSettingsInfo;
+      windowAdapter: {
+        setScale: ReturnType<typeof vi.fn>;
+        setAlwaysOnTop: ReturnType<typeof vi.fn>;
+        setPosition: ReturnType<typeof vi.fn>;
+        setSoundEnabled: ReturnType<typeof vi.fn>;
+        setClickThroughMode: ReturnType<typeof vi.fn>;
+      };
+      clickThroughController: { setMode: ReturnType<typeof vi.fn> };
+      idleController: { updateConfig: ReturnType<typeof vi.fn> };
+      fetchRuntimeSettings: ReturnType<typeof vi.fn>;
+      applyDesiredSettings: (
+        installationId: string,
+        revision: number,
+        snapshot: unknown,
+      ) => Promise<void>;
+    };
+    internal.activeInstallationId = "install-1";
+    internal.activeSettings = settings({ settingsRevision: 1 });
+    internal.windowAdapter = {
+      setScale: vi.fn(async () => undefined),
+      setAlwaysOnTop: vi.fn(async () => undefined),
+      setPosition: vi.fn(async () => undefined),
+      setSoundEnabled: vi.fn(async () => undefined),
+      setClickThroughMode: vi.fn(async () => undefined),
+    };
+    internal.clickThroughController = { setMode: vi.fn() };
+    internal.idleController = { updateConfig: vi.fn() };
+    internal.fetchRuntimeSettings = vi.fn(async () => fetched);
+
+    await internal.applyDesiredSettings("install-1", 5, {
+      installationId: "install-1",
+      settingsRevision: 5,
+      alwaysOnTop: 0,
+      // Deliberately omit the rest of the required runtime snapshot.
+    });
+
+    expect(internal.fetchRuntimeSettings).toHaveBeenCalledWith("install-1");
+    expect(internal.windowAdapter.setScale).toHaveBeenCalledWith(2);
+    expect(internal.windowAdapter.setClickThroughMode).toHaveBeenCalledWith("full");
+    expect(internal.clickThroughController.setMode).toHaveBeenCalledWith("full");
+    expect(internal.activeSettings.settingsRevision).toBe(5);
+  });
+
+  it("forces a runtime reload when the desired release changes", async () => {
+    const manager = makeManager();
+    const internal = manager as never as {
+      activeInstallationId: string;
+      state: string;
+      activeInstallation: { currentReleaseId: string; defaultActionKey: string };
+      activeSettings: RuntimeSettingsInfo;
+      enableInstallationInternal: ReturnType<typeof vi.fn>;
+      runLifecycleMutation: <T>(fn: () => Promise<T>) => Promise<T>;
+      applyDesiredStateCommand: (command: unknown) => Promise<void>;
+    };
+    internal.activeInstallationId = "install-1";
+    internal.state = "enabled";
+    internal.activeInstallation = {
+      currentReleaseId: "release-old",
+      defaultActionKey: "idle",
+    };
+    internal.activeSettings = settings();
+    internal.enableInstallationInternal = vi.fn(async () => {
+      internal.activeInstallation.currentReleaseId = "release-new";
+    });
+    internal.runLifecycleMutation = async <T>(fn: () => Promise<T>) => fn();
+
+    await internal.applyDesiredStateCommand({
+      installationId: "install-1",
+      releaseId: "release-new",
+      payload: {
+        installationId: "install-1",
+        releaseId: "release-new",
+      },
+    });
+
+    expect(internal.enableInstallationInternal).toHaveBeenCalledWith(
+      "install-1",
+      false,
+      true,
+    );
   });
 });
 

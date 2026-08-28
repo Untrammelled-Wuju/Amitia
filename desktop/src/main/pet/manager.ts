@@ -86,6 +86,7 @@ const PET_LOAD_ERROR_CHANNEL = "pet:load-error";
 const PET_STATE_CHANNEL = "pet:state";
 
 const CLICK_THROUGH_MODE_OFF = "off";
+const CLICK_THROUGH_MODE_FULL = "full";
 const CLICK_THROUGH_MODE_ALPHA = "alpha";
 const CLICK_THROUGH_MODE_BOUNDING_BOX = "boundingBox";
 
@@ -152,7 +153,7 @@ export interface RuntimeSettingsInfo {
   installationId: string;
   settingsRevision: number;
   alwaysOnTop: boolean;
-  launchOnStartup: boolean;
+  restoreOnAppStart: boolean;
   scale: number;
   positionX: number;
   positionY: number;
@@ -162,6 +163,12 @@ export interface RuntimeSettingsInfo {
   idleIntervalMaxSeconds: number;
   clickThroughMode: ClickThroughMode;
   soundEnabled: boolean;
+  positionMode: "absolute" | "relative" | "recenter";
+  displayFingerprint: string;
+  relativeX: number;
+  relativeY: number;
+  lastWindowWidth: number;
+  lastWindowHeight: number;
 }
 
 export interface PetManagerDeps {
@@ -252,7 +259,7 @@ interface RuntimeSettingsApiPayload {
   installationId: string;
   settingsRevision: number;
   alwaysOnTop: number;
-  launchOnStartup: number;
+  restoreOnAppStart?: number;
   scale: number;
   positionX: number;
   positionY: number;
@@ -262,6 +269,12 @@ interface RuntimeSettingsApiPayload {
   idleIntervalMaxSeconds: number;
   clickThroughMode: string;
   soundEnabled: number;
+  positionMode?: string;
+  displayFingerprint?: string;
+  relativeX?: number;
+  relativeY?: number;
+  lastWindowWidth?: number;
+  lastWindowHeight?: number;
 }
 
 interface RuntimeSettingsMutationApiPayload {
@@ -271,21 +284,47 @@ interface RuntimeSettingsMutationApiPayload {
   settings?: RuntimeSettingsApiPayload;
 }
 
+interface DesiredStateRuntimeCommand {
+  commandId?: string;
+  desiredRevision?: number;
+  installationId?: string;
+  releaseId?: string;
+  settingsRevision?: number;
+  payload?: {
+    ensureAbsent?: boolean;
+    installationId?: string;
+    releaseId?: string;
+    defaultActionKey?: string;
+    settingsRevision?: number;
+    settingsSnapshot?: unknown;
+    installation?: { installationId?: string };
+  };
+}
+
 function clampScale(scale: number): number {
   if (!Number.isFinite(scale)) return PET_WINDOW_SCALE_DEFAULT;
   return Math.min(PET_WINDOW_SCALE_MAX, Math.max(PET_WINDOW_SCALE_MIN, scale));
 }
 
 function normalizeClickThroughMode(value: string): ClickThroughMode {
-  if (value === CLICK_THROUGH_MODE_ALPHA) return "alpha";
-  if (value === CLICK_THROUGH_MODE_BOUNDING_BOX) return "boundingBox";
+  const normalized = value.trim().toLowerCase();
+  if (normalized === CLICK_THROUGH_MODE_FULL) return "full";
+  if (normalized === CLICK_THROUGH_MODE_ALPHA) return "alpha";
+  if (normalized === CLICK_THROUGH_MODE_BOUNDING_BOX.toLowerCase()) return "boundingBox";
   return "none";
 }
 
 function clickThroughModeToApiValue(mode: ClickThroughMode): string {
+  if (mode === "full") return CLICK_THROUGH_MODE_FULL;
   if (mode === "alpha") return CLICK_THROUGH_MODE_ALPHA;
   if (mode === "boundingBox") return CLICK_THROUGH_MODE_BOUNDING_BOX;
   return CLICK_THROUGH_MODE_OFF;
+}
+
+function normalizePositionMode(value: string | undefined): "absolute" | "relative" | "recenter" {
+  if (value === "relative") return "relative";
+  if (value === "recenter") return "recenter";
+  return "absolute";
 }
 
 function mapInstallationPayload(payload: InstallationApiPayload): InstallationInfo {
@@ -321,7 +360,9 @@ function mapRuntimeSettingsPayload(payload: RuntimeSettingsApiPayload): RuntimeS
     installationId: payload.installationId,
     settingsRevision: payload.settingsRevision ?? 0,
     alwaysOnTop: payload.alwaysOnTop !== 0,
-    launchOnStartup: payload.launchOnStartup !== 0,
+    restoreOnAppStart: payload.restoreOnAppStart == null
+      ? true
+      : payload.restoreOnAppStart !== 0,
     scale: payload.scale,
     positionX: payload.positionX,
     positionY: payload.positionY,
@@ -331,6 +372,12 @@ function mapRuntimeSettingsPayload(payload: RuntimeSettingsApiPayload): RuntimeS
     idleIntervalMaxSeconds: payload.idleIntervalMaxSeconds,
     clickThroughMode: normalizeClickThroughMode(payload.clickThroughMode),
     soundEnabled: payload.soundEnabled !== 0,
+    positionMode: normalizePositionMode(payload.positionMode),
+    displayFingerprint: payload.displayFingerprint ?? "",
+    relativeX: Number.isFinite(payload.relativeX) ? Number(payload.relativeX) : 0,
+    relativeY: Number.isFinite(payload.relativeY) ? Number(payload.relativeY) : 0,
+    lastWindowWidth: Number.isFinite(payload.lastWindowWidth) ? Number(payload.lastWindowWidth) : 0,
+    lastWindowHeight: Number.isFinite(payload.lastWindowHeight) ? Number(payload.lastWindowHeight) : 0,
   };
 }
 
@@ -717,17 +764,79 @@ export class DesktopPetManager {
   }
 
   private async applyRecenterLocal(): Promise<void> {
-    if (this.state !== "enabled" || !this.windowAdapter) {
+    if (!this.windowAdapter) {
       throw new Error("PET_NOT_ENABLED");
     }
     const primary = this.windowAdapter.listScreens().find((screen) => screen.isPrimary);
     const target = primary ?? this.windowAdapter.listScreens()[0];
     if (!target) return;
-    const width = this.windowAdapter.getOptions().canvasWidth;
-    const height = this.windowAdapter.getOptions().canvasHeight;
-    const x = (target.workArea.x - target.bounds.x) + target.workArea.width - width - 40;
-    const y = (target.workArea.y - target.bounds.y) + target.workArea.height - height - 40;
+    const options = this.windowAdapter.getOptions();
+    const nativeWindow = this.windowAdapter.getNativeWindow();
+    const [width, height] = nativeWindow && !nativeWindow.isDestroyed()
+      ? nativeWindow.getSize()
+      : [
+          Math.max(1, Math.round(options.canvasWidth * options.scale)),
+          Math.max(1, Math.round(options.canvasHeight * options.scale)),
+        ];
+    const localWorkX = target.workArea.x - target.bounds.x;
+    const localWorkY = target.workArea.y - target.bounds.y;
+    const x = localWorkX + Math.max(0, target.workArea.width - width - 40);
+    const y = localWorkY + Math.max(0, target.workArea.height - height - 40);
     await this.windowAdapter.setPosition(x, y, target.id);
+  }
+
+  private async applyRelativePositionLocal(settings: RuntimeSettingsInfo): Promise<void> {
+    if (!this.windowAdapter) {
+      throw new Error("PET_RUNTIME_NOT_READY");
+    }
+    const screens = this.windowAdapter.listScreens();
+    const target = screens.find((item) => item.id === settings.screenId)
+      ?? screens.find((item) =>
+        settings.displayFingerprint.length > 0 &&
+        (item.id === settings.displayFingerprint || item.label === settings.displayFingerprint),
+      )
+      ?? screens.find((item) => item.isPrimary)
+      ?? screens[0];
+    if (!target) return;
+
+    const options = this.windowAdapter.getOptions();
+    const nativeWindow = this.windowAdapter.getNativeWindow();
+    const [windowWidth, windowHeight] = nativeWindow && !nativeWindow.isDestroyed()
+      ? nativeWindow.getSize()
+      : [
+          Math.max(1, Math.round(options.canvasWidth * options.scale)),
+          Math.max(1, Math.round(options.canvasHeight * options.scale)),
+        ];
+    const relativeX = Math.min(1, Math.max(0, settings.relativeX));
+    const relativeY = Math.min(1, Math.max(0, settings.relativeY));
+    const localWorkX = target.workArea.x - target.bounds.x;
+    const localWorkY = target.workArea.y - target.bounds.y;
+    const travelX = Math.max(0, target.workArea.width - windowWidth);
+    const travelY = Math.max(0, target.workArea.height - windowHeight);
+    await this.windowAdapter.setPosition(
+      localWorkX + Math.round(travelX * relativeX),
+      localWorkY + Math.round(travelY * relativeY),
+      target.id,
+    );
+  }
+
+  private async applyRuntimePositionModeLocal(settings: RuntimeSettingsInfo): Promise<void> {
+    if (settings.positionMode === "recenter") {
+      await this.applyRecenterLocal();
+      return;
+    }
+    if (settings.positionMode === "relative") {
+      await this.applyRelativePositionLocal(settings);
+      return;
+    }
+    if (!this.windowAdapter) {
+      throw new Error("PET_RUNTIME_NOT_READY");
+    }
+    await this.windowAdapter.setPosition(
+      settings.positionX,
+      settings.positionY,
+      settings.screenId || undefined,
+    );
   }
 
   async updateSettings(settings: Partial<RuntimeSettingsInfo>): Promise<void> {
@@ -763,6 +872,12 @@ export class DesktopPetManager {
       typeof settings.positionX === "number" ||
       typeof settings.positionY === "number" ||
       typeof settings.screenId === "string" ||
+      typeof settings.positionMode === "string" ||
+      typeof settings.displayFingerprint === "string" ||
+      typeof settings.relativeX === "number" ||
+      typeof settings.relativeY === "number" ||
+      typeof settings.lastWindowWidth === "number" ||
+      typeof settings.lastWindowHeight === "number" ||
       typeof settings.soundEnabled === "boolean" ||
       typeof settings.clickThroughMode !== "undefined";
     const needsIdleRuntime =
@@ -793,13 +908,15 @@ export class DesktopPetManager {
       if (
         typeof settings.positionX === "number" ||
         typeof settings.positionY === "number" ||
-        typeof settings.screenId === "string"
+        typeof settings.screenId === "string" ||
+        typeof settings.positionMode === "string" ||
+        typeof settings.displayFingerprint === "string" ||
+        typeof settings.relativeX === "number" ||
+        typeof settings.relativeY === "number" ||
+        typeof settings.lastWindowWidth === "number" ||
+        typeof settings.lastWindowHeight === "number"
       ) {
-        await this.windowAdapter.setPosition(
-          merged.positionX,
-          merged.positionY,
-          merged.screenId || undefined,
-        );
+        await this.applyRuntimePositionModeLocal(merged);
       }
       if (typeof settings.soundEnabled === "boolean") {
         await this.windowAdapter.setSoundEnabled(merged.soundEnabled);
@@ -838,17 +955,275 @@ export class DesktopPetManager {
       throw new Error("PET_NOT_ENABLED");
     }
     await this.callUpdateDefaultActionApi(this.activeInstallationId, actionKey);
-    if (this.loadedInstallation) {
-      const runtime = this.loadedInstallation.actions.get(actionKey);
-      if (runtime && runtime.available) {
-        this.loadedInstallation.defaultAction = runtime;
-        if (this.idleController) {
-          this.idleController.playDefaultIdle();
-        }
-      }
+    await this.applyDefaultActionLocal(actionKey);
+  }
+
+  private async applyDefaultActionLocal(actionKey: string): Promise<void> {
+    if (!actionKey) {
+      throw new Error("ACTION_KEY_REQUIRED");
     }
-    if (this.activeInstallation) {
-      this.activeInstallation.defaultActionKey = actionKey;
+    if (!this.loadedInstallation || !this.activeInstallation || !this.animationIpc) {
+      throw new Error("PET_RUNTIME_NOT_READY");
+    }
+    const runtime = this.loadedInstallation.actions.get(actionKey);
+    if (!runtime || !runtime.available) {
+      throw new Error(`DEFAULT_ACTION_UNAVAILABLE: ${actionKey}`);
+    }
+
+    let delivery = this.animationIpc.sendUpdateDefaultAction(actionKey);
+    if (delivery.status === "queued") {
+      await this.animationIpc.waitForRuntimeReady();
+      delivery = this.animationIpc.sendUpdateDefaultAction(actionKey);
+    }
+    if (delivery.status !== "delivered") {
+      throw new Error(
+        `DEFAULT_ACTION_RENDERER_NOT_APPLIED: ${delivery.status === "rejected" ? delivery.reason ?? "unknown" : delivery.status}`,
+      );
+    }
+
+    this.loadedInstallation.defaultAction = runtime;
+    this.activeInstallation.defaultActionKey = actionKey;
+    this.idleController?.playDefaultIdle();
+  }
+
+  private parseDesiredSettingsSnapshot(
+    snapshot: unknown,
+    installationId: string,
+    settingsRevision: number,
+  ): Partial<RuntimeSettingsInfo> | null {
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+      return null;
+    }
+    const raw = snapshot as Record<string, unknown>;
+    const snapshotInstallationId = typeof raw.installationId === "string"
+      ? raw.installationId
+      : "";
+    if (
+      snapshotInstallationId &&
+      installationId &&
+      snapshotInstallationId !== installationId
+    ) {
+      throw new Error(
+        `SETTINGS_SNAPSHOT_INSTALLATION_MISMATCH: expected=${installationId} actual=${snapshotInstallationId}`,
+      );
+    }
+
+    const requiredRuntimeFields = [
+      "alwaysOnTop",
+      "restoreOnAppStart",
+      "scale",
+      "positionX",
+      "positionY",
+      "screenId",
+      "idleEnabled",
+      "idleIntervalMinSeconds",
+      "idleIntervalMaxSeconds",
+      "clickThroughMode",
+      "soundEnabled",
+      "positionMode",
+      "displayFingerprint",
+      "relativeX",
+      "relativeY",
+      "lastWindowWidth",
+      "lastWindowHeight",
+    ];
+    if (!requiredRuntimeFields.every((key) => Object.hasOwn(raw, key))) {
+      return null;
+    }
+
+    const updates: Partial<RuntimeSettingsInfo> = {
+      installationId: installationId || snapshotInstallationId,
+    };
+    const snapshotRevision = typeof raw.settingsRevision === "number" && Number.isFinite(raw.settingsRevision)
+      ? Math.floor(raw.settingsRevision)
+      : 0;
+    updates.settingsRevision = Math.max(0, settingsRevision, snapshotRevision);
+
+    const readBoolean = (key: string): boolean | undefined => {
+      const value = raw[key];
+      if (typeof value === "boolean") return value;
+      if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
+      return undefined;
+    };
+    const readNumber = (key: string): number | undefined => {
+      const value = raw[key];
+      return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+    };
+
+    const alwaysOnTop = readBoolean("alwaysOnTop");
+    if (typeof alwaysOnTop === "boolean") updates.alwaysOnTop = alwaysOnTop;
+    const restoreOnAppStart = readBoolean("restoreOnAppStart");
+    if (typeof restoreOnAppStart === "boolean") {
+      updates.restoreOnAppStart = restoreOnAppStart;
+    }
+    const idleEnabled = readBoolean("idleEnabled");
+    if (typeof idleEnabled === "boolean") updates.idleEnabled = idleEnabled;
+    const soundEnabled = readBoolean("soundEnabled");
+    if (typeof soundEnabled === "boolean") updates.soundEnabled = soundEnabled;
+
+    const scale = readNumber("scale");
+    if (typeof scale === "number") updates.scale = scale;
+    const positionX = readNumber("positionX");
+    if (typeof positionX === "number") updates.positionX = Math.round(positionX);
+    const positionY = readNumber("positionY");
+    if (typeof positionY === "number") updates.positionY = Math.round(positionY);
+    const idleMin = readNumber("idleIntervalMinSeconds");
+    if (typeof idleMin === "number") {
+      updates.idleIntervalMinSeconds = Math.max(1, Math.round(idleMin));
+    }
+    const idleMax = readNumber("idleIntervalMaxSeconds");
+    if (typeof idleMax === "number") {
+      updates.idleIntervalMaxSeconds = Math.max(1, Math.round(idleMax));
+    }
+    if (typeof raw.screenId === "string") updates.screenId = raw.screenId;
+    if (typeof raw.clickThroughMode === "string") {
+      updates.clickThroughMode = normalizeClickThroughMode(raw.clickThroughMode);
+    }
+    if (typeof raw.positionMode === "string") {
+      updates.positionMode = normalizePositionMode(raw.positionMode);
+    }
+    if (typeof raw.displayFingerprint === "string") {
+      updates.displayFingerprint = raw.displayFingerprint;
+    }
+    const relativeX = readNumber("relativeX");
+    if (typeof relativeX === "number") {
+      updates.relativeX = Math.min(1, Math.max(0, relativeX));
+    }
+    const relativeY = readNumber("relativeY");
+    if (typeof relativeY === "number") {
+      updates.relativeY = Math.min(1, Math.max(0, relativeY));
+    }
+    const lastWindowWidth = readNumber("lastWindowWidth");
+    if (typeof lastWindowWidth === "number") {
+      updates.lastWindowWidth = Math.max(0, Math.round(lastWindowWidth));
+    }
+    const lastWindowHeight = readNumber("lastWindowHeight");
+    if (typeof lastWindowHeight === "number") {
+      updates.lastWindowHeight = Math.max(0, Math.round(lastWindowHeight));
+    }
+    return updates;
+  }
+
+  private async applyDesiredSettings(
+    installationId: string,
+    settingsRevision: number,
+    settingsSnapshot: unknown,
+  ): Promise<void> {
+    const rawSnapshot = settingsSnapshot && typeof settingsSnapshot === "object" && !Array.isArray(settingsSnapshot)
+      ? settingsSnapshot as Record<string, unknown>
+      : null;
+    const snapshotRevision = typeof rawSnapshot?.settingsRevision === "number" && Number.isFinite(rawSnapshot.settingsRevision)
+      ? Math.max(0, Math.floor(rawSnapshot.settingsRevision))
+      : 0;
+    const requestedRevision = Math.max(settingsRevision, snapshotRevision);
+    const currentRevision = this.activeSettings?.settingsRevision ?? 0;
+    if (requestedRevision > 0 && currentRevision > requestedRevision) {
+      // A newer settings revision is already live locally. Never regress the
+      // renderer to an older durable command after reconnect/retry.
+      return;
+    }
+
+    let updates = this.parseDesiredSettingsSnapshot(
+      settingsSnapshot,
+      installationId,
+      requestedRevision,
+    );
+    let targetRevision = requestedRevision;
+
+    if (!updates && requestedRevision > currentRevision) {
+      const fetched = await this.fetchRuntimeSettings(installationId);
+      if (!fetched || fetched.settingsRevision < requestedRevision) {
+        throw new Error(
+          `SETTINGS_REVISION_NOT_AVAILABLE: expected>=${requestedRevision} actual=${fetched?.settingsRevision ?? 0}`,
+        );
+      }
+      updates = fetched;
+      targetRevision = fetched.settingsRevision;
+    }
+
+    if (!updates) return;
+    targetRevision = Math.max(
+      targetRevision,
+      updates.settingsRevision ?? 0,
+    );
+    if ((this.activeSettings?.settingsRevision ?? 0) > targetRevision) {
+      return;
+    }
+    await this.applyRuntimeSettingsLocal(updates, targetRevision);
+  }
+
+  private async applyDesiredStateCommand(
+    cmd: DesiredStateRuntimeCommand,
+  ): Promise<void> {
+    const payload = cmd.payload ?? {};
+    if (payload.ensureAbsent) {
+      await this.runLifecycleMutation(() => this.disableInternal(false, false));
+      return;
+    }
+
+    const installationId = payload.installationId
+      ?? payload.installation?.installationId
+      ?? cmd.installationId
+      ?? "";
+    if (!installationId) {
+      throw new Error("MISSING_INSTALLATION_ID");
+    }
+
+    const desiredReleaseId = payload.releaseId ?? cmd.releaseId ?? "";
+    const desiredDefaultActionKey = payload.defaultActionKey ?? "";
+    const desiredSettingsRevision = Math.max(
+      cmd.settingsRevision ?? 0,
+      payload.settingsRevision ?? 0,
+    );
+    const forceReload =
+      this.activeInstallationId === installationId &&
+      this.state === "enabled" &&
+      !!desiredReleaseId &&
+      this.activeInstallation?.currentReleaseId !== desiredReleaseId;
+
+    await this.runLifecycleMutation(() =>
+      this.enableInstallationInternal(installationId, false, forceReload),
+    );
+
+    if (
+      desiredReleaseId &&
+      this.activeInstallation?.currentReleaseId !== desiredReleaseId
+    ) {
+      throw new Error(
+        `DESIRED_RELEASE_NOT_APPLIED: expected=${desiredReleaseId} actual=${this.activeInstallation?.currentReleaseId ?? ""}`,
+      );
+    }
+
+    await this.applyDesiredSettings(
+      installationId,
+      desiredSettingsRevision,
+      payload.settingsSnapshot,
+    );
+
+    if (
+      desiredDefaultActionKey &&
+      (this.activeInstallation?.defaultActionKey !== desiredDefaultActionKey ||
+        this.loadedInstallation?.defaultAction?.key !== desiredDefaultActionKey)
+    ) {
+      await this.applyDefaultActionLocal(desiredDefaultActionKey);
+    }
+
+    if (
+      desiredDefaultActionKey &&
+      (this.activeInstallation?.defaultActionKey !== desiredDefaultActionKey ||
+        this.loadedInstallation?.defaultAction?.key !== desiredDefaultActionKey)
+    ) {
+      throw new Error(
+        `DESIRED_DEFAULT_ACTION_NOT_APPLIED: ${desiredDefaultActionKey}`,
+      );
+    }
+    if (
+      desiredSettingsRevision > 0 &&
+      (this.activeSettings?.settingsRevision ?? 0) < desiredSettingsRevision
+    ) {
+      throw new Error(
+        `DESIRED_SETTINGS_NOT_APPLIED: expected>=${desiredSettingsRevision} actual=${this.activeSettings?.settingsRevision ?? 0}`,
+      );
     }
   }
 
@@ -956,6 +1331,16 @@ export class DesktopPetManager {
     }
     try {
       const settings = await this.fetchRuntimeSettings(installation.id);
+      if (settings && !settings.restoreOnAppStart) {
+        // `enabled` is the authoritative runtime desired state. If the user
+        // explicitly disabled app-start restoration, converge that desired
+        // state to disabled before Runtime v2 connects; otherwise a queued or
+        // freshly reconciled sync_desired_state could immediately resurrect
+        // the pet after we intentionally skipped the local restore path.
+        await this.callDisableApi(installation.id);
+        this.setState("ready", null, "启动恢复已关闭");
+        return;
+      }
       const detection = await this.detectCorruption(installation);
       if (detection.corrupted) {
         await this.handleCorruption(installation, detection);
@@ -1243,6 +1628,10 @@ export class DesktopPetManager {
       throw new Error(
         `RUNTIME_READY_PACKAGE_MISMATCH: expected package=${loaded.manifest.packageId} revision=${this.packageRevision}, got package=${readyPayload.packageId} revision=${readyPayload.packageRevision}`,
       );
+    }
+
+    if (settings) {
+      await this.applyRuntimePositionModeLocal(settings);
     }
 
     idleController.start();
@@ -2387,8 +2776,8 @@ export class DesktopPetManager {
     if (typeof settings.alwaysOnTop === "boolean") {
       patch.alwaysOnTop = settings.alwaysOnTop ? 1 : 0;
     }
-    if (typeof settings.launchOnStartup === "boolean") {
-      patch.launchOnStartup = settings.launchOnStartup ? 1 : 0;
+    if (typeof settings.restoreOnAppStart === "boolean") {
+      patch.restoreOnAppStart = settings.restoreOnAppStart ? 1 : 0;
     }
     if (typeof settings.scale === "number" && Number.isFinite(settings.scale)) {
       patch.scale = settings.scale;
@@ -2419,6 +2808,24 @@ export class DesktopPetManager {
     if (typeof settings.soundEnabled === "boolean") {
       patch.soundEnabled = settings.soundEnabled ? 1 : 0;
     }
+    if (typeof settings.positionMode === "string") {
+      patch.positionMode = settings.positionMode;
+    }
+    if (typeof settings.displayFingerprint === "string") {
+      patch.displayFingerprint = settings.displayFingerprint;
+    }
+    if (typeof settings.relativeX === "number" && Number.isFinite(settings.relativeX)) {
+      patch.relativeX = Math.min(1, Math.max(0, settings.relativeX));
+    }
+    if (typeof settings.relativeY === "number" && Number.isFinite(settings.relativeY)) {
+      patch.relativeY = Math.min(1, Math.max(0, settings.relativeY));
+    }
+    if (typeof settings.lastWindowWidth === "number" && Number.isFinite(settings.lastWindowWidth)) {
+      patch.lastWindowWidth = Math.max(0, Math.round(settings.lastWindowWidth));
+    }
+    if (typeof settings.lastWindowHeight === "number" && Number.isFinite(settings.lastWindowHeight)) {
+      patch.lastWindowHeight = Math.max(0, Math.round(settings.lastWindowHeight));
+    }
     return patch;
   }
 
@@ -2430,7 +2837,7 @@ export class DesktopPetManager {
       installationId: this.activeInstallationId ?? "",
       settingsRevision: 0,
       alwaysOnTop: true,
-      launchOnStartup: false,
+      restoreOnAppStart: true,
       scale: PET_WINDOW_SCALE_DEFAULT,
       positionX: 0,
       positionY: 0,
@@ -2440,6 +2847,12 @@ export class DesktopPetManager {
       idleIntervalMaxSeconds: 120,
       clickThroughMode: "none",
       soundEnabled: false,
+      positionMode: "absolute",
+      displayFingerprint: "",
+      relativeX: 0,
+      relativeY: 0,
+      lastWindowWidth: 0,
+      lastWindowHeight: 0,
     };
     const current = base ?? fallback;
     return {
@@ -2452,10 +2865,10 @@ export class DesktopPetManager {
         typeof updates.alwaysOnTop === "boolean"
           ? updates.alwaysOnTop
           : current.alwaysOnTop,
-      launchOnStartup:
-        typeof updates.launchOnStartup === "boolean"
-          ? updates.launchOnStartup
-          : current.launchOnStartup,
+      restoreOnAppStart:
+        typeof updates.restoreOnAppStart === "boolean"
+          ? updates.restoreOnAppStart
+          : current.restoreOnAppStart,
       scale:
         typeof updates.scale === "number" ? updates.scale : current.scale,
       positionX:
@@ -2490,6 +2903,30 @@ export class DesktopPetManager {
         typeof updates.soundEnabled === "boolean"
           ? updates.soundEnabled
           : current.soundEnabled,
+      positionMode:
+        typeof updates.positionMode === "string"
+          ? updates.positionMode
+          : current.positionMode,
+      displayFingerprint:
+        typeof updates.displayFingerprint === "string"
+          ? updates.displayFingerprint
+          : current.displayFingerprint,
+      relativeX:
+        typeof updates.relativeX === "number"
+          ? updates.relativeX
+          : current.relativeX,
+      relativeY:
+        typeof updates.relativeY === "number"
+          ? updates.relativeY
+          : current.relativeY,
+      lastWindowWidth:
+        typeof updates.lastWindowWidth === "number"
+          ? updates.lastWindowWidth
+          : current.lastWindowWidth,
+      lastWindowHeight:
+        typeof updates.lastWindowHeight === "number"
+          ? updates.lastWindowHeight
+          : current.lastWindowHeight,
     };
   }
 
@@ -2739,11 +3176,12 @@ export class DesktopPetManager {
       onDesiredSync: (revision: number) => {
         this.markDesiredRevisionApplied(revision);
       },
-      onCommandSettled: (result, envelope) => {
-        const command = envelope.payload as { settingsRevision?: number } | undefined;
-        if (result.status === "applied" || result.status === "duplicate") {
-          this.markSettingsRevisionApplied(command?.settingsRevision ?? 0);
-        }
+      onCommandSettled: (_result, _envelope) => {
+        // Settings revision is advanced only by applyRuntimeSettingsLocal()
+        // (or a runtime start that fetched and applied that exact snapshot).
+        // Never infer settings application from a transport-level duplicate:
+        // a stale desired command can legitimately carry an unrelated/newer
+        // settingsRevision and would otherwise create a false convergence ACK.
         this.captureRuntimeCursor(this.runtimeHandler);
         this.syncRuntimeState();
       },
@@ -2756,12 +3194,17 @@ export class DesktopPetManager {
           commandType?: string;
           desiredRevision?: number;
           installationId?: string;
+          releaseId?: string;
           settingsRevision?: number;
           actionKey?: string;
           payload?: {
             installation?: { installationId?: string };
             desiredPet?: { installation?: { installationId?: string } };
             ensureAbsent?: boolean;
+            releaseId?: string;
+            defaultActionKey?: string;
+            settingsRevision?: number;
+            settingsSnapshot?: unknown;
             actionKey?: string;
             priority?: number;
             queuePolicy?: string;
@@ -2775,15 +3218,6 @@ export class DesktopPetManager {
             characterId?: string;
             petInstanceId?: string;
             installationId?: string;
-            settings?: {
-              alwaysOnTop?: boolean;
-              scale?: number;
-              positionX?: number;
-              positionY?: number;
-              screenId?: string;
-              clickThroughMode?: string;
-              soundEnabled?: boolean;
-            };
           };
         };
 
@@ -2793,23 +3227,35 @@ export class DesktopPetManager {
 
         try {
           switch (commandType) {
-            case "spawn":
             case "runtime.command.sync_desired_state": {
-              const installationId = cmd.payload?.installation?.installationId
+              if (
+                desiredRevision > 0 &&
+                desiredRevision < this.lastAppliedDesiredRevision
+              ) {
+                return {
+                  commandId,
+                  status: "duplicate",
+                  errorCode: "",
+                  errorMessage: "",
+                  appliedRevision: this.lastAppliedDesiredRevision,
+                  actualState: this.collectPetInstanceSummary(),
+                };
+              }
+              const desiredCommand: DesiredStateRuntimeCommand = cmd;
+              const installationId = cmd.payload?.installationId
+                ?? cmd.payload?.installation?.installationId
                 ?? cmd.installationId
                 ?? "";
-              if (!installationId) {
+              if (!installationId && !cmd.payload?.ensureAbsent) {
                 return {
                   commandId,
                   status: "rejected",
                   errorCode: "MISSING_INSTALLATION_ID",
-                  errorMessage: "spawn payload missing installationId",
+                  errorMessage: "sync_desired_state payload missing installationId",
                   appliedRevision: desiredRevision,
                 };
               }
-              await this.runLifecycleMutation(() =>
-                this.enableInstallationInternal(installationId, false, false),
-              );
+              await this.applyDesiredStateCommand(desiredCommand);
               this.markDesiredRevisionApplied(desiredRevision);
               return {
                 commandId,
@@ -2820,8 +3266,20 @@ export class DesktopPetManager {
                 actualState: this.collectPetInstanceSummary(),
               };
             }
-            case "destroy":
             case "runtime.command.ensure_absent": {
+              if (
+                desiredRevision > 0 &&
+                desiredRevision < this.lastAppliedDesiredRevision
+              ) {
+                return {
+                  commandId,
+                  status: "duplicate",
+                  errorCode: "",
+                  errorMessage: "",
+                  appliedRevision: this.lastAppliedDesiredRevision,
+                  actualState: this.collectPetInstanceSummary(),
+                };
+              }
               await this.runLifecycleMutation(() =>
                 this.disableInternal(false, false),
               );
@@ -2834,37 +3292,6 @@ export class DesktopPetManager {
                 appliedRevision: desiredRevision,
               };
             }
-            case "show": {
-              const win = this.windowAdapter?.getNativeWindow();
-              if (win && !win.isDestroyed()) {
-                win.show();
-              }
-              this.markDesiredRevisionApplied(desiredRevision);
-              return {
-                commandId,
-                status: "applied",
-                errorCode: "",
-                errorMessage: "",
-                appliedRevision: desiredRevision,
-                actualState: this.collectPetInstanceSummary(),
-              };
-            }
-            case "hide": {
-              const win = this.windowAdapter?.getNativeWindow();
-              if (win && !win.isDestroyed()) {
-                win.hide();
-              }
-              this.markDesiredRevisionApplied(desiredRevision);
-              return {
-                commandId,
-                status: "applied",
-                errorCode: "",
-                errorMessage: "",
-                appliedRevision: desiredRevision,
-                actualState: this.collectPetInstanceSummary(),
-              };
-            }
-            case "play_action":
             case "runtime.command.play_action": {
               const actionKey = cmd.payload?.actionKey ?? cmd.actionKey ?? "";
               if (!actionKey || !this.scheduler || !this.loadedInstallation) {
@@ -2921,43 +3348,6 @@ export class DesktopPetManager {
                 playbackRequestId: cmd.payload?.decisionId ?? commandId,
               };
             }
-            case "update_settings": {
-              const settings = cmd.payload?.settings;
-              const updates: Partial<RuntimeSettingsInfo> = {};
-              if (typeof settings?.alwaysOnTop === "boolean") {
-                updates.alwaysOnTop = settings.alwaysOnTop;
-              }
-              if (typeof settings?.scale === "number" && Number.isFinite(settings.scale)) {
-                updates.scale = settings.scale;
-              }
-              if (typeof settings?.positionX === "number" && Number.isFinite(settings.positionX)) {
-                updates.positionX = Math.round(settings.positionX);
-              }
-              if (typeof settings?.positionY === "number" && Number.isFinite(settings.positionY)) {
-                updates.positionY = Math.round(settings.positionY);
-              }
-              if (typeof settings?.screenId === "string") {
-                updates.screenId = settings.screenId;
-              }
-              if (typeof settings?.clickThroughMode === "string") {
-                updates.clickThroughMode = normalizeClickThroughMode(
-                  settings.clickThroughMode,
-                );
-              }
-              if (typeof settings?.soundEnabled === "boolean") {
-                updates.soundEnabled = settings.soundEnabled;
-              }
-              await this.applyRuntimeSettingsLocal(updates, cmd.settingsRevision ?? 0);
-              return {
-                commandId,
-                status: "applied",
-                errorCode: "",
-                errorMessage: "",
-                appliedRevision: desiredRevision,
-                actualState: this.collectPetInstanceSummary(),
-              };
-            }
-            case "recenter":
             case "runtime.command.recenter_once": {
               await this.applyRecenterLocal();
               return {
@@ -2970,6 +3360,19 @@ export class DesktopPetManager {
               };
             }
             case "runtime.command.reload_release": {
+              if (
+                desiredRevision > 0 &&
+                desiredRevision < this.lastAppliedDesiredRevision
+              ) {
+                return {
+                  commandId,
+                  status: "duplicate",
+                  errorCode: "",
+                  errorMessage: "",
+                  appliedRevision: this.lastAppliedDesiredRevision,
+                  actualState: this.collectPetInstanceSummary(),
+                };
+              }
               const reloadInstallationId = cmd.payload?.installation?.installationId
                 ?? cmd.installationId
                 ?? "";
@@ -2985,6 +3388,14 @@ export class DesktopPetManager {
               await this.runLifecycleMutation(() =>
                 this.enableInstallationInternal(reloadInstallationId, false, true),
               );
+              if (
+                cmd.releaseId &&
+                this.activeInstallation?.currentReleaseId !== cmd.releaseId
+              ) {
+                throw new Error(
+                  `DESIRED_RELEASE_NOT_APPLIED: expected=${cmd.releaseId} actual=${this.activeInstallation?.currentReleaseId ?? ""}`,
+                );
+              }
               return {
                 commandId,
                 status: "applied",
@@ -3022,35 +3433,6 @@ export class DesktopPetManager {
                 errorCode: "",
                 errorMessage: "",
                 appliedRevision: desiredRevision,
-              };
-            }
-            case "sync": {
-              const payload = cmd.payload;
-              if (payload?.ensureAbsent && this.activeInstallationId) {
-                await this.runLifecycleMutation(() =>
-                  this.disableInternal(false, false),
-                );
-              } else if (
-                payload?.desiredPet?.installation?.installationId
-              ) {
-                const installationId = payload.desiredPet.installation.installationId;
-                if (
-                  this.activeInstallationId !== installationId ||
-                  this.state !== "enabled"
-                ) {
-                  await this.runLifecycleMutation(() =>
-                    this.enableInstallationInternal(installationId, false, false),
-                  );
-                }
-              }
-              this.markDesiredRevisionApplied(desiredRevision);
-              return {
-                commandId,
-                status: "applied",
-                errorCode: "",
-                errorMessage: "",
-                appliedRevision: desiredRevision,
-                actualState: this.collectPetInstanceSummary(),
               };
             }
             default: {
