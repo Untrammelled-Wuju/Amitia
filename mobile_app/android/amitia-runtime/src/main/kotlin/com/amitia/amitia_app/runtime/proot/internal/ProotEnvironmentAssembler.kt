@@ -31,6 +31,13 @@ internal open class ProotEnvironmentAssembler(
             command = listOf("/usr/bin/true"),
             bindMounts = bindMounts,
             environment = environment,
+            // The embedded runtime does not need a fake uid 0. Enabling PRoot's
+            // root-id extension (-0) activates extra syscall emulation and the
+            // frozen Android PRoot build can terminate its first tracee with
+            // SIGSEGV before exec completes. Keep the runtime unprivileged;
+            // every writable guest path is already backed by an app-private
+            // bind mount owned by the Android application uid.
+            fakeRoot = false,
         )
     }
 
@@ -49,6 +56,10 @@ internal open class ProotEnvironmentAssembler(
             command = listOf(GuestLayout.BACKEND_SERVER, "--runtime-profile=$runtimeProfile"),
             bindMounts = bindMounts,
             environment = environment,
+            // See assembleRootfsProbe(): the backend, Node and Qdrant do not
+            // require uid 0. Avoid PRoot's -0/root-id extension so startup does
+            // not enter the crashing fake-root syscall-emulation path.
+            fakeRoot = false,
         )
     }
 

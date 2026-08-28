@@ -59,6 +59,7 @@ class ProotEnvironmentAssemblerTest {
         assertNotNull(spec)
         assertEquals(GuestLayout.BACKEND_DIR, spec.workingDirectory)
         assertEquals(listOf("/usr/bin/true"), spec.command)
+        assertEquals(false, spec.fakeRoot)
     }
 
     @Test
@@ -67,6 +68,7 @@ class ProotEnvironmentAssemblerTest {
         val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())
         val spec = assembler.assembleBackendLaunch(createProgramSource(layout))
         assertEquals(listOf(GuestLayout.BACKEND_SERVER, "--runtime-profile=local"), spec.command)
+        assertEquals(false, spec.fakeRoot)
     }
 
     @Test
@@ -77,6 +79,7 @@ class ProotEnvironmentAssemblerTest {
         val request = assembler.toProotLaunchRequest(spec)
         assertEquals(listOf(GuestLayout.BACKEND_SERVER, "--runtime-profile=local"), request.command)
         assertEquals(GuestLayout.BACKEND_DIR, request.workingDirectory)
+        assertEquals(false, request.fakeRoot)
     }
 
     @Test

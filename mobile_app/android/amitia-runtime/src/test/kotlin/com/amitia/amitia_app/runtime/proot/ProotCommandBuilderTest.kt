@@ -86,6 +86,11 @@ class ProotCommandBuilderTest {
         assertTrue(cmd.arguments.contains("-0"))
     }
 
+    @Test fun fake_root_disabled_omits_root_id_extension() {
+        val cmd = builder.build(spec().copy(fakeRoot = false))
+        assertFalse(cmd.arguments.contains("-0"))
+    }
+
     @Test fun rootfs_r_correct() {
         val cmd = builder.build(spec(rootfs = "/data/runtime/rootfs"))
         val rIdx = cmd.arguments.indexOf("-r")
