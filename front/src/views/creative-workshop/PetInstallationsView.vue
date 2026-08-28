@@ -246,8 +246,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-form-item label="置顶">
           <el-switch v-model="resizeForm.alwaysOnTop" />
         </el-form-item>
-        <el-form-item label="启动时运行">
-          <el-switch v-model="resizeForm.launchOnStartup" />
+        <el-form-item label="Amitia 启动时恢复">
+          <el-switch v-model="resizeForm.restoreOnAppStart" />
         </el-form-item>
         <el-form-item label="待机启用">
           <el-switch v-model="resizeForm.idleEnabled" />
@@ -520,7 +520,7 @@ const resizeForm = reactive({
   name: "",
   scale: 1,
   alwaysOnTop: false,
-  launchOnStartup: false,
+  restoreOnAppStart: true,
   idleEnabled: false,
   soundEnabled: false,
 });
@@ -863,7 +863,7 @@ function openResizeDialog(item: DesktopPetInstallation) {
   resizeForm.name = item.name || "未命名桌宠";
   resizeForm.scale = 1;
   resizeForm.alwaysOnTop = true;
-  resizeForm.launchOnStartup = false;
+  resizeForm.restoreOnAppStart = true;
   resizeForm.idleEnabled = true;
   resizeForm.soundEnabled = false;
   resizeDialogVisible.value = true;
@@ -877,7 +877,7 @@ async function loadRuntimeSettings(item: DesktopPetInstallation) {
     if (settings) {
       resizeForm.scale = Number(settings.scale) || 1;
       resizeForm.alwaysOnTop = Number(settings.alwaysOnTop) === 1;
-      resizeForm.launchOnStartup = Number(settings.launchOnStartup) === 1;
+      resizeForm.restoreOnAppStart = Number(settings.restoreOnAppStart) !== 0;
       resizeForm.idleEnabled = Number(settings.idleEnabled) === 1;
       resizeForm.soundEnabled = Number(settings.soundEnabled) === 1;
     }
@@ -893,7 +893,7 @@ async function submitResize() {
     await updateSettings(resizeForm.id, {
       scale: Number(resizeForm.scale.toFixed(2)),
       alwaysOnTop: resizeForm.alwaysOnTop ? 1 : 0,
-      launchOnStartup: resizeForm.launchOnStartup ? 1 : 0,
+      restoreOnAppStart: resizeForm.restoreOnAppStart ? 1 : 0,
       idleEnabled: resizeForm.idleEnabled ? 1 : 0,
       soundEnabled: resizeForm.soundEnabled ? 1 : 0,
     });
