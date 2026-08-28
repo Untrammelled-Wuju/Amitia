@@ -61,7 +61,6 @@ export interface RuntimeSettings {
   id?: string;
   installationId?: string;
   alwaysOnTop: number;
-  launchOnStartup: number;
   scale: number;
   positionX: number;
   positionY: number;
@@ -122,7 +121,7 @@ export interface InstallParams {
 
 export interface UpdateSettingsParams {
   alwaysOnTop?: number;
-  launchOnStartup?: number;
+  restoreOnAppStart?: number;
   scale?: number;
   positionX?: number;
   positionY?: number;
