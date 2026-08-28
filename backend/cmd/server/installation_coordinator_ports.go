@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
@@ -34,6 +35,19 @@ func (p *coordinatorReleaseValidator) ValidateRelease(ctx context.Context, userI
 		return nil, fmt.Errorf("decode release manifest: %w", err)
 	}
 	manifestValid := item.ManifestHash != "" && item.ContentRootHash != "" && manifest.ReleaseID == item.ID && manifest.PetID == item.PetID && manifest.DefaultAction != ""
+	actionKeys := make([]string, 0, len(manifest.Actions))
+	seenActionKeys := make(map[string]struct{}, len(manifest.Actions))
+	for _, action := range manifest.Actions {
+		key := strings.TrimSpace(action.Key)
+		if key == "" {
+			continue
+		}
+		if _, exists := seenActionKeys[key]; exists {
+			continue
+		}
+		seenActionKeys[key] = struct{}{}
+		actionKeys = append(actionKeys, key)
+	}
 	return &coordinator.ReleaseValidationResult{
 		ReleaseID:        item.ID,
 		PetID:            item.PetID,
@@ -42,6 +56,7 @@ func (p *coordinatorReleaseValidator) ValidateRelease(ctx context.Context, userI
 		ManifestValid:    manifestValid,
 		PublishedPathKey: item.StorageKey,
 		DefaultActionKey: manifest.DefaultAction,
+		ActionKeys:       actionKeys,
 	}, nil
 }
 
@@ -140,19 +155,49 @@ func (p *coordinatorRuntimePublisher) PublishRecenter(ctx context.Context, devic
 
 func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, deviceCtx device.DeviceContext, installationID, actionKey string) error {
 	if p.facade == nil {
-		return fmt.Errorf("runtime v2 unavailable")
+		return fmt.Errorf("%w: runtime v2 facade unavailable", coordinator.ErrRuntimeUnavailable)
 	}
 	if !deviceCtx.IsValid() || installationID == "" || actionKey == "" {
 		return fmt.Errorf("invalid play action request")
 	}
+	targetRuntimeID := strings.TrimSpace(deviceCtx.RuntimeID)
+	targetOnline := false
+	for _, conn := range p.facade.ListConnections(deviceCtx.UserID) {
+		if conn == nil || conn.GetState() != runtimev2.ConnStateConnected {
+			continue
+		}
+		if string(conn.DeviceID) != deviceCtx.DeviceID {
+			continue
+		}
+		if targetRuntimeID != "" && string(conn.RuntimeID) != targetRuntimeID {
+			continue
+		}
+		sessionID, generation := conn.SessionSnapshot()
+		if sessionID == "" || generation <= 0 {
+			continue
+		}
+		if targetRuntimeID == "" {
+			targetRuntimeID = string(conn.RuntimeID)
+		}
+		targetOnline = true
+		break
+	}
+	if !targetOnline {
+		return fmt.Errorf("%w: device=%s runtime=%s", coordinator.ErrRuntimeUnavailable, deviceCtx.DeviceID, targetRuntimeID)
+	}
 	payload := runtimev2.PlayActionPayload{
+		RuntimeID:        targetRuntimeID,
 		ActionKey:        actionKey,
+		InstallationID:   installationID,
 		PlaybackMode:     "once",
 		Priority:         0,
-		QueuePolicy:      "replace",
+		QueuePolicy:      runtimev2.PlayActionQueueReplaceCurrent,
 		Interruptible:    true,
+		ReturnTo:         "default",
 		PlaybackRate:     1.0,
-		CompletionPolicy: "started",
+		CompletionPolicy: runtimev2.PlayActionCompletionOnStarted,
+		Semantic:         "manual",
+		ReasonCode:       "manual_play_request",
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
