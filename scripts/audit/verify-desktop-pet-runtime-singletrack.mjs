@@ -86,7 +86,7 @@ requireText(
 requireText(
   "backend/cmd/server/services.go",
   [
-    /runtimeConfig\.Enabled\s*=\s*config\.AppCfg\.DesktopPetRuntime\.Enabled\s*&&\s*runtimePolicy\.DesktopPet/,
+    /runtimeConfig\.Enabled\s*=\s*config\.AppCfg\.DesktopPetRuntime\.Enabled\s*&&\s*policy\.DesktopPet/,
     /runtimev2\.NewRuntimeFacadeWithDeviceRuntime\s*\([\s\S]*?kernelContainer\.DeviceRuntimeSessions\s*\)/,
     /devicemesh\.NewCloudRuntimeWithHubAndSessions\s*\([\s\S]*?kernelContainer\.DeviceRuntimeSessions/,
     /wiring\.NewV2RuntimeActionAdapter\s*\(/,

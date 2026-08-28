@@ -209,7 +209,10 @@ function installGoldenResourceProtocol() {
     }
     return new Response(JSON.stringify({ error: "smoke_resource_not_found", url }), {
       status: 404,
-      headers: { "Content-Type": "application/json; charset=utf-8" },
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+      },
     });
   });
 }

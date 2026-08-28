@@ -73,6 +73,36 @@ function main() {
     errors.push(`FAILED: 无法检查 front/pet.html (${error instanceof Error ? error.message : String(error)})`);
   }
 
+
+  try {
+    const protocolSource = readFileSync(
+      resolve(projectRoot, "src/main/pet/resource-protocol.ts"),
+      "utf8",
+    );
+    if (!/corsEnabled:\s*true/.test(protocolSource)) {
+      errors.push("FORBIDDEN: amitia-pet 生产协议未启用 corsEnabled");
+    }
+    if (!/Access-Control-Allow-Origin/.test(protocolSource)) {
+      errors.push("FORBIDDEN: amitia-pet 生产协议缺少 CORS 响应头");
+    }
+
+    const managerSource = readFileSync(
+      resolve(projectRoot, "src/main/pet/manager.ts"),
+      "utf8",
+    );
+    if (!/clickThroughController\.setMode\(clickThroughMode\)/.test(managerSource)) {
+      errors.push("FORBIDDEN: 桌宠启动链未把 clickThroughMode 注入 ClickThroughController");
+    }
+    if (!/idleController\.updateConfig\(/.test(managerSource)) {
+      errors.push("FORBIDDEN: Runtime settings 未动态更新 IdleController 配置");
+    }
+    if (!/setSoundEnabled\(merged\.soundEnabled\)/.test(managerSource)) {
+      errors.push("FORBIDDEN: soundEnabled 未应用到桌宠窗口音频状态");
+    }
+  } catch (error) {
+    errors.push(`FAILED: 无法验证桌宠生产运行时关键接线 (${error instanceof Error ? error.message : String(error)})`);
+  }
+
   const mainJs = resolve(distMain, "index.cjs");
   const mainJsAlt = resolve(distMain, "index.js");
   const mainExists = existsSync(mainJs) || existsSync(mainJsAlt);
