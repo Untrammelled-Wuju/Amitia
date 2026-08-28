@@ -24,7 +24,9 @@ type FacadeConfig struct {
 	LoopbackOnly       bool
 	HeartbeatInterval  time.Duration
 	HeartbeatTimeout   time.Duration
+	RegisterTimeout    time.Duration
 	MaxMessageBytes    int64
+	SendQueueSize      int
 	CommandTimeoutSec  int64
 	CommandRetentionHr int64
 }
@@ -36,7 +38,9 @@ func DefaultFacadeConfig() *FacadeConfig {
 		LoopbackOnly:       true,
 		HeartbeatInterval:  10 * time.Second,
 		HeartbeatTimeout:   30 * time.Second,
+		RegisterTimeout:    10 * time.Second,
 		MaxMessageBytes:    1048576,
+		SendQueueSize:      64,
 		CommandTimeoutSec:  30,
 		CommandRetentionHr: 24,
 	}
@@ -169,7 +173,7 @@ func (f *RuntimeFacade) runReconciler(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			expired, err := f.reconciler.ExpireCommands(time.Now())
+			expired, err := f.reconciler.ExpireCommands(time.Now(), int(f.config.CommandTimeoutSec))
 			if err != nil {
 				log.Warn("[v2-runtime-facade] reconciler expire failed: ", err)
 			} else if expired > 0 {

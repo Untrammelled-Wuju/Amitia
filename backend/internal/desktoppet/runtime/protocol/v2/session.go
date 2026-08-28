@@ -124,13 +124,16 @@ func (p HelloPayload) ResumeCursor(connectionGeneration int64) protocol.SessionC
 }
 
 type HelloAckPayload struct {
-	Accepted        bool                             `json:"accepted"`
-	SessionID       runtimeidentity.RuntimeSessionID `json:"sessionId,omitempty"`
-	ServerTime      time.Time                        `json:"serverTime"`
-	DesiredRevision int64                            `json:"currentDesiredRevision"`
-	ResumeMode      string                           `json:"resumeMode,omitempty"`
-	ErrorCode       string                           `json:"errorCode,omitempty"`
-	ErrorMessage    string                           `json:"errorMessage,omitempty"`
+	Accepted            bool                             `json:"accepted"`
+	SessionID           runtimeidentity.RuntimeSessionID `json:"sessionId,omitempty"`
+	ServerTime          time.Time                        `json:"serverTime"`
+	DesiredRevision     int64                            `json:"currentDesiredRevision"`
+	ResumeMode          string                           `json:"resumeMode,omitempty"`
+	HeartbeatIntervalMs int                              `json:"heartbeatIntervalMs,omitempty"`
+	HeartbeatTimeoutMs  int                              `json:"heartbeatTimeoutMs,omitempty"`
+	MaxMessageBytes     int64                            `json:"maxMessageBytes,omitempty"`
+	ErrorCode           string                           `json:"errorCode,omitempty"`
+	ErrorMessage        string                           `json:"errorMessage,omitempty"`
 }
 
 func (p HelloAckPayload) DeviceRuntimeHelloAck() protocol.HelloAckPayload {
