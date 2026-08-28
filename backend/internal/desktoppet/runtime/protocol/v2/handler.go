@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -229,14 +230,14 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 	if h.deviceRuntimeSessions != nil {
 		acqReq := HelloToAcquireRequest(*payload, conn.UserID, runtimeidentity.PlatformUnknown, now)
 
-		result, err := h.deviceRuntimeSessions.Acquire(nil, acqReq)
+		result, err := h.deviceRuntimeSessions.Acquire(context.Background(), acqReq)
 		if err != nil {
 			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("session acquire failed: %v", err))
 		}
 
 		projection, projectionErr := h.sessions.SyncFromDeviceRuntimeSession(nil, result.Session, *payload)
 		if projectionErr != nil {
-			closeErr := h.deviceRuntimeSessions.Close(nil, result.Session.ID, result.Session.ConnectionGeneration, "desktop_pet_projection_failed", now)
+			closeErr := h.deviceRuntimeSessions.Close(context.Background(), result.Session.ID, result.Session.ConnectionGeneration, "desktop_pet_projection_failed", now)
 			if closeErr != nil {
 				projectionErr = errors.Join(projectionErr, fmt.Errorf("close failed session after projection error: %w", closeErr))
 			}
@@ -244,8 +245,8 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 		}
 
 		if result.Session.Status != protocol.SessionStatusReady {
-			if _, markErr := h.deviceRuntimeSessions.MarkReady(nil, result.Session.ID, result.Session.ConnectionGeneration, now); markErr != nil {
-				closeErr := h.deviceRuntimeSessions.Close(nil, result.Session.ID, result.Session.ConnectionGeneration, "presence_projection_failed", now)
+			if _, markErr := h.deviceRuntimeSessions.MarkReady(context.Background(), result.Session.ID, result.Session.ConnectionGeneration, now); markErr != nil {
+				closeErr := h.deviceRuntimeSessions.Close(context.Background(), result.Session.ID, result.Session.ConnectionGeneration, "presence_projection_failed", now)
 				if closeErr != nil {
 					markErr = errors.Join(markErr, fmt.Errorf("close failed session after mark-ready error: %w", closeErr))
 				}
@@ -724,7 +725,7 @@ func (h *Handler) persistAuthoritativeCursor(conn *Connection, eventSeq, process
 		return nil
 	}
 	id := runtimeidentity.ParseRuntimeSessionID(sessionID)
-	session, err := h.deviceRuntimeSessions.GetSession(nil, id)
+	session, err := h.deviceRuntimeSessions.GetSession(context.Background(), id)
 	if err != nil {
 		return fmt.Errorf("load authoritative runtime cursor: %w", err)
 	}
@@ -747,7 +748,7 @@ func (h *Handler) persistAuthoritativeCursor(conn *Connection, eventSeq, process
 	if actualStateHash != "" {
 		cursor.ActualStateHash = actualStateHash
 	}
-	if err := h.deviceRuntimeSessions.UpdateCursor(nil, id, generation, cursor, time.Now().UTC()); err != nil {
+	if err := h.deviceRuntimeSessions.UpdateCursor(context.Background(), id, generation, cursor, time.Now().UTC()); err != nil {
 		return fmt.Errorf("persist authoritative runtime cursor: %w", err)
 	}
 	return nil
@@ -763,7 +764,7 @@ func (h *Handler) HandleDisconnect(conn *Connection) error {
 
 	if h.deviceRuntimeSessions != nil {
 		if sessionID != "" && generation > 0 {
-			err := h.deviceRuntimeSessions.Close(nil, runtimeidentity.ParseRuntimeSessionID(sessionID), generation, "client_disconnect", time.Now().UTC())
+			err := h.deviceRuntimeSessions.Close(context.Background(), runtimeidentity.ParseRuntimeSessionID(sessionID), generation, "client_disconnect", time.Now().UTC())
 			if err != nil && !errors.Is(err, deviceruntime.ErrConnectionSuperseded) {
 				log.Warn("[v2] device runtime close failed: ", err)
 			}
@@ -790,7 +791,7 @@ func (h *Handler) HandleHeartbeat(conn *Connection) error {
 	sessionID, generation := conn.SessionSnapshot()
 
 	if h.deviceRuntimeSessions != nil && sessionID != "" && generation > 0 {
-		_, err := h.deviceRuntimeSessions.Heartbeat(nil, runtimeidentity.ParseRuntimeSessionID(sessionID), generation, now)
+		_, err := h.deviceRuntimeSessions.Heartbeat(context.Background(), runtimeidentity.ParseRuntimeSessionID(sessionID), generation, now)
 		if err != nil {
 			return err
 		}
