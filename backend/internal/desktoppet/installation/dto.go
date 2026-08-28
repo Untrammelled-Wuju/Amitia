@@ -32,7 +32,6 @@ var validPositionModes = map[string]bool{
 
 type UpdateRuntimeSettingsRequest struct {
 	AlwaysOnTop            *int     `json:"alwaysOnTop"`
-	LaunchOnStartup        *int     `json:"launchOnStartup"`
 	Scale                  *float64 `json:"scale"`
 	PositionX              *int     `json:"positionX"`
 	PositionY              *int     `json:"positionY"`
@@ -84,7 +83,17 @@ func (r *UpdateRuntimeSettingsRequest) Validate() error {
 		}
 	}
 	if r.ClickThroughMode != nil {
-		v := strings.ToLower(*r.ClickThroughMode)
+		v := strings.TrimSpace(*r.ClickThroughMode)
+		switch strings.ToLower(v) {
+		case clickThroughModeOff:
+			v = clickThroughModeOff
+		case clickThroughModeFull:
+			v = clickThroughModeFull
+		case clickThroughModeAlpha:
+			v = clickThroughModeAlpha
+		case "boundingbox":
+			v = clickThroughModeBoundingBox
+		}
 		if !validClickThroughModes[v] {
 			return NewInstallationError(ErrCodeInstallationInvalid,
 				fmt.Sprintf("clickThroughMode 无效: %s (允许: off/full/alpha/boundingBox)", *r.ClickThroughMode), ErrInstallationInvalid)
@@ -118,13 +127,6 @@ func (r *UpdateRuntimeSettingsRequest) Validate() error {
 		if v != 0 && v != 1 {
 			return NewInstallationError(ErrCodeInstallationInvalid,
 				fmt.Sprintf("alwaysOnTop 必须为 0 或 1: %d", v), ErrInstallationInvalid)
-		}
-	}
-	if r.LaunchOnStartup != nil {
-		v := *r.LaunchOnStartup
-		if v != 0 && v != 1 {
-			return NewInstallationError(ErrCodeInstallationInvalid,
-				fmt.Sprintf("launchOnStartup 必须为 0 或 1: %d", v), ErrInstallationInvalid)
 		}
 	}
 	if r.IdleEnabled != nil {
@@ -169,7 +171,7 @@ func (r *UpdateRuntimeSettingsRequest) IsEmpty() bool {
 	if r == nil {
 		return true
 	}
-	return r.AlwaysOnTop == nil && r.LaunchOnStartup == nil && r.Scale == nil &&
+	return r.AlwaysOnTop == nil && r.Scale == nil &&
 		r.PositionX == nil && r.PositionY == nil && r.ScreenID == nil &&
 		r.IdleEnabled == nil && r.IdleIntervalMinSeconds == nil && r.IdleIntervalMaxSeconds == nil &&
 		r.ClickThroughMode == nil && r.SoundEnabled == nil && r.RestoreOnAppStart == nil &&
@@ -181,9 +183,6 @@ func (r *UpdateRuntimeSettingsRequest) ToUpdates() map[string]interface{} {
 	updates := make(map[string]interface{})
 	if r.AlwaysOnTop != nil {
 		updates["always_on_top"] = *r.AlwaysOnTop
-	}
-	if r.LaunchOnStartup != nil {
-		updates["launch_on_startup"] = *r.LaunchOnStartup
 	}
 	if r.Scale != nil {
 		updates["scale"] = *r.Scale

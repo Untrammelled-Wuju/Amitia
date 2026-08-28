@@ -44,10 +44,13 @@ type Installation struct {
 func (Installation) TableName() string { return "desktop_pet_installations" }
 
 type RuntimeSettings struct {
-	ID                     string  `gorm:"column:id;primaryKey;type:text" json:"id"`
-	InstallationID         string  `gorm:"column:installation_id;type:text" json:"installationId"`
-	AlwaysOnTop            int     `gorm:"column:always_on_top;type:integer" json:"alwaysOnTop"`
-	LaunchOnStartup        int     `gorm:"column:launch_on_startup;type:integer" json:"launchOnStartup"`
+	ID             string `gorm:"column:id;primaryKey;type:text" json:"id"`
+	InstallationID string `gorm:"column:installation_id;type:text" json:"installationId"`
+	AlwaysOnTop    int    `gorm:"column:always_on_top;type:integer" json:"alwaysOnTop"`
+	// LaunchOnStartup is a legacy persisted column kept only for schema/data
+	// compatibility. OS-level Amitia auto-launch is owned exclusively by the
+	// Electron ConfigStore; per-pet startup behavior is RestoreOnAppStart.
+	LaunchOnStartup        int     `gorm:"column:launch_on_startup;type:integer" json:"-"`
 	Scale                  float64 `gorm:"column:scale;type:real" json:"scale"`
 	PositionX              int     `gorm:"column:position_x;type:integer" json:"positionX"`
 	PositionY              int     `gorm:"column:position_y;type:integer" json:"positionY"`
