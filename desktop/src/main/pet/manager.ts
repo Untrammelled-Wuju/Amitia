@@ -615,8 +615,8 @@ export class DesktopPetManager {
         await this.callEnableApi(installationId);
         backendEnableCommitted = true;
       }
-      this.markSettingsRevisionApplied(settings?.settingsRevision ?? 0);
       await this.startRuntime(installation, settings, loaded);
+      this.markSettingsRevisionApplied(settings?.settingsRevision ?? 0);
       this.setupRecoveryHandlers();
       this.petLogger.logEnable(installationId, installation.name);
       this.setState("enabled", installationId);
@@ -749,32 +749,85 @@ export class DesktopPetManager {
     const revision = Math.max(settingsRevision, settings.settingsRevision ?? 0);
     const merged = this.mergeSettings(this.activeSettings, {
       ...settings,
+      scale: typeof settings.scale === "number"
+        ? clampScale(settings.scale)
+        : settings.scale,
       settingsRevision: revision > 0
         ? revision
         : this.activeSettings?.settingsRevision ?? 0,
     });
-    this.activeSettings = merged;
-    this.markSettingsRevisionApplied(merged.settingsRevision);
+
+    const needsWindowRuntime =
+      typeof settings.scale === "number" ||
+      typeof settings.alwaysOnTop === "boolean" ||
+      typeof settings.positionX === "number" ||
+      typeof settings.positionY === "number" ||
+      typeof settings.screenId === "string" ||
+      typeof settings.soundEnabled === "boolean" ||
+      typeof settings.clickThroughMode !== "undefined";
+    const needsIdleRuntime =
+      typeof settings.idleEnabled === "boolean" ||
+      typeof settings.idleIntervalMinSeconds === "number" ||
+      typeof settings.idleIntervalMaxSeconds === "number";
+
+    if (needsWindowRuntime && !this.windowAdapter) {
+      throw new Error("PET_RUNTIME_NOT_READY");
+    }
+    if (needsIdleRuntime && !this.idleController) {
+      throw new Error("PET_IDLE_CONTROLLER_NOT_READY");
+    }
+    if (
+      typeof settings.clickThroughMode !== "undefined" &&
+      !this.clickThroughController
+    ) {
+      throw new Error("PET_CLICK_THROUGH_CONTROLLER_NOT_READY");
+    }
+
     if (this.windowAdapter) {
       if (typeof settings.scale === "number") {
-        await this.windowAdapter.setScale(clampScale(merged.scale));
+        await this.windowAdapter.setScale(merged.scale);
       }
       if (typeof settings.alwaysOnTop === "boolean") {
         await this.windowAdapter.setAlwaysOnTop(merged.alwaysOnTop);
       }
+      if (
+        typeof settings.positionX === "number" ||
+        typeof settings.positionY === "number" ||
+        typeof settings.screenId === "string"
+      ) {
+        await this.windowAdapter.setPosition(
+          merged.positionX,
+          merged.positionY,
+          merged.screenId || undefined,
+        );
+      }
+      if (typeof settings.soundEnabled === "boolean") {
+        await this.windowAdapter.setSoundEnabled(merged.soundEnabled);
+      }
       if (typeof settings.clickThroughMode !== "undefined") {
         await this.windowAdapter.setClickThroughMode(merged.clickThroughMode);
-        if (this.clickThroughController) {
-          const win = this.windowAdapter.getNativeWindow();
-          if (win) {
-            this.clickThroughController.attach(win);
-          }
-        }
+        this.clickThroughController?.setMode(merged.clickThroughMode);
       }
     }
-    if (this.idleController) {
-      this.idleController.reset();
+
+    if (
+      this.idleController &&
+      (typeof settings.idleEnabled === "boolean" ||
+        typeof settings.idleIntervalMinSeconds === "number" ||
+        typeof settings.idleIntervalMaxSeconds === "number")
+    ) {
+      this.idleController.updateConfig({
+        enabled: merged.idleEnabled,
+        minIntervalSeconds: merged.idleIntervalMinSeconds,
+        maxIntervalSeconds: merged.idleIntervalMaxSeconds,
+      });
     }
+
+    // Commit only after every requested runtime side effect completed. This
+    // keeps activeSettings/appliedRevision truthful if an adapter operation
+    // throws and lets Runtime v2 report a rejection instead of a false apply.
+    this.activeSettings = merged;
+    this.markSettingsRevisionApplied(merged.settingsRevision);
   }
 
   async updateDefaultAction(actionKey: string): Promise<void> {
@@ -924,8 +977,8 @@ export class DesktopPetManager {
       this.activeSettings = settings;
       this.loadedInstallation = loaded;
       this.packageRevision += 1;
-      this.markSettingsRevisionApplied(settings?.settingsRevision ?? 0);
       await this.startRuntime(installation, settings, loaded);
+      this.markSettingsRevisionApplied(settings?.settingsRevision ?? 0);
       this.setupRecoveryHandlers();
       this.petLogger.logEnable(installation.id, installation.name);
       this.petLogger.logWindowRecovered("app-startup", installation.id);
@@ -1025,6 +1078,7 @@ export class DesktopPetManager {
       canvasHeight,
       scale,
       alwaysOnTop,
+      soundEnabled: settings?.soundEnabled ?? false,
       clickThroughMode,
       position,
     };
@@ -1144,6 +1198,7 @@ export class DesktopPetManager {
       this.alphaThreshold,
     );
     clickThroughController.attach(win);
+    clickThroughController.setMode(clickThroughMode);
 
     const dragController = new DragController(
       windowAdapter,
@@ -1334,7 +1389,6 @@ export class DesktopPetManager {
       return;
     }
     const installationId = this.activeInstallationId;
-    this.teardownRecoveryHandlers();
     if (persistPosition) {
       try {
         await this.persistRuntimePosition();
@@ -1345,17 +1399,22 @@ export class DesktopPetManager {
         );
       }
     }
-    await this.stopRuntime();
     if (notifyBackend) {
       try {
+        // Commit the authoritative backend state before tearing down the local
+        // runtime. If this fails, keep the pet running and surface the error so
+        // a restart cannot unexpectedly resurrect an allegedly disabled pet.
         await this.callDisableApi(installationId);
       } catch (err) {
         console.warn(
-          "[DesktopPetManager] 调用后端 disable 接口失败:",
+          "[DesktopPetManager] 调用后端 disable 接口失败，保留本地运行态:",
           this.errorMessage(err),
         );
+        throw err;
       }
     }
+    this.teardownRecoveryHandlers();
+    await this.stopRuntime();
     this.petLogger.logDisable(installationId, notifyBackend ? "user" : "switch");
     this.activeInstallationId = null;
     this.activeInstallation = null;
@@ -2868,14 +2927,14 @@ export class DesktopPetManager {
               if (typeof settings?.alwaysOnTop === "boolean") {
                 updates.alwaysOnTop = settings.alwaysOnTop;
               }
-              if (typeof settings?.scale === "number") {
+              if (typeof settings?.scale === "number" && Number.isFinite(settings.scale)) {
                 updates.scale = settings.scale;
               }
-              if (typeof settings?.positionX === "number") {
-                updates.positionX = settings.positionX;
+              if (typeof settings?.positionX === "number" && Number.isFinite(settings.positionX)) {
+                updates.positionX = Math.round(settings.positionX);
               }
-              if (typeof settings?.positionY === "number") {
-                updates.positionY = settings.positionY;
+              if (typeof settings?.positionY === "number" && Number.isFinite(settings.positionY)) {
+                updates.positionY = Math.round(settings.positionY);
               }
               if (typeof settings?.screenId === "string") {
                 updates.screenId = settings.screenId;

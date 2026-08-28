@@ -20,6 +20,15 @@ const MIME_MAP: Record<string, string> = {
 const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Cache-Control": "no-store, no-cache, must-revalidate",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+  "Cross-Origin-Resource-Policy": "cross-origin",
+};
+
+const JSON_HEADERS: Record<string, string> = {
+  "Content-Type": "application/json; charset=utf-8",
+  ...SECURITY_HEADERS,
 };
 
 export type ResourceIndexEntry = IntegrityFileEntry;
@@ -43,6 +52,7 @@ try {
         standard: true,
         secure: true,
         supportFetchAPI: true,
+        corsEnabled: true,
       },
     },
   ]);
@@ -129,11 +139,15 @@ export class PetResourceProtocolRegistry {
     if (this.registered) return;
     this.registered = true;
     protocol.handle(PET_PROTOCOL_SCHEME, async (request) => {
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: SECURITY_HEADERS });
+      }
+
       const resolver = this.getActiveInstallation;
       if (!resolver) {
         return new Response(JSON.stringify({ error: "no_active_installation" }), {
           status: 503,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
 
@@ -141,7 +155,7 @@ export class PetResourceProtocolRegistry {
       if (!active) {
         return new Response(JSON.stringify({ error: "no_active_installation" }), {
           status: 503,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
 
@@ -149,21 +163,21 @@ export class PetResourceProtocolRegistry {
       if (!parsed) {
         return new Response(JSON.stringify({ error: "invalid_url" }), {
           status: 400,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
 
       if (parsed.installationId !== active.installationId) {
         return new Response(JSON.stringify({ error: "installation_mismatch" }), {
           status: 403,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
 
       if (isUnsafeRelativePath(parsed.relativePath)) {
         return new Response(JSON.stringify({ error: "unsafe_path" }), {
           status: 403,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
 
@@ -173,7 +187,7 @@ export class PetResourceProtocolRegistry {
       if (!indexEntry) {
         return new Response(JSON.stringify({ error: "resource_not_declared" }), {
           status: 403,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
 
@@ -181,7 +195,7 @@ export class PetResourceProtocolRegistry {
       if (!isPathWithinInstall(active.installPath, fullPath)) {
         return new Response(JSON.stringify({ error: "path_outside_install" }), {
           status: 403,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
 
@@ -191,14 +205,14 @@ export class PetResourceProtocolRegistry {
       } catch {
         return new Response(JSON.stringify({ error: "resource_not_found" }), {
           status: 404,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
 
       if (stats.isDirectory()) {
         return new Response(JSON.stringify({ error: "resource_not_found" }), {
           status: 404,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
 
@@ -209,7 +223,7 @@ export class PetResourceProtocolRegistry {
           actual: stats.size,
         }), {
           status: 403,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
 
@@ -223,7 +237,7 @@ export class PetResourceProtocolRegistry {
             actual: actualHash,
           }), {
             status: 403,
-            headers: { "Content-Type": "application/json; charset=utf-8" },
+            headers: JSON_HEADERS,
           });
         }
 
@@ -238,7 +252,7 @@ export class PetResourceProtocolRegistry {
       } catch {
         return new Response(JSON.stringify({ error: "read_failed" }), {
           status: 500,
-          headers: { "Content-Type": "application/json; charset=utf-8" },
+          headers: JSON_HEADERS,
         });
       }
     });

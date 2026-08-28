@@ -33,6 +33,8 @@ export class DragController {
     currentScreenId: "",
   };
   private lastPersistAt = 0;
+  private grabOffsetX = 0;
+  private grabOffsetY = 0;
 
   constructor(
     adapter: DesktopPetWindowAdapter,
@@ -53,6 +55,8 @@ export class DragController {
     this.dragging = false;
     this.win = null;
     this.lastPersistAt = 0;
+    this.grabOffsetX = 0;
+    this.grabOffsetY = 0;
     this.resetState();
   }
 
@@ -71,6 +75,9 @@ export class DragController {
 
     const { screenX, screenY } = payload;
     const screenId = this.resolveScreenId(screenX, screenY);
+    const [windowX, windowY] = win.getPosition();
+    this.grabOffsetX = screenX - windowX;
+    this.grabOffsetY = screenY - windowY;
 
     this.dragging = true;
     this.state = {
@@ -101,8 +108,10 @@ export class DragController {
       this.adapter.getDpiScale();
     }
 
-    const relX = screenX - display.bounds.x;
-    const relY = screenY - display.bounds.y;
+    const targetX = screenX - this.grabOffsetX;
+    const targetY = screenY - this.grabOffsetY;
+    const relX = targetX - display.bounds.x;
+    const relY = targetY - display.bounds.y;
     void this.adapter.setPosition(relX, relY, screenId);
 
     this.state.currentX = screenX;
@@ -124,12 +133,14 @@ export class DragController {
       ? String(display.id)
       : this.state.currentScreenId;
 
+    const targetX = screenX - this.grabOffsetX;
+    const targetY = screenY - this.grabOffsetY;
     if (display) {
-      const relX = screenX - display.bounds.x;
-      const relY = screenY - display.bounds.y;
+      const relX = targetX - display.bounds.x;
+      const relY = targetY - display.bounds.y;
       void this.adapter.setPosition(relX, relY, screenId);
     } else {
-      void this.adapter.setPosition(screenX, screenY);
+      void this.adapter.setPosition(targetX, targetY);
     }
 
     this.state.currentX = screenX;
@@ -140,6 +151,8 @@ export class DragController {
 
     this.dragging = false;
     this.state.isDragging = false;
+    this.grabOffsetX = 0;
+    this.grabOffsetY = 0;
     this.clickThrough.setDragging(false);
     this.onEvent("drag-end", this.getState());
     void snapshot;
@@ -149,6 +162,8 @@ export class DragController {
     if (!this.dragging) return;
     this.dragging = false;
     this.state.isDragging = false;
+    this.grabOffsetX = 0;
+    this.grabOffsetY = 0;
     this.clickThrough.setDragging(false);
     this.onEvent("drag-end", this.getState());
     void payload;
