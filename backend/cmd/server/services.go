@@ -51,6 +51,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/quality"
 	"github.com/u-ai/backend/internal/desktoppet/quality/detectors"
 	qualitygate "github.com/u-ai/backend/internal/desktoppet/quality/gate"
+	qualityinbox "github.com/u-ai/backend/internal/desktoppet/quality/inbox"
 	qualityinput "github.com/u-ai/backend/internal/desktoppet/quality/input"
 	qualitymeasurement "github.com/u-ai/backend/internal/desktoppet/quality/measurement"
 	qualityrecovery "github.com/u-ai/backend/internal/desktoppet/quality/recovery"
@@ -662,6 +663,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	canonicalMCPCaller := NewCanonicalMCPCaller(canonicalStdioRegistry, canonicalRemoteRegistry)
 	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(canonicalMCPCaller), makeKernelMCPHealth(canonicalMCPCaller), nil)
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
+	desktopPetService, err := desktoppet.NewService(desktopPetRepo, ctx.DB)
+	if err != nil {
+		return nil, fmt.Errorf("create desktop pet service: %w", err)
+	}
 	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, providerRegistry)
 	processingRepo := processing.NewRepository(ctx.DB, ctx)
 	processingDataDir := mcpDataDirectory(ctx)
@@ -772,7 +777,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	editingRepo := editing.NewRepository(ctx.DB)
 	editingAssetStore := editing.NewAssetStore(processingDataDir, editingRepo)
-	editingGenAdapter := newEditingGenerationPort(ctx)
+	editingGenAdapter := newEditingGenerationPort(ctx, desktopPetService, processingService)
 	editingProcAdapter := newEditingProcessingPort(ctx)
 	editingQualAdapter := newEditingQualityPort(ctx)
 	editingSvc := editing.NewService(editingRepo, editingAssetStore, editingGenAdapter, editingProcAdapter, editingQualAdapter, ctx.DB, processingDataDir)
@@ -790,10 +795,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	bridgeOutboxRepo := revisioncommit.NewOutboxRepository(ctx.DB)
 	bridgeJournalRepo := revisioncommit.NewRepository(ctx.DB)
 	procRevReader := &processingRevisionReaderAdapter{repo: processingRepo}
+	qualityInboxPublisher := qualityinbox.NewEvaluationInboxConsumer(ctx.DB, qualitySvc)
 	bridgeProcessor := revisioncommit.NewBridgeProcessor(
-		bridgeInboxRepo, bridgeJournalRepo, baselineCommitter, procRevReader, bridgeOutboxRepo, nil, "worker-main",
+		bridgeInboxRepo, bridgeJournalRepo, baselineCommitter, procRevReader, bridgeOutboxRepo, processingOutboxRepo, qualityInboxPublisher, "worker-main",
 	)
-	bridgeRecoveryWorker := revisioncommit.NewRecoveryWorker(bridgeProcessor, 30*time.Second)
+	bridgeRecoveryWorker := revisioncommit.NewRecoveryWorker(bridgeProcessor, 5*time.Second)
 	_ = bridgeRecoveryWorker
 
 	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
