@@ -4,8 +4,8 @@ package migration
 
 func DesktopPetProcessingActionsMigration() Migration {
 	return Migration{
-		Version:           "202607240010",
-		Name:              "add_desktop_pet_processing_actions_table",
+		Version: "202607240010",
+		Name:    "add_desktop_pet_processing_actions_table",
 		AcceptedChecksums: []string{
 			"b7eb16662292998f147104dbe18dfad658659aeaca580a84e2c7eb084a86ff81",
 			"30952410668a84448452af2058a8316167afe1a0326191d7797e1cc8f54ac9bf",

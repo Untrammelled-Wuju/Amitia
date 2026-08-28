@@ -4,8 +4,8 @@ package migration
 
 func DesktopPetInstallationsMigration() Migration {
 	return Migration{
-		Version:           "202607250001",
-		Name:              "add_desktop_pet_installations_table",
+		Version: "202607250001",
+		Name:    "add_desktop_pet_installations_table",
 		AcceptedChecksums: []string{
 			"a398213ea33399de6f69360dddfd8f8c6f13978968308c8c7d20349be1b3f53a",
 			"d7e24796f6c6da3d9a7a699952c818057f9edd4e730b9685a667c0c3cc82dc26",

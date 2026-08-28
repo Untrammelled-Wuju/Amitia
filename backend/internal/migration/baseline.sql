@@ -1071,8 +1071,6 @@ CREATE INDEX IF NOT EXISTS idx_dpgf_task ON desktop_pet_generation_frames(task_i
 CREATE INDEX IF NOT EXISTS idx_dpgf_action ON desktop_pet_generation_frames(task_action_id);
 CREATE INDEX IF NOT EXISTS idx_dpgf_exec ON desktop_pet_generation_frames(execution_id);
 CREATE INDEX IF NOT EXISTS idx_dpgf_status ON desktop_pet_generation_frames(status);
-ALTER TABLE desktop_pet_generation_frames ADD COLUMN generation_attempt INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE desktop_pet_generation_frames ADD COLUMN provider_attempt INTEGER NOT NULL DEFAULT 0;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpgf_action_gen_frame ON desktop_pet_generation_frames(task_action_id, generation_attempt, frame_index);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_generation_call_logs (
@@ -1287,8 +1285,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processed_frames (
 CREATE INDEX IF NOT EXISTS idx_dppf_action ON desktop_pet_processed_frames(processing_action_id);
 CREATE INDEX IF NOT EXISTS idx_dppf_index ON desktop_pet_processed_frames(frame_index);
 CREATE INDEX IF NOT EXISTS idx_dppf_status ON desktop_pet_processed_frames(status);
-ALTER TABLE desktop_pet_processed_frames ADD COLUMN processing_attempt_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processed_frames ADD COLUMN processing_attempt_number INTEGER NOT NULL DEFAULT 1;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dppf_attempt_frame ON desktop_pet_processed_frames(processing_attempt_id, frame_index);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_packages (
@@ -1966,7 +1962,8 @@ CREATE INDEX IF NOT EXISTS idx_dpar_task ON desktop_pet_action_revisions(process
 CREATE INDEX IF NOT EXISTS idx_dpar_action ON desktop_pet_action_revisions(processing_action_id);
 CREATE INDEX IF NOT EXISTS idx_dpar_parent ON desktop_pet_action_revisions(parent_revision_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpar_task_action_rev ON desktop_pet_action_revisions(processing_task_id, action_key, revision_number);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_dpar_source_type ON desktop_pet_action_revisions(source_processing_revision_id, source_type);
+CREATE INDEX IF NOT EXISTS idx_dpar_source_type ON desktop_pet_action_revisions(source_processing_revision_id, source_type);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpar_processing_baseline_source ON desktop_pet_action_revisions(source_processing_revision_id) WHERE source_type = 'processing_baseline' AND source_processing_revision_id <> '';
 CREATE INDEX IF NOT EXISTS idx_dpar_stream_rev ON desktop_pet_action_revisions(action_stream_id, revision_number);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_action_active_revisions (
@@ -2049,6 +2046,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_dparf_rev_frame_id ON desktop_pet_action_re
 CREATE TABLE IF NOT EXISTS desktop_pet_edit_sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL DEFAULT '',
+  character_id TEXT NOT NULL DEFAULT '',
+  action_stream_id TEXT NOT NULL DEFAULT '',
   processing_task_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
   base_revision_id TEXT NOT NULL DEFAULT '',
@@ -2057,16 +2056,20 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_sessions (
   cursor INTEGER NOT NULL DEFAULT 0,
   last_operation_seq INTEGER NOT NULL DEFAULT 0,
   checkpoint_id TEXT NOT NULL DEFAULT '',
+  draft_snapshot_id TEXT NOT NULL DEFAULT '',
+  draft_snapshot_hash TEXT NOT NULL DEFAULT '',
   client_instance_id TEXT NOT NULL DEFAULT '',
   expires_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT '',
-    updated_at TEXT NOT NULL DEFAULT '',
+  closed_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT '',
   committed_revision_id TEXT NOT NULL DEFAULT '',
   base_action_content_hash TEXT NOT NULL DEFAULT '',
   base_binding_revision INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_des_user ON desktop_pet_edit_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_des_character ON desktop_pet_edit_sessions(character_id);
 CREATE INDEX IF NOT EXISTS idx_des_task_action ON desktop_pet_edit_sessions(processing_task_id, action_key);
 CREATE INDEX IF NOT EXISTS idx_des_status ON desktop_pet_edit_sessions(status);
 
@@ -2200,6 +2203,8 @@ CREATE INDEX IF NOT EXISTS idx_dec_session_job ON desktop_pet_edit_candidates(se
 CREATE INDEX IF NOT EXISTS idx_dec_status ON desktop_pet_edit_candidates(status);
 CREATE INDEX IF NOT EXISTS idx_dec_revision ON desktop_pet_edit_candidates(candidate_revision_id);
 CREATE INDEX IF NOT EXISTS idx_dec_status_quality ON desktop_pet_edit_candidates(status, quality_status);
+CREATE INDEX IF NOT EXISTS idx_dec_user ON desktop_pet_edit_candidates(user_id);
+CREATE INDEX IF NOT EXISTS idx_dec_candidate_rev ON desktop_pet_edit_candidates(candidate_revision_id);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_journals (
   id TEXT PRIMARY KEY,
@@ -2223,6 +2228,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_candidate_revision_metadata (
   candidate_revision_id TEXT NOT NULL DEFAULT '',
   source_type TEXT NOT NULL DEFAULT '',
   parent_action_revision_id TEXT NOT NULL DEFAULT '',
+  parent_content_hash TEXT NOT NULL DEFAULT '',
   base_binding_revision INTEGER NOT NULL DEFAULT 0,
   regeneration_job_id TEXT NOT NULL DEFAULT '',
   content_hash TEXT NOT NULL DEFAULT '',
@@ -2486,30 +2492,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_frame_measurements (
 CREATE INDEX IF NOT EXISTS idx_dpfm_revision ON desktop_pet_frame_measurements(revision_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpfm_rev_frame ON desktop_pet_frame_measurements(revision_id, frame_index);
 
-ALTER TABLE desktop_pet_processing_tasks ADD COLUMN config_snapshot TEXT NOT NULL DEFAULT '{}';
-ALTER TABLE desktop_pet_processing_tasks ADD COLUMN config_hash TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_tasks ADD COLUMN pipeline_version TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_tasks ADD COLUMN active_revision_count INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE desktop_pet_processing_tasks ADD COLUMN publish_state TEXT NOT NULL DEFAULT '';
-
-ALTER TABLE desktop_pet_processing_actions ADD COLUMN active_revision_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_actions ADD COLUMN next_revision_number INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE desktop_pet_processing_actions ADD COLUMN source_attempt_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_actions ADD COLUMN source_candidate_index INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE desktop_pet_processing_actions ADD COLUMN processing_profile_snapshot TEXT NOT NULL DEFAULT '{}';
-
-ALTER TABLE desktop_pet_processed_frames ADD COLUMN revision_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processed_frames ADD COLUMN mask_path TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processed_frames ADD COLUMN transform_chain_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processed_frames ADD COLUMN measurement_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processed_frames ADD COLUMN source_artifact_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processed_frames ADD COLUMN source_cell_index INTEGER;
-
-ALTER TABLE desktop_pet_processing_revisions ADD COLUMN content_root_hash TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_revisions ADD COLUMN activated_at TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_revisions ADD COLUMN source_manifest_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_revisions ADD COLUMN commit_id TEXT NOT NULL DEFAULT '';
-
 ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN lease_owner TEXT NOT NULL DEFAULT '';
 ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN lease_expires_at TEXT NOT NULL DEFAULT '';
 ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN heartbeat_at TEXT NOT NULL DEFAULT '';
@@ -2519,30 +2501,6 @@ ALTER TABLE desktop_pet_processing_actions ADD COLUMN pending_retry_request_id T
 ALTER TABLE desktop_pet_processing_actions ADD COLUMN processing_warnings TEXT NOT NULL DEFAULT '';
 ALTER TABLE desktop_pet_processing_actions ADD COLUMN warning_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE desktop_pet_processing_actions ADD COLUMN action_spec_snapshot TEXT NOT NULL DEFAULT '{}';
-
-ALTER TABLE desktop_pet_processing_tasks ADD COLUMN user_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_tasks ADD COLUMN character_id TEXT NOT NULL DEFAULT '';
-
-ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN source_generation_attempt_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN source_generation_artifact_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN source_manifest_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_action_attempts ADD COLUMN source_artifact_content_hash TEXT NOT NULL DEFAULT '';
-
-ALTER TABLE desktop_pet_processing_revisions ADD COLUMN processing_attempt_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_revisions ADD COLUMN source_generation_attempt_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_revisions ADD COLUMN source_generation_artifact_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_revisions ADD COLUMN source_artifact_content_hash TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_revisions ADD COLUMN root_storage_key TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_revisions ADD COLUMN committed_at TEXT NOT NULL DEFAULT '';
-
-ALTER TABLE desktop_pet_processing_source_manifests ADD COLUMN user_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_source_manifests ADD COLUMN character_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_source_manifests ADD COLUMN active_artifact_binding_revision INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE desktop_pet_processing_source_manifests ADD COLUMN artifact_bytes INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE desktop_pet_processing_source_manifests ADD COLUMN reference_asset_content_hash TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_source_manifests ADD COLUMN generation_plan_id TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_source_manifests ADD COLUMN generation_plan_hash TEXT NOT NULL DEFAULT '';
-ALTER TABLE desktop_pet_processing_source_manifests ADD COLUMN action_spec_hash TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS desktop_pet_processing_commit_journals (
   id TEXT PRIMARY KEY,
@@ -2931,6 +2889,13 @@ CREATE TABLE IF NOT EXISTS desktop_pet_reference_assets (
     user_id TEXT NOT NULL DEFAULT '',
     source_artifact_id TEXT NOT NULL DEFAULT '',
     storage_path TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'staging',
+    source_bytes INTEGER NOT NULL DEFAULT 0,
+    normalized_bytes INTEGER NOT NULL DEFAULT 0,
+    normalizer_profile_id TEXT NOT NULL DEFAULT '',
+    normalizer_profile_version TEXT NOT NULL DEFAULT '',
+    normalizer_config_hash TEXT NOT NULL DEFAULT '',
+    normalized_artifact_id TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT ''
 );
 
@@ -4531,7 +4496,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
   superseded_at TEXT NOT NULL DEFAULT '',
   superseded_by TEXT NOT NULL DEFAULT '',
   last_command_sequence INTEGER NOT NULL DEFAULT 0,
-  last_event_sequence INTEGER NOT NULL DEFAULT 0
+  last_event_sequence INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
 );
 
 --- 来源: desktop_pet_runtime_protocol_v2.go
@@ -4869,6 +4836,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_event_outbox (
   aggregate_type TEXT NOT NULL DEFAULT 'action_revision',
   aggregate_id TEXT NOT NULL DEFAULT '',
   aggregate_sequence INTEGER NOT NULL DEFAULT 0,
+  sequence INTEGER NOT NULL DEFAULT 0,
   action_stream_id TEXT NOT NULL DEFAULT '',
   action_revision_id TEXT NOT NULL DEFAULT '',
   previous_revision_id TEXT NOT NULL DEFAULT '',
@@ -4924,10 +4892,12 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_evaluation_request_inbox (
   last_error TEXT NOT NULL DEFAULT '',
   received_at TEXT NOT NULL DEFAULT '',
   processed_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpeqri_event ON desktop_pet_quality_evaluation_request_inbox(event_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpeqri_idem ON desktop_pet_quality_evaluation_request_inbox(idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqe_idempotency_nonempty ON desktop_pet_quality_evaluations(idempotency_key) WHERE idempotency_key <> '';
 
 CREATE TABLE IF NOT EXISTS desktop_pet_quality_input_snapshots (
   id TEXT PRIMARY KEY,
@@ -5391,6 +5361,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_import_stagings (
   expires_at TEXT NOT NULL,
   consumption_started_at TEXT NOT NULL DEFAULT '',
   consumed_at TEXT NOT NULL DEFAULT '',
+  failed_at TEXT NOT NULL DEFAULT '',
+  failure_reason TEXT NOT NULL DEFAULT '',
   rejected_reason TEXT NOT NULL DEFAULT '',
   correlation_id TEXT NOT NULL DEFAULT ''
 );
@@ -5924,3 +5896,21 @@ CREATE TABLE IF NOT EXISTS execution_resumes (
 CREATE INDEX IF NOT EXISTS idx_execution_resumes_state ON execution_resumes(resume_state);
 CREATE INDEX IF NOT EXISTS idx_execution_resumes_root ON execution_resumes(root_execution_id);
 CREATE INDEX IF NOT EXISTS idx_execution_resumes_acq_txn ON execution_resumes(acquisition_transaction_id);
+
+
+CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_events (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL DEFAULT '',
+  aggregate_id TEXT NOT NULL DEFAULT '',
+  sequence INTEGER NOT NULL DEFAULT 0,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_dpare_aggregate_sequence ON desktop_pet_action_revision_events(aggregate_id, sequence);
+
+
+CREATE TABLE IF NOT EXISTS desktop_pet_bridge_request_snapshots (
+  journal_id TEXT PRIMARY KEY,
+  request_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT ''
+);
