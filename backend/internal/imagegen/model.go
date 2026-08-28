@@ -10,6 +10,7 @@ type ImageGenConfig struct {
 	ModelName string `gorm:"column:model_name;default:doubao-seedream-5-0" json:"modelName"`
 	BaseUrl   string `gorm:"column:base_url;default:https://ark.cn-beijing.volces.com/api/v3" json:"baseUrl"`
 	IsActive  int    `gorm:"column:is_active;default:0" json:"isActive"`
+	Enabled   int    `gorm:"column:enabled;default:1" json:"enabled"`
 	HasApiKey bool   `gorm:"-" json:"hasApiKey"`
 	CreatedAt string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt string `gorm:"column:updated_at" json:"updatedAt"`
