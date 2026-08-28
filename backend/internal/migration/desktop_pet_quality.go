@@ -84,7 +84,7 @@ created_at TEXT DEFAULT '',
   UNIQUE(evaluation_id, dimension_key)
 )`)
 
-		s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_results (
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_results (
   id TEXT PRIMARY KEY,
   processing_task_id TEXT NOT NULL,
   gate_status TEXT NOT NULL,

@@ -4,8 +4,8 @@ package migration
 
 func DesktopPetRuntimeSettingsMigration() Migration {
 	return Migration{
-		Version:           "202607250002",
-		Name:              "add_desktop_pet_runtime_settings_table",
+		Version: "202607250002",
+		Name:    "add_desktop_pet_runtime_settings_table",
 		AcceptedChecksums: []string{
 			"79a8a8f2d904cbdcd1b2cd09ce39269e1c2f16ffe20c22c8c59b17301a8c9414",
 			"8b41581f4fa31b714003a792900173fe363275378ff744ea0c5fe90160bf68c1",

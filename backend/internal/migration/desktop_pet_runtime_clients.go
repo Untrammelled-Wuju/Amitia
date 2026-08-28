@@ -26,7 +26,7 @@ func DesktopPetRuntimeClientsMigration() Migration {
   created_at TEXT DEFAULT '',
   updated_at TEXT DEFAULT ''
 )`)
-		return nil
+			return nil
 		},
 	}
 }

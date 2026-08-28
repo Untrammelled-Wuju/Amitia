@@ -134,7 +134,7 @@ func populateCatalogProjections(s *Step) {
 				enabled=%d,
 			updated_at=strftime('%%Y-%%m-%%d %%H:%%M:%%S','now')
 			WHERE action_key='%s'`,
-				contracts.ActionSpecSchemaVersion,
+			contracts.ActionSpecSchemaVersion,
 			contracts.CatalogVersion,
 			spec.Playback.DefaultFPS,
 			string(spec.Playback.Mode),

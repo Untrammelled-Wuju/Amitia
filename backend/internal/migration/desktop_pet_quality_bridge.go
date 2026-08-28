@@ -18,11 +18,11 @@ func DesktopPetQualityBridgeMigration() Migration {
 created_at TEXT DEFAULT '',
   updated_at TEXT DEFAULT ''
 )`)
-	if err := s.CreateIndex("uq_dpaqeb_revision_profile", "desktop_pet_active_quality_evaluation_bindings", []string{"action_revision_id", "profile_id"}, true); err != nil {
-		return err
-	}
+			if err := s.CreateIndex("uq_dpaqeb_revision_profile", "desktop_pet_active_quality_evaluation_bindings", []string{"action_revision_id", "profile_id"}, true); err != nil {
+				return err
+			}
 
-	s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_quality_commit_journals (
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_quality_commit_journals (
   id TEXT PRIMARY KEY,
   evaluation_id TEXT NOT NULL,
   commit_hash TEXT NOT NULL DEFAULT '',
@@ -32,9 +32,9 @@ created_at TEXT DEFAULT '',
   created_at TEXT DEFAULT '',
   completed_at TEXT DEFAULT ''
 )`)
-	if err := s.CreateIndex("idx_dpqcj_eval", "desktop_pet_quality_commit_journals", []string{"evaluation_id"}, false); err != nil {
-		return err
-	}
+			if err := s.CreateIndex("idx_dpqcj_eval", "desktop_pet_quality_commit_journals", []string{"evaluation_id"}, false); err != nil {
+				return err
+			}
 
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_quality_review_decisions (
   id TEXT PRIMARY KEY,
@@ -46,10 +46,10 @@ created_at TEXT DEFAULT '',
   reviewed_at TEXT NOT NULL DEFAULT '',
 created_at TEXT DEFAULT ''
 )`)
-	if err := s.CreateIndex("uq_dpqrd_eval", "desktop_pet_quality_review_decisions", []string{"evaluation_id"}, true); err != nil {
-		return err
-	}
-	s.CreateIndex("idx_dpqrd_revision", "desktop_pet_quality_review_decisions", []string{"action_revision_id"}, false)
+			if err := s.CreateIndex("uq_dpqrd_eval", "desktop_pet_quality_review_decisions", []string{"evaluation_id"}, true); err != nil {
+				return err
+			}
+			s.CreateIndex("idx_dpqrd_revision", "desktop_pet_quality_review_decisions", []string{"action_revision_id"}, false)
 
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_quality_measurement_cache (
   id TEXT PRIMARY KEY,
@@ -69,11 +69,11 @@ created_at TEXT DEFAULT ''
   measurements_json TEXT NOT NULL DEFAULT '{}',
 created_at TEXT DEFAULT ''
 )`)
-	if err := s.CreateIndex("uq_dpqmc_artifact_hash_ver", "desktop_pet_quality_measurement_cache", []string{"frame_artifact_id", "content_hash", "measurement_version"}, true); err != nil {
-		return err
-	}
+			if err := s.CreateIndex("uq_dpqmc_artifact_hash_ver", "desktop_pet_quality_measurement_cache", []string{"frame_artifact_id", "content_hash", "measurement_version"}, true); err != nil {
+				return err
+			}
 
-	s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_quality_outbox_events (
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_quality_outbox_events (
   id TEXT PRIMARY KEY,
   event_type TEXT NOT NULL,
   payload_json TEXT NOT NULL,
@@ -81,9 +81,9 @@ created_at TEXT DEFAULT ''
   created_at TEXT DEFAULT '',
   published_at TEXT DEFAULT ''
 )`)
-	if err := s.CreateIndex("idx_dpqoe_status", "desktop_pet_quality_outbox_events", []string{"status"}, false); err != nil {
-		return err
-	}
+			if err := s.CreateIndex("idx_dpqoe_status", "desktop_pet_quality_outbox_events", []string{"status"}, false); err != nil {
+				return err
+			}
 
 			s.AddColumn("desktop_pet_quality_evaluations", "user_id", "TEXT NOT NULL DEFAULT ''")
 			s.AddColumn("desktop_pet_quality_evaluations", "character_id", "TEXT NOT NULL DEFAULT ''")

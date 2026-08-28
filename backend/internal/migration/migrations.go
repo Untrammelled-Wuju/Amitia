@@ -125,6 +125,7 @@ func DefaultMigrations() []Migration {
 		DesktopPetQualityBridgeMigration(),
 		DesktopPetInstallationCoordinatorMigration(),
 		DesktopPetEditingV2Migration(),
+		DesktopPetEditingV3Migration(),
 		DesktopPetRuntimeProtocolV2Migration(),
 		DesktopPetRuntimeV2TablesMigration(),
 		DesktopPetGenerationPlanTablesMigration(),
@@ -179,6 +180,10 @@ func DefaultMigrations() []Migration {
 		SyncSchemaRevisionDeletedAtMigration(),
 		SyncMutationClaimsMigration(),
 		SessionTimestampCompatibilityMigration(),
+		DesktopPetActionRevisionSourceIndexFixMigration(),
+		DesktopPetQualityInboxFinalizationMigration(),
+		DesktopPetEditingCanonicalFinalizationMigration(),
+		DesktopPetSchemaFinalizationMigration(),
 	}
 }
 
@@ -202,9 +207,12 @@ func SyncMutationClaimsMigration() Migration {
 	}
 }
 
+// AppSettingsTombstoneMigration intentionally uses a forward-only version.
+// 20260818005 is owned by DesktopPetCutoverUniqueMigration; reusing it caused
+// Runner checksum mismatches before this migration could execute.
 func AppSettingsTombstoneMigration() Migration {
 	return Migration{
-		Version: "20260818005",
+		Version: "202608290002",
 		Name:    "add_app_settings_deleted_at_column",
 		Up: func(s *Step) error {
 			s.AddColumn("app_settings", "deleted_at", "DATETIME")
