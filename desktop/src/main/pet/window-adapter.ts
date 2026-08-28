@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen } from "electron";
+import { BrowserWindow, screen } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDevMode } from "../path-manager";
@@ -59,7 +59,6 @@ export class DesktopPetWindowAdapter {
 
   private loadTimeout: ReturnType<typeof setTimeout> | null = null;
   private loadSettled = false;
-  private loadReject: ((error: Error) => void) | null = null;
 
   private readonly onDisplayRemoved = (
     _event: Electron.Event,
@@ -129,6 +128,7 @@ export class DesktopPetWindowAdapter {
       constructorOptions.type = "panel";
     }
 
+    this.intentionalClose = false;
     this.window = new BrowserWindow(constructorOptions);
 
     this.configureForPlatform();
@@ -146,20 +146,33 @@ export class DesktopPetWindowAdapter {
     }
 
     this.loadSettled = false;
-    this.loadReject = null;
 
     return new Promise<void>((resolve, reject) => {
-      this.loadReject = reject;
+      const onRenderProcessGone = (
+        _event: Electron.Event,
+        details: Electron.RenderProcessGoneDetails,
+      ): void => {
+        settle(
+          new DesktopPetWindowLoadError(
+            "render-process-gone",
+            `reason=${details?.reason ?? "unknown"}`,
+          ),
+        );
+      };
+      const onUnresponsive = (): void => {
+        settle(new DesktopPetWindowLoadError("unresponsive"));
+      };
 
       const cleanup = (): void => {
         if (this.loadTimeout) {
           clearTimeout(this.loadTimeout);
           this.loadTimeout = null;
         }
-        win.webContents.removeAllListeners("did-finish-load");
-        win.webContents.removeAllListeners("did-fail-load");
-        win.webContents.removeAllListeners("render-process-gone");
-        win.removeAllListeners("unresponsive");
+        // Remove only the temporary startup listeners installed by this load.
+        // Long-lived crash listeners from registerWindowEvents() must survive
+        // navigation so renderer recovery keeps working after initial startup.
+        win.webContents.off("render-process-gone", onRenderProcessGone);
+        win.webContents.off("unresponsive", onUnresponsive);
       };
 
       const settle = (error: Error | null): void => {
@@ -167,58 +180,51 @@ export class DesktopPetWindowAdapter {
         this.loadSettled = true;
         cleanup();
         if (error) {
-          this.loadReject = null;
           reject(error);
         } else {
-          this.loadReject = null;
           resolve();
         }
       };
 
-      win.webContents.once("did-finish-load", () => {
-        settle(null);
-      });
-
-      win.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
-        settle(new DesktopPetWindowLoadError("did-fail-load", `code=${errorCode} desc=${errorDescription}`));
-      });
-
-      win.webContents.on("render-process-gone", (_event, details) => {
-        settle(new DesktopPetWindowLoadError("render-process-gone", `reason=${details?.reason ?? "unknown"}`));
-      });
-
-      win.on("unresponsive", () => {
-        settle(new DesktopPetWindowLoadError("unresponsive"));
-      });
+      win.webContents.once("render-process-gone", onRenderProcessGone);
+      win.webContents.once("unresponsive", onUnresponsive);
 
       this.loadTimeout = setTimeout(() => {
         settle(new DesktopPetWindowLoadError("load_timeout", `${LOAD_TIMEOUT_MS}ms`));
       }, LOAD_TIMEOUT_MS);
+
+      const loadPackagedRenderer = async (): Promise<void> => {
+        const petHtmlPath = join(currentDir, "../renderer/pet.html");
+        await win.loadFile(petHtmlPath);
+      };
 
       const doLoad = async (): Promise<void> => {
         if (isDevMode() && DEV_SERVER_URL) {
           const petDevUrl = `${DEV_SERVER_URL.replace(/\/$/, "")}/pet.html`;
           try {
             await win.loadURL(petDevUrl);
+            return;
           } catch {
-            const petHtmlPath = join(currentDir, "../renderer/pet.html");
-            try {
-              await win.loadFile(petHtmlPath);
-            } catch (err2) {
-              settle(new DesktopPetWindowLoadError("load_failed", err2 instanceof Error ? err2.message : String(err2)));
-            }
-          }
-        } else {
-          const petHtmlPath = join(currentDir, "../renderer/pet.html");
-          try {
-            await win.loadFile(petHtmlPath);
-          } catch (err) {
-            settle(new DesktopPetWindowLoadError("load_failed", err instanceof Error ? err.message : String(err)));
+            // Development server may be unavailable during Electron startup.
+            // Fall back to the packaged renderer; do not let the failed dev
+            // navigation consume the whole startup attempt.
+            await loadPackagedRenderer();
+            return;
           }
         }
+        await loadPackagedRenderer();
       };
 
-      void doLoad();
+      void doLoad().then(
+        () => settle(null),
+        (err: unknown) =>
+          settle(
+            new DesktopPetWindowLoadError(
+              "load_failed",
+              err instanceof Error ? err.message : String(err),
+            ),
+          ),
+      );
     });
   }
 
@@ -245,7 +251,6 @@ export class DesktopPetWindowAdapter {
       this.loadTimeout = null;
     }
     this.loadSettled = false;
-    this.loadReject = null;
     const win = this.window;
     this.window = null;
     if (win && !win.isDestroyed()) {
@@ -499,9 +504,9 @@ export class DesktopPetWindowAdapter {
     if (this.options.alwaysOnTop) {
       win.setAlwaysOnTop(true, "floating");
     }
-    if (app.dock) {
-      app.dock.hide();
-    }
+    // Do not call app.dock.hide() here. That API changes the Dock visibility
+    // for the entire Electron application, not just the pet panel, and would
+    // hide the main app's Dock entry while the pet is enabled.
   }
 
   private configureForLinux(): void {

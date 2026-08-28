@@ -94,8 +94,11 @@ function createMockWindow(
   setSkipTaskbar: ReturnType<typeof vi.fn>;
   setIgnoreMouseEvents: ReturnType<typeof vi.fn>;
   isDestroyed: ReturnType<typeof vi.fn>;
+  loadFile: ReturnType<typeof vi.fn>;
+  loadURL: ReturnType<typeof vi.fn>;
   webContents: {
     on: ReturnType<typeof vi.fn>;
+    once: ReturnType<typeof vi.fn>;
     off: ReturnType<typeof vi.fn>;
   };
 } {
@@ -156,13 +159,25 @@ function createMockWindow(
     setSkipTaskbar: vi.fn(),
     setIgnoreMouseEvents: vi.fn(),
     isDestroyed: vi.fn(() => state.destroyed),
+    loadFile: vi.fn(async () => undefined),
+    loadURL: vi.fn(async () => undefined),
     webContents: {
       on: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
         if (!state.webContentsListeners.has(event))
           state.webContentsListeners.set(event, []);
         state.webContentsListeners.get(event)!.push(cb);
       }),
-      off: vi.fn(),
+      once: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
+        if (!state.webContentsListeners.has(event))
+          state.webContentsListeners.set(event, []);
+        state.webContentsListeners.get(event)!.push(cb);
+      }),
+      off: vi.fn((event: string, cb: (...args: unknown[]) => void) => {
+        const arr = state.webContentsListeners.get(event);
+        if (!arr) return;
+        const idx = arr.indexOf(cb);
+        if (idx >= 0) arr.splice(idx, 1);
+      }),
     },
     ...state,
   };
@@ -290,11 +305,14 @@ describe("DesktopPetWindowAdapter", () => {
     expect(second).toBe(first);
   });
 
-  it("create 后通过 ready-to-show 显示窗口", async () => {
+  it("create 只完成 renderer 加载，RuntimeReady 前不显示窗口", async () => {
     const adapter = new DesktopPetWindowAdapter(makeOptions());
     await adapter.create();
 
-    expect(windowMock.show).toHaveBeenCalled();
+    expect(windowMock.show).not.toHaveBeenCalled();
+
+    adapter.showWhenRuntimeReady();
+    expect(windowMock.show).toHaveBeenCalledTimes(1);
   });
 
   it("create 注册 move/resize/closed 与 webContents 事件", async () => {
@@ -547,7 +565,9 @@ describe("DesktopPetWindowAdapter", () => {
 
     const goneListeners =
       windowMock.webContentsListeners.get("render-process-gone") ?? [];
-    expect(goneListeners.length).toBeGreaterThan(0);
+    // loadRenderer installs a temporary startup crash listener, but cleanup
+    // must remove only that listener and preserve the long-lived recovery one.
+    expect(goneListeners).toHaveLength(1);
 
     const listener = vi.fn();
     adapter.on("crashed", listener);

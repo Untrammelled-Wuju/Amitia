@@ -10,14 +10,17 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -p tsconfig.json && vite build && node scripts/copy-static-assets.mjs && node scripts/verify-renderer-build.mjs && node scripts/verify-desktop-pet-package.mjs",
     "dist:win": "node scripts/build-release.mjs",
-    "dist:win:dir": "electron-builder --win --x64 --dir",
+    "dist:win:dir": "pnpm run release:gate && electron-builder --win --x64 --dir && node scripts/verify-packaged-desktop-pet.mjs release/win-unpacked",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "package": "pnpm run build && node scripts/build-release.mjs && node scripts/verify-packaged-desktop-pet.mjs release/win-unpacked",
+    "package": "node scripts/build-release.mjs",
     "upload": "node scripts/publish-release.mjs",
     "verify:desktop-pet-package": "node scripts/verify-desktop-pet-package.mjs",
-    "package:ci": "pnpm run build && pnpm run test:electron-pet-smoke && electron-builder --config electron-builder.ci.yml --win --x64 --dir && node scripts/verify-packaged-desktop-pet.mjs release-ci/win-unpacked",
-    "test:electron-pet-smoke": "electron scripts/desktop-pet-electron-smoke.cjs"
+    "package:ci": "pnpm run release:gate && electron-builder --config electron-builder.ci.yml --win --x64 --dir && node scripts/verify-packaged-desktop-pet.mjs release-ci/win-unpacked",
+    "test:electron-pet-smoke": "electron scripts/desktop-pet-electron-smoke.cjs",
+    "verify:pet-player-singleton": "node scripts/verify-pet-player-singleton.mjs",
+    "verify:desktop-pet-runtime-singletrack": "node ../scripts/audit/verify-desktop-pet-runtime-singletrack.mjs",
+    "release:gate": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run verify:pet-player-singleton && pnpm run verify:desktop-pet-runtime-singletrack && pnpm run test:electron-pet-smoke"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.7",
