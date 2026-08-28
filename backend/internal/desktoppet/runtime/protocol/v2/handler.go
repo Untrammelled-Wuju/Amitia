@@ -41,9 +41,10 @@ type Connection struct {
 	// LastSeq tracks the last successfully persisted inbound runtime envelope sequence.
 	// OutboundSeq is independent: server->runtime envelopes must never advance the
 	// replay cursor used for runtime->server envelopes.
-	LastSeq     int64
-	OutboundSeq int64
-	LastBeat    time.Time
+	LastSeq        int64
+	OutboundSeq    int64
+	LastBeat       time.Time
+	HandshakeAcked bool
 
 	mu      sync.RWMutex
 	fenceMu sync.RWMutex
@@ -56,7 +57,20 @@ func (c *Connection) ActivateSession(sessionID string, generation, lastInboundSe
 	c.SessionID = sessionID
 	c.Generation = generation
 	c.LastSeq = lastInboundSeq
+	c.HandshakeAcked = false
 	c.State = ConnStateConnected
+}
+
+func (c *Connection) MarkHandshakeAcked() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.HandshakeAcked = true
+}
+
+func (c *Connection) IsHandshakeAcked() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.HandshakeAcked
 }
 
 func (c *Connection) SessionSnapshot() (string, int64) {
@@ -255,7 +269,7 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("session acquire failed: %v", err))
 		}
 
-		projection, projectionErr := h.sessions.SyncFromDeviceRuntimeSession(nil, result.Session, *payload)
+		_, projectionErr := h.sessions.SyncFromDeviceRuntimeSession(nil, result.Session, *payload)
 		if projectionErr != nil {
 			closeErr := h.deviceRuntimeSessions.Close(context.Background(), result.Session.ID, result.Session.ConnectionGeneration, "desktop_pet_projection_failed", now)
 			if closeErr != nil {
@@ -275,7 +289,17 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 		}
 
 		conn.ActivateSession(result.Session.ID.String(), result.Session.ConnectionGeneration, result.Session.LastEventSequence)
-		helloAck := SessionResultToHelloAck(result, projection.LastAppliedDesiredRevision)
+		authoritativeRevision, reconcileErr := h.commands.ReconcileDesiredStateOnHello(
+			string(conn.UserID), string(conn.DeviceID), string(conn.RuntimeID),
+			payload.LastAppliedDesiredRevision, result.Session.ConnectionGeneration,
+		)
+		if reconcileErr != nil {
+			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("desired-state reconciliation failed: %v", reconcileErr))
+		}
+		helloAck := SessionResultToHelloAck(result, authoritativeRevision)
+		if payload.LastAppliedDesiredRevision < authoritativeRevision {
+			helloAck.ResumeMode = string(protocol.ResumeModeFull)
+		}
 		return helloAck, nil
 	}
 
@@ -294,13 +318,24 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 	_ = oldSession
 
 	conn.ActivateSession(newSession.ID, newSession.ConnectionGeneration, newSession.LastEventSequence)
+	authoritativeRevision, reconcileErr := h.commands.ReconcileDesiredStateOnHello(
+		string(conn.UserID), string(conn.DeviceID), string(conn.RuntimeID),
+		payload.LastAppliedDesiredRevision, newSession.ConnectionGeneration,
+	)
+	if reconcileErr != nil {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("desired-state reconciliation failed: %v", reconcileErr))
+	}
+	resumeMode := protocol.ResumeModeResumeOrFull
+	if payload.LastAppliedDesiredRevision < authoritativeRevision {
+		resumeMode = protocol.ResumeModeFull
+	}
 
 	return &HelloAckPayload{
 		Accepted:        true,
 		SessionID:       runtimeidentity.ParseRuntimeSessionID(newSession.ID),
 		ServerTime:      time.Now(),
-		DesiredRevision: newSession.LastAppliedDesiredRevision,
-		ResumeMode:      string(protocol.ResumeModeResumeOrFull),
+		DesiredRevision: authoritativeRevision,
+		ResumeMode:      string(resumeMode),
 	}, nil
 }
 
@@ -394,26 +429,31 @@ func (h *Handler) HandleCommandAck(conn *Connection, env *Envelope, ack *Command
 	}
 
 	now := time.Now().UTC()
-	switch status {
-	case CommandStatusRuntimeReceived:
-		if err := h.commands.MarkRuntimeReceived(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
-			return fmt.Errorf("mark runtime received: %w", err)
-		}
-	case CommandStatusRuntimeAccepted:
-		if err := h.commands.MarkRuntimeAccepted(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
-			return fmt.Errorf("mark runtime accepted: %w", err)
-		}
-	case CommandStatusRendererAccepted:
-		if err := h.commands.MarkRendererAccepted(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
-			return fmt.Errorf("mark renderer accepted: %w", err)
-		}
-	case CommandStatusCompleted:
-		if err := h.commands.MarkCompleted(ackCmdID, "", now); err != nil {
-			return fmt.Errorf("mark command completed: %w", err)
-		}
-	case CommandStatusFailedTerminal:
-		if err := h.commands.MarkFailed(ackCmdID, ack.RejectErrorCode, ack.RejectReason, now); err != nil {
-			return fmt.Errorf("mark command failed: %w", err)
+	ignoreTransition := cmd.Status == string(CommandStatusSuperseded) ||
+		cmd.Status == string(CommandStatusCancelled) ||
+		cmd.Status == string(CommandStatusExpired)
+	if !ignoreTransition {
+		switch status {
+		case CommandStatusRuntimeReceived:
+			if err := h.commands.MarkRuntimeReceived(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
+				return fmt.Errorf("mark runtime received: %w", err)
+			}
+		case CommandStatusRuntimeAccepted:
+			if err := h.commands.MarkRuntimeAccepted(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
+				return fmt.Errorf("mark runtime accepted: %w", err)
+			}
+		case CommandStatusRendererAccepted:
+			if err := h.commands.MarkRendererAccepted(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
+				return fmt.Errorf("mark renderer accepted: %w", err)
+			}
+		case CommandStatusCompleted:
+			if err := h.commands.MarkCompleted(ackCmdID, "", now); err != nil {
+				return fmt.Errorf("mark command completed: %w", err)
+			}
+		case CommandStatusFailedTerminal:
+			if err := h.commands.MarkFailed(ackCmdID, ack.RejectErrorCode, ack.RejectReason, now); err != nil {
+				return fmt.Errorf("mark command failed: %w", err)
+			}
 		}
 	}
 

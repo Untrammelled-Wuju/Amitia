@@ -250,7 +250,7 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		conn:    conn,
 		handler: v2Handler,
 		config:  cfg,
-		sendCh:  make(chan []byte, sendQueueSize),
+		sendCh:  make(chan outboundFrame, sendQueueSize),
 		doneCh:  make(chan struct{}),
 	}
 
@@ -295,12 +295,17 @@ func parseRuntimeBootstrapSubprotocol(r *http.Request) (selectedProtocol, rawTic
 	return runtimeV2WebSocketSubprotocol, rawTicket, true
 }
 
+type outboundFrame struct {
+	data   []byte
+	result chan error
+}
+
 type wsConnContext struct {
 	wsConn  *websocket.Conn
 	conn    *Connection
 	handler *Handler
 	config  *FacadeConfig
-	sendCh  chan []byte
+	sendCh  chan outboundFrame
 	doneCh  chan struct{}
 	mu      sync.Mutex
 	once    sync.Once
@@ -311,6 +316,7 @@ func (ctx *wsConnContext) closeDone() {
 }
 
 func (ctx *wsConnContext) SendEnvelope(env *Envelope, sentAt string) error {
+	_ = sentAt
 	if env == nil {
 		return nil
 	}
@@ -328,13 +334,28 @@ func (ctx *wsConnContext) SendEnvelope(env *Envelope, sentAt string) error {
 		return err
 	}
 
+	frame := outboundFrame{data: data, result: make(chan error, 1)}
 	select {
-	case ctx.sendCh <- data:
-		return nil
+	case ctx.sendCh <- frame:
 	case <-ctx.doneCh:
 		return ErrConnectionClosed
 	default:
 		return errors.New("runtime send queue full")
+	}
+
+	// Queue admission is not transport delivery. The dispatcher may advance a
+	// durable command to transport_dispatched only after gorilla/websocket has
+	// actually completed WriteMessage successfully.
+	select {
+	case err := <-frame.result:
+		return err
+	case <-ctx.doneCh:
+		select {
+		case err := <-frame.result:
+			return err
+		default:
+			return ErrConnectionClosed
+		}
 	}
 }
 
@@ -423,6 +444,7 @@ func (ctx *wsConnContext) readLoop() {
 			if err := ctx.SendEnvelope(ackEnv, time.Now().Format("2006-01-02 15:04:05")); err != nil {
 				return
 			}
+			ctx.conn.MarkHandshakeAcked()
 		case MessageTypeCommandAck:
 			var ackPayload CommandAckPayload
 			if err := json.Unmarshal(env.Payload, &ackPayload); err != nil {
@@ -458,10 +480,18 @@ func (ctx *wsConnContext) writeLoop() {
 
 	for {
 		select {
-		case data := <-ctx.sendCh:
+		case frame := <-ctx.sendCh:
 			ctx.mu.Lock()
-			err := ctx.wsConn.WriteMessage(websocket.TextMessage, data)
+			writeTimeout := 10 * time.Second
+			if ctx.config != nil && ctx.config.HeartbeatTimeout > 0 {
+				writeTimeout = ctx.config.HeartbeatTimeout
+			}
+			err := ctx.wsConn.SetWriteDeadline(time.Now().Add(writeTimeout))
+			if err == nil {
+				err = ctx.wsConn.WriteMessage(websocket.TextMessage, frame.data)
+			}
 			ctx.mu.Unlock()
+			frame.result <- err
 			if err != nil {
 				return
 			}
