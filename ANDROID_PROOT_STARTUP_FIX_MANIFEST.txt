@@ -1,0 +1,33 @@
+ANDROID PRoot startup fix manifest
+Date: 2026-08-27
+Source: U-Ai-source.tar(20260827-072948).gz
+
+Root cause
+- Android runtime's DefaultProotCommandBuilder inserted a standalone "--" before the guest command.
+- The packaged PRoot 5.4.0 CLI does not support "--" as an end-of-options sentinel.
+- It exits immediately with: proot error: unknown option '--'.
+- STARTUP_PROOT_EXITED, TransportUnavailable and RECOVERY_EXHAUSTED are downstream symptoms.
+
+Changed complete replacement files
+1. mobile_app/android/amitia-runtime/src/main/kotlin/com/amitia/amitia_app/runtime/proot/internal/DefaultProotCommandBuilder.kt
+   - Removed the unsupported standalone "--" token.
+   - Kept supported PRoot options and deterministic ordering.
+   - Guest executable now directly follows PRoot options/binds as required by this PRoot CLI.
+
+2. mobile_app/android/amitia-runtime/src/test/kotlin/com/amitia/amitia_app/runtime/proot/ProotCommandBuilderTest.kt
+   - Replaced the incorrect test requiring "--" with a regression test forbidding it.
+   - Updated deterministic argument-order assertions.
+   - Added a regression test proving --runtime-profile=local remains immediately after the guest executable.
+
+Validation performed
+- Confirmed packaged ARM64 binary is PRoot 5.4.0 and contains support for --kill-on-exit, -0, -r, -w and -b.
+- Confirmed same-source packaged x86_64 PRoot 5.4.0 reproduces "unknown option '--'" for a standalone --.
+- Confirmed same x86_64 binary accepts the guest-command grammar without the standalone -- and treats a following --runtime-profile-style token as a guest argument.
+- Compiled the command-builder Kotlin dependency subset with kotlinc and executed a smoke test; generated argv contains no standalone -- and preserves guest argument ordering.
+- Static scan confirms production Android runtime no longer contains args.add("--").
+- Full Gradle test task could not run in this sandbox because Gradle 8.14 is not cached and network access is unavailable for wrapper download. No Gradle pass is claimed.
+
+Expected startup behavior after replacement
+- PRoot should no longer fail in ~0-2ms with STARTUP_PROOT_EXITED / unknown option '--'.
+- Backend startup can proceed to guest executable launch and health detection.
+- Transport should remain loading only until the backend endpoint is actually ready, rather than failing because the outer PRoot CLI rejected argv.
