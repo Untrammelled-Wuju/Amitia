@@ -92,6 +92,7 @@ const CLICK_THROUGH_MODE_ALPHA = "alpha";
 const CLICK_THROUGH_MODE_BOUNDING_BOX = "boundingBox";
 
 const INSTALLATION_STATUS_ENABLED = "enabled";
+const INSTALLATION_STATUS_INSTALLED = "installed";
 const INSTALLATION_STATUS_DISABLED = "disabled";
 const INSTALLATION_STATUS_INVALID = "invalid";
 
@@ -517,12 +518,11 @@ export class DesktopPetManager {
         "[DesktopPetManager] 角色切换时查询安装列表失败:",
         this.errorMessage(err),
       );
-      return;
+      throw err;
     }
-    const candidate = installations.find(
-      (inst) =>
-        inst.characterId === characterId &&
-        inst.status === INSTALLATION_STATUS_ENABLED,
+    const candidate = this.selectInstallationForCharacter(
+      installations,
+      characterId,
     );
     if (!candidate) return;
     if (
@@ -538,7 +538,52 @@ export class DesktopPetManager {
         "[DesktopPetManager] 角色切换后切换桌宠失败:",
         this.errorMessage(err),
       );
+      throw err;
     }
+  }
+
+  private selectInstallationForCharacter(
+    installations: InstallationInfo[],
+    characterId: string,
+  ): InstallationInfo | undefined {
+    const usableStatuses = new Set([
+      INSTALLATION_STATUS_ENABLED,
+      INSTALLATION_STATUS_INSTALLED,
+      INSTALLATION_STATUS_DISABLED,
+    ]);
+    const candidates = installations.filter(
+      (installation) =>
+        installation.characterId === characterId &&
+        usableStatuses.has(installation.status),
+    );
+    if (candidates.length <= 1) return candidates[0];
+
+    // Only one pet can be globally enabled on a device. After switching away
+    // from a character, its preferred pet is therefore normally `disabled`.
+    // Preserve the user's per-character choice by preferring the currently
+    // enabled item, then the one most recently enabled for that character, and
+    // finally the newest installation.
+    return candidates.sort((left, right) => {
+      const leftEnabled = left.status === INSTALLATION_STATUS_ENABLED ? 1 : 0;
+      const rightEnabled = right.status === INSTALLATION_STATUS_ENABLED ? 1 : 0;
+      if (leftEnabled !== rightEnabled) return rightEnabled - leftEnabled;
+
+      const lastEnabledDelta =
+        this.parseTimestamp(right.lastEnabledAt) -
+        this.parseTimestamp(left.lastEnabledAt);
+      if (lastEnabledDelta !== 0) return lastEnabledDelta;
+
+      return (
+        this.parseTimestamp(right.createdAt) -
+        this.parseTimestamp(left.createdAt)
+      );
+    })[0];
+  }
+
+  private parseTimestamp(value: string | null | undefined): number {
+    if (!value) return 0;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   onStateChange(listener: (payload: PetStatePayload) => void): () => void {
@@ -712,8 +757,47 @@ export class DesktopPetManager {
       ) {
         return;
       }
+
+      const previousInstallationId =
+        this.state === "enabled" ? this.activeInstallationId : null;
+
       await this.disableInternal(false);
-      await this.enableInstallationInternal(installationId, true, false);
+      try {
+        await this.enableInstallationInternal(installationId, true, false);
+      } catch (switchError) {
+        if (
+          previousInstallationId &&
+          previousInstallationId !== installationId
+        ) {
+          try {
+            // Switching is transactional from the user's perspective. If the
+            // target package/runtime cannot become ready, restore the exact pet
+            // that was running before the switch instead of leaving the desktop
+            // empty. The backend enable call also restores authoritative active
+            // installation state if target enable had already committed.
+            await this.enableInstallationInternal(
+              previousInstallationId,
+              true,
+              false,
+            );
+          } catch (restoreError) {
+            this.petLogger.logRuntimeCrash(
+              "switchInstallation.restorePrevious",
+              restoreError,
+            );
+            this.setState(
+              "degraded",
+              previousInstallationId,
+              `桌宠切换失败且恢复旧桌宠失败: ${this.errorMessage(restoreError)}`,
+            );
+            throw new AggregateError(
+              [switchError, restoreError],
+              "PET_SWITCH_FAILED_AND_ROLLBACK_FAILED",
+            );
+          }
+        }
+        throw switchError;
+      }
     });
   }
 

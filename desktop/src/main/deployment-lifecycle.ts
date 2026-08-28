@@ -17,8 +17,8 @@ import { BusinessCoreClient } from "./business-core-client";
 import { DesktopHostManager, DesktopSnapshotSync } from "./desktop-host";
 import { UIHostSSE } from "./ui-host-sse";
 import { DesktopPetManager } from "./pet/manager";
-import { ChatStateSubscriber } from "./pet/chat-state-subscriber";
 import { CharacterWatcher } from "./pet/character-watcher";
+import { getBackendSessionClient } from "./backend-session-client";
 import { getMeshCoordinator } from "./device-mesh/coordinator";
 
 export interface DesktopDeploymentLifecycleDeps {
@@ -41,7 +41,6 @@ export class DesktopDeploymentLifecycle {
   private desktopHostManager: DesktopHostManager | null = null;
   private desktopSnapshotSync: DesktopSnapshotSync | null = null;
   private uiHostSSE: UIHostSSE | null = null;
-  private chatStateSubscriber: ChatStateSubscriber | null = null;
   private characterWatcher: CharacterWatcher | null = null;
 
   private reconcileChain: Promise<void> = Promise.resolve();
@@ -94,7 +93,7 @@ export class DesktopDeploymentLifecycle {
   }
 
   private async reconcileLocalMode(): Promise<void> {
-    await this.stopLegacyPetIntegrations();
+    await this.stopLocalPetIntegrations();
     this.stopBusinessIntegrations();
     getMeshCoordinator(this.getMainWindow).stop();
 
@@ -109,17 +108,18 @@ export class DesktopDeploymentLifecycle {
 
     await this.rebuildBusinessIntegrations(this.topology);
 
-    await this.startLegacyPetIntegrations();
+    await this.startLocalPetIntegrations();
   }
 
   private async reconcileCloudMode(): Promise<void> {
-    await this.stopLegacyPetIntegrations();
+    await this.stopLocalPetIntegrations();
     this.stopBusinessIntegrations();
 
     const [coreResult] = await Promise.allSettled([
       ensureCoreProfile("device-agent"),
       this.probeBusinessCore(this.topology.businessCore),
     ]);
+    const localRuntimeAvailable = coreResult.status === "fulfilled";
 
     if (coreResult.status === "rejected") {
       console.error("[DeploymentLifecycle] device-agent启动失败:", coreResult.reason);
@@ -137,6 +137,14 @@ export class DesktopDeploymentLifecycle {
 
     const coordinator = getMeshCoordinator(this.getMainWindow);
     coordinator.start();
+
+    // Cloud mode still owns a local desktop-pet body. Packages, renderer and
+    // Runtime v2 remain on the device; only business/character authority moves
+    // to the cloud core. Never construct the pet manager on top of a failed
+    // device-agent profile.
+    if (localRuntimeAvailable) {
+      await this.startLocalPetIntegrations();
+    }
   }
 
   private async probeLocalRuntime(): Promise<void> {
@@ -250,36 +258,29 @@ export class DesktopDeploymentLifecycle {
     }
   }
 
-  private async startLegacyPetIntegrations(): Promise<void> {
-    if (this.currentConfig.mode !== "local" || this.shuttingDown) {
+  private async startLocalPetIntegrations(): Promise<void> {
+    if (this.shuttingDown) {
       return;
     }
 
     const mainWindow = this.getMainWindow();
     if (!mainWindow) return;
 
-    this.chatStateSubscriber = new ChatStateSubscriber({
-      coreHost: "127.0.0.1",
-      corePort: 18899,
-      onPayload: (payload) => {
-        if (!this.desktopPetManager) return;
-        try {
-          this.desktopPetManager.handleChatStatePayload(payload);
-        } catch (err) {
-          console.warn("[DeploymentLifecycle] 转发聊天状态失败:", err);
-        }
-      },
-    });
-
     this.characterWatcher = new CharacterWatcher({
-      coreHost: "127.0.0.1",
-      corePort: 18899,
+      coreBaseURL: this.topology.businessCore.baseURL,
+      authHeadersProvider: async () => {
+        if (this.topology.businessCore.remote) {
+          return this.businessCoreClient.authHeaders();
+        }
+        return getBackendSessionClient().getMainProcessAuthHeaders();
+      },
       onActiveCharacterChanged: async (characterId) => {
         if (!this.desktopPetManager) return;
         try {
           await this.desktopPetManager.handleCharacterSwitched(characterId);
         } catch (err) {
-          console.warn("[DeploymentLifecycle] 角色切换处理失败:", err);
+          console.warn("[DeploymentLifecycle] 角色切换处理失败，将由Watcher重试:", err);
+          throw err;
         }
       },
     });
@@ -290,16 +291,8 @@ export class DesktopDeploymentLifecycle {
       console.warn("[DeploymentLifecycle] DesktopPetManager 初始化失败:", err);
     }
 
-    const subscriber = this.chatStateSubscriber;
     const watcher = this.characterWatcher;
     const starts: Promise<unknown>[] = [];
-    if (subscriber) {
-      starts.push(
-        subscriber.start().catch((err) => {
-          console.warn("[DeploymentLifecycle] 聊天状态订阅启动失败:", err);
-        }),
-      );
-    }
     if (watcher) {
       starts.push(
         watcher.start().catch((err) => {
@@ -310,13 +303,10 @@ export class DesktopDeploymentLifecycle {
     await Promise.all(starts);
   }
 
-  private async stopLegacyPetIntegrations(): Promise<void> {
-    const subscriber = this.chatStateSubscriber;
+  private async stopLocalPetIntegrations(): Promise<void> {
     const watcher = this.characterWatcher;
-    this.chatStateSubscriber = null;
     this.characterWatcher = null;
 
-    subscriber?.stop();
     watcher?.stop();
 
     try {
@@ -344,7 +334,7 @@ export class DesktopDeploymentLifecycle {
         await this.reconcileChain;
 
         this.stopBusinessIntegrations();
-        await this.stopLegacyPetIntegrations();
+        await this.stopLocalPetIntegrations();
         getMeshCoordinator(this.getMainWindow).stop();
         await stopCore();
       })();

@@ -614,6 +614,149 @@ describe("DesktopPetManager manual play authority", () => {
   });
 });
 
+
+describe("DesktopPetManager installation switching", () => {
+  it("restores the previous pet when the target pet fails to become ready", async () => {
+    const manager = makeManager();
+    const switchFailure = new Error("target runtime failed");
+    const disableInternal = vi.fn(async () => undefined);
+    const enableInstallationInternal = vi
+      .fn<(_: string, __: boolean, ___: boolean) => Promise<void>>()
+      .mockRejectedValueOnce(switchFailure)
+      .mockResolvedValueOnce(undefined);
+    const internal = manager as never as {
+      state: string;
+      activeInstallationId: string | null;
+      ensureInitialized: () => Promise<void>;
+      disableInternal: (notifyBackend: boolean) => Promise<void>;
+      enableInstallationInternal: (
+        installationId: string,
+        notifyBackend: boolean,
+        restoreOnAppStart: boolean,
+      ) => Promise<void>;
+    };
+    internal.state = "enabled";
+    internal.activeInstallationId = "pet-old";
+    internal.ensureInitialized = vi.fn(async () => undefined);
+    internal.disableInternal = disableInternal;
+    internal.enableInstallationInternal = enableInstallationInternal;
+
+    await expect(manager.switchInstallation("pet-new")).rejects.toBe(switchFailure);
+
+    expect(disableInternal).toHaveBeenCalledWith(false);
+    expect(enableInstallationInternal).toHaveBeenNthCalledWith(
+      1,
+      "pet-new",
+      true,
+      false,
+    );
+    expect(enableInstallationInternal).toHaveBeenNthCalledWith(
+      2,
+      "pet-old",
+      true,
+      false,
+    );
+  });
+});
+
+describe("DesktopPetManager character reconciliation", () => {
+  it("propagates installation lookup failures so CharacterWatcher can retry", async () => {
+    const manager = makeManager();
+    const lookupFailure = new Error("installation lookup failed");
+    const internal = manager as never as {
+      ensureInitialized: () => Promise<void>;
+      listInstallations: () => Promise<unknown[]>;
+    };
+    internal.ensureInitialized = vi.fn(async () => undefined);
+    internal.listInstallations = vi.fn(async () => {
+      throw lookupFailure;
+    });
+
+    await expect(manager.handleCharacterSwitched("character-a")).rejects.toBe(
+      lookupFailure,
+    );
+  });
+
+  it("selects the most recently enabled usable pet for a newly active character", async () => {
+    const manager = makeManager();
+    const internal = manager as never as {
+      state: string;
+      activeInstallationId: string | null;
+      ensureInitialized: () => Promise<void>;
+      listInstallations: () => Promise<Array<{
+        id: string;
+        characterId: string;
+        status: string;
+        lastEnabledAt: string;
+        createdAt: string;
+      }>>;
+      switchInstallation: (installationId: string) => Promise<void>;
+    };
+    internal.state = "enabled";
+    internal.activeInstallationId = "pet-character-a";
+    internal.ensureInitialized = vi.fn(async () => undefined);
+    internal.listInstallations = vi.fn(async () => [
+      {
+        id: "pet-b-newer-install",
+        characterId: "character-b",
+        status: "installed",
+        lastEnabledAt: "",
+        createdAt: "2026-08-28T12:00:00Z",
+      },
+      {
+        id: "pet-b-preferred",
+        characterId: "character-b",
+        status: "disabled",
+        lastEnabledAt: "2026-08-28T10:00:00Z",
+        createdAt: "2026-08-20T12:00:00Z",
+      },
+      {
+        id: "pet-b-invalid",
+        characterId: "character-b",
+        status: "invalid",
+        lastEnabledAt: "2026-08-29T10:00:00Z",
+        createdAt: "2026-08-29T10:00:00Z",
+      },
+    ]);
+    internal.switchInstallation = vi.fn(async () => undefined);
+
+    await manager.handleCharacterSwitched("character-b");
+
+    expect(internal.switchInstallation).toHaveBeenCalledTimes(1);
+    expect(internal.switchInstallation).toHaveBeenCalledWith("pet-b-preferred");
+  });
+
+  it("propagates switch failures so CharacterWatcher does not commit the new character", async () => {
+    const manager = makeManager();
+    const switchFailure = new Error("switch failed");
+    const internal = manager as never as {
+      state: string;
+      activeInstallationId: string | null;
+      ensureInitialized: () => Promise<void>;
+      listInstallations: () => Promise<Array<{
+        id: string;
+        characterId: string;
+        status: string;
+      }>>;
+      switchInstallation: (installationId: string) => Promise<void>;
+    };
+    internal.state = "enabled";
+    internal.activeInstallationId = "pet-old";
+    internal.ensureInitialized = vi.fn(async () => undefined);
+    internal.listInstallations = vi.fn(async () => [
+      { id: "pet-new", characterId: "character-b", status: "enabled" },
+    ]);
+    internal.switchInstallation = vi.fn(async () => {
+      throw switchFailure;
+    });
+
+    await expect(manager.handleCharacterSwitched("character-b")).rejects.toBe(
+      switchFailure,
+    );
+    expect(internal.switchInstallation).toHaveBeenCalledWith("pet-new");
+  });
+});
+
 describe("DesktopPetManager Runtime v2 play command validation", () => {
   it("rejects legacy queue policy before scheduling", async () => {
     const manager = makeManager();
