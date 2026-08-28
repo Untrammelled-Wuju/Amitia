@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/processing/contracts"
@@ -59,6 +60,27 @@ func (c *BaselineActionRevisionCommitter) Commit(req CommitterRequest, procRev *
 	result := &CommitterResult{}
 
 	err := c.db.Transaction(func(tx *gorm.DB) error {
+		var existing editing.ActionRevision
+		existingErr := tx.Where("source_processing_revision_id = ? AND source_type = ?", req.ProcessingRevisionID, SourceTypeProcessingBaseline).First(&existing).Error
+		if existingErr == nil {
+			result.ActionRevisionID = existing.ID
+			result.RevisionNumber = int64(existing.RevisionNumber)
+			result.ActionStreamID = existing.ActionStreamID
+			result.ContentHash = existing.ContentHash
+			result.FrameSetHash = existing.FrameSetHash
+			var binding editing.ActiveActionRevisionBinding
+			if bindErr := tx.Where("action_stream_id = ? AND active_action_revision_id = ?", existing.ActionStreamID, existing.ID).First(&binding).Error; bindErr == nil {
+				result.Bound = true
+				result.BindingRevision = binding.BindingRevision
+			} else if bindErr != nil && bindErr != gorm.ErrRecordNotFound {
+				return fmt.Errorf("查询既有ActionRevision绑定失败: %w", bindErr)
+			}
+			return nil
+		}
+		if existingErr != nil && existingErr != gorm.ErrRecordNotFound {
+			return fmt.Errorf("查询既有ActionRevision失败: %w", existingErr)
+		}
+
 		stream, err := c.getOrCreateStream(tx, req.UserID, req.CharacterID, req.ActionKey, req.ProcessingTaskID)
 		if err != nil {
 			return fmt.Errorf("获取或创建ActionStream失败: %w", err)
@@ -103,7 +125,7 @@ func (c *BaselineActionRevisionCommitter) Commit(req CommitterRequest, procRev *
 		result.FrameSetHash = frameSetHash
 
 		now := time.Now().UTC().Format(time.RFC3339)
-		revisionID := fmt.Sprintf("ar-%d", time.Now().UnixNano())
+		revisionID := "ar-" + uuid.NewString()
 
 		frameCount := len(mappings)
 
@@ -157,18 +179,20 @@ func (c *BaselineActionRevisionCommitter) Commit(req CommitterRequest, procRev *
 			}
 		}
 
-		bound, bindingRevision, err := c.activateBinding(tx, stream, revisionID, req, now)
+		bound, bindingRevision, previousRevisionID, err := c.activateBinding(tx, stream, revisionID, req, now)
 		if err != nil {
 			return fmt.Errorf("激活Binding失败: %w", err)
 		}
 		result.Bound = bound
 		result.BindingRevision = bindingRevision
 
-		if err := c.recordBindingHistory(tx, stream.ID, bindingRevision, "", revisionID, req, now); err != nil {
-			return fmt.Errorf("记录BindingHistory失败: %w", err)
+		if bound {
+			if err := c.recordBindingHistory(tx, stream.ID, bindingRevision, previousRevisionID, revisionID, req, now); err != nil {
+				return fmt.Errorf("记录BindingHistory失败: %w", err)
+			}
 		}
 
-		if err := c.createOutboxEvents(tx, stream.ID, revisionID, "", req.ProcessingRevisionID, bindingRevision, req, now); err != nil {
+		if err := c.createOutboxEvents(tx, stream.ID, revisionID, previousRevisionID, req.ProcessingRevisionID, revisionNumber, contentHash, bindingRevision, bound, req, now); err != nil {
 			return fmt.Errorf("创建Outbox事件失败: %w", err)
 		}
 
@@ -204,7 +228,7 @@ func (c *BaselineActionRevisionCommitter) getOrCreateStream(tx *gorm.DB, userID,
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	stream = editing.ActionStream{
-		ID:                   fmt.Sprintf("as-%d", time.Now().UnixNano()),
+		ID:                   "as-" + uuid.NewString(),
 		UserID:               userID,
 		CharacterID:          characterID,
 		ActionKey:            actionKey,
@@ -246,11 +270,34 @@ func (c *BaselineActionRevisionCommitter) allocateRevisionNumber(tx *gorm.DB, st
 	return expectedNext, nil
 }
 
-func (c *BaselineActionRevisionCommitter) activateBinding(tx *gorm.DB, stream *editing.ActionStream, revisionID string, req CommitterRequest, now string) (bool, int64, error) {
+func (c *BaselineActionRevisionCommitter) activateBinding(tx *gorm.DB, stream *editing.ActionStream, revisionID string, req CommitterRequest, now string) (bool, int64, string, error) {
 	var existing editing.ActiveActionRevisionBinding
 	err := tx.Where("action_stream_id = ?", stream.ID).First(&existing).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return false, 0, "", err
+	}
 
 	if err == nil {
+		previousRevisionID := existing.ActiveActionRevisionID
+		shouldBind := false
+		switch req.PromotionPolicy {
+		case PromotionPolicyAlways:
+			shouldBind = true
+		case PromotionPolicyReplaceSystemBaselineIfUnchanged:
+			var current editing.ActionRevision
+			if qErr := tx.Where("id = ?", existing.ActiveActionRevisionID).First(&current).Error; qErr != nil {
+				return false, existing.BindingRevision, previousRevisionID, qErr
+			}
+			shouldBind = current.Origin == OriginSystem && current.SourceType == SourceTypeProcessingBaseline
+		case PromotionPolicyFirstRevisionOnly, PromotionPolicyManual:
+			shouldBind = false
+		default:
+			shouldBind = false
+		}
+		if !shouldBind {
+			return false, existing.BindingRevision, previousRevisionID, nil
+		}
+
 		newBindingRevision := existing.BindingRevision + 1
 		updateResult := tx.Model(&editing.ActiveActionRevisionBinding{}).
 			Where("id = ? AND binding_revision = ?", existing.ID, existing.BindingRevision).
@@ -263,20 +310,19 @@ func (c *BaselineActionRevisionCommitter) activateBinding(tx *gorm.DB, stream *e
 				"updated_at":                now,
 			})
 		if updateResult.Error != nil {
-			return false, 0, updateResult.Error
+			return false, 0, previousRevisionID, updateResult.Error
 		}
 		if updateResult.RowsAffected == 0 {
-			return false, 0, editing.ErrActionRevisionBindingConflict
+			return false, 0, previousRevisionID, editing.ErrActionRevisionBindingConflict
 		}
-		return true, newBindingRevision, nil
+		return true, newBindingRevision, previousRevisionID, nil
 	}
 
-	if err != gorm.ErrRecordNotFound {
-		return false, 0, err
+	if req.PromotionPolicy == PromotionPolicyManual {
+		return false, 0, "", nil
 	}
-
 	binding := &editing.ActiveActionRevisionBinding{
-		ID:                     fmt.Sprintf("ab-%d", time.Now().UnixNano()),
+		ID:                     "ab-" + uuid.NewString(),
 		ActionStreamID:         stream.ID,
 		UserID:                 stream.UserID,
 		CharacterID:            stream.CharacterID,
@@ -289,37 +335,14 @@ func (c *BaselineActionRevisionCommitter) activateBinding(tx *gorm.DB, stream *e
 		CreatedAt:              now,
 		UpdatedAt:              now,
 	}
-
 	if err := tx.Create(binding).Error; err != nil {
-		var existingBinding editing.ActiveActionRevisionBinding
-		findErr := tx.Where("action_stream_id = ?", stream.ID).First(&existingBinding).Error
-		if findErr != nil {
-			return false, 0, fmt.Errorf("创建Binding后查找失败: %w (原错误: %v)", findErr, err)
-		}
-
-		newBindingRevision := existingBinding.BindingRevision + 1
-		updateResult := tx.Model(&editing.ActiveActionRevisionBinding{}).
-			Where("id = ? AND binding_revision = ?", existingBinding.ID, existingBinding.BindingRevision).
-			Updates(map[string]any{
-				"active_action_revision_id": revisionID,
-				"binding_revision":          newBindingRevision,
-				"bound_reason":              req.PromotionPolicy,
-				"bound_by":                  req.CreatedBy,
-				"bound_at":                  now,
-				"updated_at":                now,
-			})
-		if updateResult.Error != nil {
-			return false, 0, updateResult.Error
-		}
-		return true, newBindingRevision, nil
+		return false, 0, "", err
 	}
-
-	return true, 1, nil
+	return true, 1, "", nil
 }
-
 func (c *BaselineActionRevisionCommitter) recordBindingHistory(tx *gorm.DB, streamID string, bindingRevision int64, previousRevisionID, newRevisionID string, req CommitterRequest, now string) error {
 	history := &editing.ActionRevisionBindingHistory{
-		ID:                 fmt.Sprintf("bh-%d", time.Now().UnixNano()),
+		ID:                 "bh-" + uuid.NewString(),
 		ActionStreamID:     streamID,
 		BindingRevision:    bindingRevision,
 		PreviousRevisionID: previousRevisionID,
@@ -332,24 +355,24 @@ func (c *BaselineActionRevisionCommitter) recordBindingHistory(tx *gorm.DB, stre
 	return tx.Create(history).Error
 }
 
-func (c *BaselineActionRevisionCommitter) createOutboxEvents(tx *gorm.DB, streamID, revisionID, previousRevisionID, processingRevisionID string, bindingRevision int64, req CommitterRequest, now string) error {
-	eventID := fmt.Sprintf("evt-%d", time.Now().UnixNano())
+func (c *BaselineActionRevisionCommitter) createOutboxEvents(tx *gorm.DB, streamID, revisionID, previousRevisionID, processingRevisionID string, revisionNumber int64, contentHash string, bindingRevision int64, bound bool, req CommitterRequest, now string) error {
+	eventID := "evt-" + uuid.NewString()
 
 	createdPayload, _ := json.Marshal(map[string]any{
 		"actionRevisionId":     revisionID,
 		"actionStreamId":       streamID,
-		"revisionNumber":       req.ProcessingRevisionID,
+		"revisionNumber":       revisionNumber,
 		"processingRevisionId": processingRevisionID,
 		"actionKey":            req.ActionKey,
 		"userId":               req.UserID,
 		"characterId":          req.CharacterID,
-		"contentHash":          "",
+		"contentHash":          contentHash,
 		"bindingRevision":      bindingRevision,
 		"occurredAt":           now,
 	})
 
 	createdEvent := &editing.ActionRevisionEventOutboxRecord{
-		ID:                   fmt.Sprintf("eo-%d", time.Now().UnixNano()),
+		ID:                   "eo-" + uuid.NewString(),
 		EventID:              eventID,
 		EventType:            EventActionRevisionCreated,
 		AggregateType:        "action_revision",
@@ -368,8 +391,8 @@ func (c *BaselineActionRevisionCommitter) createOutboxEvents(tx *gorm.DB, stream
 		return err
 	}
 
-	if req.PromotionPolicy == PromotionPolicyAlways || req.PromotionPolicy == PromotionPolicyFirstRevisionOnly {
-		activatedEventID := fmt.Sprintf("evt-%d", time.Now().UnixNano()+1)
+	if bound {
+		activatedEventID := "evt-" + uuid.NewString()
 		activatedPayload, _ := json.Marshal(map[string]any{
 			"actionRevisionId":   revisionID,
 			"actionStreamId":     streamID,
@@ -382,7 +405,7 @@ func (c *BaselineActionRevisionCommitter) createOutboxEvents(tx *gorm.DB, stream
 		})
 
 		activatedEvent := &editing.ActionRevisionEventOutboxRecord{
-			ID:                   fmt.Sprintf("eo-%d", time.Now().UnixNano()+1),
+			ID:                   "eo-" + uuid.NewString(),
 			EventID:              activatedEventID,
 			EventType:            EventActionRevisionActivated,
 			AggregateType:        "action_revision",

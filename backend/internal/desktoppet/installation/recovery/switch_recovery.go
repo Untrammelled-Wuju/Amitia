@@ -57,7 +57,7 @@ func (r *SwitchRecovery) Recover(ctx context.Context, op *operation.Installation
 func (r *SwitchRecovery) recoverFromBindingCommitted(ctx context.Context, op *operation.InstallationOperation, j *RecoverySwitchJournal) error {
 	desiredRevision := j.NewDesiredRevision
 	if desiredRevision == 0 {
-		desiredRevision = time.Now().UnixNano()
+		desiredRevision = time.Now().UnixNano() // audit:ok: desiredRevision is an int64 desired-state generation clock, not an identifier
 		j.NewDesiredRevision = desiredRevision
 	}
 	if err := r.switchRepo.PublishSwitchDesired(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, j.NewInstallationID, desiredRevision); err != nil {

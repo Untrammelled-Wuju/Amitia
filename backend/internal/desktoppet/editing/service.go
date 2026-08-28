@@ -3,10 +3,10 @@ package editing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -88,25 +88,24 @@ type Service interface {
 	RecoverPendingJournals(ctx context.Context) error
 	ExpireSessions(ctx context.Context) error
 
-	ImportLegacyRevision(ctx context.Context, processingTaskID, actionKey, userID string) (*CommitSessionResponse, error)
-
 	ListActionStreams(ctx context.Context, userID string) ([]ActionStreamSummary, error)
 	ListRevisionsByStream(ctx context.Context, userID string, streamID string) ([]RevisionSummary, error)
 	GetActiveRevisionByStream(ctx context.Context, userID string, streamID string) (*RevisionDetail, error)
 }
 
 type service struct {
-	repo        Repository
-	assetStore  RevisionAssetStore
-	genAdapter  GenerationAdapter
-	procAdapter ProcessingAdapter
-	qualAdapter QualityAdapter
-	db          *gorm.DB
-	dataDir     string
+	repo                Repository
+	assetStore          RevisionAssetStore
+	genAdapter          GenerationAdapter
+	procAdapter         ProcessingAdapter
+	qualAdapter         QualityAdapter
+	candidateAcceptance *CandidateAcceptanceService
+	db                  *gorm.DB
+	dataDir             string
 }
 
 func NewService(repo Repository, assetStore RevisionAssetStore, genAdapter GenerationAdapter, procAdapter ProcessingAdapter, qualAdapter QualityAdapter, db *gorm.DB, dataDir string) Service {
-	return &service{
+	svc := &service{
 		repo:        repo,
 		assetStore:  assetStore,
 		genAdapter:  genAdapter,
@@ -115,24 +114,26 @@ func NewService(repo Repository, assetStore RevisionAssetStore, genAdapter Gener
 		db:          db,
 		dataDir:     dataDir,
 	}
+	svc.candidateAcceptance = NewCandidateAcceptanceService(repo, qualAdapter, NewAuditOutbox(repo), svc.ApplyOperation)
+	return svc
 }
 
 type draftFrame struct {
-	FrameID           string
-	AssetID           string
-	LogicalIndex      int
-	DurationMS        int
-	AnchorX           float64
-	AnchorY           float64
-	AnchorSpace       string
-	SourceFrameID     string
-	SourceRevisionID  string
-	SourceAttemptID   string
-	LineageType       string
-	MaskAssetID       string
-	TransformJSON     string
-	MetadataJSON      string
-	CopiedFromFrameID string
+	FrameID           string  `json:"frameId"`
+	AssetID           string  `json:"assetId"`
+	LogicalIndex      int     `json:"logicalIndex"`
+	DurationMS        int     `json:"durationMs"`
+	AnchorX           float64 `json:"anchorX"`
+	AnchorY           float64 `json:"anchorY"`
+	AnchorSpace       string  `json:"anchorSpace"`
+	SourceFrameID     string  `json:"sourceFrameId,omitempty"`
+	SourceRevisionID  string  `json:"sourceRevisionId,omitempty"`
+	SourceAttemptID   string  `json:"sourceAttemptId,omitempty"`
+	LineageType       string  `json:"lineageType,omitempty"`
+	MaskAssetID       string  `json:"maskAssetId,omitempty"`
+	TransformJSON     string  `json:"transformJson,omitempty"`
+	MetadataJSON      string  `json:"metadataJson,omitempty"`
+	CopiedFromFrameID string  `json:"copiedFromFrameId,omitempty"`
 }
 
 type draftState struct {
@@ -151,7 +152,7 @@ func nowUTC() string {
 }
 
 func generateID(prefix string) string {
-	return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano())
+	return prefix + "-" + uuid.NewString()
 }
 
 func readFileBytes(path string) []byte {
@@ -787,6 +788,9 @@ func (s *service) validateSession(session *EditSession) error {
 	if session.Status == SessionStatusCommitted || session.Status == SessionStatusAbandoned {
 		return ErrSessionAlreadyCommitted
 	}
+	if session.Status == SessionStatusCommitting || session.Status == SessionStatusConflicted {
+		return ErrSessionStale
+	}
 	if session.Status == SessionStatusExpired {
 		return ErrSessionExpired
 	}
@@ -881,28 +885,22 @@ func (s *service) CheckProcessingTaskOwnership(ctx context.Context, processingTa
 }
 
 func (s *service) ListRevisions(ctx context.Context, processingTaskID, actionKey string) ([]RevisionSummary, error) {
-	revs, err := s.repo.ListActionRevisions(processingTaskID, actionKey)
+	binding, err := resolveActiveRevisionBinding(s.repo, processingTaskID, actionKey)
 	if err != nil {
 		return nil, err
 	}
 	activeRevisionID := ""
-
-	oldBinding, err := s.repo.GetActiveRevisionBinding(processingTaskID, actionKey)
+	var revs []ActionRevision
+	if binding != nil {
+		activeRevisionID = binding.RevisionID
+	}
+	if binding != nil && binding.Canonical && binding.ActionStreamID != "" {
+		revs, err = s.repo.ListActionRevisionsByStream(binding.UserID, binding.ActionStreamID)
+	} else {
+		revs, err = s.repo.ListActionRevisions(processingTaskID, actionKey)
+	}
 	if err != nil {
 		return nil, err
-	}
-	if oldBinding != nil {
-		activeRevisionID = oldBinding.RevisionID
-	}
-
-	if activeRevisionID == "" {
-		newBinding, err := s.repo.GetActiveActionRevisionBindingByTask(processingTaskID, actionKey)
-		if err != nil {
-			return nil, err
-		}
-		if newBinding != nil {
-			activeRevisionID = newBinding.ActiveActionRevisionID
-		}
 	}
 
 	summaries := make([]RevisionSummary, 0, len(revs))
@@ -966,23 +964,14 @@ func (s *service) GetRevision(ctx context.Context, revisionID string) (*Revision
 }
 
 func (s *service) GetActiveRevision(ctx context.Context, processingTaskID, actionKey string) (*RevisionDetail, error) {
-	binding, err := s.repo.GetActiveRevisionBinding(processingTaskID, actionKey)
+	binding, err := resolveActiveRevisionBinding(s.repo, processingTaskID, actionKey)
 	if err != nil {
 		return nil, err
 	}
-	if binding != nil {
-		return s.GetRevision(ctx, binding.RevisionID)
+	if binding == nil || binding.RevisionID == "" {
+		return nil, ErrRevisionNotFound
 	}
-
-	newBinding, err := s.repo.GetActiveActionRevisionBindingByTask(processingTaskID, actionKey)
-	if err != nil {
-		return nil, err
-	}
-	if newBinding != nil {
-		return s.GetRevision(ctx, newBinding.ActiveActionRevisionID)
-	}
-
-	return nil, ErrRevisionNotFound
+	return s.GetRevision(ctx, binding.RevisionID)
 }
 
 func (s *service) ActivateRevision(ctx context.Context, processingTaskID, actionKey, revisionID string, expectedVersion int64, reason, userID string) error {
@@ -993,55 +982,27 @@ func (s *service) ActivateRevision(ctx context.Context, processingTaskID, action
 	if rev.Status != RevisionStatusReady && rev.Status != RevisionStatusQualityReady {
 		return ErrRevisionNotReady
 	}
-	if rev.ProcessingTaskID != processingTaskID || rev.ActionKey != actionKey {
+	if rev.ActionKey != actionKey {
 		return ErrRevisionNotFound
 	}
-	now := nowUTC()
-	existing, err := s.repo.GetActiveRevisionBinding(processingTaskID, actionKey)
-	if err != nil {
-		return err
-	}
-	if existing == nil {
-		if expectedVersion != 0 {
-			return ErrActiveBindingConflict
+	if rev.ActionStreamID == "" {
+		if rev.ProcessingTaskID != processingTaskID {
+			return ErrRevisionNotFound
 		}
-		binding := &ActiveRevisionBinding{
-			ProcessingTaskID: processingTaskID,
-			ActionKey:        actionKey,
-			RevisionID:       revisionID,
-			BindingVersion:   1,
-			ActivatedBy:      userID,
-			Reason:           reason,
-			CreatedAt:        now,
-			UpdatedAt:        now,
+	} else {
+		binding, bindErr := resolveActiveRevisionBinding(s.repo, processingTaskID, actionKey)
+		if bindErr != nil {
+			return bindErr
 		}
-		if err := s.db.Create(binding).Error; err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "duplicate key") {
-				return ErrActiveBindingConflict
-			}
-			return err
+		if binding == nil || !binding.Canonical || binding.ActionStreamID != rev.ActionStreamID {
+			return ErrRevisionNotFound
 		}
-		return nil
 	}
-	if existing.BindingVersion != expectedVersion {
-		return ErrActiveBindingConflict
+	if rev.UserID != "" && rev.UserID != userID {
+		return ErrPermissionDenied
 	}
-	result := s.db.Model(&ActiveRevisionBinding{}).
-		Where("processing_task_id = ? AND action_key = ? AND binding_version = ?", processingTaskID, actionKey, expectedVersion).
-		Updates(map[string]any{
-			"revision_id":     revisionID,
-			"binding_version": expectedVersion + 1,
-			"activated_by":    userID,
-			"reason":          reason,
-			"updated_at":      now,
-		})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrActiveBindingConflict
-	}
-	return nil
+	_, _, err = bindActiveRevision(s.repo, processingTaskID, actionKey, revisionID, expectedVersion, userID, reason)
+	return err
 }
 
 func (s *service) GetPreviewManifest(ctx context.Context, revisionID string) (*RevisionManifest, error) {
@@ -1086,11 +1047,11 @@ func (s *service) GetFrameThumbnail(ctx context.Context, revisionID, frameID str
 }
 
 func (s *service) GetActionEditSummary(ctx context.Context, processingTaskID, actionKey string) (*ActionEditSummary, error) {
-	binding, err := s.repo.GetActiveRevisionBinding(processingTaskID, actionKey)
+	binding, err := resolveActiveRevisionBinding(s.repo, processingTaskID, actionKey)
 	if err != nil {
 		return nil, err
 	}
-	if binding == nil {
+	if binding == nil || binding.RevisionID == "" {
 		return nil, ErrRevisionNotFound
 	}
 	rev, err := s.repo.GetActionRevision(binding.RevisionID)
@@ -1143,7 +1104,12 @@ func (s *service) GetActionEditSummary(ctx context.Context, processingTaskID, ac
 	if err != nil {
 		return nil, err
 	}
-	allRevs, err := s.repo.ListActionRevisions(processingTaskID, actionKey)
+	var allRevs []ActionRevision
+	if binding.Canonical && binding.ActionStreamID != "" {
+		allRevs, err = s.repo.ListActionRevisionsByStream(binding.UserID, binding.ActionStreamID)
+	} else {
+		allRevs, err = s.repo.ListActionRevisions(processingTaskID, actionKey)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1151,7 +1117,7 @@ func (s *service) GetActionEditSummary(ctx context.Context, processingTaskID, ac
 		ActionKey:         actionKey,
 		ActiveRevisionID:  binding.RevisionID,
 		ActiveRevisionNum: rev.RevisionNumber,
-		BindingVersion:    binding.BindingVersion,
+		BindingVersion:    binding.BindingRevision,
 		FrameCount:        rev.FrameCount,
 		DurationMS:        rev.DurationMS,
 		QualityVerdict:    rev.QualityVerdict,
@@ -1162,13 +1128,6 @@ func (s *service) GetActionEditSummary(ctx context.Context, processingTaskID, ac
 }
 
 func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey, userID string, req CreateSessionRequest) (*CreateSessionResponse, error) {
-	baseRev, err := s.repo.GetActionRevision(req.BaseRevisionID)
-	if err != nil {
-		return nil, err
-	}
-	if baseRev.ProcessingTaskID != processingTaskID || baseRev.ActionKey != actionKey {
-		return nil, ErrRevisionNotFound
-	}
 	if req.IdempotencyKey != "" {
 		existing, err := s.repo.GetIdempotencyRecord(userID, "session_create", req.IdempotencyKey)
 		if err != nil {
@@ -1181,27 +1140,80 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 			}
 		}
 	}
+
+	baseRev, err := s.repo.GetActionRevision(req.BaseRevisionID)
+	if err != nil {
+		return nil, err
+	}
+	if baseRev.ActionKey != actionKey {
+		return nil, ErrRevisionNotFound
+	}
+	if baseRev.UserID != "" && baseRev.UserID != userID {
+		return nil, ErrPermissionDenied
+	}
+	binding, err := resolveActiveRevisionBinding(s.repo, processingTaskID, actionKey)
+	if err != nil {
+		return nil, err
+	}
+	if binding == nil || binding.RevisionID != req.BaseRevisionID {
+		return nil, ErrSessionStale
+	}
+	if baseRev.ActionStreamID == "" {
+		if baseRev.ProcessingTaskID != processingTaskID {
+			return nil, ErrRevisionNotFound
+		}
+	} else if !binding.Canonical || binding.ActionStreamID != baseRev.ActionStreamID {
+		return nil, ErrRevisionNotFound
+	}
+	if binding.UserID != "" && binding.UserID != userID {
+		return nil, ErrPermissionDenied
+	}
+
+	characterID := baseRev.CharacterID
+	actionStreamID := baseRev.ActionStreamID
+	if actionStreamID != "" {
+		stream, err := s.repo.GetActionStreamByID(actionStreamID)
+		if err != nil {
+			return nil, err
+		}
+		if stream == nil || (stream.UserID != "" && stream.UserID != userID) {
+			return nil, ErrPermissionDenied
+		}
+		if characterID == "" {
+			characterID = stream.CharacterID
+		}
+	}
+
 	now := nowUTC()
 	expiresAt := time.Now().UTC().Add(SessionDefaultTTLHours * time.Hour).Format(time.RFC3339)
 	sessionID := generateID("sess")
 	session := &EditSession{
-		ID:               sessionID,
-		UserID:           userID,
-		ProcessingTaskID: processingTaskID,
-		ActionKey:        actionKey,
-		BaseRevisionID:   req.BaseRevisionID,
-		SessionVersion:   1,
-		Status:           SessionStatusOpen,
-		Cursor:           0,
-		LastOperationSeq: 0,
-		ClientInstanceID: req.ClientInstanceID,
-		ExpiresAt:        expiresAt,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:                    sessionID,
+		UserID:                userID,
+		CharacterID:           characterID,
+		ActionStreamID:        actionStreamID,
+		ProcessingTaskID:      processingTaskID,
+		ActionKey:             actionKey,
+		BaseRevisionID:        req.BaseRevisionID,
+		BaseActionContentHash: baseRev.ContentHash,
+		BaseBindingRevision:   binding.BindingRevision,
+		SessionVersion:        1,
+		Status:                SessionStatusOpen,
+		Cursor:                0,
+		LastOperationSeq:      0,
+		ClientInstanceID:      req.ClientInstanceID,
+		ExpiresAt:             expiresAt,
+		CreatedAt:             now,
+		UpdatedAt:             now,
 	}
 	if err := s.repo.CreateEditSession(session); err != nil {
 		return nil, err
 	}
+	if _, err := s.ensureDraftSnapshot(ctx, session); err != nil {
+		_ = s.db.Delete(&EditSession{}, "id = ?", sessionID).Error
+		return nil, err
+	}
+
 	resp := &CreateSessionResponse{
 		SessionID:      sessionID,
 		SessionVersion: 1,
@@ -1219,7 +1231,17 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 			Status:         "completed",
 			CreatedAt:      now,
 		}
-		s.repo.CreateIdempotencyRecord(record)
+		if err := s.repo.CreateIdempotencyRecord(record); err != nil {
+			// The session is already durable. A duplicate idempotency insert can
+			// only happen under a concurrent retry; return the persisted result.
+			if existing, readErr := s.repo.GetIdempotencyRecord(userID, "session_create", req.IdempotencyKey); readErr == nil && existing != nil {
+				var result CreateSessionResponse
+				if json.Unmarshal([]byte(existing.ResultJSON), &result) == nil {
+					return &result, nil
+				}
+			}
+			return nil, err
+		}
 	}
 	return resp, nil
 }
@@ -1478,8 +1500,70 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 	if err != nil {
 		return nil, err
 	}
-	if err := s.validateSession(session); err != nil {
+	if session == nil {
+		return nil, ErrSessionNotFound
+	}
+	if session.UserID != userID {
+		return nil, ErrPermissionDenied
+	}
+
+	activationPolicy := req.ActivationPolicy
+	if activationPolicy == "" {
+		activationPolicy = ActivationPolicyImmediate
+	}
+	switch activationPolicy {
+	case ActivationPolicyImmediate, ActivationPolicyManual, ActivationPolicyKeepCurrent:
+	case ActivationPolicyAfterQualityPass:
+		return nil, NewEditError(ErrCodeEditOperationInvalid, "after_quality_pass requires a deferred activation coordinator and is disabled fail-closed")
+	default:
+		return nil, NewEditError(ErrCodeEditOperationInvalid, "未知的Revision激活策略")
+	}
+
+	effectiveIdempotencyKey := req.IdempotencyKey
+	if effectiveIdempotencyKey == "" {
+		effectiveIdempotencyKey = fmt.Sprintf("commit:%s:%d", session.ID, req.ExpectedSessionVersion)
+	}
+	idem, err := s.repo.GetIdempotencyRecord(userID, sessionID, effectiveIdempotencyKey)
+	if err != nil {
 		return nil, err
+	}
+	if idem != nil && idem.Status == "completed" {
+		var result CommitSessionResponse
+		if err := json.Unmarshal([]byte(idem.ResultJSON), &result); err == nil {
+			return &result, nil
+		}
+	}
+
+	// A retry can arrive after the durable session state was committed but
+	// before the idempotency record was finalized. Reconstruct the response
+	// from the committed revision instead of rejecting the retry.
+	if session.Status == SessionStatusCommitted && session.CommittedRevisionID != "" {
+		committed, getErr := s.repo.GetActionRevision(session.CommittedRevisionID)
+		if getErr != nil {
+			return nil, getErr
+		}
+		resp := &CommitSessionResponse{RevisionID: committed.ID, QualityJobID: committed.QualityEvaluationID, Status: SessionStatusCommitted}
+		resultJSON, _ := json.Marshal(resp)
+		if idem != nil {
+			_ = s.repo.UpdateIdempotencyRecord(idem.ID, "completed", string(resultJSON))
+		} else {
+			_ = s.repo.CreateIdempotencyRecord(&EditIdempotencyRecord{
+				ID:             generateID("idem"),
+				UserID:         userID,
+				SessionID:      sessionID,
+				IdempotencyKey: effectiveIdempotencyKey,
+				Endpoint:       "commit_session",
+				ResultJSON:     string(resultJSON),
+				Status:         "completed",
+				CreatedAt:      nowUTC(),
+			})
+		}
+		return resp, nil
+	}
+	if session.Status != SessionStatusCommitting {
+		if err := s.validateSession(session); err != nil {
+			return nil, err
+		}
 	}
 	if session.SessionVersion != req.ExpectedSessionVersion {
 		return nil, NewEditErrorWithDetail(ErrCodeEditSessionVersionConflict, "会话版本冲突", SessionConflictDetail{
@@ -1487,87 +1571,197 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 			ExpectedVersion: req.ExpectedSessionVersion,
 		})
 	}
-	if req.IdempotencyKey != "" {
-		existing, err := s.repo.GetIdempotencyRecord(userID, sessionID, req.IdempotencyKey)
-		if err != nil {
+
+	// Use a deterministic revision ID for this idempotent commit. That makes a
+	// crash between file materialization and DB finalization recoverable.
+	revID := "rev-" + uuid.NewSHA1(uuid.NameSpaceOID, []byte(session.ID+"|"+effectiveIdempotencyKey)).String()
+	recoveredRevisionNumber := 0
+	var recovered ActionRevision
+	recoverErr := s.db.Where("id = ?", revID).First(&recovered).Error
+	if recoverErr == nil {
+		recoveredRevisionNumber = recovered.RevisionNumber
+		binding, bindErr := resolveActiveRevisionBinding(s.repo, session.ProcessingTaskID, session.ActionKey)
+		if bindErr != nil {
+			return nil, bindErr
+		}
+		if recovered.ManifestHash != "" && recovered.Status != RevisionStatusBuilding &&
+			(activationPolicy != ActivationPolicyImmediate || (binding != nil && binding.RevisionID == recovered.ID)) {
+			journalID := "jrn-" + uuid.NewSHA1(uuid.NameSpaceOID, []byte(sessionID+"|"+revID+"|publish-journal")).String()
+			var existingJournal PublishJournal
+			journalErr := s.db.Where("id = ?", journalID).First(&existingJournal).Error
+			if errors.Is(journalErr, gorm.ErrRecordNotFound) {
+				journal := &PublishJournal{ID: journalID, RevisionID: revID, SessionID: sessionID, Action: JournalActionPublish, Status: JournalStatusCompleted, ManifestPath: recovered.ManifestPath, CreatedAt: nowUTC(), CompletedAt: nowUTC()}
+				if err := s.repo.CreatePublishJournal(journal); err != nil {
+					return nil, err
+				}
+			} else if journalErr != nil {
+				return nil, journalErr
+			}
+			if err := s.repo.UpdateSessionCommitted(session.ID, recovered.ID); err != nil {
+				return nil, err
+			}
+			resp := &CommitSessionResponse{RevisionID: recovered.ID, QualityJobID: recovered.QualityEvaluationID, Status: SessionStatusCommitted}
+			resultJSON, _ := json.Marshal(resp)
+			if idem == nil {
+				idem = &EditIdempotencyRecord{ID: generateID("idem"), UserID: userID, SessionID: sessionID, IdempotencyKey: effectiveIdempotencyKey, Endpoint: "commit_session", CreatedAt: nowUTC()}
+				if err := s.repo.CreateIdempotencyRecord(idem); err != nil {
+					if existing, e := s.repo.GetIdempotencyRecord(userID, sessionID, effectiveIdempotencyKey); e == nil && existing != nil {
+						idem = existing
+					} else {
+						return nil, err
+					}
+				}
+			}
+			_ = s.repo.UpdateIdempotencyRecord(idem.ID, "completed", string(resultJSON))
+			return resp, nil
+		}
+		// The deterministic revision is only partially materialized. Remove its
+		// DB rows and rebuild the same ID. Asset files are content-addressed and
+		// safe to reuse; the manifest path is overwritten atomically by storage.
+		_ = s.repo.DeleteRevisionFrames(revID)
+		if err := s.db.Delete(&ActionRevision{}, "id = ?", revID).Error; err != nil {
 			return nil, err
 		}
-		if existing != nil && existing.Status == "completed" {
-			var result CommitSessionResponse
-			if err := json.Unmarshal([]byte(existing.ResultJSON), &result); err == nil {
-				return &result, nil
+	} else if !errors.Is(recoverErr, gorm.ErrRecordNotFound) {
+		return nil, recoverErr
+	}
+
+	if _, err := s.validateSessionBaseBinding(session); err != nil {
+		_ = s.repo.UpdateSessionStatus(session.ID, SessionStatusConflicted)
+		return nil, err
+	}
+	if idem == nil {
+		idem = &EditIdempotencyRecord{
+			ID:             generateID("idem"),
+			UserID:         userID,
+			SessionID:      sessionID,
+			IdempotencyKey: effectiveIdempotencyKey,
+			Endpoint:       "commit_session",
+			Status:         "pending",
+			CreatedAt:      nowUTC(),
+		}
+		if err := s.repo.CreateIdempotencyRecord(idem); err != nil {
+			existing, readErr := s.repo.GetIdempotencyRecord(userID, sessionID, effectiveIdempotencyKey)
+			if readErr != nil || existing == nil {
+				return nil, err
+			}
+			idem = existing
+			if idem.Status == "completed" {
+				var result CommitSessionResponse
+				if json.Unmarshal([]byte(idem.ResultJSON), &result) == nil {
+					return &result, nil
+				}
 			}
 		}
 	}
+
 	if err := s.repo.UpdateSessionStatus(sessionID, SessionStatusCommitting); err != nil {
+		_ = s.repo.UpdateIdempotencyRecord(idem.ID, "failed", "")
 		return nil, err
+	}
+	failCommitOpen := func(commitErr error) (*CommitSessionResponse, error) {
+		_ = s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
+		_ = s.repo.UpdateIdempotencyRecord(idem.ID, "failed", "")
+		return nil, commitErr
 	}
 	ds, err := s.rebuildDraftState(ctx, session)
 	if err != nil {
-		s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
-		return nil, err
+		return failCommitOpen(err)
 	}
 	if len(ds.Frames) < MinFrameCount {
-		s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
-		return nil, ErrFrameCountInvalid
+		return failCommitOpen(ErrFrameCountInvalid)
 	}
 	baseRev, err := s.repo.GetActionRevision(session.BaseRevisionID)
 	if err != nil {
-		s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
-		return nil, err
+		return failCommitOpen(err)
 	}
-	revNum, err := s.repo.GetNextRevisionNumber(session.ProcessingTaskID, session.ActionKey)
+
+	var revNum int
+	if recoveredRevisionNumber > 0 {
+		revNum = recoveredRevisionNumber
+	} else if session.ActionStreamID != "" {
+		revNum, err = allocateActionStreamRevisionNumber(s.repo, session.ActionStreamID)
+	} else {
+		revNum, err = s.repo.GetNextRevisionNumber(session.ProcessingTaskID, session.ActionKey)
+	}
 	if err != nil {
-		s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
-		return nil, err
+		return failCommitOpen(err)
 	}
+
 	rootRevID := baseRev.RootRevisionID
 	if rootRevID == "" {
 		rootRevID = baseRev.ID
 	}
+	rootActionRevID := baseRev.RootActionRevisionID
+	if rootActionRevID == "" {
+		rootActionRevID = baseRev.ID
+	}
+	actionConfigJSON, err := marshalCanonicalJSON(draftActionConfig(ds))
+	if err != nil {
+		return failCommitOpen(err)
+	}
 	now := nowUTC()
-	revID := generateID("rev")
 	interruptible := 0
 	if ds.Interruptible {
 		interruptible = 1
 	}
 	newRev := &ActionRevision{
-		ID:                   revID,
-		ProcessingTaskID:     session.ProcessingTaskID,
-		GenerationTaskID:     baseRev.GenerationTaskID,
-		ActionKey:            session.ActionKey,
-		ParentRevisionID:     session.BaseRevisionID,
-		RootRevisionID:       rootRevID,
-		RevisionNumber:       revNum,
-		RevisionType:         RevisionTypeEdit,
-		Status:               RevisionStatusBuilding,
-		FrameCount:           len(ds.Frames),
-		DurationMS:           s.totalDuration(ds),
-		DefaultFPS:           ds.DefaultFPS,
-		LoopType:             ds.LoopType,
-		ReturnAction:         ds.ReturnAction,
-		Interruptible:        interruptible,
-		PriorityOverride:     ds.PriorityOverride,
-		CooldownMSOverride:   ds.CooldownMSOverride,
-		CreatedByUserID:      userID,
-		CreatedFromSessionID: sessionID,
-		ChangeSummary:        req.ChangeSummary,
-		CreatedAt:            now,
-		UpdatedAt:            now,
+		ID:                         revID,
+		UserID:                     session.UserID,
+		CharacterID:                session.CharacterID,
+		ProcessingTaskID:           session.ProcessingTaskID,
+		ProcessingActionID:         baseRev.ProcessingActionID,
+		GenerationTaskID:           baseRev.GenerationTaskID,
+		ActionKey:                  session.ActionKey,
+		ParentRevisionID:           session.BaseRevisionID,
+		RootRevisionID:             rootRevID,
+		RevisionNumber:             revNum,
+		RevisionType:               RevisionTypeEdit,
+		Status:                     RevisionStatusBuilding,
+		FrameCount:                 len(ds.Frames),
+		DurationMS:                 s.totalDuration(ds),
+		DefaultFPS:                 ds.DefaultFPS,
+		LoopType:                   ds.LoopType,
+		ReturnAction:               ds.ReturnAction,
+		Interruptible:              interruptible,
+		PriorityOverride:           ds.PriorityOverride,
+		CooldownMSOverride:         ds.CooldownMSOverride,
+		CreatedByUserID:            userID,
+		CreatedFromSessionID:       sessionID,
+		ChangeSummary:              req.ChangeSummary,
+		CreatedAt:                  now,
+		UpdatedAt:                  now,
+		SourceType:                 canonicalSourceManualEdit,
+		ContentHashVersion:         canonicalContentHashVersionManifestV1,
+		Origin:                     canonicalOriginUser,
+		PlaybackMode:               baseRev.PlaybackMode,
+		ActionStreamID:             session.ActionStreamID,
+		SourceProcessingRevisionID: baseRev.SourceProcessingRevisionID,
+		SourceProcessingTaskID:     baseRev.SourceProcessingTaskID,
+		SourceProcessingActionID:   baseRev.SourceProcessingActionID,
+		SourceProcessingAttemptID:  baseRev.SourceProcessingAttemptID,
+		ParentActionRevisionID:     baseRev.ID,
+		RootActionRevisionID:       rootActionRevID,
+		ActionConfigSnapshotJSON:   actionConfigJSON,
+		ActionSpecHash:             baseRev.ActionSpecHash,
+	}
+	if newRev.SourceProcessingTaskID == "" {
+		newRev.SourceProcessingTaskID = baseRev.ProcessingTaskID
+	}
+	if newRev.SourceProcessingActionID == "" {
+		newRev.SourceProcessingActionID = baseRev.ProcessingActionID
 	}
 	if err := s.repo.CreateActionRevision(newRev); err != nil {
-		s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
-		return nil, err
+		return failCommitOpen(err)
 	}
+
 	manifest, err := s.buildManifestFromDraft(revID, session.BaseRevisionID, session.ProcessingTaskID, session.ActionKey, ds)
 	if err != nil {
-		s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
-		return nil, err
+		return failCommitOpen(err)
 	}
 	manifestPath, manifestHash, err := s.assetStore.WriteManifest(revID, manifest)
 	if err != nil {
-		s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
-		return nil, err
+		return failCommitOpen(err)
 	}
 	revFrames := make([]ActionRevisionFrame, 0, len(ds.Frames))
 	for _, f := range ds.Frames {
@@ -1592,63 +1786,64 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 		})
 	}
 	if err := s.repo.CreateRevisionFrames(revFrames); err != nil {
-		s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
-		return nil, err
+		return failCommitOpen(err)
 	}
 	if err := s.repo.UpdateActionRevisionManifest(revID, manifestPath, manifestHash, len(ds.Frames), s.totalDuration(ds)); err != nil {
-		s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
-		return nil, err
+		return failCommitOpen(err)
+	}
+	configJSON, configHash, frameSetHash, revisionSnapshotJSON, revisionSnapshotHash, err := s.revisionHashesFromDraft(ds, manifestHash)
+	if err != nil {
+		return failCommitOpen(err)
+	}
+	if err := s.db.Model(&ActionRevision{}).Where("id = ?", revID).Updates(map[string]any{
+		"content_hash":                manifestHash,
+		"content_hash_version":        canonicalContentHashVersionManifestV1,
+		"action_config_snapshot_json": configJSON,
+		"action_config_hash":          configHash,
+		"frame_set_hash":              frameSetHash,
+		"revision_snapshot_json":      revisionSnapshotJSON,
+		"revision_snapshot_hash":      revisionSnapshotHash,
+		"updated_at":                  nowUTC(),
+	}).Error; err != nil {
+		return failCommitOpen(err)
+	}
+	if err := s.repo.UpdateActionRevisionStatus(revID, RevisionStatusReady); err != nil {
+		return failCommitOpen(err)
+	}
+
+	if activationPolicy == ActivationPolicyImmediate {
+		if _, _, err := bindActiveRevision(s.repo, session.ProcessingTaskID, session.ActionKey, revID, session.BaseBindingRevision, userID, "editor.commit"); err != nil {
+			_ = s.repo.UpdateSessionStatus(sessionID, SessionStatusConflicted)
+			_ = s.repo.UpdateIdempotencyRecord(idem.ID, "failed", "")
+			return nil, err
+		}
 	}
 	journal := &PublishJournal{
-		ID:           generateID("jrn"),
+		ID:           "jrn-" + uuid.NewSHA1(uuid.NameSpaceOID, []byte(sessionID+"|"+revID+"|publish-journal")).String(),
 		RevisionID:   revID,
 		SessionID:    sessionID,
 		Action:       JournalActionPublish,
 		Status:       JournalStatusCompleted,
 		ManifestPath: manifestPath,
 		CreatedAt:    now,
-		CompletedAt:  now,
+		CompletedAt:  nowUTC(),
 	}
 	if err := s.repo.CreatePublishJournal(journal); err != nil {
-		s.repo.UpdateSessionStatus(sessionID, SessionStatusOpen)
-		return nil, err
+		var existing PublishJournal
+		if readErr := s.db.Where("id = ?", journal.ID).First(&existing).Error; readErr != nil || existing.RevisionID != revID || existing.SessionID != sessionID {
+			_ = s.repo.UpdateIdempotencyRecord(idem.ID, "failed", "")
+			return nil, err
+		}
 	}
 	if err := s.repo.UpdateSessionCommitted(sessionID, revID); err != nil {
+		_ = s.repo.UpdateIdempotencyRecord(idem.ID, "failed", "")
 		return nil, err
 	}
-	var qualityJobID string
-	switch req.ActivationPolicy {
-	case ActivationPolicyAfterQualityPass:
-		s.repo.UpdateActionRevisionStatus(revID, RevisionStatusQualityPending)
-		evalID, qErr := s.qualAdapter.EvaluateRevision(ctx, revID)
-		if qErr == nil {
-			qualityJobID = evalID
-		}
-	case ActivationPolicyManual:
-		s.repo.UpdateActionRevisionStatus(revID, RevisionStatusReady)
-	case ActivationPolicyKeepCurrent:
-		s.repo.UpdateActionRevisionStatus(revID, RevisionStatusReady)
-	default:
-		s.repo.UpdateActionRevisionStatus(revID, RevisionStatusReady)
-	}
-	resp := &CommitSessionResponse{
-		RevisionID:   revID,
-		QualityJobID: qualityJobID,
-		Status:       SessionStatusCommitted,
-	}
-	if req.IdempotencyKey != "" {
-		resultJSON, _ := json.Marshal(resp)
-		record := &EditIdempotencyRecord{
-			ID:             generateID("idem"),
-			UserID:         userID,
-			SessionID:      sessionID,
-			IdempotencyKey: req.IdempotencyKey,
-			Endpoint:       "commit_session",
-			ResultJSON:     string(resultJSON),
-			Status:         "completed",
-			CreatedAt:      now,
-		}
-		s.repo.CreateIdempotencyRecord(record)
+
+	resp := &CommitSessionResponse{RevisionID: revID, Status: SessionStatusCommitted}
+	resultJSON, _ := json.Marshal(resp)
+	if err := s.repo.UpdateIdempotencyRecord(idem.ID, "completed", string(resultJSON)); err != nil {
+		return nil, err
 	}
 	return resp, nil
 }
@@ -1721,44 +1916,193 @@ func (s *service) CreateRegenerationJob(ctx context.Context, sessionID, userID s
 	if err := s.validateSession(session); err != nil {
 		return nil, err
 	}
+	if session.UserID != userID {
+		return nil, ErrPermissionDenied
+	}
+	if _, err := s.validateSessionBaseBinding(session); err != nil {
+		_ = s.repo.UpdateSessionStatus(session.ID, SessionStatusConflicted)
+		return nil, err
+	}
 	if req.IdempotencyKey != "" {
 		existing, err := s.repo.GetJobByIdempotencyKey(sessionID, req.IdempotencyKey)
 		if err != nil {
 			return nil, err
 		}
 		if existing != nil {
-			return &CreateRegenerationJobResponse{
-				JobID:        existing.ID,
-				Status:       existing.Status,
-				CostEstimate: existing.CostEstimateJSON,
-			}, nil
+			return &CreateRegenerationJobResponse{JobID: existing.ID, Status: existing.Status, CostEstimate: existing.CostEstimateJSON}, nil
 		}
 	}
+
+	mode := ""
+	switch req.JobType {
+	case JobTypeSingleFrame:
+		mode = RegenModeSingleFrame
+	case JobTypeFullAction:
+		mode = RegenModeFullAction
+	case JobTypeBackgroundReprocess:
+		mode = RegenModeBgReprocess
+	case JobTypeNormalizeUpload:
+		mode = RegenModeNormalize
+	default:
+		return nil, NewEditError(ErrCodeEditOperationInvalid, "未知的重生成任务类型")
+	}
+	if req.JobType != JobTypeFullAction && req.TargetFrameID == "" {
+		return nil, ErrFrameNotFound
+	}
+
+	draftSnapshot, err := s.ensureDraftSnapshot(ctx, session)
+	if err != nil {
+		return nil, err
+	}
+	var draftFrames []draftFrame
+	if err := json.Unmarshal([]byte(draftSnapshot.FramesJSON), &draftFrames); err != nil {
+		return nil, fmt.Errorf("decode immutable draft snapshot: %w", err)
+	}
+	targetContentHash := ""
+	if req.TargetFrameID != "" {
+		found := false
+		for _, frame := range draftFrames {
+			if frame.FrameID != req.TargetFrameID {
+				continue
+			}
+			asset, err := s.repo.GetFrameAsset(frame.AssetID)
+			if err != nil {
+				return nil, err
+			}
+			targetContentHash = asset.ContentHash
+			found = true
+			break
+		}
+		if !found {
+			return nil, ErrFrameNotFound
+		}
+	}
+
+	requestSnapshot := map[string]any{
+		"targetFrameId":     req.TargetFrameID,
+		"jobType":           req.JobType,
+		"fixIntent":         req.FixIntent,
+		"useAdjacentFrames": req.UseAdjacentFrames,
+	}
+	requestJSON, err := marshalCanonicalJSON(requestSnapshot)
+	if err != nil {
+		return nil, err
+	}
+	requestHash := s.assetStore.ComputeHash([]byte(requestJSON))
+	effectiveIdempotencyKey := req.IdempotencyKey
+	if effectiveIdempotencyKey == "" {
+		effectiveIdempotencyKey = "regen:" + requestHash
+	}
+	if req.IdempotencyKey == "" {
+		existing, err := s.repo.GetJobByIdempotencyKey(sessionID, effectiveIdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			return &CreateRegenerationJobResponse{JobID: existing.ID, Status: existing.Status, CostEstimate: existing.CostEstimateJSON}, nil
+		}
+	}
+	confirmationID := ""
+	if req.CostConfirmationToken != "" {
+		confirmationID = "cost-confirm-" + s.assetStore.ComputeHash([]byte(req.CostConfirmationToken))
+	}
+
 	now := nowUTC()
 	jobID := generateID("regen")
 	job := &RegenerationJob{
-		ID:               jobID,
-		SessionID:        sessionID,
-		ProcessingTaskID: session.ProcessingTaskID,
-		ActionKey:        session.ActionKey,
-		TargetFrameID:    req.TargetFrameID,
-		JobType:          req.JobType,
-		Status:           JobStatusCreated,
-		IdempotencyKey:   req.IdempotencyKey,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:                   jobID,
+		SessionID:            sessionID,
+		UserID:               session.UserID,
+		CharacterID:          session.CharacterID,
+		ActionStreamID:       session.ActionStreamID,
+		DraftSnapshotID:      draftSnapshot.ID,
+		DraftSnapshotHash:    draftSnapshot.SnapshotHash,
+		ProcessingTaskID:     session.ProcessingTaskID,
+		ActionKey:            session.ActionKey,
+		TargetFrameID:        req.TargetFrameID,
+		JobType:              req.JobType,
+		Mode:                 mode,
+		Status:               JobStatusCreated,
+		Stage:                JobStatusCreated,
+		IdempotencyKey:       effectiveIdempotencyKey,
+		RequestHash:          requestHash,
+		RequestSnapshotJSON:  requestJSON,
+		CostEstimateJSON:     "{}",
+		BaseActionRevisionID: session.BaseRevisionID,
+		BaseContentHash:      draftSnapshot.BaseContentHash,
+		BaseBindingRevision:  draftSnapshot.BaseBindingRevision,
+		InstanceID:           session.ClientInstanceID,
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}
-	if err := s.repo.CreateRegenerationJob(job); err != nil {
+	inputSnapshot := &RegenerationJobInputSnapshot{
+		JobID:                  jobID,
+		SessionID:              sessionID,
+		DraftSnapshotID:        draftSnapshot.ID,
+		DraftSnapshotHash:      draftSnapshot.SnapshotHash,
+		RequestJSON:            requestJSON,
+		RequestHash:            requestHash,
+		BaseRevisionID:         session.BaseRevisionID,
+		BaseContentHash:        draftSnapshot.BaseContentHash,
+		BaseBindingRevision:    draftSnapshot.BaseBindingRevision,
+		TargetFrameID:          req.TargetFrameID,
+		TargetFrameContentHash: targetContentHash,
+		CostEstimateJSON:       "{}",
+		CostEstimateHash:       s.assetStore.ComputeHash([]byte("{}")),
+		CostConfirmationID:     confirmationID,
+		CreatedAt:              now,
+	}
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(job).Error; err != nil {
+			return err
+		}
+		return tx.Create(inputSnapshot).Error
+	}); err != nil {
+		if existing, readErr := s.repo.GetJobByIdempotencyKey(sessionID, effectiveIdempotencyKey); readErr == nil && existing != nil {
+			return &CreateRegenerationJobResponse{JobID: existing.ID, Status: existing.Status, CostEstimate: existing.CostEstimateJSON}, nil
+		}
 		return nil, err
 	}
-	return &CreateRegenerationJobResponse{
-		JobID:  jobID,
-		Status: JobStatusCreated,
-	}, nil
+	return &CreateRegenerationJobResponse{JobID: jobID, Status: JobStatusCreated}, nil
 }
 
 func (s *service) GetRegenerationJob(ctx context.Context, jobID string) (*RegenerationJob, error) {
-	return s.repo.GetRegenerationJob(jobID)
+	job, err := s.repo.GetRegenerationJob(jobID)
+	if err != nil || job == nil {
+		return job, err
+	}
+	if job.Status != JobStatusQualityPending && job.Status != JobStatusQualityRunning {
+		return job, nil
+	}
+	var candidate EditCandidate
+	if err := s.db.Where("job_id = ?", job.ID).Order("created_at DESC").Limit(1).Find(&candidate).Error; err != nil || candidate.ID == "" || candidate.CandidateRevisionID == "" {
+		return job, err
+	}
+	passed, reason, gateErr := s.qualAdapter.IsGatePassed(ctx, candidate.CandidateRevisionID)
+	if gateErr != nil || (!passed && reason == "quality_pending") {
+		return job, gateErr
+	}
+	rev, revErr := s.repo.GetActionRevision(candidate.CandidateRevisionID)
+	if revErr != nil {
+		return job, revErr
+	}
+	effectiveVerdict := rev.QualityVerdict
+	if effectiveVerdict == "" {
+		effectiveVerdict = reason
+	}
+	if err := s.repo.UpdateCandidateFields(candidate.ID, map[string]any{
+		"status":            CandidateStatusReadyForReview,
+		"quality_status":    reason,
+		"effective_verdict": effectiveVerdict,
+	}); err != nil {
+		return job, err
+	}
+	if err := s.repo.UpdateJobFields(job.ID, map[string]any{"status": JobStatusReadyForReview, "stage": JobStatusReadyForReview}); err != nil {
+		return job, err
+	}
+	job.Status = JobStatusReadyForReview
+	job.Stage = JobStatusReadyForReview
+	return job, nil
 }
 
 func (s *service) ListRegenerationJobs(ctx context.Context, userID string, limit, offset int) ([]RegenerationJob, error) {
@@ -1783,39 +2127,29 @@ func (s *service) CancelRegenerationJob(ctx context.Context, jobID, userID strin
 	if job == nil {
 		return ErrCandidateNotFound
 	}
-	if job.Status == JobStatusCompleted || job.Status == JobStatusFailed || job.Status == JobStatusCancelled {
+	if job.UserID != "" && job.UserID != userID {
+		return ErrPermissionDenied
+	}
+	if IsTerminalJobStatus(job.Status) || job.Status == JobStatusCompleted || job.Status == JobStatusFailed {
 		return ErrJobNotCancelable
 	}
-	return s.repo.UpdateJobStatus(jobID, JobStatusCancelled)
-}
-
-func (s *service) AcceptCandidate(ctx context.Context, candidateID, userID string, req AcceptCandidateRequest) error {
-	candidate, err := s.repo.GetCandidate(candidateID)
-	if err != nil {
-		return err
-	}
-	if candidate.Status != CandidateStatusPending {
-		return ErrCandidateAlreadyDecided
-	}
-	if err := s.repo.UpdateCandidateStatus(candidateID, CandidateStatusAccepted, userID); err != nil {
-		return err
-	}
-	return s.applySessionOperation(ctx, candidate.SessionID, userID, OpFrameReplaceAsset, FrameReplaceAssetPayload{
-		FrameID:    candidate.TargetFrameID,
-		AssetID:    candidate.AssetID,
-		KeepAnchor: true,
+	return s.repo.UpdateJobFields(jobID, map[string]any{
+		"status":              JobStatusCancelled,
+		"cancel_requested_at": nowUTC(),
+		"completed_at":        nowUTC(),
+		"lease_owner":         "",
+		"lease_expires_at":    "",
+		"heartbeat_at":        "",
+		"execution_id":        "",
 	})
 }
 
+func (s *service) AcceptCandidate(ctx context.Context, candidateID, userID string, req AcceptCandidateRequest) error {
+	return s.candidateAcceptance.AcceptCandidate(ctx, candidateID, userID, req.IdempotencyKey)
+}
+
 func (s *service) RejectCandidate(ctx context.Context, candidateID, userID string, req RejectCandidateRequest) error {
-	candidate, err := s.repo.GetCandidate(candidateID)
-	if err != nil {
-		return err
-	}
-	if candidate.Status != CandidateStatusPending {
-		return ErrCandidateAlreadyDecided
-	}
-	return s.repo.UpdateCandidateStatus(candidateID, CandidateStatusRejected, userID)
+	return s.candidateAcceptance.RejectCandidate(ctx, candidateID, userID, "user_rejected", req.IdempotencyKey)
 }
 
 func (s *service) ListCandidates(ctx context.Context, sessionID string) ([]EditCandidate, error) {
@@ -1823,12 +2157,43 @@ func (s *service) ListCandidates(ctx context.Context, sessionID string) ([]EditC
 	if err != nil {
 		return nil, err
 	}
-	if err := s.validateSession(session); err != nil {
-		return nil, err
+	if session == nil {
+		return nil, ErrSessionNotFound
 	}
 	candidates, err := s.repo.ListCandidatesBySession(sessionID)
 	if err != nil {
 		return nil, err
+	}
+	for i := range candidates {
+		candidate := &candidates[i]
+		if candidate.CandidateRevisionID == "" ||
+			(candidate.Status != CandidateStatusQualityPending && candidate.Status != CandidateStatusQualityRunning) {
+			continue
+		}
+		passed, reason, gateErr := s.qualAdapter.IsGatePassed(ctx, candidate.CandidateRevisionID)
+		if gateErr != nil || (!passed && reason == "quality_pending") {
+			continue
+		}
+		rev, revErr := s.repo.GetActionRevision(candidate.CandidateRevisionID)
+		if revErr != nil {
+			continue
+		}
+		effectiveVerdict := rev.QualityVerdict
+		if effectiveVerdict == "" {
+			effectiveVerdict = reason
+		}
+		updates := map[string]any{
+			"status":            CandidateStatusReadyForReview,
+			"quality_status":    reason,
+			"effective_verdict": effectiveVerdict,
+		}
+		if s.repo.UpdateCandidateFields(candidate.ID, updates) == nil {
+			candidate.Status = CandidateStatusReadyForReview
+			candidate.QualityStatus = reason
+			candidate.EffectiveVerdict = effectiveVerdict
+			_ = s.repo.UpdateCandidateRevisionMetadataStatus(candidate.CandidateRevisionID, CandidateStatusReadyForReview)
+			_ = s.repo.UpdateJobFields(candidate.JobID, map[string]any{"status": JobStatusReadyForReview, "stage": JobStatusReadyForReview})
+		}
 	}
 	if candidates == nil {
 		candidates = []EditCandidate{}
@@ -1844,8 +2209,32 @@ func (s *service) UploadCandidate(ctx context.Context, sessionID, userID string,
 	if err := s.validateSession(session); err != nil {
 		return nil, err
 	}
-	if len(data) == 0 {
+	if session.UserID != userID {
+		return nil, ErrPermissionDenied
+	}
+	if _, err := s.validateSessionBaseBinding(session); err != nil {
+		return nil, err
+	}
+	if len(data) == 0 || targetFrameID == "" {
 		return nil, ErrUploadInvalid
+	}
+	snapshot, err := s.ensureDraftSnapshot(ctx, session)
+	if err != nil {
+		return nil, err
+	}
+	var frames []draftFrame
+	if err := json.Unmarshal([]byte(snapshot.FramesJSON), &frames); err != nil {
+		return nil, err
+	}
+	found := false
+	for _, frame := range frames {
+		if frame.FrameID == targetFrameID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, ErrFrameNotFound
 	}
 	asset, err := s.assetStore.WriteAsset(ctx, data, mimeType, AssetSourceUploaded, userID)
 	if err != nil {
@@ -1854,22 +2243,29 @@ func (s *service) UploadCandidate(ctx context.Context, sessionID, userID string,
 	now := nowUTC()
 	candidateID := generateID("cand")
 	candidate := &EditCandidate{
-		ID:            candidateID,
-		SessionID:     sessionID,
-		TargetFrameID: targetFrameID,
-		CandidateType: AssetSourceUploaded,
-		AssetID:       asset.ID,
-		Status:        CandidateStatusPending,
-		CreatedAt:     now,
+		ID:                  candidateID,
+		SessionID:           sessionID,
+		UserID:              session.UserID,
+		CharacterID:         session.CharacterID,
+		ActionStreamID:      session.ActionStreamID,
+		CandidateVersion:    snapshot.SessionVersion,
+		DraftSnapshotID:     snapshot.ID,
+		DraftSnapshotHash:   snapshot.SnapshotHash,
+		TargetFrameID:       targetFrameID,
+		CandidateType:       AssetSourceUploaded,
+		AssetID:             asset.ID,
+		Status:              CandidateStatusReadyForReview,
+		SourceType:          AssetSourceUploaded,
+		ParentRevisionID:    session.BaseRevisionID,
+		ParentContentHash:   session.BaseActionContentHash,
+		BaseBindingRevision: session.BaseBindingRevision,
+		ActivationPolicy:    ActivationPolicyManual,
+		CreatedAt:           now,
 	}
 	if err := s.repo.CreateCandidate(candidate); err != nil {
 		return nil, err
 	}
-	return &UploadCandidateResponse{
-		CandidateID: candidateID,
-		AssetID:     asset.ID,
-		Status:      CandidateStatusPending,
-	}, nil
+	return &UploadCandidateResponse{CandidateID: candidateID, AssetID: asset.ID, Status: CandidateStatusReadyForReview}, nil
 }
 
 func (s *service) ApplyBackgroundPatch(ctx context.Context, sessionID, frameID, userID string, req BackgroundApplyPatchPayload) error {
@@ -1952,14 +2348,19 @@ func (s *service) TriggerQualityEvaluation(ctx context.Context, revisionID strin
 	if err != nil {
 		return "", err
 	}
+	if rev.QualityEvaluationID != "" && (rev.Status == RevisionStatusQualityPending || rev.Status == RevisionStatusQualityReady) {
+		return rev.QualityEvaluationID, nil
+	}
 	if rev.Status == RevisionStatusBuilding {
-		s.repo.UpdateActionRevisionStatus(revisionID, RevisionStatusQualityPending)
+		if err := s.repo.UpdateActionRevisionStatus(revisionID, RevisionStatusReady); err != nil {
+			return "", err
+		}
+		rev.Status = RevisionStatusReady
 	}
-	evalID, err := s.qualAdapter.EvaluateRevision(ctx, revisionID)
-	if err != nil {
-		return "", err
+	if rev.Status != RevisionStatusReady {
+		return "", ErrRevisionNotReady
 	}
-	return evalID, nil
+	return s.qualAdapter.EvaluateRevision(ctx, revisionID)
 }
 
 func (s *service) GetLatestQualityEvaluation(ctx context.Context, revisionID string) (*QualityEvaluationInfo, error) {
@@ -2009,158 +2410,6 @@ func (s *service) ExpireSessions(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-func (s *service) ImportLegacyRevision(ctx context.Context, processingTaskID, actionKey, userID string) (*CommitSessionResponse, error) {
-	existing, err := s.repo.GetActiveRevisionBinding(processingTaskID, actionKey)
-	if err == nil && existing != nil {
-		return nil, NewEditError(ErrCodeEditOperationInvalid, "该动作已有活跃 Revision，无需导入")
-	}
-	importData, err := s.procAdapter.ImportAsBaselineRevision(ctx, processingTaskID, actionKey)
-	if err != nil {
-		return nil, err
-	}
-	if len(importData.Frames) == 0 {
-		return nil, NewEditError(ErrCodeEditFrameCountInvalid, "未找到可导入的处理帧")
-	}
-	now := nowUTC()
-	revID := generateID("rev")
-	fps := importData.FPS
-	if fps <= 0 {
-		fps = 12
-	}
-	frameDuration := importData.FrameDurationMS
-	if frameDuration <= 0 {
-		frameDuration = DefaultFrameDurationMS
-	}
-	loopType := importData.LoopType
-	if loopType == "" {
-		loopType = "loop"
-	}
-	totalDuration := frameDuration * len(importData.Frames)
-	newRev := &ActionRevision{
-		ID:                   revID,
-		ProcessingTaskID:     processingTaskID,
-		GenerationTaskID:     "",
-		ActionKey:            actionKey,
-		ParentRevisionID:     "",
-		RootRevisionID:       revID,
-		RevisionNumber:       1,
-		RevisionType:         RevisionTypeLegacyImport,
-		Status:               RevisionStatusBuilding,
-		FrameCount:           len(importData.Frames),
-		DurationMS:           totalDuration,
-		DefaultFPS:           fps,
-		LoopType:             loopType,
-		ReturnAction:         "",
-		Interruptible:        1,
-		CreatedByUserID:      userID,
-		CreatedFromSessionID: "",
-		ChangeSummary:        "从处理结果导入为基线 Revision",
-		CreatedAt:            now,
-		UpdatedAt:            now,
-	}
-	if err := s.repo.CreateActionRevision(newRev); err != nil {
-		return nil, err
-	}
-	revFrames := make([]ActionRevisionFrame, 0, len(importData.Frames))
-	ds := &draftState{
-		Frames:        make([]draftFrame, 0, len(importData.Frames)),
-		DeletedFrames: make(map[string]draftFrame),
-		DefaultFPS:    fps,
-		LoopType:      loopType,
-		Interruptible: true,
-	}
-	for i, frameInfo := range importData.Frames {
-		asset, assetErr := s.assetStore.WriteAsset(ctx, readFileBytes(filepath.Join(s.dataDir, frameInfo.ProcessedPath)), "image/png", AssetSourceLegacy, importData.ProcessingActionID)
-		if assetErr != nil {
-			s.repo.UpdateActionRevisionStatus(revID, RevisionStatusFailed)
-			return nil, assetErr
-		}
-		frameID := fmt.Sprintf("frame-legacy-%d-%d", time.Now().UnixNano(), i)
-		anchorX := frameInfo.AnchorX
-		if anchorX == 0 {
-			anchorX = DefaultAnchorX
-		}
-		anchorY := frameInfo.AnchorY
-		if anchorY == 0 {
-			anchorY = DefaultAnchorY
-		}
-		rf := ActionRevisionFrame{
-			ID:               generateID("rf"),
-			RevisionID:       revID,
-			FrameID:          frameID,
-			AssetID:          asset.ID,
-			LogicalIndex:     i,
-			DurationMS:       frameDuration,
-			SourceFrameID:    "",
-			SourceRevisionID: "",
-			AnchorX:          anchorX,
-			AnchorY:          anchorY,
-			AnchorSpace:      AnchorSpaceNormalizedCanvas,
-			CreatedAt:        now,
-		}
-		revFrames = append(revFrames, rf)
-		ds.Frames = append(ds.Frames, draftFrame{
-			FrameID:      frameID,
-			AssetID:      asset.ID,
-			LogicalIndex: i,
-			DurationMS:   frameDuration,
-			AnchorX:      anchorX,
-			AnchorY:      anchorY,
-			AnchorSpace:  AnchorSpaceNormalizedCanvas,
-			LineageType:  LineageOriginal,
-		})
-	}
-	if err := s.repo.CreateRevisionFrames(revFrames); err != nil {
-		s.repo.UpdateActionRevisionStatus(revID, RevisionStatusFailed)
-		return nil, err
-	}
-	manifest, err := s.buildManifestFromDraft(revID, "", processingTaskID, actionKey, ds)
-	if err != nil {
-		s.repo.UpdateActionRevisionStatus(revID, RevisionStatusFailed)
-		return nil, err
-	}
-	manifestPath, manifestHash, err := s.assetStore.WriteManifest(revID, manifest)
-	if err != nil {
-		s.repo.UpdateActionRevisionStatus(revID, RevisionStatusFailed)
-		return nil, err
-	}
-	if err := s.repo.UpdateActionRevisionManifest(revID, manifestPath, manifestHash, len(revFrames), totalDuration); err != nil {
-		return nil, err
-	}
-	if err := s.repo.UpdateActionRevisionStatus(revID, RevisionStatusReady); err != nil {
-		return nil, err
-	}
-	journal := &PublishJournal{
-		ID:           generateID("jrn"),
-		RevisionID:   revID,
-		Action:       JournalActionPublish,
-		Status:       JournalStatusCompleted,
-		ManifestPath: manifestPath,
-		CreatedAt:    now,
-		CompletedAt:  now,
-	}
-	if err := s.repo.CreatePublishJournal(journal); err != nil {
-		return nil, err
-	}
-	binding := &ActiveRevisionBinding{
-		ProcessingTaskID: processingTaskID,
-		ActionKey:        actionKey,
-		RevisionID:       revID,
-		BindingVersion:   1,
-		ActivatedBy:      userID,
-		Reason:           "legacy_import",
-		CreatedAt:        now,
-		UpdatedAt:        now,
-	}
-	if err := s.db.Create(binding).Error; err != nil {
-		return nil, err
-	}
-	return &CommitSessionResponse{
-		RevisionID: revID,
-		Status:     "ready",
-	}, nil
 }
 
 func (s *service) ListActionStreams(ctx context.Context, userID string) ([]ActionStreamSummary, error) {

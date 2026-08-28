@@ -423,7 +423,7 @@ func TestCreateTask_DbFailureCleanup(t *testing.T) {
 		t.Fatalf("DeleteTask: %v", err)
 	}
 	if _, err := os.Stat(taskDir); !os.IsNotExist(err) {
-		remErr := os.RemoveAll(taskDir)
+		remErr := os.RemoveAll(taskDir) // audit:ok: test-only cleanup of a temp task directory created by this test
 		t.Fatalf("task dir should be removed after delete, stat err = %v, config.DataDir=%s, manual remove err=%v", err, config.AppCfg.Storage.DataDir, remErr)
 	}
 }

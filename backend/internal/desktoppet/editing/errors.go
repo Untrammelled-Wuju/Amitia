@@ -192,6 +192,7 @@ const (
 )
 
 const (
+	ActivationPolicyImmediate        = "immediate"
 	ActivationPolicyAfterQualityPass = "after_quality_pass"
 	ActivationPolicyManual           = "manual"
 	ActivationPolicyKeepCurrent      = "keep_current"

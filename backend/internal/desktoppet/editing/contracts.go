@@ -71,13 +71,13 @@ type FrameRestorePayload struct {
 
 type FrameDuplicatePayload struct {
 	FrameID      string `json:"frameId"`
-	AfterFrameID string `json:"afterFrameID,omitempty"`
+	AfterFrameID string `json:"afterFrameId,omitempty"`
 }
 
 type FrameInsertAssetPayload struct {
 	AssetID       string `json:"assetId"`
 	BeforeFrameID string `json:"beforeFrameId,omitempty"`
-	AfterFrameID  string `json:"afterFrameID,omitempty"`
+	AfterFrameID  string `json:"afterFrameId,omitempty"`
 	DurationMS    int    `json:"durationMs,omitempty"`
 }
 

@@ -4,6 +4,7 @@ package processing
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -358,7 +359,7 @@ func (r *repository) BeginProcessingActionAttempt(tx *gorm.DB, actionID string, 
 		return nil, fmt.Errorf("processing action %s row version mismatch", actionID)
 	}
 
-	attemptID := fmt.Sprintf("pa_%d_%d", time.Now().UnixNano(), newAttemptNumber)
+	attemptID := "pa_" + uuid.NewString()
 	attempt := &ProcessingActionAttempt{
 		ID:                      attemptID,
 		ProcessingActionID:      actionID,

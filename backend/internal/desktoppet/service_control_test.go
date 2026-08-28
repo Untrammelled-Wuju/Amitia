@@ -217,7 +217,7 @@ func TestStartTask_MissingReferenceImageReturnsInvalid(t *testing.T) {
 	summary := createValidTask(t, svc, "start-no-ref", []string{"idle_normal"})
 
 	taskDir := filepath.Join(dataDir, "desktop-pets", "generation-tasks", summary.ID)
-	if err := os.RemoveAll(taskDir); err != nil {
+	if err := os.RemoveAll(taskDir); err != nil { // audit:ok: test-only cleanup of a temp task directory created by this test
 		t.Fatalf("remove task dir: %v", err)
 	}
 

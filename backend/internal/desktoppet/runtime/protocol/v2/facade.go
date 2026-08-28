@@ -236,7 +236,7 @@ func (n *V2RuntimeNotifier) NotifyInstallationEnabled(userId, installationId str
 		"userId":          userId,
 		"installationId":  installationId,
 		"settings":        settings,
-		"desiredRevision": time.Now().UnixNano(),
+		"desiredRevision": time.Now().UnixNano(), // audit:ok: desiredRevision is an int64 desired-state generation clock, not an identifier
 	}
 	return n.emit("installation.enabled", installationId, payload)
 }
@@ -246,7 +246,7 @@ func (n *V2RuntimeNotifier) NotifyInstallationDisabled(userId, installationId st
 		"type":            "installation.disabled",
 		"userId":          userId,
 		"installationId":  installationId,
-		"desiredRevision": time.Now().UnixNano(),
+		"desiredRevision": time.Now().UnixNano(), // audit:ok: desiredRevision is an int64 desired-state generation clock, not an identifier
 	}
 	return n.emit("installation.disabled", installationId, payload)
 }

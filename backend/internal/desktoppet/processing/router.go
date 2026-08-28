@@ -33,7 +33,7 @@ func RegisterProcessingRouter(r *gin.RouterGroup, ctx *app.AppContext, registry 
 		g.POST("/processing-tasks/:processingTaskId/package", handler.CreatePackage)
 		g.POST("/processing-tasks/:processingTaskId/actions/:actionKey/switch-attempt", handler.SwitchAttempt)
 		g.POST("/processing-tasks/:processingTaskId/actions/:actionKey/exclude", handler.ExcludeAction)
-		g.GET("/processing-tasks/:processingTaskId/events", handler.ProcessingEventsStream)
+		g.GET("/processing-tasks/:processingTaskId/events", handler.ProcessingEventsStream) // audit:ok: handler enforces actor authentication and task ownership
 		g.GET("/processing-tasks/:processingTaskId/actions/:actionKey/frames/:frameIndex/processed-image", handler.ProcessedFrameImage)
 		g.GET("/processing-tasks/:processingTaskId/actions/:actionKey/frames/:frameIndex/source-image", handler.SourceFrameImage)
 		g.GET("/processing-tasks/:processingTaskId/actions/:actionKey/preview", handler.ActionPreview)

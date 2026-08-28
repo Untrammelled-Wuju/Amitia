@@ -2,6 +2,7 @@ package baseline
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/editing"
@@ -123,14 +124,13 @@ func (m *FrameAssetMapper) BuildRevisionFrames(
 	now string,
 ) []editing.ActionRevisionFrame {
 	frames := make([]editing.ActionRevisionFrame, 0, len(mappings))
-	base := time.Now().UnixNano()
 	for i, mp := range mappings {
 		idx := 0
 		if mp.Artifact.FrameIndex != nil {
 			idx = *mp.Artifact.FrameIndex
 		}
 		frames = append(frames, editing.ActionRevisionFrame{
-			ID:                              fmt.Sprintf("rf-%d-%d", base, i),
+			ID:                              "rf-" + uuid.NewString(),
 			RevisionID:                      revisionID,
 			FrameID:                         mp.Artifact.ID,
 			AssetID:                         mp.Asset.ID,

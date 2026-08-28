@@ -3,6 +3,7 @@
 package audit
 
 import (
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/u-ai/backend/internal/auth"
@@ -96,15 +97,7 @@ func NewAuditRecord(action AuditAction, resourceType, resourceID string, result 
 }
 
 func generateAuditID() string {
-	return "audit_" + time.Now().UTC().Format("20060102T150405") + "_" + randomHex(8)
-}
-
-func randomHex(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = "0123456789abcdef"[(time.Now().UnixNano()+int64(i))%16]
-	}
-	return string(b)
+	return "audit_" + uuid.NewString()
 }
 
 type AuditRecorder interface {

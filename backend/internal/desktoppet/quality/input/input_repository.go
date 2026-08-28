@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ type actionRevisionRow struct {
 	ID                         string `gorm:"column:id"`
 	UserID                     string `gorm:"column:user_id"`
 	CharacterID                string `gorm:"column:character_id"`
+	ActionStreamID             string `gorm:"column:action_stream_id"`
 	ProcessingTaskID           string `gorm:"column:processing_task_id"`
 	ProcessingActionID         string `gorm:"column:processing_action_id"`
 	ActionKey                  string `gorm:"column:action_key"`
@@ -198,10 +200,10 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	snapshot := &quality.EvaluationInputSnapshot{
-		ID:                   fmt.Sprintf("is-%d", time.Now().UnixNano()),
+		ID:                   "is-" + uuid.NewString(),
 		UserID:               rev.UserID,
 		CharacterID:          rev.CharacterID,
-		ActionStreamID:       rev.ID,
+		ActionStreamID:       rev.ActionStreamID,
 		ActionRevisionID:     rev.ID,
 		ActionContentHash:    rev.ContentHash,
 		ProcessingRevisionID: rev.SourceProcessingRevisionID,

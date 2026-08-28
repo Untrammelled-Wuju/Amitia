@@ -100,7 +100,7 @@ type PlaybackEvent struct {
 	InterruptedAt                string `json:"interruptedAt,omitempty"`
 	FailedAt                     string `json:"failedAt,omitempty"`
 	InterruptReason              string `json:"interruptReason,omitempty"`
-	ReplacedByCommandID          string `json:"replacedByCommandID,omitempty"`
+	ReplacedByCommandID          string `json:"replacedByCommandId,omitempty"`
 	ReplacedByPlaybackInstanceID string `json:"replacedByPlaybackInstanceId,omitempty"`
 	CompletionReason             string `json:"completionReason,omitempty"`
 	CycleCount                   int    `json:"cycleCount,omitempty"`

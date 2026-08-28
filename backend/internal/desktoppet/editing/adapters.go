@@ -12,6 +12,7 @@ type GenerationAdapter interface {
 }
 
 type SingleFrameGenerationRequest struct {
+	JobID            string
 	GenerationTaskID string
 	ActionKey        string
 	TargetFrameID    string
@@ -20,6 +21,10 @@ type SingleFrameGenerationRequest struct {
 	AdjacentFrames   []AdjacentFrameContext
 	FixIntent        string
 	UserID           string
+	// AttemptID is a caller-stable submission identity. Regeneration workers
+	// must reuse it across retries so a crash cannot create a second provider
+	// attempt for the same durable job.
+	AttemptID string
 }
 
 type AdjacentFrameContext struct {
@@ -37,9 +42,12 @@ type SingleFrameGenerationResult struct {
 }
 
 type FullActionGenerationRequest struct {
+	JobID            string
 	GenerationTaskID string
 	ActionKey        string
 	UserID           string
+	// AttemptID has the same idempotency semantics as the single-frame path.
+	AttemptID string
 }
 
 type FullActionGenerationResult struct {
@@ -63,7 +71,6 @@ type ProcessingAdapter interface {
 	GetProcessingAction(ctx context.Context, processingTaskID, actionKey string) (*ProcessingActionInfo, error)
 	GetProcessedFrames(ctx context.Context, processingActionID string) ([]ProcessedFrameInfo, error)
 	GetProcessingRevisionFrames(ctx context.Context, revisionID string) ([]ProcessedFrameInfo, error)
-	ImportAsBaselineRevision(ctx context.Context, processingTaskID, actionKey string) (*BaselineRevisionImport, error)
 }
 
 type ProcessingActionInfo struct {
@@ -91,14 +98,6 @@ type ProcessedFrameInfo struct {
 	AnchorX       float64
 	AnchorY       float64
 	QualityFlags  string
-}
-
-type BaselineRevisionImport struct {
-	ProcessingActionID string
-	Frames             []ProcessedFrameInfo
-	LoopType           string
-	FPS                int
-	FrameDurationMS    int
 }
 
 type QualityAdapter interface {

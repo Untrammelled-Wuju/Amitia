@@ -77,6 +77,7 @@ func (s *QualityWritebackService) WritebackQualitySnapshot(ctx context.Context, 
 		"quality_overall_score":       req.Score,
 		"quality_source_content_hash": req.SourceContentHash,
 		"quality_evaluated_at":        now,
+		"status":                      "quality_ready",
 		"updated_at":                  now,
 	}
 	query := s.db.WithContext(ctx).Table("desktop_pet_action_revisions").Where("id = ?", req.ActionRevisionID)
