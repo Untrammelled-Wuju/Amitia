@@ -54,6 +54,7 @@ export interface RuntimeResumeCursor {
 
 export interface RuntimeHandlerConfig {
   url: string;
+  bootstrapTicket: string;
   userId: string;
   deviceId: string;
   runtimeId: string;
@@ -91,6 +92,23 @@ const DEFAULT_MAX_RECONNECT = 5;
 const DEFAULT_RECONNECT_BASE_MS = 1000;
 const DEFAULT_RECONNECT_MAX_MS = 30000;
 
+export const RUNTIME_V2_WEBSOCKET_SUBPROTOCOL = "amitia.runtime.v2";
+export const RUNTIME_V2_BOOTSTRAP_SUBPROTOCOL_PREFIX = "amitia.runtime.bootstrap.";
+
+function buildRuntimeWebSocketProtocols(ticket: string): string[] {
+  const normalized = ticket.trim();
+  if (normalized === "") {
+    throw new Error("runtime bootstrap ticket is required");
+  }
+  if (!/^[A-Za-z0-9._~-]+$/.test(normalized)) {
+    throw new Error("runtime bootstrap ticket contains invalid websocket protocol characters");
+  }
+  return [
+    RUNTIME_V2_WEBSOCKET_SUBPROTOCOL,
+    `${RUNTIME_V2_BOOTSTRAP_SUBPROTOCOL_PREFIX}${normalized}`,
+  ];
+}
+
 function sanitizeCursor(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? Math.floor(value)
@@ -126,6 +144,7 @@ export class DesktopRuntimeHandlerV2 {
   constructor(config: RuntimeHandlerConfig, hooks: RuntimeHandlerHooks) {
     this.config = {
       url: config.url,
+      bootstrapTicket: config.bootstrapTicket,
       userId: config.userId,
       deviceId: config.deviceId,
       runtimeId: config.runtimeId,
@@ -202,7 +221,10 @@ export class DesktopRuntimeHandlerV2 {
         this.pendingConnectResolve = resolve;
         this.pendingConnectReject = reject;
 
-        const ws = new WebSocket(this.config.url);
+        const ws = new WebSocket(
+          this.config.url,
+          buildRuntimeWebSocketProtocols(this.config.bootstrapTicket),
+        );
         this.ws = ws;
 
         const timeoutId = setTimeout(() => {
