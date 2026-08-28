@@ -11,14 +11,23 @@ on:
       - 'contracts/desktop-pet/**'
       - 'scripts/test/run-desktop-pet-*.ps1'
       - 'scripts/audit/desktop_pet_*.ps1'
+      - 'scripts/audit/verify-desktop-pet-runtime-singletrack.mjs'
+      - '.github/workflows/desktop-pet.yml'
+      - 'scripts/test/run-desktop-pet-*.ps1'
+      - 'scripts/audit/desktop_pet_*.ps1'
       - '.github/workflows/desktop-pet.yml'
   pull_request:
     paths:
       - 'backend/internal/desktoppet/**'
+      - 'backend/internal/migration/desktop_pet_*.go'
       - 'backend/cmd/**'
       - 'desktop/**'
       - 'front/**'
       - 'contracts/desktop-pet/**'
+      - 'scripts/test/run-desktop-pet-*.ps1'
+      - 'scripts/audit/desktop_pet_*.ps1'
+      - 'scripts/audit/verify-desktop-pet-runtime-singletrack.mjs'
+      - '.github/workflows/desktop-pet.yml'
 
 jobs:
   toolchain:
@@ -138,6 +147,8 @@ jobs:
         shell: pwsh
         run: |
           & "${{ github.workspace }}/scripts/audit/desktop_pet_forbidden_patterns.ps1" -Paths @("backend/internal/desktoppet", "backend/cmd/server")
+      - name: Verify Runtime V2 single-track cutover
+        run: node scripts/audit/verify-desktop-pet-runtime-singletrack.mjs
 
   frontend:
     name: Frontend Build & Test
