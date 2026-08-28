@@ -100,6 +100,7 @@ function createMockWindow(
     on: ReturnType<typeof vi.fn>;
     once: ReturnType<typeof vi.fn>;
     off: ReturnType<typeof vi.fn>;
+    setAudioMuted: ReturnType<typeof vi.fn>;
   };
 } {
   const state: MockWindowState = {
@@ -178,6 +179,7 @@ function createMockWindow(
         const idx = arr.indexOf(cb);
         if (idx >= 0) arr.splice(idx, 1);
       }),
+      setAudioMuted: vi.fn(),
     },
     ...state,
   };
@@ -826,6 +828,19 @@ describe("DesktopPetWindowAdapter", () => {
     expect(lastCall[0]).toBeLessThanOrEqual(
       primary.workArea.x + primary.workArea.width - 20,
     );
+  });
+
+  it("soundEnabled 通过 webContents 音频静音状态真实生效", async () => {
+    const adapter = new DesktopPetWindowAdapter(
+      makeOptions({ soundEnabled: false }),
+    );
+    await adapter.create();
+
+    expect(windowMock.webContents.setAudioMuted).toHaveBeenCalledWith(true);
+
+    await adapter.setSoundEnabled(true);
+    expect(windowMock.webContents.setAudioMuted).toHaveBeenLastCalledWith(false);
+    expect(adapter.getOptions().soundEnabled).toBe(true);
   });
 
   it("屏幕 display-metrics-changed 事件触发 ensureVisible", async () => {

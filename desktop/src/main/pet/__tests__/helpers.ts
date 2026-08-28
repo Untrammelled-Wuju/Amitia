@@ -53,6 +53,7 @@ export interface MockBrowserWindow {
   webContents: {
     on: ReturnType<typeof vi.fn>;
     off: ReturnType<typeof vi.fn>;
+    setAudioMuted: ReturnType<typeof vi.fn>;
   };
   __options: Record<string, unknown>;
   __position: { x: number; y: number };
@@ -100,6 +101,7 @@ export function createMockBrowserWindow(
     webContents: {
       on: vi.fn(),
       off: vi.fn(),
+      setAudioMuted: vi.fn(),
     },
     __options: options as Record<string, unknown>,
     __position: position,
