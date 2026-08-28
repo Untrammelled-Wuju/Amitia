@@ -488,3 +488,78 @@ describe("DesktopPetManager disable transaction", () => {
     expect(internal.activeInstallationId).toBe("install-1");
   });
 });
+
+describe("DesktopPetManager lifecycle serialization", () => {
+  it("queues shutdown behind an in-flight lifecycle mutation", async () => {
+    const manager = makeManager();
+    let releaseMutation: (() => void) | null = null;
+    const internal = manager as never as {
+      runLifecycleMutation: <T>(operation: () => Promise<T>) => Promise<T>;
+      teardownRecoveryHandlers: ReturnType<typeof vi.fn>;
+      stopBridge: ReturnType<typeof vi.fn>;
+      stopRuntime: ReturnType<typeof vi.fn>;
+      setState: ReturnType<typeof vi.fn>;
+    };
+    internal.teardownRecoveryHandlers = vi.fn();
+    internal.stopBridge = vi.fn();
+    internal.stopRuntime = vi.fn(async () => undefined);
+    internal.setState = vi.fn();
+
+    const mutation = internal.runLifecycleMutation(
+      () => new Promise<void>((resolve) => {
+        releaseMutation = resolve;
+      }),
+    );
+    const shutdown = manager.shutdown();
+
+    await Promise.resolve();
+    expect(internal.stopRuntime).not.toHaveBeenCalled();
+
+    releaseMutation?.();
+    await mutation;
+    await shutdown;
+
+    expect(internal.teardownRecoveryHandlers).toHaveBeenCalledTimes(1);
+    expect(internal.stopBridge).toHaveBeenCalledTimes(1);
+    expect(internal.stopRuntime).toHaveBeenCalledTimes(1);
+    expect(internal.setState).toHaveBeenCalledWith(
+      "uninitialized",
+      null,
+      "shutdown",
+    );
+  });
+
+  it("serializes recovery work through the lifecycle queue", async () => {
+    const manager = makeManager();
+    const calls: string[] = [];
+    const internal = manager as never as {
+      runLifecycleMutation: <T>(operation: () => Promise<T>) => Promise<T>;
+      recoverRuntime: (reason: "manual") => Promise<void>;
+      recoverRuntimeInternal: (reason: "manual") => Promise<void>;
+    };
+    internal.recoverRuntimeInternal = vi.fn(async () => {
+      calls.push("recovery");
+    });
+
+    let releaseMutation: (() => void) | null = null;
+    const mutation = internal.runLifecycleMutation(
+      () => new Promise<void>((resolve) => {
+        calls.push("mutation-start");
+        releaseMutation = () => {
+          calls.push("mutation-end");
+          resolve();
+        };
+      }),
+    );
+    const recovery = internal.recoverRuntime("manual");
+
+    await Promise.resolve();
+    expect(calls).toEqual(["mutation-start"]);
+
+    releaseMutation?.();
+    await mutation;
+    await recovery;
+
+    expect(calls).toEqual(["mutation-start", "mutation-end", "recovery"]);
+  });
+});
