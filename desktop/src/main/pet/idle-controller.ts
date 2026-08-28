@@ -40,7 +40,14 @@ export class IdleController {
     config?: Partial<IdleControllerConfig>,
   ) {
     this.scheduler = scheduler;
-    this.config = { ...DEFAULT_IDLE_CONFIG, ...(config ?? {}) };
+    this.config = this.normalizeConfig({ ...DEFAULT_IDLE_CONFIG, ...(config ?? {}) });
+  }
+
+  updateConfig(config: Partial<IdleControllerConfig>): void {
+    this.config = this.normalizeConfig({ ...this.config, ...config });
+    if (this.running) {
+      this.reset();
+    }
   }
 
   attachLoaded(loaded: LoadedInstallation): void {
@@ -196,6 +203,28 @@ export class IdleController {
     if (!this.running) return;
     this.playRandomIdle();
     this.scheduleNext();
+  }
+
+  private normalizeConfig(config: IdleControllerConfig): IdleControllerConfig {
+    const minIntervalSeconds = Number.isFinite(config.minIntervalSeconds)
+      ? Math.max(0, config.minIntervalSeconds)
+      : DEFAULT_IDLE_CONFIG.minIntervalSeconds;
+    const maxIntervalSeconds = Number.isFinite(config.maxIntervalSeconds)
+      ? Math.max(minIntervalSeconds, config.maxIntervalSeconds)
+      : Math.max(minIntervalSeconds, DEFAULT_IDLE_CONFIG.maxIntervalSeconds);
+    const maxRepeatCount = Number.isFinite(config.maxRepeatCount)
+      ? Math.max(1, Math.round(config.maxRepeatCount))
+      : DEFAULT_IDLE_CONFIG.maxRepeatCount;
+    const recentActionWeight = Number.isFinite(config.recentActionWeight)
+      ? Math.min(1, Math.max(0, config.recentActionWeight))
+      : DEFAULT_IDLE_CONFIG.recentActionWeight;
+    return {
+      enabled: config.enabled === true,
+      minIntervalSeconds,
+      maxIntervalSeconds,
+      maxRepeatCount,
+      recentActionWeight,
+    };
   }
 
   private randomIntervalMs(): number {

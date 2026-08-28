@@ -31,6 +31,7 @@ export interface DesktopPetWindowOptions {
   canvasHeight: number;
   scale: number;
   alwaysOnTop: boolean;
+  soundEnabled?: boolean;
   clickThroughMode?: ClickThroughMode;
   position?: Position;
 }
@@ -42,6 +43,6 @@ export interface DesktopPetPosition {
   scale: number;
 }
 
-export const PET_WINDOW_SCALE_MIN = 0.5;
-export const PET_WINDOW_SCALE_MAX = 2.0;
+export const PET_WINDOW_SCALE_MIN = 0.1;
+export const PET_WINDOW_SCALE_MAX = 5.0;
 export const PET_WINDOW_SCALE_DEFAULT = 1.0;

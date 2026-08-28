@@ -132,6 +132,7 @@ export class DesktopPetWindowAdapter {
     this.window = new BrowserWindow(constructorOptions);
 
     this.configureForPlatform();
+    this.applySoundEnabled(this.options.soundEnabled ?? false);
     this.applyClickThroughMode(this.options.clickThroughMode ?? "none");
     this.registerWindowEvents();
     this.registerScreenEvents();
@@ -319,6 +320,11 @@ export class DesktopPetWindowAdapter {
     const next: ClickThroughMode = isClickThroughMode(mode) ? mode : "none";
     this.options.clickThroughMode = next;
     this.applyClickThroughMode(next);
+  }
+
+  async setSoundEnabled(enabled: boolean): Promise<void> {
+    this.options.soundEnabled = enabled;
+    this.applySoundEnabled(enabled);
   }
 
   on(event: PetWindowEvent, listener: PetWindowEventListener): void {
@@ -516,6 +522,12 @@ export class DesktopPetWindowAdapter {
     if (this.options.alwaysOnTop) {
       win.setAlwaysOnTop(true);
     }
+  }
+
+  private applySoundEnabled(enabled: boolean): void {
+    const win = this.window;
+    if (!win || win.isDestroyed()) return;
+    win.webContents.setAudioMuted(!enabled);
   }
 
   private applyClickThroughMode(mode: ClickThroughMode): void {
