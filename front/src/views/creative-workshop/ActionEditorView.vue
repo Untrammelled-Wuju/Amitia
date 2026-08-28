@@ -15,15 +15,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #actions>
         <el-button :icon="Back" @click="goBack">返回</el-button>
         <el-button
-          v-if="!activeRevisionId"
-          type="warning"
-          plain
-          :icon="Download"
-          :loading="importing"
-          @click="importLegacy"
-          >导入Legacy</el-button
-        >
-        <el-button
           v-if="activeRevisionId && !hasSession"
           type="primary"
           :loading="creatingSession"
@@ -63,11 +54,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     </ExtensionPageHeader>
 
     <div v-if="!activeRevisionId && !loading" class="empty-state">
-      <el-empty description="暂无活跃 Revision">
-        <el-button type="primary" :loading="importing" @click="importLegacy"
-          >导入处理结果</el-button
-        >
-      </el-empty>
+      <el-empty description="暂无活跃 Revision；处理完成后会自动生成可编辑 Revision" />
     </div>
 
     <div v-else-if="activeRevisionId" class="editor-content">
@@ -343,7 +330,6 @@ import {
   RefreshRight,
   VideoPause,
   VideoPlay,
-  Download,
   Picture,
 } from "@element-plus/icons-vue";
 import * as editorApi from "@/composables/useActionEditor";
@@ -372,7 +358,6 @@ const isPlaying = ref(false);
 const playTimer = ref<number | null>(null);
 const sessionVersion = ref(0);
 
-const importing = ref(false);
 const creatingSession = ref(false);
 const committing = ref(false);
 const abandoning = ref(false);
@@ -539,9 +524,12 @@ async function loadRevisionDetail(revisionId: string) {
       actionProps.fps = rev.defaultFps ?? rev.fps ?? 12;
       actionProps.loopType = rev.loopType ?? "loop";
       actionProps.returnAction = rev.returnAction ?? "";
-      actionProps.interruptible = rev.interruptible ?? true;
-      actionProps.priority = rev.priority ?? 0;
-      actionProps.cooldownMs = rev.cooldownMs ?? 0;
+      actionProps.interruptible =
+        rev.interruptible === undefined || rev.interruptible === null
+          ? true
+          : Boolean(rev.interruptible);
+      actionProps.priority = rev.priorityOverride ?? 0;
+      actionProps.cooldownMs = rev.cooldownMsOverride ?? 0;
     }
   } catch {
     // ignore
@@ -596,18 +584,32 @@ async function createSession() {
   }
 }
 
-async function applyOp(type: string, payload: any) {
+async function applyOpRequest(type: string, payload: unknown) {
+  if (!session.value) {
+    throw new Error("请先创建编辑会话");
+  }
+  const res = await editorApi.applyOperation(session.value.id, {
+    baseSessionVersion: sessionVersion.value,
+    idempotencyKey: `op:${crypto.randomUUID()}`,
+    operation: {
+      type,
+      schemaVersion: 1,
+      payload,
+    },
+  });
+  sessionVersion.value = res.sessionVersion;
+  session.value.sessionVersion = res.sessionVersion;
+  return res;
+}
+
+async function applyOp(type: string, payload: unknown) {
   if (!session.value) {
     ElMessage.warning("请先创建编辑会话");
     return;
   }
   applying.value = true;
   try {
-    const res = await editorApi.applyOperation(session.value.id, {
-      type,
-      payload,
-    });
-    sessionVersion.value = res.sessionVersion;
+    await applyOpRequest(type, payload);
     await refreshSession();
     await refreshSummary();
     ElMessage.success("操作已应用");
@@ -660,7 +662,9 @@ async function commitSession() {
   committing.value = true;
   try {
     await editorApi.commitSession(session.value.id, {
-      sessionVersion: sessionVersion.value,
+      expectedSessionVersion: sessionVersion.value,
+      activationPolicy: "immediate",
+      idempotencyKey: `commit:${session.value.id}:${sessionVersion.value}`,
     });
     ElMessage.success("会话已提交");
     session.value = null;
@@ -701,23 +705,6 @@ async function abandonSession() {
     ElMessage.error(err?.message || "放弃会话失败");
   } finally {
     abandoning.value = false;
-  }
-}
-
-async function importLegacy() {
-  if (!processingTaskId.value || !actionKey.value) return;
-  importing.value = true;
-  try {
-    await editorApi.importLegacyRevision(
-      processingTaskId.value,
-      actionKey.value,
-    );
-    ElMessage.success("已导入处理结果");
-    await loadData();
-  } catch (err: any) {
-    ElMessage.error(err?.message || "导入失败");
-  } finally {
-    importing.value = false;
   }
 }
 
@@ -763,19 +750,36 @@ function playNextFrame() {
 }
 
 async function deleteFrame(frameId: string) {
-  await applyOp("delete_frame", { frameId });
+  await applyOp("frame.delete", { frameId });
 }
 
 async function duplicateFrame(frameId: string) {
-  await applyOp("duplicate_frame", { frameId });
+  await applyOp("frame.duplicate", { frameId });
 }
 
 async function moveFrame(frameId: string, direction: "left" | "right") {
-  await applyOp("reorder_frame", { frameId, direction });
+  const timeline = editSummary.value?.timeline ?? [];
+  const index = timeline.findIndex((frame) => frame.frameId === frameId);
+  if (index < 0) return;
+
+  if (direction === "left") {
+    if (index === 0) return;
+    await applyOp("frame.reorder", {
+      frameId,
+      beforeFrameId: timeline[index - 1].frameId,
+    });
+    return;
+  }
+
+  if (index >= timeline.length - 1) return;
+  await applyOp("frame.reorder", {
+    frameId,
+    afterFrameId: timeline[index + 1].frameId,
+  });
 }
 
 async function updateFrameDuration(frameId: string, duration: number) {
-  await applyOp("set_frame_duration", { frameId, durationMs: duration });
+  await applyOp("frame.set_duration", { frameId, durationMs: duration });
 }
 
 function onFrameDurationChange() {
@@ -785,27 +789,48 @@ function onFrameDurationChange() {
 
 function onFrameAnchorChange() {
   if (!currentFrame.value || !session.value) return;
-  applying.value = true;
-  editorApi
-    .setFrameAnchor(session.value.id, {
-      frameId: currentFrame.value.frameId,
-      anchorX: frameAnchorX.value,
-      anchorY: frameAnchorY.value,
-    })
-    .then(() => {
-      ElMessage.success("锚点已更新");
-      void refreshSummary();
-    })
-    .catch((err: any) => {
-      ElMessage.error(err?.message || "更新锚点失败");
-    })
-    .finally(() => {
-      applying.value = false;
-    });
+  void applyOp("anchor.set_frame", {
+    frameId: currentFrame.value.frameId,
+    anchorX: frameAnchorX.value,
+    anchorY: frameAnchorY.value,
+    space: "normalized_canvas",
+  });
 }
 
 async function updateActionProps() {
-  await applyOp("update_action_props", { ...actionProps });
+  if (!session.value) {
+    ElMessage.warning("请先创建编辑会话");
+    return;
+  }
+  applying.value = true;
+  try {
+    await applyOpRequest("action.set_default_fps", {
+      defaultFps: actionProps.fps,
+      recalculate: false,
+    });
+    await applyOpRequest("action.set_loop_type", {
+      loopType: actionProps.loopType,
+    });
+    await applyOpRequest("action.set_return_action", {
+      returnAction: actionProps.returnAction,
+    });
+    await applyOpRequest("action.set_interruptible", {
+      interruptible: actionProps.interruptible,
+    });
+    await applyOpRequest("action.set_priority_override", {
+      priority: actionProps.priority,
+    });
+    await applyOpRequest("action.set_cooldown_override", {
+      cooldownMs: actionProps.cooldownMs,
+    });
+    await refreshSession();
+    await refreshSummary();
+    ElMessage.success("动作属性已更新");
+  } catch (err: any) {
+    ElMessage.error(err?.message || "更新动作属性失败");
+  } finally {
+    applying.value = false;
+  }
 }
 
 function goBack() {

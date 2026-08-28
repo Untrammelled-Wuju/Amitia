@@ -70,6 +70,7 @@ export interface ActionEditSummary {
   actionKey: string;
   activeRevisionId: string;
   activeRevisionNum: number;
+  bindingVersion: number;
   frameCount: number;
   durationMs: number;
   qualityVerdict: string;
@@ -81,21 +82,45 @@ export interface ActionEditSummary {
 export interface EditSession {
   id: string;
   userId: string;
+  characterId: string;
+  actionStreamId: string;
   processingTaskId: string;
   actionKey: string;
   baseRevisionId: string;
+  baseActionContentHash: string;
+  baseBindingRevision: number;
   sessionVersion: number;
   status: string;
   cursor: number;
   lastOperationSeq: number;
+  draftSnapshotId: string;
+  draftSnapshotHash: string;
   expiresAt: string;
   createdAt: string;
+}
+
+export interface ApplyOperationRequest {
+  baseSessionVersion: number;
+  idempotencyKey: string;
+  operation: {
+    type: string;
+    schemaVersion: number;
+    payload: unknown;
+  };
 }
 
 export interface ApplyOperationResponse {
   sessionVersion: number;
   sequence: number;
   status: string;
+}
+
+
+export interface CommitSessionRequest {
+  expectedSessionVersion: number;
+  changeSummary?: string;
+  activationPolicy: "immediate" | "manual" | "keep_current";
+  idempotencyKey: string;
 }
 
 export interface CommitSessionResponse {
@@ -194,16 +219,6 @@ export async function getLatestQualityEvaluation(
   return res.data;
 }
 
-export async function importLegacyRevision(
-  processingTaskId: string | number,
-  actionKey: string,
-): Promise<any> {
-  const res = await apiClient.post(
-    `${BASE}/processing-tasks/${processingTaskId}/actions/${actionKey}/import-legacy`,
-  );
-  return res.data;
-}
-
 export async function createSession(
   processingTaskId: string | number,
   actionKey: string,
@@ -225,7 +240,7 @@ export async function getSession(
 
 export async function applyOperation(
   sessionId: string,
-  data: any,
+  data: ApplyOperationRequest,
 ): Promise<ApplyOperationResponse> {
   const res = await apiClient.post(
     `${BASE}/edit-sessions/${sessionId}/operations`,
@@ -269,7 +284,7 @@ export async function createCheckpoint(
 
 export async function commitSession(
   sessionId: string,
-  data: any,
+  data: CommitSessionRequest,
 ): Promise<CommitSessionResponse> {
   const res = await apiClient.post(
     `${BASE}/edit-sessions/${sessionId}/commit`,
@@ -333,6 +348,7 @@ export async function acceptCandidate(
 ): Promise<any> {
   const res = await apiClient.post(
     `${BASE}/edit-sessions/${sessionId}/candidates/${candidateId}/accept`,
+    { idempotencyKey: `candidate:accept:${candidateId}` },
   );
   return res.data;
 }
@@ -343,6 +359,7 @@ export async function rejectCandidate(
 ): Promise<any> {
   const res = await apiClient.post(
     `${BASE}/edit-sessions/${sessionId}/candidates/${candidateId}/reject`,
+    { idempotencyKey: `candidate:reject:${candidateId}` },
   );
   return res.data;
 }
