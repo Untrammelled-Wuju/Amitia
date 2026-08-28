@@ -44,6 +44,21 @@ func NewCloudRuntime(db *sql.DB, deviceReg *host_registry.Registry) (*Runtime, e
 }
 
 func NewCloudRuntimeWithHub(db *sql.DB, deviceReg *host_registry.Registry, hub *server.ConnectionHub) (*Runtime, error) {
+	return NewCloudRuntimeWithHubAndSessions(db, deviceReg, hub, nil)
+}
+
+// NewCloudRuntimeWithHubAndSessions constructs the cloud runtime around the
+// caller-provided authoritative DeviceRuntime session service. Production
+// wiring should pass the Kernel-owned service so Desktop Pet, DeviceMesh and
+// the extension kernel share one in-process session authority. A nil service
+// is accepted only for compatibility callers and tests, where this constructor
+// creates an isolated service backed by the same database.
+func NewCloudRuntimeWithHubAndSessions(
+	db *sql.DB,
+	deviceReg *host_registry.Registry,
+	hub *server.ConnectionHub,
+	sessions *deviceruntime.Service,
+) (*Runtime, error) {
 	if err := EnsureSchema(context.Background(), db); err != nil {
 		return nil, err
 	}
@@ -81,13 +96,16 @@ func NewCloudRuntimeWithHub(db *sql.DB, deviceReg *host_registry.Registry, hub *
 
 	probe := server.NewProbeService(hub)
 
-	sessionStore := deviceruntime.NewSQLiteSessionStore(db)
-	if err := sessionStore.EnsureSchema(context.Background()); err != nil {
-		return nil, err
-	}
-	sessions, err := deviceruntime.NewService(sessionStore, deviceruntime.ServiceOptions{})
-	if err != nil {
-		return nil, err
+	if sessions == nil {
+		sessionStore := deviceruntime.NewSQLiteSessionStore(db)
+		if err := sessionStore.EnsureSchema(context.Background()); err != nil {
+			return nil, err
+		}
+		var err error
+		sessions, err = deviceruntime.NewService(sessionStore, deviceruntime.ServiceOptions{})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	rt := &Runtime{
@@ -107,6 +125,9 @@ func NewCloudRuntimeWithHub(db *sql.DB, deviceReg *host_registry.Registry, hub *
 
 func (rt *Runtime) SetSessions(sessions *deviceruntime.Service) {
 	rt.sessions = sessions
+	if rt.Handler != nil {
+		rt.Handler.SetSessions(sessions)
+	}
 }
 
 func (rt *Runtime) SetDispatcher(d dispatcherResolveAdapter) {

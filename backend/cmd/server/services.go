@@ -732,7 +732,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	var installationCoordinator coordinator.InstallationCoordinator
 
 	runtimeConfig := runtime.DefaultRuntimeConfig()
-	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled
+	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled && runtimePolicy.DesktopPet
 	runtimeConfig.LoopbackOnly = config.AppCfg.DesktopPetRuntime.LoopbackOnly
 	runtimeConfig.HeartbeatIntervalMs = config.AppCfg.DesktopPetRuntime.HeartbeatIntervalMs
 	runtimeConfig.HeartbeatTimeoutMs = config.AppCfg.DesktopPetRuntime.HeartbeatTimeoutMs
@@ -745,7 +745,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	runtimeConfig.RetryMaxDelayMs = config.AppCfg.DesktopPetRuntime.RetryMaxDelayMs
 	runtimeConfig.CommandRetentionHours = config.AppCfg.DesktopPetRuntime.CommandRetentionHours
 
-	runtimeV2Facade := runtimev2.NewRuntimeFacade(ctx.DB, &runtimev2.FacadeConfig{
+	if runtimePolicy.DesktopPet && kernelContainer.DeviceRuntimeSessions == nil {
+		return nil, errors.New("desktop pet runtime requires kernel DeviceRuntimeSessions authority")
+	}
+	runtimeV2Facade := runtimev2.NewRuntimeFacadeWithDeviceRuntime(ctx.DB, &runtimev2.FacadeConfig{
 		Enabled:            runtimeConfig.Enabled,
 		Path:               runtimeConfig.Path,
 		LoopbackOnly:       runtimeConfig.LoopbackOnly,
@@ -754,7 +757,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		MaxMessageBytes:    int64(runtimeConfig.MaxMessageBytes),
 		CommandTimeoutSec:  int64(runtimeConfig.CommandTimeoutSec),
 		CommandRetentionHr: int64(runtimeConfig.CommandRetentionHours),
-	})
+	}, kernelContainer.DeviceRuntimeSessions)
 
 	runtimeSinkHolder := &runtimeEventSinkHolder{}
 	runtimeOutboxSink := runtime.NewOutboxRuntimeEventSink(
@@ -1082,7 +1085,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		if dbErr != nil {
 			return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", dbErr)
 		}
-		deviceMeshRuntime, meshErr := devicemesh.NewCloudRuntimeWithHub(sqlDB, kernelContainer.DeviceRegistry, meshHub)
+		if kernelContainer.DeviceRuntimeSessions == nil {
+			return nil, fmt.Errorf("cloud/local device mesh requires kernel DeviceRuntimeSessions authority")
+		}
+		deviceMeshRuntime, meshErr := devicemesh.NewCloudRuntimeWithHubAndSessions(
+			sqlDB, kernelContainer.DeviceRegistry, meshHub, kernelContainer.DeviceRuntimeSessions,
+		)
 		if meshErr != nil {
 			return nil, fmt.Errorf("failed to construct device mesh runtime: %w", meshErr)
 		}
