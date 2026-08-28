@@ -727,16 +727,13 @@ export class DesktopPetManager {
     if (this.dragController?.isDragging()) {
       throw new Error("PET_IS_DRAGGING");
     }
-    const request: DesktopPetActionRequest = {
-      actionKey,
-      source: EventSources.MANUAL,
-      priority: ActionPriorities.CLICK,
-      interrupt: true,
-    };
-    const result = this.scheduler.submit(request);
-    if (result === "rejected") {
-      throw new Error(`ACTION_REJECTED: ${actionKey}`);
+    const action = this.loadedInstallation.actions.get(actionKey);
+    if (!action?.available) {
+      throw new Error(`ACTION_NOT_FOUND: ${actionKey}`);
     }
+
+    // Manual playback has exactly one authority: backend -> Runtime v2 -> scheduler.
+    // Submitting locally here would race/duplicate the Runtime v2 play_action command.
     await this.callPlayActionApi(actionKey);
   }
 
@@ -756,14 +753,13 @@ export class DesktopPetManager {
   }
 
   async recenter(): Promise<void> {
-    if (this.state !== "enabled" || !this.windowAdapter) {
+    if (this.state !== "enabled" || !this.windowAdapter || !this.activeInstallationId) {
       throw new Error("PET_NOT_ENABLED");
     }
-    if (this.activeInstallationId) {
-      await this.callRecenterApi(this.activeInstallationId);
-    }
-    await this.applyRecenterLocal();
-    await this.persistRuntimePosition();
+
+    // Recenter is authoritative through backend -> Runtime v2 recenter_once.
+    // The local position is applied only when that Runtime v2 command is consumed.
+    await this.callRecenterApi(this.activeInstallationId);
   }
 
   private async applyRecenterLocal(): Promise<void> {
@@ -1884,7 +1880,9 @@ export class DesktopPetManager {
             commandId,
             event.actionKey ?? "",
             context,
-          );
+          ).then(() => this.syncRuntimeState()).catch((err) => {
+            console.warn("[DesktopPetManager] 上报播放开始失败:", this.errorMessage(err));
+          });
         }
         break;
       case "playback.action_completed":
@@ -2057,6 +2055,8 @@ export class DesktopPetManager {
       frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
       actionKey: this.currentActionKey ?? "",
       occurredAt: new Date().toISOString(),
+    }).catch((err) => {
+      console.warn("[DesktopPetManager] 上报单击事件失败:", this.errorMessage(err));
     });
   }
 
@@ -2074,6 +2074,8 @@ export class DesktopPetManager {
       frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
       actionKey: this.currentActionKey ?? "",
       occurredAt: new Date().toISOString(),
+    }).catch((err) => {
+      console.warn("[DesktopPetManager] 上报双击事件失败:", this.errorMessage(err));
     });
   }
 
@@ -2087,6 +2089,8 @@ export class DesktopPetManager {
       actionKey: this.currentActionKey ?? "",
       frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
       occurredAt: new Date().toISOString(),
+    }).catch((err) => {
+      console.warn("[DesktopPetManager] 上报悬停事件失败:", this.errorMessage(err));
     });
   }
 
@@ -2164,6 +2168,8 @@ export class DesktopPetManager {
         currentY: state.currentY,
         displayId: state.startScreenId,
         occurredAt: new Date().toISOString(),
+      }).catch((err) => {
+        console.warn("[DesktopPetManager] 上报拖拽开始失败:", this.errorMessage(err));
       });
     } else if (event === "drag-end") {
       this.worldController?.setDragging(false);
@@ -2180,9 +2186,13 @@ export class DesktopPetManager {
         currentY: state.currentY,
         displayId: state.currentScreenId,
         occurredAt: new Date().toISOString(),
+      }).catch((err) => {
+        console.warn("[DesktopPetManager] 上报拖拽完成失败:", this.errorMessage(err));
       });
       this.currentDragId = null;
-      void this.persistRuntimePosition();
+      void this.persistRuntimePosition().catch((err) => {
+        console.warn("[DesktopPetManager] 持久化桌宠位置失败:", this.errorMessage(err));
+      });
     }
   }
 
@@ -3331,13 +3341,35 @@ export class DesktopPetManager {
                 };
               }
 
+              const action = this.loadedInstallation.actions.get(actionKey);
+              if (!action?.available) {
+                return {
+                  commandId,
+                  status: "rejected",
+                  errorCode: "ACTION_NOT_FOUND",
+                  errorMessage: `action ${actionKey} is not available in the active installation`,
+                  appliedRevision: desiredRevision,
+                };
+              }
+
+              const queuePolicy = cmd.payload?.queuePolicy ?? "enqueue";
+              if (queuePolicy !== "enqueue" && queuePolicy !== "replace_current") {
+                return {
+                  commandId,
+                  status: "rejected",
+                  errorCode: "INVALID_QUEUE_POLICY",
+                  errorMessage: `unsupported Runtime v2 queuePolicy: ${queuePolicy}`,
+                  appliedRevision: desiredRevision,
+                };
+              }
+
               const semantic = cmd.payload?.semantic ?? "";
               const source = this.resolveBehaviorEventSource(semantic);
               const request: DesktopPetActionRequest = {
                 actionKey,
                 source,
                 priority: this.resolveBehaviorPriority(semantic, cmd.payload?.priority),
-                interrupt: cmd.payload?.queuePolicy === "replace_current",
+                interrupt: queuePolicy === "replace_current",
                 dedupeKey: cmd.payload?.decisionId || `runtime_${commandId}`,
                 metadata: {
                   semantic,
@@ -3375,6 +3407,10 @@ export class DesktopPetManager {
             }
             case "runtime.command.recenter_once": {
               await this.applyRecenterLocal();
+              // Persist only after the authoritative Runtime v2 command has
+              // applied the position. This keeps one execution authority while
+              // preserving the position across restart.
+              await this.persistRuntimePosition();
               return {
                 commandId,
                 status: "applied",
