@@ -91,12 +91,107 @@ requireText(
     /devicemesh\.NewCloudRuntimeWithHubAndSessions\s*\([\s\S]*?kernelContainer\.DeviceRuntimeSessions/,
     /wiring\.NewV2RuntimeActionAdapter\s*\(/,
     /wiring\.NewV2ActivePetAdapter\s*\(/,
+    /desktoppet\.LegacyWriteCutoverReady\s*\(ctx\.DB\)/,
+    /services\.InstallationCoordinator\s*==\s*nil/,
   ],
   [
     /runtimev2\.NewRuntimeFacade\s*\(/,
     /runtime\.NewService\s*\(/,
     /wiring\.NewRuntimeActionAdapter\s*\(/,
     /wiring\.NewActivePetAdapter\s*\(/,
+  ],
+);
+
+requireText(
+  "backend/internal/desktoppet/runtime/protocol/v2/router.go",
+  [
+    /runtimeV2WebSocketSubprotocol\s*=\s*"amitia\.runtime\.v2"/,
+    /runtimeV2BootstrapProtocolPrefix\s*=\s*"amitia\.runtime\.bootstrap\."/,
+    /websocket\.IsWebSocketUpgrade\s*\(r\)/,
+    /parseRuntimeBootstrapSubprotocol\s*\(r\)/,
+    /upgrader\.Subprotocols\s*=\s*\[\]string\{selectedProtocol\}/,
+  ],
+  [
+    /rawTicket\s*:=\s*strings\.TrimSpace\(r\.URL\.Query\(\)\.Get\("ticket"\)\)/,
+  ],
+);
+
+requireText(
+  "desktop/src/main/pet/manager.ts",
+  [
+    /bootstrapTicket:\s*issued\.ticket/,
+    /buildRuntimeV2URL\(runtimeId,\s*deviceId\)/,
+  ],
+  [
+    /searchParams\.set\("ticket"/,
+  ],
+);
+
+requireText(
+  "desktop/src/desktop-pet/runtime/runtime-handler-v2.ts",
+  [
+    /RUNTIME_V2_WEBSOCKET_SUBPROTOCOL\s*=\s*"amitia\.runtime\.v2"/,
+    /RUNTIME_V2_BOOTSTRAP_SUBPROTOCOL_PREFIX\s*=\s*"amitia\.runtime\.bootstrap\."/,
+    /new WebSocket\([\s\S]*?buildRuntimeWebSocketProtocols\(this\.config\.bootstrapTicket\)/,
+  ],
+);
+
+requireText(
+  "backend/internal/desktoppet/legacy_package_flag.go",
+  [
+    /legacyInstallationWriteDisabled\s+atomic\.Bool/,
+    /legacyEditingWriteDisabled\s+atomic\.Bool/,
+    /func LegacyWriteCutoverReady\(db \*gorm\.DB\) error/,
+  ],
+);
+
+requireText(
+  "backend/internal/desktoppet/migration/repository.go",
+  [
+    /JOIN desktop_pet_migration_operations AS o ON o\.id = w\.operation_id/,
+    /o\.kind = \? AND o\.status IN \?/,
+    /StageLegacyWriteBlocked/,
+    /StageCompleted/,
+  ],
+);
+
+requireText(
+  "backend/internal/desktoppet/migration/runner.go",
+  [
+    /StageWriteCutover, StageLegacyWriteBlocked/,
+    /legacyWriteRefresh == nil/,
+    /if op\.Stage == StageLegacyWriteBlocked \{[\s\S]*?legacyWriteRefresh\(\)[\s\S]*?StageLegacyWriteBlocked, StageCompleted/,
+  ],
+);
+
+requireText(
+  "backend/internal/desktoppet/migration/plans/desktop_pet_v2_cutover.go",
+  [
+    /The durable authority for blocking legacy writes is the migration/,
+  ],
+  [
+    /desktop_pet_migration_flags/,
+    /legacy_writes_blocked/,
+  ],
+);
+
+requireText(
+  "backend/cmd/server/main.go",
+  [/migration\.MarkDesktopPetCanonicalBaselineCutover\(db\)/],
+);
+
+requireText(
+  "backend/cmd/legacy-package-migrate/main.go",
+  [/migration\.MarkDesktopPetCanonicalBaselineCutover\(db\)/],
+);
+
+requireText(
+  "backend/internal/migration/desktop_pet_canonical_baseline.go",
+  [
+    /baseline-desktop-pet-v2/,
+    /desktop_pet_migration_operations/,
+    /desktop_pet_write_cutovers/,
+    /"installation", "editing"/,
   ],
 );
 
@@ -121,6 +216,8 @@ requireText(
   [
     /webContents\.off\("render-process-gone",\s*onRenderProcessGone\)/,
     /showWhenRuntimeReady\s*\(\)/,
+    /webContents\.on\("will-navigate",\s*\(event\)\s*=>\s*event\.preventDefault\(\)\)/,
+    /webContents\.setWindowOpenHandler\(\(\)\s*=>\s*\(\{ action: "deny" \}\)\)/,
   ],
   [
     /removeAllListeners\("render-process-gone"\)/,
