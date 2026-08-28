@@ -4581,10 +4581,19 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_states (
     installation_id TEXT NOT NULL DEFAULT '',
     user_id TEXT NOT NULL DEFAULT '',
     device_id TEXT NOT NULL DEFAULT '',
+    runtime_id TEXT NOT NULL DEFAULT '',
+    pet_id TEXT NOT NULL DEFAULT '',
+    release_id TEXT NOT NULL DEFAULT '',
     desired_enabled INTEGER NOT NULL DEFAULT 0,
     desired_visible INTEGER NOT NULL DEFAULT 0,
     desired_release_id TEXT NOT NULL DEFAULT '',
     desired_action_key TEXT NOT NULL DEFAULT '',
+    settings_snapshot_json TEXT NOT NULL DEFAULT '',
+    settings_revision INTEGER NOT NULL DEFAULT 0,
+    desired_revision INTEGER NOT NULL DEFAULT 0,
+    desired_hash TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    operation_id TEXT NOT NULL DEFAULT '',
     position_x REAL,
     position_y REAL,
     scale REAL NOT NULL DEFAULT 1.0,
@@ -4599,6 +4608,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_states (
 );
 CREATE INDEX IF NOT EXISTS idx_dprds_installation ON desktop_pet_runtime_desired_states(installation_id);
 CREATE INDEX IF NOT EXISTS idx_dprds_user ON desktop_pet_runtime_desired_states(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dprds_user_device ON desktop_pet_runtime_desired_states(user_id, device_id) WHERE user_id <> '' AND device_id <> '';
+CREATE INDEX IF NOT EXISTS idx_dprds_runtime ON desktop_pet_runtime_desired_states(runtime_id);
+CREATE INDEX IF NOT EXISTS idx_dprds_desired_revision ON desktop_pet_runtime_desired_states(user_id, device_id, desired_revision);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_installation_commit_journals (
     id TEXT PRIMARY KEY,
