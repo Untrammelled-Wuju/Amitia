@@ -107,8 +107,11 @@ func publicRuntimeCapabilities(services *AppServices) gin.H {
 	}
 
 	gameHostAvailable := services.KernelContainer != nil && services.KernelContainer.GameHost != nil
-	gameModeAvailable := services.RuntimeProfile == runtimeprofile.ProfileLocal &&
+	localGameModeAvailable := services.RuntimeProfile == runtimeprofile.ProfileLocal &&
 		policy.FullHTTPAPI && policy.LocalUIEndpoints && policy.DevicePluginRuntime && gameHostAvailable
+	remoteGameModeAvailable := services.RuntimeProfile == runtimeprofile.ProfileCloudCore &&
+		policy.FullHTTPAPI && services.DeviceMesh != nil && services.DeviceMesh.Hub != nil && services.DeviceMesh.PendingInvocations != nil
+	gameModeAvailable := localGameModeAvailable || remoteGameModeAvailable
 	return gin.H{
 		"runtimeProfile": services.RuntimeProfile.String(),
 		"capabilities": gin.H{
@@ -518,6 +521,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			wasmHandler.Register(wasmMux)
 			apiGroup.Any("/wasm/*wasmPath", gin.WrapH(wasmMux))
 		}
+		registerCloudGameCenterGateway(apiGroup, services)
 		if services.KernelContainer != nil && services.KernelContainer.GameHost != nil {
 			log.Info("[GameCenter] GameHost detected, registering game-center routes")
 			kernelReader := management.NewKernelReaderWithContributions(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository, services.KernelContainer.ContributionRepository)
@@ -780,6 +784,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			}); err != nil {
 				return nil, fmt.Errorf("register device mesh routes: %w", err)
 			}
+		}
+
+		if err := registerCloudDesktopPetGenerationBridge(r, ctx, services); err != nil {
+			return nil, err
 		}
 
 		if services.NativeBridgeRelay != nil && bootstrap != nil {
