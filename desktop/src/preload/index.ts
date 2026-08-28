@@ -81,6 +81,18 @@ const api = {
   writeClipboardText(text: string): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.clipboardWriteText, text);
   },
+  notifyDesktopPetChatState(payload: {
+    state:
+      | "assistant_listening"
+      | "assistant_thinking"
+      | "assistant_speaking"
+      | "assistant_finished"
+      | "assistant_error";
+    roundId?: string;
+    error?: string;
+  }): void {
+    ipcRenderer.send("chat:state-change", payload);
+  },
   setAuthToken(token: string): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.setAuthToken, token);
   },

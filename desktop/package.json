@@ -20,8 +20,9 @@
     "test:electron-pet-smoke": "electron scripts/desktop-pet-electron-smoke.cjs",
     "verify:pet-player-singleton": "node scripts/verify-pet-player-singleton.mjs",
     "verify:desktop-pet-runtime-singletrack": "node ../scripts/audit/verify-desktop-pet-runtime-singletrack.mjs",
-    "release:gate": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run verify:pet-player-singleton && pnpm run verify:desktop-pet-runtime-singletrack && pnpm run verify:desktop-pet-finalization && pnpm run test:electron-pet-smoke",
-    "verify:desktop-pet-finalization": "node scripts/verify-desktop-pet-finalization.mjs"
+    "release:gate": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run verify:pet-player-singleton && pnpm run verify:desktop-pet-runtime-singletrack && pnpm run verify:desktop-pet-finalization && pnpm run verify:cloud-device-execution-finalization && pnpm run test:electron-pet-smoke",
+    "verify:desktop-pet-finalization": "node scripts/verify-desktop-pet-finalization.mjs",
+    "verify:cloud-device-execution-finalization": "node scripts/verify-cloud-device-execution-finalization.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.7",
