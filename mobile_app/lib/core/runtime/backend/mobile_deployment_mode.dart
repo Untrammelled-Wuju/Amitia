@@ -1,7 +1,6 @@
 enum MobileDeploymentMode {
   local,
-  cloud,
-  hybrid;
+  cloud;
 
   static MobileDeploymentMode fromStorage(String? raw) {
     switch (raw) {
@@ -9,9 +8,8 @@ enum MobileDeploymentMode {
         return MobileDeploymentMode.local;
       case 'cloud':
       case 'remote':
-        return MobileDeploymentMode.cloud;
       case 'hybrid':
-        return MobileDeploymentMode.hybrid;
+        return MobileDeploymentMode.cloud;
       default:
         return MobileDeploymentMode.local;
     }
@@ -23,8 +21,6 @@ enum MobileDeploymentMode {
         return 'local';
       case MobileDeploymentMode.cloud:
         return 'cloud';
-      case MobileDeploymentMode.hybrid:
-        return 'hybrid';
     }
   }
 }
@@ -33,10 +29,7 @@ class MobileDeploymentConfig {
   final MobileDeploymentMode mode;
   final String? remoteCoreUri;
 
-  const MobileDeploymentConfig({
-    required this.mode,
-    this.remoteCoreUri,
-  });
+  const MobileDeploymentConfig({required this.mode, this.remoteCoreUri});
 
   MobileDeploymentConfig copyWith({
     MobileDeploymentMode? mode,
@@ -62,9 +55,8 @@ class MobileDeploymentConfig {
     );
   }
 
-  static MobileDeploymentConfig get local => const MobileDeploymentConfig(
-        mode: MobileDeploymentMode.local,
-      );
+  static MobileDeploymentConfig get local =>
+      const MobileDeploymentConfig(mode: MobileDeploymentMode.local);
 }
 
 class DeploymentConfigValidationError extends Error {
@@ -81,11 +73,10 @@ DeploymentConfigValidationError? validateDeploymentConfigForSave(
   if (config == null) {
     return DeploymentConfigValidationError('config is null');
   }
-  if (config.mode == MobileDeploymentMode.cloud ||
-      config.mode == MobileDeploymentMode.hybrid) {
+  if (config.mode == MobileDeploymentMode.cloud) {
     if (config.remoteCoreUri == null || config.remoteCoreUri!.trim().isEmpty) {
       return DeploymentConfigValidationError(
-        'cloud/hybrid mode requires remote core URI',
+        'cloud mode requires remote core URI',
       );
     }
   }

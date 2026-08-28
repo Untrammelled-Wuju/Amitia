@@ -1,25 +1,28 @@
-import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:amitia_app/core/runtime/backend/mobile_backend_lifecycle.dart';
 import 'package:amitia_app/core/runtime/backend/mobile_deployment_mode.dart';
 import 'package:amitia_app/core/runtime/backend/backend_topology.dart';
 import 'package:amitia_app/core/runtime/backend/backend_topology_resolver.dart';
 import 'package:amitia_app/core/runtime/embedded/embedded_runtime_controller.dart';
-import 'package:amitia_app/core/runtime/backend_transport/connectivity/backend_connectivity_probe.dart';
+import 'package:amitia_app/core/backend_transport/connectivity/backend_connectivity_probe.dart';
 
 class FakeEmbeddedRuntimeController implements EmbeddedRuntimeController {
   EmbeddedRuntimeStatus _status = EmbeddedRuntimeStatus.stopped;
   int ensureRunningCallCount = 0;
   int getStatusCallCount = 0;
   int stopCallCount = 0;
+  EmbeddedRuntimeProfile? lastRequestedProfile;
 
   void setStatus(EmbeddedRuntimeStatus status) {
     _status = status;
   }
 
   @override
-  Future<EmbeddedRuntimeStatus> ensureRunning(EmbeddedRuntimeProfile profile) async {
+  Future<EmbeddedRuntimeStatus> ensureRunning(
+    EmbeddedRuntimeProfile profile,
+  ) async {
     ensureRunningCallCount++;
+    lastRequestedProfile = profile;
     return _status;
   }
 
@@ -94,11 +97,21 @@ MobileBackendTopology _createCloudTopology() {
     businessCore: BackendEndpoint(
       role: BackendEndpointRole.businessCore,
       httpBaseUri: Uri(scheme: 'https', host: 'remote.example.com', port: 443),
-      websocketBaseUri: Uri(scheme: 'wss', host: 'remote.example.com', port: 443),
+      websocketBaseUri: Uri(
+        scheme: 'wss',
+        host: 'remote.example.com',
+        port: 443,
+      ),
       isRemote: true,
     ),
-    localRuntime: null,
-    requiresEmbeddedRuntime: false,
+    localRuntime: BackendEndpoint(
+      role: BackendEndpointRole.localRuntime,
+      httpBaseUri: Uri(scheme: 'http', host: '127.0.0.1', port: 18899),
+      websocketBaseUri: Uri(scheme: 'ws', host: '127.0.0.1', port: 18899),
+      isRemote: false,
+    ),
+    embeddedRuntimeProfile: EmbeddedRuntimeProfile.deviceAgent,
+    requiresEmbeddedRuntime: true,
   );
 }
 
@@ -120,14 +133,20 @@ void main() {
 
       embedded.setStatus(EmbeddedRuntimeStatus.ready);
 
-      await lifecycle.reconcile(const MobileDeploymentConfig(mode: MobileDeploymentMode.local));
+      await lifecycle.reconcile(
+        const MobileDeploymentConfig(mode: MobileDeploymentMode.local),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(statuses.isNotEmpty, isTrue);
       expect(statuses.last.mode, equals(MobileDeploymentMode.local));
       expect(statuses.last.state, equals(RuntimeDeploymentState.ready));
-      expect(statuses.last.businessCore.state, equals(RuntimeDeploymentState.ready));
+      expect(
+        statuses.last.businessCore.state,
+        equals(RuntimeDeploymentState.ready),
+      );
       expect(embedded.ensureRunningCallCount, greaterThan(0));
+      expect(embedded.lastRequestedProfile, EmbeddedRuntimeProfile.local);
 
       await lifecycle.shutdown();
       await sub.cancel();
@@ -149,12 +168,17 @@ void main() {
 
       embedded.setStatus(EmbeddedRuntimeStatus.failed);
 
-      await lifecycle.reconcile(const MobileDeploymentConfig(mode: MobileDeploymentMode.local));
+      await lifecycle.reconcile(
+        const MobileDeploymentConfig(mode: MobileDeploymentMode.local),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(statuses.isNotEmpty, isTrue);
       expect(statuses.last.state, equals(RuntimeDeploymentState.failed));
-      expect(statuses.last.businessCore.state, equals(RuntimeDeploymentState.failed));
+      expect(
+        statuses.last.businessCore.state,
+        equals(RuntimeDeploymentState.failed),
+      );
 
       await lifecycle.shutdown();
       await sub.cancel();
@@ -176,7 +200,9 @@ void main() {
 
       embedded.setStatus(EmbeddedRuntimeStatus.notInstalled);
 
-      await lifecycle.reconcile(const MobileDeploymentConfig(mode: MobileDeploymentMode.local));
+      await lifecycle.reconcile(
+        const MobileDeploymentConfig(mode: MobileDeploymentMode.local),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(statuses.isNotEmpty, isTrue);
@@ -201,15 +227,24 @@ void main() {
       final statuses = <MobileBackendStatus>[];
       final sub = lifecycle.statusStream.listen(statuses.add);
 
+      embedded.setStatus(EmbeddedRuntimeStatus.ready);
       probe.setResult(BackendConnectivityResult.ready);
 
-      await lifecycle.reconcile(const MobileDeploymentConfig(mode: MobileDeploymentMode.cloud));
+      await lifecycle.reconcile(
+        const MobileDeploymentConfig(mode: MobileDeploymentMode.cloud),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(statuses.isNotEmpty, isTrue);
       expect(statuses.last.mode, equals(MobileDeploymentMode.cloud));
       expect(statuses.last.state, equals(RuntimeDeploymentState.ready));
-      expect(statuses.last.businessCore.state, equals(RuntimeDeploymentState.ready));
+      expect(
+        statuses.last.businessCore.state,
+        equals(RuntimeDeploymentState.ready),
+      );
+      expect(embedded.ensureRunningCallCount, greaterThan(0));
+      expect(embedded.lastRequestedProfile, EmbeddedRuntimeProfile.deviceAgent);
+      expect(statuses.last.localRuntime?.state, RuntimeDeploymentState.ready);
 
       await lifecycle.shutdown();
       await sub.cancel();
@@ -231,7 +266,9 @@ void main() {
 
       probe.setResult(BackendConnectivityResult.unreachable);
 
-      await lifecycle.reconcile(const MobileDeploymentConfig(mode: MobileDeploymentMode.cloud));
+      await lifecycle.reconcile(
+        const MobileDeploymentConfig(mode: MobileDeploymentMode.cloud),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
       expect(statuses.isNotEmpty, isTrue);
@@ -258,11 +295,15 @@ void main() {
 
       // First reconcile with ready status
       embedded.setStatus(EmbeddedRuntimeStatus.ready);
-      await lifecycle.reconcile(const MobileDeploymentConfig(mode: MobileDeploymentMode.local));
+      await lifecycle.reconcile(
+        const MobileDeploymentConfig(mode: MobileDeploymentMode.local),
+      );
       await Future.delayed(const Duration(milliseconds: 50));
 
       // Second reconcile should supersede
-      await lifecycle.reconcile(const MobileDeploymentConfig(mode: MobileDeploymentMode.local));
+      await lifecycle.reconcile(
+        const MobileDeploymentConfig(mode: MobileDeploymentMode.local),
+      );
       await Future.delayed(const Duration(milliseconds: 100));
 
       // Should have statuses from both reconciles
@@ -296,7 +337,10 @@ class _ConnectivityProbeAdapter implements RemoteCoreProbe {
   _ConnectivityProbeAdapter(this._probe);
 
   @override
-  Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout = const Duration(seconds: 5)}) async {
+  Future<BackendConnectivityResult> probe(
+    Uri baseUri, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     return _probe.probe();
   }
 }

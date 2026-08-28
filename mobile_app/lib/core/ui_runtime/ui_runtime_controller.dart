@@ -2,12 +2,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/extension_service.dart';
 import '../services/providers.dart' show extensionServiceProvider;
-import '../backend_connection/providers/backend_connection_providers.dart' show accountSessionProvider;
+import '../backend_connection/providers/backend_connection_providers.dart'
+    show accountSessionProvider;
 import '../backend_connection/backend_connection_availability.dart';
 import '../backend_connection/providers/runtime_backend_connection_source.dart';
 import '../backend_transport/backend_service_api.dart';
 import '../backend_transport/http/backend_http_client.dart';
-import '../runtime/backend/mobile_backend_providers.dart' show mobileDeploymentConfigProvider;
+import '../runtime/backend/mobile_backend_providers.dart'
+    show mobileDeploymentConfigProvider;
 import '../runtime/backend/mobile_deployment_mode.dart';
 import 'ui_client_info.dart';
 import 'ui_device_identity.dart';
@@ -16,16 +18,17 @@ import 'ui_snapshot_cache.dart';
 
 final uiRuntimeUsingLastKnownGoodProvider = StateProvider<bool>((ref) => false);
 
-class UIRuntimeController extends StateNotifier<AsyncValue<UIProviderSnapshot?>> {
+class UIRuntimeController
+    extends StateNotifier<AsyncValue<UIProviderSnapshot?>> {
   UIRuntimeController(
     this._service, {
     required void Function(bool) onLastKnownGood,
     required Future<String> Function() cacheNamespace,
     required Future<String?> Function() meshDeviceId,
-  })  : _cacheNamespace = cacheNamespace,
-        _meshDeviceId = meshDeviceId,
-        _onLastKnownGood = onLastKnownGood,
-        super(const AsyncValue.data(null)) {
+  }) : _cacheNamespace = cacheNamespace,
+       _meshDeviceId = meshDeviceId,
+       _onLastKnownGood = onLastKnownGood,
+       super(const AsyncValue.data(null)) {
     // Mobile does not depend on the web SSE transport. Periodic reconciliation
     // keeps cloud profile/provider changes convergent while app is alive.
     _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
@@ -59,15 +62,24 @@ class UIRuntimeController extends StateNotifier<AsyncValue<UIProviderSnapshot?>>
     final currentDeviceId = await deviceId;
     final cacheNamespace = await _cacheNamespace();
     try {
-      final json = await _service.getUISnapshot(platform, deviceId: currentDeviceId);
+      final json = await _service.getUISnapshot(
+        platform,
+        deviceId: currentDeviceId,
+      );
       state = AsyncValue.data(UIProviderSnapshot.fromJson(json));
       _onLastKnownGood(false);
       await _cache.save(cacheNamespace, platform, currentDeviceId, json);
     } catch (error, stack) {
-      final cached = await _cache.load(cacheNamespace, platform, currentDeviceId);
+      final cached = await _cache.load(
+        cacheNamespace,
+        platform,
+        currentDeviceId,
+      );
       if (cached != null) {
         final offline = Map<String, dynamic>.from(cached);
-        final rawContext = (offline['providerContext'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+        final rawContext =
+            (offline['providerContext'] as Map?)?.cast<String, dynamic>() ??
+            <String, dynamic>{};
         final client = currentUIClientInfo();
         offline['providerContext'] = <String, dynamic>{
           ...rawContext,
@@ -99,7 +111,10 @@ class UIRuntimeController extends StateNotifier<AsyncValue<UIProviderSnapshot?>>
     return UIProfileEnvelope.fromJson(json);
   }
 
-  Future<UIProfile> updateProfile(UIProfile profile, {UIProfileScopeKind scope = UIProfileScopeKind.user}) async {
+  Future<UIProfile> updateProfile(
+    UIProfile profile, {
+    UIProfileScopeKind scope = UIProfileScopeKind.user,
+  }) async {
     try {
       final json = await _service.updateUIProfile(
         profile.toJson(),
@@ -166,37 +181,49 @@ class UIRuntimeController extends StateNotifier<AsyncValue<UIProviderSnapshot?>>
   }
 }
 
-final uiRuntimeProvider = StateNotifierProvider<UIRuntimeController, AsyncValue<UIProviderSnapshot?>>((ref) {
-  return UIRuntimeController(
-    ref.read(extensionServiceProvider),
-    onLastKnownGood: (value) => ref.read(uiRuntimeUsingLastKnownGoodProvider.notifier).state = value,
-    cacheNamespace: () async {
-      final deployment = ref.read(mobileDeploymentConfigProvider);
-      final userId = await ref.read(accountSessionProvider).getUserId();
-      final endpoint = deployment.remoteCoreUri?.trim();
-      return '${deployment.mode.storageValue}:${endpoint == null || endpoint.isEmpty ? 'embedded' : endpoint}|user=${userId ?? 'anonymous'}';
-    },
-    meshDeviceId: () async {
-      final deployment = ref.read(mobileDeploymentConfigProvider);
-      if (deployment.mode != MobileDeploymentMode.hybrid) return null;
-      BackendHttpClient? http;
-      try {
-        final availability = await const RuntimeBackendConnectionSource().resolve();
-        if (availability is! BackendConnectionAvailable) return null;
-        http = BackendHttpClient(availability.config);
-        final api = BackendServiceApi(http, availability.config.generation);
-        final status = await api.get<Map<String, dynamic>>('/internal/device-mesh/status');
-        final id = (status?['deviceId'] ?? '').toString().trim();
-        return id.isEmpty ? null : id;
-      } catch (_) {
-        return null;
-      } finally {
-        if (http != null) await http.close();
-      }
-    },
-  );
-});
+final uiRuntimeProvider =
+    StateNotifierProvider<
+      UIRuntimeController,
+      AsyncValue<UIProviderSnapshot?>
+    >((ref) {
+      return UIRuntimeController(
+        ref.read(extensionServiceProvider),
+        onLastKnownGood: (value) =>
+            ref.read(uiRuntimeUsingLastKnownGoodProvider.notifier).state =
+                value,
+        cacheNamespace: () async {
+          final deployment = ref.read(mobileDeploymentConfigProvider);
+          final userId = await ref.read(accountSessionProvider).getUserId();
+          final endpoint = deployment.remoteCoreUri?.trim();
+          return '${deployment.mode.storageValue}:${endpoint == null || endpoint.isEmpty ? 'embedded' : endpoint}|user=${userId ?? 'anonymous'}';
+        },
+        meshDeviceId: () async {
+          final deployment = ref.read(mobileDeploymentConfigProvider);
+          if (deployment.mode != MobileDeploymentMode.cloud) return null;
+          BackendHttpClient? http;
+          try {
+            final availability = await const RuntimeBackendConnectionSource()
+                .resolve();
+            if (availability is! BackendConnectionAvailable) return null;
+            http = BackendHttpClient(availability.config);
+            final api = BackendServiceApi(http, availability.config.generation);
+            final status = await api.get<Map<String, dynamic>>(
+              '/internal/device-mesh/status',
+            );
+            final id = (status?['deviceId'] ?? '').toString().trim();
+            return id.isEmpty ? null : id;
+          } catch (_) {
+            return null;
+          } finally {
+            if (http != null) await http.close();
+          }
+        },
+      );
+    });
 
-final activeUIProvider = Provider.family<UIProviderDefinition?, String>((ref, capability) {
+final activeUIProvider = Provider.family<UIProviderDefinition?, String>((
+  ref,
+  capability,
+) {
   return ref.watch(uiRuntimeProvider).valueOrNull?.resolve(capability);
 });

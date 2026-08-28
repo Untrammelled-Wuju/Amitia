@@ -7,18 +7,13 @@ import 'backend_connection.dart';
 import '../embedded/embedded_runtime_controller.dart';
 import '../../backend_transport/connectivity/backend_connectivity_probe.dart';
 
-export '../embedded/embedded_runtime_controller.dart' show EmbeddedRuntimeStatus;
+export '../embedded/embedded_runtime_controller.dart'
+    show EmbeddedRuntimeStatus;
 
 const Duration _embeddedRuntimeStartupTimeout = Duration(seconds: 100);
 const Duration _embeddedRuntimePollInterval = Duration(milliseconds: 250);
 
-enum RuntimeDeploymentState {
-  unavailable,
-  starting,
-  ready,
-  stopping,
-  failed,
-}
+enum RuntimeDeploymentState { unavailable, starting, ready, stopping, failed }
 
 class BackendNodeStatus {
   final RuntimeDeploymentState state;
@@ -33,9 +28,8 @@ class BackendNodeStatus {
     this.message,
   });
 
-  factory BackendNodeStatus.initial() => const BackendNodeStatus(
-        state: RuntimeDeploymentState.unavailable,
-      );
+  factory BackendNodeStatus.initial() =>
+      const BackendNodeStatus(state: RuntimeDeploymentState.unavailable);
 
   @override
   bool operator ==(Object other) =>
@@ -48,10 +42,7 @@ class BackendNodeStatus {
 
   @override
   int get hashCode =>
-      state.hashCode ^
-      baseUri.hashCode ^
-      profile.hashCode ^
-      message.hashCode;
+      state.hashCode ^ baseUri.hashCode ^ profile.hashCode ^ message.hashCode;
 }
 
 class MobileBackendStatus {
@@ -70,11 +61,11 @@ class MobileBackendStatus {
   });
 
   factory MobileBackendStatus.initial() => MobileBackendStatus(
-        mode: MobileDeploymentMode.local,
-        state: RuntimeDeploymentState.unavailable,
-        businessCore: BackendNodeStatus.initial(),
-        generation: 0,
-      );
+    mode: MobileDeploymentMode.local,
+    state: RuntimeDeploymentState.unavailable,
+    businessCore: BackendNodeStatus.initial(),
+    generation: 0,
+  );
 
   bool get isBusinessReady =>
       businessCore.state == RuntimeDeploymentState.ready;
@@ -126,9 +117,9 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     required BackendTopologyResolver resolver,
     required EmbeddedRuntimeController embeddedRuntime,
     required RemoteCoreProbe remoteProbe,
-  })  : _resolver = resolver,
-        _embeddedRuntime = embeddedRuntime,
-        _remoteProbe = remoteProbe;
+  }) : _resolver = resolver,
+       _embeddedRuntime = embeddedRuntime,
+       _remoteProbe = remoteProbe;
 
   factory DefaultMobileBackendLifecycle.withProbe({
     required BackendTopologyResolver resolver,
@@ -168,24 +159,24 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     try {
       topology = _resolver.resolve(config);
     } on DeploymentConfigValidationError catch (e) {
-      _emitStatus(MobileBackendStatus(
-        mode: config.mode,
-        state: RuntimeDeploymentState.failed,
-        businessCore: BackendNodeStatus(
+      _emitStatus(
+        MobileBackendStatus(
+          mode: config.mode,
           state: RuntimeDeploymentState.failed,
-          message: e.message,
+          businessCore: BackendNodeStatus(
+            state: RuntimeDeploymentState.failed,
+            message: e.message,
+          ),
+          generation: expectedGeneration,
         ),
-        generation: expectedGeneration,
-      ));
+      );
       return;
     }
 
-    if (!topology.requiresEmbeddedRuntime) {
-      await _reconcileCloud(topology, expectedGeneration);
-    } else if (topology.mode == MobileDeploymentMode.local) {
+    if (topology.mode == MobileDeploymentMode.local) {
       await _reconcileLocal(topology, expectedGeneration);
     } else {
-      await _reconcileHybrid(topology, expectedGeneration);
+      await _reconcileCloud(topology, expectedGeneration);
     }
   }
 
@@ -193,40 +184,63 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     MobileBackendTopology topology,
     int expectedGeneration,
   ) async {
-    await _stopEmbeddedRuntimeIfRunning(expectedGeneration);
-    if (expectedGeneration != _generation) return;
-
     _updateBusinessNode(
       expectedGeneration,
       RuntimeDeploymentState.starting,
       topology.businessCore.httpBaseUri,
     );
 
-    final probeResult = await _remoteProbe.probe(topology.businessCore.httpBaseUri);
+    final localFuture = _ensureEmbeddedRuntimeReady(
+      EmbeddedRuntimeProfile.deviceAgent,
+      expectedGeneration,
+    );
+    final remoteFuture = _remoteProbe.probe(topology.businessCore.httpBaseUri);
+    final results = await Future.wait([localFuture, remoteFuture]);
     if (expectedGeneration != _generation) return;
 
-    final reachable = probeResult == BackendConnectivityResult.ready || probeResult == BackendConnectivityResult.live;
+    final localStatus = results[0] as EmbeddedRuntimeStatus;
+    final probeResult = results[1] as BackendConnectivityResult;
+    final reachable =
+        probeResult == BackendConnectivityResult.ready ||
+        probeResult == BackendConnectivityResult.live;
+    final localNodeStatus = BackendNodeStatus(
+      state: localStatus == EmbeddedRuntimeStatus.ready
+          ? RuntimeDeploymentState.ready
+          : RuntimeDeploymentState.failed,
+      baseUri: topology.localRuntime?.httpBaseUri,
+      profile: 'device-agent',
+      message: localStatus == EmbeddedRuntimeStatus.ready
+          ? null
+          : _embeddedRuntimeFailureMessage(localStatus, 'device-agent'),
+    );
+
     if (reachable) {
-      _emitStatus(MobileBackendStatus(
-        mode: MobileDeploymentMode.cloud,
-        state: RuntimeDeploymentState.ready,
-        businessCore: BackendNodeStatus(
+      _emitStatus(
+        MobileBackendStatus(
+          mode: MobileDeploymentMode.cloud,
           state: RuntimeDeploymentState.ready,
-          baseUri: topology.businessCore.httpBaseUri,
+          businessCore: BackendNodeStatus(
+            state: RuntimeDeploymentState.ready,
+            baseUri: topology.businessCore.httpBaseUri,
+          ),
+          localRuntime: localNodeStatus,
+          generation: expectedGeneration,
         ),
-        generation: expectedGeneration,
-      ));
+      );
     } else {
-      _emitStatus(MobileBackendStatus(
-        mode: MobileDeploymentMode.cloud,
-        state: RuntimeDeploymentState.failed,
-        businessCore: BackendNodeStatus(
+      _emitStatus(
+        MobileBackendStatus(
+          mode: MobileDeploymentMode.cloud,
           state: RuntimeDeploymentState.failed,
-          baseUri: topology.businessCore.httpBaseUri,
-          message: 'remote core not reachable',
+          businessCore: BackendNodeStatus(
+            state: RuntimeDeploymentState.failed,
+            baseUri: topology.businessCore.httpBaseUri,
+            message: 'remote core not reachable',
+          ),
+          localRuntime: localNodeStatus,
+          generation: expectedGeneration,
         ),
-        generation: expectedGeneration,
-      ));
+      );
     }
   }
 
@@ -249,111 +263,57 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
 
       if (status != EmbeddedRuntimeStatus.ready) {
         final message = _embeddedRuntimeFailureMessage(status, 'local');
-        _emitStatus(MobileBackendStatus(
+        _emitStatus(
+          MobileBackendStatus(
+            mode: MobileDeploymentMode.local,
+            state: RuntimeDeploymentState.failed,
+            businessCore: BackendNodeStatus(
+              state: RuntimeDeploymentState.failed,
+              baseUri: topology.businessCore.httpBaseUri,
+              profile: 'local',
+              message: message,
+            ),
+            localRuntime: BackendNodeStatus(
+              state: RuntimeDeploymentState.failed,
+              profile: 'local',
+              message: message,
+            ),
+            generation: expectedGeneration,
+          ),
+        );
+        return;
+      }
+
+      _emitStatus(
+        MobileBackendStatus(
+          mode: MobileDeploymentMode.local,
+          state: RuntimeDeploymentState.ready,
+          businessCore: BackendNodeStatus(
+            state: RuntimeDeploymentState.ready,
+            baseUri: topology.businessCore.httpBaseUri,
+            profile: 'local',
+          ),
+          localRuntime: BackendNodeStatus(
+            state: RuntimeDeploymentState.ready,
+            baseUri: topology.localRuntime?.httpBaseUri,
+            profile: 'local',
+          ),
+          generation: expectedGeneration,
+        ),
+      );
+    } catch (e) {
+      if (expectedGeneration != _generation) return;
+      _emitStatus(
+        MobileBackendStatus(
           mode: MobileDeploymentMode.local,
           state: RuntimeDeploymentState.failed,
           businessCore: BackendNodeStatus(
             state: RuntimeDeploymentState.failed,
-            baseUri: topology.businessCore.httpBaseUri,
-            profile: 'local',
-            message: message,
-          ),
-          localRuntime: BackendNodeStatus(
-            state: RuntimeDeploymentState.failed,
-            profile: 'local',
-            message: message,
+            message: e.toString(),
           ),
           generation: expectedGeneration,
-        ));
-        return;
-      }
-
-      _emitStatus(MobileBackendStatus(
-        mode: MobileDeploymentMode.local,
-        state: RuntimeDeploymentState.ready,
-        businessCore: BackendNodeStatus(
-          state: RuntimeDeploymentState.ready,
-          baseUri: topology.businessCore.httpBaseUri,
-          profile: 'local',
         ),
-        localRuntime: BackendNodeStatus(
-          state: RuntimeDeploymentState.ready,
-          baseUri: topology.localRuntime?.httpBaseUri,
-          profile: 'local',
-        ),
-        generation: expectedGeneration,
-      ));
-    } catch (e) {
-      if (expectedGeneration != _generation) return;
-      _emitStatus(MobileBackendStatus(
-        mode: MobileDeploymentMode.local,
-        state: RuntimeDeploymentState.failed,
-        businessCore: BackendNodeStatus(
-          state: RuntimeDeploymentState.failed,
-          message: e.toString(),
-        ),
-        generation: expectedGeneration,
-      ));
-    }
-  }
-
-  Future<void> _reconcileHybrid(
-    MobileBackendTopology topology,
-    int expectedGeneration,
-  ) async {
-    _updateBusinessNode(
-      expectedGeneration,
-      RuntimeDeploymentState.starting,
-      topology.businessCore.httpBaseUri,
-    );
-
-    final localFuture = _ensureEmbeddedRuntimeReady(
-      EmbeddedRuntimeProfile.deviceAgent,
-      expectedGeneration,
-    );
-    final remoteFuture = _remoteProbe.probe(topology.businessCore.httpBaseUri);
-
-    final results = await Future.wait([localFuture, remoteFuture]);
-    if (expectedGeneration != _generation) return;
-
-    final localStatus = results[0] as EmbeddedRuntimeStatus;
-    final remoteResult = results[1] as BackendConnectivityResult;
-    final remoteReachable = remoteResult == BackendConnectivityResult.ready || remoteResult == BackendConnectivityResult.live;
-
-    final localNodeStatus = BackendNodeStatus(
-      state: localStatus == EmbeddedRuntimeStatus.ready
-          ? RuntimeDeploymentState.ready
-          : RuntimeDeploymentState.failed,
-      baseUri: topology.localRuntime?.httpBaseUri,
-      profile: 'device-agent',
-      message: localStatus != EmbeddedRuntimeStatus.ready
-          ? _embeddedRuntimeFailureMessage(localStatus, 'device-agent')
-          : null,
-    );
-
-    if (remoteReachable) {
-      _emitStatus(MobileBackendStatus(
-        mode: MobileDeploymentMode.hybrid,
-        state: RuntimeDeploymentState.ready,
-        businessCore: BackendNodeStatus(
-          state: RuntimeDeploymentState.ready,
-          baseUri: topology.businessCore.httpBaseUri,
-        ),
-        localRuntime: localNodeStatus,
-        generation: expectedGeneration,
-      ));
-    } else {
-      _emitStatus(MobileBackendStatus(
-        mode: MobileDeploymentMode.hybrid,
-        state: RuntimeDeploymentState.failed,
-        businessCore: BackendNodeStatus(
-          state: RuntimeDeploymentState.failed,
-          baseUri: topology.businessCore.httpBaseUri,
-          message: 'remote core not reachable',
-        ),
-        localRuntime: localNodeStatus,
-        generation: expectedGeneration,
-      ));
+      );
     }
   }
 
@@ -447,27 +407,20 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     }
   }
 
-  Future<void> _stopEmbeddedRuntimeIfRunning(int expectedGeneration) async {
-    try {
-      await _embeddedRuntime.stop();
-    } catch (_) {}
-  }
-
   void _updateBusinessNode(
     int expectedGeneration,
     RuntimeDeploymentState state,
     Uri baseUri,
   ) {
     if (expectedGeneration != _generation) return;
-    _emitStatus(MobileBackendStatus(
-      mode: _currentStatus.mode,
-      state: state,
-      businessCore: BackendNodeStatus(
+    _emitStatus(
+      MobileBackendStatus(
+        mode: _currentStatus.mode,
         state: state,
-        baseUri: baseUri,
+        businessCore: BackendNodeStatus(state: state, baseUri: baseUri),
+        generation: expectedGeneration,
       ),
-      generation: expectedGeneration,
-    ));
+    );
   }
 
   void _emitStatus(MobileBackendStatus status) {
@@ -506,7 +459,10 @@ class _ConnectivityProbeAdapter implements RemoteCoreProbe {
   _ConnectivityProbeAdapter(this._probe);
 
   @override
-  Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout = const Duration(seconds: 5)}) async {
+  Future<BackendConnectivityResult> probe(
+    Uri baseUri, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     return _probe.probe();
   }
 }

@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
 
-import '../../backend_access/business_backend_unavailable.dart';
 import '../../backend_connection/backend_connection_availability.dart';
 import '../../backend_connection/backend_connection_config.dart';
 import '../../backend_connection/providers/backend_connection_providers.dart';
 import '../../runtime/status/runtime_status_provider.dart';
+import '../../runtime/backend/mobile_backend_providers.dart';
+import '../../runtime/backend/mobile_deployment_mode.dart';
+import '../../debug/debug_log_service.dart';
 import '../backend_service_api.dart';
 import '../backend_transport.dart';
 import '../dynamic_backend_service_api.dart';
@@ -20,13 +22,12 @@ import '../state/backend_transport_state.dart';
 
 final _transportLogger = Logger();
 
-final backendTransportProvider = AsyncNotifierProvider<
-    BackendTransportNotifier, BackendTransportState>(
-  BackendTransportNotifier.new,
-);
+final backendTransportProvider =
+    AsyncNotifierProvider<BackendTransportNotifier, BackendTransportState>(
+      BackendTransportNotifier.new,
+    );
 
-class BackendTransportNotifier
-    extends AsyncNotifier<BackendTransportState> {
+class BackendTransportNotifier extends AsyncNotifier<BackendTransportState> {
   BackendTransport? _current;
   int _currentGeneration = 0;
   bool _disposeRegistered = false;
@@ -47,9 +48,7 @@ class BackendTransportNotifier
         if (config.generation != _currentGeneration || _current == null) {
           _recreateTransport(config);
         }
-        return TransportAvailable(
-          generation: config.generation,
-        );
+        return TransportAvailable(generation: config.generation);
       },
       loading: () {
         _closeCurrentIfNeeded();
@@ -98,10 +97,8 @@ class BackendTransportNotifier
   }
 }
 
-final backendCurrentTransportProvider =
-    Provider<BackendTransport?>((ref) {
-  final transportAsync =
-      ref.watch(backendTransportProvider);
+final backendCurrentTransportProvider = Provider<BackendTransport?>((ref) {
+  final transportAsync = ref.watch(backendTransportProvider);
 
   final state = transportAsync.asData?.value;
 
@@ -109,13 +106,11 @@ final backendCurrentTransportProvider =
     return null;
   }
 
-  final notifier =
-      ref.read(backendTransportProvider.notifier);
+  final notifier = ref.read(backendTransportProvider.notifier);
 
   final transport = notifier.currentTransport;
 
-  if (transport == null ||
-      notifier.currentGeneration != state.generation) {
+  if (transport == null || notifier.currentGeneration != state.generation) {
     return null;
   }
 
@@ -123,8 +118,7 @@ final backendCurrentTransportProvider =
 });
 
 final backendTransportGenerationProvider = Provider<int>((ref) {
-  final transportAsync =
-      ref.watch(backendTransportProvider);
+  final transportAsync = ref.watch(backendTransportProvider);
 
   final state = transportAsync.asData?.value;
 
@@ -162,12 +156,14 @@ class BackendTransportApi {
     Map<String, dynamic>? queryParameters,
     Duration? timeout,
   }) {
-    return _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.get,
-      path: path,
-      queryParameters: queryParameters,
-      timeout: timeout,
-    ));
+    return _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.get,
+        path: path,
+        queryParameters: queryParameters,
+        timeout: timeout,
+      ),
+    );
   }
 
   Future<BackendHttpResponse> post(
@@ -176,13 +172,15 @@ class BackendTransportApi {
     Map<String, dynamic>? queryParameters,
     Duration? timeout,
   }) {
-    return _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.post,
-      path: path,
-      body: body,
-      queryParameters: queryParameters,
-      timeout: timeout,
-    ));
+    return _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.post,
+        path: path,
+        body: body,
+        queryParameters: queryParameters,
+        timeout: timeout,
+      ),
+    );
   }
 
   Future<BackendHttpResponse> put(
@@ -191,24 +189,25 @@ class BackendTransportApi {
     Map<String, dynamic>? queryParameters,
     Duration? timeout,
   }) {
-    return _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.put,
-      path: path,
-      body: body,
-      queryParameters: queryParameters,
-      timeout: timeout,
-    ));
+    return _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.put,
+        path: path,
+        body: body,
+        queryParameters: queryParameters,
+        timeout: timeout,
+      ),
+    );
   }
 
-  Future<BackendHttpResponse> head(
-    String path, {
-    Duration? timeout,
-  }) {
-    return _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.head,
-      path: path,
-      timeout: timeout,
-    ));
+  Future<BackendHttpResponse> head(String path, {Duration? timeout}) {
+    return _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.head,
+        path: path,
+        timeout: timeout,
+      ),
+    );
   }
 
   Future<BackendHttpResponse> delete(
@@ -216,12 +215,14 @@ class BackendTransportApi {
     Object? body,
     Duration? timeout,
   }) {
-    return _http.send(BackendHttpRequest(
-      method: BackendHttpMethod.delete,
-      path: path,
-      body: body,
-      timeout: timeout,
-    ));
+    return _http.send(
+      BackendHttpRequest(
+        method: BackendHttpMethod.delete,
+        path: path,
+        body: body,
+        timeout: timeout,
+      ),
+    );
   }
 }
 
@@ -232,8 +233,24 @@ final rawBackendServiceApiProvider = Provider<BackendServiceApi?>((ref) {
 });
 
 final backendServiceProvider = Provider<BackendServiceApi>((ref) {
+  final logService = ref.read(debugLogServiceProvider);
   return DynamicBackendServiceApiProxy(
     currentApi: () => ref.read(rawBackendServiceApiProvider),
     currentStatus: () => ref.read(runtimeStatusCurrentProvider),
+    canUseApi: (status, api) {
+      final mode = ref.read(mobileDeploymentConfigProvider).mode;
+      if (mode != MobileDeploymentMode.local) {
+        return api != null;
+      }
+      return status.businessAvailable &&
+          api != null &&
+          api.generation == status.generation;
+    },
+    onUnavailable: (error) {
+      logService.addBackendLog(
+        'Business backend unavailable: $error',
+        DebugLogLevel.error,
+      );
+    },
   );
 });

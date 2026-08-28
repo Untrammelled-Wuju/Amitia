@@ -28,8 +28,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
 
   static const _modes = <(MobileDeploymentMode, IconData, String)>[
     (MobileDeploymentMode.local, Icons.dns_outlined, '完整功能本地运行，数据不离开设备'),
-    (MobileDeploymentMode.cloud, Icons.cloud_outlined, '连接远程核心服务'),
-    (MobileDeploymentMode.hybrid, Icons.sync_alt, '本地设备代理 + 远程核心'),
+    (MobileDeploymentMode.cloud, Icons.cloud_outlined, '远程核心 + 本地设备代理'),
   ];
 
   @override
@@ -56,9 +55,12 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   Widget build(BuildContext context) {
     final connectionAsync = ref.watch(backendConnectionProvider);
     final currentConfig = ref.watch(mobileDeploymentConfigProvider);
-    final statusAsync = ref.watch(mobileBackendStatusProvider);
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '部署模式', showBackButton: true, fallbackRoute: AppRoutes.settings),
+      appBar: AmitiaAppBar(
+        title: '部署模式',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.settings,
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -66,28 +68,37 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
               children: [
                 _SectionLabel(text: '选择部署模式'),
                 SizedBox(height: AppSpacing.sm),
-                ..._modes.map((m) => Padding(
-                      padding: EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.md),
-                      child: _ModeCard(
-                        mode: m.$1,
-                        icon: m.$2,
-                        description: m.$3,
-                        isSelected: m.$1 == currentConfig.mode,
-                        onTap: () => _confirmSwitch(m.$1),
-                      ),
-                    )),
-                if (currentConfig.mode == MobileDeploymentMode.cloud ||
-                    currentConfig.mode == MobileDeploymentMode.hybrid) ...[
+                ..._modes.map(
+                  (m) => Padding(
+                    padding: EdgeInsets.only(
+                      left: AppSpacing.pagePadding,
+                      right: AppSpacing.pagePadding,
+                      bottom: AppSpacing.md,
+                    ),
+                    child: _ModeCard(
+                      mode: m.$1,
+                      icon: m.$2,
+                      description: m.$3,
+                      isSelected: m.$1 == currentConfig.mode,
+                      onTap: () => _confirmSwitch(m.$1),
+                    ),
+                  ),
+                ),
+                if (currentConfig.mode == MobileDeploymentMode.cloud) ...[
                   SizedBox(height: AppSpacing.sm),
                   _SectionLabel(text: '远程核心地址'),
                   SizedBox(height: AppSpacing.sm),
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpacing.pagePadding,
+                    ),
                     child: TextField(
                       controller: _remoteUriController,
                       decoration: InputDecoration(
                         hintText: 'https://example.com:18899',
-                        border: OutlineInputBorder(borderRadius: AppRadius.brSmall),
+                        border: OutlineInputBorder(
+                          borderRadius: AppRadius.brSmall,
+                        ),
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: AppSpacing.md,
                           vertical: AppSpacing.sm,
@@ -103,7 +114,9 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                 _buildConfigCard(connectionAsync),
                 SizedBox(height: AppSpacing.sectionGap),
                 Padding(
-                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: AppSpacing.pagePadding,
+                  ),
                   child: AmitiaButton(
                     label: _testState ? '检查中...' : '检查运行时状态',
                     icon: Icons.wifi_protected_setup,
@@ -117,7 +130,9 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     );
   }
 
-  Widget _buildConfigCard(AsyncValue<BackendConnectionAvailability> connectionAsync) {
+  Widget _buildConfigCard(
+    AsyncValue<BackendConnectionAvailability> connectionAsync,
+  ) {
     final statusAsync = ref.watch(mobileBackendStatusProvider);
     return Container(
       margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
@@ -129,7 +144,12 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       ),
       child: Column(
         children: [
-          _InfoRow(label: '当前模式', value: _modeDisplayName(ref.read(mobileDeploymentConfigProvider).mode)),
+          _InfoRow(
+            label: '当前模式',
+            value: _modeDisplayName(
+              ref.read(mobileDeploymentConfigProvider).mode,
+            ),
+          ),
           connectionAsync.when(
             data: (avail) {
               if (avail is BackendConnectionAvailable) {
@@ -142,10 +162,8 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
             error: (_, __) => const _InfoRow(label: '后端地址', value: '运行环境未就绪'),
           ),
           statusAsync.when(
-            data: (status) => _InfoRow(
-              label: '运行状态',
-              value: _statusDisplayName(status),
-            ),
+            data: (status) =>
+                _InfoRow(label: '运行状态', value: _statusDisplayName(status)),
             loading: () => const _InfoRow(label: '运行状态', value: '检查中...'),
             error: (_, __) => const _InfoRow(label: '运行状态', value: '检查失败'),
           ),
@@ -160,8 +178,6 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
         return '本地';
       case MobileDeploymentMode.cloud:
         return '远程';
-      case MobileDeploymentMode.hybrid:
-        return '混合';
     }
   }
 
@@ -182,22 +198,28 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
 
   void _onRemoteUriChanged(String value) {
     final current = ref.read(mobileDeploymentConfigProvider);
-    ref.read(mobileDeploymentConfigProvider.notifier).update(
-      MobileDeploymentConfig(
-        mode: current.mode,
-        remoteCoreUri: value.trim().isEmpty ? null : value.trim(),
-      ),
-    );
+    ref
+        .read(mobileDeploymentConfigProvider.notifier)
+        .update(
+          MobileDeploymentConfig(
+            mode: current.mode,
+            remoteCoreUri: value.trim().isEmpty ? null : value.trim(),
+          ),
+        );
   }
 
   void _confirmSwitch(MobileDeploymentMode newMode) {
     final current = ref.read(mobileDeploymentConfigProvider);
     if (newMode == current.mode) return;
 
-    if ((newMode == MobileDeploymentMode.cloud || newMode == MobileDeploymentMode.hybrid) &&
-        (current.remoteCoreUri == null || current.remoteCoreUri!.trim().isEmpty)) {
+    if (newMode == MobileDeploymentMode.cloud &&
+        (current.remoteCoreUri == null ||
+            current.remoteCoreUri!.trim().isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先输入远程核心地址'), duration: Duration(seconds: 2)),
+        const SnackBar(
+          content: Text('请先输入远程核心地址'),
+          duration: Duration(seconds: 2),
+        ),
       );
       return;
     }
@@ -207,9 +229,15 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
         title: Text('切换部署模式', style: AppTypography.cardTitle(context)),
-        content: Text('确定要将部署模式切换为「${_modeDisplayName(newMode)}」吗？切换后服务将重新连接。', style: AppTypography.body(context)),
+        content: Text(
+          '确定要将部署模式切换为「${_modeDisplayName(newMode)}」吗？切换后服务将重新连接。',
+          style: AppTypography.body(context),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -233,7 +261,10 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     lifecycle.reconcile(newConfig);
     setState(() => _testState = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已切换为${_modeDisplayName(newMode)}模式'), duration: const Duration(seconds: 1)),
+      SnackBar(
+        content: Text('已切换为${_modeDisplayName(newMode)}模式'),
+        duration: const Duration(seconds: 1),
+      ),
     );
   }
 
@@ -280,17 +311,28 @@ class _ModeCard extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: isSelected ? context.accentSoft : context.surfaceSecondary,
+                color: isSelected
+                    ? context.accentSoft
+                    : context.surfaceSecondary,
                 borderRadius: AppRadius.brSmall,
               ),
-              child: Icon(icon, size: 24, color: isSelected ? context.accentPrimary : context.textSecondary),
+              child: Icon(
+                icon,
+                size: 24,
+                color: isSelected
+                    ? context.accentPrimary
+                    : context.textSecondary,
+              ),
             ),
             SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(mode.storageValue, style: AppTypography.cardTitle(context)),
+                  Text(
+                    mode.storageValue,
+                    style: AppTypography.cardTitle(context),
+                  ),
                   const SizedBox(height: 2),
                   Text(description, style: AppTypography.caption(context)),
                 ],
@@ -319,9 +361,18 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
-          SizedBox(width: 72, child: Text(label, style: AppTypography.label(context))),
+          SizedBox(
+            width: 72,
+            child: Text(label, style: AppTypography.label(context)),
+          ),
           SizedBox(width: AppSpacing.md),
-          Expanded(child: Text(value, style: AppTypography.bodySmall(context), textAlign: TextAlign.end)),
+          Expanded(
+            child: Text(
+              value,
+              style: AppTypography.bodySmall(context),
+              textAlign: TextAlign.end,
+            ),
+          ),
         ],
       ),
     );
@@ -335,7 +386,12 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+      ),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

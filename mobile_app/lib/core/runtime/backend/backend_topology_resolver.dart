@@ -19,14 +19,12 @@ class DefaultBackendTopologyResolver implements BackendTopologyResolver {
         return _resolveLocal(config);
       case MobileDeploymentMode.cloud:
         return _resolveCloud(config);
-      case MobileDeploymentMode.hybrid:
-        return _resolveHybrid(config);
     }
   }
 
   MobileBackendTopology _resolveLocal(MobileDeploymentConfig config) {
-    final localEp = localEndpointProvider?.call() ??
-        Uri.parse('http://127.0.0.1:18899');
+    final localEp =
+        localEndpointProvider?.call() ?? Uri.parse('http://127.0.0.1:18899');
     final normalized = normalizeLocalUri(localEp);
     final wsUri = toWebSocketUri(normalized);
     final endpoint = BackendEndpoint(
@@ -59,43 +57,18 @@ class DefaultBackendTopologyResolver implements BackendTopologyResolver {
       websocketBaseUri: wsUri,
       isRemote: true,
     );
-    return MobileBackendTopology(
-      mode: MobileDeploymentMode.cloud,
-      businessCore: endpoint,
-      localRuntime: null,
-      embeddedRuntimeProfile: null,
-      requiresEmbeddedRuntime: false,
-    );
-  }
-
-  MobileBackendTopology _resolveHybrid(MobileDeploymentConfig config) {
-    final raw = config.remoteCoreUri;
-    if (raw == null || raw.trim().isEmpty) {
-      throw DeploymentConfigValidationError(
-        'hybrid mode requires remote core URI',
-      );
-    }
-    final normalized = normalizeRemoteCoreUri(raw);
-    final wsUri = toWebSocketUri(normalized);
-    final businessEndpoint = BackendEndpoint(
-      role: BackendEndpointRole.businessCore,
-      httpBaseUri: normalized,
-      websocketBaseUri: wsUri,
-      isRemote: true,
-    );
-    final localEp = localEndpointProvider?.call() ??
-        Uri.parse('http://127.0.0.1:18899');
+    final localEp =
+        localEndpointProvider?.call() ?? Uri.parse('http://127.0.0.1:18899');
     final localNormalized = normalizeLocalUri(localEp);
-    final localWsUri = toWebSocketUri(localNormalized);
     final localEndpoint = BackendEndpoint(
       role: BackendEndpointRole.localRuntime,
       httpBaseUri: localNormalized,
-      websocketBaseUri: localWsUri,
+      websocketBaseUri: toWebSocketUri(localNormalized),
       isRemote: false,
     );
     return MobileBackendTopology(
-      mode: MobileDeploymentMode.hybrid,
-      businessCore: businessEndpoint,
+      mode: MobileDeploymentMode.cloud,
+      businessCore: endpoint,
       localRuntime: localEndpoint,
       embeddedRuntimeProfile: EmbeddedRuntimeProfile.deviceAgent,
       requiresEmbeddedRuntime: true,
@@ -150,11 +123,7 @@ Uri normalizeRemoteCoreUri(String raw) {
   if (port == 0) {
     port = scheme == 'https' ? 443 : 80;
   }
-  final resolved = Uri(
-    scheme: scheme,
-    host: host,
-    port: port,
-  );
+  final resolved = Uri(scheme: scheme, host: host, port: port);
   return resolved;
 }
 
