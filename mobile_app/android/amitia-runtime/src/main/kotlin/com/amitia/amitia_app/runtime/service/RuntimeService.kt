@@ -641,8 +641,14 @@ class RuntimeService : Service() {
                 if (exitWatcherFailureAlreadyHandled()) return
                 handleExitWatcherFailed(event)
             }
-            is ProotEvent.Stdout -> captureProotDiagnostic("stdout", event.data)
-            is ProotEvent.Stderr -> captureProotDiagnostic("stderr", event.data)
+            is ProotEvent.Stdout -> {
+                captureProotDiagnostic("stdout", event.data)
+                com.amitia.amitia_app.runtime.bridge.RuntimeLogCallback.instance?.onLog("INFO", event.data)
+            }
+            is ProotEvent.Stderr -> {
+                captureProotDiagnostic("stderr", event.data)
+                com.amitia.amitia_app.runtime.bridge.RuntimeLogCallback.instance?.onLog("ERROR", event.data)
+            }
         }
     }
 

@@ -6,9 +6,13 @@ import '../runtime/runtime_bootstrap_provider.dart';
 import '../runtime/status/runtime_status_provider.dart';
 import '../runtime/status/runtime_status_snapshot.dart';
 import 'debug_log_service.dart';
+import 'runtime_log_stream.dart';
 
 final debugRuntimeLogBridgeProvider = Provider<void>((ref) {
   final logService = ref.read(debugLogServiceProvider);
+  final logStream = RuntimeLogStream(logService);
+  logStream.start();
+  ref.onDispose(logStream.stop);
   String? lastTransportSignature;
   String? lastBootstrapErrorSignature;
 
