@@ -563,3 +563,168 @@ describe("DesktopPetManager lifecycle serialization", () => {
     expect(calls).toEqual(["mutation-start", "mutation-end", "recovery"]);
   });
 });
+
+describe("DesktopPetManager manual play authority", () => {
+  it("publishes a manual action only through the Runtime v2 backend path", async () => {
+    const manager = makeManager();
+    const schedulerSubmit = vi.fn();
+    const callPlayActionApi = vi.fn(async () => undefined);
+    const internal = manager as never as {
+      state: string;
+      scheduler: { submit: typeof schedulerSubmit };
+      loadedInstallation: { actions: Map<string, { key: string; available: boolean }> };
+      dragController: { isDragging: ReturnType<typeof vi.fn> };
+      callPlayActionApi: typeof callPlayActionApi;
+    };
+    internal.state = "enabled";
+    internal.scheduler = { submit: schedulerSubmit };
+    internal.loadedInstallation = {
+      actions: new Map([["wave", { key: "wave", available: true }]]),
+    };
+    internal.dragController = { isDragging: vi.fn(() => false) };
+    internal.callPlayActionApi = callPlayActionApi;
+
+    await manager.playAction("wave");
+
+    expect(callPlayActionApi).toHaveBeenCalledTimes(1);
+    expect(callPlayActionApi).toHaveBeenCalledWith("wave");
+    expect(schedulerSubmit).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unavailable manual action before publishing a command", async () => {
+    const manager = makeManager();
+    const callPlayActionApi = vi.fn(async () => undefined);
+    const internal = manager as never as {
+      state: string;
+      scheduler: { submit: ReturnType<typeof vi.fn> };
+      loadedInstallation: { actions: Map<string, { key: string; available: boolean }> };
+      dragController: { isDragging: ReturnType<typeof vi.fn> };
+      callPlayActionApi: typeof callPlayActionApi;
+    };
+    internal.state = "enabled";
+    internal.scheduler = { submit: vi.fn() };
+    internal.loadedInstallation = {
+      actions: new Map([["wave", { key: "wave", available: false }]]),
+    };
+    internal.dragController = { isDragging: vi.fn(() => false) };
+    internal.callPlayActionApi = callPlayActionApi;
+
+    await expect(manager.playAction("wave")).rejects.toThrow("ACTION_NOT_FOUND: wave");
+    expect(callPlayActionApi).not.toHaveBeenCalled();
+  });
+});
+
+describe("DesktopPetManager Runtime v2 play command validation", () => {
+  it("rejects legacy queue policy before scheduling", async () => {
+    const manager = makeManager();
+    const submit = vi.fn(() => "played" as const);
+    const internal = manager as never as {
+      activeInstallationId: string;
+      loadedInstallation: { actions: Map<string, { key: string; available: boolean }> };
+      scheduler: { submit: typeof submit };
+      buildRuntimeHooks: () => {
+        onCommand: (command: unknown, envelope: unknown) => Promise<{
+          status: string;
+          errorCode: string;
+        }>;
+      };
+    };
+    internal.activeInstallationId = "install-1";
+    internal.loadedInstallation = {
+      actions: new Map([["wave", { key: "wave", available: true }]]),
+    };
+    internal.scheduler = { submit };
+
+    const result = await internal.buildRuntimeHooks().onCommand(
+      {
+        commandId: "cmd-1",
+        commandType: "runtime.command.play_action",
+        installationId: "install-1",
+        payload: {
+          installationId: "install-1",
+          actionKey: "wave",
+          queuePolicy: "replace",
+          semantic: "manual",
+        },
+      },
+      {},
+    );
+
+    expect(result.status).toBe("rejected");
+    expect(result.errorCode).toBe("INVALID_QUEUE_POLICY");
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("maps a canonical manual command to one interrupting manual scheduler request", async () => {
+    const manager = makeManager();
+    const submit = vi.fn(() => "played" as const);
+    const internal = manager as never as {
+      activeInstallationId: string;
+      loadedInstallation: { actions: Map<string, { key: string; available: boolean }> };
+      scheduler: { submit: typeof submit };
+      buildRuntimeHooks: () => {
+        onCommand: (command: unknown, envelope: unknown) => Promise<{
+          status: string;
+          errorCode: string;
+        }>;
+      };
+    };
+    internal.activeInstallationId = "install-1";
+    internal.loadedInstallation = {
+      actions: new Map([["wave", { key: "wave", available: true }]]),
+    };
+    internal.scheduler = { submit };
+
+    const result = await internal.buildRuntimeHooks().onCommand(
+      {
+        commandId: "cmd-2",
+        commandType: "runtime.command.play_action",
+        installationId: "install-1",
+        payload: {
+          installationId: "install-1",
+          actionKey: "wave",
+          queuePolicy: "replace_current",
+          semantic: "manual",
+        },
+      },
+      {},
+    );
+
+    expect(result.status).toBe("accepted");
+    expect(result.errorCode).toBe("");
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionKey: "wave",
+        source: "manual",
+        priority: 80,
+        interrupt: true,
+        dedupeKey: "runtime_cmd-2",
+      }),
+    );
+  });
+});
+
+describe("DesktopPetManager Runtime report rejection safety", () => {
+  it("observes pointer report rejection instead of leaking an unhandled promise", async () => {
+    const manager = makeManager();
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const internal = manager as never as {
+      runtimeHandler: { sendRuntimeEvent: ReturnType<typeof vi.fn> };
+      handleClick: (x: number, y: number) => void;
+    };
+    internal.runtimeHandler = {
+      sendRuntimeEvent: vi.fn(() => Promise.reject(new Error("runtime socket not open"))),
+    };
+
+    internal.handleClick(10, 20);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(warning).toHaveBeenCalledWith(
+      "[DesktopPetManager] 上报单击事件失败:",
+      "runtime socket not open",
+    );
+    warning.mockRestore();
+  });
+});
