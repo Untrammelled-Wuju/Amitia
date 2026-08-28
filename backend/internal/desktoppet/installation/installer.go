@@ -64,6 +64,7 @@ type installer struct {
 	dataDir     string
 }
 
+// DEPRECATED: legacy package installer retained for migration/tests; production writes are blocked and use InstallationCoordinator.
 func NewInstaller(repo Repository, packageRepo processing.Repository, charRepo character.Repository, dataDir string) Installer {
 	return &installer{
 		repo:        repo,

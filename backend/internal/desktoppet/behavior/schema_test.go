@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-func TestSchemaRegistry_NoDuplicateRegistration(t *testing.T) {
+func TestSchemaRegistry_FrozenAfterInitialization(t *testing.T) {
 	testDef := &EventSchemaDef{
-		EventType:   "test.duplicate.event",
+		EventType:   "test.frozen.event",
 		Reliability: ReliabilityEphemeral,
 		DefaultTTL:  5 * time.Second,
 		AllowedFields: map[string]string{
@@ -16,13 +16,8 @@ func TestSchemaRegistry_NoDuplicateRegistration(t *testing.T) {
 		},
 		SchemaVersion: 1,
 	}
-	err := RegisterSchema(testDef)
-	if err != nil {
-		t.Fatalf("first registration should succeed, got: %v", err)
-	}
-	err = RegisterSchema(testDef)
-	if err == nil {
-		t.Fatal("duplicate registration should fail")
+	if err := RegisterSchema(testDef); err == nil {
+		t.Fatal("registration after initialization should fail because the registry is frozen")
 	}
 }
 

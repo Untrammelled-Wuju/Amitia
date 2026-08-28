@@ -18,7 +18,6 @@ func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service, guard sec
 		g.GET("/processing-tasks/:processingTaskId/actions/:actionKey/active-revision", handler.GetActiveRevision)
 		g.POST("/processing-tasks/:processingTaskId/actions/:actionKey/active-revision", handler.ActivateRevision)
 		g.GET("/processing-tasks/:processingTaskId/actions/:actionKey/edit-summary", handler.GetActionEditSummary)
-		g.POST("/processing-tasks/:processingTaskId/actions/:actionKey/import-legacy", handler.ImportLegacyRevision)
 
 		g.GET("/action-streams", handler.ListActionStreams)
 		g.GET("/action-streams/:streamId/revisions", handler.ListRevisionsByStream)

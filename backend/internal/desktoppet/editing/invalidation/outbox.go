@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/editing/baseline"
@@ -67,7 +68,7 @@ func (o *LogEventOutbox) publish(eventType string, event baseline.ActionRevision
 
 	if o.db != nil {
 		record := ActionRevisionEventRecord{
-			ID:          fmt.Sprintf("evtrec_%d", time.Now().UnixNano()),
+			ID:          "evtrec_" + uuid.NewString(),
 			EventType:   eventType,
 			AggregateID: aggregateID,
 			Sequence:    event.BindingRevision,

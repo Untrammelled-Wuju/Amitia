@@ -801,26 +801,6 @@ func (h *Handler) GetLatestQualityEvaluation(c *gin.Context) {
 	util.SuccessResponse(c, info)
 }
 
-func (h *Handler) ImportLegacyRevision(c *gin.Context) {
-	processingTaskID := c.Param("processingTaskId")
-	actionKey := c.Param("actionKey")
-	actor, err := middleware.GetActorFromContext(c)
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
-		return
-	}
-	if _, err := h.ownershipGuard.RequireProcessingTask(c.Request.Context(), actor, processingTaskID); err != nil {
-		writeEditOwnershipError(c, err)
-		return
-	}
-	resp, err := h.service.ImportLegacyRevision(c.Request.Context(), processingTaskID, actionKey, string(actor.UserID))
-	if err != nil {
-		writeEditError(c, err)
-		return
-	}
-	util.SuccessResponse(c, resp)
-}
-
 func serveImageFile(responder *security.SafeArtifactResponder, c *gin.Context, actor *desktoppetAuth.ActorContext, rootKind security.StorageRootKind, path, mimeType, artifactID, entityID string) {
 	if path == "" || actor == nil {
 		c.Status(http.StatusNotFound)

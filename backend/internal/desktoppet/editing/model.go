@@ -141,6 +141,8 @@ func (ActionRevisionFrame) TableName() string { return "desktop_pet_action_revis
 type EditSession struct {
 	ID                    string `gorm:"column:id;primaryKey" json:"id"`
 	UserID                string `gorm:"column:user_id" json:"userId"`
+	CharacterID           string `gorm:"column:character_id;default:''" json:"characterId"`
+	ActionStreamID        string `gorm:"column:action_stream_id;default:''" json:"actionStreamId"`
 	ProcessingTaskID      string `gorm:"column:processing_task_id" json:"processingTaskId"`
 	ActionKey             string `gorm:"column:action_key" json:"actionKey"`
 	BaseRevisionID        string `gorm:"column:base_revision_id" json:"baseRevisionId"`
@@ -151,10 +153,13 @@ type EditSession struct {
 	Cursor                int    `gorm:"column:cursor" json:"cursor"`
 	LastOperationSeq      int    `gorm:"column:last_operation_seq" json:"lastOperationSeq"`
 	CheckpointID          string `gorm:"column:checkpoint_id" json:"checkpointId"`
+	DraftSnapshotID       string `gorm:"column:draft_snapshot_id;default:''" json:"draftSnapshotId"`
+	DraftSnapshotHash     string `gorm:"column:draft_snapshot_hash;default:''" json:"draftSnapshotHash"`
 	ClientInstanceID      string `gorm:"column:client_instance_id" json:"clientInstanceId"`
 	ExpiresAt             string `gorm:"column:expires_at" json:"expiresAt"`
 	CreatedAt             string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt             string `gorm:"column:updated_at" json:"updatedAt"`
+	ClosedAt              string `gorm:"column:closed_at;default:''" json:"closedAt"`
 	CommittedRevisionID   string `gorm:"column:committed_revision_id" json:"committedRevisionId"`
 }
 
@@ -192,6 +197,11 @@ func (EditCheckpoint) TableName() string { return "desktop_pet_edit_checkpoints"
 type RegenerationJob struct {
 	ID                   string `gorm:"column:id;primaryKey" json:"id"`
 	SessionID            string `gorm:"column:session_id" json:"sessionId"`
+	UserID               string `gorm:"column:user_id;default:''" json:"userId"`
+	CharacterID          string `gorm:"column:character_id;default:''" json:"characterId"`
+	ActionStreamID       string `gorm:"column:action_stream_id;default:''" json:"actionStreamId"`
+	DraftSnapshotID      string `gorm:"column:draft_snapshot_id;default:''" json:"draftSnapshotId"`
+	DraftSnapshotHash    string `gorm:"column:draft_snapshot_hash;default:''" json:"draftSnapshotHash"`
 	ProcessingTaskID     string `gorm:"column:processing_task_id" json:"processingTaskId"`
 	ActionKey            string `gorm:"column:action_key" json:"actionKey"`
 	TargetFrameID        string `gorm:"column:target_frame_id" json:"targetFrameId"`
@@ -207,6 +217,9 @@ type RegenerationJob struct {
 	ProcessingRevisionID string `gorm:"column:processing_revision_id" json:"processingRevisionId"`
 	CandidateRevisionID  string `gorm:"column:candidate_revision_id" json:"candidateRevisionId"`
 	QualityEvaluationID  string `gorm:"column:quality_evaluation_id" json:"qualityEvaluationId"`
+	GenerationAttemptID  string `gorm:"column:generation_attempt_id;default:''" json:"generationAttemptId"`
+	GenerationArtifactID string `gorm:"column:generation_artifact_id;default:''" json:"generationArtifactId"`
+	ProcessingAttemptID  string `gorm:"column:processing_attempt_id;default:''" json:"processingAttemptId"`
 	ExecutionID          string `gorm:"column:execution_id" json:"executionId"`
 	AttemptCount         int    `gorm:"column:attempt_count" json:"attemptCount"`
 	InstanceID           string `gorm:"column:instance_id" json:"instanceId"`
@@ -226,6 +239,8 @@ type RegenerationJob struct {
 	RejectedBy           string `gorm:"column:rejected_by" json:"rejectedBy"`
 	RejectedAt           string `gorm:"column:rejected_at" json:"rejectedAt"`
 	CancelRequestedAt    string `gorm:"column:cancel_requested_at" json:"cancelRequestedAt"`
+	CompletedAt          string `gorm:"column:completed_at;default:''" json:"completedAt"`
+	SupersedesJobID      string `gorm:"column:supersedes_job_id;default:''" json:"supersedesJobId"`
 	CreatedAt            string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt            string `gorm:"column:updated_at" json:"updatedAt"`
 }
@@ -236,6 +251,12 @@ type EditCandidate struct {
 	ID                  string `gorm:"column:id;primaryKey" json:"id"`
 	SessionID           string `gorm:"column:session_id" json:"sessionId"`
 	JobID               string `gorm:"column:job_id" json:"jobId"`
+	UserID              string `gorm:"column:user_id;default:''" json:"userId"`
+	CharacterID         string `gorm:"column:character_id;default:''" json:"characterId"`
+	ActionStreamID      string `gorm:"column:action_stream_id;default:''" json:"actionStreamId"`
+	CandidateVersion    int64  `gorm:"column:candidate_version;default:0" json:"candidateVersion"`
+	DraftSnapshotID     string `gorm:"column:draft_snapshot_id;default:''" json:"draftSnapshotId"`
+	DraftSnapshotHash   string `gorm:"column:draft_snapshot_hash;default:''" json:"draftSnapshotHash"`
 	TargetFrameID       string `gorm:"column:target_frame_id" json:"targetFrameId"`
 	CandidateType       string `gorm:"column:candidate_type" json:"candidateType"`
 	AssetID             string `gorm:"column:asset_id" json:"assetId"`
@@ -246,12 +267,15 @@ type EditCandidate struct {
 	DecidedAt           string `gorm:"column:decided_at" json:"decidedAt"`
 	SourceType          string `gorm:"column:source_type" json:"sourceType"`
 	ParentRevisionID    string `gorm:"column:parent_action_revision_id" json:"parentActionRevisionId"`
+	ParentContentHash   string `gorm:"column:parent_content_hash;default:''" json:"parentContentHash"`
 	BaseBindingRevision int64  `gorm:"column:base_binding_revision" json:"baseBindingRevision"`
 	QualityStatus       string `gorm:"column:quality_status" json:"qualityStatus"`
 	QualityEvaluationID string `gorm:"column:quality_evaluation_id" json:"qualityEvaluationId"`
 	ContentHash         string `gorm:"column:content_hash" json:"contentHash"`
 	FrameSetHash        string `gorm:"column:frame_set_hash" json:"frameSetHash"`
 	ActionConfigHash    string `gorm:"column:action_config_hash" json:"actionConfigHash"`
+	EffectiveVerdict    string `gorm:"column:effective_verdict;default:''" json:"effectiveVerdict"`
+	ActivationPolicy    string `gorm:"column:activation_policy;default:''" json:"activationPolicy"`
 	AcceptedAt          string `gorm:"column:accepted_at" json:"acceptedAt"`
 	RejectedAt          string `gorm:"column:rejected_at" json:"rejectedAt"`
 	RejectReason        string `gorm:"column:reject_reason" json:"rejectReason"`
@@ -388,6 +412,7 @@ type CandidateRevisionMetadata struct {
 	CandidateRevisionID string `gorm:"column:candidate_revision_id" json:"candidateRevisionId"`
 	SourceType          string `gorm:"column:source_type" json:"sourceType"`
 	ParentRevisionID    string `gorm:"column:parent_action_revision_id" json:"parentActionRevisionId"`
+	ParentContentHash   string `gorm:"column:parent_content_hash;default:''" json:"parentContentHash"`
 	BaseBindingRevision int64  `gorm:"column:base_binding_revision" json:"baseBindingRevision"`
 	RegenerationJobID   string `gorm:"column:regeneration_job_id" json:"regenerationJobId"`
 	ContentHash         string `gorm:"column:content_hash" json:"contentHash"`

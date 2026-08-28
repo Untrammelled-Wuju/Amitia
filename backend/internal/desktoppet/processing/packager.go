@@ -141,7 +141,7 @@ func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bo
 	if !persistLegacyRecord {
 		defer func() {
 			if !completed {
-				_ = os.RemoveAll(packageDir)
+				_ = os.RemoveAll(packageDir) // audit:ok: packageDir is UUID-derived under the packager-owned generation-task package root
 			}
 		}()
 	}

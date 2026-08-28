@@ -67,7 +67,7 @@ func (r *RuntimeRecovery) CancelOperation(ctx context.Context, op *operation.Ins
 func (r *RuntimeRecovery) recoverFromDesiredStateCommitted(ctx context.Context, op *operation.InstallationOperation, j *RecoveryCommitJournal) error {
 	desiredRevision := op.DesiredRevision
 	if op.OperationType != operation.TypeRecenter && desiredRevision == 0 {
-		desiredRevision = time.Now().UnixNano()
+		desiredRevision = time.Now().UnixNano() // audit:ok: desiredRevision is an int64 desired-state generation clock, not an identifier
 		op.DesiredRevision = desiredRevision
 	}
 	if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, desiredRevision); err != nil {

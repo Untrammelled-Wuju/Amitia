@@ -2,6 +2,7 @@ package events
 
 import (
 	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -23,7 +24,7 @@ func (r *outboxRepository) CreateOutbox(tx *gorm.DB, record *OutboxRecord) error
 
 func (r *outboxRepository) ListPendingOutbox(limit int) ([]OutboxRecord, error) {
 	var records []OutboxRecord
-	err := r.db.Where("status = ?", OutboxStatusPending).
+	err := r.db.Where("status IN ? AND retry_count < ?", []string{OutboxStatusPending, OutboxStatusFailed}, 5).
 		Order("created_at ASC").
 		Limit(limit).
 		Find(&records).Error
@@ -38,7 +39,8 @@ func (r *outboxRepository) MarkPublished(outboxID string) error {
 		Where("id = ?", outboxID).
 		Updates(map[string]interface{}{
 			"status":       OutboxStatusPublished,
-			"published_at": "",
+			"published_at": time.Now().UTC().Format(time.RFC3339),
+			"error":        "",
 		}).Error
 }
 
@@ -46,8 +48,9 @@ func (r *outboxRepository) MarkFailed(outboxID string, errMsg string) error {
 	return r.db.Model(&OutboxRecord{}).
 		Where("id = ?", outboxID).
 		Updates(map[string]interface{}{
-			"status": OutboxStatusFailed,
-			"error":  errMsg,
+			"status":      OutboxStatusFailed,
+			"error":       errMsg,
+			"retry_count": gorm.Expr("retry_count + 1"),
 		}).Error
 }
 

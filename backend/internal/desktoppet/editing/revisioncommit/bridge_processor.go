@@ -2,13 +2,18 @@ package revisioncommit
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/editing/baseline"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
+	processingevents "github.com/u-ai/backend/internal/desktoppet/processing/events"
 	"github.com/u-ai/backend/log"
 )
 
@@ -21,6 +26,8 @@ const (
 type ProcessingRevisionReader interface {
 	GetProcessingRevision(revisionID string) (*processing.ProcessingRevision, error)
 	GetProcessingArtifacts(revisionID string) ([]processing.ProcessingArtifactRecord, error)
+	GetProcessingTask(taskID string) (*processing.ProcessingTask, error)
+	GetProcessingAction(taskID, actionKey string) (*processing.ProcessingAction, error)
 }
 
 type InboxEntryPayload struct {
@@ -45,17 +52,18 @@ type InboxEntryPayload struct {
 }
 
 type BridgeProcessor struct {
-	inboxRepo   BridgeInboxRepository
-	journalRepo BridgeJournalRepository
-	committer   *baseline.BaselineActionRevisionCommitter
-	procReader  ProcessingRevisionReader
-	outboxRepo  OutboxRepository
-	eventPub    EventPublisher
-	workerID    string
+	inboxRepo            BridgeInboxRepository
+	journalRepo          BridgeJournalRepository
+	committer            *baseline.BaselineActionRevisionCommitter
+	procReader           ProcessingRevisionReader
+	outboxRepo           OutboxRepository
+	processingOutboxRepo processingevents.OutboxRepository
+	eventPub             EventPublisher
+	workerID             string
 }
 
 type EventPublisher interface {
-	Publish(ctx context.Context, eventType string, payload []byte) error
+	Publish(ctx context.Context, eventID, eventType string, payload []byte) error
 }
 
 func NewBridgeProcessor(
@@ -64,17 +72,19 @@ func NewBridgeProcessor(
 	committer *baseline.BaselineActionRevisionCommitter,
 	procReader ProcessingRevisionReader,
 	outboxRepo OutboxRepository,
+	processingOutboxRepo processingevents.OutboxRepository,
 	eventPub EventPublisher,
 	workerID string,
 ) *BridgeProcessor {
 	return &BridgeProcessor{
-		inboxRepo:   inboxRepo,
-		journalRepo: journalRepo,
-		committer:   committer,
-		procReader:  procReader,
-		outboxRepo:  outboxRepo,
-		eventPub:    eventPub,
-		workerID:    workerID,
+		inboxRepo:            inboxRepo,
+		journalRepo:          journalRepo,
+		committer:            committer,
+		procReader:           procReader,
+		outboxRepo:           outboxRepo,
+		processingOutboxRepo: processingOutboxRepo,
+		eventPub:             eventPub,
+		workerID:             workerID,
 	}
 }
 
@@ -87,6 +97,17 @@ func (p *BridgeProcessor) SubmitToInbox(ctx context.Context, eventID string, pay
 		log.Logger.Infof("Inbox条目已存在，跳过: eventId=%s status=%s", eventID, existing.Status)
 		return nil
 	}
+	if payload.ProcessingRevisionID == "" {
+		return fmt.Errorf("processing revision id is required")
+	}
+	existing, err = p.inboxRepo.GetByProcessingRevision(payload.ProcessingRevisionID)
+	if err != nil {
+		return fmt.Errorf("按ProcessingRevision查询Inbox去重失败: %w", err)
+	}
+	if existing != nil {
+		log.Logger.Infof("ProcessingRevision已进入Inbox，跳过重复事件: processingRevisionId=%s existingEventId=%s status=%s", payload.ProcessingRevisionID, existing.EventID, existing.Status)
+		return nil
+	}
 
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -95,7 +116,7 @@ func (p *BridgeProcessor) SubmitToInbox(ctx context.Context, eventID string, pay
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	entry := &editing.ActionRevisionBridgeInbox{
-		ID:                   fmt.Sprintf("inbox-%d", time.Now().UnixNano()),
+		ID:                   "inbox-" + uuid.NewString(),
 		EventID:              eventID,
 		ProcessingRevisionID: payload.ProcessingRevisionID,
 		PayloadJSON:          string(payloadJSON),
@@ -103,6 +124,133 @@ func (p *BridgeProcessor) SubmitToInbox(ctx context.Context, eventID string, pay
 		ReceivedAt:           now,
 	}
 	return p.inboxRepo.Create(entry)
+}
+
+func (p *BridgeProcessor) IngestProcessingOutbox(ctx context.Context, maxCount int) error {
+	if p.processingOutboxRepo == nil {
+		return nil
+	}
+	records, err := p.processingOutboxRepo.ListPendingOutbox(maxCount)
+	if err != nil {
+		return fmt.Errorf("查询Processing Outbox失败: %w", err)
+	}
+	for i := range records {
+		record := &records[i]
+		if record.EventType != processingevents.EventTopicProcessingRevisionCommitted {
+			_ = p.processingOutboxRepo.MarkFailed(record.ID, "unsupported_event_type: "+record.EventType)
+			continue
+		}
+		var evt processingevents.ProcessingRevisionCommittedEvent
+		if err := json.Unmarshal([]byte(record.Payload), &evt); err != nil {
+			_ = p.processingOutboxRepo.MarkFailed(record.ID, "invalid_payload: "+err.Error())
+			continue
+		}
+		payload, err := p.buildInboxPayload(ctx, evt)
+		if err != nil {
+			_ = p.processingOutboxRepo.MarkFailed(record.ID, err.Error())
+			continue
+		}
+		if err := p.SubmitToInbox(ctx, record.ID, payload); err != nil {
+			_ = p.processingOutboxRepo.MarkFailed(record.ID, err.Error())
+			continue
+		}
+		if err := p.processingOutboxRepo.MarkPublished(record.ID); err != nil {
+			return fmt.Errorf("标记Processing Outbox已消费失败: %w", err)
+		}
+	}
+	return nil
+}
+
+func (p *BridgeProcessor) buildInboxPayload(_ context.Context, evt processingevents.ProcessingRevisionCommittedEvent) (InboxEntryPayload, error) {
+	if evt.ProcessingRevisionID == "" || evt.ProcessingTaskID == "" || evt.ActionKey == "" {
+		return InboxEntryPayload{}, fmt.Errorf("processing event missing required identity fields")
+	}
+	procRev, err := p.procReader.GetProcessingRevision(evt.ProcessingRevisionID)
+	if err != nil {
+		return InboxEntryPayload{}, fmt.Errorf("读取ProcessingRevision失败: %w", err)
+	}
+	if procRev == nil {
+		return InboxEntryPayload{}, fmt.Errorf("ProcessingRevision不存在: %s", evt.ProcessingRevisionID)
+	}
+	task, err := p.procReader.GetProcessingTask(evt.ProcessingTaskID)
+	if err != nil {
+		return InboxEntryPayload{}, fmt.Errorf("读取ProcessingTask失败: %w", err)
+	}
+	action, err := p.procReader.GetProcessingAction(evt.ProcessingTaskID, evt.ActionKey)
+	if err != nil {
+		return InboxEntryPayload{}, fmt.Errorf("读取ProcessingAction失败: %w", err)
+	}
+	if task == nil || action == nil {
+		return InboxEntryPayload{}, fmt.Errorf("processing task/action metadata missing")
+	}
+
+	fps := action.FPS
+	if fps <= 0 {
+		fps = task.DefaultFPS
+	}
+	if fps <= 0 {
+		fps = processing.DefaultFPSForAction(action.ActionKey)
+	}
+	frameDurationMS := action.FrameDurationMS
+	if frameDurationMS <= 0 && fps > 0 {
+		frameDurationMS = 1000 / fps
+	}
+	loopType := action.LoopType
+	if loopType == "" {
+		if action.PlaybackMode == "loop" || action.PlaybackMode == "ping_pong" {
+			loopType = "loop"
+		} else {
+			loopType = "once"
+		}
+	}
+	anchor := processing.DefaultAnchorForActionKey(action.ActionKey)
+	if action.AnchorType != "" {
+		anchor.Type = processing.AnchorMode(action.AnchorType)
+		anchor.X = action.AnchorX
+		anchor.Y = action.AnchorY
+	}
+	actionJSON := processing.BuildActionJSON(action.ActionKey, action.ActionNameSnapshot, procRev.FrameCount, fps, anchor, loopType)
+	processing.EnrichActionJSONFromSpec(actionJSON, action)
+	configBytes, err := json.Marshal(actionJSON)
+	if err != nil {
+		return InboxEntryPayload{}, fmt.Errorf("序列化ActionConfig失败: %w", err)
+	}
+	configDigest := sha256.Sum256(configBytes)
+	anchorBytes, err := json.Marshal(actionJSON.Anchor)
+	if err != nil {
+		return InboxEntryPayload{}, fmt.Errorf("序列化Anchor失败: %w", err)
+	}
+	userID := evt.UserID
+	if userID == "" {
+		userID = task.UserID
+	}
+	characterID := evt.CharacterID
+	if characterID == "" {
+		characterID = task.CharacterID
+	}
+	if userID == "" || characterID == "" {
+		return InboxEntryPayload{}, fmt.Errorf("processing task identity incomplete: userId=%q characterId=%q", userID, characterID)
+	}
+	return InboxEntryPayload{
+		UserID:               userID,
+		CharacterID:          characterID,
+		ProcessingTaskID:     evt.ProcessingTaskID,
+		ProcessingActionID:   evt.ProcessingActionID,
+		ProcessingAttemptID:  evt.ProcessingAttemptID,
+		ProcessingRevisionID: evt.ProcessingRevisionID,
+		ActionKey:            evt.ActionKey,
+		ActionConfigJSON:     string(configBytes),
+		ActionConfigHash:     hex.EncodeToString(configDigest[:]),
+		ActionSpecVersion:    strconv.Itoa(action.ActionSpecVersion),
+		ActionSpecHash:       action.ActionSpecHash,
+		PlaybackMode:         actionJSON.PlaybackMode,
+		FPS:                  actionJSON.Fps,
+		FrameDurationMS:      actionJSON.FrameDurationMs,
+		LoopType:             actionJSON.LoopType,
+		AnchorJSON:           string(anchorBytes),
+		PromotionPolicy:      baseline.PromotionPolicyFirstRevisionOnly,
+		CreatedBy:            "system:processing-bridge",
+	}, nil
 }
 
 func (p *BridgeProcessor) ProcessPending(ctx context.Context, maxCount int) error {
@@ -171,23 +319,28 @@ func (p *BridgeProcessor) processPayload(ctx context.Context, entry *editing.Act
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
-	journalID := fmt.Sprintf("bridge-%d", time.Now().UnixNano())
-	journal := &editing.RevisionBridgeJournal{
-		ID:                   journalID,
-		ProcessingRevisionID: payload.ProcessingRevisionID,
-		ProcessingActionID:   payload.ProcessingActionID,
-		ActionRevisionID:     "",
-		TargetActionKey:      payload.ActionKey,
-		Status:               baseline.BridgeStatusReceived,
-		EventID:              entry.EventID,
-		UserID:               payload.UserID,
-		CharacterID:          payload.CharacterID,
-		ActionKey:            payload.ActionKey,
-		CreatedAt:            now,
-		UpdatedAt:            now,
-	}
-	if err := p.journalRepo.Create(journal); err != nil {
-		return fmt.Errorf("创建Journal失败: %w", err)
+	journalID := ""
+	if existingJournal != nil {
+		journalID = existingJournal.ID
+	} else {
+		journalID = "bridge-" + uuid.NewString()
+		journal := &editing.RevisionBridgeJournal{
+			ID:                   journalID,
+			ProcessingRevisionID: payload.ProcessingRevisionID,
+			ProcessingActionID:   payload.ProcessingActionID,
+			ActionRevisionID:     "",
+			TargetActionKey:      payload.ActionKey,
+			Status:               baseline.BridgeStatusReceived,
+			EventID:              entry.EventID,
+			UserID:               payload.UserID,
+			CharacterID:          payload.CharacterID,
+			ActionKey:            payload.ActionKey,
+			CreatedAt:            now,
+			UpdatedAt:            now,
+		}
+		if err := p.journalRepo.Create(journal); err != nil {
+			return fmt.Errorf("创建Journal失败: %w", err)
+		}
 	}
 
 	_ = p.journalRepo.UpdateStatus(journalID, baseline.BridgeStatusCommitting, "")
@@ -253,10 +406,13 @@ func (p *BridgeProcessor) publishOne(ctx context.Context, record *editing.Action
 	}
 
 	if p.eventPub == nil {
-		return p.outboxRepo.MarkPublished(record.ID)
+		err := fmt.Errorf("action revision event publisher is not configured")
+		_ = p.outboxRepo.IncrementAttemptCount(record.ID)
+		_ = p.outboxRepo.MarkFailed(record.ID, err.Error())
+		return err
 	}
 
-	if err := p.eventPub.Publish(ctx, record.EventType, []byte(record.PayloadJSON)); err != nil {
+	if err := p.eventPub.Publish(ctx, record.EventID, record.EventType, []byte(record.PayloadJSON)); err != nil {
 		_ = p.outboxRepo.IncrementAttemptCount(record.ID)
 		if record.AttemptCount+1 >= MaxOutboxRetryAttempts {
 			_ = p.outboxRepo.MarkFailed(record.ID, err.Error())

@@ -241,7 +241,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 		return nil, NewReleaseError("PACKAGE_BUILD_FAILED", "生成 Release 源包失败", err)
 	}
 	if generated.Ephemeral && strings.TrimSpace(generated.PackageDir) != "" {
-		defer os.RemoveAll(generated.PackageDir)
+		defer os.RemoveAll(generated.PackageDir) // audit:ok: Ephemeral PackageDir is created and owned by the internal processing packager
 	}
 
 	legacyManifest, err := (&packageformat.V1Reader{}).ReadManifest(generated.ManifestData)

@@ -63,8 +63,8 @@ func (r *bridgeInboxRepository) AcquireLease(id, owner string, leaseDuration tim
 	now := time.Now().UTC()
 	expiresAt := now.Add(leaseDuration).Format(time.RFC3339)
 	result := r.db.Model(&editing.ActionRevisionBridgeInbox{}).
-		Where("id = ? AND (status = ? OR (status = ? AND lease_expires_at < ?))",
-			id, baseline.InboxStatusReceived, baseline.InboxStatusProcessing, now.Format(time.RFC3339)).
+		Where("id = ? AND (status IN ? OR (status = ? AND lease_expires_at < ?))",
+			id, []string{baseline.InboxStatusReceived, baseline.InboxStatusFailedRetryable}, baseline.InboxStatusProcessing, now.Format(time.RFC3339)).
 		Updates(map[string]any{
 			"status":           baseline.InboxStatusProcessing,
 			"lease_owner":      owner,
@@ -100,8 +100,8 @@ func (r *bridgeInboxRepository) ListPending(maxCount int) ([]editing.ActionRevis
 	var entries []editing.ActionRevisionBridgeInbox
 	now := time.Now().UTC().Format(time.RFC3339)
 	err := r.db.Where(
-		"status = ? OR (status = ? AND lease_expires_at < ?)",
-		baseline.InboxStatusReceived, baseline.InboxStatusProcessing, now,
+		"status IN ? OR (status = ? AND lease_expires_at < ?)",
+		[]string{baseline.InboxStatusReceived, baseline.InboxStatusFailedRetryable}, baseline.InboxStatusProcessing, now,
 	).Limit(maxCount).Find(&entries).Error
 	return entries, err
 }
@@ -149,7 +149,7 @@ func NewOutboxRepository(db *gorm.DB) OutboxRepository {
 func (r *outboxRepository) ListPending(maxCount int) ([]editing.ActionRevisionEventOutboxRecord, error) {
 	var records []editing.ActionRevisionEventOutboxRecord
 	now := time.Now().UTC().Format(time.RFC3339)
-	err := r.db.Where("status = ? AND available_at <= ?", baseline.OutboxStatusPending, now).
+	err := r.db.Where("status IN ? AND available_at <= ? AND attempt_count < ?", []string{baseline.OutboxStatusPending, baseline.OutboxStatusFailed, baseline.OutboxStatusPublishing}, now, MaxOutboxRetryAttempts).
 		Order("created_at ASC").Limit(maxCount).Find(&records).Error
 	return records, err
 }
@@ -158,9 +158,10 @@ func (r *outboxRepository) AcquireLease(id, owner string, leaseDuration time.Dur
 	now := time.Now().UTC()
 	expiresAt := now.Add(leaseDuration).Format(time.RFC3339)
 	result := r.db.Model(&editing.ActionRevisionEventOutboxRecord{}).
-		Where("id = ? AND status = ?", id, baseline.OutboxStatusPending).
+		Where("id = ? AND status IN ? AND available_at <= ? AND attempt_count < ?", id, []string{baseline.OutboxStatusPending, baseline.OutboxStatusFailed, baseline.OutboxStatusPublishing}, now.Format(time.RFC3339), MaxOutboxRetryAttempts).
 		Updates(map[string]any{
-			"status": baseline.OutboxStatusPublishing,
+			"status":       baseline.OutboxStatusPublishing,
+			"available_at": expiresAt,
 		})
 	if result.Error != nil {
 		return false, result.Error
@@ -168,8 +169,7 @@ func (r *outboxRepository) AcquireLease(id, owner string, leaseDuration time.Dur
 	if result.RowsAffected == 0 {
 		return false, nil
 	}
-	_ = expiresAt
-	_ = owner
+	_ = owner // schema has no lease-owner column; available_at carries the lease expiry.
 	return true, nil
 }
 

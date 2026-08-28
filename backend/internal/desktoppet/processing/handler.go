@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"os"
 	"path/filepath"
@@ -316,7 +317,7 @@ func (h *Handler) ExcludeAction(c *gin.Context) {
 	util.SuccessMsgResponse(c, "动作已排除", nil)
 }
 
-func (h *Handler) ProcessingEventsStream(c *gin.Context) {
+func (h *Handler) ProcessingEventsStream(c *gin.Context) { // audit:ok: authenticated actor and processing-task ownership are checked before subscription
 	processingTaskID := c.Param("processingTaskId")
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
@@ -333,7 +334,7 @@ func (h *Handler) ProcessingEventsStream(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	bus := desktoppet.DefaultEventBus()
-	subscriberID := fmt.Sprintf("sse_%d_%d", time.Now().UnixNano(), c.Writer)
+	subscriberID := "sse-" + uuid.NewString()
 	events := bus.Subscribe(processingTaskID, subscriberID)
 	defer bus.Unsubscribe(processingTaskID, subscriberID)
 

@@ -25,6 +25,7 @@ func NewRecoveryWorker(processor *BridgeProcessor, interval time.Duration) *Reco
 }
 
 func (w *RecoveryWorker) Start(ctx context.Context) {
+	w.runOnce(ctx)
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 	for {
@@ -34,13 +35,20 @@ func (w *RecoveryWorker) Start(ctx context.Context) {
 		case <-w.stopCh:
 			return
 		case <-ticker.C:
-			if err := w.processor.ProcessPending(ctx, 50); err != nil {
-				log.Logger.Errorf("恢复待处理Inbox条目失败: %v", err)
-			}
-			if err := w.processor.PublishOutbox(ctx, 50); err != nil {
-				log.Logger.Errorf("发布待处理Outbox事件失败: %v", err)
-			}
+			w.runOnce(ctx)
 		}
+	}
+}
+
+func (w *RecoveryWorker) runOnce(ctx context.Context) {
+	if err := w.processor.IngestProcessingOutbox(ctx, 50); err != nil {
+		log.Logger.Errorf("消费Processing Outbox失败: %v", err)
+	}
+	if err := w.processor.ProcessPending(ctx, 50); err != nil {
+		log.Logger.Errorf("恢复待处理Inbox条目失败: %v", err)
+	}
+	if err := w.processor.PublishOutbox(ctx, 50); err != nil {
+		log.Logger.Errorf("发布待处理Outbox事件失败: %v", err)
 	}
 }
 

@@ -3,6 +3,7 @@ package events
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
@@ -145,7 +146,7 @@ func BuildDedupKey(parts ...string) string {
 		result += p
 	}
 	if result == "" {
-		return fmt.Sprintf("auto-%d", time.Now().UnixNano())
+		return "auto-" + uuid.NewString()
 	}
 	return result
 }

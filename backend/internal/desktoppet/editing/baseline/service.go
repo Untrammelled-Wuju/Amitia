@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet"
@@ -84,7 +85,7 @@ func (s *service) CreateFromProcessingRevision(ctx context.Context, req CreateBa
 		return nil, fmt.Errorf("获取RevisionNumber失败: %w", err)
 	}
 
-	revisionID := fmt.Sprintf("ar-%d", time.Now().UnixNano())
+	revisionID := "ar-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	frameCount := req.FrameCount
@@ -205,8 +206,6 @@ func (s *service) parseAnchor(anchorJSON string) (AnchorInfo, error) {
 
 func (s *service) buildRevisionFrames(revisionID, processingRevisionID string, artifacts []processing.ProcessingArtifactRecord, frameDurationMS int, now string) []editing.ActionRevisionFrame {
 	frames := make([]editing.ActionRevisionFrame, 0, len(artifacts))
-	base := time.Now().UnixNano()
-	seq := 0
 	for _, a := range artifacts {
 		if a.ArtifactKind != contracts.ArtifactKindFrame {
 			continue
@@ -216,7 +215,7 @@ func (s *service) buildRevisionFrames(revisionID, processingRevisionID string, a
 			idx = *a.FrameIndex
 		}
 		frames = append(frames, editing.ActionRevisionFrame{
-			ID:               fmt.Sprintf("rf-%d-%d", base, seq),
+			ID:               "rf-" + uuid.NewString(),
 			RevisionID:       revisionID,
 			FrameID:          a.ID,
 			LogicalIndex:     idx,
@@ -224,7 +223,6 @@ func (s *service) buildRevisionFrames(revisionID, processingRevisionID string, a
 			SourceRevisionID: processingRevisionID,
 			CreatedAt:        now,
 		})
-		seq++
 	}
 	return frames
 }

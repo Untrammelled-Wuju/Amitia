@@ -55,7 +55,6 @@ type Worker struct {
 	sem               chan struct{}
 	stateEngine       *taskstate.Engine
 	onActionProcessed func(taskID, actionID, actionKey string)
-	revisionPromoter  func(processingTaskID, actionKey, userID string) error
 }
 
 func NewWorker(db *gorm.DB, repo processing.Repository, dataDir string, pipeline *application.Pipeline, sourceResolver *application.RepoSourceResolver, committer *commit.ProcessingCommitter) *Worker {
@@ -79,10 +78,6 @@ func NewWorker(db *gorm.DB, repo processing.Repository, dataDir string, pipeline
 
 func (w *Worker) SetOnActionProcessed(fn func(taskID, actionID, actionKey string)) {
 	w.onActionProcessed = fn
-}
-
-func (w *Worker) SetRevisionPromoter(fn func(processingTaskID, actionKey, userID string) error) {
-	w.revisionPromoter = fn
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -223,7 +218,6 @@ func (w *Worker) runProcessingStages(ctx context.Context, task *processing.Proce
 	}
 
 	totalActions := len(actions)
-	succeededActionKeys := make([]string, 0, totalActions)
 	for i := range actions {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -241,7 +235,6 @@ func (w *Worker) runProcessingStages(ctx context.Context, task *processing.Proce
 			w.failAction(action, err)
 			continue
 		}
-		succeededActionKeys = append(succeededActionKeys, action.ActionKey)
 	}
 
 	if w.isCancelled(task.ID) {
@@ -249,24 +242,6 @@ func (w *Worker) runProcessingStages(ctx context.Context, task *processing.Proce
 	}
 
 	w.updateStage(task.ID, executionID, StagePreview, ProgressPreview)
-
-	if w.revisionPromoter != nil && len(succeededActionKeys) > 0 {
-		promotedActionKeys := make([]string, 0, len(succeededActionKeys))
-		for _, actionKey := range succeededActionKeys {
-			if err := w.revisionPromoter(task.ID, actionKey, userID); err != nil {
-				log.Logger.Errorf("promote revision for action %s failed: %v", actionKey, err)
-				for j := range actions {
-					if actions[j].ActionKey == actionKey {
-						w.failAction(&actions[j], fmt.Errorf("promote revision failed: %w", err))
-						break
-					}
-				}
-				continue
-			}
-			promotedActionKeys = append(promotedActionKeys, actionKey)
-		}
-		succeededActionKeys = promotedActionKeys
-	}
 
 	w.updateStage(task.ID, executionID, StagePackaging, ProgressManifest)
 

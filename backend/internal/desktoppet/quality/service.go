@@ -99,20 +99,45 @@ func (s *qualityService) CreateEvaluation(ctx context.Context, req CreateEvaluat
 		qualityMode = QualityModeBalanced
 	}
 
+	evaluationID := uuid.NewString()
+	if req.IdempotencyKey != "" {
+		// The ID is derived from the idempotency key so a crash after the
+		// evaluation row is committed but before the caller acknowledges it is
+		// safe to retry without creating a duplicate evaluation.
+		evaluationID = uuid.NewSHA1(uuid.NameSpaceURL, []byte("desktop-pet-quality:"+req.IdempotencyKey)).String()
+		if existing, err := s.repo.GetEvaluation(ctx, evaluationID); err == nil && existing != nil {
+			return existing, nil
+		} else if err != nil && err != gorm.ErrRecordNotFound {
+			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to resolve idempotent evaluation", err)
+		}
+	}
+
 	eval := &QualityEvaluation{
-		ID:                  uuid.NewString(),
-		ProcessingTaskID:    req.ProcessingTaskID,
-		ProcessingActionID:  req.ProcessingActionID,
-		ActionRevisionID:    req.ActionRevisionID,
-		ActionKey:           req.ActionKey,
-		ExecutionStatus:     EvalPending,
-		ProfileSnapshotJSON: "",
-		ProfileHash:         "",
-		EngineVersion:       EngineVersion,
-		QualityMode:         qualityMode,
+		ID:                   evaluationID,
+		UserID:               req.UserID,
+		CharacterID:          req.CharacterID,
+		ProcessingTaskID:     req.ProcessingTaskID,
+		ProcessingActionID:   req.ProcessingActionID,
+		ActionRevisionID:     req.ActionRevisionID,
+		ActionContentHash:    req.ActionContentHash,
+		ProcessingRevisionID: req.ProcessingRevisionID,
+		ActionKey:            req.ActionKey,
+		ExecutionStatus:      EvalPending,
+		ProfileSnapshotJSON:  "",
+		ProfileHash:          "",
+		ProfileID:            req.ProfileID,
+		RuleSetVersion:       req.RuleSetVersion,
+		EngineVersion:        EngineVersion,
+		QualityMode:          qualityMode,
+		IdempotencyKey:       req.IdempotencyKey,
 	}
 
 	if err := s.repo.CreateEvaluation(ctx, eval); err != nil {
+		if req.IdempotencyKey != "" {
+			if existing, readErr := s.repo.GetEvaluation(ctx, evaluationID); readErr == nil && existing != nil {
+				return existing, nil
+			}
+		}
 		return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to create evaluation", err)
 	}
 

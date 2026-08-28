@@ -33,7 +33,7 @@ func RegisterDesktopPetRouter(r *gin.RouterGroup, ctx *app.AppContext, registry 
 		readGroup.GET("/generation-tasks", handler.ListTasks)
 		readGroup.GET("/generation-tasks/:taskId", handler.GetTask)
 		readGroup.GET("/generation-tasks/:taskId/reference-image", handler.ReferenceImage)
-		readGroup.GET("/generation-tasks/:taskId/events", handler.TaskEventsStream)
+		readGroup.GET("/generation-tasks/:taskId/events", handler.TaskEventsStream) // audit:ok: handler enforces actor authentication and task ownership
 		readGroup.GET("/generation-tasks/:taskId/actions/:actionKey/frames/:frameIndex/image", handler.ActionFrameImage)
 		readGroup.GET("/generation-tasks/:taskId/transitions", handler.GetTaskTransitions)
 	}

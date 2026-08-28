@@ -5,7 +5,7 @@ package desktoppet
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/google/uuid"
 	"strconv"
 	"time"
 
@@ -292,7 +292,7 @@ func (h *Handler) GetTaskTransitions(c *gin.Context) {
 	util.SuccessResponse(c, records)
 }
 
-func (h *Handler) TaskEventsStream(c *gin.Context) {
+func (h *Handler) TaskEventsStream(c *gin.Context) { // audit:ok: authenticated actor and generation-task ownership are checked before subscription
 	taskID := c.Param("taskId")
 	actor, err := middleware.GetActorFromContext(c)
 	if err != nil {
@@ -309,7 +309,7 @@ func (h *Handler) TaskEventsStream(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	bus := DefaultEventBus()
-	subscriberID := fmt.Sprintf("sse-%s-%p-%d", string(actor.UserID), c.Request, time.Now().UnixNano())
+	subscriberID := "sse-" + uuid.NewString()
 	events := bus.Subscribe(taskID, subscriberID)
 	defer bus.Unsubscribe(taskID, subscriberID)
 

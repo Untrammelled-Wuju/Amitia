@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/processing"
@@ -97,7 +98,7 @@ func (b *TaskBuilder) Build(ctx context.Context, req *CreateTaskRequest) (*proce
 	}
 
 	now := b.now()
-	taskID := fmt.Sprintf("pt_%d", time.Now().UnixNano())
+	taskID := "pt_" + uuid.NewString()
 
 	task := &processing.ProcessingTask{
 		ID:                         taskID,
@@ -126,7 +127,6 @@ func (b *TaskBuilder) Build(ctx context.Context, req *CreateTaskRequest) (*proce
 			return fmt.Errorf("taskbuilder: create processing task: %w", err)
 		}
 
-		ts := time.Now().UnixNano()
 		for i, ai := range req.Actions {
 			if ai.ActionKey == "" {
 				return fmt.Errorf("taskbuilder: action %d has empty action key", i)
@@ -144,7 +144,7 @@ func (b *TaskBuilder) Build(ctx context.Context, req *CreateTaskRequest) (*proce
 				actionSpecSnapshotJSON = string(data)
 			}
 
-			actionID := fmt.Sprintf("pa_%d_%d", ts, i)
+			actionID := "pa_" + uuid.NewString()
 			action := &processing.ProcessingAction{
 				ID:                     actionID,
 				ProcessingTaskID:       taskID,
@@ -166,7 +166,7 @@ func (b *TaskBuilder) Build(ctx context.Context, req *CreateTaskRequest) (*proce
 			}
 
 			manifestRecord, mErr := b.manifestBuilder.Build(source.BuildManifestRequest{
-				ID:                            fmt.Sprintf("pm_%d_%d", ts, i),
+				ID:                            "pm_" + uuid.NewString(),
 				UserID:                        req.UserID,
 				CharacterID:                   req.CharacterID,
 				ProcessingTaskID:              taskID,

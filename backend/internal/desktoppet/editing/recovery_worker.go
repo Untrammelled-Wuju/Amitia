@@ -76,7 +76,11 @@ func (w *RecoveryWorker) recoverStuckJobs(ctx context.Context) {
 
 		if lastState == JournalStateFailed {
 			if uErr := w.repo.UpdateJobFields(job.ID, map[string]any{
-				"status": JobStatusFailedTerminal,
+				"status":           JobStatusFailedTerminal,
+				"lease_owner":      "",
+				"lease_expires_at": "",
+				"heartbeat_at":     "",
+				"execution_id":     "",
 			}); uErr != nil {
 				log.Logger.Errorf("recovery worker mark job %s terminal failed: %v", job.ID, uErr)
 				continue
@@ -87,6 +91,8 @@ func (w *RecoveryWorker) recoverStuckJobs(ctx context.Context) {
 				"status":           JobStatusQueued,
 				"lease_owner":      "",
 				"lease_expires_at": "",
+				"heartbeat_at":     "",
+				"execution_id":     "",
 			}); uErr != nil {
 				log.Logger.Errorf("recovery worker requeue job %s failed: %v", job.ID, uErr)
 				continue

@@ -61,7 +61,7 @@ func newTestService(t *testing.T, db *gorm.DB, dataDir string, pkgRepo processin
 	t.Helper()
 	ctx := newTestContext(db)
 	repo := NewRepository(db, ctx)
-	inst := NewInstaller(repo, pkgRepo, charRepo, dataDir)
+	inst := NewInstaller(repo, pkgRepo, charRepo, dataDir) // audit:ok: test exercises guarded deprecated installer
 	un := NewUninstaller(repo, dataDir)
 	return NewService(repo, inst, un, pkgRepo, charRepo, dataDir)
 }
@@ -70,7 +70,7 @@ func newTestInstaller(t *testing.T, db *gorm.DB, dataDir string, pkgRepo process
 	t.Helper()
 	ctx := newTestContext(db)
 	repo := NewRepository(db, ctx)
-	return NewInstaller(repo, pkgRepo, charRepo, dataDir), repo
+	return NewInstaller(repo, pkgRepo, charRepo, dataDir), repo // audit:ok: test helper for guarded deprecated installer
 }
 
 func newTestUninstaller(t *testing.T, db *gorm.DB, dataDir string) Uninstaller {

@@ -21,6 +21,9 @@ var schemaRegistry = map[string]*EventSchemaDef{}
 var registryFrozen bool
 
 func RegisterSchema(def *EventSchemaDef) error {
+	if registryFrozen {
+		return fmt.Errorf("schema registry is frozen")
+	}
 	if def == nil {
 		return fmt.Errorf("schema def is nil")
 	}

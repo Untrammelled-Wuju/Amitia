@@ -101,6 +101,7 @@ type Repository interface {
 
 	CASUpdateActiveBinding(processingTaskID, actionKey string, expectedBindingVersion int64, newRevisionID, activatedBy, reason string) (bool, error)
 	UpdateJobFields(id string, fields map[string]any) error
+	UpdateClaimedJobFields(id, leaseOwner, executionID string, fields map[string]any) (bool, error)
 	UpdateCandidateFields(id string, fields map[string]any) error
 	ListJobsForRecovery(leaseDuration time.Duration) ([]RegenerationJob, error)
 	ListExpiredCandidates(retentionDays int) ([]EditCandidate, error)
@@ -376,10 +377,14 @@ func (r *repository) UpdateSessionVersion(id string, expectedVersion int64) (int
 
 func (r *repository) UpdateSessionStatus(id, status string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	return r.db.Model(&EditSession{}).Where("id = ?", id).Updates(map[string]any{
+	updates := map[string]any{
 		"status":     status,
 		"updated_at": now,
-	}).Error
+	}
+	if status == SessionStatusCommitted || status == SessionStatusAbandoned || status == SessionStatusExpired {
+		updates["closed_at"] = now
+	}
+	return r.db.Model(&EditSession{}).Where("id = ?", id).Updates(updates).Error
 }
 
 func (r *repository) UpdateSessionCursor(id string, cursor, lastOpSeq int) error {
@@ -405,6 +410,7 @@ func (r *repository) UpdateSessionCommitted(id, revisionID string) error {
 		"status":                SessionStatusCommitted,
 		"committed_revision_id": revisionID,
 		"updated_at":            now,
+		"closed_at":             now,
 	}).Error
 }
 
@@ -526,10 +532,14 @@ func (r *repository) ListPendingJobs() ([]RegenerationJob, error) {
 
 func (r *repository) UpdateJobStatus(id, status string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	return r.db.Model(&RegenerationJob{}).Where("id = ?", id).Updates(map[string]any{
+	updates := map[string]any{
 		"status":     status,
 		"updated_at": now,
-	}).Error
+	}
+	if status == JobStatusCompleted || status == JobStatusFailed || status == JobStatusCancelled || status == JobStatusAccepted || status == JobStatusRejected {
+		updates["completed_at"] = now
+	}
+	return r.db.Model(&RegenerationJob{}).Where("id = ?", id).Updates(updates).Error
 }
 
 func (r *repository) UpdateJobResult(id, providerAttemptID string, costActual any) error {
@@ -543,7 +553,6 @@ func (r *repository) UpdateJobResult(id, providerAttemptID string, costActual an
 	return r.db.Model(&RegenerationJob{}).Where("id = ?", id).Updates(map[string]any{
 		"provider_attempt_id": providerAttemptID,
 		"cost_actual_json":    costJSON,
-		"status":              JobStatusCompleted,
 		"updated_at":          now,
 	}).Error
 }
@@ -555,6 +564,7 @@ func (r *repository) UpdateJobError(id, errorCode, errorMessage string) error {
 		"error_message": errorMessage,
 		"status":        JobStatusFailed,
 		"updated_at":    now,
+		"completed_at":  now,
 	}).Error
 }
 
@@ -747,16 +757,33 @@ func (r *repository) UpdateJobFields(id string, fields map[string]any) error {
 	return r.db.Model(&RegenerationJob{}).Where("id = ?", id).Updates(fields).Error
 }
 
+func (r *repository) UpdateClaimedJobFields(id, leaseOwner, executionID string, fields map[string]any) (bool, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	fields["updated_at"] = now
+	result := r.db.Model(&RegenerationJob{}).
+		Where("id = ? AND lease_owner = ? AND execution_id = ?", id, leaseOwner, executionID).
+		Updates(fields)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected == 1, nil
+}
+
 func (r *repository) UpdateCandidateFields(id string, fields map[string]any) error {
 	return r.db.Model(&EditCandidate{}).Where("id = ?", id).Updates(fields).Error
 }
 
 func (r *repository) ListJobsForRecovery(leaseDuration time.Duration) ([]RegenerationJob, error) {
-	cutoff := time.Now().UTC().Add(-leaseDuration).Format(time.RFC3339)
+	now := time.Now().UTC()
+	heartbeatCutoff := now.Add(-leaseDuration).Format(time.RFC3339)
+	nowStr := now.Format(time.RFC3339)
 	var jobs []RegenerationJob
-	err := r.db.Where("status IN ? AND (lease_expires_at != '' AND lease_expires_at < ? OR heartbeat_at != '' AND heartbeat_at < ?)",
+	// lease_expires_at is already an absolute expiry time, so compare it to
+	// now. Applying leaseDuration a second time would delay recovery by an
+	// additional full lease interval. heartbeat_at remains a staleness check.
+	err := r.db.Where("status IN ? AND ((lease_expires_at != '' AND lease_expires_at < ?) OR (lease_expires_at = '' AND heartbeat_at != '' AND heartbeat_at < ?))",
 		[]string{JobStatusPreparing, JobStatusSubmitting, JobStatusPolling, JobStatusArtifactReady, JobStatusProcessing, JobStatusCandidateCommitting, JobStatusQualityPending, JobStatusQualityRunning},
-		cutoff, cutoff).Find(&jobs).Error
+		nowStr, heartbeatCutoff).Find(&jobs).Error
 	return jobs, err
 }
 
@@ -819,14 +846,16 @@ func (r *repository) GetActiveActionRevisionBindingByStream(userID, streamID str
 
 func (r *repository) GetActiveActionRevisionBindingByTask(processingTaskID, actionKey string) (*ActiveActionRevisionBinding, error) {
 	var binding ActiveActionRevisionBinding
+	// A stream can span many processing tasks. Resolve the stream through the
+	// revisions actually produced for this task instead of root_processing_task_id,
+	// which only identifies the first task that created the stream.
 	err := r.db.Raw(`
 		SELECT b.* FROM desktop_pet_active_action_revision_bindings b
-		WHERE b.action_key = ? AND b.action_stream_id IN (
-			SELECT s.id FROM desktop_pet_action_streams s
-			WHERE s.root_processing_task_id = ?
-		)
+		JOIN desktop_pet_action_revisions r ON r.action_stream_id = b.action_stream_id
+		WHERE r.processing_task_id = ? AND r.action_key = ?
+		ORDER BY r.revision_number DESC
 		LIMIT 1
-	`, actionKey, processingTaskID).Scan(&binding).Error
+	`, processingTaskID, actionKey).Scan(&binding).Error
 	if err != nil {
 		return nil, err
 	}
@@ -906,11 +935,12 @@ func (r *repository) UpdateJobHeartbeatWithLease(jobID, executionID, leaseOwner 
 func (r *repository) UpdateJobLease(jobID, leaseOwner, executionID string, leaseExpiresAt string) (bool, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	result := r.db.Model(&RegenerationJob{}).
-		Where("id = ? AND execution_id = ?", jobID, executionID).
+		Where("id = ? AND lease_owner = ? AND execution_id = ?", jobID, leaseOwner, executionID).
 		Updates(map[string]any{
 			"lease_owner":      leaseOwner,
 			"execution_id":     executionID,
 			"lease_expires_at": leaseExpiresAt,
+			"heartbeat_at":     now,
 			"updated_at":       now,
 		})
 	if result.Error != nil {
@@ -976,6 +1006,8 @@ func (r *repository) UpdateCandidateAcceptanceOperation(id, status, errorMsg str
 	}
 	if errorMsg != "" {
 		updates["error_message"] = errorMsg
+	} else if status == "completed" {
+		updates["error_message"] = ""
 	}
 	if status == "completed" || status == "failed" {
 		updates["completed_at"] = now
