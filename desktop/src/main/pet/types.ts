@@ -1,4 +1,4 @@
-export type ClickThroughMode = "alpha" | "boundingBox" | "none";
+export type ClickThroughMode = "alpha" | "boundingBox" | "full" | "none";
 
 export interface Position {
   x: number;

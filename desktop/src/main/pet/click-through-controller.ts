@@ -1,6 +1,7 @@
 import { BrowserWindow, screen } from "electron";
 import { ClickHitTester } from "./click-hit-test";
 import type { DesktopPetWindowAdapter } from "./window-adapter";
+import type { ClickThroughMode } from "./types";
 
 const POLL_INTERVAL_MS = 16;
 
@@ -9,7 +10,7 @@ export class ClickThroughController {
   private readonly adapter: DesktopPetWindowAdapter;
   private win: BrowserWindow | null = null;
   private isDragging = false;
-  private mode: "none" | "alpha" | "boundingBox" = "none";
+  private mode: ClickThroughMode = "none";
   private hitMaskThreshold = 0;
   private isIgnoring = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -70,11 +71,15 @@ export class ClickThroughController {
     this.hitMaskThreshold = threshold;
   }
 
-  setMode(mode: "none" | "alpha" | "boundingBox"): void {
+  setMode(mode: ClickThroughMode): void {
     this.mode = mode;
     this.lastProcessTime = 0;
     if (mode === "none") {
       this.setIgnoreState(false);
+      return;
+    }
+    if (mode === "full") {
+      this.setIgnoreState(true);
       return;
     }
     this.processMousePosition();
@@ -107,6 +112,10 @@ export class ClickThroughController {
     if (!win || win.isDestroyed()) return;
     if (this.isDragging) return;
     if (this.mode === "none") return;
+    if (this.mode === "full") {
+      this.setIgnoreState(true);
+      return;
+    }
 
     let contentWidth = 0;
     let contentHeight = 0;

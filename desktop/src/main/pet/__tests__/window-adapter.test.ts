@@ -508,6 +508,19 @@ describe("DesktopPetWindowAdapter", () => {
     expect(windowMock.setIgnoreMouseEvents).toHaveBeenCalledWith(false);
   });
 
+  it("setClickThroughMode full 模式整窗穿透", async () => {
+    const adapter = new DesktopPetWindowAdapter(
+      makeOptions({ clickThroughMode: "none" }),
+    );
+    await adapter.create();
+
+    await adapter.setClickThroughMode("full");
+    expect(adapter.getOptions().clickThroughMode).toBe("full");
+    expect(windowMock.setIgnoreMouseEvents).toHaveBeenCalledWith(true, {
+      forward: true,
+    });
+  });
+
   it("setClickThroughMode 非法值回退到 none", async () => {
     const adapter = new DesktopPetWindowAdapter(makeOptions());
     await adapter.create();

@@ -54,4 +54,13 @@ describe("ClickThroughController", () => {
     expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true });
     controller.detach();
   });
+
+  it("full mode always ignores the whole window", () => {
+    const controller = new ClickThroughController({} as never, 10);
+    controller.attach(win as never);
+    controller.setMode("full");
+
+    expect(win.setIgnoreMouseEvents).toHaveBeenCalledWith(true, { forward: true });
+    controller.detach();
+  });
 });
