@@ -30,6 +30,10 @@ var (
 	profilesLocalOnly = []runtimeprofile.Profile{
 		runtimeprofile.ProfileLocal,
 	}
+	profilesDeviceLocal = []runtimeprofile.Profile{
+		runtimeprofile.ProfileLocal,
+		runtimeprofile.ProfileDeviceAgent,
+	}
 )
 
 type sqliteComponent struct {
@@ -363,7 +367,9 @@ func (c *desktopPetComponent) Descriptor() runtimeorchestrator.ComponentDescript
 			runtimeorchestrator.ComponentExtensionKernel,
 		},
 		Capabilities: []string{"desktop-pet.runtime"},
-		Profiles:     profilesLocalOnly,
+		// Desktop-pet packages and the renderer runtime are device-local in both
+		// standalone and cloud deployments. CloudCore never hosts the pet body.
+		Profiles: profilesDeviceLocal,
 	}
 }
 

@@ -68,6 +68,7 @@ import (
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/devicemesh"
+	devicemeshagent "github.com/u-ai/backend/internal/devicemesh/agent"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -1082,11 +1083,16 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		if kernelContainer.TaskRuntimeService == nil {
 			return nil, fmt.Errorf("device-agent task runtime service is required")
 		}
+		localRuntimeDispatcher := devicemeshagent.NewRuntimeDispatcher()
+		if kernelContainer.GameHost != nil {
+			localRuntimeDispatcher.RegisterCancellable(gameHostManagementInvokeHandler, newGameHostManagementInvokeHandler(services))
+		}
+		deviceDispatcher := devicemeshagent.NewChainedRuntimeDispatcher(localRuntimeDispatcher, dispatcher)
 		deviceMeshRuntime, meshErr := devicemesh.NewDeviceAgentRuntime(
 			mcpDataDirectory(ctx),
 			platformFromGOOS(goruntime.GOOS),
 			NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService),
-			dispatcher,
+			deviceDispatcher,
 		)
 		if meshErr != nil {
 			return nil, fmt.Errorf("failed to construct device-agent mesh runtime: %w", meshErr)
@@ -1659,7 +1665,8 @@ func (s *BehaviorRuntimeEventSink) OnRuntimeEvent(ctx context.Context, event run
 
 	switch canonicalEventType {
 	case "runtime.pointer.clicked", "runtime.pointer.double_clicked", "runtime.pointer.hovered",
-		"runtime.drag.started", "runtime.drag.moved", "runtime.drag.completed":
+		"runtime.drag.started", "runtime.drag.moved", "runtime.drag.completed", "runtime.drag.cancelled",
+		"runtime.pet.fall.started", "runtime.pet.edge.reached", "runtime.pet.interacted":
 		builder := events.NewEnvelope(canonicalEventType, behavior.OriginDesktop).
 			UserID(event.UserID).
 			CharacterID(characterID).
