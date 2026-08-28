@@ -28,7 +28,9 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/specs"
 	"github.com/u-ai/backend/internal/desktoppet/taskstate"
 	"github.com/u-ai/backend/internal/imageprovider"
+	"github.com/u-ai/backend/internal/imageprovider/cloudbridge"
 	"github.com/u-ai/backend/internal/imageprovider/seedream"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"gorm.io/gorm"
@@ -97,6 +99,11 @@ func NewProviderRegistry() (*imageprovider.Registry, error) {
 	if err := seedream.Register(registry); err != nil {
 		return nil, fmt.Errorf("failed to register seedream provider: %w", err)
 	}
+	if runtimeprofile.CurrentProcessProfile().IsDeviceAgent() {
+		if err := registry.Register(cloudbridge.ProviderName, cloudbridge.NewProvider(config.AppCfg.Storage.DataDir)); err != nil {
+			return nil, fmt.Errorf("failed to register cloud image generation bridge: %w", err)
+		}
+	}
 	return registry, nil
 }
 
@@ -152,38 +159,87 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 	if characterID == "" {
 		return nil, NewBusinessError(response.NotFound, ErrCodeCharacterNotFound, "角色不存在")
 	}
-	character, err := s.repo.FindCharacterByID(characterID)
-	if err != nil || character == nil {
-		return nil, NewBusinessError(response.NotFound, ErrCodeCharacterNotFound, "角色不存在")
+	deviceAgent := runtimeprofile.CurrentProcessProfile().IsDeviceAgent()
+	if !deviceAgent {
+		character, err := s.repo.FindCharacterByID(characterID)
+		if err != nil || character == nil {
+			return nil, NewBusinessError(response.NotFound, ErrCodeCharacterNotFound, "角色不存在")
+		}
 	}
 
 	if name == "" {
 		return nil, NewBusinessError(response.BusinessError, ErrCodeDesktopPetNameRequired, "桌宠名称不能为空")
 	}
-
-	cfg, err := s.repo.GetImageGenConfigByID(modelConfigID)
-	if err != nil || cfg == nil {
+	if modelConfigID <= 0 {
 		return nil, NewBusinessError(response.NotFound, ErrCodeImageModelNotFound, "生图模型配置不存在")
 	}
-	if cfg.Enabled != 1 {
-		return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelDisabled, "生图模型已禁用")
+
+	providerName := ""
+	modelNameSnapshot := ""
+	configRevisionSnapshot := ""
+	var provider imageprovider.ImageGenerationProvider
+	var modelConfig imageprovider.ImageModelConfig
+
+	if deviceAgent {
+		remote, ok := s.providerRegistry.Resolve(cloudbridge.ProviderName)
+		if !ok || remote == nil {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "云端生图桥不可用")
+		}
+		cloudProvider, ok := remote.(*cloudbridge.Provider)
+		if !ok {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "云端生图桥类型无效")
+		}
+		metadata, err := cloudProvider.DescribeConfig(ctx, modelConfigID)
+		if err != nil {
+			return nil, NewBusinessError(response.OperationFailed, ErrCodeImageModelUnavailable, "无法读取云端生图模型配置: "+err.Error())
+		}
+		if !metadata.Enabled {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelDisabled, "生图模型已禁用")
+		}
+		if !metadata.HasAPIKey {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelCredentialMissing, "生图模型缺少 API 凭据")
+		}
+		provider = remote
+		providerName = metadata.Provider
+		modelNameSnapshot = metadata.Model
+		configRevisionSnapshot = metadata.Revision
+		modelConfig = imageprovider.ImageModelConfig{
+			ConfigID:  modelConfigID,
+			Name:      metadata.Name,
+			ApiType:   cloudbridge.ProviderName,
+			ModelName: metadata.Model,
+		}
+	} else {
+		cfg, err := s.repo.GetImageGenConfigByID(modelConfigID)
+		if err != nil || cfg == nil {
+			return nil, NewBusinessError(response.NotFound, ErrCodeImageModelNotFound, "生图模型配置不存在")
+		}
+		if cfg.Enabled != 1 {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelDisabled, "生图模型已禁用")
+		}
+		providerName = imageprovider.NormalizeProviderName(cfg.ApiType)
+		if providerName == "" {
+			providerName = "seedream"
+		}
+		var providerOK bool
+		provider, providerOK = s.providerRegistry.Resolve(providerName)
+		if !providerOK {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "生图提供者不可用: "+providerName)
+		}
+		modelNameSnapshot = cfg.ModelName
+		configRevisionSnapshot = cfg.UpdatedAt
+		modelConfig = imageprovider.ImageModelConfig{
+			ConfigID:  cfg.ID,
+			Name:      cfg.Name,
+			ApiType:   cfg.ApiType,
+			ApiKey:    cfg.ApiKey,
+			ModelName: cfg.ModelName,
+			BaseUrl:   cfg.BaseUrl,
+		}
 	}
 
-	providerName := imageprovider.NormalizeProviderName(cfg.ApiType)
-	if providerName == "" {
-		providerName = "seedream"
-	}
-	provider, providerOk := s.providerRegistry.Resolve(providerName)
-	if !providerOk {
-		return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "生图提供者不可用: "+providerName)
-	}
-
-	modelConfig := imageprovider.ImageModelConfig{
-		Name:      cfg.Name,
-		ApiType:   cfg.ApiType,
-		ApiKey:    cfg.ApiKey,
-		ModelName: cfg.ModelName,
-		BaseUrl:   cfg.BaseUrl,
+	if err := provider.ValidateConfig(ctx, modelConfig); err != nil {
+		return nil, NewBusinessError(response.OperationFailed, ErrCodeImageGenerationRequestInvalid, "生图模型校验失败: "+err.Error())
 	}
 
 	var capabilitySnapshotJSON string
@@ -306,8 +362,8 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 		EstimatedGenerationCount: estimatedTotal,
 		GenerationPlanVersion:    1,
 		ProviderKeySnapshot:      providerName,
-		ModelNameSnapshot:        cfg.ModelName,
-		ConfigRevisionSnapshot:   cfg.UpdatedAt,
+		ModelNameSnapshot:        modelNameSnapshot,
+		ConfigRevisionSnapshot:   configRevisionSnapshot,
 		CapabilitySnapshotJSON:   capabilitySnapshotJSON,
 		CapabilitySnapshotHash:   capabilitySnapshotHash,
 		CreatedAt:                now,
@@ -405,8 +461,8 @@ func (s *service) GetTask(taskID string) (*TaskDetailResponse, error) {
 		characterName = ch.Name
 	}
 
-	modelName := ""
-	if cfg, err := s.repo.GetImageGenConfigByID(task.ModelConfigID); err == nil && cfg != nil {
+	modelName := task.ModelNameSnapshot
+	if cfg, err := s.repo.GetImageGenConfigByID(task.ModelConfigID); err == nil && cfg != nil && strings.TrimSpace(cfg.Name) != "" {
 		modelName = cfg.Name
 	}
 
@@ -536,8 +592,8 @@ func (s *service) ListTasks(userID, characterID, status string, page, pageSize i
 		if ch, err := s.repo.FindCharacterByID(t.CharacterID); err == nil && ch != nil {
 			characterName = ch.Name
 		}
-		modelName := ""
-		if cfg, err := s.repo.GetImageGenConfigByID(t.ModelConfigID); err == nil && cfg != nil {
+		modelName := t.ModelNameSnapshot
+		if cfg, err := s.repo.GetImageGenConfigByID(t.ModelConfigID); err == nil && cfg != nil && strings.TrimSpace(cfg.Name) != "" {
 			modelName = cfg.Name
 		}
 		items = append(items, TaskListItemResponse{
@@ -1067,6 +1123,35 @@ func (s *service) RetryAction(taskID, actionKey string) (*TaskActionResponse, er
 }
 
 func (s *service) validateModelConfigForExecution(modelConfigID int) (*imageGenConfigView, error) {
+	if runtimeprofile.CurrentProcessProfile().IsDeviceAgent() {
+		remote, ok := s.providerRegistry.Resolve(cloudbridge.ProviderName)
+		if !ok || remote == nil {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "云端生图桥不可用")
+		}
+		cloudProvider, ok := remote.(*cloudbridge.Provider)
+		if !ok {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "云端生图桥类型无效")
+		}
+		metadata, err := cloudProvider.DescribeConfig(context.Background(), modelConfigID)
+		if err != nil {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "读取云端生图模型失败: "+err.Error())
+		}
+		if !metadata.Enabled {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "生图模型已禁用")
+		}
+		if !metadata.HasAPIKey {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelCredentialMissing, "生图模型缺少 API 凭据")
+		}
+		if err := remote.ValidateConfig(context.Background(), imageprovider.ImageModelConfig{
+			ConfigID: modelConfigID, Name: metadata.Name, ApiType: cloudbridge.ProviderName, ModelName: metadata.Model,
+		}); err != nil {
+			return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "云端生图模型校验失败: "+err.Error())
+		}
+		return &imageGenConfigView{
+			ID: modelConfigID, Name: metadata.Name, ApiType: cloudbridge.ProviderName, ModelName: metadata.Model, Enabled: 1, UpdatedAt: metadata.Revision,
+		}, nil
+	}
+
 	cfg, err := s.repo.GetImageGenConfigByID(modelConfigID)
 	if err != nil || cfg == nil {
 		return nil, NewBusinessError(response.BusinessError, ErrCodeImageModelUnavailable, "生图模型不可用")

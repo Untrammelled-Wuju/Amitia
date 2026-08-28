@@ -243,8 +243,35 @@ func EnvelopeFromVoiceEvent(evt behavior.VoiceLifecycleEvent, now time.Time) beh
 	return builder.Build(now)
 }
 
+func canonicalDesktopGestureEventType(gestureType string) string {
+	switch gestureType {
+	case "clicked":
+		return "runtime.pointer.clicked"
+	case "double_clicked":
+		return "runtime.pointer.double_clicked"
+	case "hovered":
+		return "runtime.pointer.hovered"
+	case "drag.started":
+		return "runtime.drag.started"
+	case "drag.moved":
+		return "runtime.drag.moved"
+	case "drag.ended", "drag.completed":
+		return "runtime.drag.completed"
+	case "drag.cancelled":
+		return "runtime.drag.cancelled"
+	case "fall.started":
+		return "runtime.pet.fall.started"
+	case "edge.reached":
+		return "runtime.pet.edge.reached"
+	case "interacted":
+		return "runtime.pet.interacted"
+	default:
+		return "runtime.pet." + gestureType
+	}
+}
+
 func EnvelopeFromDesktopEvent(evt behavior.DesktopGestureEvent, now time.Time) behavior.BehaviorEventEnvelope {
-	eventType := "desktop.pet." + evt.GestureType
+	eventType := canonicalDesktopGestureEventType(evt.GestureType)
 	builder := NewEnvelope(eventType, behavior.OriginDesktop).
 		UserID(evt.UserID).
 		CharacterID(evt.CharacterID).
@@ -254,5 +281,8 @@ func EnvelopeFromDesktopEvent(evt behavior.DesktopGestureEvent, now time.Time) b
 
 	builder.PayloadField("gestureId", evt.GestureID)
 	builder.PayloadField("sequence", evt.Sequence)
+	if eventType == "runtime.pet.interacted" {
+		builder.PayloadField("interactionType", evt.GestureType)
+	}
 	return builder.Build(now)
 }
