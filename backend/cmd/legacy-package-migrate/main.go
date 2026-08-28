@@ -15,8 +15,8 @@ import (
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	legacymigration "github.com/u-ai/backend/internal/extension/package_legacy_migration"
-	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/mcp"
+	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/database/mysql"
 	"github.com/u-ai/backend/pkg/util"
@@ -208,6 +208,9 @@ func applyMigrations(db *gorm.DB) error {
 	if isNew {
 		if err := migration.ApplyBaseline(db); err != nil {
 			return fmt.Errorf("apply baseline: %w", err)
+		}
+		if err := migration.MarkDesktopPetCanonicalBaselineCutover(db); err != nil {
+			return fmt.Errorf("mark desktop pet canonical baseline cutover: %w", err)
 		}
 		if err := migration.MarkAllMigrationsApplied(db, migrations); err != nil {
 			return fmt.Errorf("mark all migrations applied: %w", err)

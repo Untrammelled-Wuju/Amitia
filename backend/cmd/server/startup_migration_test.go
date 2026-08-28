@@ -86,6 +86,14 @@ func TestApplyDatabaseStartupMigrationsBacksUpExistingDatabaseBeforeInitialSQL(t
 		t.Fatalf("legacy_keep table should still exist (baseline uses IF NOT EXISTS), got count = %d", liveLegacyCount)
 	}
 
+	var canonicalBaselineCutover int64
+	if err := db.Raw(`SELECT COUNT(*) FROM desktop_pet_migration_operations WHERE id = 'baseline-desktop-pet-v2'`).Scan(&canonicalBaselineCutover).Error; err != nil {
+		t.Fatal(err)
+	}
+	if canonicalBaselineCutover != 0 {
+		t.Fatalf("existing database must not receive an implicit desktop pet canonical cutover, got %d", canonicalBaselineCutover)
+	}
+
 	isNew, err := migration.IsNewDatabase(db)
 	if err != nil {
 		t.Fatal(err)

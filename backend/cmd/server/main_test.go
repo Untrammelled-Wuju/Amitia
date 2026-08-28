@@ -94,6 +94,24 @@ func TestApplyDatabaseStartupMigrationsCreatesRetrievalLogsWithAllColumns(t *tes
 	if migrationCount == 0 {
 		t.Fatal("expected applied migrations in schema_migrations table")
 	}
+
+	var canonicalOperationCount int64
+	if err := db.Raw(`SELECT COUNT(*) FROM desktop_pet_migration_operations
+WHERE id = 'baseline-desktop-pet-v2' AND kind = 'desktop-pet-v2-cutover' AND status = 'completed'`).Scan(&canonicalOperationCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if canonicalOperationCount != 1 {
+		t.Fatalf("canonical desktop pet baseline operation count = %d, want 1", canonicalOperationCount)
+	}
+
+	var verifiedWriteCutovers int64
+	if err := db.Raw(`SELECT COUNT(DISTINCT step_name) FROM desktop_pet_write_cutovers
+WHERE operation_id = 'baseline-desktop-pet-v2' AND verified = 1 AND step_name IN ('installation','editing')`).Scan(&verifiedWriteCutovers).Error; err != nil {
+		t.Fatal(err)
+	}
+	if verifiedWriteCutovers != 2 {
+		t.Fatalf("verified canonical desktop pet write cutovers = %d, want 2", verifiedWriteCutovers)
+	}
 }
 
 func TestApplyDatabaseStartupMigrationsCreatesConversationScopeIndexes(t *testing.T) {

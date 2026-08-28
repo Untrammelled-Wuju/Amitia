@@ -811,7 +811,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	importStagingRepo := desktoppetsecurity.NewImportStagingRepository(ctx.DB)
 
-	desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB)
+	if err := desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB); err != nil {
+		return nil, fmt.Errorf("initialize desktop pet legacy write guards: %w", err)
+	}
 
 	coordRepo := installation.NewCoordinatorRepoAdapter(installationRepoV2)
 	coordValidator := &coordinatorReleaseValidator{releases: releaseRepo}
@@ -926,7 +928,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	migrationRunner.SetBackupDir(backupDir)
 	backupPort := migration.NewDomainMigrationBackupPort(ctx.DB, backupDir)
 	migrationRunner.SetBackupPort(backupPort)
-	migrationRunner.SetLegacyWriteRefresh(func() { desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB) })
+	migrationRunner.SetLegacyWriteRefresh(func() error {
+		return desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB)
+	})
 	migrationRunner.RegisterPlan(migrationplans.NewDesktopPetV2CutoverPlan(migrationplans.Dependencies{
 		DB: ctx.DB,
 		ReadPathReady: func() error {
@@ -1175,11 +1179,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 				return nil
 			},
 			CanonicalCutoverReady: func() error {
-				if services.DesktopPetRuntimeV2 == nil || services.InstallationRepo == nil {
+				if services.DesktopPetRuntimeV2 == nil || services.InstallationRepo == nil || services.InstallationCoordinator == nil {
 					return fmt.Errorf("desktop pet canonical v2 wiring is incomplete")
 				}
 				if !desktoppet.LegacyPackageWritesDisabled {
 					return fmt.Errorf("legacy desktop pet package writes are still enabled")
+				}
+				if err := desktoppet.LegacyWriteCutoverReady(ctx.DB); err != nil {
+					return fmt.Errorf("desktop pet legacy write cutover is incomplete: %w", err)
 				}
 				if err := runCanonicalBuildAssertions(services); err != nil {
 					return fmt.Errorf("canonical build assertions: %w", err)

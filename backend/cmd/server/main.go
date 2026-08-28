@@ -542,6 +542,9 @@ func applyDatabaseStartupMigrations(db *gorm.DB, dataDir string) error {
 		if err := migration.ApplyBaseline(db); err != nil {
 			return fmt.Errorf("apply baseline: %w", err)
 		}
+		if err := migration.MarkDesktopPetCanonicalBaselineCutover(db); err != nil {
+			return fmt.Errorf("mark desktop pet canonical baseline cutover: %w", err)
+		}
 		log.Info("基线建表完成，标记所有迁移为已应用")
 		if err := migration.MarkAllMigrationsApplied(db, migrations); err != nil {
 			return fmt.Errorf("mark all migrations applied: %w", err)
