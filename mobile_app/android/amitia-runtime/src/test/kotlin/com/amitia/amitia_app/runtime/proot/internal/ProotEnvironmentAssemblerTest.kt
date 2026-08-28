@@ -37,6 +37,9 @@ class ProotEnvironmentAssemblerTest {
                     hostProcess = mapOf(
                         "TMPDIR" to request.hostLayout.runRoot.absolutePath + "/tmp",
                         "PROOT_TMP_DIR" to request.hostLayout.runRoot.absolutePath + "/proot-tmp",
+                        "PROOT_NO_SECCOMP" to "1",
+                        "ANDROID_ROOT" to "/system",
+                        "ANDROID_DATA" to "/data",
                     ),
                     guestRuntime = mapOf(
                         "AMITIA_RUNTIME_ROOT" to GuestLayout.PROGRAM,
@@ -55,7 +58,7 @@ class ProotEnvironmentAssemblerTest {
         val spec = assembler.assembleRootfsProbe(createProgramSource(layout))
         assertNotNull(spec)
         assertEquals(GuestLayout.BACKEND_DIR, spec.workingDirectory)
-        assertEquals(listOf("/usr/bin/env"), spec.command)
+        assertEquals(listOf("/usr/bin/true"), spec.command)
     }
 
     @Test
@@ -155,6 +158,9 @@ class ProotEnvironmentAssemblerTest {
         val assembler = ProotEnvironmentAssembler(layout = layout, environmentBuilder = fakeBuilder())
         val spec = assembler.assembleBackendLaunch(createProgramSource(layout))
         assertEquals(layout.runRoot.absolutePath + "/proot-tmp", spec.environment.toMap()["PROOT_TMP_DIR"])
+        assertEquals("1", spec.environment.toMap()["PROOT_NO_SECCOMP"])
+        assertEquals("/system", spec.environment.toMap()["ANDROID_ROOT"])
+        assertEquals("/data", spec.environment.toMap()["ANDROID_DATA"])
         assertEquals(GuestLayout.PROGRAM, spec.environment.toMap()["AMITIA_RUNTIME_ROOT"])
     }
 

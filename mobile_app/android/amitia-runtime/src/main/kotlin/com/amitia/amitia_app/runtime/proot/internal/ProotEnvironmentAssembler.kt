@@ -28,7 +28,7 @@ internal open class ProotEnvironmentAssembler(
             binaryPath = "",
             rootfsPath = layout.rootfsRoot.absolutePath,
             workingDirectory = GuestLayout.BACKEND_DIR,
-            command = listOf("/usr/bin/env"),
+            command = listOf("/usr/bin/true"),
             bindMounts = bindMounts,
             environment = environment,
         )

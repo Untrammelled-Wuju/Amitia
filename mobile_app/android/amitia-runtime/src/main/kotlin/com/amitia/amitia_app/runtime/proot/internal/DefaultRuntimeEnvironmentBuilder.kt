@@ -81,6 +81,19 @@ internal class DefaultRuntimeEnvironmentBuilder : RuntimeEnvironmentBuilder {
     private fun buildHostProcessEnvironment(layout: RuntimeHostLayout): Map<String, String> {
         val env = LinkedHashMap<String, String>()
         env["PROOT_TMP_DIR"] = File(layout.runRoot, "proot-tmp").absolutePath
+
+        // The bundled Android PRoot clears/inherits only the environment we
+        // explicitly provide through ProcessBuilder. On affected Android/Linux
+        // kernels its seccomp acceleration can crash the tracee immediately
+        // (the native binary itself recommends PROOT_NO_SECCOMP=1 for this
+        // compatibility path). Prefer correctness for the embedded runtime:
+        // without this key the outer PRoot may exit before the backend can
+        // publish any health endpoint, producing STARTUP_PROOT_EXITED with
+        // "signal 11 received from process ...".
+        env["PROOT_NO_SECCOMP"] = "1"
+        env["ANDROID_ROOT"] = "/system"
+        env["ANDROID_DATA"] = "/data"
+
         env["TMPDIR"] = File(layout.runRoot, "tmp").absolutePath
         env["HOME"] = "/"
         env["LANG"] = GuestLayoutContract.LANG
