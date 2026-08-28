@@ -378,16 +378,32 @@ func (r *DBRepository) HasVerifiedWriteCutover(ctx context.Context, operationID 
 	return count == 2, err
 }
 
-func (r *DBRepository) LegacyInstallationWriteDisabled() bool {
-	var count int64
-	r.db.Model(&writeCutoverRecord{}).Where("step_name = ? AND verified = 1", "installation").Count(&count)
-	return count > 0
+func (r *DBRepository) LegacyInstallationWriteDisabled() (bool, error) {
+	return r.legacyWriteDisabledForStep("installation")
 }
 
-func (r *DBRepository) LegacyEditingWriteDisabled() bool {
+func (r *DBRepository) LegacyEditingWriteDisabled() (bool, error) {
+	return r.legacyWriteDisabledForStep("editing")
+}
+
+func (r *DBRepository) legacyWriteDisabledForStep(stepName string) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, errors.New("migration: repository database is nil")
+	}
 	var count int64
-	r.db.Model(&writeCutoverRecord{}).Where("step_name = ? AND verified = 1", "editing").Count(&count)
-	return count > 0
+	err := r.db.Table("desktop_pet_write_cutovers AS w").
+		Joins("JOIN desktop_pet_migration_operations AS o ON o.id = w.operation_id").
+		Where(
+			"w.step_name = ? AND w.verified = 1 AND o.kind = ? AND o.status IN ?",
+			stepName,
+			"desktop-pet-v2-cutover",
+			[]string{string(StageLegacyWriteBlocked), string(StageCompleted)},
+		).
+		Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("migration: query %s legacy write cutover: %w", stepName, err)
+	}
+	return count > 0, nil
 }
 
 func (r *DBRepository) UpdateOperationCheckpoint(ctx context.Context, op *MigrationOperation) error {

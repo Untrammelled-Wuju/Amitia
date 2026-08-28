@@ -60,6 +60,38 @@ func newRuntimeWSTestServer(t *testing.T) (*httptest.Server, *RuntimeFacade) {
 	return server, facade
 }
 
+func TestParseRuntimeBootstrapSubprotocolRejectsAmbiguousOrMissingCredentials(t *testing.T) {
+	tests := []struct {
+		name       string
+		protocols  []string
+		wantTicket string
+		wantOK     bool
+	}{
+		{name: "valid", protocols: []string{runtimeV2WebSocketSubprotocol, runtimeV2BootstrapProtocolPrefix + "ticket-1"}, wantTicket: "ticket-1", wantOK: true},
+		{name: "missing runtime protocol", protocols: []string{runtimeV2BootstrapProtocolPrefix + "ticket-1"}, wantOK: false},
+		{name: "missing bootstrap protocol", protocols: []string{runtimeV2WebSocketSubprotocol}, wantOK: false},
+		{name: "ambiguous bootstrap protocols", protocols: []string{runtimeV2WebSocketSubprotocol, runtimeV2BootstrapProtocolPrefix + "ticket-1", runtimeV2BootstrapProtocolPrefix + "ticket-2"}, wantOK: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/runtime/ws", nil)
+			if len(tc.protocols) > 0 {
+				req.Header.Set("Sec-WebSocket-Protocol", strings.Join(tc.protocols, ", "))
+			}
+			selected, ticket, ok := parseRuntimeBootstrapSubprotocol(req)
+			if ok != tc.wantOK {
+				t.Fatalf("ok=%v want=%v selected=%q ticket=%q", ok, tc.wantOK, selected, ticket)
+			}
+			if tc.wantOK {
+				if selected != runtimeV2WebSocketSubprotocol || ticket != tc.wantTicket {
+					t.Fatalf("selected=%q ticket=%q", selected, ticket)
+				}
+			}
+		})
+	}
+}
+
 func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 	server, _ := newRuntimeWSTestServer(t)
 
@@ -72,12 +104,48 @@ func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/runtime/ws?ticket=ticket-1&deviceId=device-ws&runtimeId=runtime-ws"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	plainReq, err := http.NewRequest(http.MethodGet, server.URL+"/runtime/ws?deviceId=device-ws&runtimeId=runtime-ws", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plainReq.Header.Set("Sec-WebSocket-Protocol", runtimeV2WebSocketSubprotocol+", "+runtimeV2BootstrapProtocolPrefix+"ticket-1")
+	plainResp, err := http.DefaultClient.Do(plainReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plainResp.StatusCode != http.StatusUpgradeRequired {
+		t.Fatalf("non-websocket request must not consume bootstrap ticket: expected 426, got %d", plainResp.StatusCode)
+	}
+	_ = plainResp.Body.Close()
+
+	legacyQueryURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/runtime/ws?ticket=ticket-1&deviceId=device-ws&runtimeId=runtime-ws"
+	legacyConn, legacyResp, legacyErr := websocket.DefaultDialer.Dial(legacyQueryURL, nil)
+	if legacyConn != nil {
+		_ = legacyConn.Close()
+	}
+	if legacyErr == nil || legacyResp == nil || legacyResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("query-string bootstrap ticket must be rejected, err=%v status=%v", legacyErr, func() any {
+			if legacyResp == nil {
+				return nil
+			}
+			return legacyResp.StatusCode
+		}())
+	}
+	_ = legacyResp.Body.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/runtime/ws?deviceId=device-ws&runtimeId=runtime-ws"
+	dialer := websocket.Dialer{Subprotocols: []string{
+		runtimeV2WebSocketSubprotocol,
+		runtimeV2BootstrapProtocolPrefix + "ticket-1",
+	}}
+	conn, _, err := dialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer conn.Close()
+	if conn.Subprotocol() != runtimeV2WebSocketSubprotocol {
+		t.Fatalf("unexpected negotiated subprotocol: %q", conn.Subprotocol())
+	}
 
 	helloPayload := HelloPayload{
 		RuntimeVersion:         "1.0.0",
@@ -125,7 +193,7 @@ func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 	}
 
 	// A consumed ticket must not create a second websocket session.
-	second, resp2, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	second, resp2, err := dialer.Dial(wsURL, nil)
 	if second != nil {
 		_ = second.Close()
 	}

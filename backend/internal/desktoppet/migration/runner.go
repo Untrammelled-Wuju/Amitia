@@ -30,7 +30,7 @@ type Runner struct {
 	leaseTTL           time.Duration
 	backupDir          string
 	leaseLost          chan struct{}
-	legacyWriteRefresh func()
+	legacyWriteRefresh func() error
 }
 
 func NewRunner(repo *DBRepository) *Runner {
@@ -55,7 +55,7 @@ func (r *Runner) SetBackupDir(dir string) {
 	r.backupDir = dir
 }
 
-func (r *Runner) SetLegacyWriteRefresh(refresh func()) {
+func (r *Runner) SetLegacyWriteRefresh(refresh func() error) {
 	r.legacyWriteRefresh = refresh
 }
 
@@ -645,9 +645,6 @@ func (r *Runner) requestWriteCutover(ctx context.Context, op *MigrationOperation
 				return &RunnerError{Code: "LEGACY_BLOCK_FAILED", Message: "旧写阻断失败: " + err.Error()}
 			}
 		}
-		if r.legacyWriteRefresh != nil {
-			r.legacyWriteRefresh()
-		}
 		ok, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageWriteCutover, StageLegacyWriteBlocked, nil)
 		if err != nil || !ok {
 			if err == nil {
@@ -658,6 +655,12 @@ func (r *Runner) requestWriteCutover(ctx context.Context, op *MigrationOperation
 		op.Stage = StageLegacyWriteBlocked
 	}
 	if op.Stage == StageLegacyWriteBlocked {
+		if r.legacyWriteRefresh == nil {
+			return &RunnerError{Code: "LEGACY_BLOCK_FAILED", Message: "旧写阻断状态刷新器未配置"}
+		}
+		if err := r.legacyWriteRefresh(); err != nil {
+			return &RunnerError{Code: "LEGACY_BLOCK_FAILED", Message: "刷新旧写阻断状态失败: " + err.Error()}
+		}
 		ok, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageLegacyWriteBlocked, StageCompleted, nil)
 		if err != nil || !ok {
 			if err == nil {
