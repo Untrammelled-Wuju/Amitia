@@ -732,7 +732,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	var installationCoordinator coordinator.InstallationCoordinator
 
 	runtimeConfig := runtime.DefaultRuntimeConfig()
-	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled && runtimePolicy.DesktopPet
+	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled && policy.DesktopPet
 	runtimeConfig.LoopbackOnly = config.AppCfg.DesktopPetRuntime.LoopbackOnly
 	runtimeConfig.HeartbeatIntervalMs = config.AppCfg.DesktopPetRuntime.HeartbeatIntervalMs
 	runtimeConfig.HeartbeatTimeoutMs = config.AppCfg.DesktopPetRuntime.HeartbeatTimeoutMs
@@ -745,7 +745,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	runtimeConfig.RetryMaxDelayMs = config.AppCfg.DesktopPetRuntime.RetryMaxDelayMs
 	runtimeConfig.CommandRetentionHours = config.AppCfg.DesktopPetRuntime.CommandRetentionHours
 
-	if runtimePolicy.DesktopPet && kernelContainer.DeviceRuntimeSessions == nil {
+	if policy.DesktopPet && kernelContainer.DeviceRuntimeSessions == nil {
 		return nil, errors.New("desktop pet runtime requires kernel DeviceRuntimeSessions authority")
 	}
 	runtimeV2Facade := runtimev2.NewRuntimeFacadeWithDeviceRuntime(ctx.DB, &runtimev2.FacadeConfig{
