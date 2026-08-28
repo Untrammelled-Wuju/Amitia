@@ -212,70 +212,76 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 			layersChanged = append(layersChanged, "transient")
 		}
 
-	case "desktop.pet.clicked":
+	case "runtime.pointer.clicked":
 		changed = r.reduceDesktopClicked(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "desktopGesture")
 		}
 
-	case "desktop.pet.double_clicked":
+	case "runtime.pointer.double_clicked":
 		changed = r.reduceDesktopDoubleClicked(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "desktopGesture")
 		}
 
-	case "desktop.pet.hovered":
+	case "runtime.pointer.hovered":
 		changed = r.reduceDesktopHovered(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "desktopGesture")
 		}
 
-	case "desktop.pet.drag.started":
+	case "runtime.drag.started":
 		changed = r.reduceDesktopDragStarted(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "desktopGesture")
 		}
 
-	case "desktop.pet.drag.moved":
+	case "runtime.drag.moved":
 		changed = r.reduceDesktopDragMoved(&next, event)
 
-	case "desktop.pet.drag.ended":
+	case "runtime.drag.completed", "runtime.drag.cancelled":
 		changed = r.reduceDesktopDragEnded(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "desktopGesture")
 		}
 
-	case "desktop.pet.fall.started":
+	case "runtime.pet.fall.started":
 		changed = r.reduceDesktopFallStarted(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "desktopGesture")
 		}
 
-	case "desktop.pet.edge.reached":
+	case "runtime.pet.edge.reached":
 		changed = r.reduceDesktopEdgeReached(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "desktopGesture")
 		}
 
-	case "playback.action.started":
+	case "runtime.pet.interacted":
+		changed = r.reduceDesktopInteracted(&next, event)
+		if changed {
+			layersChanged = append(layersChanged, "desktopGesture")
+		}
+
+	case "runtime.playback.action_started":
 		changed = r.reducePlaybackStarted(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "foreground")
 		}
 
-	case "playback.action.completed":
+	case "runtime.playback.action_completed":
 		changed = r.reducePlaybackCompleted(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "foreground")
 		}
 
-	case "playback.action.interrupted":
+	case "runtime.playback.action_interrupted":
 		changed = r.reducePlaybackInterrupted(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "foreground")
 		}
 
-	case "playback.action.failed":
+	case "runtime.playback.action_failed":
 		changed = r.reducePlaybackFailed(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "foreground")
@@ -831,6 +837,22 @@ func (r *Reducer) reduceDesktopFallStarted(ctx *BehaviorContextSnapshot, event B
 
 func (r *Reducer) reduceDesktopEdgeReached(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	ctx.DesktopGesture.CurrentGesture = "edge"
+	return true
+}
+
+func (r *Reducer) reduceDesktopInteracted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
+	payload := parsePayload(event.Payload)
+	seq := int64(getInt(payload, "sequence"))
+	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
+		return false
+	}
+	interactionType, _ := payload["interactionType"].(string)
+	if interactionType == "" {
+		interactionType = "interacted"
+	}
+	ctx.DesktopGesture.CurrentGesture = interactionType
+	ctx.DesktopGesture.Sequence = seq
+	ctx.DesktopGesture.PendingClickWin = false
 	return true
 }
 

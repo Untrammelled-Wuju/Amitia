@@ -103,6 +103,8 @@ func TestSchemaRegistry_RuntimeEventNames(t *testing.T) {
 		"runtime.drag.started",
 		"runtime.drag.moved",
 		"runtime.drag.completed",
+		"runtime.drag.cancelled",
+		"runtime.pet.interacted",
 		"runtime.playback.action_started",
 		"runtime.playback.action_completed",
 		"runtime.playback.action_interrupted",
@@ -112,6 +114,24 @@ func TestSchemaRegistry_RuntimeEventNames(t *testing.T) {
 		if !IsSchemaRegistered(eventType) {
 			t.Fatalf("%s should be registered", eventType)
 		}
+	}
+}
+
+func TestSchemaRegistry_RuntimePetInteractedPreservesSequence(t *testing.T) {
+	payload := json.RawMessage(`{"gestureId":"gesture-1","sequence":7,"interactionType":"interacted"}`)
+	filtered, err := ValidatePayload("runtime.pet.interacted", payload)
+	if err != nil {
+		t.Fatalf("runtime.pet.interacted payload should validate: %v", err)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(filtered, &result); err != nil {
+		t.Fatalf("filtered runtime.pet.interacted payload should be valid JSON: %v", err)
+	}
+	if got := int64(result["sequence"].(float64)); got != 7 {
+		t.Fatalf("expected sequence 7, got %d", got)
+	}
+	if got, _ := result["interactionType"].(string); got != "interacted" {
+		t.Fatalf("expected interactionType interacted, got %q", got)
 	}
 }
 

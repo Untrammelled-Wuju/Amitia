@@ -422,6 +422,9 @@ func registerDesktopSchemas() {
 		{"runtime.drag.completed", ReliabilityEphemeral, 3 * time.Second, map[string]string{
 			"gestureId": "string", "sequence": "int64",
 		}},
+		{"runtime.drag.cancelled", ReliabilityEphemeral, 3 * time.Second, map[string]string{
+			"gestureId": "string", "sequence": "int64",
+		}},
 		{"runtime.pet.fall.started", ReliabilityEphemeral, 3 * time.Second, map[string]string{
 			"gestureId": "string", "sequence": "int64",
 		}},
@@ -429,7 +432,7 @@ func registerDesktopSchemas() {
 			"gestureId": "string", "sequence": "int64", "edge": "string",
 		}},
 		{"runtime.pet.interacted", ReliabilityEphemeral, 5 * time.Second, map[string]string{
-			"gestureId": "string", "interactionType": "string",
+			"gestureId": "string", "sequence": "int64", "interactionType": "string",
 		}},
 	}
 	for _, s := range schemas {

@@ -53,7 +53,7 @@ func (v *Validator) registerDefaults() {
 		"proactive.message.suppressed",
 		"runtime.pointer.clicked", "runtime.pointer.double_clicked",
 		"runtime.pointer.hovered", "runtime.drag.started",
-		"runtime.drag.moved", "runtime.drag.completed",
+		"runtime.drag.moved", "runtime.drag.completed", "runtime.drag.cancelled",
 		"runtime.pet.fall.started", "runtime.pet.edge.reached",
 		"runtime.pet.interacted",
 		"runtime.playback.action_started", "runtime.playback.action_completed",

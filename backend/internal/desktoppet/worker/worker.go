@@ -411,37 +411,14 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 		return "failed"
 	}
 
-	cfg, err := w.repo.GetImageGenConfigByID(task.ModelConfigID)
-	if err != nil || cfg == nil {
-		w.failAction(action, desktoppet.ErrCodeImageModelNotFound, "生图模型配置不存在")
+	resolved, errCode, errMsg := w.resolveGenerationProvider(ctx, task)
+	if resolved == nil {
+		w.failAction(action, errCode, errMsg)
 		return "failed"
 	}
-	if cfg.Enabled != 1 {
-		w.failAction(action, desktoppet.ErrCodeImageModelDisabled, "生图模型已禁用")
-		return "failed"
-	}
-	if strings.TrimSpace(cfg.ApiKey) == "" {
-		w.failAction(action, desktoppet.ErrCodeImageModelCredentialMissing, "生图模型缺少 API 凭据")
-		return "failed"
-	}
-
-	providerName := imageprovider.NormalizeProviderName(cfg.ApiType)
-	if providerName == "" {
-		providerName = "seedream"
-	}
-	provider, ok := w.registry.Resolve(providerName)
-	if !ok {
-		w.failAction(action, desktoppet.ErrCodeImageModelUnavailable, "生图提供者不可用: "+providerName)
-		return "failed"
-	}
-
-	modelConfig := imageprovider.ImageModelConfig{
-		Name:      cfg.Name,
-		ApiType:   cfg.ApiType,
-		ApiKey:    cfg.ApiKey,
-		ModelName: cfg.ModelName,
-		BaseUrl:   cfg.BaseUrl,
-	}
+	providerName := resolved.ProviderName
+	provider := resolved.Provider
+	modelConfig := resolved.ModelConfig
 
 	if err := provider.ValidateConfig(ctx, modelConfig); err != nil {
 		w.failAction(action, desktoppet.ErrCodeImageGenerationRequestInvalid, fmt.Sprintf("生图模型校验失败: %v", err))
@@ -459,7 +436,7 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 	}
 
 	if task.GenerationPlanVersion > 0 {
-		return w.executeWithGenerationExecutor(ctx, task, action, spec, cfg.ID, cfg.ModelName, cfg.UpdatedAt, providerName, provider, modelConfig)
+		return w.executeWithGenerationExecutor(ctx, task, action, spec, resolved.ConfigID, resolved.ModelName, resolved.ConfigRevision, providerName, provider, modelConfig)
 	}
 
 	now := time.Now().Format(workerTimeFormat)
@@ -508,7 +485,7 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 			PromptSnapshot:         prompt,
 			NegativePromptSnapshot: negPrompt,
 			Provider:               providerName,
-			Model:                  cfg.ModelName,
+			Model:                  resolved.ModelName,
 			CreatedAt:              frameTime,
 			UpdatedAt:              frameTime,
 		})
@@ -642,7 +619,7 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 
 	_ = w.downloader.WriteMetadata(task.ID, action.ActionKey, actionAttempt, map[string]interface{}{
 		"provider":     providerName,
-		"model":        cfg.ModelName,
+		"model":        resolved.ModelName,
 		"frameCount":   spec.FrameCount,
 		"successCount": successCount,
 		"failCount":    failCount,

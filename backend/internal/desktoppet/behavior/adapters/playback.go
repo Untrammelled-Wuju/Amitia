@@ -34,7 +34,7 @@ func (a *PlaybackAdapter) OnPlaybackFeedback(ctx context.Context, feedback behav
 		occurredAt = now
 	}
 
-	eventType := "playback.action." + string(feedback.Phase)
+	eventType := "runtime.playback.action_" + string(feedback.Phase)
 	builder := events.NewEnvelope(eventType, behavior.OriginPlayback).
 		UserID(userID).
 		CharacterID(characterID).
