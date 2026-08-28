@@ -61,10 +61,13 @@ export class PlaybackEventBridge {
       return;
     }
 
-    void this.runtime.sendPlaybackStarted(
-      this.lastPlaybackId,
-      this.lastCommandId,
-      event.actionKey ?? this.lastActionKey,
+    this.observeReport(
+      "playback started",
+      this.runtime.sendPlaybackStarted(
+        this.lastPlaybackId,
+        this.lastCommandId,
+        event.actionKey ?? this.lastActionKey,
+      ),
     );
   }
 
@@ -75,12 +78,15 @@ export class PlaybackEventBridge {
 
     const playedMs = event.playedDurationMs ?? (Date.now() - this.playbackStartedAt);
 
-    void this.runtime.sendPlaybackEnded(
-      event.playbackInstanceId ?? this.lastPlaybackId,
-      event.commandId ?? this.lastCommandId,
-      event.actionKey ?? this.lastActionKey,
-      playedMs,
-      event.reason ?? "natural_end",
+    this.observeReport(
+      "playback ended",
+      this.runtime.sendPlaybackEnded(
+        event.playbackInstanceId ?? this.lastPlaybackId,
+        event.commandId ?? this.lastCommandId,
+        event.actionKey ?? this.lastActionKey,
+        playedMs,
+        event.reason ?? "natural_end",
+      ),
     );
   }
 
@@ -90,12 +96,15 @@ export class PlaybackEventBridge {
     }
 
     const playedMs = event.playedDurationMs ?? (Date.now() - this.playbackStartedAt);
-    void this.runtime.sendPlaybackInterrupted(
-      event.playbackInstanceId ?? this.lastPlaybackId,
-      event.commandId ?? this.lastCommandId,
-      event.actionKey ?? this.lastActionKey,
-      playedMs,
-      event.reason ?? "higher_priority_action",
+    this.observeReport(
+      "playback interrupted",
+      this.runtime.sendPlaybackInterrupted(
+        event.playbackInstanceId ?? this.lastPlaybackId,
+        event.commandId ?? this.lastCommandId,
+        event.actionKey ?? this.lastActionKey,
+        playedMs,
+        event.reason ?? "higher_priority_action",
+      ),
     );
   }
 
@@ -104,13 +113,25 @@ export class PlaybackEventBridge {
       return;
     }
 
-    void this.runtime.sendPlaybackFailed(
-      event.playbackInstanceId ?? this.lastPlaybackId,
-      event.commandId ?? this.lastCommandId,
-      event.actionKey ?? this.lastActionKey,
-      event.error?.code ?? "unknown",
-      event.error?.message ?? "unknown error",
+    this.observeReport(
+      "playback failed",
+      this.runtime.sendPlaybackFailed(
+        event.playbackInstanceId ?? this.lastPlaybackId,
+        event.commandId ?? this.lastCommandId,
+        event.actionKey ?? this.lastActionKey,
+        event.error?.code ?? "unknown",
+        event.error?.message ?? "unknown error",
+      ),
     );
+  }
+
+  private observeReport(label: string, report: Promise<void>): void {
+    void report.catch((err) => {
+      console.warn(
+        `[PlaybackEventBridge] failed to report ${label}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    });
   }
 
   async reportStateSnapshot(snapshot: {
