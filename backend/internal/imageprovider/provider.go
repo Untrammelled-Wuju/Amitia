@@ -76,6 +76,7 @@ type ImageGenerationSubmission struct {
 }
 
 type ImageModelConfig struct {
+	ConfigID  int
 	Name      string
 	ApiType   string
 	ApiKey    string
