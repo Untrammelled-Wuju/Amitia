@@ -2,93 +2,478 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
+	"github.com/u-ai/backend/internal/desktoppet/generation"
+	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/pkg/app"
+	"gorm.io/gorm"
+)
+
+const (
+	editingGenerationPollInterval = 500 * time.Millisecond
+	editingGenerationWaitTimeout  = 12 * time.Minute
 )
 
 type editingGenerationPort struct {
-	ctx *app.AppContext
+	ctx               *app.AppContext
+	service           desktoppet.Service
+	processingService processing.Service
 }
 
-func newEditingGenerationPort(ctx *app.AppContext) editing.GenerationAdapter {
-	return &editingGenerationPort{ctx: ctx}
+func newEditingGenerationPort(ctx *app.AppContext, service desktoppet.Service, processingService processing.Service) editing.GenerationAdapter {
+	return &editingGenerationPort{ctx: ctx, service: service, processingService: processingService}
+}
+
+type editingGenerationAttempt struct {
+	ID            string `gorm:"column:id"`
+	AttemptNumber int    `gorm:"column:attempt_number"`
+	Status        string `gorm:"column:status"`
+	ErrorCode     string `gorm:"column:error_code"`
+	ErrorMessage  string `gorm:"column:error_message"`
+}
+
+type editingGenerationAction struct {
+	ID                string `gorm:"column:id"`
+	Status            string `gorm:"column:status"`
+	NextAttemptNumber int    `gorm:"column:next_attempt_number"`
+}
+
+type editingRegenerationSubmission struct {
+	ActiveAttemptID     string `gorm:"column:active_attempt_id"`
+	GenerationAttemptID string `gorm:"column:generation_attempt_id"`
+	ProcessingAttemptID string `gorm:"column:processing_attempt_id"`
+	ProcessingTaskID    string `gorm:"column:processing_task_id"`
+}
+
+func editingSubmissionMarker(stableID string, attemptNumber int) string {
+	return "editing-submit:" + stableID + ":" + strconv.Itoa(attemptNumber)
+}
+
+func parseEditingSubmissionMarker(marker, stableID string) (int, bool) {
+	prefix := "editing-submit:" + stableID + ":"
+	if !strings.HasPrefix(marker, prefix) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(strings.TrimPrefix(marker, prefix))
+	return n, err == nil && n > 0
+}
+
+func isGenerationActionTerminal(status string) bool {
+	switch status {
+	case "succeeded", "failed", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *editingGenerationPort) loadAttempt(id string) (*editingGenerationAttempt, error) {
+	var attempt editingGenerationAttempt
+	err := a.ctx.DB.Table("desktop_pet_action_generation_attempts").Where("id = ?", id).First(&attempt).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &attempt, nil
+}
+
+func (a *editingGenerationPort) loadAttemptByNumber(taskActionID string, attemptNumber int) (*editingGenerationAttempt, error) {
+	var attempt editingGenerationAttempt
+	err := a.ctx.DB.Table("desktop_pet_action_generation_attempts").
+		Where("task_action_id = ? AND attempt_number = ?", taskActionID, attemptNumber).
+		First(&attempt).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &attempt, nil
+}
+
+func (a *editingGenerationPort) waitAttempt(ctx context.Context, attempt *editingGenerationAttempt) (*editingGenerationAttempt, error) {
+	if attempt == nil {
+		return nil, errors.New("generation attempt is nil")
+	}
+	waitCtx := ctx
+	var cancel context.CancelFunc
+	if _, ok := ctx.Deadline(); !ok {
+		waitCtx, cancel = context.WithTimeout(ctx, editingGenerationWaitTimeout)
+		defer cancel()
+	}
+	ticker := time.NewTicker(editingGenerationPollInterval)
+	defer ticker.Stop()
+	for {
+		latest, err := a.loadAttempt(attempt.ID)
+		if err != nil {
+			return nil, err
+		}
+		if latest != nil {
+			switch generation.AttemptStatus(latest.Status) {
+			case generation.AttemptStatusSucceeded:
+				return latest, nil
+			case generation.AttemptStatusFailed,
+				generation.AttemptStatusFailedConfirmed,
+				generation.AttemptStatusManualReview,
+				generation.AttemptStatusCancelled,
+				generation.AttemptStatusCancelNotSupported,
+				generation.AttemptStatusCancelledAfterProviderCompletion:
+				message := strings.TrimSpace(latest.ErrorMessage)
+				if message == "" {
+					message = "generation attempt ended without a usable artifact"
+				}
+				if latest.ErrorCode != "" {
+					return nil, fmt.Errorf("generation attempt %s failed [%s]: %s", latest.ID, latest.ErrorCode, message)
+				}
+				return nil, fmt.Errorf("generation attempt %s failed: %s", latest.ID, message)
+			}
+		}
+		select {
+		case <-waitCtx.Done():
+			return nil, fmt.Errorf("wait generation attempt %s: %w", attempt.ID, waitCtx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func (a *editingGenerationPort) submitAndWait(ctx context.Context, jobID, generationTaskID, actionKey, stableSubmissionID string) (*editingGenerationAttempt, error) {
+	if jobID == "" || generationTaskID == "" || actionKey == "" || stableSubmissionID == "" {
+		return nil, errors.New("job ID, generation task ID, action key and stable submission ID are required")
+	}
+	if a.service == nil {
+		return nil, errors.New("desktop pet generation service is unavailable")
+	}
+
+	var action editingGenerationAction
+	if err := a.ctx.DB.Table("desktop_pet_generation_task_actions").
+		Where("task_id = ? AND action_key = ?", generationTaskID, actionKey).
+		First(&action).Error; err != nil {
+		return nil, fmt.Errorf("find task action: %w", err)
+	}
+
+	var submission editingRegenerationSubmission
+	if err := a.ctx.DB.Table("desktop_pet_regeneration_jobs").
+		Where("id = ?", jobID).
+		First(&submission).Error; err != nil {
+		return nil, fmt.Errorf("load regeneration submission state: %w", err)
+	}
+	if submission.GenerationAttemptID != "" {
+		attempt, err := a.loadAttempt(submission.GenerationAttemptID)
+		if err != nil {
+			return nil, err
+		}
+		if attempt == nil {
+			return nil, fmt.Errorf("recorded generation attempt %s does not exist", submission.GenerationAttemptID)
+		}
+		return a.waitAttempt(ctx, attempt)
+	}
+
+	expectedAttempt := 0
+	markerExists := false
+	if submission.ActiveAttemptID != "" {
+		var ok bool
+		expectedAttempt, ok = parseEditingSubmissionMarker(submission.ActiveAttemptID, stableSubmissionID)
+		if !ok {
+			return nil, fmt.Errorf("regeneration job %s is already bound to another generation submission", jobID)
+		}
+		markerExists = true
+	} else {
+		expectedAttempt = action.NextAttemptNumber
+		if expectedAttempt <= 0 {
+			expectedAttempt = 1
+		}
+		marker := editingSubmissionMarker(stableSubmissionID, expectedAttempt)
+		result := a.ctx.DB.Table("desktop_pet_regeneration_jobs").
+			Where("id = ? AND (active_attempt_id = '' OR active_attempt_id IS NULL)", jobID).
+			Updates(map[string]any{"active_attempt_id": marker, "updated_at": time.Now().UTC().Format(time.RFC3339)})
+		if result.Error != nil {
+			return nil, fmt.Errorf("reserve regeneration submission: %w", result.Error)
+		}
+		if result.RowsAffected != 1 {
+			return a.submitAndWait(ctx, jobID, generationTaskID, actionKey, stableSubmissionID)
+		}
+	}
+
+	attempt, err := a.loadAttemptByNumber(action.ID, expectedAttempt)
+	if err != nil {
+		return nil, err
+	}
+	if attempt == nil {
+		// A persisted marker means a previous process may have queued the retry and
+		// crashed before the Generation Worker created its attempt. Never queue a
+		// second retry while the action is already active.
+		if !markerExists || isGenerationActionTerminal(action.Status) {
+			if _, err := a.service.RetryAction(generationTaskID, actionKey); err != nil {
+				// If the retry raced with another claimant, re-read before surfacing the
+				// conflict. The stable expected attempt is authoritative.
+				if existing, readErr := a.loadAttemptByNumber(action.ID, expectedAttempt); readErr == nil && existing != nil {
+					attempt = existing
+				} else {
+					return nil, fmt.Errorf("queue canonical generation retry: %w", err)
+				}
+			}
+		}
+	}
+
+	if attempt == nil {
+		waitCtx := ctx
+		var cancel context.CancelFunc
+		if _, ok := ctx.Deadline(); !ok {
+			waitCtx, cancel = context.WithTimeout(ctx, editingGenerationWaitTimeout)
+			defer cancel()
+		}
+		ticker := time.NewTicker(editingGenerationPollInterval)
+		defer ticker.Stop()
+		for attempt == nil {
+			attempt, err = a.loadAttemptByNumber(action.ID, expectedAttempt)
+			if err != nil {
+				return nil, err
+			}
+			if attempt != nil {
+				break
+			}
+			select {
+			case <-waitCtx.Done():
+				return nil, fmt.Errorf("wait canonical generation attempt %d: %w", expectedAttempt, waitCtx.Err())
+			case <-ticker.C:
+			}
+		}
+	}
+
+	if err := a.ctx.DB.Table("desktop_pet_regeneration_jobs").Where("id = ?", jobID).Updates(map[string]any{
+		"active_attempt_id":     attempt.ID,
+		"generation_attempt_id": attempt.ID,
+		"provider_attempt_id":   attempt.ID,
+		"updated_at":            time.Now().UTC().Format(time.RFC3339),
+	}).Error; err != nil {
+		return nil, fmt.Errorf("persist generation attempt identity: %w", err)
+	}
+	return a.waitAttempt(ctx, attempt)
+}
+
+func (a *editingGenerationPort) findProcessingTaskForAttempt(generationTaskID, actionKey string, attemptNumber int) (*processing.ProcessingTask, error) {
+	var task processing.ProcessingTask
+	err := a.ctx.DB.Table("desktop_pet_processing_tasks AS t").
+		Joins("JOIN desktop_pet_processing_actions AS a ON a.processing_task_id = t.id").
+		Where("t.generation_task_id = ? AND a.action_key = ? AND a.source_attempt_number = ?", generationTaskID, actionKey, attemptNumber).
+		Order("t.processing_version DESC").
+		Select("t.*").
+		First(&task).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
+func (a *editingGenerationPort) ensureProcessingTask(ctx context.Context, jobID, generationTaskID, actionKey, userID string, attemptNumber int) (*processing.ProcessingTask, error) {
+	if a.processingService == nil {
+		return nil, errors.New("desktop pet processing service is unavailable")
+	}
+	var submission editingRegenerationSubmission
+	if err := a.ctx.DB.WithContext(ctx).Table("desktop_pet_regeneration_jobs").Where("id = ?", jobID).First(&submission).Error; err != nil {
+		return nil, err
+	}
+	if submission.ProcessingAttemptID != "" {
+		resp, err := a.processingService.GetProcessingTask(submission.ProcessingAttemptID)
+		if err == nil && resp != nil && resp.ProcessingTask != nil {
+			return resp.ProcessingTask, nil
+		}
+	}
+	if existing, err := a.findProcessingTaskForAttempt(generationTaskID, actionKey, attemptNumber); err != nil {
+		return nil, err
+	} else if existing != nil {
+		_ = a.ctx.DB.Table("desktop_pet_regeneration_jobs").Where("id = ?", jobID).Updates(map[string]any{
+			"processing_attempt_id": existing.ID,
+			"updated_at":            time.Now().UTC().Format(time.RFC3339),
+		}).Error
+		return existing, nil
+	}
+
+	var source processing.ProcessingTask
+	if submission.ProcessingTaskID != "" {
+		_ = a.ctx.DB.Table("desktop_pet_processing_tasks").Where("id = ?", submission.ProcessingTaskID).First(&source).Error
+	}
+	created, err := a.processingService.CreateProcessingTask(&processing.CreateProcessingTaskRequest{
+		GenerationTaskID:           generationTaskID,
+		UserID:                     userID,
+		OutputWidth:                source.OutputWidth,
+		OutputHeight:               source.OutputHeight,
+		TargetCharacterHeightRatio: source.TargetCharacterHeightRatio,
+		AnchorMode:                 source.AnchorMode,
+		BackgroundMode:             source.BackgroundMode,
+		OutputFormat:               source.OutputFormat,
+		DefaultFPS:                 source.DefaultFPS,
+	})
+	if err != nil {
+		// A crash after task creation but before job bookkeeping is recovered by
+		// adopting the processing task that already points at this generation attempt.
+		if existing, findErr := a.findProcessingTaskForAttempt(generationTaskID, actionKey, attemptNumber); findErr == nil && existing != nil {
+			created = existing
+		} else {
+			return nil, fmt.Errorf("create processing task for regeneration: %w", err)
+		}
+	}
+	if err := a.ctx.DB.Table("desktop_pet_regeneration_jobs").Where("id = ?", jobID).Updates(map[string]any{
+		"processing_attempt_id": created.ID,
+		"updated_at":            time.Now().UTC().Format(time.RFC3339),
+	}).Error; err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
+func (a *editingGenerationPort) waitProcessedFrames(ctx context.Context, task *processing.ProcessingTask, actionKey string, attemptNumber int) ([]editing.GenerationArtifactInfo, error) {
+	if task == nil {
+		return nil, errors.New("processing task is nil")
+	}
+	waitCtx := ctx
+	var cancel context.CancelFunc
+	if _, ok := ctx.Deadline(); !ok {
+		waitCtx, cancel = context.WithTimeout(ctx, editingGenerationWaitTimeout)
+		defer cancel()
+	}
+	ticker := time.NewTicker(editingGenerationPollInterval)
+	defer ticker.Stop()
+	for {
+		resp, err := a.processingService.GetProcessingTask(task.ID)
+		if err != nil {
+			return nil, err
+		}
+		if resp != nil && resp.ProcessingTask != nil {
+			status := resp.ProcessingTask.Status
+			switch status {
+			case "succeeded", "partially_succeeded":
+				var actionStatus string
+				for _, action := range resp.Actions {
+					if action.ActionKey == actionKey {
+						actionStatus = action.Status
+						break
+					}
+				}
+				if actionStatus != "succeeded" {
+					return nil, fmt.Errorf("processing action %s ended with status %s", actionKey, actionStatus)
+				}
+				var rows []struct {
+					ID            string `gorm:"column:id"`
+					FrameIndex    int    `gorm:"column:frame_index"`
+					ProcessedPath string `gorm:"column:processed_path"`
+					Width         int    `gorm:"column:width"`
+					Height        int    `gorm:"column:height"`
+					ContentHash   string `gorm:"column:content_hash"`
+				}
+				if err := a.ctx.DB.WithContext(ctx).Table("desktop_pet_processed_frames AS f").
+					Joins("JOIN desktop_pet_processing_actions AS a ON a.id = f.processing_action_id").
+					Where("a.processing_task_id = ? AND a.action_key = ? AND a.source_attempt_number = ? AND f.status = ?", task.ID, actionKey, attemptNumber, "succeeded").
+					Order("f.frame_index ASC").Find(&rows).Error; err != nil {
+					return nil, err
+				}
+				if len(rows) == 0 {
+					return nil, fmt.Errorf("processing task %s produced no frames for %s", task.ID, actionKey)
+				}
+				out := make([]editing.GenerationArtifactInfo, 0, len(rows))
+				for _, row := range rows {
+					path := row.ProcessedPath
+					if !filepath.IsAbs(path) {
+						path = filepath.Join(config.AppCfg.Storage.DataDir, filepath.FromSlash(path))
+					}
+					out = append(out, editing.GenerationArtifactInfo{
+						ArtifactID: row.ID, FrameIndex: row.FrameIndex, ImagePath: path,
+						Width: row.Width, Height: row.Height, ContentHash: row.ContentHash,
+					})
+				}
+				return out, nil
+			case "failed", "cancelled":
+				return nil, fmt.Errorf("processing task %s ended with status %s: %s", task.ID, status, resp.ProcessingTask.ErrorMessage)
+			}
+		}
+		select {
+		case <-waitCtx.Done():
+			return nil, fmt.Errorf("wait processing task %s: %w", task.ID, waitCtx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func (a *editingGenerationPort) generateProcessedFrames(ctx context.Context, jobID, generationTaskID, actionKey, userID, stableSubmissionID string) (*editingGenerationAttempt, []editing.GenerationArtifactInfo, error) {
+	attempt, err := a.submitAndWait(ctx, jobID, generationTaskID, actionKey, stableSubmissionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	processingTask, err := a.ensureProcessingTask(ctx, jobID, generationTaskID, actionKey, userID, attempt.AttemptNumber)
+	if err != nil {
+		return nil, nil, err
+	}
+	frames, err := a.waitProcessedFrames(ctx, processingTask, actionKey, attempt.AttemptNumber)
+	if err != nil {
+		return nil, nil, err
+	}
+	for i := range frames {
+		frames[i].AttemptID = attempt.ID
+	}
+	return attempt, frames, nil
 }
 
 func (a *editingGenerationPort) GenerateSingleFrame(ctx context.Context, req editing.SingleFrameGenerationRequest) (*editing.SingleFrameGenerationResult, error) {
-	if req.GenerationTaskID == "" || req.ActionKey == "" {
-		return nil, fmt.Errorf("generation task ID and action key are required")
-	}
-	var taskAction struct {
-		ID string `gorm:"column:id"`
-	}
-	err := a.ctx.DB.Table("desktop_pet_generation_task_actions").
-		Where("task_id = ? AND action_key = ?", req.GenerationTaskID, req.ActionKey).
-		First(&taskAction).Error
+	attempt, frames, err := a.generateProcessedFrames(ctx, req.JobID, req.GenerationTaskID, req.ActionKey, req.UserID, req.AttemptID)
 	if err != nil {
-		return nil, fmt.Errorf("find task action: %w", err)
+		return nil, err
 	}
-	attemptID := uuid.NewString()
-	now := time.Now().UTC().Format(time.RFC3339)
-	err = a.ctx.DB.Table("desktop_pet_action_generation_attempts").Create(map[string]interface{}{
-		"id":             attemptID,
-		"task_id":        req.GenerationTaskID,
-		"task_action_id": taskAction.ID,
-		"attempt_number": 1,
-		"mode":           "single_frame",
-		"reason":         "editing_single_frame_regen",
-		"status":         "pending",
-		"created_at":     now,
-		"updated_at":     now,
-	}).Error
-	if err != nil {
-		return nil, fmt.Errorf("create generation attempt: %w", err)
+	var selected *editing.GenerationArtifactInfo
+	for i := range frames {
+		if frames[i].FrameIndex == req.FrameIndex {
+			selected = &frames[i]
+			break
+		}
+	}
+	if selected == nil {
+		return nil, fmt.Errorf("processed regeneration attempt %s has no frame index %d", attempt.ID, req.FrameIndex)
 	}
 	return &editing.SingleFrameGenerationResult{
-		ProviderAttemptID: attemptID,
+		ProviderAttemptID: attempt.ID,
+		ImagePath:         selected.ImagePath,
+		Width:             selected.Width,
+		Height:            selected.Height,
 	}, nil
 }
 
 func (a *editingGenerationPort) GenerateFullAction(ctx context.Context, req editing.FullActionGenerationRequest) (*editing.FullActionGenerationResult, error) {
-	if req.GenerationTaskID == "" || req.ActionKey == "" {
-		return nil, fmt.Errorf("generation task ID and action key are required")
-	}
-	var taskAction struct {
-		ID string `gorm:"column:id"`
-	}
-	err := a.ctx.DB.Table("desktop_pet_generation_task_actions").
-		Where("task_id = ? AND action_key = ?", req.GenerationTaskID, req.ActionKey).
-		First(&taskAction).Error
+	attempt, frames, err := a.generateProcessedFrames(ctx, req.JobID, req.GenerationTaskID, req.ActionKey, req.UserID, req.AttemptID)
 	if err != nil {
-		return nil, fmt.Errorf("find task action: %w", err)
+		return nil, err
 	}
-	attemptID := uuid.NewString()
-	now := time.Now().UTC().Format(time.RFC3339)
-	err = a.ctx.DB.Table("desktop_pet_action_generation_attempts").Create(map[string]interface{}{
-		"id":             attemptID,
-		"task_id":        req.GenerationTaskID,
-		"task_action_id": taskAction.ID,
-		"attempt_number": 1,
-		"mode":           "sprite_sheet",
-		"reason":         "editing_full_action_regen",
-		"status":         "pending",
-		"created_at":     now,
-		"updated_at":     now,
-	}).Error
-	if err != nil {
-		return nil, fmt.Errorf("create generation attempt: %w", err)
+	paths := make([]string, 0, len(frames))
+	for _, frame := range frames {
+		if frame.ImagePath != "" {
+			paths = append(paths, frame.ImagePath)
+		}
+	}
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("processed regeneration attempt %s completed without frames", attempt.ID)
 	}
 	return &editing.FullActionGenerationResult{
-		ProviderAttemptID: attemptID,
+		ProviderAttemptID: attempt.ID,
+		FrameCount:        len(paths),
+		FramePaths:        paths,
 	}, nil
 }
 
 func (a *editingGenerationPort) GetGenerationArtifacts(ctx context.Context, generationTaskID, actionKey string, attemptNumber int) ([]editing.GenerationArtifactInfo, error) {
 	var taskActionID string
-	err := a.ctx.DB.Table("desktop_pet_generation_task_actions").
+	err := a.ctx.DB.WithContext(ctx).Table("desktop_pet_generation_task_actions").
 		Where("task_id = ? AND action_key = ?", generationTaskID, actionKey).
 		Select("id").Scan(&taskActionID).Error
 	if err != nil {
@@ -97,7 +482,7 @@ func (a *editingGenerationPort) GetGenerationArtifacts(ctx context.Context, gene
 	if taskActionID == "" {
 		return []editing.GenerationArtifactInfo{}, nil
 	}
-	query := a.ctx.DB.Table("desktop_pet_generation_artifacts").
+	query := a.ctx.DB.WithContext(ctx).Table("desktop_pet_generation_artifacts").
 		Where("task_action_id = ?", taskActionID)
 	if attemptNumber > 0 {
 		query = query.Where("attempt_id IN (?)",
@@ -116,19 +501,22 @@ func (a *editingGenerationPort) GetGenerationArtifacts(ctx context.Context, gene
 		Height       int    `gorm:"column:height"`
 		SegmentIndex int    `gorm:"column:segment_index"`
 	}
-	err = query.Order("segment_index ASC").Find(&artifacts).Error
-	if err != nil {
+	if err := query.Order("segment_index ASC").Find(&artifacts).Error; err != nil {
 		return nil, fmt.Errorf("query artifacts: %w", err)
 	}
 	result := make([]editing.GenerationArtifactInfo, 0, len(artifacts))
 	for _, art := range artifacts {
-		if art.ArtifactType == "provider_receipt" || art.ArtifactType == "layout_manifest" {
+		if art.ArtifactType == "provider_receipt" || art.ArtifactType == "layout_manifest" || art.RelativePath == "" {
 			continue
+		}
+		path := art.RelativePath
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(config.AppCfg.Storage.DataDir, filepath.FromSlash(path))
 		}
 		result = append(result, editing.GenerationArtifactInfo{
 			ArtifactID:  art.ID,
 			FrameIndex:  art.SegmentIndex,
-			ImagePath:   art.RelativePath,
+			ImagePath:   path,
 			Width:       art.Width,
 			Height:      art.Height,
 			ContentHash: art.Hash,
@@ -246,24 +634,6 @@ func (a *editingProcessingPort) GetProcessingRevisionFrames(ctx context.Context,
 		}
 	}
 	return result, nil
-}
-
-func (a *editingProcessingPort) ImportAsBaselineRevision(ctx context.Context, processingTaskID, actionKey string) (*editing.BaselineRevisionImport, error) {
-	action, err := a.GetProcessingAction(ctx, processingTaskID, actionKey)
-	if err != nil {
-		return nil, err
-	}
-	frames, err := a.GetProcessedFrames(ctx, action.ProcessingActionID)
-	if err != nil {
-		return nil, err
-	}
-	return &editing.BaselineRevisionImport{
-		ProcessingActionID: action.ProcessingActionID,
-		Frames:             frames,
-		LoopType:           action.LoopType,
-		FPS:                action.FPS,
-		FrameDurationMS:    action.FrameDurationMS,
-	}, nil
 }
 
 type editingQualityPort struct {

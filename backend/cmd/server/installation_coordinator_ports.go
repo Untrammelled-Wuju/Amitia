@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"strings"
 	"time"
 
@@ -207,7 +208,7 @@ func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, dev
 		deviceCtx.UserID,
 		deviceCtx.DeviceID,
 		string(runtimev2.CommandTypePlayAction),
-		fmt.Sprintf("play:%s:%s:%s:%d", deviceCtx.DeviceID, installationID, actionKey, time.Now().UnixNano()),
+		fmt.Sprintf("play:%s:%s:%s:%s", deviceCtx.DeviceID, installationID, actionKey, uuid.NewString()),
 		payloadBytes,
 	)
 	if err != nil {
