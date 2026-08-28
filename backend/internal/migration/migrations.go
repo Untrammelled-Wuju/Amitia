@@ -147,6 +147,7 @@ func DefaultMigrations() []Migration {
 		DesktopPetInstallationOperationIdempotencyMigration(),
 		DesktopPetDevicesMigration(),
 		DesktopPetLocalSessionFixMigration(),
+		DesktopPetDesiredStateSchemaForwardFixMigration(),
 		ExtensionEventOutboxDomainCausationMigration(),
 		DesktopPetImportSagaFieldsMigration(),
 		WorkspaceMountsMigration(),
