@@ -57,7 +57,7 @@ async function flushAsync(): Promise<void> {
   }
 }
 
-function helloAckEnvelope(): RuntimeEnvelope {
+function helloAckEnvelope(overrides: Record<string, unknown> = {}): RuntimeEnvelope {
   return buildEnvelope(
     "hello_ack",
     "hello_ack",
@@ -72,6 +72,7 @@ function helloAckEnvelope(): RuntimeEnvelope {
       sessionId: "session-1",
       serverTime: new Date().toISOString(),
       currentDesiredRevision: 7,
+      ...overrides,
     },
   );
 }
@@ -84,6 +85,7 @@ async function connectHandler(
     lastEventSequence?: number;
     actualStateHash?: string;
   },
+  helloAckOverrides: Record<string, unknown> = {},
 ): Promise<{ handler: DesktopRuntimeHandlerV2; ws: FakeWebSocket; hello: RuntimeEnvelope }> {
   const handler = new DesktopRuntimeHandlerV2(
     {
@@ -119,7 +121,7 @@ async function connectHandler(
   expect(hello.deviceId).toBe("device-1");
   expect(hello.runtimeId).toBe("runtime-1");
 
-  ws.message(helloAckEnvelope());
+  ws.message(helloAckEnvelope(helloAckOverrides));
   await connecting;
   await flushAsync();
   return { handler, ws, hello };
@@ -425,4 +427,98 @@ describe("DesktopRuntimeHandlerV2", () => {
     expect(handler.getState()).toBe("disconnected");
     expect(FakeWebSocket.instances).toHaveLength(countBeforeClose);
   });
+  it("rejects a server envelope from a superseded generation before command execution", async () => {
+    const onCommand = vi.fn(async () => ({
+      commandId: "cmd-stale",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+    const { handler, ws } = await connectHandler(onCommand);
+
+    ws.message(
+      buildEnvelope(
+        "command",
+        "runtime.command.play_action",
+        "user-1",
+        "device-1",
+        "runtime-1",
+        "session-1",
+        2,
+        9,
+        {
+          commandId: "cmd-stale",
+          commandType: "runtime.command.play_action",
+          commandSequence: 99,
+          payload: { actionKey: "wave" },
+        },
+      ),
+    );
+    await flushAsync();
+
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(ws.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(handler.getState()).toBe("disconnected");
+  });
+
+  it("rejects a server envelope whose payload hash no longer matches", async () => {
+    const onCommand = vi.fn(async () => ({
+      commandId: "cmd-tampered",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+    const { handler, ws } = await connectHandler(onCommand);
+
+    const tampered = buildEnvelope(
+      "command",
+      "runtime.command.play_action",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      10,
+      {
+        commandId: "cmd-tampered",
+        commandType: "runtime.command.play_action",
+        commandSequence: 100,
+        payload: { actionKey: "wave" },
+      },
+    );
+    tampered.payload = {
+      commandId: "cmd-tampered",
+      commandType: "runtime.command.play_action",
+      commandSequence: 100,
+      payload: { actionKey: "shutdown" },
+    };
+    ws.message(tampered);
+    await flushAsync();
+
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(ws.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(handler.getState()).toBe("disconnected");
+  });
+
+  it("honors the negotiated server message-size limit for outbound envelopes", async () => {
+    const { handler } = await connectHandler(
+      async () => ({
+        commandId: "unused",
+        status: "applied",
+        errorCode: "",
+        errorMessage: "",
+        appliedRevision: 0,
+      }),
+      undefined,
+      { maxMessageBytes: 512 },
+    );
+
+    await expect(
+      handler.sendRuntimeEvent("runtime.test.large", { body: "x".repeat(2048) }),
+    ).rejects.toThrow("maxMessageBytes");
+    handler.disconnect();
+  });
+
 });

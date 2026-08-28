@@ -1228,6 +1228,10 @@ export class DesktopPetManager {
   }
 
   async shutdown(): Promise<void> {
+    await this.runLifecycleMutation(() => this.shutdownInternal());
+  }
+
+  private async shutdownInternal(): Promise<void> {
     this.teardownRecoveryHandlers();
     this.stopBridge();
     await this.stopRuntime();
@@ -2707,6 +2711,10 @@ export class DesktopPetManager {
   };
 
   private async recoverRuntime(reason: RecoveryReason): Promise<void> {
+    await this.runLifecycleMutation(() => this.recoverRuntimeInternal(reason));
+  }
+
+  private async recoverRuntimeInternal(reason: RecoveryReason): Promise<void> {
     if (this.recoveryInProgress) {
       return;
     }

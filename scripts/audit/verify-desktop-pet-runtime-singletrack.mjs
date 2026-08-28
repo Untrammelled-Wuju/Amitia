@@ -93,6 +93,8 @@ requireText(
     /wiring\.NewV2ActivePetAdapter\s*\(/,
     /desktoppet\.LegacyWriteCutoverReady\s*\(ctx\.DB\)/,
     /services\.InstallationCoordinator\s*==\s*nil/,
+    /RegisterTimeout:\s*time\.Duration\(runtimeConfig\.RegisterTimeoutSec\)\s*\*\s*time\.Second/,
+    /SendQueueSize:\s*runtimeConfig\.SendQueueSize/,
   ],
   [
     /runtimev2\.NewRuntimeFacade\s*\(/,
@@ -110,6 +112,12 @@ requireText(
     /websocket\.IsWebSocketUpgrade\s*\(r\)/,
     /parseRuntimeBootstrapSubprotocol\s*\(r\)/,
     /upgrader\.Subprotocols\s*=\s*\[\]string\{selectedProtocol\}/,
+    /env\.ConnectionGeneration\s*!=\s*generation/,
+    /ctx\.handler\.HandleHeartbeat\(ctx\.conn\)/,
+    /wsConn\.SetReadLimit\(cfg\.MaxMessageBytes\)/,
+    /wsConn\.SetReadDeadline\(time\.Now\(\)\.Add\(cfg\.RegisterTimeout\)\)/,
+    /refreshHeartbeatDeadline\(\)/,
+    /sendQueueSize\s*:=\s*cfg\.SendQueueSize/,
   ],
   [
     /rawTicket\s*:=\s*strings\.TrimSpace\(r\.URL\.Query\(\)\.Get\("ticket"\)\)/,
@@ -133,6 +141,11 @@ requireText(
     /RUNTIME_V2_WEBSOCKET_SUBPROTOCOL\s*=\s*"amitia\.runtime\.v2"/,
     /RUNTIME_V2_BOOTSTRAP_SUBPROTOCOL_PREFIX\s*=\s*"amitia\.runtime\.bootstrap\."/,
     /new WebSocket\([\s\S]*?buildRuntimeWebSocketProtocols\(this\.config\.bootstrapTicket\)/,
+    /validateServerEnvelope\(envelope\)/,
+    /envelope\.payloadHash\s*!==\s*computePayloadHash\(envelope\.payload\)/,
+    /envelope\.connectionGeneration\s*!==\s*this\.connectionGeneration/,
+    /runtime server heartbeat timeout/,
+    /runtime envelope exceeds maxMessageBytes/,
   ],
 );
 
@@ -205,9 +218,34 @@ requireText(
   [
     /deviceRuntimeSessions\.Acquire\s*\(context\.Background\(\)/,
     /deviceRuntimeSessions\.UpdateCursor\s*\(context\.Background\(\)/,
+    /fenceMu\s+sync\.RWMutex/,
+    /existing\.fenceMu\.Lock\(\)/,
+    /validateEstablishedInboundEnvelope\(conn, env\)/,
+    /env\.ConnectionGeneration\s*!=\s*generation/,
+    /validateCommandOwnership\(conn, sessionID, ackCmdID\)/,
+    /previousState\s*==\s*ConnStateClosing/,
   ],
   [
     /deviceRuntimeSessions\.(?:Acquire|Close|MarkReady|GetSession|UpdateCursor|Heartbeat)\s*\(\s*nil\b/,
+  ],
+);
+
+requireText(
+  "backend/internal/desktoppet/runtime/protocol/v2/reconciler.go",
+  [
+    /ExpireCommands\(now time\.Time, timeoutSec int\)/,
+    /ListExpiredCommands\(100, timeoutSec\)/,
+  ],
+  [
+    /ListExpiredCommands\(100, 60\)/,
+  ],
+);
+
+requireText(
+  "backend/internal/desktoppet/runtime/protocol/v2/command_dispatcher.go",
+  [
+    /conn\.fenceMu\.RLock\(\)/,
+    /sessionID, generation := conn\.SessionSnapshot\(\)/,
   ],
 );
 

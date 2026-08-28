@@ -120,6 +120,9 @@ export interface HelloAckPayload {
   serverTime: string;
   currentDesiredRevision: number;
   resumeMode?: string;
+  heartbeatIntervalMs?: number;
+  heartbeatTimeoutMs?: number;
+  maxMessageBytes?: number;
   errorCode?: string;
   errorMessage?: string;
 }

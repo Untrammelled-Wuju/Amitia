@@ -63,6 +63,8 @@ export interface RuntimeHandlerConfig {
   autoReconnect?: boolean;
   connectTimeoutMs?: number;
   heartbeatIntervalMs?: number;
+  heartbeatTimeoutMs?: number;
+  maxMessageBytes?: number;
   maxReconnectAttempts?: number;
   reconnectBaseDelayMs?: number;
   reconnectMaxDelayMs?: number;
@@ -87,6 +89,8 @@ export interface RuntimeCommandAttempt {
 }
 
 const DEFAULT_HEARTBEAT_MS = 15000;
+const DEFAULT_HEARTBEAT_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_MESSAGE_BYTES = 1048576;
 const DEFAULT_CONNECT_TIMEOUT_MS = 10000;
 const DEFAULT_MAX_RECONNECT = 5;
 const DEFAULT_RECONNECT_BASE_MS = 1000;
@@ -135,6 +139,7 @@ export class DesktopRuntimeHandlerV2 {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private idleHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private lastServerTime = "";
+  private lastServerMessageAt = 0;
   private pendingConnectResolve: (() => void) | null = null;
   private pendingConnectReject: ((err: Error) => void) | null = null;
 
@@ -160,6 +165,8 @@ export class DesktopRuntimeHandlerV2 {
       autoReconnect: config.autoReconnect ?? false,
       connectTimeoutMs: config.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
       heartbeatIntervalMs: config.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_MS,
+      heartbeatTimeoutMs: config.heartbeatTimeoutMs ?? DEFAULT_HEARTBEAT_TIMEOUT_MS,
+      maxMessageBytes: config.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES,
       maxReconnectAttempts: config.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT,
       reconnectBaseDelayMs: config.reconnectBaseDelayMs ?? DEFAULT_RECONNECT_BASE_MS,
       reconnectMaxDelayMs: config.reconnectMaxDelayMs ?? DEFAULT_RECONNECT_MAX_MS,
@@ -243,8 +250,13 @@ export class DesktopRuntimeHandlerV2 {
         };
 
         ws.onmessage = (event: MessageEvent) => {
-          this.handleMessage(event.data)
-            .catch((err) => this.hooks.onError(err instanceof Error ? err : new Error(String(err))));
+          this.handleMessage(event.data).catch((err) => {
+            const error = err instanceof Error ? err : new Error(String(err));
+            this.hooks.onError(error);
+            if (this.ws === ws && ws.readyState === WebSocket.OPEN) {
+              ws.close(4003, "protocol_violation");
+            }
+          });
         };
 
         ws.onerror = () => {
@@ -450,7 +462,14 @@ export class DesktopRuntimeHandlerV2 {
       this.outboundSequence,
       payload,
     );
-    ws.send(JSON.stringify(envelope));
+    const serialized = JSON.stringify(envelope);
+    const messageBytes = new TextEncoder().encode(serialized).byteLength;
+    if (this.config.maxMessageBytes > 0 && messageBytes > this.config.maxMessageBytes) {
+      throw new Error(
+        `runtime envelope exceeds maxMessageBytes: ${messageBytes} > ${this.config.maxMessageBytes}`,
+      );
+    }
+    ws.send(serialized);
     if (type === "runtime_event" || type === "command_ack") {
       this.lastEventSequence = this.outboundSequence;
     }
@@ -462,12 +481,15 @@ export class DesktopRuntimeHandlerV2 {
 
   private async handleMessage(raw: unknown): Promise<void> {
     if (typeof raw !== "string") {
-      return;
+      throw new Error("runtime server envelope must be text");
     }
+    if (this.config.maxMessageBytes > 0 && new TextEncoder().encode(raw).byteLength > this.config.maxMessageBytes) {
+      throw new Error("runtime server envelope exceeds maxMessageBytes");
+    }
+
     const envelope = JSON.parse(raw) as RuntimeEnvelope;
-    if (envelope.protocol !== "amitia.desktop-pet.runtime") {
-      return;
-    }
+    this.validateServerEnvelope(envelope);
+    this.lastServerMessageAt = Date.now();
 
     switch (envelope.messageType) {
       case "hello_ack":
@@ -495,6 +517,47 @@ export class DesktopRuntimeHandlerV2 {
     }
   }
 
+  private validateServerEnvelope(envelope: RuntimeEnvelope): void {
+    if (!envelope || envelope.envelopeVersion !== 2 || envelope.protocol !== "amitia.desktop-pet.runtime") {
+      throw new Error("invalid runtime server envelope protocol");
+    }
+    if (envelope.userId !== this.config.userId ||
+        envelope.deviceId !== this.config.deviceId ||
+        envelope.runtimeId !== this.config.runtimeId) {
+      throw new Error("runtime server envelope identity mismatch");
+    }
+    if (!Number.isInteger(envelope.connectionGeneration) || envelope.connectionGeneration <= 0) {
+      throw new Error("runtime server envelope generation is invalid");
+    }
+    if (!Number.isInteger(envelope.sequence) || envelope.sequence <= 0) {
+      throw new Error("runtime server envelope sequence is invalid");
+    }
+    if (envelope.payloadHash !== computePayloadHash(envelope.payload)) {
+      throw new Error("runtime server envelope payload hash mismatch");
+    }
+
+    if (envelope.messageType === "hello_ack") {
+      const ack = envelope.payload as HelloAckPayload | undefined;
+      if (!ack) {
+        throw new Error("runtime hello_ack payload is missing");
+      }
+      if (ack.accepted && (!ack.sessionId || envelope.runtimeSessionId !== ack.sessionId)) {
+        throw new Error("runtime hello_ack session mismatch");
+      }
+      if (this.connectionGeneration > 0 && envelope.connectionGeneration < this.connectionGeneration) {
+        throw new Error("runtime hello_ack generation regressed");
+      }
+      return;
+    }
+
+    if (!this.sessionId || envelope.runtimeSessionId !== this.sessionId) {
+      throw new Error("runtime server envelope session mismatch");
+    }
+    if (envelope.connectionGeneration !== this.connectionGeneration) {
+      throw new Error("runtime server envelope generation mismatch");
+    }
+  }
+
   private async handleHelloAck(ack: HelloAckPayload): Promise<void> {
     if (!ack.accepted) {
       const err = new Error(`hello rejected: ${ack.errorCode} ${ack.errorMessage}`);
@@ -506,8 +569,20 @@ export class DesktopRuntimeHandlerV2 {
 
     this.sessionId = ack.sessionId ?? "";
     this.lastServerTime = ack.serverTime ?? "";
+    if (typeof ack.heartbeatIntervalMs === "number" && Number.isFinite(ack.heartbeatIntervalMs) && ack.heartbeatIntervalMs > 0) {
+      this.config.heartbeatIntervalMs = Math.floor(ack.heartbeatIntervalMs);
+    }
+    if (typeof ack.heartbeatTimeoutMs === "number" && Number.isFinite(ack.heartbeatTimeoutMs) &&
+        ack.heartbeatTimeoutMs > this.config.heartbeatIntervalMs) {
+      this.config.heartbeatTimeoutMs = Math.floor(ack.heartbeatTimeoutMs);
+    }
+    if (typeof ack.maxMessageBytes === "number" && Number.isFinite(ack.maxMessageBytes) && ack.maxMessageBytes > 0) {
+      this.config.maxMessageBytes = Math.floor(ack.maxMessageBytes);
+    }
+    this.lastServerMessageAt = Date.now();
     this.reconnectAttempts = 0;
     this.setState("connected");
+    this.startHeartbeat();
     this.resolvePendingConnect();
 
     this.hooks.onHelloAck(ack);
@@ -771,9 +846,28 @@ export class DesktopRuntimeHandlerV2 {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
       if (this.isConnected()) {
-        void this.sendEnvelope("ping", "ping", { t: Date.now() }).catch(() => {});
+        void this.sendEnvelope("ping", "ping", { t: Date.now() }).catch((err) => {
+          this.hooks.onError(err instanceof Error ? err : new Error(String(err)));
+        });
       }
     }, this.config.heartbeatIntervalMs);
+
+    const watchdogIntervalMs = Math.max(1000, Math.min(
+      this.config.heartbeatIntervalMs,
+      Math.floor(this.config.heartbeatTimeoutMs / 3),
+    ));
+    this.idleHeartbeatTimer = setInterval(() => {
+      if (!this.isConnected() || this.lastServerMessageAt <= 0) return;
+      if (Date.now() - this.lastServerMessageAt <= this.config.heartbeatTimeoutMs) return;
+
+      const err = new Error("runtime server heartbeat timeout");
+      this.hooks.onError(err);
+      this.stopHeartbeat();
+      const ws = this.ws;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close(4002, "heartbeat_timeout");
+      }
+    }, watchdogIntervalMs);
   }
 
   private stopHeartbeat(): void {

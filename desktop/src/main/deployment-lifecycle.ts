@@ -46,6 +46,8 @@ export class DesktopDeploymentLifecycle {
 
   private reconcileChain: Promise<void> = Promise.resolve();
   private currentConfig: DeploymentModeConfig;
+  private shuttingDown = false;
+  private shutdownPromise: Promise<void> | null = null;
 
   constructor(deps: DesktopDeploymentLifecycleDeps, initialConfig: DeploymentModeConfig) {
     this.configStore = deps.configStore;
@@ -59,6 +61,10 @@ export class DesktopDeploymentLifecycle {
   }
 
   async reconcile(config: DeploymentModeConfig): Promise<RuntimeStatus> {
+    if (this.shuttingDown) {
+      return this.runtimeManager.getStatus();
+    }
+
     const result: { status?: RuntimeStatus; error?: Error } = {};
 
     this.reconcileChain = this.reconcileChain.then(async () => {
@@ -88,7 +94,7 @@ export class DesktopDeploymentLifecycle {
   }
 
   private async reconcileLocalMode(): Promise<void> {
-    this.stopLegacyPetIntegrations();
+    await this.stopLegacyPetIntegrations();
     this.stopBusinessIntegrations();
     getMeshCoordinator(this.getMainWindow).stop();
 
@@ -103,11 +109,11 @@ export class DesktopDeploymentLifecycle {
 
     await this.rebuildBusinessIntegrations(this.topology);
 
-    this.startLegacyPetIntegrations();
+    await this.startLegacyPetIntegrations();
   }
 
   private async reconcileCloudMode(): Promise<void> {
-    this.stopLegacyPetIntegrations();
+    await this.stopLegacyPetIntegrations();
     this.stopBusinessIntegrations();
 
     const [coreResult] = await Promise.allSettled([
@@ -244,8 +250,8 @@ export class DesktopDeploymentLifecycle {
     }
   }
 
-  private startLegacyPetIntegrations(): void {
-    if (this.currentConfig.mode !== "local") {
+  private async startLegacyPetIntegrations(): Promise<void> {
+    if (this.currentConfig.mode !== "local" || this.shuttingDown) {
       return;
     }
 
@@ -278,29 +284,46 @@ export class DesktopDeploymentLifecycle {
       },
     });
 
-    void this.desktopPetManager.initialize().catch((err) => {
+    try {
+      await this.desktopPetManager.initialize();
+    } catch (err) {
       console.warn("[DeploymentLifecycle] DesktopPetManager 初始化失败:", err);
-    });
-    void this.chatStateSubscriber.start().catch((err) => {
-      console.warn("[DeploymentLifecycle] 聊天状态订阅启动失败:", err);
-    });
-    void this.characterWatcher.start().catch((err) => {
-      console.warn("[DeploymentLifecycle] 角色监听启动失败:", err);
-    });
+    }
+
+    const subscriber = this.chatStateSubscriber;
+    const watcher = this.characterWatcher;
+    const starts: Promise<unknown>[] = [];
+    if (subscriber) {
+      starts.push(
+        subscriber.start().catch((err) => {
+          console.warn("[DeploymentLifecycle] 聊天状态订阅启动失败:", err);
+        }),
+      );
+    }
+    if (watcher) {
+      starts.push(
+        watcher.start().catch((err) => {
+          console.warn("[DeploymentLifecycle] 角色监听启动失败:", err);
+        }),
+      );
+    }
+    await Promise.all(starts);
   }
 
-  private stopLegacyPetIntegrations(): void {
-    if (this.chatStateSubscriber) {
-      this.chatStateSubscriber.stop();
-      this.chatStateSubscriber = null;
-    }
-    if (this.characterWatcher) {
-      this.characterWatcher.stop();
-      this.characterWatcher = null;
-    }
-    void this.desktopPetManager?.shutdown().catch((err) => {
+  private async stopLegacyPetIntegrations(): Promise<void> {
+    const subscriber = this.chatStateSubscriber;
+    const watcher = this.characterWatcher;
+    this.chatStateSubscriber = null;
+    this.characterWatcher = null;
+
+    subscriber?.stop();
+    watcher?.stop();
+
+    try {
+      await this.desktopPetManager.shutdown();
+    } catch (err) {
       console.warn("[DeploymentLifecycle] DesktopPetManager shutdown 失败:", err);
-    });
+    }
   }
 
   getTopology(): DesktopBackendTopology {
@@ -312,9 +335,20 @@ export class DesktopDeploymentLifecycle {
   }
 
   async shutdown(): Promise<void> {
-    this.stopBusinessIntegrations();
-    this.stopLegacyPetIntegrations();
-    getMeshCoordinator(this.getMainWindow).stop();
-    await stopCore();
+    if (!this.shutdownPromise) {
+      this.shuttingDown = true;
+      this.shutdownPromise = (async () => {
+        // Drain the currently running reconcile before teardown. This prevents an
+        // in-flight local/cloud transition from re-creating integrations after the
+        // quit path has already started destroying them.
+        await this.reconcileChain;
+
+        this.stopBusinessIntegrations();
+        await this.stopLegacyPetIntegrations();
+        getMeshCoordinator(this.getMainWindow).stop();
+        await stopCore();
+      })();
+    }
+    await this.shutdownPromise;
   }
 }
