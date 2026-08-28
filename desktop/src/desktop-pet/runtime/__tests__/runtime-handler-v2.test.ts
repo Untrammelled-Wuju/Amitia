@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DesktopRuntimeHandlerV2 } from "../runtime-handler-v2";
+import type { RuntimeCommandReplayEntry } from "../runtime-handler-v2";
 import { buildEnvelope } from "../protocol-v2";
 import type { RuntimeEnvelope } from "../protocol-v2";
 import type { RuntimeCommandExecutionResult } from "../../../main/pet/runtime-v2-command-adapter";
@@ -16,6 +17,7 @@ class FakeWebSocket {
   readonly protocols: string[];
   readyState = FakeWebSocket.CONNECTING;
   sent: string[] = [];
+  failCommandAckStatusOnce: string | null = null;
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -32,6 +34,16 @@ class FakeWebSocket {
   }
 
   send(data: string): void {
+    if (this.failCommandAckStatusOnce) {
+      const envelope = JSON.parse(data) as RuntimeEnvelope;
+      const status = envelope.messageType === "command_ack"
+        ? (envelope.payload as { status?: string } | undefined)?.status
+        : undefined;
+      if (status === this.failCommandAckStatusOnce) {
+        this.failCommandAckStatusOnce = null;
+        throw new Error(`synthetic send failure for ${status}`);
+      }
+    }
     this.sent.push(data);
   }
 
@@ -86,6 +98,7 @@ async function connectHandler(
     actualStateHash?: string;
   },
   helloAckOverrides: Record<string, unknown> = {},
+  replayEntries: readonly RuntimeCommandReplayEntry[] = [],
 ): Promise<{ handler: DesktopRuntimeHandlerV2; ws: FakeWebSocket; hello: RuntimeEnvelope }> {
   const handler = new DesktopRuntimeHandlerV2(
     {
@@ -98,6 +111,7 @@ async function connectHandler(
       heartbeatIntervalMs: 60_000,
       connectTimeoutMs: 5_000,
       resumeCursor,
+      replayEntries,
     },
     {
       onState: () => undefined,
@@ -520,5 +534,258 @@ describe("DesktopRuntimeHandlerV2", () => {
     ).rejects.toThrow("maxMessageBytes");
     handler.disconnect();
   });
+
+  it("replays the cached terminal ACK without executing a redelivered command twice", async () => {
+    const onCommand = vi.fn(async () => ({
+      commandId: "cmd-replay",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+    const { handler, ws } = await connectHandler(onCommand);
+
+    const payload = {
+      commandId: "cmd-replay",
+      commandType: "runtime.command.recenter_once",
+      commandSequence: 45,
+      desiredRevision: 0,
+      payload: {},
+    };
+    ws.message(buildEnvelope(
+      "command",
+      "runtime.command.recenter_once",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      11,
+      payload,
+    ));
+    await flushAsync();
+    expect(onCommand).toHaveBeenCalledTimes(1);
+
+    ws.sent = [];
+    ws.message(buildEnvelope(
+      "command",
+      "runtime.command.recenter_once",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      12,
+      payload,
+    ));
+    await flushAsync();
+
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    const replayStatuses = ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageType === "command_ack")
+      .map((env) => (env.payload as { status: string }).status);
+    expect(replayStatuses).toEqual(["completed"]);
+    handler.disconnect();
+  });
+
+  it("does not treat the command sequence high-water mark as proof that every lower command ran", async () => {
+    const onCommand = vi.fn(async () => ({
+      commandId: "cmd-old",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+    const { handler, ws } = await connectHandler(onCommand, {
+      lastAppliedDesiredRevision: 5,
+      lastProcessedCommandSequence: 50,
+    });
+
+    ws.sent = [];
+    ws.message(buildEnvelope(
+      "command",
+      "runtime.command.recenter_once",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      13,
+      {
+        commandId: "cmd-old",
+        commandType: "runtime.command.recenter_once",
+        commandSequence: 49,
+        desiredRevision: 0,
+        payload: {},
+      },
+    ));
+    await flushAsync();
+
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    const statuses = ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageType === "command_ack")
+      .map((env) => (env.payload as { status: string }).status);
+    expect(statuses.at(-1)).toBe("completed");
+    handler.disconnect();
+  });
+
+  it("carries terminal commandId replay protection across handler replacement", async () => {
+    const firstExecutor = vi.fn(async () => ({
+      commandId: "cmd-persisted-replay",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+    const first = await connectHandler(firstExecutor);
+    first.ws.message(buildEnvelope(
+      "command",
+      "runtime.command.recenter_once",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      14,
+      {
+        commandId: "cmd-persisted-replay",
+        commandType: "runtime.command.recenter_once",
+        commandSequence: 61,
+        desiredRevision: 0,
+        payload: {},
+      },
+    ));
+    await flushAsync();
+    expect(firstExecutor).toHaveBeenCalledTimes(1);
+    const replayEntries = first.handler.getReplayEntries();
+    first.handler.disconnect();
+
+    const secondExecutor = vi.fn(async () => ({
+      commandId: "cmd-persisted-replay",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+    const second = await connectHandler(
+      secondExecutor,
+      { lastProcessedCommandSequence: 61 },
+      {},
+      replayEntries,
+    );
+    second.ws.sent = [];
+    second.ws.message(buildEnvelope(
+      "command",
+      "runtime.command.recenter_once",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      15,
+      {
+        commandId: "cmd-persisted-replay",
+        commandType: "runtime.command.recenter_once",
+        commandSequence: 61,
+        desiredRevision: 0,
+        payload: {},
+      },
+    ));
+    await flushAsync();
+
+    expect(secondExecutor).not.toHaveBeenCalled();
+    const statuses = second.ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageType === "command_ack")
+      .map((env) => (env.payload as { status: string }).status);
+    expect(statuses).toEqual(["completed"]);
+    second.handler.disconnect();
+  });
+
+
+  it("records terminal execution before a terminal ACK transport failure", async () => {
+    const firstExecutor = vi.fn(async () => ({
+      commandId: "cmd-ack-loss",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 72,
+    }));
+    const first = await connectHandler(firstExecutor);
+    first.ws.failCommandAckStatusOnce = "completed";
+    first.ws.message(buildEnvelope(
+      "command",
+      "runtime.command.sync_desired_state",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      16,
+      {
+        commandId: "cmd-ack-loss",
+        commandType: "runtime.command.sync_desired_state",
+        commandSequence: 72,
+        desiredRevision: 72,
+        payload: {},
+      },
+    ));
+    await flushAsync();
+
+    expect(firstExecutor).toHaveBeenCalledTimes(1);
+    const replayEntries = first.handler.getReplayEntries();
+    expect(replayEntries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        commandId: "cmd-ack-loss",
+        commandSequence: 72,
+        desiredRevision: 72,
+        ackStatus: "completed",
+      }),
+    ]));
+
+    const secondExecutor = vi.fn(async () => ({
+      commandId: "cmd-ack-loss",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 72,
+    }));
+    const second = await connectHandler(
+      secondExecutor,
+      { lastAppliedDesiredRevision: 72, lastProcessedCommandSequence: 72 },
+      {},
+      replayEntries,
+    );
+    second.ws.sent = [];
+    second.ws.message(buildEnvelope(
+      "command",
+      "runtime.command.sync_desired_state",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      17,
+      {
+        commandId: "cmd-ack-loss",
+        commandType: "runtime.command.sync_desired_state",
+        commandSequence: 72,
+        desiredRevision: 72,
+        payload: {},
+      },
+    ));
+    await flushAsync();
+
+    expect(secondExecutor).not.toHaveBeenCalled();
+    const statuses = second.ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageType === "command_ack")
+      .map((env) => (env.payload as { status: string }).status);
+    expect(statuses).toEqual(["completed"]);
+    second.handler.disconnect();
+  });
+
 
 });

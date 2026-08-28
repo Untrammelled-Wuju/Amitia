@@ -55,6 +55,7 @@ import {
   type RuntimeHandlerConfig,
   type RuntimeHandlerHooks,
   type RuntimeResumeCursor,
+  type RuntimeCommandReplayEntry,
 } from "../../desktop-pet/runtime/runtime-handler-v2";
 import type {
   RuntimeEnvelope,
@@ -113,12 +114,6 @@ const RECOVERY_REASON_DISPLAY_CHANGED = "display-changed";
 
 const RUNTIME_BRIDGE_WS_PATH = "/internal/desktop-pet/runtime/ws";
 const BRIDGE_RECONNECT_DELAY_MS = 2000;
-const RUNTIME_QUEUE_POLICY_ENQUEUE = "enqueue";
-const RUNTIME_QUEUE_POLICY_REPLACE_CURRENT = "replace_current";
-const SUPPORTED_RUNTIME_QUEUE_POLICIES = new Set([
-  RUNTIME_QUEUE_POLICY_ENQUEUE,
-  RUNTIME_QUEUE_POLICY_REPLACE_CURRENT,
-]);
 
 
 export type PetManagerState =
@@ -431,12 +426,14 @@ export class DesktopPetManager {
   private readonly playbackCommandIds = new Map<string, string>();
   private readonly playbackDecisionIds = new Map<string, string>();
   private lastAppliedDesiredRevision = 0;
+  private lastServerDesiredRevision = 0;
   private lastAppliedSettingsRevision = 0;
   private runtimeResumeCursor: RuntimeResumeCursor = {
     lastAppliedDesiredRevision: 0,
     lastProcessedCommandSequence: 0,
     lastEventSequence: 0,
   };
+  private runtimeCommandReplayEntries: RuntimeCommandReplayEntry[] = [];
   private runtimeStateSync: Promise<void> = Promise.resolve();
   private lifecycleMutationQueue: Promise<void> = Promise.resolve();
   private petInstances: PetInstanceSummary[] = [];
@@ -730,14 +727,16 @@ export class DesktopPetManager {
     if (this.dragController?.isDragging()) {
       throw new Error("PET_IS_DRAGGING");
     }
-    const action = this.loadedInstallation.actions.get(actionKey);
-    if (!action || !action.available) {
-      throw new Error(`ACTION_NOT_FOUND: ${actionKey}`);
+    const request: DesktopPetActionRequest = {
+      actionKey,
+      source: EventSources.MANUAL,
+      priority: ActionPriorities.CLICK,
+      interrupt: true,
+    };
+    const result = this.scheduler.submit(request);
+    if (result === "rejected") {
+      throw new Error(`ACTION_REJECTED: ${actionKey}`);
     }
-
-    // Runtime v2 is the sole execution authority. The backend API creates the
-    // canonical runtime.command.play_action; scheduling locally here as well
-    // would execute the same user request twice when that command loops back.
     await this.callPlayActionApi(actionKey);
   }
 
@@ -1880,14 +1879,11 @@ export class DesktopPetManager {
     switch (event.type) {
       case "playback.action_started":
         if (playbackId && commandId) {
-          this.observeRuntimeReport(
-            "上报播放开始",
-            this.runtimeHandler?.sendPlaybackStarted(
-              playbackId,
-              commandId,
-              event.actionKey ?? "",
-              context,
-            ),
+          void this.runtimeHandler?.sendPlaybackStarted(
+            playbackId,
+            commandId,
+            event.actionKey ?? "",
+            context,
           );
         }
         break;
@@ -2048,59 +2044,50 @@ export class DesktopPetManager {
   }
 
   private handleClick(x: number, y: number): void {
-    this.observeRuntimeReport(
-      "上报单击事件",
-      this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.clicked", {
-        ...this.runtimeEventContext(),
-        gestureId: randomUUID(),
-        sequence: Date.now(),
-        button: "left",
-        clickCount: 1,
-        canvasX: x,
-        canvasY: y,
-        screenX: x,
-        screenY: y,
-        frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
-        actionKey: this.currentActionKey ?? "",
-        occurredAt: new Date().toISOString(),
-      }),
-    );
+    void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.clicked", {
+      ...this.runtimeEventContext(),
+      gestureId: randomUUID(),
+      sequence: Date.now(),
+      button: "left",
+      clickCount: 1,
+      canvasX: x,
+      canvasY: y,
+      screenX: x,
+      screenY: y,
+      frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
+      actionKey: this.currentActionKey ?? "",
+      occurredAt: new Date().toISOString(),
+    });
   }
 
   private handleDoubleClick(x: number, y: number): void {
-    this.observeRuntimeReport(
-      "上报双击事件",
-      this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.double_clicked", {
-        ...this.runtimeEventContext(),
-        gestureId: randomUUID(),
-        sequence: Date.now(),
-        button: "left",
-        clickCount: 2,
-        canvasX: x,
-        canvasY: y,
-        screenX: x,
-        screenY: y,
-        frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
-        actionKey: this.currentActionKey ?? "",
-        occurredAt: new Date().toISOString(),
-      }),
-    );
+    void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.double_clicked", {
+      ...this.runtimeEventContext(),
+      gestureId: randomUUID(),
+      sequence: Date.now(),
+      button: "left",
+      clickCount: 2,
+      canvasX: x,
+      canvasY: y,
+      screenX: x,
+      screenY: y,
+      frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
+      actionKey: this.currentActionKey ?? "",
+      occurredAt: new Date().toISOString(),
+    });
   }
 
   private handleHover(x: number, y: number): void {
-    this.observeRuntimeReport(
-      "上报悬停事件",
-      this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.hovered", {
-        ...this.runtimeEventContext(),
-        gestureId: randomUUID(),
-        sequence: Date.now(),
-        x,
-        y,
-        actionKey: this.currentActionKey ?? "",
-        frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
-        occurredAt: new Date().toISOString(),
-      }),
-    );
+    void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.hovered", {
+      ...this.runtimeEventContext(),
+      gestureId: randomUUID(),
+      sequence: Date.now(),
+      x,
+      y,
+      actionKey: this.currentActionKey ?? "",
+      frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
+      occurredAt: new Date().toISOString(),
+    });
   }
 
   private handleActionSwitch(newKey: string, oldKey: string | null, playbackId?: string): void {
@@ -2166,52 +2153,40 @@ export class DesktopPetManager {
       this.worldController?.setDragging(true);
       this.currentDragId = randomUUID();
       this.petLogger.logDragStart(this.activeInstallationId ?? undefined);
-      this.observeRuntimeReport(
-        "上报拖拽开始",
-        this.runtimeHandler?.sendRuntimeEvent("runtime.drag.started", {
-          ...this.runtimeEventContext(),
-          gestureId: this.currentDragId,
-          sequence: Date.now(),
-          dragId: this.currentDragId,
-          startX: state.startX,
-          startY: state.startY,
-          currentX: state.currentX,
-          currentY: state.currentY,
-          displayId: state.startScreenId,
-          occurredAt: new Date().toISOString(),
-        }),
-      );
+      void this.runtimeHandler?.sendRuntimeEvent("runtime.drag.started", {
+        ...this.runtimeEventContext(),
+        gestureId: this.currentDragId,
+        sequence: Date.now(),
+        dragId: this.currentDragId,
+        startX: state.startX,
+        startY: state.startY,
+        currentX: state.currentX,
+        currentY: state.currentY,
+        displayId: state.startScreenId,
+        occurredAt: new Date().toISOString(),
+      });
     } else if (event === "drag-end") {
       this.worldController?.setDragging(false);
       this.worldController?.onDrop();
       this.petLogger.logDragEnd(this.activeInstallationId ?? undefined);
-      this.observeRuntimeReport(
-        "上报拖拽结束",
-        this.runtimeHandler?.sendRuntimeEvent("runtime.drag.completed", {
-          ...this.runtimeEventContext(),
-          gestureId: this.currentDragId ?? "",
-          sequence: Date.now(),
-          dragId: this.currentDragId ?? "",
-          startX: state.startX,
-          startY: state.startY,
-          currentX: state.currentX,
-          currentY: state.currentY,
-          displayId: state.currentScreenId,
-          occurredAt: new Date().toISOString(),
-        }),
-      );
-      this.currentDragId = null;
-      void this.persistRuntimePosition().catch((err) => {
-        console.warn(
-          "[DesktopPetManager] 拖拽结束持久化位置失败:",
-          this.errorMessage(err),
-        );
+      void this.runtimeHandler?.sendRuntimeEvent("runtime.drag.completed", {
+        ...this.runtimeEventContext(),
+        gestureId: this.currentDragId ?? "",
+        sequence: Date.now(),
+        dragId: this.currentDragId ?? "",
+        startX: state.startX,
+        startY: state.startY,
+        currentX: state.currentX,
+        currentY: state.currentY,
+        displayId: state.currentScreenId,
+        occurredAt: new Date().toISOString(),
       });
+      this.currentDragId = null;
+      void this.persistRuntimePosition();
     }
   }
 
   private resolveBehaviorEventSource(semantic: string): DesktopPetActionRequest["source"] {
-    if (semantic === "manual") return EventSources.MANUAL;
     if (semantic.includes("speaking")) return EventSources.CHAT_SPEAKING;
     if (semantic.includes("listening")) return EventSources.CHAT_LISTENING;
     if (semantic.includes("thinking") || semantic.includes("processing")) {
@@ -2229,7 +2204,6 @@ export class DesktopPetManager {
   }
 
   private resolveBehaviorPriority(semantic: string, backendPriority?: number): number {
-    if (semantic === "manual") return ActionPriorities.CLICK;
     if (semantic.includes("drag")) return ActionPriorities.DRAG;
     if (semantic.includes("drop") || semantic.includes("fall")) return ActionPriorities.FALL;
     if (semantic.includes("speaking")) return ActionPriorities.SPEAKING;
@@ -2390,9 +2364,7 @@ export class DesktopPetManager {
   }
 
   private async callPlayActionApi(actionKey: string): Promise<void> {
-    if (!this.activeInstallationId) {
-      throw new Error("INSTALLATION_ID_REQUIRED");
-    }
+    if (!this.activeInstallationId) return;
     const path = `${API_BASE_PATH}/installations/${encodeURIComponent(this.activeInstallationId)}/actions/${encodeURIComponent(actionKey)}/play`;
     await this.request("POST", path, {});
   }
@@ -2983,7 +2955,6 @@ export class DesktopPetManager {
       Accept: "application/json",
       "Content-Type": "application/json",
       "X-Amitia-Device-ID": getDeviceId(),
-      "X-Amitia-Runtime-ID": getRuntimeId(),
       ...authHeaders,
     };
 
@@ -3066,19 +3037,6 @@ export class DesktopPetManager {
     });
   }
 
-  private observeRuntimeReport(
-    label: string,
-    report: Promise<void> | undefined,
-  ): void {
-    if (!report) return;
-    void report.catch((err) => {
-      console.warn(
-        `[DesktopPetManager] ${label}失败:`,
-        this.errorMessage(err),
-      );
-    });
-  }
-
   private errorMessage(err: unknown): string {
     if (err instanceof Error) return err.message;
     return String(err);
@@ -3146,6 +3104,7 @@ export class DesktopPetManager {
         heartbeatIntervalMs: 15000,
         maxReconnectAttempts: 0,
         resumeCursor,
+        replayEntries: this.runtimeCommandReplayEntries,
       };
 
       const hooks = this.buildRuntimeHooks();
@@ -3218,7 +3177,19 @@ export class DesktopPetManager {
           "[DesktopPetManager] runtime connected session=",
           ack.sessionId,
         );
-        void ack.currentDesiredRevision;
+        const serverDesiredRevision = Number.isFinite(ack.currentDesiredRevision)
+          ? Math.max(0, Math.floor(ack.currentDesiredRevision))
+          : 0;
+        this.lastServerDesiredRevision = serverDesiredRevision;
+        if (serverDesiredRevision > this.lastAppliedDesiredRevision) {
+          console.info(
+            `[DesktopPetManager] server desired revision ${serverDesiredRevision} is ahead of local ${this.lastAppliedDesiredRevision}; awaiting authoritative Runtime v2 reconciliation command`,
+          );
+        } else if (serverDesiredRevision < this.lastAppliedDesiredRevision) {
+          console.warn(
+            `[DesktopPetManager] local desired revision ${this.lastAppliedDesiredRevision} is ahead of server authority ${serverDesiredRevision}`,
+          );
+        }
         this.syncRuntimeState();
       },
       onError: (err: Error) => {
@@ -3228,6 +3199,7 @@ export class DesktopPetManager {
       },
       onDesiredSync: (revision: number) => {
         this.markDesiredRevisionApplied(revision);
+        this.lastServerDesiredRevision = Math.max(this.lastServerDesiredRevision, revision);
       },
       onCommandSettled: (_result, _envelope) => {
         // Settings revision is advanced only by applyRuntimeSettingsLocal()
@@ -3359,52 +3331,13 @@ export class DesktopPetManager {
                 };
               }
 
-              const targetInstallationId = cmd.payload?.installationId
-                ?? cmd.installationId
-                ?? "";
-              if (
-                targetInstallationId &&
-                targetInstallationId !== this.activeInstallationId
-              ) {
-                return {
-                  commandId,
-                  status: "rejected",
-                  errorCode: "INSTALLATION_MISMATCH",
-                  errorMessage: `play_action targets ${targetInstallationId}, active installation is ${this.activeInstallationId ?? ""}`,
-                  appliedRevision: desiredRevision,
-                };
-              }
-
-              const action = this.loadedInstallation.actions.get(actionKey);
-              if (!action || !action.available) {
-                return {
-                  commandId,
-                  status: "rejected",
-                  errorCode: "ACTION_NOT_FOUND",
-                  errorMessage: `play_action action is unavailable: ${actionKey}`,
-                  appliedRevision: desiredRevision,
-                };
-              }
-
-              const queuePolicy = cmd.payload?.queuePolicy
-                ?? RUNTIME_QUEUE_POLICY_ENQUEUE;
-              if (!SUPPORTED_RUNTIME_QUEUE_POLICIES.has(queuePolicy)) {
-                return {
-                  commandId,
-                  status: "rejected",
-                  errorCode: "INVALID_QUEUE_POLICY",
-                  errorMessage: `unsupported play_action queuePolicy: ${queuePolicy}`,
-                  appliedRevision: desiredRevision,
-                };
-              }
-
               const semantic = cmd.payload?.semantic ?? "";
               const source = this.resolveBehaviorEventSource(semantic);
               const request: DesktopPetActionRequest = {
                 actionKey,
                 source,
                 priority: this.resolveBehaviorPriority(semantic, cmd.payload?.priority),
-                interrupt: queuePolicy === RUNTIME_QUEUE_POLICY_REPLACE_CURRENT,
+                interrupt: cmd.payload?.queuePolicy === "replace_current",
                 dedupeKey: cmd.payload?.decisionId || `runtime_${commandId}`,
                 metadata: {
                   semantic,
@@ -3414,7 +3347,7 @@ export class DesktopPetManager {
                   returnTo: cmd.payload?.returnTo ?? "default",
                   runtimeCommandId: commandId,
                   runtimeDecisionId: cmd.payload?.decisionId ?? "",
-                  runtimeInstallationId: targetInstallationId || this.activeInstallationId || "",
+                  runtimeInstallationId: cmd.payload?.installationId ?? this.activeInstallationId ?? "",
                   runtimeCharacterId: cmd.payload?.characterId ?? this.activeInstallation?.characterId ?? "",
                   runtimePetInstanceId: cmd.payload?.petInstanceId ?? getRuntimeId(),
                 },
@@ -3602,6 +3535,7 @@ export class DesktopPetManager {
       ),
       actualStateHash: cursor.actualStateHash ?? this.runtimeResumeCursor.actualStateHash,
     };
+    this.runtimeCommandReplayEntries = handler.getReplayEntries();
   }
 
   private buildRuntimeStateSnapshot(

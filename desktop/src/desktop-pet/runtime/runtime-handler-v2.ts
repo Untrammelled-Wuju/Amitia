@@ -52,6 +52,15 @@ export interface RuntimeResumeCursor {
   actualStateHash?: string;
 }
 
+export interface RuntimeCommandReplayEntry {
+  commandId: string;
+  commandSequence: number;
+  desiredRevision: number;
+  ackStatus: "completed" | "failed_terminal";
+  errorCode?: string;
+  errorMessage?: string;
+}
+
 export interface RuntimeHandlerConfig {
   url: string;
   bootstrapTicket: string;
@@ -69,6 +78,7 @@ export interface RuntimeHandlerConfig {
   reconnectBaseDelayMs?: number;
   reconnectMaxDelayMs?: number;
   resumeCursor?: Partial<RuntimeResumeCursor>;
+  replayEntries?: readonly RuntimeCommandReplayEntry[];
 }
 
 export interface RuntimeHandlerHooks {
@@ -87,6 +97,15 @@ export interface RuntimeCommandAttempt {
   status: CommandStatus;
   attemptedAt: number;
 }
+
+interface CachedCommandExecution {
+  commandSequence: number;
+  desiredRevision: number;
+  result: RuntimeCommandExecutionResult;
+  ackStatus: CommandStatus;
+}
+
+const MAX_COMMAND_REPLAY_CACHE = 256;
 
 const DEFAULT_HEARTBEAT_MS = 15000;
 const DEFAULT_HEARTBEAT_TIMEOUT_MS = 30000;
@@ -113,6 +132,12 @@ function buildRuntimeWebSocketProtocols(ticket: string): string[] {
   ];
 }
 
+function isRevisionedDurableCommand(commandType: string | undefined): boolean {
+  return commandType === "runtime.command.sync_desired_state" ||
+    commandType === "runtime.command.ensure_absent" ||
+    commandType === "runtime.command.reload_release";
+}
+
 function sanitizeCursor(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? Math.floor(value)
@@ -120,7 +145,7 @@ function sanitizeCursor(value: number | undefined): number {
 }
 
 export class DesktopRuntimeHandlerV2 {
-  private readonly config: Required<Omit<RuntimeHandlerConfig, "resumeCursor">>;
+  private readonly config: Required<Omit<RuntimeHandlerConfig, "resumeCursor" | "replayEntries">>;
   private readonly hooks: RuntimeHandlerHooks;
 
   private ws: WebSocket | null = null;
@@ -134,6 +159,8 @@ export class DesktopRuntimeHandlerV2 {
   private actualStateHash = "";
   private lastReportedHealthStatus = "unknown";
   private readonly trackedCommandSequences = new Map<string, number>();
+  private readonly commandReplayCache = new Map<string, CachedCommandExecution>();
+  private readonly inFlightCommands = new Map<string, Promise<void>>();
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -177,6 +204,25 @@ export class DesktopRuntimeHandlerV2 {
     this.lastEventSequence = sanitizeCursor(resume.lastEventSequence);
     this.outboundSequence = this.lastEventSequence;
     this.actualStateHash = typeof resume.actualStateHash === "string" ? resume.actualStateHash : "";
+    for (const entry of config.replayEntries ?? []) {
+      if (!entry?.commandId || (entry.ackStatus !== "completed" && entry.ackStatus !== "failed_terminal")) {
+        continue;
+      }
+      const commandSequence = sanitizeCursor(entry.commandSequence);
+      const desiredRevision = sanitizeCursor(entry.desiredRevision);
+      this.cacheCommandExecution(entry.commandId, {
+        commandSequence,
+        desiredRevision,
+        ackStatus: entry.ackStatus,
+        result: {
+          commandId: entry.commandId,
+          status: entry.ackStatus === "completed" ? "duplicate" : "failed",
+          errorCode: entry.errorCode ?? "",
+          errorMessage: entry.errorMessage ?? "",
+          appliedRevision: desiredRevision,
+        },
+      });
+    }
     this.hooks = hooks;
   }
 
@@ -211,6 +257,22 @@ export class DesktopRuntimeHandlerV2 {
       lastEventSequence: this.lastEventSequence,
       actualStateHash: this.actualStateHash || undefined,
     };
+  }
+
+  getReplayEntries(): RuntimeCommandReplayEntry[] {
+    const entries: RuntimeCommandReplayEntry[] = [];
+    for (const [commandId, cached] of this.commandReplayCache) {
+      if (!isCommandTerminal(cached.ackStatus)) continue;
+      entries.push({
+        commandId,
+        commandSequence: cached.commandSequence,
+        desiredRevision: cached.desiredRevision,
+        ackStatus: cached.ackStatus === "failed_terminal" ? "failed_terminal" : "completed",
+        errorCode: cached.result.errorCode || undefined,
+        errorMessage: cached.result.errorMessage || undefined,
+      });
+    }
+    return entries.slice(-MAX_COMMAND_REPLAY_CACHE);
   }
 
   getConnectionGeneration(): number {
@@ -388,7 +450,7 @@ export class DesktopRuntimeHandlerV2 {
       occurredAt: new Date().toISOString(),
     };
     await this.sendRuntimeEvent("runtime.playback.action_failed", payload);
-    this.markTrackedCommandProcessed(commandId);
+    this.markTrackedCommandProcessed(commandId, "failed_terminal", errorCode, errorMessage);
   }
 
   async sendRendererState(snapshot: StateSnapshotPayload): Promise<void> {
@@ -605,59 +667,186 @@ export class DesktopRuntimeHandlerV2 {
       throw new Error("invalid runtime command");
     }
 
-    await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "runtime_received");
-    await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "runtime_accepted");
+    const commandId = command.commandId;
+    const commandSequence = sanitizeCursor(command.commandSequence);
+    const desiredRevision = sanitizeCursor(command.desiredRevision);
 
-    try {
-      const result = await this.hooks.onCommand(envelope.payload, envelope);
-      const ackStatus = this.mapCommandExecutionStatus(result.status);
-      if (result.status === "failed" || result.status === "rejected" ||
-          result.status === "expired" || result.status === "cancelled") {
-        await this.sendCommandAck(
-          command.commandId,
-          command.commandSequence ?? 0,
-          ackStatus,
-          result.errorCode || "RENDERER_REJECTED",
-          result.errorMessage || "command execution failed",
-        );
-      } else {
-        await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "renderer_accepted");
-        if (ackStatus !== "renderer_accepted") {
-          await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, ackStatus);
-        }
+    const cached = this.commandReplayCache.get(commandId);
+    if (cached) {
+      await this.replayCachedCommand(commandId, commandSequence, cached);
+      return;
+    }
+
+    const inFlight = this.inFlightCommands.get(commandId);
+    if (inFlight) {
+      await inFlight;
+      const settled = this.commandReplayCache.get(commandId);
+      if (settled) {
+        await this.replayCachedCommand(commandId, commandSequence, settled);
       }
-      this.recordCommandResult(
-        command.commandId,
-        command.commandSequence ?? 0,
-        command.desiredRevision ?? 0,
-        result,
-        ackStatus,
-      );
-      await this.hooks.onCommandSettled?.(result, envelope);
+      return;
+    }
+
+    // lastProcessedCommandSequence is a high-water mark, not proof that every
+    // lower sequence has completed: independent commands may settle out of
+    // order. Only revisioned durable desired-state commands can be suppressed
+    // without a commandId cache entry, because an already-applied revision is
+    // itself the idempotency fence. Ephemeral commands must never be discarded
+    // solely because their sequence is below the high-water mark.
+    if (
+      isRevisionedDurableCommand(command.commandType) &&
+      desiredRevision > 0 &&
+      desiredRevision <= this.lastAppliedDesiredRevision
+    ) {
+      const duplicateResult: RuntimeCommandExecutionResult = {
+        commandId,
+        status: "duplicate",
+        errorCode: "",
+        errorMessage: "",
+        appliedRevision: this.lastAppliedDesiredRevision,
+      };
+      this.lastProcessedCommandSequence = Math.max(this.lastProcessedCommandSequence, commandSequence);
+      this.cacheCommandExecution(commandId, {
+        commandSequence,
+        desiredRevision,
+        result: duplicateResult,
+        ackStatus: "completed",
+      });
+      await this.sendCommandAck(commandId, commandSequence, "completed");
+      return;
+    }
+
+    const execution = this.executeCommand(
+      envelope,
+      {
+        commandId,
+        commandType: command.commandType,
+        commandSequence,
+        desiredRevision,
+      },
+      commandSequence,
+      desiredRevision,
+    );
+    this.inFlightCommands.set(commandId, execution);
+    try {
+      await execution;
+    } finally {
+      if (this.inFlightCommands.get(commandId) === execution) {
+        this.inFlightCommands.delete(commandId);
+      }
+    }
+  }
+
+  private async executeCommand(
+    envelope: RuntimeEnvelope,
+    command: {
+      commandId: string;
+      commandType?: string;
+      commandSequence?: number;
+      desiredRevision?: number;
+    },
+    commandSequence: number,
+    desiredRevision: number,
+  ): Promise<void> {
+    await this.sendCommandAck(command.commandId, commandSequence, "runtime_received");
+    await this.sendCommandAck(command.commandId, commandSequence, "runtime_accepted");
+
+    let result: RuntimeCommandExecutionResult;
+    try {
+      result = await this.hooks.onCommand(envelope.payload, envelope);
     } catch (err) {
-      const failure: RuntimeCommandExecutionResult = {
+      result = {
         commandId: command.commandId,
         status: "failed",
         errorCode: "RENDERER_REJECTED",
         errorMessage: err instanceof Error ? err.message : String(err),
         appliedRevision: 0,
       };
-      await this.sendCommandAck(
-        command.commandId,
-        command.commandSequence ?? 0,
-        "failed_terminal",
-        failure.errorCode,
-        failure.errorMessage,
-      );
-      this.recordCommandResult(
-        command.commandId,
-        command.commandSequence ?? 0,
-        command.desiredRevision ?? 0,
-        failure,
-        "failed_terminal",
-      );
-      await this.hooks.onCommandSettled?.(failure, envelope);
     }
+
+    const ackStatus = this.mapCommandExecutionStatus(result.status);
+
+    // The local side effect/result is authoritative once onCommand returns. It
+    // must be recorded before attempting the terminal ACK; otherwise a socket
+    // loss between execution and ACK can cause a durable redelivery to execute
+    // the same side effect again and can misclassify transport failure as a
+    // renderer failure.
+    this.recordCommandResult(
+      command.commandId,
+      commandSequence,
+      desiredRevision,
+      result,
+      ackStatus,
+    );
+    this.cacheCommandExecution(command.commandId, {
+      commandSequence,
+      desiredRevision,
+      result,
+      ackStatus,
+    });
+
+    let ackError: unknown;
+    try {
+      if (result.status === "failed" || result.status === "rejected" ||
+          result.status === "expired" || result.status === "cancelled") {
+        await this.sendCommandAck(
+          command.commandId,
+          commandSequence,
+          ackStatus,
+          result.errorCode || "RENDERER_REJECTED",
+          result.errorMessage || "command execution failed",
+        );
+      } else {
+        await this.sendCommandAck(command.commandId, commandSequence, "renderer_accepted");
+        if (ackStatus !== "renderer_accepted") {
+          await this.sendCommandAck(command.commandId, commandSequence, ackStatus);
+        }
+      }
+    } catch (err) {
+      ackError = err;
+    }
+
+    try {
+      await this.hooks.onCommandSettled?.(result, envelope);
+    } catch (err) {
+      this.hooks.onError(err instanceof Error ? err : new Error(String(err)));
+    }
+
+    if (ackError) {
+      throw ackError;
+    }
+  }
+
+  private cacheCommandExecution(commandId: string, cached: CachedCommandExecution): void {
+    this.commandReplayCache.delete(commandId);
+    this.commandReplayCache.set(commandId, cached);
+    while (this.commandReplayCache.size > MAX_COMMAND_REPLAY_CACHE) {
+      const oldest = this.commandReplayCache.keys().next().value as string | undefined;
+      if (!oldest) break;
+      this.commandReplayCache.delete(oldest);
+    }
+  }
+
+  private async replayCachedCommand(
+    commandId: string,
+    commandSequence: number,
+    cached: CachedCommandExecution,
+  ): Promise<void> {
+    const sequence = commandSequence > 0 ? commandSequence : cached.commandSequence;
+    if (isCommandTerminal(cached.ackStatus)) {
+      this.lastProcessedCommandSequence = Math.max(this.lastProcessedCommandSequence, sequence);
+    }
+    if (cached.ackStatus === "failed_terminal") {
+      await this.sendCommandAck(
+        commandId,
+        sequence,
+        "failed_terminal",
+        cached.result.errorCode || "RENDERER_REJECTED",
+        cached.result.errorMessage || "command execution failed",
+      );
+      return;
+    }
+    await this.sendCommandAck(commandId, sequence, cached.ackStatus);
   }
 
   private async handleCommandAck(ack: CommandAckPayload): Promise<void> {
@@ -760,12 +949,28 @@ export class DesktopRuntimeHandlerV2 {
     }
   }
 
-  private markTrackedCommandProcessed(commandId: string): void {
+  private markTrackedCommandProcessed(
+    commandId: string,
+    terminalStatus: "completed" | "failed_terminal" = "completed",
+    errorCode = "",
+    errorMessage = "",
+  ): void {
     if (!commandId) return;
     const seq = this.trackedCommandSequences.get(commandId);
     if (typeof seq === "number") {
       this.lastProcessedCommandSequence = Math.max(this.lastProcessedCommandSequence, seq);
       this.trackedCommandSequences.delete(commandId);
+    }
+    const cached = this.commandReplayCache.get(commandId);
+    if (cached) {
+      cached.ackStatus = terminalStatus;
+      cached.result = {
+        ...cached.result,
+        status: terminalStatus === "completed" ? "applied" : "failed",
+        errorCode: errorCode || cached.result.errorCode,
+        errorMessage: errorMessage || cached.result.errorMessage,
+      };
+      this.cacheCommandExecution(commandId, cached);
     }
   }
 
