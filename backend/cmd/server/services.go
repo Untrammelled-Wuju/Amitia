@@ -754,7 +754,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		LoopbackOnly:       runtimeConfig.LoopbackOnly,
 		HeartbeatInterval:  time.Duration(runtimeConfig.HeartbeatIntervalMs) * time.Millisecond,
 		HeartbeatTimeout:   time.Duration(runtimeConfig.HeartbeatTimeoutMs) * time.Millisecond,
+		RegisterTimeout:    time.Duration(runtimeConfig.RegisterTimeoutSec) * time.Second,
 		MaxMessageBytes:    int64(runtimeConfig.MaxMessageBytes),
+		SendQueueSize:      runtimeConfig.SendQueueSize,
 		CommandTimeoutSec:  int64(runtimeConfig.CommandTimeoutSec),
 		CommandRetentionHr: int64(runtimeConfig.CommandRetentionHours),
 	}, kernelContainer.DeviceRuntimeSessions)
