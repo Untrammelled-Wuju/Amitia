@@ -1,5 +1,5 @@
-import { createAuthorizedRequestInit, resolveApiUrl } from "@/runtime/runtime-adapter";
-import { getAccessToken } from "@/stores/refresh-coordinator";
+import { resolveApiUrl } from "@/runtime/runtime-adapter";
+import { createAuthenticatedFetchInit } from "@/runtime/request-auth";
 import type { ConversationUIEventRecord } from "@/api/extension";
 
 export interface ConversationUIEventStreamOptions {
@@ -33,12 +33,10 @@ export function createConversationUIEventStream(options: ConversationUIEventStre
     try {
       const path = `/api/extensions/events/conversation-ui/${encodeURIComponent(conversationId)}/stream?afterSequence=${cursor}`;
       const url = await resolveApiUrl(path);
-      const init = await createAuthorizedRequestInit({
+      const init = await createAuthenticatedFetchInit(path, {
         headers: { Accept: "text/event-stream" },
         signal: controller.signal,
       });
-      const token = getAccessToken();
-      if (token) (init.headers as Record<string, string>).Authorization = `Bearer ${token}`;
       const response = await fetch(url, init);
       if (!response.ok || !response.body || !response.headers.get("content-type")?.includes("text/event-stream")) {
         throw new Error(`conversation event stream unavailable (${response.status})`);

@@ -1,10 +1,8 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref } from "vue";
-import {
-  createAuthorizedRequestInit,
-  resolveApiUrl,
-} from "../runtime/runtime-adapter";
+import { resolveApiUrl } from "../runtime/runtime-adapter";
+import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 
 const VISION_IMAGE_TYPES = new Set([
   "image/png",
@@ -159,7 +157,7 @@ export function useMediaUpload(
     formData.append("video", file);
     Promise.all([
       resolveApiUrl("/api/video/upload"),
-      createAuthorizedRequestInit({ method: "POST", body: formData }),
+      createAuthenticatedFetchInit("/api/video/upload", { method: "POST", body: formData }),
     ])
       .then(([url, init]) => fetch(url, init))
       .then((res) => res.json())

@@ -3,6 +3,8 @@
 import { ref, reactive, computed, inject } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "../../../composables/useApi";
+import { createAuthenticatedFetchInit } from "../../../runtime/request-auth";
+import { resolveApiUrl } from "../../../runtime/runtime-adapter";
 import {
   type TemplateItem,
   DEFAULT_BOUNDARY,
@@ -220,11 +222,10 @@ export function useCharacterConfig() {
     try {
       const formData = new FormData();
       formData.append("avatar", file);
-      const { resolveApiUrl, createAuthorizedRequestInit } =
-        await import("../../../runtime/runtime-adapter");
+      const path = `/api/characters/${selectedId.value}/avatar`;
       const [url, init] = await Promise.all([
-        resolveApiUrl(`/api/characters/${selectedId.value}/avatar`),
-        createAuthorizedRequestInit({ method: "POST", body: formData }),
+        resolveApiUrl(path),
+        createAuthenticatedFetchInit(path, { method: "POST", body: formData }),
       ]);
       const res = await fetch(url, init);
       if (!res.ok) throw new Error("上传失败");

@@ -3,15 +3,14 @@
 import { type Ref, computed, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "./useApi";
-import {
-  createAuthorizedRequestInit,
-  resolveApiUrl,
-} from "../runtime/runtime-adapter";
+import { resolveApiUrl } from "../runtime/runtime-adapter";
+import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { createRequestEnvelope } from "../utils/requestEnvelope";
 import {
   compareChatMessages,
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
+import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -107,6 +106,7 @@ export function useWebChatSend(
       if (!modelError.value) {
         modelError.value = "AI响应超时，请重试";
       }
+      notifyDesktopPetChatState("assistant_error", convId.value || undefined);
     }, 60000);
   }
 
@@ -144,7 +144,7 @@ export function useWebChatSend(
       formData.append("audio", blob, "voice.webm");
       const [url, init] = await Promise.all([
         resolveApiUrl("/api/voice/upload"),
-        createAuthorizedRequestInit({ method: "POST", body: formData }),
+        createAuthenticatedFetchInit("/api/voice/upload", { method: "POST", body: formData }),
       ]);
       const res = await fetch(url, init);
       if (!res.ok) throw new Error("Voice upload failed");
@@ -286,6 +286,7 @@ export function useWebChatSend(
     scrollToBottom(true);
     sending.value = true;
     modelError.value = "";
+    notifyDesktopPetChatState("assistant_thinking", requestEnvelope.requestId);
     clearSendingTimer();
     try {
       const payload = {
@@ -301,7 +302,7 @@ export function useWebChatSend(
       };
       const [url, init] = await Promise.all([
         resolveApiUrl("/api/web-chat/messages"),
-        createAuthorizedRequestInit({
+        createAuthenticatedFetchInit("/api/web-chat/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -351,6 +352,11 @@ export function useWebChatSend(
           status: "failed",
         };
       }
+      notifyDesktopPetChatState(
+        "assistant_error",
+        requestEnvelope.requestId,
+        errMsg,
+      );
       sending.value = false;
       isSubmitting.value = false;
       if (convId.value) { try { sessionStorage.removeItem(`uai-pending-msg:${convId.value}`) } catch {} }
@@ -371,6 +377,7 @@ export function useWebChatSend(
     messages.value
       .filter((m: any) => m.status === "streaming")
       .forEach((m: any) => (m.status = "interrupted"));
+    notifyDesktopPetChatState("assistant_finished", convId.value || undefined);
     sending.value = false;
     generating.value = false;
     if (convId.value) {
@@ -405,8 +412,10 @@ export function useWebChatSend(
     sending.value = true;
     generating.value = true;
     modelError.value = "";
+    notifyDesktopPetChatState("assistant_thinking", convId.value);
     clearSendingTimer();
     clearGenerationPhaseTimer();
+    let completed = false;
     try {
       const res = await post<any>(
         `/api/web-chat/conversations/${convId.value}/regenerate`,
@@ -448,11 +457,16 @@ export function useWebChatSend(
       }
       scrollToBottom(true);
       if (fetchWebMsgCount) fetchWebMsgCount();
+      completed = true;
     } catch (err: any) {
+      notifyDesktopPetChatState("assistant_error", convId.value, err?.message || "重新生成失败");
       ElMessage.error(err?.message || "重新生成失败");
     } finally {
       sending.value = false;
       generating.value = false;
+      if (completed) {
+        notifyDesktopPetChatState("assistant_finished", convId.value);
+      }
     }
   }
 

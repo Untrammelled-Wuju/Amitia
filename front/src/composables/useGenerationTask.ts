@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, onUnmounted } from "vue";
-import { resolveApiUrl } from "@/runtime/runtime-adapter";
+import { consumeAuthenticatedSSE } from "@/runtime/authenticated-sse";
 
 export type GenerationTaskStatus =
   | "pending"
@@ -40,7 +40,7 @@ export function useGenerationTask(options: UseGenerationTaskOptions) {
   } = options;
 
   const connected = ref(false);
-  let eventSource: EventSource | null = null;
+  let eventAbortController: AbortController | null = null;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let stopped = true;
   let refreshing = false;
@@ -92,61 +92,58 @@ export function useGenerationTask(options: UseGenerationTaskOptions) {
   }
 
   function disconnectSSE() {
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
+    eventAbortController?.abort();
+    eventAbortController = null;
     connected.value = false;
+  }
+
+  function handleSSEFailure(controller: AbortController) {
+    if (controller.signal.aborted || eventAbortController !== controller) return;
+    sseFailed = true;
+    eventAbortController = null;
+    connected.value = false;
+    if (!stopped && !pollTimer) {
+      schedulePoll();
+    }
   }
 
   async function connectSSE(taskId: string | number) {
     disconnectSSE();
-    try {
-      const url = await resolveApiUrl(
-        `/api/desktop-pets/generation-tasks/${taskId}/events`,
-      );
-      const source = new EventSource(url);
-      eventSource = source;
-      source.onopen = () => {
-        if (stopped) {
-          disconnectSSE();
+    const controller = new AbortController();
+    eventAbortController = controller;
+    const eventTypes = new Set([
+      "task.started",
+      "task.claimed",
+      "task.cancel_requested",
+      "task.completed",
+      "action.started",
+      "action.completed",
+      "action.retry",
+      "frame.started",
+      "frame.succeeded",
+      "frame.failed",
+    ]);
+    const path = `/api/desktop-pets/generation-tasks/${taskId}/events`;
+
+    void consumeAuthenticatedSSE(path, {
+      signal: controller.signal,
+      onOpen: () => {
+        if (stopped || eventAbortController !== controller) {
+          controller.abort();
           return;
         }
         connected.value = true;
         sseFailed = false;
-      };
-      const eventTypes = [
-        "task.started",
-        "task.claimed",
-        "task.cancel_requested",
-        "task.completed",
-        "action.started",
-        "action.completed",
-        "action.retry",
-        "frame.started",
-        "frame.succeeded",
-        "frame.failed",
-      ];
-      const handleEvent = () => {
-        if (stopped) return;
+      },
+      onEvent: ({ event }) => {
+        if (stopped || !eventTypes.has(event)) return;
         void safeRefresh().then(() => {
           checkTerminalAndMaybeStop();
         });
-      };
-      eventTypes.forEach((type) => {
-        source.addEventListener(type, handleEvent);
-      });
-      source.onerror = () => {
-        sseFailed = true;
-        disconnectSSE();
-        if (!stopped && !pollTimer) {
-          schedulePoll();
-        }
-      };
-    } catch {
-      sseFailed = true;
-      disconnectSSE();
-    }
+      },
+    })
+      .then(() => handleSSEFailure(controller))
+      .catch(() => handleSSEFailure(controller));
   }
 
   async function start(taskId: string | number) {

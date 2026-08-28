@@ -1,10 +1,10 @@
 import { ref, onUnmounted, type Ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElNotification, ElMessageBox } from "element-plus";
-import { resolveApiUrl, createAuthorizedRequestInit } from "../runtime/runtime-adapter";
+import { resolveApiUrl } from "../runtime/runtime-adapter";
+import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { isNavigationAllowed } from "../navigation/nav-whitelist";
 import { useExtensionUIStore } from "../stores/extensionUI";
-import { getAccessToken } from "../stores/refresh-coordinator";
 import { browserClientPluginRuntime, type BrowserDeclarativeClientPackage } from "../ui-runtime/clientPluginRuntime";
 
 interface SSEEventEnvelope {
@@ -63,7 +63,7 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   async function sendDialogResponse(dialogId: string, result: string): Promise<void> {
     try {
       const url = await resolveApiUrl("/api/extensions/ui/dialog-response");
-      const init = await createAuthorizedRequestInit({
+      const init = await createAuthenticatedFetchInit("/api/extensions/ui/dialog-response", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dialogId, result }),
@@ -83,7 +83,7 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   ): Promise<void> {
     try {
       const url = await resolveApiUrl("/api/extensions/ui/client-runtime-response");
-      const init = await createAuthorizedRequestInit({
+      const init = await createAuthenticatedFetchInit("/api/extensions/ui/client-runtime-response", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ commandId, hostClientId, hostSessionId, result, error }),
@@ -415,14 +415,10 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     abortController = controller;
     try {
       const url = await resolveApiUrl(`/api/proactive-sse?clientId=ui-host`);
-      const init = await createAuthorizedRequestInit({
+      const init = await createAuthenticatedFetchInit("/api/proactive-sse", {
         headers: { Accept: "text/event-stream" },
         signal: controller.signal,
       });
-      const token = getAccessToken();
-      if (token) {
-        (init.headers as Record<string, string>).Authorization = `Bearer ${token}`;
-      }
       const response = await fetch(url, init);
       if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
         throw new Error("SSE 连接未建立");

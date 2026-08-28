@@ -1,11 +1,8 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type Ref, nextTick } from "vue";
-import {
-  createAuthorizedRequestInit,
-  resolveApiUrl,
-} from "../runtime/runtime-adapter";
-import { getAccessToken } from "../stores/refresh-coordinator";
+import { resolveApiUrl } from "../runtime/runtime-adapter";
+import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { calcTypingDelay } from "@/utils/typing";
 import { emitConversationRuntimeEvent } from "@/ui-runtime/conversationProjection";
 import {
@@ -14,6 +11,7 @@ import {
   mergeChatMessage,
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
+import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
 
 export function isWebChatReplyEvent(message: any): boolean {
   return message?.role === "assistant";
@@ -67,6 +65,8 @@ export function useWebChatSSE(
   function processTypingQueue() {
     if (typingQueue.length === 0) return;
     const raw = typingQueue.shift()!;
+    const roundId = String(raw.requestId || raw.anchorMessageId || raw.id || convId.value || "");
+    notifyDesktopPetChatState("assistant_speaking", roundId);
     const delay = calcTypingDelay(raw.content || "");
     typingTimer = setTimeout(() => {
       raw.typingDone = true;
@@ -76,6 +76,7 @@ export function useWebChatSSE(
       scrollToBottom();
       fetchWechatMsgCount();
       fetchQQStatus();
+      notifyDesktopPetChatState("assistant_finished", roundId);
       typingTimer = null;
       setTimeout(() => processTypingQueue(), 300);
     }, delay);
@@ -134,6 +135,11 @@ export function useWebChatSSE(
       ) {
         if (isTransientModelErrorReplyEvent(msg)) {
           if (shouldFinishSendingForModelError(msg)) sending.value = false;
+          notifyDesktopPetChatState(
+            "assistant_error",
+            String(msg.requestId || msg.anchorMessageId || msg.id || convId.value || ""),
+            String(msg.rawError || msg.content || "模型响应失败"),
+          );
           insertTransientModelError(messages.value, {
             ...msg,
             typingDone: true,
@@ -218,14 +224,10 @@ export function useWebChatSSE(
     try {
       const url =
         (await resolveApiUrl("/api/messages/events")) + "?channel=web";
-      const init = await createAuthorizedRequestInit({
+      const init = await createAuthenticatedFetchInit("/api/messages/events", {
         headers: { Accept: "text/event-stream" },
         signal: controller.signal,
       });
-      const token = getAccessToken();
-      if (token) {
-        (init.headers as Record<string, string>).Authorization = `Bearer ${token}`;
-      }
       const response = await fetch(url, init);
       if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
         throw new Error("聊天事件流不可用");
@@ -256,6 +258,8 @@ export function useWebChatSSE(
         try {
           const msg = normalizeRealtimeMessage(JSON.parse(e.data));
           if (msg.conversationId === convId.value) {
+            const proactiveRoundId = String(msg.requestId || msg.id || convId.value || "");
+            notifyDesktopPetChatState("assistant_speaking", proactiveRoundId);
             if (mergeChatMessage(messages.value, msg)) sortMessages();
             else if (!mergeChatMessage(typingQueue, msg)) {
               messages.value.push({
@@ -265,6 +269,7 @@ export function useWebChatSSE(
               sortMessages();
             }
             nextTick(() => scrollToBottom());
+            notifyDesktopPetChatState("assistant_finished", proactiveRoundId);
           }
         } catch {}
         fetchWechatMsgCount();
