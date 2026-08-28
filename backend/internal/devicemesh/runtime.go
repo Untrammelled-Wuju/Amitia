@@ -237,4 +237,62 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 	meshClient.Start()
 }
 
+// InvokeDeviceHandler sends a bounded management invocation to the active
+// Device Agent for targetDeviceID and waits for the result. It is intended for
+// cloud control-plane bridges such as Game Center; execution still occurs only
+// on the device.
+func (rt *Runtime) InvokeDeviceHandler(
+	ctx context.Context,
+	userID runtimeidentity.UserID,
+	targetDeviceID runtimeidentity.DeviceID,
+	handlerName string,
+	input []byte,
+	deadline time.Duration,
+) (capability.UnifiedToolResult, error) {
+	if rt == nil || rt.Hub == nil || rt.PendingInvocations == nil {
+		return capability.UnifiedToolResult{}, fmt.Errorf("devicemesh: invocation runtime unavailable")
+	}
+	conn, ok := rt.Hub.GetByDevice(userID, targetDeviceID)
+	if !ok || conn == nil {
+		return capability.UnifiedToolResult{}, fmt.Errorf("devicemesh: target device is offline")
+	}
+	if deadline <= 0 {
+		deadline = 30 * time.Second
+	}
+	invocationID := uuid.NewString()
+	port := capability.NewMeshDeviceRuntimeInvocationPort(&capability.MeshRuntimePorts{
+		Hub:                rt.Hub,
+		PendingInvocations: rt.PendingInvocations,
+	})
+	route := capability.RuntimeExecutionRoute{
+		Binding: capability.RuntimeBinding{
+			RuntimeType: capability.RuntimeTypeGameHost,
+			HandlerName: handlerName,
+		},
+		Placement:    capability.ProviderPlacementDevice,
+		UserID:       userID,
+		DeviceID:     targetDeviceID,
+		RuntimeID:    conn.RuntimeID,
+		RemoteDevice: true,
+	}
+	request := capability.DeviceRuntimeInvocationRequest{
+		Route:   route,
+		Binding: route.Binding,
+		Invocation: capability.ToolInvocationContext{
+			InvocationID:     invocationID,
+			UserID:           string(userID),
+			DeadlineDuration: deadline,
+		},
+		Input: input,
+	}
+	result := port.Execute(ctx, request)
+	if result.Status != capability.ToolResultStatusSuccess {
+		if result.Error != nil {
+			return result, result.Error
+		}
+		return result, fmt.Errorf("devicemesh: device invocation failed with status %s", result.Status)
+	}
+	return result, nil
+}
+
 var _ = runtimeidentity.PlatformWindows
