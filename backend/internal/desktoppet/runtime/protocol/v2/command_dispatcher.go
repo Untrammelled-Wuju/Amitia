@@ -46,11 +46,17 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 	if conn == nil {
 		return
 	}
-	sessionID, generation := conn.SessionSnapshot()
-	if sessionID == "" {
+
+	// Hold the same reconnect fence used by inbound mutations. A replacement
+	// websocket cannot supersede this connection between the state/generation
+	// snapshot and command delivery.
+	conn.fenceMu.RLock()
+	defer conn.fenceMu.RUnlock()
+	if conn.GetState() != ConnStateConnected {
 		return
 	}
-	if conn.GetState() != ConnStateConnected {
+	sessionID, generation := conn.SessionSnapshot()
+	if sessionID == "" || generation <= 0 {
 		return
 	}
 

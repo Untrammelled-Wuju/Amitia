@@ -34,6 +34,10 @@ func (c *oneTimeTicketConsumer) consume(_ context.Context, ticket string, runtim
 }
 
 func newRuntimeWSTestServer(t *testing.T) (*httptest.Server, *RuntimeFacade) {
+	return newRuntimeWSTestServerWithConfig(t, nil)
+}
+
+func newRuntimeWSTestServerWithConfig(t *testing.T, configure func(*FacadeConfig)) (*httptest.Server, *RuntimeFacade) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{})
@@ -46,6 +50,9 @@ func newRuntimeWSTestServer(t *testing.T) (*httptest.Server, *RuntimeFacade) {
 	cfg := DefaultFacadeConfig()
 	cfg.Path = "/runtime/ws"
 	cfg.LoopbackOnly = false
+	if configure != nil {
+		configure(cfg)
+	}
 	facade := NewRuntimeFacade(db, cfg)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -92,8 +99,58 @@ func TestParseRuntimeBootstrapSubprotocolRejectsAmbiguousOrMissingCredentials(t 
 	}
 }
 
+func TestRuntimeWebSocketEnforcesRegistrationTimeoutAndMessageLimit(t *testing.T) {
+	t.Run("registration timeout", func(t *testing.T) {
+		server, _ := newRuntimeWSTestServerWithConfig(t, func(cfg *FacadeConfig) {
+			cfg.RegisterTimeout = 50 * time.Millisecond
+		})
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/runtime/ws?deviceId=device-ws&runtimeId=runtime-ws"
+		dialer := websocket.Dialer{Subprotocols: []string{
+			runtimeV2WebSocketSubprotocol,
+			runtimeV2BootstrapProtocolPrefix + "timeout-ticket",
+		}}
+		conn, _, err := dialer.Dial(wsURL, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		start := time.Now()
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+		if _, _, err := conn.ReadMessage(); err == nil {
+			t.Fatal("websocket without hello must be closed by registration timeout")
+		}
+		if elapsed := time.Since(start); elapsed >= 750*time.Millisecond {
+			t.Fatalf("registration timeout was not enforced promptly: %s", elapsed)
+		}
+	})
+
+	t.Run("message size limit", func(t *testing.T) {
+		server, _ := newRuntimeWSTestServerWithConfig(t, func(cfg *FacadeConfig) {
+			cfg.RegisterTimeout = time.Second
+			cfg.MaxMessageBytes = 256
+		})
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/runtime/ws?deviceId=device-ws&runtimeId=runtime-ws"
+		dialer := websocket.Dialer{Subprotocols: []string{
+			runtimeV2WebSocketSubprotocol,
+			runtimeV2BootstrapProtocolPrefix + "limit-ticket",
+		}}
+		conn, _, err := dialer.Dial(wsURL, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(strings.Repeat("x", 2048))); err != nil {
+			t.Fatal(err)
+		}
+		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+		if _, _, err := conn.ReadMessage(); err == nil {
+			t.Fatal("oversized websocket message must close the connection")
+		}
+	})
+}
+
 func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
-	server, _ := newRuntimeWSTestServer(t)
+	server, facade := newRuntimeWSTestServer(t)
 
 	resp, err := http.Get(server.URL + "/runtime/ws?deviceId=device-ws&runtimeId=runtime-ws")
 	if err != nil {
@@ -192,6 +249,48 @@ func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 		t.Fatalf("hello ack identity mismatch: %+v", ackEnv)
 	}
 
+	runtimeConn := facade.GetConnection("user-ws", "device-ws", "runtime-ws")
+	if runtimeConn == nil {
+		t.Fatal("runtime connection missing after hello")
+	}
+	beforeHeartbeat := runtimeConn.LastHeartbeat()
+	time.Sleep(2 * time.Millisecond)
+	pingPayload := []byte(`{"t":1}`)
+	ping := &Envelope{
+		EnvelopeVersion:      EnvelopeVersion,
+		Protocol:             ProtocolName,
+		MessageType:          MessageTypePing,
+		MessageName:          "ping",
+		MessageID:            "ping-valid",
+		UserID:               "user-ws",
+		DeviceID:             "device-ws",
+		RuntimeID:            "runtime-ws",
+		RuntimeSessionID:     ackEnv.RuntimeSessionID,
+		ConnectionGeneration: ackEnv.ConnectionGeneration,
+		Sequence:             2,
+		PayloadSchemaVersion: 1,
+		PayloadHash:          ComputePayloadHash(pingPayload),
+		SentAt:               time.Now().UTC(),
+		Payload:              pingPayload,
+	}
+	if err := conn.WriteJSON(ping); err != nil {
+		t.Fatal(err)
+	}
+	_, rawPong, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pongEnv Envelope
+	if err := json.Unmarshal(rawPong, &pongEnv); err != nil {
+		t.Fatal(err)
+	}
+	if pongEnv.MessageType != MessageTypePong {
+		t.Fatalf("expected pong, got %s", pongEnv.MessageType)
+	}
+	if !runtimeConn.LastHeartbeat().After(beforeHeartbeat) {
+		t.Fatalf("valid ping did not refresh heartbeat: before=%s after=%s", beforeHeartbeat, runtimeConn.LastHeartbeat())
+	}
+
 	// A consumed ticket must not create a second websocket session.
 	second, resp2, err := dialer.Dial(wsURL, nil)
 	if second != nil {
@@ -221,7 +320,7 @@ func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 		RuntimeID:            "runtime-ws",
 		RuntimeSessionID:     ackEnv.RuntimeSessionID,
 		ConnectionGeneration: ackEnv.ConnectionGeneration,
-		Sequence:             2,
+		Sequence:             3,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          ComputePayloadHash(forgedPayload),
 		SentAt:               time.Now().UTC(),

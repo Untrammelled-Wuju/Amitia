@@ -68,7 +68,16 @@ func TestHandlerCommandAckUsesRuntimeEnvelopeSequenceAndTerminalStatus(t *testin
 	conn := &Connection{ID: "conn-1", UserID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", State: ConnStateConnected}
 	conn.ActivateSession(session.ID, 1, 3)
 	payload, _ := json.Marshal(CommandAckPayload{CommandID: cmd.ID, CommandSequence: 7, Status: string(CommandStatusCompleted), RuntimeSessionID: session.ID, ReceivedAt: time.Now().UTC()})
-	env := &Envelope{Sequence: 100, Payload: payload, PayloadHash: ComputePayloadHash(payload)}
+	env := &Envelope{
+		UserID:               conn.UserID,
+		DeviceID:             conn.DeviceID,
+		RuntimeID:            conn.RuntimeID,
+		RuntimeSessionID:     session.ID,
+		ConnectionGeneration: 1,
+		Sequence:             100,
+		Payload:              payload,
+		PayloadHash:          ComputePayloadHash(payload),
+	}
 	if err := handler.HandleCommandAck(conn, env, &CommandAckPayload{CommandID: cmd.ID, CommandSequence: 7, Status: string(CommandStatusCompleted), RuntimeSessionID: session.ID, ReceivedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
@@ -286,10 +295,15 @@ func TestHandleEventRejectsInvalidStateSnapshotBeforeConsumingSequence(t *testin
 		t.Fatal(err)
 	}
 	env := &Envelope{
-		MessageName: EventStateSnapshot,
-		Sequence:    9,
-		Payload:     payload,
-		PayloadHash: ComputePayloadHash(payload),
+		UserID:               conn.UserID,
+		DeviceID:             conn.DeviceID,
+		RuntimeID:            conn.RuntimeID,
+		RuntimeSessionID:     session.ID,
+		ConnectionGeneration: 5,
+		MessageName:          EventStateSnapshot,
+		Sequence:             9,
+		Payload:              payload,
+		PayloadHash:          ComputePayloadHash(payload),
 	}
 	if _, err := handler.HandleEvent(conn, env); err == nil {
 		t.Fatal("expected invalid state snapshot to be rejected")
@@ -304,5 +318,158 @@ func TestHandleEventRejectsInvalidStateSnapshotBeforeConsumingSequence(t *testin
 	}
 	if conn.LastInboundSequence() != 0 {
 		t.Fatalf("invalid snapshot advanced inbound cursor: %d", conn.LastInboundSequence())
+	}
+}
+
+func TestReconnectFencesSupersededConnectionBeforeCommandAckMutation(t *testing.T) {
+	db, services, handler := newHandlerP0DB(t)
+	oldConn, err := handler.HandleConnect("user-reconnect", "device-reconnect", "runtime-reconnect")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hello := &HelloPayload{
+		RuntimeVersion:         "2.0.0",
+		RuntimeContractVersion: CurrentSchemaVersion,
+		DeviceID:               oldConn.DeviceID,
+		RuntimeID:              oldConn.RuntimeID,
+	}
+	ack, err := handler.HandleHello(oldConn, hello)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ack == nil || ack.SessionID == "" {
+		t.Fatal("expected established old runtime session")
+	}
+
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	cmd := &RuntimeCommand{
+		ID:                   "cmd-reconnect-fence",
+		UserID:               string(oldConn.UserID),
+		DeviceID:             string(oldConn.DeviceID),
+		RuntimeID:            string(oldConn.RuntimeID),
+		RuntimeSessionID:     string(ack.SessionID),
+		CommandType:          string(CommandTypePlayAction),
+		Durability:           "ephemeral",
+		Status:               string(CommandStatusRendererAccepted),
+		PayloadJSON:          `{}`,
+		PayloadHash:          ComputePayloadHash([]byte(`{}`)),
+		PayloadSchemaVersion: 1,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	newConn, err := handler.HandleConnect(oldConn.UserID, oldConn.DeviceID, oldConn.RuntimeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newConn == oldConn || oldConn.GetState() != ConnStateClosing {
+		t.Fatalf("old connection was not fenced: old=%s new=%s", oldConn.GetState(), newConn.GetState())
+	}
+
+	payload, err := json.Marshal(CommandAckPayload{
+		CommandID:        cmd.ID,
+		Status:           string(CommandStatusCompleted),
+		RuntimeSessionID: string(ack.SessionID),
+		ReceivedAt:       time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, generation := oldConn.SessionSnapshot()
+	env := &Envelope{
+		UserID:               oldConn.UserID,
+		DeviceID:             oldConn.DeviceID,
+		RuntimeID:            oldConn.RuntimeID,
+		RuntimeSessionID:     ack.SessionID,
+		ConnectionGeneration: generation,
+		Sequence:             10,
+		Payload:              payload,
+		PayloadHash:          ComputePayloadHash(payload),
+	}
+	if err := handler.HandleCommandAck(oldConn, env, &CommandAckPayload{
+		CommandID:        cmd.ID,
+		Status:           string(CommandStatusCompleted),
+		RuntimeSessionID: string(ack.SessionID),
+		ReceivedAt:       time.Now().UTC(),
+	}); err == nil {
+		t.Fatal("superseded connection command ack must be rejected")
+	}
+
+	stored, err := services.Commands.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != string(CommandStatusRendererAccepted) {
+		t.Fatalf("stale ack mutated command status: %s", stored.Status)
+	}
+	var eventCount int64
+	if err := db.Model(&EventRecord{}).Where("runtime_session_id = ? AND sequence = ?", ack.SessionID, 10).Count(&eventCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if eventCount != 0 {
+		t.Fatalf("stale ack appended an event: %d", eventCount)
+	}
+}
+
+func TestReconnectFencesSupersededHandshakeBeforeSessionAcquire(t *testing.T) {
+	db, _, handler := newHandlerP0DB(t)
+	oldConn, err := handler.HandleConnect("user-handshake", "device-handshake", "runtime-handshake")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.HandleConnect(oldConn.UserID, oldConn.DeviceID, oldConn.RuntimeID); err != nil {
+		t.Fatal(err)
+	}
+	if oldConn.GetState() != ConnStateClosing {
+		t.Fatalf("old handshake was not fenced: %s", oldConn.GetState())
+	}
+	if _, err := handler.HandleHello(oldConn, &HelloPayload{
+		RuntimeVersion:         "2.0.0",
+		RuntimeContractVersion: CurrentSchemaVersion,
+		DeviceID:               oldConn.DeviceID,
+		RuntimeID:              oldConn.RuntimeID,
+	}); err == nil {
+		t.Fatal("superseded handshake must not acquire a runtime session")
+	}
+	var sessionCount int64
+	if err := db.Model(&RuntimeSession{}).Count(&sessionCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if sessionCount != 0 {
+		t.Fatalf("superseded handshake created runtime sessions: %d", sessionCount)
+	}
+}
+
+func TestHandleCommandAckRejectsWrongGenerationBeforeMutation(t *testing.T) {
+	db, services, handler := newHandlerP0DB(t)
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	session := &RuntimeSession{ID: "sess-generation", UserID: "user-generation", DeviceID: "device-generation", RuntimeID: "runtime-generation", ConnectionGeneration: 3, Status: string(SessionStatusReady), CreatedAt: now, UpdatedAt: now}
+	if err := db.Create(session).Error; err != nil {
+		t.Fatal(err)
+	}
+	cmd := &RuntimeCommand{ID: "cmd-generation", UserID: session.UserID, DeviceID: session.DeviceID, RuntimeID: session.RuntimeID, RuntimeSessionID: session.ID, CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRendererAccepted), PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+	conn := &Connection{ID: "conn-generation", UserID: "user-generation", DeviceID: "device-generation", RuntimeID: "runtime-generation", State: ConnStateConnected}
+	conn.ActivateSession(session.ID, 3, 0)
+	ack := &CommandAckPayload{CommandID: cmd.ID, Status: string(CommandStatusCompleted), RuntimeSessionID: session.ID, ReceivedAt: time.Now().UTC()}
+	payload, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := &Envelope{UserID: conn.UserID, DeviceID: conn.DeviceID, RuntimeID: conn.RuntimeID, RuntimeSessionID: session.ID, ConnectionGeneration: 2, Sequence: 1, Payload: payload, PayloadHash: ComputePayloadHash(payload)}
+	if err := handler.HandleCommandAck(conn, env, ack); err == nil {
+		t.Fatal("wrong generation must be rejected")
+	}
+	stored, err := services.Commands.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != string(CommandStatusRendererAccepted) {
+		t.Fatalf("wrong-generation ack mutated command: %s", stored.Status)
 	}
 }

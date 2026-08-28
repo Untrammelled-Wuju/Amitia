@@ -47,9 +47,12 @@ func (r *Reconciler) ReconcileSession(ctx context.Context, sessionID string, des
 	return nil
 }
 
-func (r *Reconciler) ExpireCommands(now time.Time) (int64, error) {
+func (r *Reconciler) ExpireCommands(now time.Time, timeoutSec int) (int64, error) {
+	if timeoutSec <= 0 {
+		timeoutSec = 30
+	}
 	expired := int64(0)
-	cmds, err := r.commands.ListExpiredCommands(100, 60)
+	cmds, err := r.commands.ListExpiredCommands(100, timeoutSec)
 	if err != nil {
 		return 0, err
 	}

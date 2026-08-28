@@ -222,6 +222,17 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cfg := h.facade.Config()
+	if cfg.MaxMessageBytes > 0 {
+		wsConn.SetReadLimit(cfg.MaxMessageBytes)
+	}
+	if cfg.RegisterTimeout > 0 {
+		if err := wsConn.SetReadDeadline(time.Now().Add(cfg.RegisterTimeout)); err != nil {
+			_ = wsConn.Close()
+			return
+		}
+	}
+
 	v2Handler := h.facade.Handler()
 
 	conn, err := v2Handler.HandleConnect(userID, deviceID, runtimeID)
@@ -230,11 +241,16 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sendQueueSize := cfg.SendQueueSize
+	if sendQueueSize <= 0 {
+		sendQueueSize = 64
+	}
 	ctx := &wsConnContext{
 		wsConn:  wsConn,
 		conn:    conn,
 		handler: v2Handler,
-		sendCh:  make(chan []byte, 64),
+		config:  cfg,
+		sendCh:  make(chan []byte, sendQueueSize),
 		doneCh:  make(chan struct{}),
 	}
 
@@ -283,6 +299,7 @@ type wsConnContext struct {
 	wsConn  *websocket.Conn
 	conn    *Connection
 	handler *Handler
+	config  *FacadeConfig
 	sendCh  chan []byte
 	doneCh  chan struct{}
 	mu      sync.Mutex
@@ -321,6 +338,13 @@ func (ctx *wsConnContext) SendEnvelope(env *Envelope, sentAt string) error {
 	}
 }
 
+func (ctx *wsConnContext) refreshHeartbeatDeadline() error {
+	if ctx == nil || ctx.wsConn == nil || ctx.config == nil || ctx.config.HeartbeatTimeout <= 0 {
+		return nil
+	}
+	return ctx.wsConn.SetReadDeadline(time.Now().Add(ctx.config.HeartbeatTimeout))
+}
+
 func (ctx *wsConnContext) readLoop() {
 	defer func() {
 		ctx.closeDone()
@@ -355,13 +379,23 @@ func (ctx *wsConnContext) readLoop() {
 			return
 		}
 
-		sessionID, _ := ctx.conn.SessionSnapshot()
-		if env.MessageType != MessageTypeHello && env.RuntimeSessionID != runtimeidentity.RuntimeSessionID(sessionID) {
-			return
+		sessionID, generation := ctx.conn.SessionSnapshot()
+		if env.MessageType != MessageTypeHello {
+			if env.RuntimeSessionID != runtimeidentity.RuntimeSessionID(sessionID) {
+				return
+			}
+			if generation <= 0 || env.ConnectionGeneration != generation {
+				return
+			}
 		}
 
 		if !env.VerifyPayloadHash() {
 			return
+		}
+		if env.MessageType != MessageTypeHello {
+			if err := ctx.refreshHeartbeatDeadline(); err != nil {
+				return
+			}
 		}
 
 		switch MessageType(env.MessageType) {
@@ -372,6 +406,14 @@ func (ctx *wsConnContext) readLoop() {
 			}
 			ack, err := ctx.handler.HandleHello(ctx.conn, &payload)
 			if err != nil || ack == nil {
+				return
+			}
+			if ctx.config != nil {
+				ack.HeartbeatIntervalMs = int(ctx.config.HeartbeatInterval / time.Millisecond)
+				ack.HeartbeatTimeoutMs = int(ctx.config.HeartbeatTimeout / time.Millisecond)
+				ack.MaxMessageBytes = ctx.config.MaxMessageBytes
+			}
+			if err := ctx.refreshHeartbeatDeadline(); err != nil {
 				return
 			}
 			ackEnv, err := ctx.handler.CreateEnvelope(MessageTypeHelloAck, "hello_ack", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()), ack, ctx.conn.UserID, ctx.conn.DeviceID)
@@ -390,6 +432,9 @@ func (ctx *wsConnContext) readLoop() {
 				return
 			}
 		case MessageTypePing:
+			if err := ctx.handler.HandleHeartbeat(ctx.conn); err != nil {
+				return
+			}
 			pongEnv, err := ctx.handler.CreateEnvelope(MessageTypePong, "pong", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()), protocol.PongPayload{Time: time.Now()}, ctx.conn.UserID, ctx.conn.DeviceID)
 			if err != nil || pongEnv == nil {
 				return

@@ -45,8 +45,9 @@ type Connection struct {
 	OutboundSeq int64
 	LastBeat    time.Time
 
-	mu     sync.RWMutex
-	sendCh []byte
+	mu      sync.RWMutex
+	fenceMu sync.RWMutex
+	sendCh  []byte
 }
 
 func (c *Connection) ActivateSession(sessionID string, generation, lastInboundSeq int64) {
@@ -178,13 +179,23 @@ func (h *Handler) HandleConnect(userID runtimeidentity.UserID, deviceID runtimei
 	defer h.mu.Unlock()
 
 	key := RuntimeConnectionKey(userID, deviceID, runtimeID)
-	if existing, ok := h.connections[key]; ok && existing.GetState() == ConnStateConnected {
+	if existing, ok := h.connections[key]; ok && existing != nil {
+		// A reconnect must fence the old websocket before replacing the registry
+		// entry. In-flight mutations finish first; once this exclusive fence is
+		// acquired, no stale ACK/event/heartbeat can begin after supersession.
+		existing.fenceMu.Lock()
+		existingState := existing.GetState()
 		existingSessionID := existing.SessionIDValue()
-		if existingSessionID != "" {
-			if err := h.sessions.SupersedeSession(existingSessionID, "new_connection"); err != nil {
-				return nil, fmt.Errorf("supersede existing runtime session: %w", err)
+		if existingState != ConnStateClosed && existingState != ConnStateClosing {
+			if existingSessionID != "" {
+				if err := h.sessions.SupersedeSession(existingSessionID, "new_connection"); err != nil {
+					existing.fenceMu.Unlock()
+					return nil, fmt.Errorf("supersede existing runtime session: %w", err)
+				}
 			}
+			existing.SetState(ConnStateClosing)
 		}
+		existing.fenceMu.Unlock()
 	}
 
 	conn := &Connection{
@@ -204,6 +215,15 @@ func (h *Handler) HandleConnect(userID runtimeidentity.UserID, deviceID runtimei
 func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAckPayload, error) {
 	if conn == nil {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "connection is nil")
+	}
+	if payload == nil {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "hello payload is required")
+	}
+
+	conn.fenceMu.RLock()
+	defer conn.fenceMu.RUnlock()
+	if conn.GetState() != ConnStateHandshake {
+		return nil, deviceruntime.ErrConnectionSuperseded
 	}
 
 	if payload.DeviceID != conn.DeviceID {
@@ -284,16 +304,68 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 	}, nil
 }
 
+func validateEstablishedInboundEnvelope(conn *Connection, env *Envelope) (string, int64, error) {
+	if conn == nil {
+		return "", 0, ErrConnectionClosed
+	}
+	if env == nil {
+		return "", 0, NewProtocolError(ErrCodeEnvelopeInvalid, "runtime envelope is required")
+	}
+	if conn.GetState() != ConnStateConnected {
+		return "", 0, deviceruntime.ErrConnectionSuperseded
+	}
+	sessionID, generation := conn.SessionSnapshot()
+	if sessionID == "" || generation <= 0 {
+		return "", 0, ErrConnectionClosed
+	}
+	if env.UserID != conn.UserID || env.DeviceID != conn.DeviceID || env.RuntimeID != conn.RuntimeID {
+		return "", 0, NewProtocolError(ErrCodeEnvelopeInvalid, "runtime envelope identity mismatch")
+	}
+	if env.RuntimeSessionID != runtimeidentity.ParseRuntimeSessionID(sessionID) {
+		return "", 0, NewProtocolError(ErrCodeEnvelopeInvalid, "runtime envelope session mismatch")
+	}
+	if env.ConnectionGeneration != generation {
+		return "", 0, deviceruntime.ErrConnectionSuperseded
+	}
+	return sessionID, generation, nil
+}
+
+func (h *Handler) validateCommandOwnership(conn *Connection, sessionID, commandID string) (*RuntimeCommand, error) {
+	cmd, err := h.commands.GetCommand(commandID)
+	if err != nil {
+		return nil, err
+	}
+	if cmd.UserID != string(conn.UserID) || cmd.DeviceID != string(conn.DeviceID) {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "command ownership mismatch")
+	}
+	if cmd.RuntimeID != "" && cmd.RuntimeID != string(conn.RuntimeID) {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "command runtime mismatch")
+	}
+	if cmd.RuntimeSessionID != "" && cmd.RuntimeSessionID != sessionID {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "command session mismatch")
+	}
+	return cmd, nil
+}
+
 func (h *Handler) HandleCommandAck(conn *Connection, env *Envelope, ack *CommandAckPayload) error {
 	if conn == nil {
 		return ErrConnectionClosed
 	}
-	sessionID := conn.SessionIDValue()
-	if sessionID == "" {
-		return ErrConnectionClosed
+	conn.fenceMu.RLock()
+	defer conn.fenceMu.RUnlock()
+
+	if ack == nil {
+		return NewProtocolError(ErrCodeEnvelopeInvalid, "command ack payload is required")
 	}
-	if env == nil || ack == nil {
-		return NewProtocolError(ErrCodeEnvelopeInvalid, "command ack envelope is required")
+	sessionID, _, err := validateEstablishedInboundEnvelope(conn, env)
+	if err != nil {
+		return err
+	}
+	if ack.RuntimeSessionID != sessionID {
+		return NewProtocolError(ErrCodeEnvelopeInvalid, "command ack runtimeSessionId mismatch")
+	}
+	if ack.CommandSequence < 0 {
+		return NewProtocolError(ErrCodeEnvelopeInvalid, "commandSequence must be non-negative")
 	}
 	if !conn.IsInboundSequenceNew(env.Sequence) {
 		// Exact/older retries are idempotently ignored. The unique event sequence
@@ -311,6 +383,14 @@ func (h *Handler) HandleCommandAck(conn *Connection, env *Envelope, ack *Command
 		CommandStatusCompleted, CommandStatusFailedTerminal:
 	default:
 		return NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("unsupported command ack status: %s", ack.Status))
+	}
+
+	cmd, err := h.validateCommandOwnership(conn, sessionID, ackCmdID)
+	if err != nil {
+		return fmt.Errorf("validate command ack ownership: %w", err)
+	}
+	if cmd.DeviceSequence > 0 && ack.CommandSequence != cmd.DeviceSequence {
+		return NewProtocolError(ErrCodeEnvelopeInvalid, "command ack sequence mismatch")
 	}
 
 	now := time.Now().UTC()
@@ -367,12 +447,12 @@ func (h *Handler) HandleEvent(conn *Connection, env *Envelope) (*EventRecord, er
 	if conn == nil {
 		return nil, ErrConnectionClosed
 	}
-	sessionID := conn.SessionIDValue()
-	if sessionID == "" {
-		return nil, ErrConnectionClosed
-	}
-	if env == nil {
-		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "runtime event envelope is required")
+	conn.fenceMu.RLock()
+	defer conn.fenceMu.RUnlock()
+
+	sessionID, _, err := validateEstablishedInboundEnvelope(conn, env)
+	if err != nil {
+		return nil, err
 	}
 	if !IsEventType(env.MessageName) {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("unsupported runtime event type: %s", env.MessageName))
@@ -387,6 +467,9 @@ func (h *Handler) HandleEvent(conn *Connection, env *Envelope) (*EventRecord, er
 		if _, err := h.runtimeActualStateFromSnapshot(conn, env); err != nil {
 			return nil, err
 		}
+	}
+	if err := h.validateRuntimeEventCommandOwnership(conn, sessionID, env); err != nil {
+		return nil, err
 	}
 
 	var commandID *string
@@ -404,7 +487,7 @@ func (h *Handler) HandleEvent(conn *Connection, env *Envelope) (*EventRecord, er
 	if err != nil {
 		return nil, fmt.Errorf("append runtime event: %w", err)
 	}
-	if err := h.applyRuntimeEventCommandProgress(env); err != nil {
+	if err := h.applyRuntimeEventCommandProgress(conn, sessionID, env); err != nil {
 		return nil, fmt.Errorf("apply runtime playback progress: %w", err)
 	}
 	if err := h.appendRuntimeDomainEvent(conn, env); err != nil {
@@ -476,7 +559,7 @@ func runtimeEventOccurredAt(meta runtimeEventMetadata) time.Time {
 	return time.Now().UTC()
 }
 
-func (h *Handler) applyRuntimeEventCommandProgress(env *Envelope) error {
+func (h *Handler) validateRuntimeEventCommandOwnership(conn *Connection, sessionID string, env *Envelope) error {
 	if env == nil {
 		return nil
 	}
@@ -484,6 +567,28 @@ func (h *Handler) applyRuntimeEventCommandProgress(env *Envelope) error {
 	if meta.CommandID == "" {
 		return nil
 	}
+	switch env.MessageName {
+	case EventPlaybackActionStarted, EventPlaybackActionCompleted, EventPlaybackActionInterrupted, EventPlaybackActionFailed:
+		if _, err := h.validateCommandOwnership(conn, sessionID, meta.CommandID); err != nil {
+			return fmt.Errorf("validate runtime event command ownership: %w", err)
+		}
+	}
+	return nil
+}
+
+func (h *Handler) applyRuntimeEventCommandProgress(conn *Connection, sessionID string, env *Envelope) error {
+	if env == nil {
+		return nil
+	}
+	meta := decodeRuntimeEventMetadata(env.Payload)
+	if meta.CommandID == "" {
+		return nil
+	}
+	// Ownership is validated before EventRecord persistence in HandleEvent. Keep
+	// the parameters explicit so this function cannot accidentally be detached
+	// from the established session context during future refactors.
+	_ = conn
+	_ = sessionID
 	now := runtimeEventOccurredAt(meta)
 	switch env.MessageName {
 	case EventPlaybackActionStarted:
@@ -759,7 +864,16 @@ func (h *Handler) HandleDisconnect(conn *Connection) error {
 		return nil
 	}
 
+	conn.fenceMu.Lock()
+	defer conn.fenceMu.Unlock()
+	previousState := conn.GetState()
 	conn.SetState(ConnStateClosed)
+	// A connection explicitly fenced by HandleConnect is already superseded.
+	// Its deferred websocket cleanup must not close the authoritative session
+	// that the replacement connection is about to resume.
+	if previousState == ConnStateClosing {
+		return nil
+	}
 	sessionID, generation := conn.SessionSnapshot()
 
 	if h.deviceRuntimeSessions != nil {
@@ -784,6 +898,12 @@ func (h *Handler) HandleDisconnect(conn *Connection) error {
 func (h *Handler) HandleHeartbeat(conn *Connection) error {
 	if conn == nil {
 		return ErrConnectionClosed
+	}
+
+	conn.fenceMu.RLock()
+	defer conn.fenceMu.RUnlock()
+	if conn.GetState() != ConnStateConnected {
+		return deviceruntime.ErrConnectionSuperseded
 	}
 
 	now := time.Now().UTC()
