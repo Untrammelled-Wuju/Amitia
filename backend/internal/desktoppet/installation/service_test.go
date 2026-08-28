@@ -644,6 +644,26 @@ func TestUpdateRuntimeSettings_InvalidClickThroughMode_Rejected(t *testing.T) {
 	assertInstallationError(t, err, ErrCodeInstallationInvalid)
 }
 
+func TestUpdateRuntimeSettings_BoundingBoxClickThroughMode_Canonicalized(t *testing.T) {
+	svc, db, _, inst, _ := setupInstalledService(t)
+
+	if err := svc.EnableInstallation(testUserID, inst.ID); err != nil {
+		t.Fatalf("EnableInstallation: %v", err)
+	}
+
+	ctm := "boundingBox"
+	if _, err := svc.UpdateRuntimeSettings(testUserID, inst.ID, &UpdateRuntimeSettingsRequest{
+		ClickThroughMode: &ctm,
+	}); err != nil {
+		t.Fatalf("UpdateRuntimeSettings: %v", err)
+	}
+
+	rs := getRuntimeSettingsFromDB(t, db, inst.ID)
+	if rs.ClickThroughMode != "boundingBox" {
+		t.Fatalf("ClickThroughMode = %s, 期望 boundingBox", rs.ClickThroughMode)
+	}
+}
+
 func TestUpdateRuntimeSettings_EmptySettings_NoOp(t *testing.T) {
 	svc, _, _, inst, _ := setupInstalledService(t)
 
