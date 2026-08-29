@@ -1,10 +1,13 @@
 package com.amitia.amitia_app.runtime.bridge
 
 import io.flutter.plugin.common.EventChannel
+import java.util.ArrayDeque
 import java.util.concurrent.CopyOnWriteArrayList
 
 class RuntimeLogBridge : EventChannel.StreamHandler, RuntimeLogCallback {
     private val listeners = CopyOnWriteArrayList<LogListener>()
+    private val bufferedLogs = ArrayDeque<Map<String, Any>>()
+    private val logLock = Any()
 
     interface LogListener {
         fun onLog(level: String, message: String)
@@ -19,6 +22,17 @@ class RuntimeLogBridge : EventChannel.StreamHandler, RuntimeLogCallback {
     }
 
     override fun onLog(level: String, message: String) {
+        val entry = mapOf(
+            "level" to level,
+            "message" to message,
+            "timestamp" to System.currentTimeMillis(),
+        )
+        synchronized(logLock) {
+            if (bufferedLogs.size >= MAX_BUFFERED_LOGS) {
+                bufferedLogs.removeFirst()
+            }
+            bufferedLogs.addLast(entry)
+        }
         for (listener in listeners) {
             try {
                 listener.onLog(level, message)
@@ -41,6 +55,13 @@ class RuntimeLogBridge : EventChannel.StreamHandler, RuntimeLogCallback {
         }
         addListener(listener)
         RuntimeLogCallback.instance = this
+        val entries = synchronized(logLock) { bufferedLogs.toList() }
+        for (entry in entries) {
+            try {
+                sink.success(entry)
+            } catch (_: Throwable) {
+            }
+        }
     }
 
     override fun onCancel(arguments: Any?) {
@@ -49,6 +70,7 @@ class RuntimeLogBridge : EventChannel.StreamHandler, RuntimeLogCallback {
 
     companion object {
         const val EVENT_CHANNEL = "com.amitia.runtime/logs"
+        private const val MAX_BUFFERED_LOGS = 200
 
         @Volatile
         private var instance: RuntimeLogBridge? = null

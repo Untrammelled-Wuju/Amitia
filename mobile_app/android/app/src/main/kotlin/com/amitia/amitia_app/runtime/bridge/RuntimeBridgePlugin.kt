@@ -17,6 +17,7 @@ class RuntimeBridgePlugin : FlutterPlugin {
     private var methodChannel: MethodChannel? = null
     private var eventChannel: EventChannel? = null
     private var logEventChannel: EventChannel? = null
+    private var logBridge: RuntimeLogBridge? = null
     private var methodHandler: RuntimeBridgeHandler? = null
     private var streamHandler: RuntimeBridgeStreamHandler? = null
 
@@ -58,19 +59,26 @@ class RuntimeBridgePlugin : FlutterPlugin {
         this.eventChannel = eventChannel
         this.streamHandler = streamHandler
 
+        val logBridge = RuntimeLogBridge.getInstance()
+        RuntimeLogCallback.instance = logBridge
         val logEventChannel = EventChannel(binding.binaryMessenger, RuntimeLogBridge.EVENT_CHANNEL)
-        logEventChannel.setStreamHandler(RuntimeLogBridge.getInstance())
+        logEventChannel.setStreamHandler(logBridge)
         this.logEventChannel = logEventChannel
+        this.logBridge = logBridge
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         methodChannel?.setMethodCallHandler(null)
         eventChannel?.setStreamHandler(null)
         logEventChannel?.setStreamHandler(null)
+        if (RuntimeLogCallback.instance === logBridge) {
+            RuntimeLogCallback.instance = null
+        }
         streamHandler?.detach()
         methodChannel = null
         eventChannel = null
         logEventChannel = null
+        logBridge = null
         methodHandler = null
         streamHandler = null
     }

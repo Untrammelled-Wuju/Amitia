@@ -7,6 +7,7 @@ import android.os.IBinder
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.amitia.amitia_app.runtime.AndroidRuntimeModule
+import com.amitia.amitia_app.runtime.bridge.RuntimeLogCallback
 import com.amitia.amitia_app.runtime.service.internal.DefaultRuntimeServiceEndpoint
 import com.amitia.amitia_app.runtime.service.internal.RuntimeForegroundNotification
 import com.amitia.amitia_app.runtime.service.internal.RuntimeForegroundNotificationResult
@@ -568,6 +569,10 @@ class RuntimeService : Service() {
             phase = phase,
             noProcessCreated = noProcessCreated,
             cleanupPhase = StartupFailureCleanupPhase.FAILURE_DETECTED,
+        )
+        RuntimeLogCallback.instance?.onLog(
+            "ERROR",
+            "Runtime startup failed [${cause.name}] phase=$phase: ${cleanupContext.message}",
         )
         if (!startupFailureCleanupContextRef.compareAndSet(null, cleanupContext)) {
             return
