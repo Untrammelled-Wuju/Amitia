@@ -46,6 +46,7 @@ type GeneratedPackageSourceResult struct {
 }
 
 type GeneratedPackageSource interface {
+	CheckProcessingTaskOwnership(ctx context.Context, userID, processingTaskID string) error
 	BuildGeneratedPackage(ctx context.Context, userID, processingTaskID, defaultAction string, includedActions []string) (*GeneratedPackageSourceResult, error)
 }
 
@@ -160,11 +161,24 @@ func makeIdentitySlug(name string) string {
 }
 
 func (s *service) BuildRelease(ctx context.Context, req *BuildReleaseRequest) (*BuildReleaseResult, error) {
+	if req == nil {
+		return nil, NewReleaseError("INVALID_REQUEST", "构建请求不能为空", nil)
+	}
 	if req.UserID == "" {
 		return nil, NewReleaseError("INVALID_REQUEST", "用户 ID 不能为空", nil)
 	}
 	if req.ProcessingTaskID == "" {
 		return nil, NewReleaseError("INVALID_REQUEST", "处理任务 ID 不能为空", nil)
+	}
+	if s.packageSource == nil {
+		return nil, NewReleaseError("PACKAGE_SOURCE_UNAVAILABLE", "Release 源包服务未配置", nil)
+	}
+	// Ownership is an admission gate, not a late packaging check. Perform it
+	// before idempotency lookup, build-operation creation, quality-gate reads or
+	// any other observable side effect so a foreign processingTaskID cannot be
+	// used as an existence/status oracle.
+	if err := s.packageSource.CheckProcessingTaskOwnership(ctx, req.UserID, req.ProcessingTaskID); err != nil {
+		return nil, NewReleaseError("OWNERSHIP_DENIED", "处理任务不属于当前用户", err)
 	}
 
 	stableKey := req.IdempotencyKey
@@ -219,16 +233,18 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 	}
 
 	op.State = BuildOpStateSnapshotting
-	_ = s.repo.UpdateBuildOperation(op)
+	if err := s.repo.UpdateBuildOperation(op); err != nil {
+		return nil, NewReleaseError("OPERATION_UPDATE_FAILED", "更新操作状态失败", err)
+	}
 
 	gate, err := s.loadReleaseQualityGate(ctx, req.UserID, req.ProcessingTaskID)
 	if err != nil {
-		s.failOperation(op, "QUALITY_GATE_READ_FAILED", err)
+		err = s.failOperation(op, "QUALITY_GATE_READ_FAILED", err)
 		return nil, err
 	}
 	selectedActions, err := validateReleaseActionSelection(gate, req.IncludedActionKeys, req.DefaultAction)
 	if err != nil {
-		s.failOperation(op, "QUALITY_GATE_REJECTED", err)
+		err = s.failOperation(op, "QUALITY_GATE_REJECTED", err)
 		return nil, err
 	}
 	buildReq := *req
@@ -237,7 +253,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 
 	generated, err := s.packageSource.BuildGeneratedPackage(ctx, req.UserID, req.ProcessingTaskID, req.DefaultAction, req.IncludedActionKeys)
 	if err != nil {
-		s.failOperation(op, "PACKAGE_BUILD_FAILED", err)
+		err = s.failOperation(op, "PACKAGE_BUILD_FAILED", err)
 		return nil, NewReleaseError("PACKAGE_BUILD_FAILED", "生成 Release 源包失败", err)
 	}
 	if generated.Ephemeral && strings.TrimSpace(generated.PackageDir) != "" {
@@ -246,7 +262,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 
 	legacyManifest, err := (&packageformat.V1Reader{}).ReadManifest(generated.ManifestData)
 	if err != nil {
-		s.failOperation(op, "SOURCE_MANIFEST_INVALID", err)
+		err = s.failOperation(op, "SOURCE_MANIFEST_INVALID", err)
 		return nil, NewReleaseError("SOURCE_MANIFEST_INVALID", "源包 manifest 无法转换为 V2", err)
 	}
 	characterID := strings.TrimSpace(legacyManifest.Binding.SourceCharacterID)
@@ -255,12 +271,12 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 	}
 	if characterID == "" {
 		err := errors.New("source character id is empty")
-		s.failOperation(op, "CHARACTER_ID_MISSING", err)
+		err = s.failOperation(op, "CHARACTER_ID_MISSING", err)
 		return nil, NewReleaseError("CHARACTER_ID_MISSING", "无法确定桌宠绑定角色", err)
 	}
 	if req.CharacterID != "" && req.CharacterID != characterID {
 		err := fmt.Errorf("request character %s does not match source character %s", req.CharacterID, characterID)
-		s.failOperation(op, "CHARACTER_ID_MISMATCH", err)
+		err = s.failOperation(op, "CHARACTER_ID_MISMATCH", err)
 		return nil, NewReleaseError("CHARACTER_ID_MISMATCH", "桌宠角色绑定与处理任务不一致", err)
 	}
 
@@ -268,25 +284,25 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 	if req.PetID != "" {
 		identity, err = s.repo.GetPetIdentity(req.PetID)
 		if err != nil {
-			s.failOperation(op, "PET_IDENTITY_NOT_FOUND", err)
+			err = s.failOperation(op, "PET_IDENTITY_NOT_FOUND", err)
 			return nil, NewReleaseError("PET_IDENTITY_NOT_FOUND", "指定桌宠身份不存在", err)
 		}
 		if identity.OwnerUserID != req.UserID || (identity.SourceCharacterID != "" && identity.SourceCharacterID != characterID) {
 			err := errors.New("pet identity ownership or binding mismatch")
-			s.failOperation(op, "OWNERSHIP_DENIED", err)
+			err = s.failOperation(op, "OWNERSHIP_DENIED", err)
 			return nil, NewReleaseError("OWNERSHIP_DENIED", "桌宠身份与当前用户或角色不匹配", err)
 		}
 	} else {
 		identity, err = s.identitySvc.ResolveOrCreate(ctx, req.UserID, characterID, legacyManifest.Name)
 		if err != nil {
-			s.failOperation(op, "IDENTITY_CREATE_FAILED", err)
+			err = s.failOperation(op, "IDENTITY_CREATE_FAILED", err)
 			return nil, err
 		}
 	}
 
 	snapshot, err := s.createSnapshot(ctx, req, op, identity, legacyManifest, gate)
 	if err != nil {
-		s.failOperation(op, "SNAPSHOT_FAILED", err)
+		err = s.failOperation(op, "SNAPSHOT_FAILED", err)
 		return nil, err
 	}
 	op.SnapshotID = snapshot.ID
@@ -299,7 +315,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 
 	releaseSequence, err := s.allocateSequence(ctx, identity.ID)
 	if err != nil {
-		s.failOperation(op, "SEQUENCE_FAILED", err)
+		err = s.failOperation(op, "SEQUENCE_FAILED", err)
 		return nil, err
 	}
 	version := fmt.Sprintf("1.0.%d", releaseSequence)
@@ -327,7 +343,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 		UpdatedAt:             now,
 	}
 	if err := s.repo.CreateRelease(record); err != nil {
-		s.failOperation(op, "RELEASE_CREATE_FAILED", err)
+		err = s.failOperation(op, "RELEASE_CREATE_FAILED", err)
 		return nil, NewReleaseError("RELEASE_CREATE_FAILED", "创建 Release 记录失败", err)
 	}
 
@@ -340,8 +356,12 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 	if err != nil {
 		record.Lifecycle = string(ReleaseLifecycleFailed)
 		record.UpdatedAt = formatReleaseTimestamp(time.Now())
-		_ = s.repo.UpdateRelease(record)
-		s.failOperation(op, "FINALIZE_FAILED", err)
+		if updateErr := s.repo.UpdateRelease(record); updateErr != nil {
+			combined := errors.Join(err, fmt.Errorf("persist failed release state: %w", updateErr))
+			combined = s.failOperation(op, "FINALIZE_FAILED", combined)
+			return nil, NewReleaseError("RELEASE_FAILURE_STATE_PERSIST_FAILED", "Release 失败状态持久化失败", combined)
+		}
+		err = s.failOperation(op, "FINALIZE_FAILED", err)
 		return nil, err
 	}
 
@@ -514,8 +534,7 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 		return nil, NewReleaseError("STAGING_PATH_FAILED", "解析 Release 暂存目录失败", err)
 	}
 	if err := copyPackageTree(generated.PackageDir, stagingDir); err != nil {
-		_ = s.storage.RemoveStagingDir(record.ID)
-		return nil, NewReleaseError("PACKAGE_COPY_FAILED", "复制 Release 文件失败", err)
+		return nil, NewReleaseError("PACKAGE_COPY_FAILED", "复制 Release 文件失败", s.cleanupStagingFailure(record.ID, err))
 	}
 	_ = os.Remove(filepath.Join(stagingDir, "manifest.json"))
 
@@ -555,8 +574,7 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 			a.IsTransitionOnly,
 		)
 		if err != nil {
-			_ = s.storage.RemoveStagingDir(record.ID)
-			return nil, NewReleaseError("ACTION_CONFIG_CONVERT_FAILED", "转换动作配置失败: "+a.Key, err)
+			return nil, NewReleaseError("ACTION_CONFIG_CONVERT_FAILED", "转换动作配置失败: "+a.Key, s.cleanupStagingFailure(record.ID, err))
 		}
 		a.RevisionID = "generated:" + generated.PackageID
 		a.QualityVerdict = packageformat.QualityVerdictAccepted
@@ -567,8 +585,7 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 
 	fileManifest, err := packageformat.BuildFileManifestFromDir(stagingDir)
 	if err != nil {
-		_ = s.storage.RemoveStagingDir(record.ID)
-		return nil, NewReleaseError("FILE_MANIFEST_FAILED", "计算 Release 文件清单失败", err)
+		return nil, NewReleaseError("FILE_MANIFEST_FAILED", "计算 Release 文件清单失败", s.cleanupStagingFailure(record.ID, err))
 	}
 	manifest.Integrity = packageformat.ManifestIntegrity{Algorithm: packageformat.IntegrityAlgorithmV2, Files: fileManifest.Entries}
 	for _, f := range fileManifest.Entries {
@@ -577,42 +594,38 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 	manifest.Integrity.FileCount = len(fileManifest.Entries)
 	finalManifest, manifestData, err := (&packageformat.V2Writer{}).FinalizeManifest(&manifest)
 	if err != nil {
-		_ = s.storage.RemoveStagingDir(record.ID)
-		return nil, NewReleaseError("MANIFEST_FINALIZE_FAILED", "生成 V2 manifest 失败", err)
+		return nil, NewReleaseError("MANIFEST_FINALIZE_FAILED", "生成 V2 manifest 失败", s.cleanupStagingFailure(record.ID, err))
 	}
 	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.json"), manifestData, 0o644); err != nil {
-		_ = s.storage.RemoveStagingDir(record.ID)
-		return nil, NewReleaseError("MANIFEST_WRITE_FAILED", "写入 V2 manifest 失败", err)
+		return nil, NewReleaseError("MANIFEST_WRITE_FAILED", "写入 V2 manifest 失败", s.cleanupStagingFailure(record.ID, err))
 	}
 	validation := packageformat.NewValidator().ValidateDirectory(stagingDir, finalManifest)
 	if validation.Verdict != "valid" || validation.ErrorCount > 0 {
-		_ = s.storage.RemoveStagingDir(record.ID)
-		return nil, NewReleaseError("RELEASE_VALIDATION_FAILED", fmt.Sprintf("V2 Release 校验失败: %d errors", validation.ErrorCount), nil)
+		validationErr := fmt.Errorf("V2 Release 校验失败: %d errors", validation.ErrorCount)
+		return nil, NewReleaseError("RELEASE_VALIDATION_FAILED", validationErr.Error(), s.cleanupStagingFailure(record.ID, validationErr))
 	}
 	if err := s.storage.MoveStagingToPublished(identity.ID, record.ID); err != nil {
-		_ = s.storage.RemoveStagingDir(record.ID)
-		return nil, NewReleaseError("PUBLISH_FAILED", "发布 Release 文件失败", err)
+		return nil, NewReleaseError("PUBLISH_FAILED", "发布 Release 文件失败", s.cleanupStagingFailure(record.ID, err))
 	}
 	publishedDir, err := s.storage.PublishedDir(identity.ID, record.ID)
 	if err != nil {
-		return nil, NewReleaseError("PUBLISHED_PATH_FAILED", "解析发布目录失败", err)
+		return nil, NewReleaseError("PUBLISHED_PATH_FAILED", "解析发布目录失败", s.cleanupPublishedFailure(identity.ID, record.ID, "", err))
 	}
 	archivePath, err := s.storage.ArchivePath(identity.ID, record.ID)
 	if err != nil {
-		return nil, NewReleaseError("ARCHIVE_PATH_FAILED", "解析 Release 归档路径失败", err)
+		return nil, NewReleaseError("ARCHIVE_PATH_FAILED", "解析 Release 归档路径失败", s.cleanupPublishedFailure(identity.ID, record.ID, "", err))
 	}
 	archiveHash, archiveBytes, err := buildZipArchive(publishedDir, archivePath)
 	if err != nil {
-		_ = s.storage.RemovePublishedDir(identity.ID, record.ID)
-		return nil, NewReleaseError("ARCHIVE_BUILD_FAILED", "生成 Release 下载归档失败", err)
+		return nil, NewReleaseError("ARCHIVE_BUILD_FAILED", "生成 Release 下载归档失败", s.cleanupPublishedFailure(identity.ID, record.ID, archivePath, err))
 	}
 	storageKey, err := s.storage.PublishedStorageKey(identity.ID, record.ID)
 	if err != nil {
-		return nil, NewReleaseError("STORAGE_KEY_FAILED", "生成 Release 存储键失败", err)
+		return nil, NewReleaseError("STORAGE_KEY_FAILED", "生成 Release 存储键失败", s.cleanupPublishedFailure(identity.ID, record.ID, archivePath, err))
 	}
 	archiveKey, err := s.storage.ArchiveStorageKey(identity.ID, record.ID)
 	if err != nil {
-		return nil, NewReleaseError("ARCHIVE_KEY_FAILED", "生成归档存储键失败", err)
+		return nil, NewReleaseError("ARCHIVE_KEY_FAILED", "生成归档存储键失败", s.cleanupPublishedFailure(identity.ID, record.ID, archivePath, err))
 	}
 
 	now := formatReleaseTimestamp(time.Now())
@@ -638,23 +651,42 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 	for _, f := range finalManifest.Integrity.Files {
 		files = append(files, ReleaseFileData{ID: uuid.NewString(), ReleaseID: record.ID, Path: f.Path, SHA256: f.SHA256, Bytes: f.Bytes, MediaType: f.MediaType, Role: f.Role, ActionKey: f.ActionKey, FrameID: f.FrameID, CreatedAt: now})
 	}
+	identity.DefaultActionKey = record.DefaultActionKey
+	identity.UpdatedAt = now
 	if err := s.repo.Transaction(func(tx *gorm.DB) error {
 		if err := s.repo.UpdateReleaseTx(tx, record); err != nil {
 			return err
 		}
 		if len(files) > 0 {
-			return s.repo.CreateReleaseFilesTx(tx, files)
+			if err := s.repo.CreateReleaseFilesTx(tx, files); err != nil {
+				return err
+			}
 		}
-		return nil
+		return s.repo.UpdatePetIdentityTx(tx, identity)
 	}); err != nil {
-		_ = s.storage.RemovePublishedDir(identity.ID, record.ID)
-		_ = os.Remove(archivePath)
-		return nil, NewReleaseError("RELEASE_FINALIZE_FAILED", "提交 Release 元数据失败", err)
+		return nil, NewReleaseError("RELEASE_FINALIZE_FAILED", "提交 Release 元数据失败", s.cleanupPublishedFailure(identity.ID, record.ID, archivePath, err))
 	}
-	identity.DefaultActionKey = record.DefaultActionKey
-	identity.UpdatedAt = now
-	_ = s.repo.UpdatePetIdentity(identity)
 	return record, nil
+}
+
+func (s *service) cleanupStagingFailure(releaseID string, cause error) error {
+	if cleanupErr := s.storage.RemoveStagingDir(releaseID); cleanupErr != nil {
+		return errors.Join(cause, fmt.Errorf("cleanup staging release %s: %w", releaseID, cleanupErr))
+	}
+	return cause
+}
+
+func (s *service) cleanupPublishedFailure(petID, releaseID, archivePath string, cause error) error {
+	errs := []error{cause}
+	if cleanupErr := s.storage.RemovePublishedDir(petID, releaseID); cleanupErr != nil {
+		errs = append(errs, fmt.Errorf("cleanup published release %s/%s: %w", petID, releaseID, cleanupErr))
+	}
+	if archivePath != "" {
+		if cleanupErr := os.Remove(archivePath); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
+			errs = append(errs, fmt.Errorf("cleanup release archive %s: %w", archivePath, cleanupErr))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 type convertedActionMetadata struct {
@@ -918,14 +950,17 @@ func (s *service) computeInputHash(req *BuildReleaseRequest, stableKey string) s
 	return hex.EncodeToString(h[:])
 }
 
-func (s *service) failOperation(op *ReleaseBuildOperation, code string, err error) {
+func (s *service) failOperation(op *ReleaseBuildOperation, code string, cause error) error {
 	op.State = BuildOpStateFailedTerminal
 	op.ErrorCode = code
-	if err != nil {
-		op.ErrorMessage = err.Error()
+	if cause != nil {
+		op.ErrorMessage = cause.Error()
 	}
 	op.UpdatedAt = formatReleaseTimestamp(time.Now())
-	s.repo.UpdateBuildOperation(op)
+	if updateErr := s.repo.UpdateBuildOperation(op); updateErr != nil {
+		return errors.Join(cause, fmt.Errorf("persist release operation %s failure state: %w", op.ID, updateErr))
+	}
+	return cause
 }
 
 func (s *service) GetBuildOperation(ctx context.Context, operationID, userID string) (*ReleaseBuildOperation, error) {

@@ -44,7 +44,8 @@ func (f *GenerationFinalizer) FinalizeAttempt(req FinalizeAttemptRequest) error 
 	if err := f.markAttemptSucceeded(req.Tx, req.AttemptID, now); err != nil {
 		return NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("mark attempt succeeded: %v", err), err)
 	}
-	if err := f.markActionSucceeded(req.Tx, req.TaskActionID, now); err != nil {
+	actionTransitioned, err := f.markActionSucceeded(req.Tx, req.TaskActionID, now)
+	if err != nil {
 		return NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("mark action succeeded: %v", err), err)
 	}
 	if req.PrimaryArtifactID != "" {
@@ -57,7 +58,7 @@ func (f *GenerationFinalizer) FinalizeAttempt(req FinalizeAttemptRequest) error 
 			return err
 		}
 	}
-	if err := f.applyActionCostStats(req.Tx, req.TaskActionID, req); err != nil {
+	if err := f.applyActionCostStats(req.Tx, req.TaskActionID, req, actionTransitioned); err != nil {
 		return NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("apply action cost stats: %v", err), err)
 	}
 	if err := f.applyAttemptCostStats(req.Tx, req.AttemptID, req); err != nil {
@@ -83,22 +84,39 @@ func (f *GenerationFinalizer) markAttemptSucceeded(tx *gorm.DB, attemptID, now s
 	return nil
 }
 
-func (f *GenerationFinalizer) markActionSucceeded(tx *gorm.DB, taskActionID, now string) error {
+func (f *GenerationFinalizer) markActionSucceeded(tx *gorm.DB, taskActionID, now string) (bool, error) {
+	var current struct {
+		Status string `gorm:"column:status"`
+	}
+	if err := tx.Table("desktop_pet_generation_task_actions").
+		Select("status").
+		Where("id = ?", taskActionID).
+		First(&current).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("task action not found: %s", taskActionID), err)
+		}
+		return false, err
+	}
+	if current.Status == "succeeded" {
+		return false, nil
+	}
 	result := tx.Table("desktop_pet_generation_task_actions").
 		Where("id = ?", taskActionID).
 		Updates(map[string]interface{}{
-			"status":       "succeeded",
-			"progress":     100,
-			"completed_at": now,
-			"updated_at":   now,
+			"status":        "succeeded",
+			"progress":      100,
+			"error_code":    "",
+			"error_message": "",
+			"completed_at":  now,
+			"updated_at":    now,
 		})
 	if result.Error != nil {
-		return result.Error
+		return false, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("task action not found: %s", taskActionID), nil)
+		return false, NewGenerationError(ErrCodeFinalizeFailed, fmt.Sprintf("task action not found: %s", taskActionID), nil)
 	}
-	return nil
+	return true, nil
 }
 
 func (f *GenerationFinalizer) markArtifactPersisted(tx *gorm.DB, artifactID, now string) error {
@@ -128,16 +146,19 @@ func (f *GenerationFinalizer) promoteActiveBinding(req FinalizeAttemptRequest) e
 	return nil
 }
 
-func (f *GenerationFinalizer) applyActionCostStats(tx *gorm.DB, taskActionID string, req FinalizeAttemptRequest) error {
+func (f *GenerationFinalizer) applyActionCostStats(tx *gorm.DB, taskActionID string, req FinalizeAttemptRequest, incrementSuccess bool) error {
+	updates := map[string]interface{}{
+		"actual_cost":         req.ActualCost,
+		"actual_input_units":  req.ActualInputUnits,
+		"actual_output_units": req.ActualOutputUnits,
+		"updated_at":          nowRFC3339(),
+	}
+	if incrementSuccess {
+		updates["actual_success_count"] = gorm.Expr("actual_success_count + 1")
+	}
 	result := tx.Table("desktop_pet_generation_task_actions").
 		Where("id = ?", taskActionID).
-		Updates(map[string]interface{}{
-			"actual_cost":          req.ActualCost,
-			"actual_input_units":   req.ActualInputUnits,
-			"actual_output_units":  req.ActualOutputUnits,
-			"actual_success_count": gorm.Expr("actual_success_count + 1"),
-			"updated_at":           nowRFC3339(),
-		})
+		Updates(updates)
 	return result.Error
 }
 

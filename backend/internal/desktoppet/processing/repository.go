@@ -345,6 +345,7 @@ func (r *repository) BeginProcessingActionAttempt(tx *gorm.DB, actionID string, 
 	result := tx.Model(&ProcessingAction{}).
 		Where("id = ? AND row_version = ?", actionID, expectedRowVersion).
 		Updates(map[string]interface{}{
+			"status":              "processing",
 			"processing_attempt":  newAttemptNumber,
 			"row_version":         expectedRowVersion + 1,
 			"active_execution_id": executionID,
@@ -368,7 +369,7 @@ func (r *repository) BeginProcessingActionAttempt(tx *gorm.DB, actionID string, 
 		AttemptNumber:           newAttemptNumber,
 		SourceGenerationAttempt: sourceGenerationAttempt,
 		ExecutionID:             executionID,
-		Status:                  "pending",
+		Status:                  "processing",
 		Progress:                0,
 		CreatedAt:               now,
 		UpdatedAt:               now,

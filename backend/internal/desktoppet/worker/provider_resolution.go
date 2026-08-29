@@ -2,10 +2,12 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/desktoppet/generation"
 	"github.com/u-ai/backend/internal/imageprovider"
 	"github.com/u-ai/backend/internal/imageprovider/cloudbridge"
 	"github.com/u-ai/backend/internal/runtimeprofile"
@@ -98,4 +100,51 @@ func validateResolvedProvider(ctx context.Context, resolved *generationProviderR
 		return imageprovider.ImageGenerationCapabilities{}, err
 	}
 	return resolved.Provider.Capabilities(ctx, resolved.ModelConfig)
+}
+
+func (w *Worker) queryGenerationProviderForRecovery(ctx context.Context, attempt *generation.ActionGenerationAttempt) (*generation.ProviderQueryResult, error) {
+	if attempt == nil {
+		return nil, fmt.Errorf("generation recovery attempt is nil")
+	}
+	if strings.TrimSpace(attempt.ProviderOperationID) == "" {
+		return nil, fmt.Errorf("generation recovery attempt %s has no provider operation id", attempt.ID)
+	}
+	task, err := w.repo.GetTaskByID(attempt.TaskID)
+	if err != nil {
+		return nil, fmt.Errorf("load generation task for recovery: %w", err)
+	}
+	if task == nil {
+		return nil, fmt.Errorf("generation task %s not found for recovery", attempt.TaskID)
+	}
+	if attempt.ConfigID > 0 {
+		task.ModelConfigID = attempt.ConfigID
+	}
+	resolved, code, message := w.resolveGenerationProvider(ctx, task)
+	if resolved == nil {
+		if code == "" {
+			code = desktoppet.ErrCodeImageModelUnavailable
+		}
+		return nil, fmt.Errorf("%s: %s", code, message)
+	}
+	result, err := resolved.Provider.Query(ctx, resolved.ModelConfig, attempt.ProviderOperationID)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, fmt.Errorf("provider query returned nil result")
+	}
+	rawMetadata := ""
+	if result.RawMetadata != nil {
+		if data, marshalErr := json.Marshal(result.RawMetadata); marshalErr == nil {
+			rawMetadata = string(data)
+		}
+	}
+	status := strings.TrimSpace(result.Status)
+	return &generation.ProviderQueryResult{
+		ProviderStatus:   status,
+		IsCompleted:      status == "succeeded",
+		IsFailed:         status == "failed",
+		RawMetadata:      rawMetadata,
+		GenerationResult: convertToGenerationResult(result),
+	}, nil
 }

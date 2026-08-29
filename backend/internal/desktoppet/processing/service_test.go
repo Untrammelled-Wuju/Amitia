@@ -185,6 +185,28 @@ func TestServiceCreateProcessingTask_NoSuccessfulActions(t *testing.T) {
 	assertProcessingErrorCode(t, err, ErrCodeNoSuccessfulActions)
 }
 
+func TestServiceCreateProcessingTask_WrongOwnerFailsClosed(t *testing.T) {
+	svc, db, _, dataDir := setupServiceEnv(t)
+
+	seedFullGenerationTask(t, db, dataDir, "gt-wrong-owner", "user-owner", "idle_normal", 1)
+
+	req := &CreateProcessingTaskRequest{
+		GenerationTaskID: "gt-wrong-owner",
+		UserID:           "user-attacker",
+	}
+
+	_, err := svc.CreateProcessingTask(req)
+	assertProcessingErrorCode(t, err, ErrCodeGenerationTaskNotReady)
+
+	var count int64
+	if err := db.Model(&ProcessingTask{}).Where("generation_task_id = ?", "gt-wrong-owner").Count(&count).Error; err != nil {
+		t.Fatalf("count processing tasks: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("cross-user request created %d processing task(s), want 0", count)
+	}
+}
+
 func TestServiceCreateProcessingTask_TaskGenerating(t *testing.T) {
 	svc, db, _, _ := setupServiceEnv(t)
 

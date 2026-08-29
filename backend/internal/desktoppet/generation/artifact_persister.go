@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"net/http"
@@ -113,7 +114,7 @@ func (p *ArtifactPersister) Persist(input PersistInput) (*PersistResult, error) 
 		return p.persistWithCommitter(input, dataDir, result)
 	}
 
-	artifactDir := p.buildArtifactDir(input.TaskID, input.TaskActionID, input.AttemptID)
+	artifactDir := p.buildArtifactDir(dataDir, input.TaskID, input.TaskActionID, input.AttemptID)
 	if err := os.MkdirAll(artifactDir, 0755); err != nil {
 		return nil, NewGenerationError(ErrCodeArtifactPersistFailed, fmt.Sprintf("create artifact dir failed: %v", err), err)
 	}
@@ -121,7 +122,7 @@ func (p *ArtifactPersister) Persist(input PersistInput) (*PersistResult, error) 
 	for i := range input.Result.Candidates {
 		artifact, err := p.persistCandidate(input, artifactDir, &input.Result.Candidates[i], i)
 		if err != nil {
-			return nil, err
+			return nil, p.rollbackPersistFailure(dataDir, result, err)
 		}
 		result.Artifacts = append(result.Artifacts, artifact)
 		if i == 0 {
@@ -133,14 +134,15 @@ func (p *ArtifactPersister) Persist(input PersistInput) (*PersistResult, error) 
 	if result.PrimaryArtifact != nil {
 		for _, a := range result.Artifacts {
 			if err := p.artifactRepo.CreateArtifact(input.Tx, a); err != nil {
-				return nil, NewGenerationError(ErrCodeArtifactPersistFailed, fmt.Sprintf("create artifact record failed: %v", err), err)
+				persistErr := NewGenerationError(ErrCodeArtifactPersistFailed, fmt.Sprintf("create artifact record failed: %v", err), err)
+				return nil, p.rollbackPersistFailure(dataDir, result, persistErr)
 			}
 		}
 	}
 
 	receipt, err := p.persistReceipt(input, artifactDir)
 	if err != nil {
-		return nil, err
+		return nil, p.rollbackPersistFailure(dataDir, result, err)
 	}
 	if receipt != nil {
 		result.ReceiptArtifact = receipt
@@ -196,7 +198,8 @@ func (p *ArtifactPersister) persistWithCommitter(input PersistInput, dataDir str
 
 		artifact, err := p.commitFunc(commitInput)
 		if err != nil {
-			return nil, NewGenerationError(ErrCodeArtifactPersistFailed, fmt.Sprintf("commit candidate %d failed: %v", i, err), err)
+			persistErr := NewGenerationError(ErrCodeArtifactPersistFailed, fmt.Sprintf("commit candidate %d failed: %v", i, err), err)
+			return nil, p.rollbackPersistFailure(dataDir, result, persistErr)
 		}
 		result.Artifacts = append(result.Artifacts, artifact)
 		if i == 0 {
@@ -204,9 +207,9 @@ func (p *ArtifactPersister) persistWithCommitter(input PersistInput, dataDir str
 		}
 	}
 
-	receipt, err := p.persistReceipt(input, p.buildArtifactDir(input.TaskID, input.TaskActionID, input.AttemptID))
+	receipt, err := p.persistReceipt(input, p.buildArtifactDir(dataDir, input.TaskID, input.TaskActionID, input.AttemptID))
 	if err != nil {
-		return nil, err
+		return nil, p.rollbackPersistFailure(dataDir, result, err)
 	}
 	if receipt != nil {
 		result.ReceiptArtifact = receipt
@@ -396,6 +399,7 @@ func (p *ArtifactPersister) persistReceipt(input PersistInput, dir string) (*Gen
 	}
 
 	if err := p.artifactRepo.CreateArtifact(input.Tx, artifact); err != nil {
+		_ = os.Remove(receiptPath)
 		return nil, NewGenerationError(ErrCodeArtifactPersistFailed, fmt.Sprintf("create receipt artifact failed: %v", err), err)
 	}
 
@@ -425,9 +429,12 @@ func (p *ArtifactPersister) extractLayoutJSON(plan *GenerationPlanSnapshot) stri
 	return plan.LayoutJSON
 }
 
-func (p *ArtifactPersister) buildArtifactDir(taskID, taskActionID, attemptID string) string {
+func (p *ArtifactPersister) buildArtifactDir(dataDir, taskID, taskActionID, attemptID string) string {
+	if dataDir == "" {
+		dataDir = config.AppCfg.Storage.DataDir
+	}
 	return filepath.Join(
-		config.AppCfg.Storage.DataDir,
+		dataDir,
 		"desktop-pets",
 		"generation-tasks",
 		taskID,
@@ -438,6 +445,70 @@ func (p *ArtifactPersister) buildArtifactDir(taskID, taskActionID, attemptID str
 		attemptID,
 		artifactDirName,
 	)
+}
+
+// RollbackPersistedFiles removes filesystem artifacts that were published as
+// part of a database transaction which is about to be rolled back. Generation
+// persistence writes files before committing its SQL transaction so that the
+// database never points at a missing final file; the inverse failure mode must
+// therefore be handled explicitly to avoid orphaned files when finalization or
+// the SQL commit fails.
+func (p *ArtifactPersister) RollbackPersistedFiles(dataDir string, result *PersistResult) error {
+	if result == nil {
+		return nil
+	}
+	if dataDir == "" {
+		dataDir = config.AppCfg.Storage.DataDir
+	}
+
+	root, err := filepath.Abs(dataDir)
+	if err != nil {
+		return fmt.Errorf("resolve artifact rollback root: %w", err)
+	}
+
+	artifacts := make([]*GenerationArtifact, 0, len(result.Artifacts)+1)
+	artifacts = append(artifacts, result.Artifacts...)
+	if result.ReceiptArtifact != nil {
+		artifacts = append(artifacts, result.ReceiptArtifact)
+	}
+
+	seen := make(map[string]struct{}, len(artifacts))
+	var rollbackErrs []error
+	for _, artifact := range artifacts {
+		if artifact == nil || strings.TrimSpace(artifact.RelativePath) == "" {
+			continue
+		}
+
+		rel := filepath.Clean(filepath.FromSlash(artifact.RelativePath))
+		if filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("refuse rollback outside data dir: %q", artifact.RelativePath))
+			continue
+		}
+
+		absPath := filepath.Join(root, rel)
+		containedRel, relErr := filepath.Rel(root, absPath)
+		if relErr != nil || containedRel == ".." || strings.HasPrefix(containedRel, ".."+string(filepath.Separator)) {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("refuse rollback outside data dir: %q", artifact.RelativePath))
+			continue
+		}
+		if _, ok := seen[absPath]; ok {
+			continue
+		}
+		seen[absPath] = struct{}{}
+
+		if removeErr := os.Remove(absPath); removeErr != nil && !os.IsNotExist(removeErr) {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("remove rolled back artifact %s: %w", artifact.RelativePath, removeErr))
+		}
+	}
+
+	return errors.Join(rollbackErrs...)
+}
+
+func (p *ArtifactPersister) rollbackPersistFailure(dataDir string, result *PersistResult, cause error) error {
+	if rollbackErr := p.RollbackPersistedFiles(dataDir, result); rollbackErr != nil {
+		return fmt.Errorf("%w; filesystem rollback failed: %v", cause, rollbackErr)
+	}
+	return cause
 }
 
 func (p *ArtifactPersister) buildRelativePath(taskID, taskActionID, attemptID, fileName string) string {

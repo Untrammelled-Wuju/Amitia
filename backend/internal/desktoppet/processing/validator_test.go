@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/u-ai/backend/internal/desktoppet"
+	"github.com/u-ai/backend/internal/desktoppet/generation"
 	"gorm.io/gorm"
 )
 
@@ -232,6 +233,69 @@ func TestValidator_ValidateSources_Normal(t *testing.T) {
 	}
 	if frames[0].Width != 64 || frames[0].Height != 64 {
 		t.Fatalf("帧 0 尺寸 = %dx%d, 期望 64x64", frames[0].Width, frames[0].Height)
+	}
+}
+
+func TestValidator_ValidateProcessingSources_AcceptsHistoricalVerifiedV2Artifact(t *testing.T) {
+	db := setupTestDB(t)
+	repo := newRepoFromDB(t, db)
+	dataDir := t.TempDir()
+
+	seedValidatorTask(t, db, "gt-v2-verified", "user-1", "succeeded")
+	action := seedValidatorAction(t, db, "gta-v2-verified", "gt-v2-verified", "idle_normal", "succeeded", 1, 1, "v1")
+	action.GenerationMode = "single_frame"
+	action.ActiveAttemptID = "attempt-v2-verified"
+	action.ActiveAttemptNumber = 1
+	if err := db.Model(&desktoppet.GenerationTaskAction{}).Where("id = ?", action.ID).Updates(map[string]interface{}{
+		"generation_mode":       action.GenerationMode,
+		"active_attempt_id":     action.ActiveAttemptID,
+		"active_attempt_number": action.ActiveAttemptNumber,
+	}).Error; err != nil {
+		t.Fatalf("update V2 action: %v", err)
+	}
+
+	if err := db.Create(&generation.ActionGenerationAttempt{
+		ID:            action.ActiveAttemptID,
+		TaskID:        "gt-v2-verified",
+		TaskActionID:  action.ID,
+		AttemptNumber: 1,
+		Mode:          "single_frame",
+		Status:        "succeeded",
+	}).Error; err != nil {
+		t.Fatalf("create V2 generation attempt: %v", err)
+	}
+
+	rel := "desktop-pets/generation-tasks/gt-v2-verified/artifacts/idle_normal/verified.png"
+	abs := writeValidatorPNG(t, dataDir, rel, 64, 64)
+	hash := fileSHA256(t, abs)
+	if err := db.Create(&generation.GenerationArtifact{
+		ID:           "artifact-v2-verified",
+		TaskID:       "gt-v2-verified",
+		TaskActionID: action.ID,
+		AttemptID:    action.ActiveAttemptID,
+		ArtifactType: string(generation.ArtifactTypeSingleFrameRaw),
+		ArtifactRole: string(generation.ArtifactRolePrimary),
+		IsPrimary:    1,
+		Status:       string(generation.ArtifactStatusVerified),
+		RelativePath: rel,
+		ContentHash:  hash,
+		Hash:         hash,
+		Width:        64,
+		Height:       64,
+	}).Error; err != nil {
+		t.Fatalf("create historical V2 artifact: %v", err)
+	}
+
+	v := NewValidator(repo, dataDir)
+	result, err := v.ValidateProcessingSources("gt-v2-verified", "user-1")
+	if err != nil {
+		t.Fatalf("ValidateProcessingSources: %v", err)
+	}
+	if result.SourceAttempts["idle_normal"] != 1 {
+		t.Fatalf("SourceAttempts[idle_normal] = %d, want 1", result.SourceAttempts["idle_normal"])
+	}
+	if _, ok := result.FramePaths["idle_normal"]; !ok {
+		t.Fatal("V2 verified artifact was not admitted")
 	}
 }
 

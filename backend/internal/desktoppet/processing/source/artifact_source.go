@@ -15,14 +15,16 @@ import (
 type ArtifactSourceRepo interface {
 	GetTaskActionID(taskID, actionKey string) (string, error)
 	GetActiveAttemptInfo(taskActionID string) (*AttemptInfo, error)
+	GetAttemptInfo(taskActionID string, attemptNumber int) (*AttemptInfo, error)
 	GetPrimaryArtifact(attemptID string) (*ArtifactInfo, error)
 	GetTaskUserID(taskID string) (string, error)
 }
 
 type AttemptInfo struct {
-	ID     string
-	Mode   string
-	Status string
+	ID            string
+	AttemptNumber int
+	Mode          string
+	Status        string
 }
 
 type ArtifactInfo struct {
@@ -70,7 +72,7 @@ func (a *SpriteSheetSourceAdapter) Resolve(ctx context.Context, req ResolveReque
 		return nil, fmt.Errorf("%w: taskID=%s actionKey=%s", ErrSourcePlanNotFound, req.GenerationTaskID, req.ActionKey)
 	}
 
-	attempt, err := a.repo.GetActiveAttemptInfo(taskActionID)
+	attempt, err := resolveAttempt(a.repo, taskActionID, req.SourceGenerationAttemptNumber)
 	if err != nil {
 		return nil, fmt.Errorf("%w: taskActionID=%s", ErrSourceAttemptNotFound, taskActionID)
 	}
@@ -85,7 +87,7 @@ func (a *SpriteSheetSourceAdapter) Resolve(ctx context.Context, req ResolveReque
 	if artifact == nil {
 		return nil, fmt.Errorf("%w: attemptID=%s", ErrSourceArtifactNotFound, attempt.ID)
 	}
-	if artifact.Status != "verified" && artifact.Status != "saved" {
+	if !isDurableArtifactStatus(artifact.Status) {
 		return nil, fmt.Errorf("%w: artifactID=%s status=%s", ErrSourceArtifactNotReady, artifact.ArtifactID, artifact.Status)
 	}
 
@@ -147,7 +149,7 @@ func (a *SingleFrameSourceAdapter) Resolve(ctx context.Context, req ResolveReque
 		return nil, fmt.Errorf("%w: taskID=%s actionKey=%s", ErrSourcePlanNotFound, req.GenerationTaskID, req.ActionKey)
 	}
 
-	attempt, err := a.repo.GetActiveAttemptInfo(taskActionID)
+	attempt, err := resolveAttempt(a.repo, taskActionID, req.SourceGenerationAttemptNumber)
 	if err != nil {
 		return nil, fmt.Errorf("%w: taskActionID=%s", ErrSourceAttemptNotFound, taskActionID)
 	}
@@ -162,7 +164,7 @@ func (a *SingleFrameSourceAdapter) Resolve(ctx context.Context, req ResolveReque
 	if artifact == nil {
 		return nil, fmt.Errorf("%w: attemptID=%s", ErrSourceArtifactNotFound, attempt.ID)
 	}
-	if artifact.Status != "verified" && artifact.Status != "saved" {
+	if !isDurableArtifactStatus(artifact.Status) {
 		return nil, fmt.Errorf("%w: artifactID=%s status=%s", ErrSourceArtifactNotReady, artifact.ArtifactID, artifact.Status)
 	}
 
@@ -215,7 +217,7 @@ func (a *KeyframeSourceAdapter) Resolve(ctx context.Context, req ResolveRequest)
 		return nil, fmt.Errorf("%w: taskID=%s actionKey=%s", ErrSourcePlanNotFound, req.GenerationTaskID, req.ActionKey)
 	}
 
-	attempt, err := a.repo.GetActiveAttemptInfo(taskActionID)
+	attempt, err := resolveAttempt(a.repo, taskActionID, req.SourceGenerationAttemptNumber)
 	if err != nil {
 		return nil, fmt.Errorf("%w: taskActionID=%s", ErrSourceAttemptNotFound, taskActionID)
 	}
@@ -230,7 +232,7 @@ func (a *KeyframeSourceAdapter) Resolve(ctx context.Context, req ResolveRequest)
 	if artifact == nil {
 		return nil, fmt.Errorf("%w: attemptID=%s", ErrSourceArtifactNotFound, attempt.ID)
 	}
-	if artifact.Status != "verified" && artifact.Status != "saved" {
+	if !isDurableArtifactStatus(artifact.Status) {
 		return nil, fmt.Errorf("%w: artifactID=%s status=%s", ErrSourceArtifactNotReady, artifact.ArtifactID, artifact.Status)
 	}
 
@@ -258,6 +260,22 @@ func (a *KeyframeSourceAdapter) Resolve(ctx context.Context, req ResolveRequest)
 	}
 
 	return descriptor, nil
+}
+
+func isDurableArtifactStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "persisted", "saved", "verified":
+		return true
+	default:
+		return false
+	}
+}
+
+func resolveAttempt(repo ArtifactSourceRepo, taskActionID string, attemptNumber int) (*AttemptInfo, error) {
+	if attemptNumber > 0 {
+		return repo.GetAttemptInfo(taskActionID, attemptNumber)
+	}
+	return repo.GetActiveAttemptInfo(taskActionID)
 }
 
 func validateOwnership(repo ArtifactSourceRepo, req ResolveRequest) error {
@@ -396,15 +414,35 @@ func isEmptyCell(emptyIndexes []int, idx int) bool {
 
 func ResolveRelativePath(dataDir, relativePath string) (string, error) {
 	cleaned := filepath.Clean(relativePath)
-	if filepath.IsAbs(cleaned) {
-		return "", fmt.Errorf("absolute path not allowed: %s", relativePath)
+	if cleaned == "." || cleaned == ".." || filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes data dir: %s", relativePath)
 	}
-	if strings.Contains(cleaned, "..") {
-		return "", fmt.Errorf("path traversal not allowed: %s", relativePath)
+	absRoot, err := filepath.Abs(dataDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve data dir: %w", err)
 	}
-	abs := filepath.Join(dataDir, cleaned)
-	absCleaned := filepath.Clean(abs)
-	return absCleaned, nil
+	absPath, err := filepath.Abs(filepath.Join(absRoot, cleaned))
+	if err != nil {
+		return "", fmt.Errorf("resolve source path: %w", err)
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes data dir: %s", relativePath)
+	}
+
+	realRoot, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolve data dir symlinks: %w", err)
+	}
+	realPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve source symlinks: %w", err)
+	}
+	realRel, err := filepath.Rel(realRoot, realPath)
+	if err != nil || realRel == ".." || strings.HasPrefix(realRel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("resolved path escapes data dir: %s", relativePath)
+	}
+	return realPath, nil
 }
 
 func ComputeContentHash(data []byte) string {

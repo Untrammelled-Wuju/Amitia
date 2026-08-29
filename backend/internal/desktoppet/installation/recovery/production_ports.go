@@ -390,7 +390,9 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 		}
 		currentSessionID, currentGeneration := targetConn.SessionSnapshot()
 		if targetConn.GetState() != runtimev2.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
-			_ = p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed during recenter creation", time.Now().UTC())
+			if markErr := p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed during recenter creation", time.Now().UTC()); markErr != nil {
+				return fmt.Errorf("production runtime recovery: recenter session changed and stale command fencing failed: %w", markErr)
+			}
 			return errors.New("production runtime recovery: recenter runtime session changed")
 		}
 		if cmd.RuntimeSessionID != targetSessionID {
@@ -398,7 +400,9 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 		}
 		currentSessionID, currentGeneration = targetConn.SessionSnapshot()
 		if targetConn.GetState() != runtimev2.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
-			_ = p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed after recenter route bind", time.Now().UTC())
+			if markErr := p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed after recenter route bind", time.Now().UTC()); markErr != nil {
+				return fmt.Errorf("production runtime recovery: recenter route-bind session changed and stale command fencing failed: %w", markErr)
+			}
 			return errors.New("production runtime recovery: recenter runtime session changed after bind")
 		}
 		return nil

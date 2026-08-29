@@ -15,14 +15,15 @@ type SourceResolver interface {
 }
 
 type ResolveRequest struct {
-	ProcessingTaskID   string
-	ProcessingActionID string
-	ActionKey          string
-	GenerationTaskID   string
-	UserID             string
-	SourceAttemptID    string
-	CandidateIndex     int
-	DataDir            string
+	ProcessingTaskID              string
+	ProcessingActionID            string
+	ActionKey                     string
+	GenerationTaskID              string
+	UserID                        string
+	SourceAttemptID               string
+	SourceGenerationAttemptNumber int
+	CandidateIndex                int
+	DataDir                       string
 }
 
 type LegacyFrameRepo interface {
@@ -96,7 +97,10 @@ func (a *LegacyFrameAdapter) Resolve(ctx context.Context, req ResolveRequest) (*
 		return nil, fmt.Errorf("%w: actionKey=%s", ErrActionNotFound, req.ActionKey)
 	}
 
-	attemptNumber := matched.CurrentAttempt
+	attemptNumber := req.SourceGenerationAttemptNumber
+	if attemptNumber <= 0 {
+		attemptNumber = matched.CurrentAttempt
+	}
 	if attemptNumber <= 0 {
 		attemptNumber = 1
 	}

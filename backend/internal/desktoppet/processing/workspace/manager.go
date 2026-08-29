@@ -140,6 +140,17 @@ func (m *WorkspaceManager) CleanupTaskWorkspace(processingTaskID string) error {
 	return removeDirWithRetry(taskDir, 5)
 }
 
+func (m *WorkspaceManager) CleanupPublishedRevision(processingTaskID, processingActionID, revisionID string) error {
+	if processingTaskID == "" {
+		return fmt.Errorf("workspace: processingTaskID is empty")
+	}
+	if revisionID == "" {
+		return fmt.Errorf("workspace: revisionID is empty")
+	}
+	finalDir := m.FinalDir(processingTaskID, processingActionID, revisionID)
+	return removeDirWithRetry(finalDir, 5)
+}
+
 func (m *WorkspaceManager) StagingDir(processingTaskID, processingActionID, attemptID, commitID string) string {
 	rootPath := m.workspaceRoot(processingTaskID, processingActionID, attemptID, commitID)
 	return filepath.Join(rootPath, "staging")

@@ -151,7 +151,11 @@ func (p *Pipeline) ProcessAction(req ProcessActionRequest) (*ProcessActionResult
 
 	decodedImages := make([]*decode.DecodedImage, 0, len(srcFrames))
 	for _, frame := range srcFrames {
-		absPath := filepath.Join(p.dataDir, frame.RelativePath)
+		absPath, err := source.ResolveRelativePath(p.dataDir, frame.RelativePath)
+		if err != nil {
+			_ = journal.Record("decode", "failed", err.Error())
+			return nil, fmt.Errorf("pipeline: decode stage source path: %w", err)
+		}
 		decodeReq := decode.DecodeRequest{
 			AbsolutePath: absPath,
 			MaxBytes:     req.ConfigSnapshot.Decode.MaxInputBytes,

@@ -80,6 +80,23 @@ func (s *TaskGateService) buildVerdictSummary(ctx context.Context, eval *quality
 }
 
 func (s *TaskGateService) GetValidGateForRelease(ctx context.Context, req quality.GetValidGateForReleaseRequest) (*quality.QualityGateResult, error) {
+	if req.UserID == "" {
+		return nil, quality.NewQualityError(quality.ErrCodeQualityNotOwned, "用户 ID 不能为空", nil)
+	}
+
+	evals, err := s.repo.ListEvaluationsByTask(ctx, req.ProcessingTaskID)
+	if err != nil {
+		return nil, err
+	}
+	if len(evals) == 0 {
+		return nil, nil
+	}
+	for _, eval := range evals {
+		if eval.UserID != req.UserID {
+			return nil, quality.NewQualityError(quality.ErrCodeQualityNotOwned, "处理任务不属于当前用户", nil)
+		}
+	}
+
 	record, err := s.repo.GetGateResult(ctx, req.ProcessingTaskID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
