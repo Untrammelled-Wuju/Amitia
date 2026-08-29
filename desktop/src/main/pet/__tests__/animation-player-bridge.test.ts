@@ -59,6 +59,27 @@ function makeIpc(result: RendererDeliveryResult = { status: "delivered" }) {
   return { adapter, sent };
 }
 
+function rendererAcceptAndStart(
+  bridge: AnimationPlayerBridge,
+  command: PlayActionCommand,
+  playbackInstanceId: string,
+): void {
+  bridge.handlePlaybackEvent({
+    type: "playback.command_accepted",
+    actionKey: command.actionKey,
+    playbackInstanceId,
+    commandId: command.commandId,
+    timestamp: Date.now(),
+  });
+  bridge.handlePlaybackEvent({
+    type: "playback.action_started",
+    actionKey: command.actionKey,
+    playbackInstanceId,
+    commandId: command.commandId,
+    timestamp: Date.now(),
+  });
+}
+
 describe("AnimationPlayerBridge", () => {
   it("routes play through renderer IPC and commits state only after renderer start", () => {
     const idle = makeAction("idle");
@@ -82,17 +103,12 @@ describe("AnimationPlayerBridge", () => {
       interruptPolicy: "respect_action",
     });
 
-    bridge.handlePlaybackEvent({
-      type: "playback.action_started",
-      actionKey: "idle",
-      playbackInstanceId: sent[0].playbackInstanceId,
-      commandId: sent[0].commandId,
-      timestamp: Date.now(),
-    });
+    expect(sent[0].playbackInstanceId).toBe("");
+    rendererAcceptAndStart(bridge, sent[0], "renderer-playback-idle");
 
     expect(bridge.getState()).toBe("playing");
     expect(bridge.getCurrentAction()?.key).toBe("idle");
-    expect(bridge.getCurrentPlaybackId()).toBe(sent[0].playbackInstanceId);
+    expect(bridge.getCurrentPlaybackId()).toBe("renderer-playback-idle");
   });
 
   it("fails closed when renderer delivery rejects a command", () => {
@@ -140,15 +156,14 @@ describe("AnimationPlayerBridge", () => {
     const wave = makeAction("wave", { loopType: "once" });
     const loaded = makeLoaded([wave], "wave");
     const onCompleted = vi.fn();
+    const { adapter, sent } = makeIpc();
     const bridge = new AnimationPlayerBridge({ onActionCompleted: onCompleted });
 
     bridge.attachLoaded(loaded);
-    bridge.handlePlaybackEvent({
-      type: "playback.action_started",
-      actionKey: "wave",
-      playbackInstanceId: "playback-wave",
-      timestamp: Date.now(),
-    });
+    bridge.setAnimationIpc(adapter);
+    bridge.setInstallationContext("install-test", "pet-test", 1);
+    bridge.play(wave, { commandId: "command-wave" });
+    rendererAcceptAndStart(bridge, sent[0], "playback-wave");
     bridge.handleSnapshotUpdate({
       phase: "playing",
       packageId: "package-test",
@@ -167,6 +182,8 @@ describe("AnimationPlayerBridge", () => {
     bridge.handlePlaybackEvent({
       type: "playback.action_completed",
       actionKey: "wave",
+      playbackInstanceId: "playback-wave",
+      commandId: "command-wave",
       timestamp: Date.now(),
     });
 
@@ -232,18 +249,12 @@ describe("AnimationPlayerBridge", () => {
     bridge.setAnimationIpc(adapter);
     bridge.setInstallationContext("install-test", "pet-test", 7);
     bridge.play(action);
-    bridge.handlePlaybackEvent({
-      type: "playback.action_started",
-      actionKey: action.key,
-      playbackInstanceId: sent[0].playbackInstanceId,
-      commandId: sent[0].commandId,
-      timestamp: Date.now(),
-    });
+    rendererAcceptAndStart(bridge, sent[0], "renderer-playback-active");
 
     bridge.handlePlaybackEvent({
       type: "playback.action_failed",
       actionKey: action.key,
-      playbackInstanceId: sent[0].playbackInstanceId,
+      playbackInstanceId: "renderer-playback-active",
       commandId: sent[0].commandId,
       reason: "renderer_delivery_failed",
       error: { code: "renderer_delivery_failed", message: "delivery failed" },
@@ -271,20 +282,14 @@ describe("AnimationPlayerBridge", () => {
     bridge.setAnimationIpc(adapter);
     bridge.setInstallationContext("install-test", "pet-test", 7);
     bridge.play(action);
-    bridge.handlePlaybackEvent({
-      type: "playback.action_started",
-      actionKey: action.key,
-      playbackInstanceId: sent[0].playbackInstanceId,
-      commandId: sent[0].commandId,
-      timestamp: Date.now(),
-    });
+    rendererAcceptAndStart(bridge, sent[0], "renderer-playback-stop");
 
     bridge.stop("runtime_stop");
 
     expect(onFailed).toHaveBeenCalledWith(
       action.key,
       "STOP_DELIVERY_FAILED:renderer_not_ready",
-      sent[0].playbackInstanceId,
+      "renderer-playback-stop",
     );
     expect(bridge.getCurrentPlaybackId()).toBeNull();
   });

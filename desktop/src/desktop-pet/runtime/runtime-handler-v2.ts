@@ -56,6 +56,8 @@ export interface RuntimeCommandReplayEntry {
   commandId: string;
   commandSequence: number;
   desiredRevision: number;
+  commandType?: string;
+  desiredHash?: string;
   ackStatus: "completed" | "failed_terminal";
   errorCode?: string;
   errorMessage?: string;
@@ -101,6 +103,8 @@ export interface RuntimeCommandAttempt {
 interface CachedCommandExecution {
   commandSequence: number;
   desiredRevision: number;
+  commandType: string;
+  desiredHash: string;
   result: RuntimeCommandExecutionResult;
   ackStatus: CommandStatus;
 }
@@ -136,6 +140,46 @@ function isRevisionedDurableCommand(commandType: string | undefined): boolean {
   return commandType === "runtime.command.sync_desired_state" ||
     commandType === "runtime.command.ensure_absent" ||
     commandType === "runtime.command.reload_release";
+}
+
+function isEphemeralRuntimeCommand(commandType: string | undefined): boolean {
+  return commandType === "runtime.command.play_action" ||
+    commandType === "runtime.command.stop_action" ||
+    commandType === "runtime.command.pause_action" ||
+    commandType === "runtime.command.resume_action" ||
+    commandType === "runtime.command.recenter_once";
+}
+
+function validateAuthoritativeExpiry(expiresAt: string | undefined):
+  | { ok: true }
+  | { ok: false; status: "expired" | "rejected"; errorCode: string; errorMessage: string } {
+  const raw = typeof expiresAt === "string" ? expiresAt.trim() : "";
+  if (!raw) {
+    return {
+      ok: false,
+      status: "rejected",
+      errorCode: "COMMAND_EXPIRY_REQUIRED",
+      errorMessage: "ephemeral runtime command is missing authoritative expiresAt",
+    };
+  }
+  const expiresAtMs = Date.parse(raw);
+  if (!Number.isFinite(expiresAtMs)) {
+    return {
+      ok: false,
+      status: "rejected",
+      errorCode: "COMMAND_EXPIRY_INVALID",
+      errorMessage: "ephemeral runtime command has an invalid authoritative expiresAt",
+    };
+  }
+  if (expiresAtMs <= Date.now()) {
+    return {
+      ok: false,
+      status: "expired",
+      errorCode: "COMMAND_EXPIRED",
+      errorMessage: "ephemeral runtime command expired before local execution",
+    };
+  }
+  return { ok: true };
 }
 
 function sanitizeCursor(value: number | undefined): number {
@@ -205,7 +249,11 @@ export class DesktopRuntimeHandlerV2 {
     this.outboundSequence = this.lastEventSequence;
     this.actualStateHash = typeof resume.actualStateHash === "string" ? resume.actualStateHash : "";
     for (const entry of config.replayEntries ?? []) {
-      if (!entry?.commandId || (entry.ackStatus !== "completed" && entry.ackStatus !== "failed_terminal")) {
+      if (
+        !entry?.commandId ||
+        !isRevisionedDurableCommand(entry.commandType) ||
+        (entry.ackStatus !== "completed" && entry.ackStatus !== "failed_terminal")
+      ) {
         continue;
       }
       const commandSequence = sanitizeCursor(entry.commandSequence);
@@ -213,6 +261,8 @@ export class DesktopRuntimeHandlerV2 {
       this.cacheCommandExecution(entry.commandId, {
         commandSequence,
         desiredRevision,
+        commandType: entry.commandType ?? "",
+        desiredHash: entry.desiredHash ?? "",
         ackStatus: entry.ackStatus,
         result: {
           commandId: entry.commandId,
@@ -259,14 +309,28 @@ export class DesktopRuntimeHandlerV2 {
     };
   }
 
+  async drainInFlightCommands(): Promise<void> {
+    // Reconnect must not replace the handler while a locally accepted durable
+    // mutation is still executing. Otherwise the new session can redeliver the
+    // same command before the old handler has cached its local result. Closing
+    // the socket first prevents new work; this loop then drains everything that
+    // was already admitted by the old handler.
+    while (this.inFlightCommands.size > 0) {
+      const pending = Array.from(this.inFlightCommands.values());
+      await Promise.allSettled(pending);
+    }
+  }
+
   getReplayEntries(): RuntimeCommandReplayEntry[] {
     const entries: RuntimeCommandReplayEntry[] = [];
     for (const [commandId, cached] of this.commandReplayCache) {
-      if (!isCommandTerminal(cached.ackStatus)) continue;
+      if (!isCommandTerminal(cached.ackStatus) || !isRevisionedDurableCommand(cached.commandType)) continue;
       entries.push({
         commandId,
         commandSequence: cached.commandSequence,
         desiredRevision: cached.desiredRevision,
+        commandType: cached.commandType || undefined,
+        desiredHash: cached.desiredHash || undefined,
         ackStatus: cached.ackStatus === "failed_terminal" ? "failed_terminal" : "completed",
         errorCode: cached.result.errorCode || undefined,
         errorMessage: cached.result.errorMessage || undefined,
@@ -366,6 +430,23 @@ export class DesktopRuntimeHandlerV2 {
     this.setState("disconnected");
   }
 
+  async sendPlaybackCommandAccepted(
+    playbackId: string,
+    commandId: string,
+    actionKey: string,
+    context: RuntimeEventContext = {},
+  ): Promise<void> {
+    const payload: PlaybackEventPayload = {
+      type: "runtime.playback.command_accepted",
+      playbackInstanceId: playbackId,
+      commandId,
+      actionKey,
+      ...context,
+      occurredAt: new Date().toISOString(),
+    };
+    await this.sendRuntimeEvent("runtime.playback.command_accepted", payload);
+  }
+
   async sendPlaybackStarted(
     playbackId: string,
     commandId: string,
@@ -400,6 +481,24 @@ export class DesktopRuntimeHandlerV2 {
       occurredAt: new Date().toISOString(),
     };
     await this.sendRuntimeEvent("runtime.playback.action_first_cycle", payload);
+  }
+
+  async sendPlaybackHolding(
+    playbackId: string,
+    commandId: string,
+    actionKey: string,
+    context: RuntimeEventContext = {},
+  ): Promise<void> {
+    const payload: PlaybackEventPayload = {
+      type: "runtime.playback.action_holding",
+      playbackInstanceId: playbackId,
+      commandId,
+      actionKey,
+      ...context,
+      holdingAt: new Date().toISOString(),
+      occurredAt: new Date().toISOString(),
+    };
+    await this.sendRuntimeEvent("runtime.playback.action_holding", payload);
   }
 
   async sendPlaybackEnded(
@@ -446,6 +545,48 @@ export class DesktopRuntimeHandlerV2 {
     };
     await this.sendRuntimeEvent("runtime.playback.action_interrupted", payload);
     this.markTrackedCommandProcessed(commandId);
+  }
+
+  async sendRuntimeCommandFailed(
+    commandId: string,
+    errorCode: string,
+    errorMessage: string,
+  ): Promise<void> {
+    const commandSequence = this.trackedCommandSequences.get(commandId);
+    if (typeof commandSequence !== "number") {
+      throw new Error(`runtime command is not tracked or already terminal: ${commandId}`);
+    }
+    await this.sendCommandAck(
+      commandId,
+      commandSequence,
+      "failed_terminal",
+      errorCode || "RUNTIME_REJECTED",
+      errorMessage || "runtime command failed before renderer acceptance",
+    );
+    this.markTrackedCommandProcessed(
+      commandId,
+      "failed_terminal",
+      errorCode || "RUNTIME_REJECTED",
+      errorMessage || "runtime command failed before renderer acceptance",
+    );
+  }
+
+  async sendRuntimeCommandExpired(
+    commandId: string,
+    errorMessage = "runtime command expired before renderer acceptance",
+  ): Promise<void> {
+    const commandSequence = this.trackedCommandSequences.get(commandId);
+    if (typeof commandSequence !== "number") {
+      throw new Error(`runtime command is not tracked or already terminal: ${commandId}`);
+    }
+    await this.sendCommandAck(
+      commandId,
+      commandSequence,
+      "expired",
+      "COMMAND_EXPIRED",
+      errorMessage,
+    );
+    this.markTrackedCommandProcessed(commandId, "expired", "COMMAND_EXPIRED", errorMessage);
   }
 
   async sendPlaybackFailed(
@@ -678,6 +819,7 @@ export class DesktopRuntimeHandlerV2 {
       installationId?: string;
       petId?: string;
       releaseId?: string;
+      expiresAt?: string;
       payload?: unknown;
     } | undefined;
 
@@ -688,6 +830,12 @@ export class DesktopRuntimeHandlerV2 {
     const commandId = command.commandId;
     const commandSequence = sanitizeCursor(command.commandSequence);
     const desiredRevision = sanitizeCursor(command.desiredRevision);
+    const desiredHash = this.extractDesiredHash(envelope);
+    if (isRevisionedDurableCommand(command.commandType) && (desiredRevision <= 0 || !desiredHash)) {
+      throw new Error(
+        `invalid durable desired command ${commandId}: desiredRevision and desiredHash are required`,
+      );
+    }
 
     const cached = this.commandReplayCache.get(commandId);
     if (cached) {
@@ -705,34 +853,11 @@ export class DesktopRuntimeHandlerV2 {
       return;
     }
 
-    // lastProcessedCommandSequence is a high-water mark, not proof that every
-    // lower sequence has completed: independent commands may settle out of
-    // order. Only revisioned durable desired-state commands can be suppressed
-    // without a commandId cache entry, because an already-applied revision is
-    // itself the idempotency fence. Ephemeral commands must never be discarded
-    // solely because their sequence is below the high-water mark.
-    if (
-      isRevisionedDurableCommand(command.commandType) &&
-      desiredRevision > 0 &&
-      desiredRevision <= this.lastAppliedDesiredRevision
-    ) {
-      const duplicateResult: RuntimeCommandExecutionResult = {
-        commandId,
-        status: "duplicate",
-        errorCode: "",
-        errorMessage: "",
-        appliedRevision: this.lastAppliedDesiredRevision,
-      };
-      this.lastProcessedCommandSequence = Math.max(this.lastProcessedCommandSequence, commandSequence);
-      this.cacheCommandExecution(commandId, {
-        commandSequence,
-        desiredRevision,
-        result: duplicateResult,
-        ackStatus: "completed",
-      });
-      await this.sendCommandAck(commandId, commandSequence, "completed");
-      return;
-    }
+    // Never short-circuit revisioned desired-state commands by revision alone.
+    // The Manager owns revision+desiredHash validation because equal revisions
+    // are idempotent only when they refer to the exact same canonical desired
+    // payload. A stale/lower revision must be rejected rather than falsely
+    // reported as desired_applied.
 
     const execution = this.executeCommand(
       envelope,
@@ -741,6 +866,8 @@ export class DesktopRuntimeHandlerV2 {
         commandType: command.commandType,
         commandSequence,
         desiredRevision,
+        desiredHash,
+        expiresAt: command.expiresAt,
       },
       commandSequence,
       desiredRevision,
@@ -762,30 +889,44 @@ export class DesktopRuntimeHandlerV2 {
       commandType?: string;
       commandSequence?: number;
       desiredRevision?: number;
+      desiredHash?: string;
+      expiresAt?: string;
     },
     commandSequence: number,
     desiredRevision: number,
   ): Promise<void> {
     await this.sendCommandAck(command.commandId, commandSequence, "runtime_received");
-    await this.sendCommandAck(command.commandId, commandSequence, "runtime_accepted");
 
     let result: RuntimeCommandExecutionResult;
-    try {
-      result = await this.hooks.onCommand(envelope.payload, envelope);
-    } catch (err) {
+    const expiryValidation = isEphemeralRuntimeCommand(command.commandType)
+      ? validateAuthoritativeExpiry(command.expiresAt)
+      : { ok: true as const };
+    if (!expiryValidation.ok) {
       result = {
         commandId: command.commandId,
-        status: "failed",
-        errorCode: "RENDERER_REJECTED",
-        errorMessage: err instanceof Error ? err.message : String(err),
+        status: expiryValidation.status,
+        errorCode: expiryValidation.errorCode,
+        errorMessage: expiryValidation.errorMessage,
         appliedRevision: 0,
       };
+    } else {
+      try {
+        result = await this.hooks.onCommand(envelope.payload, envelope);
+      } catch (err) {
+        result = {
+          commandId: command.commandId,
+          status: "failed",
+          errorCode: "RENDERER_REJECTED",
+          errorMessage: err instanceof Error ? err.message : String(err),
+          appliedRevision: 0,
+        };
+      }
     }
 
     const ackStatus = this.mapCommandExecutionStatus(result.status);
 
-    // The local side effect/result is authoritative once onCommand returns. It
-    // must be recorded before attempting the terminal ACK; otherwise a socket
+    // The local validation/execution result is authoritative before transport
+    // acknowledgement. Record it before attempting the terminal ACK; otherwise a socket
     // loss between execution and ACK can cause a durable redelivery to execute
     // the same side effect again and can misclassify transport failure as a
     // renderer failure.
@@ -799,25 +940,66 @@ export class DesktopRuntimeHandlerV2 {
     this.cacheCommandExecution(command.commandId, {
       commandSequence,
       desiredRevision,
+      commandType: command.commandType ?? "",
+      desiredHash: command.desiredHash ?? "",
       result,
       ackStatus,
     });
 
     let ackError: unknown;
     try {
-      if (result.status === "failed" || result.status === "rejected" ||
-          result.status === "expired" || result.status === "cancelled") {
-        await this.sendCommandAck(
-          command.commandId,
-          commandSequence,
-          ackStatus,
-          result.errorCode || "RENDERER_REJECTED",
-          result.errorMessage || "command execution failed",
-        );
+      const failed = result.status === "failed" || result.status === "rejected" ||
+        result.status === "expired" || result.status === "cancelled";
+      if (failed) {
+        if (isRevisionedDurableCommand(command.commandType) && command.desiredHash) {
+          // desired_rejected is the canonical terminal truth for revisioned
+          // desired-state commands. Do not create a second terminal authority via
+          // command_ack.
+          await this.sendDesiredStateEvent(
+            "runtime.state.desired_rejected",
+            command.commandId,
+            desiredRevision,
+            command.desiredHash,
+            result.errorCode || "RUNTIME_REJECTED",
+            result.errorMessage || "runtime rejected desired state",
+          );
+          this.markTrackedCommandProcessed(
+            command.commandId,
+            "failed_terminal",
+            result.errorCode || "RUNTIME_REJECTED",
+            result.errorMessage || "runtime rejected desired state",
+          );
+        } else {
+          const terminalStatus: CommandStatus = result.status === "expired" ? "expired" : "failed_terminal";
+          await this.sendCommandAck(
+            command.commandId,
+            commandSequence,
+            terminalStatus,
+            result.errorCode || (terminalStatus === "expired" ? "COMMAND_EXPIRED" : "RUNTIME_REJECTED"),
+            result.errorMessage || (terminalStatus === "expired"
+              ? "runtime command expired before renderer acceptance"
+              : "runtime command validation failed"),
+          );
+        }
       } else {
-        await this.sendCommandAck(command.commandId, commandSequence, "renderer_accepted");
-        if (ackStatus !== "renderer_accepted") {
-          await this.sendCommandAck(command.commandId, commandSequence, ackStatus);
+        // runtime_accepted means local command validation/submission succeeded.
+        // Renderer acceptance/start/terminal are reported only by playback events.
+        await this.sendCommandAck(command.commandId, commandSequence, "runtime_accepted");
+        if (isRevisionedDurableCommand(command.commandType)) {
+          if (!command.desiredHash) {
+            throw new Error("durable desired-state command missing desiredHash");
+          }
+          await this.sendDesiredStateEvent(
+            "runtime.state.desired_applied",
+            command.commandId,
+            desiredRevision,
+            command.desiredHash,
+          );
+          this.markTrackedCommandProcessed(command.commandId);
+        } else if (command.commandType !== "runtime.command.play_action" && result.status !== "accepted") {
+          // Immediate non-playback commands have no renderer lifecycle. Keep a
+          // terminal runtime ACK for those commands only.
+          await this.sendCommandAck(command.commandId, commandSequence, "completed");
         }
       }
     } catch (err) {
@@ -854,6 +1036,32 @@ export class DesktopRuntimeHandlerV2 {
     if (isCommandTerminal(cached.ackStatus)) {
       this.lastProcessedCommandSequence = Math.max(this.lastProcessedCommandSequence, sequence);
     }
+    if (isRevisionedDurableCommand(cached.commandType) && cached.desiredHash) {
+      // A failed durable command may already be terminal on the backend. Replaying
+      // runtime_received would attempt to regress that terminal state. The canonical
+      // desired_rejected event is idempotent and is sufficient to close a delivery
+      // that previously lost its terminal event.
+      if (cached.ackStatus === "failed_terminal") {
+        await this.sendDesiredStateEvent(
+          "runtime.state.desired_rejected",
+          commandId,
+          cached.desiredRevision,
+          cached.desiredHash,
+          cached.result.errorCode || "RUNTIME_REJECTED",
+          cached.result.errorMessage || "command execution failed",
+        );
+        return;
+      }
+      await this.sendCommandAck(commandId, sequence, "runtime_received");
+      await this.sendCommandAck(commandId, sequence, "runtime_accepted");
+      await this.sendDesiredStateEvent(
+        "runtime.state.desired_applied",
+        commandId,
+        cached.desiredRevision,
+        cached.desiredHash,
+      );
+      return;
+    }
     if (cached.ackStatus === "failed_terminal") {
       await this.sendCommandAck(
         commandId,
@@ -865,6 +1073,43 @@ export class DesktopRuntimeHandlerV2 {
       return;
     }
     await this.sendCommandAck(commandId, sequence, cached.ackStatus);
+  }
+
+  private extractDesiredHash(envelope: RuntimeEnvelope): string {
+    const outer = envelope.payload as { payload?: unknown } | undefined;
+    if (!outer?.payload || typeof outer.payload !== "object") return "";
+    const desiredHash = (outer.payload as { desiredHash?: unknown }).desiredHash;
+    return typeof desiredHash === "string" ? desiredHash.trim() : "";
+  }
+
+  private async sendDesiredStateEvent(
+    eventName: "runtime.state.desired_applied" | "runtime.state.desired_rejected",
+    commandId: string,
+    desiredRevision: number,
+    desiredHash: string,
+    errorCode = "",
+    errorMessage = "",
+  ): Promise<void> {
+    const occurredAt = new Date().toISOString();
+    if (eventName === "runtime.state.desired_rejected") {
+      await this.sendRuntimeEvent(eventName, {
+        commandId,
+        desiredRevision,
+        desiredHash,
+        errorCode,
+        errorMessage,
+        rejectedAt: occurredAt,
+        occurredAt,
+      });
+      return;
+    }
+    await this.sendRuntimeEvent(eventName, {
+      commandId,
+      desiredRevision,
+      desiredHash,
+      appliedAt: occurredAt,
+      occurredAt,
+    });
   }
 
   private async handleCommandAck(ack: CommandAckPayload): Promise<void> {
@@ -928,10 +1173,11 @@ export class DesktopRuntimeHandlerV2 {
       case "duplicate":
         return "completed";
       case "accepted":
-        return "renderer_accepted";
+        return "runtime_accepted";
+      case "expired":
+        return "expired";
       case "failed":
       case "rejected":
-      case "expired":
       case "cancelled":
       default:
         return "failed_terminal";
@@ -969,7 +1215,7 @@ export class DesktopRuntimeHandlerV2 {
 
   private markTrackedCommandProcessed(
     commandId: string,
-    terminalStatus: "completed" | "failed_terminal" = "completed",
+    terminalStatus: "completed" | "failed_terminal" | "expired" = "completed",
     errorCode = "",
     errorMessage = "",
   ): void {
@@ -984,7 +1230,7 @@ export class DesktopRuntimeHandlerV2 {
       cached.ackStatus = terminalStatus;
       cached.result = {
         ...cached.result,
-        status: terminalStatus === "completed" ? "applied" : "failed",
+        status: terminalStatus === "completed" ? "applied" : terminalStatus === "expired" ? "expired" : "failed",
         errorCode: errorCode || cached.result.errorCode,
         errorMessage: errorMessage || cached.result.errorMessage,
       };
@@ -1055,6 +1301,7 @@ export class DesktopRuntimeHandlerV2 {
     if (c.supportsHighDpi) caps.push("high_dpi");
     if (c.supportsHitTest) caps.push("hit_test");
     if (c.supportsShadow) caps.push("shadow");
+    caps.push("runtime.sync_desired_v2", "runtime.play_action_v2", "runtime.renderer_ack_v2", "runtime.expiry_rfc3339_v1");
     caps.push(`platform:${c.platform}`);
     return caps;
   }

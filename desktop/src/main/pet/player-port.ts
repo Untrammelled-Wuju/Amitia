@@ -10,12 +10,12 @@ export type PlayerState = "idle" | "loading" | "playing" | "paused" | "stopped";
  */
 export interface PlayerSwitchContext {
   commandId?: string;
-  playbackInstanceId?: string;
   idempotencyKey?: string;
   priority?: number;
   queuePolicy?: QueuePolicy;
   interruptPolicy?: InterruptPolicy;
   playbackRate?: number;
+  requiresAuthoritativeExpiry?: boolean;
   expiresAt?: string;
   returnOverride?: ReturnTarget;
   minimumPlayMs?: number;
@@ -28,7 +28,6 @@ export interface PlayerSwitchContext {
 
 export interface PlayerSubmissionIdentity {
   commandId: string;
-  playbackInstanceId: string;
 }
 
 export interface DesktopPetPlayerPort {

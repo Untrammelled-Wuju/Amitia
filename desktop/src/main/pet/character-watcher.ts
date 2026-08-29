@@ -5,7 +5,7 @@ export interface CharacterWatcherOptions {
   authHeadersProvider?: () =>
     | Record<string, string>
     | Promise<Record<string, string>>;
-  onActiveCharacterChanged?: (characterId: string) => void | Promise<void>;
+  onActiveCharacterChanged?: (characterId: string | null) => void | Promise<void>;
 }
 
 interface ApiEnvelope<T> {
@@ -30,8 +30,9 @@ export class CharacterWatcher {
   private readonly requestTimeoutMs: number;
   private readonly authHeadersProvider?: CharacterWatcherOptions["authHeadersProvider"];
   private readonly onActiveCharacterChanged?:
-    | ((characterId: string) => void | Promise<void>);
+    | ((characterId: string | null) => void | Promise<void>);
   private lastCharacterId: string | null = null;
+  private hasObservedCharacter = false;
   private stopped = true;
   private timer: NodeJS.Timeout | null = null;
   private tickInFlight = false;
@@ -55,6 +56,7 @@ export class CharacterWatcher {
     const generation = ++this.lifecycleGeneration;
     this.stopped = false;
     this.lastCharacterId = null;
+    this.hasObservedCharacter = false;
     if (!this.onActiveCharacterChanged || this.pollIntervalMs <= 0) {
       return;
     }
@@ -114,8 +116,7 @@ export class CharacterWatcher {
       if (
         this.stopped ||
         generation !== this.lifecycleGeneration ||
-        !characterId ||
-        this.lastCharacterId === characterId
+        (this.hasObservedCharacter && this.lastCharacterId === characterId)
       ) {
         return;
       }
@@ -128,12 +129,13 @@ export class CharacterWatcher {
       await this.onActiveCharacterChanged?.(characterId);
       if (this.stopped || generation !== this.lifecycleGeneration) return;
       this.lastCharacterId = characterId;
+      this.hasObservedCharacter = true;
     } finally {
       this.tickInFlight = false;
     }
   }
 
-  private async fetchActiveCharacterId(generation: number): Promise<string> {
+  private async fetchActiveCharacterId(generation: number): Promise<string | null> {
     const controller = new AbortController();
     this.activeRequest = controller;
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
@@ -154,6 +156,9 @@ export class CharacterWatcher {
           signal: controller.signal,
         },
       );
+      if (response.status === 404 || response.status === 204) {
+        return null;
+      }
       if (!response.ok) {
         throw new Error(`role profile HTTP ${response.status}`);
       }
@@ -167,14 +172,14 @@ export class CharacterWatcher {
         "code" in parsed &&
         typeof parsed.code === "number"
       ) {
-        if (parsed.code < 200 || parsed.code >= 300 || !parsed.data) {
+        if (parsed.code < 200 || parsed.code >= 300) {
           throw new Error(
             `role profile API ${parsed.code}${parsed.msg ? `: ${parsed.msg}` : ""}`,
           );
         }
-        return this.extractCharacterId(parsed.data);
+        return parsed.data ? this.extractCharacterId(parsed.data) || null : null;
       }
-      return this.extractCharacterId(parsed as RoleProfilePayload);
+      return this.extractCharacterId(parsed as RoleProfilePayload) || null;
     } finally {
       clearTimeout(timeout);
       if (

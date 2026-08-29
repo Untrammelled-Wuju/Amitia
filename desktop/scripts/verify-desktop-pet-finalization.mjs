@@ -207,7 +207,8 @@ assert(
   manager.includes("await this.runLifecycleMutation(() => this.shutdownInternal())") &&
     manager.includes("await this.runLifecycleMutation(() => this.recoverRuntimeInternal(reason))") &&
     manager.includes("this.initializeInternal(options.restoreActiveInstallation ?? true)") &&
-    manager.includes("this.handleCharacterSwitchedInternal(characterId)"),
+    manager.includes("async handleCharacterSwitched(characterId: string | null)") &&
+    manager.includes("await this.handleCharacterSwitchedInternal(normalized)"),
   "initialize, character reconciliation, shutdown and runtime recovery must share the serialized lifecycle mutation queue",
 );
 assert(

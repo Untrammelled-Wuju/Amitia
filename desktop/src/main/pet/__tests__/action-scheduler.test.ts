@@ -54,8 +54,9 @@ class SchedulerTestPlayer implements DesktopPetPlayerPort, PlayerLifecyclePort {
     this.loopCount = 0;
   }
 
-  switchAction(action: RuntimeAction): void {
+  switchAction(action: RuntimeAction, context?: PlayerSwitchContext): PlayerSubmissionIdentity {
     this.play(action);
+    return { commandId: context?.commandId ?? `test-command-${action.key}` };
   }
 
   pause(): void {
@@ -116,7 +117,6 @@ class IdentitySchedulerTestPlayer extends SchedulerTestPlayer {
     this.sequence += 1;
     return {
       commandId: context?.commandId ?? `test-command-${this.sequence}`,
-      playbackInstanceId: context?.playbackInstanceId ?? `test-playback-${this.sequence}`,
     };
   }
 }
@@ -900,7 +900,7 @@ describe("DesktopPetActionScheduler", () => {
   it("expiresAt 已过期请求被拒绝", () => {
     const loaded = attachAndAdvance();
 
-    const pastTime = -1;
+    const pastTime = Date.now() - 1_000;
     const result = scheduler.submit(
       makeRequest({
         actionKey: "happy",
@@ -1036,6 +1036,92 @@ describe("DesktopPetActionScheduler", () => {
     scheduler.dispose();
 
     expect(() => scheduler.attachLoaded(loaded)).not.toThrow();
+  });
+
+  it("replacement 加载期间旧动作自然结束后，新动作失败不会恢复已结束旧动作", () => {
+    const identityPlayer = new IdentitySchedulerTestPlayer();
+    const identityScheduler = new DesktopPetActionScheduler(identityPlayer);
+    const loaded = makeLoadedInstallation();
+    loaded.actions.set(
+      "first",
+      makeRuntimeAction({ key: "first", loopType: "loop", interruptible: true }),
+    );
+    loaded.actions.set(
+      "second",
+      makeRuntimeAction({ key: "second", loopType: "loop", interruptible: true }),
+    );
+
+    identityScheduler.attachLoaded(loaded);
+    expect(identityScheduler.submit(makeRequest({
+      actionKey: "first",
+      source: EventSources.EMOTION,
+      priority: ActionPriorities.EMOTION,
+      interrupt: true,
+      metadata: { runtimeCommandId: "cmd-first" },
+    }))).toBe("played");
+    identityScheduler.notifyActionStarted("first", "pb-first", "cmd-first");
+
+    expect(identityScheduler.submit(makeRequest({
+      actionKey: "second",
+      source: EventSources.USER_DRAG,
+      priority: ActionPriorities.DRAG,
+      interrupt: true,
+      metadata: { runtimeCommandId: "cmd-second" },
+    }))).toBe("played");
+
+    // The old playback can end naturally while the replacement is still loading.
+    identityScheduler.notifyActionCompleted("first", "pb-first", "cmd-first");
+    identityScheduler.notifyActionFailed("second", "pb-second", "cmd-second");
+
+    expect(identityScheduler.getCurrent()?.actionKey).not.toBe("first");
+    identityScheduler.dispose();
+  });
+
+  it("连续 replacement 尚未首帧时保留最后一个真实播放作为回滚锚点", () => {
+    const identityPlayer = new IdentitySchedulerTestPlayer();
+    const identityScheduler = new DesktopPetActionScheduler(identityPlayer);
+    const loaded = makeLoadedInstallation();
+    for (const key of ["first", "second", "third"]) {
+      loaded.actions.set(
+        key,
+        makeRuntimeAction({ key, loopType: "loop", interruptible: true }),
+      );
+    }
+
+    identityScheduler.attachLoaded(loaded);
+    expect(identityScheduler.submit(makeRequest({
+      actionKey: "first",
+      source: EventSources.EMOTION,
+      priority: ActionPriorities.EMOTION,
+      interrupt: true,
+      metadata: { runtimeCommandId: "cmd-first" },
+    }))).toBe("played");
+    identityScheduler.notifyActionStarted("first", "pb-first", "cmd-first");
+
+    expect(identityScheduler.submit(makeRequest({
+      actionKey: "second",
+      source: EventSources.USER_DRAG,
+      priority: ActionPriorities.DRAG,
+      interrupt: true,
+      metadata: { runtimeCommandId: "cmd-second" },
+    }))).toBe("played");
+
+    expect(identityScheduler.submit(makeRequest({
+      actionKey: "third",
+      source: EventSources.SYSTEM,
+      priority: ActionPriorities.DRAG + 10,
+      interrupt: true,
+      metadata: { runtimeCommandId: "cmd-third" },
+    }))).toBe("played");
+
+    // Neither replacement reached a Renderer-confirmed first frame. When the
+    // newest replacement fails, Scheduler must mirror Renderer rollback to A,
+    // not lose the original playback or restore the never-started B.
+    identityScheduler.notifyActionFailed("third", "", "cmd-third");
+    expect(identityScheduler.getCurrent()?.actionKey).toBe("first");
+    expect(identityScheduler.isCurrentPlaybackStarted()).toBe(true);
+
+    identityScheduler.dispose();
   });
 
   it("晚到的旧 playback 终态不会清除已经切换的新动作", () => {

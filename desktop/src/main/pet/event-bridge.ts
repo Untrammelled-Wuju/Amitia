@@ -8,7 +8,6 @@ import type { DragController, DragEvent, DragState } from "./drag-controller";
 
 const DEFAULT_HOVER_COOLDOWN_MS = 3000;
 const DEFAULT_CLICK_COOLDOWN_MS = 500;
-const DEFAULT_DOUBLE_CLICK_THRESHOLD_MS = 300;
 
 const CLICKED_ACTION_KEY = "clicked";
 const DOUBLE_CLICKED_ACTION_KEY = "double_clicked";
@@ -36,10 +35,8 @@ export class DesktopPetEventBridge {
   private dragController: DragController;
   private hoverCooldownMs: number;
   private clickCooldownMs: number;
-  private doubleClickThresholdMs: number;
   private lastHoverAt: number;
   private lastClickAt: number;
-  private pendingClickTimer: ReturnType<typeof setTimeout> | null;
   private pendingClickX: number;
   private pendingClickY: number;
 
@@ -51,34 +48,19 @@ export class DesktopPetEventBridge {
     this.dragController = dragController;
     this.hoverCooldownMs = DEFAULT_HOVER_COOLDOWN_MS;
     this.clickCooldownMs = DEFAULT_CLICK_COOLDOWN_MS;
-    this.doubleClickThresholdMs = DEFAULT_DOUBLE_CLICK_THRESHOLD_MS;
     this.lastHoverAt = 0;
     this.lastClickAt = 0;
-    this.pendingClickTimer = null;
     this.pendingClickX = 0;
     this.pendingClickY = 0;
   }
 
   handleClick(x: number, y: number): void {
-    if (this.pendingClickTimer !== null) {
-      clearTimeout(this.pendingClickTimer);
-      this.pendingClickTimer = null;
-      this.handleDoubleClick(x, y);
-      return;
-    }
     this.pendingClickX = x;
     this.pendingClickY = y;
-    this.pendingClickTimer = setTimeout(() => {
-      this.pendingClickTimer = null;
-      this.processSingleClick();
-    }, this.doubleClickThresholdMs);
+    this.processSingleClick();
   }
 
   handleDoubleClick(x: number, y: number): void {
-    if (this.pendingClickTimer !== null) {
-      clearTimeout(this.pendingClickTimer);
-      this.pendingClickTimer = null;
-    }
     const now = nowTimestamp();
     this.lastClickAt = now;
     const request: DesktopPetActionRequest = {
@@ -108,10 +90,6 @@ export class DesktopPetEventBridge {
   }
 
   handleDragStart(): void {
-    if (this.pendingClickTimer !== null) {
-      clearTimeout(this.pendingClickTimer);
-      this.pendingClickTimer = null;
-    }
     this.scheduler.forceInterrupt("user_drag");
     const request: DesktopPetActionRequest = {
       actionKey: DRAGGED_ACTION_KEY,
@@ -137,6 +115,8 @@ export class DesktopPetEventBridge {
       this.handleDragStart();
     } else if (event === "drag-end") {
       this.handleDragEnd();
+    } else if (event === "drag-cancel") {
+      // Cancellation is not a successful drop and must not schedule dropped.
     }
   }
 
@@ -152,17 +132,8 @@ export class DesktopPetEventBridge {
     }
   }
 
-  setDoubleClickThresholdMs(ms: number): void {
-    if (Number.isFinite(ms) && ms >= 0) {
-      this.doubleClickThresholdMs = ms;
-    }
-  }
-
   dispose(): void {
-    if (this.pendingClickTimer !== null) {
-      clearTimeout(this.pendingClickTimer);
-      this.pendingClickTimer = null;
-    }
+    // Renderer is the sole click/double-click arbiter; Main owns no timers.
   }
 
   private processSingleClick(): void {

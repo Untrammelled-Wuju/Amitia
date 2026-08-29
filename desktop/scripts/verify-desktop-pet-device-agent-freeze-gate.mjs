@@ -232,9 +232,11 @@ assert(
 );
 assert(
   manager.includes("RENDERER_DELIVERY_FAILED") &&
-    manager.includes("this.handlePlaybackEvent({") &&
-    manager.includes("renderer_delivery_${reason}"),
-  "main-process renderer delivery failures must terminalize accepted Runtime v2 commands",
+    manager.includes("this.actionPlayer.handleSubmissionFailure(command.commandId, reason)") &&
+    manager.includes("this.runtimeHandler?.sendRuntimeCommandFailed(") &&
+    manager.includes("before command_accepted") &&
+    !manager.includes("renderer_delivery_${reason}"),
+  "pre-renderer delivery failures must terminalize through Runtime ACK without fabricating playback events",
 );
 assert(
   playerBridge.includes("STOP_DELIVERY_FAILED") &&

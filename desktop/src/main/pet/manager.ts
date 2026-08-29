@@ -182,6 +182,7 @@ export interface PetManagerDeps {
   corePort?: number;
   petLogger?: PetLogger;
   runtimeVersion?: string;
+  getChatStateWindow?: () => BrowserWindow | null;
 }
 
 export interface CorruptionDetectionResult {
@@ -294,6 +295,7 @@ interface DesiredStateRuntimeCommand {
   settingsRevision?: number;
   payload?: {
     ensureAbsent?: boolean;
+    desiredHash?: string;
     installationId?: string;
     releaseId?: string;
     defaultActionKey?: string;
@@ -392,6 +394,7 @@ export class DesktopPetManager {
   private readonly alphaThreshold: number;
   private readonly petLogger: PetLogger;
   private readonly runtimeVersion: string;
+  private readonly getChatStateWindow: (() => BrowserWindow | null) | null;
 
   private authToken: string | null = null;
   private state: PetManagerState = "uninitialized";
@@ -426,7 +429,15 @@ export class DesktopPetManager {
   private currentCommandId: string | null = null;
   private readonly playbackCommandIds = new Map<string, string>();
   private readonly playbackDecisionIds = new Map<string, string>();
+  private readonly submittedRuntimeCommands = new Map<
+    string,
+    { runtimeCommandId: string; decisionId: string }
+  >();
+  // During a Runtime-v2 session handoff, old-session physical work is stopped
+  // locally but must never be reported through the newly authenticated session.
+  private suppressRuntimeLifecycleReporting = false;
   private lastAppliedDesiredRevision = 0;
+  private lastAppliedDesiredHash = "";
   private lastServerDesiredRevision = 0;
   private lastAppliedSettingsRevision = 0;
   private runtimeResumeCursor: RuntimeResumeCursor = {
@@ -462,6 +473,7 @@ export class DesktopPetManager {
     this.coreHost = opts.coreHost ?? CORE_BASE_HOST;
     this.corePort = opts.corePort ?? CORE_BASE_PORT;
     this.runtimeVersion = opts.runtimeVersion ?? DESKTOP_PET_RUNTIME_VERSION;
+    this.getChatStateWindow = opts.getChatStateWindow ?? null;
     this.resourceLoader = opts.resourceLoader ?? new ResourceLoader(this.runtimeVersion);
     this.resourceCache = opts.resourceCache ?? new ResourceCache();
     this.alphaThreshold =
@@ -507,11 +519,21 @@ export class DesktopPetManager {
     }
   }
 
-  async handleCharacterSwitched(characterId: string): Promise<void> {
-    if (!characterId) return;
-    await this.runLifecycleMutation(() =>
-      this.handleCharacterSwitchedInternal(characterId),
-    );
+  async handleCharacterSwitched(characterId: string | null): Promise<void> {
+    const normalized = characterId?.trim() ?? "";
+    await this.runLifecycleMutation(async () => {
+      if (!normalized) {
+        // "No active character" is authoritative desired absence. Never leave the
+        // previous character's pet visible while the watcher repeatedly observes
+        // a 204/404/null role profile.
+        await this.ensureInitializedWithinMutation(false);
+        if (this.activeInstallationId || this.state === "enabled") {
+          await this.disableInternal(true);
+        }
+        return;
+      }
+      await this.handleCharacterSwitchedInternal(normalized);
+    });
   }
 
   private async handleCharacterSwitchedInternal(characterId: string): Promise<void> {
@@ -1856,6 +1878,7 @@ export class DesktopPetManager {
     this.currentCommandId = null;
     this.playbackCommandIds.clear();
     this.playbackDecisionIds.clear();
+    this.submittedRuntimeCommands.clear();
     this.rendererHealthy = false;
     this.intentionalClose = false;
   }
@@ -1960,37 +1983,64 @@ export class DesktopPetManager {
     }
 
     const playbackId = event.playbackInstanceId ?? "";
-    const mappedCommandId = playbackId ? this.playbackCommandIds.get(playbackId) : undefined;
-    // A playback id with no command mapping is an internal renderer playback
-    // (return/default/fallback), not permission to borrow whichever Runtime v2
-    // command happens to be globally current. Only legacy events that omit a
-    // playback identity may fall back to the current command mirror.
-    const commandId = event.commandId
-      ?? mappedCommandId
-      ?? (!playbackId ? this.currentCommandId ?? "" : "");
-    const mappedDecisionId = playbackId ? this.playbackDecisionIds.get(playbackId) : undefined;
+    const playerCommandId = event.commandId ?? "";
+    const mappedRuntimeCommandId = playbackId ? this.playbackCommandIds.get(playbackId) ?? "" : "";
+    const submittedRuntime = playerCommandId
+      ? this.submittedRuntimeCommands.get(playerCommandId)
+      : undefined;
     const currentRequest = this.scheduler?.getCurrent();
-    const currentRequestCommandId = currentRequest?.metadata?.runtimeCommandId ?? "";
-    const decisionId = mappedDecisionId
-      ?? (!playbackId && (!commandId || !currentRequestCommandId || commandId === currentRequestCommandId)
-        ? currentRequest?.metadata?.runtimeDecisionId ?? ""
-        : "");
+    const currentRequestRuntimeCommandId = currentRequest?.metadata?.runtimeCommandId ?? "";
+
+    // Renderer/Main also use local command IDs for idle, return and fallback
+    // playback. Those IDs are never Runtime-v2 command identities and must not
+    // escape to Backend. A Runtime command is proven only by the scheduler's
+    // runtimeCommandId metadata (before command_accepted) or by an already bound
+    // playback -> Runtime command mapping (after command_accepted).
+    const runtimeCommandId = mappedRuntimeCommandId
+      || submittedRuntime?.runtimeCommandId
+      || (
+        playerCommandId &&
+        currentRequestRuntimeCommandId &&
+        playerCommandId === currentRequestRuntimeCommandId
+          ? playerCommandId
+          : ""
+      );
+    const mappedDecisionId = playbackId ? this.playbackDecisionIds.get(playbackId) : undefined;
+    const requestDecisionId = runtimeCommandId && runtimeCommandId === currentRequestRuntimeCommandId
+      ? currentRequest?.metadata?.runtimeDecisionId ?? ""
+      : "";
+    const decisionId = mappedDecisionId ?? submittedRuntime?.decisionId ?? requestDecisionId;
     const context = this.runtimeEventContext(decisionId);
     const actionKey = event.actionKey ?? "";
 
     switch (event.type) {
+      case "playback.command_accepted":
+        if (playbackId && runtimeCommandId) {
+          this.playbackCommandIds.set(playbackId, runtimeCommandId);
+          if (decisionId) this.playbackDecisionIds.set(playbackId, decisionId);
+          if (playerCommandId) this.submittedRuntimeCommands.delete(playerCommandId);
+          void this.runtimeHandler?.sendPlaybackCommandAccepted(
+            playbackId, runtimeCommandId, actionKey, context,
+          ).then(() => this.syncRuntimeState()).catch((err) => {
+            console.warn("[DesktopPetManager] 上报 Renderer 接受失败:", this.errorMessage(err));
+          });
+        }
+        break;
+
       case "playback.action_started":
+        if (actionKey) this.currentActionKey = actionKey;
         if (playbackId) {
           this.currentPlaybackId = playbackId;
-          if (commandId) this.playbackCommandIds.set(playbackId, commandId);
+          if (runtimeCommandId) this.playbackCommandIds.set(playbackId, runtimeCommandId);
           if (decisionId) this.playbackDecisionIds.set(playbackId, decisionId);
         }
-        if (commandId) this.currentCommandId = commandId;
-        this.scheduler?.notifyActionStarted(actionKey, playbackId, commandId || undefined);
-        if (playbackId && commandId) {
+        this.currentCommandId = runtimeCommandId || null;
+        // Scheduler correlation is local-player identity, not Backend identity.
+        this.scheduler?.notifyActionStarted(actionKey, playbackId, playerCommandId || undefined);
+        if (playbackId && runtimeCommandId) {
           void this.runtimeHandler?.sendPlaybackStarted(
             playbackId,
-            commandId,
+            runtimeCommandId,
             actionKey,
             context,
           ).then(() => this.syncRuntimeState()).catch((err) => {
@@ -2000,26 +2050,33 @@ export class DesktopPetManager {
         break;
 
       case "playback.action_first_cycle":
-        if (playbackId && commandId) {
+        if (playbackId && runtimeCommandId) {
           void this.runtimeHandler?.sendPlaybackFirstCycle(
-            playbackId,
-            commandId,
-            actionKey,
-            context,
+            playbackId, runtimeCommandId, actionKey, context,
           ).then(() => this.syncRuntimeState()).catch((err) => {
             console.warn("[DesktopPetManager] 上报首轮播放完成失败:", this.errorMessage(err));
           });
         }
         break;
 
+      case "playback.action_holding":
+        if (playbackId && runtimeCommandId) {
+          void this.runtimeHandler?.sendPlaybackHolding(
+            playbackId, runtimeCommandId, actionKey, context,
+          ).then(() => this.syncRuntimeState()).catch((err) => {
+            console.warn("[DesktopPetManager] 上报保持状态失败:", this.errorMessage(err));
+          });
+        }
+        break;
+
       case "playback.action_completed":
-        this.scheduler?.notifyActionCompleted(actionKey, playbackId, commandId || undefined);
-        if (commandId) {
+        this.scheduler?.notifyActionCompleted(actionKey, playbackId, playerCommandId || undefined);
+        if (playbackId && runtimeCommandId) {
           const runtime = this.runtimeHandler;
           if (runtime) {
             void runtime.sendPlaybackEnded(
               playbackId,
-              commandId,
+              runtimeCommandId,
               actionKey,
               event.playedDurationMs ?? 0,
               event.reason ?? "natural_end",
@@ -2029,17 +2086,17 @@ export class DesktopPetManager {
             });
           }
         }
-        this.clearPlaybackMapping(playbackId, commandId);
+        this.clearPlaybackMapping(playbackId, runtimeCommandId);
         break;
 
       case "playback.action_interrupted":
-        this.scheduler?.notifyActionInterrupted(actionKey, playbackId, commandId || undefined);
-        if (commandId) {
+        this.scheduler?.notifyActionInterrupted(actionKey, playbackId, playerCommandId || undefined);
+        if (playbackId && runtimeCommandId) {
           const runtime = this.runtimeHandler;
           if (runtime) {
             void runtime.sendPlaybackInterrupted(
               playbackId,
-              commandId,
+              runtimeCommandId,
               actionKey,
               event.playedDurationMs ?? 0,
               event.reason ?? "higher_priority_action",
@@ -2049,20 +2106,20 @@ export class DesktopPetManager {
             });
           }
         }
-        this.clearPlaybackMapping(playbackId, commandId);
+        this.clearPlaybackMapping(playbackId, runtimeCommandId);
         break;
 
       case "playback.action_failed": {
-        this.scheduler?.notifyActionInterrupted(actionKey, playbackId, commandId || undefined);
+        this.scheduler?.notifyActionFailed(actionKey, playbackId, playerCommandId || undefined);
         const errorCode = event.error?.code ?? event.reason ?? "playback_failed";
         const errorMessage = event.error?.message ?? "playback execution failed";
         console.warn("[DesktopPetManager] 动画失败:", actionKey, errorCode, errorMessage);
-        if (commandId) {
+        if (playbackId && runtimeCommandId) {
           const runtime = this.runtimeHandler;
           if (runtime) {
             void runtime.sendPlaybackFailed(
               playbackId,
-              commandId,
+              runtimeCommandId,
               actionKey,
               errorCode,
               errorMessage,
@@ -2072,13 +2129,14 @@ export class DesktopPetManager {
             });
           }
         }
-        this.clearPlaybackMapping(playbackId, commandId);
+        this.clearPlaybackMapping(playbackId, runtimeCommandId);
         break;
       }
     }
   }
 
   private clearPlaybackMapping(playbackId: string, commandId: string): void {
+    if (commandId) this.submittedRuntimeCommands.delete(commandId);
     if (playbackId) {
       this.playbackCommandIds.delete(playbackId);
       this.playbackDecisionIds.delete(playbackId);
@@ -2183,27 +2241,34 @@ export class DesktopPetManager {
     );
     if (!command) return;
 
-    // Once Runtime v2 has accepted a play_action, a main-process delivery
-    // failure (renderer not-ready queue expiry/overflow, window teardown or
-    // IPC send failure) must still terminate the exact command. Route it
-    // through the same canonical playback-event path used by Renderer events
-    // so Scheduler, AnimationPlayerBridge and Runtime v2 are cleared together.
-    this.handlePlaybackEvent({
-      type: "playback.action_failed",
-      playbackInstanceId: command.playbackInstanceId,
-      commandId: command.commandId,
-      actionKey: command.actionKey,
-      reason: `renderer_delivery_${reason}`,
-      timestamp: Date.now(),
-      traceId: command.traceId,
-      error: {
-        code: "RENDERER_DELIVERY_FAILED",
-        message: `renderer delivery failed: ${reason}`,
-        actionKey: command.actionKey,
-        playbackInstanceId: command.playbackInstanceId,
-        commandId: command.commandId,
-        traceId: command.traceId,
-      },
+    // Main->Renderer delivery failed before Renderer could emit
+    // playback.command_accepted, therefore no physical playback identity exists.
+    // Clear the local pending submission and terminate via the Runtime-level ACK;
+    // never fabricate a renderer playback event with an empty PlaybackID.
+    const submittedRuntime = this.submittedRuntimeCommands.get(command.commandId);
+    const runtimeCommandId = submittedRuntime?.runtimeCommandId
+      ?? this.scheduler?.getCurrent()?.metadata?.runtimeCommandId
+      ?? "";
+    if (this.actionPlayer instanceof AnimationPlayerBridge) {
+      this.actionPlayer.handleSubmissionFailure(command.commandId, reason);
+    }
+    this.scheduler?.notifyActionFailed(command.actionKey, "", command.commandId);
+    if (!runtimeCommandId || runtimeCommandId !== command.commandId) {
+      return;
+    }
+    this.submittedRuntimeCommands.delete(command.commandId);
+    const report = reason === "ttl_expired"
+      ? this.runtimeHandler?.sendRuntimeCommandExpired(
+          runtimeCommandId,
+          "renderer delivery queue expired command before command_accepted",
+        )
+      : this.runtimeHandler?.sendRuntimeCommandFailed(
+          runtimeCommandId,
+          "RENDERER_DELIVERY_FAILED",
+          `renderer delivery failed before command_accepted: ${reason}`,
+        );
+    void report?.then(() => this.syncRuntimeState()).catch((err) => {
+      console.warn("[DesktopPetManager] 上报 Renderer 投递失败终态失败:", this.errorMessage(err));
     });
   }
 
@@ -2262,21 +2327,13 @@ export class DesktopPetManager {
     });
   }
 
-  private handleActionSwitch(newKey: string, oldKey: string | null, playbackId?: string): void {
-    this.currentActionKey = newKey;
-    if (playbackId) {
-      this.currentPlaybackId = playbackId;
-      const request = this.scheduler?.getCurrent();
-      const commandId = request?.metadata?.runtimeCommandId ?? "";
-      const decisionId = request?.metadata?.runtimeDecisionId ?? "";
-      if (commandId) {
-        this.playbackCommandIds.set(playbackId, commandId);
-      }
-      if (decisionId) {
-        this.playbackDecisionIds.set(playbackId, decisionId);
-      }
-    }
-    this.petLogger.logActionSwitch(newKey, oldKey, "scheduler");
+  private handleActionSwitch(newKey: string, oldKey: string | null, _playbackId?: string): void {
+    // Do not infer Runtime identity from Scheduler.current here. command_accepted
+    // can arrive for an older pending replacement after a newer request has
+    // already become Scheduler.current. Runtime command/playback binding is done
+    // exclusively in handlePlaybackEvent using the renderer commandId submitted
+    // for that exact request.
+    this.petLogger.logActionSwitch(newKey, oldKey, "renderer_accepted");
   }
 
   private handleSchedulerEvent(
@@ -2284,11 +2341,22 @@ export class DesktopPetManager {
     request: DesktopPetActionRequest,
     action: RuntimeAction | null,
   ): void {
+    if (event === "action-submitted") {
+      const runtimeCommandId = request.metadata?.runtimeCommandId ?? "";
+      if (runtimeCommandId) {
+        this.submittedRuntimeCommands.set(runtimeCommandId, {
+          runtimeCommandId,
+          decisionId: request.metadata?.runtimeDecisionId ?? "",
+        });
+      }
+      return;
+    }
     if (event === "action-started") {
-      this.currentCommandId = request.metadata?.runtimeCommandId ?? null;
       return;
     }
     if (event === "action-rejected") {
+      const rejectedRuntimeCommandId = request.metadata?.runtimeCommandId ?? "";
+      if (rejectedRuntimeCommandId) this.submittedRuntimeCommands.delete(rejectedRuntimeCommandId);
       console.warn(
         "[DesktopPetManager] 动作请求被拒绝:",
         request.actionKey,
@@ -2320,22 +2388,25 @@ export class DesktopPetManager {
     }
     if (event === "action-cancelled") {
       const commandId = request.metadata?.runtimeCommandId ?? "";
+      if (commandId) this.submittedRuntimeCommands.delete(commandId);
       const reason = request.metadata?.cancellationReason ?? "scheduler_cancelled";
       console.warn(
         "[DesktopPetManager] 排队动作被取消:",
         request.actionKey,
         reason,
       );
-      if (commandId) {
-        const context = this.runtimeEventContext(request.metadata?.runtimeDecisionId ?? "");
-        void this.runtimeHandler?.sendPlaybackFailed(
-          "",
-          commandId,
-          request.actionKey,
-          "PLAYBACK_COMMAND_CANCELLED",
-          `scheduler cancelled accepted command: ${reason}`,
-          context,
-        ).then(() => this.syncRuntimeState()).catch((err) => {
+      if (commandId && !this.suppressRuntimeLifecycleReporting) {
+        const report = reason.startsWith("ttl_expired")
+          ? this.runtimeHandler?.sendRuntimeCommandExpired(
+              commandId,
+              `scheduler expired command before renderer acceptance: ${reason}`,
+            )
+          : this.runtimeHandler?.sendRuntimeCommandFailed(
+              commandId,
+              "PLAYBACK_COMMAND_CANCELLED",
+              `scheduler cancelled command before renderer acceptance: ${reason}`,
+            );
+        void report?.then(() => this.syncRuntimeState()).catch((err) => {
           console.warn("[DesktopPetManager] 上报排队动作取消失败:", this.errorMessage(err));
         });
       }
@@ -2384,6 +2455,23 @@ export class DesktopPetManager {
       void this.persistRuntimePosition().catch((err) => {
         console.warn("[DesktopPetManager] 持久化桌宠位置失败:", this.errorMessage(err));
       });
+    } else if (event === "drag-cancel") {
+      this.worldController?.setDragging(false);
+      void this.runtimeHandler?.sendRuntimeEvent("runtime.drag.cancelled", {
+        ...this.runtimeEventContext(),
+        gestureId: this.currentDragId ?? "",
+        sequence: Date.now(),
+        dragId: this.currentDragId ?? "",
+        startX: state.startX,
+        startY: state.startY,
+        currentX: state.currentX,
+        currentY: state.currentY,
+        displayId: state.currentScreenId,
+        occurredAt: new Date().toISOString(),
+      }).catch((err) => {
+        console.warn("[DesktopPetManager] 上报拖拽取消失败:", this.errorMessage(err));
+      });
+      this.currentDragId = null;
     }
   }
 
@@ -2473,10 +2561,10 @@ export class DesktopPetManager {
   }
 
   private readonly boundChatStateChange = (
-    _event: Electron.IpcMainEvent,
+    event: Electron.IpcMainEvent,
     payload: ChatStateIpcPayload,
   ): void => {
-    if (!this.chatStateBridge) return;
+    if (!this.chatStateBridge || !this.isTrustedChatStateSender(event)) return;
     try {
       this.chatStateBridge.handleIpcPayload(payload);
     } catch (err) {
@@ -2486,6 +2574,15 @@ export class DesktopPetManager {
       );
     }
   };
+
+  private isTrustedChatStateSender(event: Electron.IpcMainEvent): boolean {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!senderWindow || senderWindow.isDestroyed()) return false;
+    const trustedWindow = this.getChatStateWindow?.() ?? null;
+    if (!trustedWindow || trustedWindow.isDestroyed()) return false;
+    return senderWindow === trustedWindow &&
+      event.sender.id === trustedWindow.webContents.id;
+  }
 
   private setState(
     state: PetManagerState,
@@ -3269,12 +3366,21 @@ export class DesktopPetManager {
     try {
       if (this.runtimeHandler) {
         const previousHandler = this.runtimeHandler;
-        this.captureRuntimeCursor(previousHandler);
         this.runtimeHandler = null;
         try {
+          // Fence the transport first so no new command can enter the old
+          // handler, then wait until all already-admitted local mutations have
+          // settled and been cached before exporting the resume cursor/replay
+          // set for the replacement session.
           previousHandler.disconnect();
-        } catch {
-          void 0;
+          await previousHandler.drainInFlightCommands();
+        } catch (err) {
+          console.warn(
+            "[DesktopPetManager] draining previous runtime handler failed:",
+            this.errorMessage(err),
+          );
+        } finally {
+          this.captureRuntimeCursor(previousHandler);
         }
       }
 
@@ -3375,6 +3481,30 @@ export class DesktopPetManager {
           ? Math.max(0, Math.floor(ack.currentDesiredRevision))
           : 0;
         this.lastServerDesiredRevision = serverDesiredRevision;
+        // A new Runtime-v2 session never inherits an ephemeral playback attempt.
+        // Stop any locally in-flight Runtime command so Backend and Renderer share
+        // the same reconnect boundary.
+        const schedulerRuntimeCommandId =
+          this.scheduler?.getCurrent()?.metadata?.runtimeCommandId ?? "";
+        const hadOldSessionRuntimePlayback = Boolean(
+          this.currentCommandId || schedulerRuntimeCommandId || this.submittedRuntimeCommands.size > 0,
+        );
+        // The Backend fences all old-session ephemeral attempts on reconnect.
+        // Drop every old-session correlation before any synchronous stop/cancel
+        // callback can fire into the newly authenticated RuntimeHandler.
+        this.currentCommandId = null;
+        this.currentPlaybackId = null;
+        this.playbackCommandIds.clear();
+        this.playbackDecisionIds.clear();
+        this.submittedRuntimeCommands.clear();
+        if (hadOldSessionRuntimePlayback) {
+          this.suppressRuntimeLifecycleReporting = true;
+          try {
+            this.scheduler?.forceInterrupt("runtime_stop");
+          } finally {
+            this.suppressRuntimeLifecycleReporting = false;
+          }
+        }
         if (serverDesiredRevision > this.lastAppliedDesiredRevision) {
           console.info(
             `[DesktopPetManager] server desired revision ${serverDesiredRevision} is ahead of local ${this.lastAppliedDesiredRevision}; awaiting authoritative Runtime v2 reconciliation command`,
@@ -3415,11 +3545,13 @@ export class DesktopPetManager {
           installationId?: string;
           releaseId?: string;
           settingsRevision?: number;
+          expiresAt?: string;
           actionKey?: string;
           payload?: {
             installation?: { installationId?: string };
             desiredPet?: { installation?: { installationId?: string } };
             ensureAbsent?: boolean;
+            desiredHash?: string;
             releaseId?: string;
             defaultActionKey?: string;
             settingsRevision?: number;
@@ -3445,20 +3577,33 @@ export class DesktopPetManager {
         const commandId = cmd.commandId ?? "";
         const commandType = cmd.commandType ?? "";
         const desiredRevision = cmd.desiredRevision ?? 0;
+        const desiredHash = cmd.payload?.desiredHash?.trim() ?? "";
+        const isDurableDesiredCommand = commandType === "runtime.command.sync_desired_state" ||
+          commandType === "runtime.command.ensure_absent" ||
+          commandType === "runtime.command.reload_release";
+        if (isDurableDesiredCommand && (!desiredHash || desiredRevision <= 0)) {
+          return {
+            commandId,
+            status: "rejected",
+            errorCode: !desiredHash ? "MISSING_DESIRED_HASH" : "INVALID_DESIRED_REVISION",
+            errorMessage: !desiredHash
+              ? "durable desired-state command missing desiredHash"
+              : "durable desired-state command requires desiredRevision > 0",
+            appliedRevision: this.lastAppliedDesiredRevision,
+          };
+        }
 
         try {
           switch (commandType) {
             case "runtime.command.sync_desired_state": {
-              if (
-                desiredRevision > 0 &&
-                desiredRevision < this.lastAppliedDesiredRevision
-              ) {
+              const desiredRevisionFence = this.validateDesiredCommandRevision(
+                desiredRevision,
+                desiredHash,
+              );
+              if (desiredRevisionFence) {
                 return {
                   commandId,
-                  status: "duplicate",
-                  errorCode: "",
-                  errorMessage: "",
-                  appliedRevision: this.lastAppliedDesiredRevision,
+                  ...desiredRevisionFence,
                   actualState: this.collectPetInstanceSummary(),
                 };
               }
@@ -3477,7 +3622,7 @@ export class DesktopPetManager {
                 };
               }
               await this.applyDesiredStateCommand(desiredCommand);
-              this.markDesiredRevisionApplied(desiredRevision);
+              this.markDesiredRevisionApplied(desiredRevision, desiredHash);
               return {
                 commandId,
                 status: "applied",
@@ -3488,23 +3633,21 @@ export class DesktopPetManager {
               };
             }
             case "runtime.command.ensure_absent": {
-              if (
-                desiredRevision > 0 &&
-                desiredRevision < this.lastAppliedDesiredRevision
-              ) {
+              const desiredRevisionFence = this.validateDesiredCommandRevision(
+                desiredRevision,
+                desiredHash,
+              );
+              if (desiredRevisionFence) {
                 return {
                   commandId,
-                  status: "duplicate",
-                  errorCode: "",
-                  errorMessage: "",
-                  appliedRevision: this.lastAppliedDesiredRevision,
+                  ...desiredRevisionFence,
                   actualState: this.collectPetInstanceSummary(),
                 };
               }
               await this.runLifecycleMutation(() =>
                 this.disableInternal(false, false),
               );
-              this.markDesiredRevisionApplied(desiredRevision);
+              this.markDesiredRevisionApplied(desiredRevision, desiredHash);
               return {
                 commandId,
                 status: "applied",
@@ -3525,6 +3668,38 @@ export class DesktopPetManager {
                     : "desktop pet scheduler is not ready",
                   appliedRevision: desiredRevision,
                 };
+              }
+
+              const incomingInstallationId = (cmd.payload?.installationId ?? cmd.installationId ?? "").trim();
+              const activeInstallationId = (this.activeInstallationId ?? this.activeInstallation?.id ?? "").trim();
+              if (!incomingInstallationId) {
+                return { commandId, status: "rejected", errorCode: "MISSING_INSTALLATION_ID", errorMessage: "play_action must bind the active installation", appliedRevision: desiredRevision };
+              }
+              if (!activeInstallationId || incomingInstallationId !== activeInstallationId) {
+                return { commandId, status: "rejected", errorCode: "INSTALLATION_MISMATCH", errorMessage: "play_action targets a stale installation", appliedRevision: desiredRevision };
+              }
+              const incomingCharacterId = (cmd.payload?.characterId ?? "").trim();
+              const activeCharacterId = (this.activeInstallation?.characterId ?? this.loadedInstallation.manifest.characterId ?? "").trim();
+              if (!incomingCharacterId) {
+                return { commandId, status: "rejected", errorCode: "MISSING_CHARACTER_ID", errorMessage: "play_action must bind the active character", appliedRevision: desiredRevision };
+              }
+              if (!activeCharacterId || incomingCharacterId !== activeCharacterId) {
+                return { commandId, status: "rejected", errorCode: "CHARACTER_MISMATCH", errorMessage: "play_action targets a stale character", appliedRevision: desiredRevision };
+              }
+              const incomingPetInstanceId = (cmd.payload?.petInstanceId ?? "").trim();
+              if (!incomingPetInstanceId) {
+                return { commandId, status: "rejected", errorCode: "MISSING_PET_INSTANCE_ID", errorMessage: "play_action must bind the active runtime pet instance", appliedRevision: desiredRevision };
+              }
+              if (incomingPetInstanceId !== getRuntimeId()) {
+                return { commandId, status: "rejected", errorCode: "PET_INSTANCE_MISMATCH", errorMessage: "play_action targets a stale pet instance", appliedRevision: desiredRevision };
+              }
+              const expiresAtText = (cmd.expiresAt ?? "").trim();
+              const expiresAtMs = expiresAtText ? Date.parse(expiresAtText) : Number.NaN;
+              if (!Number.isFinite(expiresAtMs)) {
+                return { commandId, status: "rejected", errorCode: "MISSING_OR_INVALID_EXPIRY", errorMessage: "ephemeral play_action requires authoritative expiresAt", appliedRevision: desiredRevision };
+              }
+              if (expiresAtMs <= Date.now()) {
+                return { commandId, status: "expired", errorCode: "COMMAND_EXPIRED", errorMessage: "play_action expired before runtime scheduling", appliedRevision: desiredRevision };
               }
 
               const action = this.loadedInstallation.actions.get(actionKey);
@@ -3585,6 +3760,7 @@ export class DesktopPetManager {
                 priority: this.resolveBehaviorPriority(semantic, cmd.payload?.priority),
                 interrupt: queuePolicy === "replace_current",
                 dedupeKey: cmd.payload?.decisionId || `runtime_${commandId}`,
+                expiresAt: expiresAtMs,
                 metadata,
               };
               this.applyVitalityForBehaviorSemantic(semantic);
@@ -3624,16 +3800,14 @@ export class DesktopPetManager {
               };
             }
             case "runtime.command.reload_release": {
-              if (
-                desiredRevision > 0 &&
-                desiredRevision < this.lastAppliedDesiredRevision
-              ) {
+              const desiredRevisionFence = this.validateDesiredCommandRevision(
+                desiredRevision,
+                desiredHash,
+              );
+              if (desiredRevisionFence) {
                 return {
                   commandId,
-                  status: "duplicate",
-                  errorCode: "",
-                  errorMessage: "",
-                  appliedRevision: this.lastAppliedDesiredRevision,
+                  ...desiredRevisionFence,
                   actualState: this.collectPetInstanceSummary(),
                 };
               }
@@ -3660,6 +3834,7 @@ export class DesktopPetManager {
                   `DESIRED_RELEASE_NOT_APPLIED: expected=${cmd.releaseId} actual=${this.activeInstallation?.currentReleaseId ?? ""}`,
                 );
               }
+              this.markDesiredRevisionApplied(desiredRevision, desiredHash);
               return {
                 commandId,
                 status: "applied",
@@ -3729,7 +3904,7 @@ export class DesktopPetManager {
     const win = this.windowAdapter?.getNativeWindow();
     const visible = win ? win.isVisible() : false;
     return {
-      petInstanceId: this.activeInstallationId,
+      petInstanceId: getRuntimeId(),
       installationId: this.activeInstallationId,
       visible,
       currentActionKey: this.currentActionKey ?? "",
@@ -3740,12 +3915,57 @@ export class DesktopPetManager {
     };
   }
 
-  private markDesiredRevisionApplied(revision: number): void {
+  private validateDesiredCommandRevision(
+    desiredRevision: number,
+    desiredHash: string,
+  ): {
+    status: "duplicate" | "rejected";
+    errorCode: string;
+    errorMessage: string;
+    appliedRevision: number;
+  } | null {
+    if (desiredRevision < this.lastAppliedDesiredRevision) {
+      return {
+        status: "rejected",
+        errorCode: "STALE_DESIRED_REVISION",
+        errorMessage: `desired revision ${desiredRevision} is older than applied revision ${this.lastAppliedDesiredRevision}`,
+        appliedRevision: this.lastAppliedDesiredRevision,
+      };
+    }
+    if (desiredRevision !== this.lastAppliedDesiredRevision || desiredRevision <= 0) {
+      return null;
+    }
+    const appliedHash = this.lastAppliedDesiredHash.trim();
+    if (!appliedHash) {
+      // Legacy/recovered state without a trustworthy hash is re-applied instead
+      // of being guessed idempotent. The successful apply will establish the
+      // canonical revision+hash pair.
+      return null;
+    }
+    if (appliedHash !== desiredHash) {
+      return {
+        status: "rejected",
+        errorCode: "DESIRED_HASH_MISMATCH",
+        errorMessage: "desiredHash differs from the state already applied at this revision",
+        appliedRevision: this.lastAppliedDesiredRevision,
+      };
+    }
+    return {
+      status: "duplicate",
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: this.lastAppliedDesiredRevision,
+    };
+  }
+
+  private markDesiredRevisionApplied(revision: number, desiredHash?: string): void {
     if (!Number.isFinite(revision) || revision <= 0) return;
-    this.lastAppliedDesiredRevision = Math.max(
-      this.lastAppliedDesiredRevision,
-      Math.floor(revision),
-    );
+    const normalizedRevision = Math.floor(revision);
+    const previousRevision = this.lastAppliedDesiredRevision;
+    this.lastAppliedDesiredRevision = Math.max(previousRevision, normalizedRevision);
+    if (normalizedRevision >= previousRevision && desiredHash?.trim()) {
+      this.lastAppliedDesiredHash = desiredHash.trim();
+    }
   }
 
   private markSettingsRevisionApplied(revision: number): void {
@@ -3843,6 +4063,9 @@ export class DesktopPetManager {
       positionY: summary?.positionY ?? 0,
       screenId: summary?.screenId ?? "",
       scale: summary?.scale ?? PET_WINDOW_SCALE_DEFAULT,
+      appliedDesiredRevision: this.lastAppliedDesiredRevision,
+      appliedDesiredHash: this.lastAppliedDesiredHash,
+      appliedSettingsRevision: this.lastAppliedSettingsRevision,
     };
     const actualStateHash = "sha256:" + createHash("sha256")
       .update(JSON.stringify(actualState), "utf8")
@@ -3857,6 +4080,7 @@ export class DesktopPetManager {
       rendererStatus,
       playbackStatus,
       appliedDesiredRevision: this.lastAppliedDesiredRevision,
+      appliedDesiredHash: this.lastAppliedDesiredHash || undefined,
       appliedSettingsRevision: this.lastAppliedSettingsRevision,
       installationId: this.activeInstallationId ?? "",
       petId: this.activeInstallation?.petId ?? "",
