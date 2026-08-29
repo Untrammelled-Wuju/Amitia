@@ -21,7 +21,7 @@ import type {
   LoadInstallationRequest,
 } from "./resource-loader";
 import { ResourceCache } from "./resource-cache";
-import type { PlaybackSnapshot } from "../../desktop-pet/animation/contracts";
+import type { PlaybackEvent, PlaybackSnapshot, PlayActionCommand } from "../../desktop-pet/animation/contracts";
 import { DesktopPetWindowAdapter } from "./window-adapter";
 import { AnimationIpcAdapter } from "./animation-ipc";
 import type { PetDragIpcPayload, PetHitMaskPayload, RuntimeInitFailedPayload, RuntimeReadyPayload } from "../../shared/animation-ipc";
@@ -832,9 +832,10 @@ export class DesktopPetManager {
 
   stopAction(): void {
     if (this.scheduler) {
-      this.scheduler.forceInterrupt("resource_invalid");
+      this.scheduler.forceInterrupt("runtime_stop");
+      return;
     }
-    this.actionPlayer?.stop();
+    this.actionPlayer?.stop("runtime_stop");
   }
 
   pauseAction(): void {
@@ -1632,18 +1633,12 @@ export class DesktopPetManager {
         this.handleActionSwitch(newKey, oldKey, playbackId),
       onActionCompleted: (actionKey, loopCount) => {
         this.handleActionCompleted(actionKey, loopCount);
-        this.scheduler?.notifyActionCompleted(actionKey);
       },
       onActionInterrupted: (actionKey, loopCount) => {
         this.handleActionInterrupted(actionKey, loopCount);
-        this.scheduler?.notifyActionInterrupted(actionKey);
       },
-      onActionFailed: (actionKey, reason) => {
-        console.warn(
-          "[DesktopPetManager] 动作播放失败:",
-          actionKey,
-          reason,
-        );
+      onActionFailed: (actionKey, reason, playbackId) => {
+        this.handlePlayerBridgeFailure(actionKey, reason, playbackId);
       },
       onError: (err) =>
         console.error("[DesktopPetManager] AnimationPlayerBridge 错误:", err),
@@ -1690,7 +1685,7 @@ export class DesktopPetManager {
 
     const eventBridge = new DesktopPetEventBridge(scheduler, dragController);
 
-    const chatStateBridge = new ChatStateBridge(scheduler);
+    const chatStateBridge = new ChatStateBridge();
     chatStateBridge.attachLoaded(loaded);
     chatStateBridge.attachPetWindow(win);
 
@@ -1781,14 +1776,16 @@ export class DesktopPetManager {
       console.warn("[DesktopPetManager] 停止待机控制器失败:", err);
     }
     try {
-      this.scheduler?.forceInterrupt("app_exit");
+      if (this.scheduler) {
+        // Scheduler owns the active action and translates app_exit to the
+        // canonical window_destroyed interruption reason. Do not stop the
+        // player a second time with the default user_disabled reason.
+        this.scheduler.forceInterrupt("app_exit");
+      } else {
+        this.actionPlayer?.stop("window_destroyed");
+      }
     } catch (err) {
-      console.warn("[DesktopPetManager] 停止调度器失败:", err);
-    }
-    try {
-      this.actionPlayer?.stop();
-    } catch (err) {
-      console.warn("[DesktopPetManager] 停止播放器失败:", err);
+      console.warn("[DesktopPetManager] 停止动作链失败:", err);
     }
     try {
       this.animationIpc?.unregister();
@@ -1951,69 +1948,94 @@ export class DesktopPetManager {
     return context;
   }
 
-  private handlePlaybackEvent(event: { type: string; actionKey?: string; reason?: string; playbackInstanceId?: string; frameIndex?: number }): void {
-    if (this.actionPlayer && this.actionPlayer instanceof AnimationPlayerBridge) {
+  private handlePlaybackEvent(event: PlaybackEvent): void {
+    if (this.actionPlayer instanceof AnimationPlayerBridge) {
       this.actionPlayer.handlePlaybackEvent(event);
     }
 
-    const playbackId = event.playbackInstanceId ?? this.currentPlaybackId ?? "";
-    const commandId = playbackId
-      ? (this.playbackCommandIds.get(playbackId) ?? "")
-      : (this.currentCommandId ?? "");
-    const decisionId = (playbackId ? this.playbackDecisionIds.get(playbackId) : undefined)
-      ?? this.scheduler?.getCurrent()?.metadata?.runtimeDecisionId
-      ?? "";
+    const playbackId = event.playbackInstanceId ?? "";
+    const mappedCommandId = playbackId ? this.playbackCommandIds.get(playbackId) : undefined;
+    // A playback id with no command mapping is an internal renderer playback
+    // (return/default/fallback), not permission to borrow whichever Runtime v2
+    // command happens to be globally current. Only legacy events that omit a
+    // playback identity may fall back to the current command mirror.
+    const commandId = event.commandId
+      ?? mappedCommandId
+      ?? (!playbackId ? this.currentCommandId ?? "" : "");
+    const mappedDecisionId = playbackId ? this.playbackDecisionIds.get(playbackId) : undefined;
+    const currentRequest = this.scheduler?.getCurrent();
+    const currentRequestCommandId = currentRequest?.metadata?.runtimeCommandId ?? "";
+    const decisionId = mappedDecisionId
+      ?? (!playbackId && (!commandId || !currentRequestCommandId || commandId === currentRequestCommandId)
+        ? currentRequest?.metadata?.runtimeDecisionId ?? ""
+        : "");
     const context = this.runtimeEventContext(decisionId);
+    const actionKey = event.actionKey ?? "";
 
     switch (event.type) {
       case "playback.action_started":
+        if (playbackId) {
+          this.currentPlaybackId = playbackId;
+          if (commandId) this.playbackCommandIds.set(playbackId, commandId);
+          if (decisionId) this.playbackDecisionIds.set(playbackId, decisionId);
+        }
+        if (commandId) this.currentCommandId = commandId;
+        this.scheduler?.notifyActionStarted(actionKey, playbackId, commandId || undefined);
         if (playbackId && commandId) {
           void this.runtimeHandler?.sendPlaybackStarted(
             playbackId,
             commandId,
-            event.actionKey ?? "",
+            actionKey,
             context,
           ).then(() => this.syncRuntimeState()).catch((err) => {
             console.warn("[DesktopPetManager] 上报播放开始失败:", this.errorMessage(err));
           });
         }
         break;
+
+      case "playback.action_first_cycle":
+        if (playbackId && commandId) {
+          void this.runtimeHandler?.sendPlaybackFirstCycle(
+            playbackId,
+            commandId,
+            actionKey,
+            context,
+          ).then(() => this.syncRuntimeState()).catch((err) => {
+            console.warn("[DesktopPetManager] 上报首轮播放完成失败:", this.errorMessage(err));
+          });
+        }
+        break;
+
       case "playback.action_completed":
+        this.scheduler?.notifyActionCompleted(actionKey, playbackId, commandId || undefined);
         if (commandId) {
           const runtime = this.runtimeHandler;
           if (runtime) {
             void runtime.sendPlaybackEnded(
               playbackId,
               commandId,
-              event.actionKey ?? "",
-              0,
-              "natural_end",
+              actionKey,
+              event.playedDurationMs ?? 0,
+              event.reason ?? "natural_end",
               context,
             ).then(() => this.syncRuntimeState()).catch((err) => {
               console.warn("[DesktopPetManager] 上报播放完成失败:", this.errorMessage(err));
             });
           }
         }
-        if (playbackId) {
-          this.playbackCommandIds.delete(playbackId);
-          this.playbackDecisionIds.delete(playbackId);
-          if (this.currentPlaybackId === playbackId) {
-            this.currentPlaybackId = null;
-          }
-        }
-        if (this.currentCommandId === commandId) {
-          this.currentCommandId = null;
-        }
+        this.clearPlaybackMapping(playbackId, commandId);
         break;
+
       case "playback.action_interrupted":
+        this.scheduler?.notifyActionInterrupted(actionKey, playbackId, commandId || undefined);
         if (commandId) {
           const runtime = this.runtimeHandler;
           if (runtime) {
             void runtime.sendPlaybackInterrupted(
               playbackId,
               commandId,
-              event.actionKey ?? "",
-              0,
+              actionKey,
+              event.playedDurationMs ?? 0,
               event.reason ?? "higher_priority_action",
               context,
             ).then(() => this.syncRuntimeState()).catch((err) => {
@@ -2021,50 +2043,42 @@ export class DesktopPetManager {
             });
           }
         }
-        if (playbackId) {
-          this.playbackCommandIds.delete(playbackId);
-          this.playbackDecisionIds.delete(playbackId);
-          if (this.currentPlaybackId === playbackId) {
-            this.currentPlaybackId = null;
-          }
-        }
-        if (this.currentCommandId === commandId) {
-          this.currentCommandId = null;
-        }
+        this.clearPlaybackMapping(playbackId, commandId);
         break;
-      case "playback.action_failed":
-        console.warn(
-          "[DesktopPetManager] 动画失败:",
-          event.actionKey,
-          event.reason,
-        );
+
+      case "playback.action_failed": {
+        this.scheduler?.notifyActionInterrupted(actionKey, playbackId, commandId || undefined);
+        const errorCode = event.error?.code ?? event.reason ?? "playback_failed";
+        const errorMessage = event.error?.message ?? "playback execution failed";
+        console.warn("[DesktopPetManager] 动画失败:", actionKey, errorCode, errorMessage);
         if (commandId) {
           const runtime = this.runtimeHandler;
           if (runtime) {
             void runtime.sendPlaybackFailed(
               playbackId,
               commandId,
-              event.actionKey ?? "",
-              event.reason ?? "playback_failed",
-              "playback execution failed",
+              actionKey,
+              errorCode,
+              errorMessage,
               context,
             ).then(() => this.syncRuntimeState()).catch((err) => {
               console.warn("[DesktopPetManager] 上报播放失败失败:", this.errorMessage(err));
             });
           }
         }
-        if (playbackId) {
-          this.playbackCommandIds.delete(playbackId);
-          this.playbackDecisionIds.delete(playbackId);
-          if (this.currentPlaybackId === playbackId) {
-            this.currentPlaybackId = null;
-          }
-        }
-        if (this.currentCommandId === commandId) {
-          this.currentCommandId = null;
-        }
+        this.clearPlaybackMapping(playbackId, commandId);
         break;
+      }
     }
+  }
+
+  private clearPlaybackMapping(playbackId: string, commandId: string): void {
+    if (playbackId) {
+      this.playbackCommandIds.delete(playbackId);
+      this.playbackDecisionIds.delete(playbackId);
+      if (this.currentPlaybackId === playbackId) this.currentPlaybackId = null;
+    }
+    if (commandId && this.currentCommandId === commandId) this.currentCommandId = null;
   }
 
   private handleSnapshotUpdate(snapshot: PlaybackSnapshot): void {
@@ -2123,15 +2137,68 @@ export class DesktopPetManager {
     );
   }
 
+  private handlePlayerBridgeFailure(
+    actionKey: string,
+    reason?: string,
+    playbackId?: string,
+  ): void {
+    console.warn(
+      "[DesktopPetManager] AnimationPlayerBridge 动作失败:",
+      actionKey,
+      reason ?? "",
+    );
+    if (!playbackId) return;
+    const commandId = this.playbackCommandIds.get(playbackId) ?? this.currentCommandId ?? "";
+    if (!commandId) return;
+    const decisionId = this.playbackDecisionIds.get(playbackId) ?? "";
+    const context = this.runtimeEventContext(decisionId);
+    this.scheduler?.notifyActionInterrupted(actionKey, playbackId, commandId);
+    void this.runtimeHandler?.sendPlaybackFailed(
+      playbackId,
+      commandId,
+      actionKey,
+      "PLAYER_BRIDGE_DELIVERY_FAILED",
+      reason ?? "player bridge failed before renderer terminal event",
+      context,
+    ).then(() => this.syncRuntimeState()).catch((err) => {
+      console.warn("[DesktopPetManager] 上报 PlayerBridge 失败终态失败:", this.errorMessage(err));
+    });
+    this.clearPlaybackMapping(playbackId, commandId);
+  }
+
   private handleDeliveryFailed(
     reason: string,
-    command: { actionKey?: string } | undefined,
+    command: PlayActionCommand | undefined,
   ): void {
     console.warn(
       "[DesktopPetManager] 指令投递失败:",
       reason,
       command?.actionKey ?? "",
     );
+    if (!command) return;
+
+    // Once Runtime v2 has accepted a play_action, a main-process delivery
+    // failure (renderer not-ready queue expiry/overflow, window teardown or
+    // IPC send failure) must still terminate the exact command. Route it
+    // through the same canonical playback-event path used by Renderer events
+    // so Scheduler, AnimationPlayerBridge and Runtime v2 are cleared together.
+    this.handlePlaybackEvent({
+      type: "playback.action_failed",
+      playbackInstanceId: command.playbackInstanceId,
+      commandId: command.commandId,
+      actionKey: command.actionKey,
+      reason: `renderer_delivery_${reason}`,
+      timestamp: Date.now(),
+      traceId: command.traceId,
+      error: {
+        code: "RENDERER_DELIVERY_FAILED",
+        message: `renderer delivery failed: ${reason}`,
+        actionKey: command.actionKey,
+        playbackInstanceId: command.playbackInstanceId,
+        commandId: command.commandId,
+        traceId: command.traceId,
+      },
+    });
   }
 
   private handleClick(x: number, y: number): void {
@@ -2243,6 +2310,29 @@ export class DesktopPetManager {
       );
       return;
     }
+    if (event === "action-cancelled") {
+      const commandId = request.metadata?.runtimeCommandId ?? "";
+      const reason = request.metadata?.cancellationReason ?? "scheduler_cancelled";
+      console.warn(
+        "[DesktopPetManager] 排队动作被取消:",
+        request.actionKey,
+        reason,
+      );
+      if (commandId) {
+        const context = this.runtimeEventContext(request.metadata?.runtimeDecisionId ?? "");
+        void this.runtimeHandler?.sendPlaybackFailed(
+          "",
+          commandId,
+          request.actionKey,
+          "PLAYBACK_COMMAND_CANCELLED",
+          `scheduler cancelled accepted command: ${reason}`,
+          context,
+        ).then(() => this.syncRuntimeState()).catch((err) => {
+          console.warn("[DesktopPetManager] 上报排队动作取消失败:", this.errorMessage(err));
+        });
+      }
+      return;
+    }
   }
 
   private handleDragEvent(event: DragEvent, state: DragState): void {
@@ -2307,25 +2397,18 @@ export class DesktopPetManager {
   }
 
   private resolveBehaviorPriority(semantic: string, backendPriority?: number): number {
+    if (typeof backendPriority === "number" && Number.isFinite(backendPriority)) {
+      return Math.max(0, Math.floor(backendPriority));
+    }
     if (semantic.includes("drag")) return ActionPriorities.DRAG;
     if (semantic.includes("drop") || semantic.includes("fall")) return ActionPriorities.FALL;
     if (semantic.includes("speaking")) return ActionPriorities.SPEAKING;
     if (semantic.includes("listening") || semantic.includes("thinking") || semantic.startsWith("tool_")) {
       return ActionPriorities.THINKING;
     }
-    if (semantic.startsWith("affect_") || semantic.startsWith("emotion_")) {
-      return ActionPriorities.EMOTION;
-    }
+    if (semantic.startsWith("affect_") || semantic.startsWith("emotion_")) return ActionPriorities.EMOTION;
     if (semantic.startsWith("proactive_")) return ActionPriorities.GREETING;
-    if (semantic.startsWith("activity_") || semantic.startsWith("life_")) {
-      return ActionPriorities.LIFE;
-    }
-    if (typeof backendPriority === "number" && Number.isFinite(backendPriority)) {
-      if (backendPriority >= 800) return ActionPriorities.SPEAKING;
-      if (backendPriority >= 600) return ActionPriorities.THINKING;
-      if (backendPriority >= 400) return ActionPriorities.EMOTION;
-      return ActionPriorities.LIFE;
-    }
+    if (semantic.startsWith("activity_") || semantic.startsWith("life_")) return ActionPriorities.LIFE;
     return ActionPriorities.EMOTION;
   }
 
@@ -3339,6 +3422,8 @@ export class DesktopPetManager {
             interruptible?: boolean;
             minimumPlayMs?: number;
             maximumPlayMs?: number;
+            interruptAfterMs?: number;
+            completionPolicy?: string;
             returnTo?: string;
             decisionId?: string;
             semantic?: string;
@@ -3458,24 +3543,41 @@ export class DesktopPetManager {
 
               const semantic = cmd.payload?.semantic ?? "";
               const source = this.resolveBehaviorEventSource(semantic);
+              const metadata: Record<string, string> = {
+                semantic,
+                reasonCode: cmd.payload?.reasonCode ?? "",
+                completionPolicy: cmd.payload?.completionPolicy ?? "",
+                runtimeCommandId: commandId,
+                runtimeDecisionId: cmd.payload?.decisionId ?? "",
+                runtimeInstallationId: cmd.payload?.installationId ?? this.activeInstallationId ?? "",
+                runtimeCharacterId: cmd.payload?.characterId ?? this.activeInstallation?.characterId ?? "",
+                runtimePetInstanceId: cmd.payload?.petInstanceId ?? getRuntimeId(),
+              };
+              const minimumPlayMs = cmd.payload?.minimumPlayMs ?? action.minimumPlayMs;
+              const maximumPlayMs = cmd.payload?.maximumPlayMs ?? action.maximumPlayMs;
+              const interruptAfterMs = cmd.payload?.interruptAfterMs ?? action.interruptAfterMs;
+              if (minimumPlayMs !== undefined && minimumPlayMs !== null) {
+                metadata.minimumPlayMs = String(minimumPlayMs);
+              }
+              // null means "no maximum" in the package contract. Do not coerce it
+              // to 0, because 0 is a real renderer duration value.
+              if (maximumPlayMs !== undefined && maximumPlayMs !== null) {
+                metadata.maximumPlayMs = String(maximumPlayMs);
+              }
+              if (interruptAfterMs !== undefined && interruptAfterMs !== null) {
+                metadata.interruptAfterMs = String(interruptAfterMs);
+              }
+              const returnTo = cmd.payload?.returnTo?.trim();
+              if (returnTo) {
+                metadata.returnTo = returnTo;
+              }
               const request: DesktopPetActionRequest = {
                 actionKey,
                 source,
                 priority: this.resolveBehaviorPriority(semantic, cmd.payload?.priority),
                 interrupt: queuePolicy === "replace_current",
                 dedupeKey: cmd.payload?.decisionId || `runtime_${commandId}`,
-                metadata: {
-                  semantic,
-                  reasonCode: cmd.payload?.reasonCode ?? "",
-                  minimumPlayMs: String(cmd.payload?.minimumPlayMs ?? 0),
-                  maximumPlayMs: String(cmd.payload?.maximumPlayMs ?? 0),
-                  returnTo: cmd.payload?.returnTo ?? "default",
-                  runtimeCommandId: commandId,
-                  runtimeDecisionId: cmd.payload?.decisionId ?? "",
-                  runtimeInstallationId: cmd.payload?.installationId ?? this.activeInstallationId ?? "",
-                  runtimeCharacterId: cmd.payload?.characterId ?? this.activeInstallation?.characterId ?? "",
-                  runtimePetInstanceId: cmd.payload?.petInstanceId ?? getRuntimeId(),
-                },
+                metadata,
               };
               this.applyVitalityForBehaviorSemantic(semantic);
               const scheduleResult = this.scheduler.submit(request);

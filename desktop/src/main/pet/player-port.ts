@@ -1,13 +1,42 @@
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
+import type { InterruptPolicy, QueuePolicy, ReturnTarget } from "../../desktop-pet/animation/contracts";
 
 export type PlayerState = "idle" | "loading" | "playing" | "paused" | "stopped";
 
+/**
+ * Immutable identity and execution semantics passed from the scheduler to the
+ * renderer playback command. Runtime-v2 supplied values must not be replaced
+ * by bridge defaults while crossing the main-process boundary.
+ */
+export interface PlayerSwitchContext {
+  commandId?: string;
+  playbackInstanceId?: string;
+  idempotencyKey?: string;
+  priority?: number;
+  queuePolicy?: QueuePolicy;
+  interruptPolicy?: InterruptPolicy;
+  playbackRate?: number;
+  expiresAt?: string;
+  returnOverride?: ReturnTarget;
+  minimumPlayMs?: number;
+  maximumPlayMs?: number | null;
+  interruptAfterMs?: number;
+  completionPolicy?: string;
+  source?: string;
+  traceId?: string;
+}
+
+export interface PlayerSubmissionIdentity {
+  commandId: string;
+  playbackInstanceId: string;
+}
+
 export interface DesktopPetPlayerPort {
-  play(action: RuntimeAction): void;
+  play(action: RuntimeAction, context?: PlayerSwitchContext): PlayerSubmissionIdentity | void;
   pause(): void;
   resume(): void;
-  stop(): void;
-  switchAction(action: RuntimeAction): void;
+  stop(reason?: string): void;
+  switchAction(action: RuntimeAction, context?: PlayerSwitchContext): PlayerSubmissionIdentity | void;
 
   getCurrentAction(): RuntimeAction | null;
   getState(): PlayerState;

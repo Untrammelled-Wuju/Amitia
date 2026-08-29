@@ -32,6 +32,7 @@ const PLAYBACK_EVENT_TYPE_WHITELIST = new Set<string>([
   "playback.command_queued",
   "playback.action_loading",
   "playback.action_started",
+  "playback.action_first_cycle",
   "playback.frame_presented",
   "playback.action_holding",
   "playback.action_completed",
@@ -691,8 +692,8 @@ export class AnimationIpcAdapter {
     return this.deliverToRenderer(ANIMATION_IPC_CHANNELS.resume);
   }
 
-  sendStop(): RendererDeliveryResult {
-    return this.deliverToRenderer(ANIMATION_IPC_CHANNELS.stop);
+  sendStop(reason: string = "user_disabled"): RendererDeliveryResult {
+    return this.deliverToRenderer(ANIMATION_IPC_CHANNELS.stop, reason);
   }
 
   sendSwitchPackage(snapshot: PackagePlaybackSnapshot): RendererDeliveryResult {

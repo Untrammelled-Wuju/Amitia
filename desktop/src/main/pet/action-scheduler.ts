@@ -1,6 +1,10 @@
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
 import { ResourceLoader } from "./resource-loader";
-import type { DesktopPetPlayerPort, PlayerLifecyclePort } from "./player-port";
+import type {
+  DesktopPetPlayerPort,
+  PlayerLifecyclePort,
+  PlayerSwitchContext,
+} from "./player-port";
 
 export type EventSource =
   | "system"
@@ -37,7 +41,8 @@ export type SchedulerEvent =
   | "action-fallback"
   | "action-queued"
   | "action-rejected"
-  | "action-interrupted";
+  | "action-interrupted"
+  | "action-cancelled";
 
 export interface SchedulerCallbacks {
   onEvent?: (
@@ -146,6 +151,8 @@ export class DesktopPetActionScheduler {
   private queue: DesktopPetActionRequest[] = [];
   private current: DesktopPetActionRequest | null = null;
   private currentActionStartedAt = 0;
+  private currentPlaybackInstanceId: string | null = null;
+  private currentCommandId: string | null = null;
   private lastTriggeredAt: Map<string, number> = new Map();
   private sustainedState: string | null = null;
   private idleRepeatCount: Map<string, number> = new Map();
@@ -229,20 +236,29 @@ export class DesktopPetActionScheduler {
     return "rejected";
   }
 
-  forceInterrupt(reason: "user_drag" | "app_exit" | "resource_invalid"): void {
+  forceInterrupt(reason: "user_drag" | "app_exit" | "resource_invalid" | "runtime_stop"): void {
     const now = nowTimestamp();
     const previous = this.current;
     this.current = null;
     this.currentActionStartedAt = 0;
-    this.queue.length = 0;
+    this.currentPlaybackInstanceId = null;
+    this.currentCommandId = null;
+    this.cancelQueuedRequests(`force_interrupt:${reason}`);
 
     if (previous) {
       this.emit("action-interrupted", previous, this.player.getCurrentAction());
     }
 
-    this.player.stop();
+    const stopReason = reason === "app_exit"
+      ? "window_destroyed"
+      : reason === "resource_invalid"
+        ? "resource_failure"
+        : reason === "runtime_stop"
+          ? "runtime_stop"
+          : "system_force";
+    this.player.stop(stopReason);
 
-    if (reason === "app_exit" || !this.loaded) {
+    if (reason === "app_exit" || reason === "runtime_stop" || !this.loaded) {
       return;
     }
 
@@ -284,32 +300,45 @@ export class DesktopPetActionScheduler {
   }
 
   clearQueue(): void {
-    this.queue.length = 0;
+    this.cancelQueuedRequests("queue_cleared");
   }
 
   dispose(): void {
     this.resetRuntimeState();
   }
 
-  notifyActionCompleted(actionKey: string): void {
-    this.handleActionComplete(actionKey);
+  notifyActionStarted(actionKey: string, playbackInstanceId: string, commandId?: string): void {
+    const current = this.current;
+    if (!current || current.actionKey !== actionKey) return;
+    const expectedCommandId = current.metadata?.runtimeCommandId ?? this.currentCommandId ?? "";
+    if (commandId && expectedCommandId && commandId !== expectedCommandId) return;
+    this.currentPlaybackInstanceId = playbackInstanceId || this.currentPlaybackInstanceId;
+    this.currentCommandId = commandId || expectedCommandId || this.currentCommandId;
   }
 
-  notifyActionInterrupted(actionKey: string): void {
-    if (!this.loaded) return;
+  notifyActionCompleted(actionKey: string, playbackInstanceId?: string, commandId?: string): void {
+    this.handleActionComplete(actionKey, playbackInstanceId, commandId);
+  }
+
+  notifyActionInterrupted(actionKey: string, playbackInstanceId?: string, commandId?: string): void {
+    if (!this.loaded || !this.matchesCurrent(actionKey, playbackInstanceId, commandId)) return;
     const interruptedRequest = this.current;
     this.current = null;
     this.currentActionStartedAt = 0;
+    this.currentPlaybackInstanceId = null;
+    this.currentCommandId = null;
     if (interruptedRequest) {
       this.emit("action-interrupted", interruptedRequest, this.player.getCurrentAction());
     }
   }
 
-  private handleActionComplete(_actionKey: string): void {
-    if (!this.loaded) return;
+  private handleActionComplete(actionKey: string, playbackInstanceId?: string, commandId?: string): void {
+    if (!this.loaded || !this.matchesCurrent(actionKey, playbackInstanceId, commandId)) return;
     const completedRequest = this.current;
     this.current = null;
     this.currentActionStartedAt = 0;
+    this.currentPlaybackInstanceId = null;
+    this.currentCommandId = null;
 
     if (completedRequest) {
       this.emit("action-completed", completedRequest, this.player.getCurrentAction());
@@ -425,7 +454,7 @@ export class DesktopPetActionScheduler {
       return false;
     }
 
-    const minDuration = this.getMinPlayDuration(currentAction);
+    const minDuration = this.getMinPlayDuration(currentAction, this.current);
     if (now - this.currentActionStartedAt < minDuration) {
       return false;
     }
@@ -433,8 +462,19 @@ export class DesktopPetActionScheduler {
     return true;
   }
 
-  private getMinPlayDuration(_action: RuntimeAction): number {
-    return DEFAULT_MIN_PLAY_DURATION_MS;
+  private getMinPlayDuration(action: RuntimeAction, request: DesktopPetActionRequest | null): number {
+    const requestMinimum = this.readMetadataNumber(request, "minimumPlayMs");
+    const requestInterruptAfter = this.readMetadataNumber(request, "interruptAfterMs");
+    const hasExplicitTiming =
+      requestMinimum !== undefined ||
+      requestInterruptAfter !== undefined ||
+      action.minimumPlayMs !== undefined ||
+      action.interruptAfterMs !== undefined;
+    if (!hasExplicitTiming) return DEFAULT_MIN_PLAY_DURATION_MS;
+
+    const minimumPlayMs = requestMinimum ?? action.minimumPlayMs ?? 0;
+    const interruptAfterMs = requestInterruptAfter ?? action.interruptAfterMs ?? 0;
+    return Math.max(0, minimumPlayMs, interruptAfterMs);
   }
 
   private playNow(
@@ -465,8 +505,14 @@ export class DesktopPetActionScheduler {
 
     this.current = request;
     this.currentActionStartedAt = now;
+    this.currentPlaybackInstanceId = null;
+    this.currentCommandId = request.metadata?.runtimeCommandId ?? null;
     this.bumpIdleRepeat(request);
-    this.player.switchAction(action);
+    const submission = this.player.switchAction(action, this.buildPlayerSwitchContext(request, action));
+    if (submission) {
+      this.currentPlaybackInstanceId = submission.playbackInstanceId;
+      this.currentCommandId = submission.commandId;
+    }
     this.emit("action-started", request, action);
   }
 
@@ -484,7 +530,8 @@ export class DesktopPetActionScheduler {
       if (this.queue[lowestIndex].priority >= request.priority) {
         return false;
       }
-      this.queue.splice(lowestIndex, 1);
+      const [evicted] = this.queue.splice(lowestIndex, 1);
+      if (evicted) this.emitCancelled(evicted, "queue_evicted");
     } else if (
       request.priority <= IDLE_PRIORITY_THRESHOLD &&
       this.queue.length > 0
@@ -499,6 +546,10 @@ export class DesktopPetActionScheduler {
           item.actionKey === request.actionKey,
       );
       if (existingIndex !== -1) {
+        const existing = this.queue[existingIndex];
+        if (existing.metadata?.runtimeCommandId !== request.metadata?.runtimeCommandId) {
+          this.emitCancelled(existing, "queue_coalesced");
+        }
         this.queue[existingIndex] = request;
         this.sortQueue();
         return true;
@@ -529,12 +580,77 @@ export class DesktopPetActionScheduler {
   }
 
   private resetRuntimeState(): void {
-    this.queue.length = 0;
+    this.cancelQueuedRequests("scheduler_reset");
     this.current = null;
     this.currentActionStartedAt = 0;
+    this.currentPlaybackInstanceId = null;
+    this.currentCommandId = null;
     this.lastTriggeredAt.clear();
     this.idleRepeatCount.clear();
     this.sustainedState = null;
+  }
+
+  private matchesCurrent(actionKey: string, playbackInstanceId?: string, commandId?: string): boolean {
+    const current = this.current;
+    if (!current || current.actionKey !== actionKey) return false;
+    const expectedCommandId = current.metadata?.runtimeCommandId ?? this.currentCommandId ?? "";
+    if (commandId && expectedCommandId && commandId !== expectedCommandId) return false;
+    if (playbackInstanceId && this.currentPlaybackInstanceId && playbackInstanceId !== this.currentPlaybackInstanceId) return false;
+    return true;
+  }
+
+  private buildPlayerSwitchContext(
+    request: DesktopPetActionRequest,
+    action: RuntimeAction,
+  ): PlayerSwitchContext {
+    const returnTo = request.metadata?.returnTo ?? "";
+    const returnOverride = returnTo === "default"
+      ? { type: "default" as const }
+      : returnTo === "previous"
+        ? { type: "previous" as const }
+        : returnTo === "current_activity"
+          ? { type: "current_activity" as const }
+          : returnTo === "none"
+            ? { type: "none" as const }
+            : returnTo
+              ? { type: "action" as const, actionKey: returnTo }
+              : undefined;
+    return {
+      commandId: request.metadata?.runtimeCommandId || undefined,
+      idempotencyKey: request.metadata?.runtimeDecisionId || request.dedupeKey,
+      priority: request.priority,
+      queuePolicy: request.interrupt ? "replace_current" : "enqueue",
+      interruptPolicy: request.interrupt ? "respect_action" : "never_interrupt",
+      returnOverride,
+      minimumPlayMs: this.readMetadataNumber(request, "minimumPlayMs") ?? action.minimumPlayMs,
+      maximumPlayMs: this.readMetadataNumber(request, "maximumPlayMs") ?? action.maximumPlayMs,
+      interruptAfterMs: this.readMetadataNumber(request, "interruptAfterMs") ?? action.interruptAfterMs,
+      completionPolicy: request.metadata?.completionPolicy || undefined,
+      source: request.source,
+      traceId: request.metadata?.traceId || undefined,
+    };
+  }
+
+  private readMetadataNumber(request: DesktopPetActionRequest | null, key: string): number | undefined {
+    const raw = request?.metadata?.[key];
+    if (raw === undefined || raw === "") return undefined;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return undefined;
+    return value;
+  }
+
+  private emitCancelled(request: DesktopPetActionRequest, reason: string): void {
+    this.emit(
+      "action-cancelled",
+      { ...request, metadata: { ...(request.metadata ?? {}), cancellationReason: reason } },
+      this.resolveAction(request),
+    );
+  }
+
+  private cancelQueuedRequests(reason: string): void {
+    if (this.queue.length === 0) return;
+    const queued = this.queue.splice(0, this.queue.length);
+    for (const request of queued) this.emitCancelled(request, reason);
   }
 
   private emit(
