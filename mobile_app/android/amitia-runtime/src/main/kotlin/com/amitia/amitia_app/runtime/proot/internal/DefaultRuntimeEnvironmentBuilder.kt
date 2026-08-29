@@ -30,7 +30,9 @@ internal class DefaultRuntimeEnvironmentBuilder(
         }
 
         val securityMaterial = try {
-            ensureLocalSecurityMaterial(request.hostLayout)
+            val material = ensureLocalSecurityMaterial(request.hostLayout)
+            ensureRuntimeConfig(request.hostLayout, material)
+            material
         } catch (e: Exception) {
             return RuntimeEnvironmentResult.Failure(
                 RuntimeEnvironmentErrorCode.BUILD_FAILED,
@@ -85,14 +87,6 @@ internal class DefaultRuntimeEnvironmentBuilder(
         if (prootLoaderPath.isNotBlank()) env["PROOT_LOADER"] = prootLoaderPath
         env["PROOT_TMP_DIR"] = File(layout.runRoot, "proot-tmp").absolutePath
 
-        // The bundled Android PRoot clears/inherits only the environment we
-        // explicitly provide through ProcessBuilder. On affected Android/Linux
-        // kernels its seccomp acceleration can crash the tracee immediately
-        // (the native binary itself recommends PROOT_NO_SECCOMP=1 for this
-        // compatibility path). Prefer correctness for the embedded runtime:
-        // without this key the outer PRoot may exit before the backend can
-        // publish any health endpoint, producing STARTUP_PROOT_EXITED with
-        // "signal 11 received from process ...".
         env["PROOT_NO_SECCOMP"] = "1"
         env["ANDROID_ROOT"] = "/system"
         env["ANDROID_DATA"] = "/data"
@@ -111,7 +105,6 @@ internal class DefaultRuntimeEnvironmentBuilder(
     ): Map<String, String> {
         val env = LinkedHashMap<String, String>()
 
-        // Canonical guest roots used by the runtime package contract.
         env["AMITIA_RUNTIME_ROOT"] = GuestLayoutContract.RUNTIME_ROOT
         env["AMITIA_CONFIG_ROOT"] = GuestLayoutContract.CONFIG_ROOT
         env["AMITIA_DATA_ROOT"] = GuestLayoutContract.DATA_ROOT
@@ -122,9 +115,6 @@ internal class DefaultRuntimeEnvironmentBuilder(
         env["AMITIA_WORKSPACE_ROOT"] = GuestLayoutContract.WORKSPACE_ROOT
         env["AMITIA_HOME"] = GuestLayoutContract.HOME
 
-        // Go backend path resolver uses *_DIR keys. Keep both contracts mapped
-        // to the same guest paths so mutable state can never fall back under
-        // the immutable /opt/amitia program tree.
         env["AMITIA_CONFIG_DIR"] = GuestLayoutContract.CONFIG_ROOT
         env["AMITIA_DATA_DIR"] = GuestLayoutContract.DATA_ROOT
         env["AMITIA_CACHE_DIR"] = GuestLayoutContract.CACHE_ROOT
@@ -137,14 +127,8 @@ internal class DefaultRuntimeEnvironmentBuilder(
         env["AMITIA_ALLOW_REMOTE_ACCESS"] = "false"
         env["AMITIA_LOCAL_TOKEN_FILE"] = GuestLayout.LOCAL_TOKEN
 
-        // Compatibility with the already-bundled backend binary: its config
-        // loader requires a strong JWT secret before main() gets a chance to
-        // create local credentials. The value is generated once in Android's
-        // app-private data directory and reused; it is never hard-coded.
         env["AMITIA_JWT_SECRET"] = securityMaterial.jwtSecret
 
-        // The current Android embedded runtime package intentionally does not
-        // ship SurrealDB. Disable only this optional provider on Android.
         env["AMITIA_GRAPH_STORE_ENABLED"] = "false"
         env["AMITIA_GRAPH_STORE_REQUIRED"] = "false"
         env["AMITIA_SURREAL_ENABLED"] = "false"
@@ -175,6 +159,17 @@ internal class DefaultRuntimeEnvironmentBuilder(
         val jwtSecretFile = File(securityDir, "jwt-secret")
         val jwtSecret = ensureCredential(jwtSecretFile, minLength = 32, randomBytes = 48)
         return LocalSecurityMaterial(jwtSecret = jwtSecret)
+    }
+
+    private fun ensureRuntimeConfig(layout: RuntimeHostLayout, securityMaterial: LocalSecurityMaterial) {
+        ensureDirectory(layout.configRoot)
+        val configFile = File(layout.configRoot, "config.yml")
+        val value = "jwt:\n  secret: \"${securityMaterial.jwtSecret}\"\n"
+        configFile.writeText(value, Charsets.UTF_8)
+        configFile.setReadable(false, false)
+        configFile.setWritable(false, false)
+        configFile.setReadable(true, true)
+        configFile.setWritable(true, true)
     }
 
     private fun ensureDirectory(directory: File) {

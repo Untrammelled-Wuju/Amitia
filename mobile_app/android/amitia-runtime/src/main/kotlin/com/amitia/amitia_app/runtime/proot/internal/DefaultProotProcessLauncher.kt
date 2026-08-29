@@ -1,5 +1,6 @@
 package com.amitia.amitia_app.runtime.proot.internal
 
+import android.util.Log
 import com.amitia.amitia_app.runtime.proot.ProotCommand
 import com.amitia.amitia_app.runtime.proot.ProotErrorCode
 import com.amitia.amitia_app.runtime.proot.ProotObserver
@@ -13,8 +14,19 @@ internal class DefaultProotProcessLauncher(private val sessionIdGenerator: Sessi
         try {
             val fullCommand = ArrayList<String>(command.arguments.size + 1)
             fullCommand.add(command.binaryPath); fullCommand.addAll(command.arguments)
-            val pb = ProcessBuilder(fullCommand); pb.directory(File("/"))
-            if (command.environment.isNotEmpty()) { pb.environment().putAll(command.environment) }
+            Log.e("AmitiaRuntime", fullCommand.joinToString(separator = "\n"))
+            val shellCommand = ArrayList<String>(fullCommand.size + 4)
+            shellCommand.add("/system/bin/sh")
+            shellCommand.add("-c")
+            shellCommand.add("exec \"\$@\"")
+            shellCommand.add("amitia-proot")
+            shellCommand.addAll(fullCommand)
+            val pb = ProcessBuilder(shellCommand); pb.directory(File("/"))
+            if (command.environment.isNotEmpty()) {
+                pb.environment().remove("LD_LIBRARY_PATH")
+                pb.environment().remove("LD_PRELOAD")
+                pb.environment().putAll(command.environment)
+            }
             val process = pb.start()
             val session = DefaultProotSession(
                 sessionId = sessionId,
