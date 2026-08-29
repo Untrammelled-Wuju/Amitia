@@ -14,9 +14,19 @@ export class PlaybackEventBridge {
   private lastActionKey = "";
   private playbackStartedAt = 0;
 
+  /**
+   * @deprecated Test-only compatibility adapter. Production playback reporting
+   * is owned exclusively by DesktopPetManager.handlePlaybackEvent(). Keeping
+   * this adapter fail-closed outside tests prevents accidental double reports.
+   */
   constructor(runtime: DesktopRuntimeHandlerV2, hooks: PlaybackEventBridgeHooks = {
     shouldReportEvent: () => true,
   }) {
+    if (process.env.NODE_ENV !== "test") {
+      throw new Error(
+        "PlaybackEventBridge is test-only; production reporting is owned by DesktopPetManager",
+      );
+    }
     this.runtime = runtime;
     this.hooks = hooks;
   }
