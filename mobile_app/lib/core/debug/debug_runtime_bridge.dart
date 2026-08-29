@@ -23,8 +23,8 @@ final debugRuntimeLogBridgeProvider = Provider<void>((ref) {
     final signature = '${error.code}:${error.message}';
     if (signature == lastBootstrapErrorSignature) return;
     lastBootstrapErrorSignature = signature;
-    logService.addRuntimeLog(
-      'Bootstrap error [${error.code}]: ${error.message}',
+    logService.addBackendLog(
+      'Runtime bootstrap error [${error.code}]: ${error.message}',
       DebugLogLevel.error,
     );
   });
