@@ -123,17 +123,36 @@ export class DesktopPetWorldController {
 
     const resolvedDirection = desiredX < x ? -1 : 1;
     const requestKey = resolvedDirection < 0 ? "walk_left" : "walk_right";
-    this.scheduler.submit({
+    const wanderKey = `desktop_world_wander_${Date.now()}_${resolvedDirection}`;
+    const scheduleResult = this.scheduler.submit({
       actionKey: requestKey,
       source: EventSources.AUTONOMOUS,
       priority: ActionPriorities.RANDOM_IDLE,
       interrupt: false,
-      dedupeKey: "desktop_world_wander",
+      dedupeKey: wanderKey,
       metadata: { worldMotion: "wander" },
     });
+    if (scheduleResult !== "played" && scheduleResult !== "fallback") return;
 
+    const movementStartDeadline = Date.now() + 5000;
+    let playbackStarted = false;
     this.movementTimer = setInterval(() => {
       if (this.dragging || this.falling) {
+        this.stopMovement();
+        return;
+      }
+      if (!playbackStarted) {
+        playbackStarted = this.scheduler.isCurrentPlaybackStarted(wanderKey);
+        if (!playbackStarted) {
+          if (Date.now() >= movementStartDeadline) this.stopMovement();
+          return;
+        }
+        const resolvedActionKey = this.scheduler.getCurrent()?.actionKey ?? "";
+        if (!["walk_left", "walk_right", "walk", "move"].includes(resolvedActionKey)) {
+          this.stopMovement();
+          return;
+        }
+      } else if (!this.scheduler.isCurrentPlaybackStarted(wanderKey)) {
         this.stopMovement();
         return;
       }

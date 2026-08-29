@@ -18,6 +18,7 @@ class FakeWebSocket {
   readyState = FakeWebSocket.CONNECTING;
   sent: string[] = [];
   failCommandAckStatusOnce: string | null = null;
+  failMessageNameOnce: string | null = null;
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -34,8 +35,8 @@ class FakeWebSocket {
   }
 
   send(data: string): void {
+    const envelope = JSON.parse(data) as RuntimeEnvelope;
     if (this.failCommandAckStatusOnce) {
-      const envelope = JSON.parse(data) as RuntimeEnvelope;
       const status = envelope.messageType === "command_ack"
         ? (envelope.payload as { status?: string } | undefined)?.status
         : undefined;
@@ -43,6 +44,11 @@ class FakeWebSocket {
         this.failCommandAckStatusOnce = null;
         throw new Error(`synthetic send failure for ${status}`);
       }
+    }
+    if (this.failMessageNameOnce && envelope.messageName === this.failMessageNameOnce) {
+      const messageName = this.failMessageNameOnce;
+      this.failMessageNameOnce = null;
+      throw new Error(`synthetic send failure for ${messageName}`);
     }
     this.sent.push(data);
   }
@@ -67,6 +73,14 @@ async function flushAsync(): Promise<void> {
   for (let i = 0; i < 6; i += 1) {
     await Promise.resolve();
   }
+}
+
+function futureExpiry(offsetMs = 60_000): string {
+  return new Date(Date.now() + offsetMs).toISOString();
+}
+
+function pastExpiry(offsetMs = 1_000): string {
+  return new Date(Date.now() - offsetMs).toISOString();
 }
 
 function helloAckEnvelope(overrides: Record<string, unknown> = {}): RuntimeEnvelope {
@@ -182,13 +196,14 @@ describe("DesktopRuntimeHandlerV2", () => {
     handler.disconnect();
   });
 
-  it("sends full command ACK progression and terminal completed", async () => {
+  it("keeps renderer acceptance/start/terminal on playback events instead of command ACKs", async () => {
     const { handler, ws } = await connectHandler(async () => ({
       commandId: "cmd-1",
-      status: "applied",
+      status: "accepted",
       errorCode: "",
       errorMessage: "",
-      appliedRevision: 9,
+      appliedRevision: 0,
+      acceptedAction: "wave",
     }));
 
     ws.sent = [];
@@ -211,6 +226,7 @@ describe("DesktopRuntimeHandlerV2", () => {
           installationId: "inst-1",
           petId: "pet-1",
           releaseId: "release-1",
+          expiresAt: futureExpiry(),
           payload: { actionKey: "wave" },
         },
       ),
@@ -222,17 +238,113 @@ describe("DesktopRuntimeHandlerV2", () => {
       .filter((env) => env.messageType === "command_ack")
       .map((env) => (env.payload as { commandId: string; status: string }).status);
 
-    expect(statuses).toEqual([
-      "runtime_received",
-      "runtime_accepted",
-      "renderer_accepted",
-      "completed",
+    expect(statuses).toEqual(["runtime_received", "runtime_accepted"]);
+
+    await handler.sendPlaybackCommandAccepted("playback-1", "cmd-1", "wave");
+    await handler.sendPlaybackStarted("playback-1", "cmd-1", "wave");
+    await handler.sendPlaybackEnded("playback-1", "cmd-1", "wave", 1000, "natural_end");
+
+    const playbackEvents = ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageType === "runtime_event")
+      .map((env) => env.messageName);
+    expect(playbackEvents).toEqual([
+      "runtime.playback.command_accepted",
+      "runtime.playback.action_started",
+      "runtime.playback.action_completed",
     ]);
-    for (const raw of ws.sent) {
-      const env = JSON.parse(raw) as RuntimeEnvelope;
-      if (env.messageType !== "command_ack") continue;
-      expect((env.payload as { commandId: string }).commandId).toBe("cmd-1");
-    }
+    expect(handler.getLastProcessedCommandSequence()).toBe(42);
+    handler.disconnect();
+  });
+
+  it.each([
+    "runtime.command.play_action",
+    "runtime.command.stop_action",
+    "runtime.command.pause_action",
+    "runtime.command.resume_action",
+    "runtime.command.recenter_once",
+  ])("fails closed when %s is missing authoritative expiresAt", async (commandType) => {
+    const onCommand = vi.fn(async () => ({
+      commandId: "cmd-missing-expiry",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+    const { handler, ws } = await connectHandler(onCommand);
+
+    ws.sent = [];
+    ws.message(buildEnvelope(
+      "command",
+      commandType,
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      3,
+      {
+        commandId: `cmd-missing-expiry-${commandType}`,
+        commandType,
+        commandSequence: 43,
+        payload: commandType === "runtime.command.play_action" ? { actionKey: "wave" } : {},
+      },
+    ));
+    await flushAsync();
+
+    expect(onCommand).not.toHaveBeenCalled();
+    const acks = ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageType === "command_ack")
+      .map((env) => env.payload as { status: string; rejectErrorCode?: string });
+    expect(acks.map((ack) => ack.status)).toEqual(["runtime_received", "failed_terminal"]);
+    expect(acks.at(-1)?.rejectErrorCode).toBe("COMMAND_EXPIRY_REQUIRED");
+    handler.disconnect();
+  });
+
+  it.each([
+    "runtime.command.play_action",
+    "runtime.command.stop_action",
+    "runtime.command.pause_action",
+    "runtime.command.resume_action",
+    "runtime.command.recenter_once",
+  ])("rejects expired %s before local execution", async (commandType) => {
+    const onCommand = vi.fn(async () => ({
+      commandId: "cmd-expired",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+    const { handler, ws } = await connectHandler(onCommand);
+
+    ws.sent = [];
+    ws.message(buildEnvelope(
+      "command",
+      commandType,
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      3,
+      {
+        commandId: `cmd-expired-${commandType}`,
+        commandType,
+        commandSequence: 44,
+        expiresAt: pastExpiry(),
+        payload: commandType === "runtime.command.play_action" ? { actionKey: "wave" } : {},
+      },
+    ));
+    await flushAsync();
+
+    expect(onCommand).not.toHaveBeenCalled();
+    const acks = ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageType === "command_ack")
+      .map((env) => env.payload as { status: string; rejectErrorCode?: string });
+    expect(acks.map((ack) => ack.status)).toEqual(["runtime_received", "expired"]);
+    expect(acks.at(-1)?.rejectErrorCode).toBe("COMMAND_EXPIRED");
     handler.disconnect();
   });
 
@@ -265,6 +377,7 @@ describe("DesktopRuntimeHandlerV2", () => {
           installationId: "inst-1",
           petId: "pet-1",
           releaseId: "release-1",
+          expiresAt: futureExpiry(),
           payload: {},
         },
       ),
@@ -283,7 +396,6 @@ describe("DesktopRuntimeHandlerV2", () => {
 
     expect(acks.map((ack) => ack.status)).toEqual([
       "runtime_received",
-      "runtime_accepted",
       "failed_terminal",
     ]);
     expect(acks.at(-1)).toMatchObject({
@@ -354,6 +466,7 @@ describe("DesktopRuntimeHandlerV2", () => {
           commandType: "runtime.command.play_action",
           commandSequence: 44,
           desiredRevision: 9,
+          expiresAt: futureExpiry(),
           payload: { actionKey: "wave" },
         },
       ),
@@ -465,6 +578,7 @@ describe("DesktopRuntimeHandlerV2", () => {
           commandId: "cmd-stale",
           commandType: "runtime.command.play_action",
           commandSequence: 99,
+          expiresAt: futureExpiry(),
           payload: { actionKey: "wave" },
         },
       ),
@@ -499,6 +613,7 @@ describe("DesktopRuntimeHandlerV2", () => {
         commandId: "cmd-tampered",
         commandType: "runtime.command.play_action",
         commandSequence: 100,
+        expiresAt: futureExpiry(),
         payload: { actionKey: "wave" },
       },
     );
@@ -506,6 +621,7 @@ describe("DesktopRuntimeHandlerV2", () => {
       commandId: "cmd-tampered",
       commandType: "runtime.command.play_action",
       commandSequence: 100,
+      expiresAt: futureExpiry(),
       payload: { actionKey: "shutdown" },
     };
     ws.message(tampered);
@@ -550,6 +666,7 @@ describe("DesktopRuntimeHandlerV2", () => {
       commandType: "runtime.command.recenter_once",
       commandSequence: 45,
       desiredRevision: 0,
+      expiresAt: futureExpiry(),
       payload: {},
     };
     ws.message(buildEnvelope(
@@ -617,6 +734,7 @@ describe("DesktopRuntimeHandlerV2", () => {
         commandType: "runtime.command.recenter_once",
         commandSequence: 49,
         desiredRevision: 0,
+        expiresAt: futureExpiry(),
         payload: {},
       },
     ));
@@ -631,9 +749,9 @@ describe("DesktopRuntimeHandlerV2", () => {
     handler.disconnect();
   });
 
-  it("carries terminal commandId replay protection across handler replacement", async () => {
+  it("does not carry ephemeral terminal replay across handler replacement", async () => {
     const firstExecutor = vi.fn(async () => ({
-      commandId: "cmd-persisted-replay",
+      commandId: "cmd-ephemeral-old-session",
       status: "applied" as const,
       errorCode: "",
       errorMessage: "",
@@ -650,62 +768,26 @@ describe("DesktopRuntimeHandlerV2", () => {
       1,
       14,
       {
-        commandId: "cmd-persisted-replay",
+        commandId: "cmd-ephemeral-old-session",
         commandType: "runtime.command.recenter_once",
         commandSequence: 61,
         desiredRevision: 0,
+        expiresAt: futureExpiry(),
         payload: {},
       },
     ));
     await flushAsync();
     expect(firstExecutor).toHaveBeenCalledTimes(1);
-    const replayEntries = first.handler.getReplayEntries();
+
+    // Ephemeral commands are physically owned by one Runtime-v2 session. Their
+    // local same-session idempotency cache must not be exported to a replacement
+    // handler; the Backend supersedes those commands at the reconnect fence.
+    expect(first.handler.getReplayEntries()).toEqual([]);
     first.handler.disconnect();
-
-    const secondExecutor = vi.fn(async () => ({
-      commandId: "cmd-persisted-replay",
-      status: "applied" as const,
-      errorCode: "",
-      errorMessage: "",
-      appliedRevision: 0,
-    }));
-    const second = await connectHandler(
-      secondExecutor,
-      { lastProcessedCommandSequence: 61 },
-      {},
-      replayEntries,
-    );
-    second.ws.sent = [];
-    second.ws.message(buildEnvelope(
-      "command",
-      "runtime.command.recenter_once",
-      "user-1",
-      "device-1",
-      "runtime-1",
-      "session-1",
-      1,
-      15,
-      {
-        commandId: "cmd-persisted-replay",
-        commandType: "runtime.command.recenter_once",
-        commandSequence: 61,
-        desiredRevision: 0,
-        payload: {},
-      },
-    ));
-    await flushAsync();
-
-    expect(secondExecutor).not.toHaveBeenCalled();
-    const statuses = second.ws.sent
-      .map((item) => JSON.parse(item) as RuntimeEnvelope)
-      .filter((env) => env.messageType === "command_ack")
-      .map((env) => (env.payload as { status: string }).status);
-    expect(statuses).toEqual(["completed"]);
-    second.handler.disconnect();
   });
 
 
-  it("records terminal execution before a terminal ACK transport failure", async () => {
+  it("records durable execution before a canonical desired-event transport failure", async () => {
     const firstExecutor = vi.fn(async () => ({
       commandId: "cmd-ack-loss",
       status: "applied" as const,
@@ -714,7 +796,7 @@ describe("DesktopRuntimeHandlerV2", () => {
       appliedRevision: 72,
     }));
     const first = await connectHandler(firstExecutor);
-    first.ws.failCommandAckStatusOnce = "completed";
+    first.ws.failMessageNameOnce = "runtime.state.desired_applied";
     first.ws.message(buildEnvelope(
       "command",
       "runtime.command.sync_desired_state",
@@ -729,7 +811,7 @@ describe("DesktopRuntimeHandlerV2", () => {
         commandType: "runtime.command.sync_desired_state",
         commandSequence: 72,
         desiredRevision: 72,
-        payload: {},
+        payload: { desiredHash: "sha256:desired-72" },
       },
     ));
     await flushAsync();
@@ -773,7 +855,7 @@ describe("DesktopRuntimeHandlerV2", () => {
         commandType: "runtime.command.sync_desired_state",
         commandSequence: 72,
         desiredRevision: 72,
-        payload: {},
+        payload: { desiredHash: "sha256:desired-72" },
       },
     ));
     await flushAsync();
@@ -783,7 +865,16 @@ describe("DesktopRuntimeHandlerV2", () => {
       .map((item) => JSON.parse(item) as RuntimeEnvelope)
       .filter((env) => env.messageType === "command_ack")
       .map((env) => (env.payload as { status: string }).status);
-    expect(statuses).toEqual(["completed"]);
+    expect(statuses).toEqual(["runtime_received", "runtime_accepted"]);
+    const desiredEvents = second.ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageName === "runtime.state.desired_applied");
+    expect(desiredEvents).toHaveLength(1);
+    expect(desiredEvents[0]?.payload).toMatchObject({
+      commandId: "cmd-ack-loss",
+      desiredRevision: 72,
+      desiredHash: "sha256:desired-72",
+    });
     second.handler.disconnect();
   });
 

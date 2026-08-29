@@ -75,8 +75,8 @@ function createEngine(canvas: HTMLCanvasElement): {
 function reportEventToMain(api: PetAnimationApi, event: PlaybackEvent): void {
   try {
     api.reportEvent(event);
-  } catch {
-    void 0;
+  } catch (error) {
+    console.error("[PetAnimation] failed to report playback event to main", error);
   }
 }
 
@@ -451,7 +451,13 @@ async function main(): Promise<void> {
   const disposeDragListeners = attachDragListeners(api, canvas, interactionState);
 
   const unsubPlayAction = api.onPlayAction((command: PlayActionCommand) => {
-    void engine.playAction(command);
+    const rendererCommand: PlayActionCommand = {
+      ...command,
+      playbackInstanceId: command.playbackInstanceId || crypto.randomUUID(),
+    };
+    void engine.playAction(rendererCommand).catch((error) => {
+      console.error("[PetAnimation] playAction failed", error);
+    });
   });
 
   const unsubPause = api.onPause(() => {
@@ -489,7 +495,9 @@ async function main(): Promise<void> {
   });
 
   const unsubRecovery = api.onRecovery((snapshot) => {
-    engine.onRendererRecover(snapshot);
+    void engine.onRendererRecover(snapshot).catch((error) => {
+      console.error("[PetAnimation] renderer recovery failed", error);
+    });
   });
 
   const unsubUpdateDefault = api.onUpdateDefaultAction((actionKey: string) => {

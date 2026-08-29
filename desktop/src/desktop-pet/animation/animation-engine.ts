@@ -285,8 +285,15 @@ export class DesktopPetAnimationEngine {
     const result = this.gateway.processCommand(command, now);
     const ack = result.ack;
 
-    if (result.decision === "accept_and_load" || result.decision === "queue") {
+    if (result.decision === "accept_and_load" || result.decision === "queue" || result.decision === "satisfied") {
       this.acceptedCommands.set(command.playbackInstanceId, command);
+      this.emit({
+        type: "playback.command_accepted",
+        playbackInstanceId: command.playbackInstanceId,
+        commandId: command.commandId,
+        actionKey: command.actionKey,
+        timestamp: Date.now(),
+      });
     }
     this.drainQueueRemovals();
 
@@ -392,6 +399,18 @@ export class DesktopPetAnimationEngine {
 
       const effectiveAction = this.applyCommandOverrides(loaded.action, command);
       const entry = this.createLoadedEntry({ ...loaded, action: effectiveAction });
+      if (command.expiresAt || command.requiresAuthoritativeExpiry === true) {
+        const expiresAtMs = command.expiresAt ? Date.parse(command.expiresAt) : Number.NaN;
+        if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+          this.releaseLoadedAssets(loaded);
+          this.emitCommandFailure(
+            command,
+            "PLAYBACK_COMMAND_EXPIRED",
+            "playback command expired while loading assets",
+          );
+          return;
+        }
+      }
       const firstFrame = entry.frames[0];
       if (!firstFrame) {
         this.releaseLoadedAssets(loaded);
@@ -731,12 +750,18 @@ export class DesktopPetAnimationEngine {
     }
   }
 
-  onRendererRecover(snapshot: PlaybackRecoverySnapshot): void {
+  async onRendererRecover(snapshot: PlaybackRecoverySnapshot): Promise<void> {
     if (this.disposed) return;
     this.telemetry.recordRendererRecovery();
     this.dispatch({ type: "RECOVER", snapshot });
-    if (this.packageSnapshot) {
-      this.initialize(this.packageSnapshot);
+    if (!this.packageSnapshot) return;
+    try {
+      await this.initialize(this.packageSnapshot);
+    } catch (error) {
+      const pbError = PlaybackError.fromUnknown(error);
+      this.telemetry.recordError(pbError.toView());
+      console.error("[AnimationEngine] renderer recovery failed", pbError);
+      throw pbError;
     }
   }
 

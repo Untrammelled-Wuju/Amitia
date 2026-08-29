@@ -3,7 +3,7 @@ import type { ClickThroughController } from "./click-through-controller";
 import type { DesktopPetWindowAdapter } from "./window-adapter";
 import type { PetDragIpcPayload } from "../../shared/animation-ipc";
 
-export type DragEvent = "drag-start" | "drag-move" | "drag-end";
+export type DragEvent = "drag-start" | "drag-move" | "drag-end" | "drag-cancel";
 
 export interface DragState {
   isDragging: boolean;
@@ -165,7 +165,7 @@ export class DragController {
     this.grabOffsetX = 0;
     this.grabOffsetY = 0;
     this.clickThrough.setDragging(false);
-    this.onEvent("drag-end", this.getState());
+    this.onEvent("drag-cancel", this.getState());
     void payload;
   }
 

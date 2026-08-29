@@ -36,6 +36,7 @@ export interface DesktopPetActionRequest {
 }
 
 export type SchedulerEvent =
+  | "action-submitted"
   | "action-started"
   | "action-completed"
   | "action-fallback"
@@ -135,12 +136,9 @@ const SOURCE_COOLDOWN_MS: Record<EventSource, number> = {
 };
 
 function nowTimestamp(): number {
-  if (
-    typeof performance !== "undefined" &&
-    typeof performance.now === "function"
-  ) {
-    return performance.now();
-  }
+  // Runtime-v2 expiry is an absolute wall-clock timestamp. Scheduler cooldowns
+  // and minimum-play windows use the same epoch domain so values can never be
+  // compared against performance.now() by accident.
   return Date.now();
 }
 
@@ -153,6 +151,16 @@ export class DesktopPetActionScheduler {
   private currentActionStartedAt = 0;
   private currentPlaybackInstanceId: string | null = null;
   private currentCommandId: string | null = null;
+  private replacementPrevious: {
+    request: DesktopPetActionRequest;
+    startedAt: number;
+    playbackInstanceId: string | null;
+    commandId: string | null;
+  } | null = null;
+  private readonly submittedRequests = new Map<string, {
+    request: DesktopPetActionRequest;
+    action: RuntimeAction;
+  }>();
   private lastTriggeredAt: Map<string, number> = new Map();
   private sustainedState: string | null = null;
   private idleRepeatCount: Map<string, number> = new Map();
@@ -222,7 +230,9 @@ export class DesktopPetActionScheduler {
     }
 
     if (this.canPlayImmediately(request, now)) {
-      this.playNow(request, targetAction, now);
+      if (!this.playNow(request, targetAction, now)) {
+        return "rejected";
+      }
       this.lastTriggeredAt.set(cooldownKey, now);
       return isFallback ? "fallback" : "played";
     }
@@ -243,6 +253,7 @@ export class DesktopPetActionScheduler {
     this.currentActionStartedAt = 0;
     this.currentPlaybackInstanceId = null;
     this.currentCommandId = null;
+    this.replacementPrevious = null;
     this.cancelQueuedRequests(`force_interrupt:${reason}`);
 
     if (previous) {
@@ -279,7 +290,9 @@ export class DesktopPetActionScheduler {
         interrupt: true,
         dedupeKey: `recovery_${fallbackAction.key}_${Math.floor(now)}`,
       };
-      this.startAction(recoveryRequest, fallbackAction, now);
+      if (!this.startAction(recoveryRequest, fallbackAction, now)) {
+        this.drainQueueOrIdle();
+      }
     }
   }
 
@@ -289,6 +302,11 @@ export class DesktopPetActionScheduler {
 
   getQueue(): DesktopPetActionRequest[] {
     return this.queue.slice();
+  }
+
+  isCurrentPlaybackStarted(dedupeKey?: string): boolean {
+    return this.currentActionStartedAt > 0 && this.current !== null &&
+      (!dedupeKey || this.current.dedupeKey === dedupeKey);
   }
 
   setSustainedState(state: string | null): void {
@@ -308,55 +326,165 @@ export class DesktopPetActionScheduler {
   }
 
   notifyActionStarted(actionKey: string, playbackInstanceId: string, commandId?: string): void {
+    if (!playbackInstanceId || !commandId) return;
     const current = this.current;
-    if (!current || current.actionKey !== actionKey) return;
+    const submitted = this.submittedRequests.get(commandId);
+
+    if (!current || current.actionKey !== actionKey) {
+      // Cross-process ordering can expose a Renderer start for B after Main has
+      // already submitted replacement C. If C has not started yet, B is now the
+      // real physical rollback anchor and must replace the older A mirror.
+      if (
+        current &&
+        this.currentActionStartedAt === 0 &&
+        submitted &&
+        submitted.request.actionKey === actionKey
+      ) {
+        this.replacementPrevious = {
+          request: submitted.request,
+          startedAt: nowTimestamp(),
+          playbackInstanceId,
+          commandId,
+        };
+        this.submittedRequests.delete(commandId);
+        this.emit("action-started", submitted.request, submitted.action);
+      }
+      return;
+    }
+
     const expectedCommandId = current.metadata?.runtimeCommandId ?? this.currentCommandId ?? "";
-    if (commandId && expectedCommandId && commandId !== expectedCommandId) return;
-    this.currentPlaybackInstanceId = playbackInstanceId || this.currentPlaybackInstanceId;
-    this.currentCommandId = commandId || expectedCommandId || this.currentCommandId;
+    if (expectedCommandId && commandId !== expectedCommandId) return;
+    this.currentPlaybackInstanceId = playbackInstanceId;
+    this.currentCommandId = commandId;
+    this.currentActionStartedAt = nowTimestamp();
+    this.submittedRequests.delete(commandId);
+    // Renderer has committed the replacement first frame. The old renderer
+    // playback will report its own interrupted event; it is no longer a restore
+    // candidate from this point onward.
+    this.replacementPrevious = null;
+    this.emit("action-started", current, this.player.getCurrentAction());
   }
 
   notifyActionCompleted(actionKey: string, playbackInstanceId?: string, commandId?: string): void {
+    if (commandId) this.submittedRequests.delete(commandId);
+    const previous = this.replacementPrevious;
+    if (previous && this.matchesIdentity(previous, actionKey, playbackInstanceId, commandId)) {
+      this.replacementPrevious = null;
+      this.emit("action-completed", previous.request, this.player.getCurrentAction());
+      return;
+    }
+    if (this.restorePreviousAfterPendingTerminal("action-completed", actionKey, playbackInstanceId, commandId)) {
+      return;
+    }
     this.handleActionComplete(actionKey, playbackInstanceId, commandId);
   }
 
   notifyActionInterrupted(actionKey: string, playbackInstanceId?: string, commandId?: string): void {
-    if (!this.loaded || !this.matchesCurrent(actionKey, playbackInstanceId, commandId)) return;
-    const interruptedRequest = this.current;
-    this.current = null;
-    this.currentActionStartedAt = 0;
-    this.currentPlaybackInstanceId = null;
-    this.currentCommandId = null;
-    if (interruptedRequest) {
-      this.emit("action-interrupted", interruptedRequest, this.player.getCurrentAction());
+    if (commandId) this.submittedRequests.delete(commandId);
+    const previous = this.replacementPrevious;
+    if (previous && this.matchesIdentity(previous, actionKey, playbackInstanceId, commandId)) {
+      this.replacementPrevious = null;
+      this.emit("action-interrupted", previous.request, this.player.getCurrentAction());
+      return;
     }
+    if (this.restorePreviousAfterPendingTerminal("action-interrupted", actionKey, playbackInstanceId, commandId)) {
+      return;
+    }
+    this.finishCurrent("action-interrupted", actionKey, playbackInstanceId, commandId);
+  }
+
+  notifyActionFailed(actionKey: string, playbackInstanceId?: string, commandId?: string): void {
+    if (commandId) this.submittedRequests.delete(commandId);
+    const previous = this.replacementPrevious;
+    if (previous && this.matchesIdentity(previous, actionKey, playbackInstanceId, commandId)) {
+      this.replacementPrevious = null;
+      this.emit("action-interrupted", previous.request, this.player.getCurrentAction());
+      return;
+    }
+    if (!this.matchesCurrent(actionKey, playbackInstanceId, commandId)) return;
+    const failed = this.current;
+    // A replacement can be accepted by the command gateway and still fail while
+    // loading assets, before its first frame becomes visible. In that case the
+    // renderer resumes the old playback; restore the Scheduler mirror as well.
+    if (failed && this.currentActionStartedAt === 0 && this.replacementPrevious) {
+      const previous = this.replacementPrevious;
+      this.replacementPrevious = null;
+      this.current = previous.request;
+      this.currentActionStartedAt = previous.startedAt;
+      this.currentPlaybackInstanceId = previous.playbackInstanceId;
+      this.currentCommandId = previous.commandId;
+      this.emit("action-rejected", failed, this.resolveAction(failed));
+      return;
+    }
+    this.finishCurrent("action-interrupted", actionKey, playbackInstanceId, commandId);
+  }
+
+  private restorePreviousAfterPendingTerminal(
+    terminalEvent: "action-completed" | "action-interrupted",
+    actionKey: string,
+    playbackInstanceId?: string,
+    commandId?: string,
+  ): boolean {
+    if (this.currentActionStartedAt !== 0 || !this.replacementPrevious) return false;
+    if (!this.matchesCurrent(actionKey, playbackInstanceId, commandId)) return false;
+    const terminalRequest = this.current;
+    const previous = this.replacementPrevious;
+    this.replacementPrevious = null;
+    this.current = previous.request;
+    this.currentActionStartedAt = previous.startedAt;
+    this.currentPlaybackInstanceId = previous.playbackInstanceId;
+    this.currentCommandId = previous.commandId;
+    if (terminalRequest) {
+      // Covers Renderer `already_satisfied` completion and pre-first-frame
+      // interruption. The command is terminal, but the previous physical
+      // playback is still what the user sees.
+      this.emit(terminalEvent, terminalRequest, this.player.getCurrentAction());
+    }
+    return true;
   }
 
   private handleActionComplete(actionKey: string, playbackInstanceId?: string, commandId?: string): void {
+    this.finishCurrent("action-completed", actionKey, playbackInstanceId, commandId);
+  }
+
+  private finishCurrent(
+    terminalEvent: "action-completed" | "action-interrupted",
+    actionKey: string,
+    playbackInstanceId?: string,
+    commandId?: string,
+  ): void {
     if (!this.loaded || !this.matchesCurrent(actionKey, playbackInstanceId, commandId)) return;
-    const completedRequest = this.current;
+    const finishedRequest = this.current;
     this.current = null;
     this.currentActionStartedAt = 0;
     this.currentPlaybackInstanceId = null;
     this.currentCommandId = null;
 
-    if (completedRequest) {
-      this.emit("action-completed", completedRequest, this.player.getCurrentAction());
+    if (finishedRequest) {
+      this.emit(terminalEvent, finishedRequest, this.player.getCurrentAction());
     }
+    this.drainQueueOrIdle();
+  }
 
+  private drainQueueOrIdle(): void {
     while (this.queue.length > 0) {
       const next = this.queue.shift() as DesktopPetActionRequest;
-      const nextAction = this.resolveAction(next);
-      if (!nextAction) {
+      const now = nowTimestamp();
+      if (next.expiresAt !== undefined && next.expiresAt <= now) {
+        this.emitCancelled(next, "ttl_expired_in_queue");
         continue;
       }
-      const now = nowTimestamp();
-      this.startAction(next, nextAction, now);
-      const cooldownKey = next.dedupeKey ?? next.actionKey;
-      this.lastTriggeredAt.set(cooldownKey, now);
-      return;
+      const nextAction = this.resolveAction(next);
+      if (!nextAction) {
+        this.emitCancelled(next, "action_unavailable_at_dequeue");
+        continue;
+      }
+      if (this.startAction(next, nextAction, now)) {
+        const cooldownKey = next.dedupeKey ?? next.actionKey;
+        this.lastTriggeredAt.set(cooldownKey, now);
+        return;
+      }
     }
-
     this.tryPlayDefaultIdle();
   }
 
@@ -455,7 +583,7 @@ export class DesktopPetActionScheduler {
     }
 
     const minDuration = this.getMinPlayDuration(currentAction, this.current);
-    if (now - this.currentActionStartedAt < minDuration) {
+    if (this.currentActionStartedAt > 0 && now - this.currentActionStartedAt < minDuration) {
       return false;
     }
 
@@ -481,39 +609,91 @@ export class DesktopPetActionScheduler {
     request: DesktopPetActionRequest,
     action: RuntimeAction,
     now: number,
-  ): void {
-    const previous = this.current;
-    if (previous) {
-      this.emit("action-interrupted", previous, this.player.getCurrentAction());
-    }
-    this.startAction(request, action, now);
+  ): boolean {
+    // Renderer owns physical replacement. The old request is not terminal until
+    // the renderer presents the replacement first frame and emits interrupted.
+    return this.startAction(request, action, now);
   }
 
   private startAction(
     request: DesktopPetActionRequest,
     action: RuntimeAction,
     now: number,
-  ): void {
+  ): boolean {
+    void now;
+    const effectiveRequest: DesktopPetActionRequest = action.key === request.actionKey
+      ? request
+      : {
+          ...request,
+          actionKey: action.key,
+          metadata: {
+            ...(request.metadata ?? {}),
+            requestedActionKey: request.actionKey,
+          },
+        };
     const previousRequest = this.current;
     if (
       previousRequest &&
-      previousRequest.actionKey !== request.actionKey
+      previousRequest.actionKey !== effectiveRequest.actionKey
     ) {
       const prevIdleKey = previousRequest.dedupeKey ?? previousRequest.actionKey;
       this.idleRepeatCount.delete(prevIdleKey);
     }
 
-    this.current = request;
-    this.currentActionStartedAt = now;
-    this.currentPlaybackInstanceId = null;
-    this.currentCommandId = request.metadata?.runtimeCommandId ?? null;
-    this.bumpIdleRepeat(request);
-    const submission = this.player.switchAction(action, this.buildPlayerSwitchContext(request, action));
-    if (submission) {
-      this.currentPlaybackInstanceId = submission.playbackInstanceId;
-      this.currentCommandId = submission.commandId;
+    if (previousRequest && this.currentActionStartedAt > 0) {
+      this.replacementPrevious = {
+        request: previousRequest,
+        startedAt: this.currentActionStartedAt,
+        playbackInstanceId: this.currentPlaybackInstanceId,
+        commandId: this.currentCommandId,
+      };
+    } else if (previousRequest && this.replacementPrevious) {
+      // A replacement can itself be replaced while it is still loading. Keep
+      // the last Renderer-confirmed playback as the rollback anchor across the
+      // whole pending chain (A playing -> B loading -> C loading). If C fails,
+      // Renderer can still resume A and Scheduler must restore the same mirror.
+      // B's later cancellation/failure event is intentionally ignored because
+      // it never became the active physical playback.
+    } else {
+      this.replacementPrevious = null;
     }
-    this.emit("action-started", request, action);
+
+    this.current = effectiveRequest;
+    // Submission is not playback. Do not start the minimum-play clock and do not
+    // publish a playback identity until Renderer emits command_accepted/started.
+    this.currentActionStartedAt = 0;
+    this.currentPlaybackInstanceId = null;
+    this.currentCommandId = effectiveRequest.metadata?.runtimeCommandId ?? null;
+    this.bumpIdleRepeat(effectiveRequest);
+    const submission = this.player.switchAction(
+      action,
+      this.buildPlayerSwitchContext(effectiveRequest, action),
+    );
+    if (!submission) {
+      const failed = this.current;
+      const previous = this.replacementPrevious;
+      this.replacementPrevious = null;
+      if (previous) {
+        this.current = previous.request;
+        this.currentActionStartedAt = previous.startedAt;
+        this.currentPlaybackInstanceId = previous.playbackInstanceId;
+        this.currentCommandId = previous.commandId;
+      } else {
+        this.current = null;
+        this.currentActionStartedAt = 0;
+        this.currentPlaybackInstanceId = null;
+        this.currentCommandId = null;
+      }
+      if (failed) this.emit("action-rejected", failed, action);
+      return false;
+    }
+    this.currentCommandId = submission.commandId;
+    this.submittedRequests.set(submission.commandId, {
+      request: effectiveRequest,
+      action,
+    });
+    this.emit("action-submitted", effectiveRequest, action);
+    return true;
   }
 
   private tryEnqueue(request: DesktopPetActionRequest): boolean {
@@ -576,7 +756,7 @@ export class DesktopPetActionScheduler {
       priority: ActionPriorities.DEFAULT_IDLE,
       interrupt: false,
     };
-    this.startAction(request, defaultAction, now);
+    void this.startAction(request, defaultAction, now);
   }
 
   private resetRuntimeState(): void {
@@ -585,18 +765,43 @@ export class DesktopPetActionScheduler {
     this.currentActionStartedAt = 0;
     this.currentPlaybackInstanceId = null;
     this.currentCommandId = null;
+    this.replacementPrevious = null;
+    this.submittedRequests.clear();
     this.lastTriggeredAt.clear();
     this.idleRepeatCount.clear();
     this.sustainedState = null;
+  }
+
+  private matchesIdentity(
+    identity: {
+      request: DesktopPetActionRequest;
+      playbackInstanceId: string | null;
+      commandId: string | null;
+    },
+    actionKey: string,
+    playbackInstanceId?: string,
+    commandId?: string,
+  ): boolean {
+    if (identity.request.actionKey !== actionKey) return false;
+    const expectedCommandId = identity.request.metadata?.runtimeCommandId ?? identity.commandId ?? "";
+    if (expectedCommandId && commandId !== expectedCommandId) return false;
+    if (!expectedCommandId && commandId) return false;
+    if (identity.playbackInstanceId && playbackInstanceId !== identity.playbackInstanceId) return false;
+    return true;
   }
 
   private matchesCurrent(actionKey: string, playbackInstanceId?: string, commandId?: string): boolean {
     const current = this.current;
     if (!current || current.actionKey !== actionKey) return false;
     const expectedCommandId = current.metadata?.runtimeCommandId ?? this.currentCommandId ?? "";
-    if (commandId && expectedCommandId && commandId !== expectedCommandId) return false;
-    if (playbackInstanceId && this.currentPlaybackInstanceId && playbackInstanceId !== this.currentPlaybackInstanceId) return false;
-    return true;
+    if (expectedCommandId) {
+      if (!commandId || commandId !== expectedCommandId) return false;
+      if (this.currentPlaybackInstanceId && (!playbackInstanceId || playbackInstanceId !== this.currentPlaybackInstanceId)) return false;
+      return true;
+    }
+    if (commandId) return false;
+    if (this.currentPlaybackInstanceId && playbackInstanceId && playbackInstanceId !== this.currentPlaybackInstanceId) return false;
+    return current.actionKey === actionKey;
   }
 
   private buildPlayerSwitchContext(
@@ -628,6 +833,8 @@ export class DesktopPetActionScheduler {
       completionPolicy: request.metadata?.completionPolicy || undefined,
       source: request.source,
       traceId: request.metadata?.traceId || undefined,
+      requiresAuthoritativeExpiry: Boolean(request.metadata?.runtimeCommandId),
+      expiresAt: request.expiresAt !== undefined ? new Date(request.expiresAt).toISOString() : undefined,
     };
   }
 
@@ -661,8 +868,8 @@ export class DesktopPetActionScheduler {
     if (!this.callbacks.onEvent) return;
     try {
       this.callbacks.onEvent(event, request, action);
-    } catch {
-      void 0;
+    } catch (err) {
+      console.error(`[DesktopPetActionScheduler] callback failed for ${event}`, err);
     }
   }
 }

@@ -307,6 +307,27 @@ describe("ActionQueue", () => {
       expect(queue.enqueue(valid, 100)).not.toBeNull();
       expect(queue.size()).toBe(1);
     });
+
+    it("requires expiry only for authoritative Runtime commands", () => {
+      const local = makeCommand({
+        commandId: "local-no-expiry",
+        requiresAuthoritativeExpiry: false,
+      });
+      expect(queue.enqueue(local, 100)).not.toBeNull();
+
+      const runtimeMissing = makeCommand({
+        commandId: "runtime-missing-expiry",
+        requiresAuthoritativeExpiry: true,
+      });
+      expect(queue.enqueue(runtimeMissing, 200)).toBeNull();
+
+      const runtimeInvalid = makeCommand({
+        commandId: "runtime-invalid-expiry",
+        requiresAuthoritativeExpiry: true,
+        expiresAt: "not-a-timestamp",
+      });
+      expect(queue.enqueue(runtimeInvalid, 300)).toBeNull();
+    });
   });
 
   describe("reindex", () => {

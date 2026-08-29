@@ -197,13 +197,13 @@ export class ActionQueue {
 
   private isExpired(command: PlayActionCommand): boolean {
     if (!command.expiresAt) {
-      return false;
+      return command.requiresAuthoritativeExpiry === true;
     }
     const expiresAtMs = Date.parse(command.expiresAt);
     if (Number.isNaN(expiresAtMs)) {
-      return false;
+      return true;
     }
-    return Date.now() > expiresAtMs;
+    return Date.now() >= expiresAtMs;
   }
 
   private evictForInsertion(command: PlayActionCommand): void {

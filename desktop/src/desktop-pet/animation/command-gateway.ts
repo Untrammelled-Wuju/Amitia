@@ -165,13 +165,13 @@ export class CommandGateway {
 
   isCommandExpired(command: PlayActionCommand, now: Date): boolean {
     if (!command.expiresAt) {
-      return false;
+      return command.requiresAuthoritativeExpiry === true;
     }
     const expiresAtMs = Date.parse(command.expiresAt);
     if (Number.isNaN(expiresAtMs)) {
-      return false;
+      return true;
     }
-    return now.getTime() > expiresAtMs;
+    return now.getTime() >= expiresAtMs;
   }
 
   private applyQueuePolicy(

@@ -105,7 +105,9 @@ async function enterMainApp(): Promise<void> {
   const runtimeManager = new DesktopRuntimeManager(currentConfig);
   await runtimeManager.initialize();
 
-  const desktopPetManager = new DesktopPetManager();
+  const desktopPetManager = new DesktopPetManager({
+    getChatStateWindow: () => mainWindow,
+  });
   registerPetIpcHandlers(desktopPetManager);
 
   const ensureResult = ensureDataAndConfig();

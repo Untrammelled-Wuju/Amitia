@@ -51,7 +51,6 @@ const PLAYBACK_EVENT_TYPE_WHITELIST = new Set<string>([
 const MAX_COORDINATE = 1_000_000;
 const MAX_STRING_LENGTH = 4096;
 const MAX_PENDING_COMMANDS = 32;
-const COMMAND_TTL_MS = 10_000;
 const RUNTIME_READY_TIMEOUT_MS = 30_000;
 const MAX_MASK_REVISION = 0x7fffffff;
 const MAX_RESOURCE_BYTES = 64 * 1024 * 1024;
@@ -77,7 +76,10 @@ export interface RendererDeliveryResult {
 interface PendingPlayCommand {
   command: PlayActionCommand;
   queuedAt: number;
-  expiresAt: number;
+  // Runtime v2 commands always carry an authoritative admission deadline.
+  // Local/default actions do not; they are invalidated by renderer reset/package
+  // replacement rather than by inventing a second TTL authority in Main.
+  expiresAt: number | null;
 }
 
 interface DurableState {
@@ -653,7 +655,7 @@ export class AnimationIpcAdapter {
     const commands = this.pendingCommands;
     this.pendingCommands = [];
     for (const entry of commands) {
-      if (now > entry.expiresAt) {
+      if (entry.expiresAt !== null && now >= entry.expiresAt) {
         this.deps.onDeliveryFailed?.("ttl_expired", entry.command);
         continue;
       }
@@ -679,10 +681,24 @@ export class AnimationIpcAdapter {
         }
       }
       const now = Date.now();
+      const hasAuthoritativeExpiry = typeof command.expiresAt === "string" && command.expiresAt.trim() !== "";
+      if (command.requiresAuthoritativeExpiry === true && !hasAuthoritativeExpiry) {
+        this.deps.onDeliveryFailed?.("command_invalid", command);
+        return { status: "rejected", reason: "command_invalid" };
+      }
+      const authoritativeExpiry = hasAuthoritativeExpiry ? Date.parse(command.expiresAt as string) : null;
+      if (hasAuthoritativeExpiry && (authoritativeExpiry === null || !Number.isFinite(authoritativeExpiry))) {
+        this.deps.onDeliveryFailed?.("command_invalid", command);
+        return { status: "rejected", reason: "command_invalid" };
+      }
+      if (authoritativeExpiry !== null && now >= authoritativeExpiry) {
+        this.deps.onDeliveryFailed?.("ttl_expired", command);
+        return { status: "rejected", reason: "ttl_expired" };
+      }
       this.pendingCommands.push({
         command,
         queuedAt: now,
-        expiresAt: now + COMMAND_TTL_MS,
+        expiresAt: authoritativeExpiry,
       });
       return { status: "queued" };
     }
