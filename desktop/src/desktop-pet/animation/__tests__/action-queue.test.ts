@@ -5,6 +5,7 @@ import type { PlayActionCommand } from "../contracts";
 function makeCommand(overrides?: Partial<PlayActionCommand>): PlayActionCommand {
   return {
     commandId: `cmd_${Math.random().toString(36).slice(2, 8)}`,
+    playbackInstanceId: `pbi_${Math.random().toString(36).slice(2, 8)}`,
     idempotencyKey: `idem_${Math.random().toString(36).slice(2, 8)}`,
     installationId: "inst-1",
     petInstanceId: "pet-1",

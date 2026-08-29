@@ -13,8 +13,28 @@ export interface QueueLimits {
 
 export type MutexGroupResolver = (actionKey: string) => string | null;
 
+export type QueueRemovalReason =
+  | "expired"
+  | "coalesced"
+  | "per_action_limit"
+  | "mutex_limit"
+  | "capacity"
+  | "cleared";
+
+export interface QueueRemoval {
+  item: QueuedCommand;
+  reason: QueueRemovalReason;
+}
+
+/**
+ * Bounded renderer command queue. Every command removed after it was accepted
+ * into the queue is retained in the removal journal until the engine drains it
+ * and emits a terminal lifecycle event. This prevents silent accepted-command
+ * loss during coalesce/expiry/eviction/package switch.
+ */
 export class ActionQueue {
   private items: QueuedCommand[] = [];
+  private removals: QueueRemoval[] = [];
   private readonly limits: QueueLimits;
   private readonly resolveMutexGroup: MutexGroupResolver;
 
@@ -32,7 +52,7 @@ export class ActionQueue {
     }
     this.evictForInsertion(command);
     if (this.items.length >= this.limits.total) {
-      if (!this.evictWeakest()) {
+      if (!this.evictWeakest("capacity")) {
         return null;
       }
     }
@@ -69,7 +89,7 @@ export class ActionQueue {
     this.removeCoalescable(command);
     this.evictForInsertion(command);
     while (this.items.length >= this.limits.total) {
-      if (!this.evictWeakest()) {
+      if (!this.evictWeakest("capacity")) {
         break;
       }
     }
@@ -79,8 +99,18 @@ export class ActionQueue {
     return this.findInQueue(command.commandId) ?? queued;
   }
 
-  clear(): void {
+  clear(reason: QueueRemovalReason = "cleared"): void {
+    if (this.items.length > 0) {
+      for (const item of this.items) this.recordRemoval(item, reason);
+    }
     this.items = [];
+  }
+
+  drainRemovals(): QueueRemoval[] {
+    if (this.removals.length === 0) return [];
+    const out = this.removals;
+    this.removals = [];
+    return out;
   }
 
   size(): number {
@@ -109,7 +139,7 @@ export class ActionQueue {
         commandId: command.commandId,
         status: "queued",
         reason: null,
-        playbackInstanceId: null,
+        playbackInstanceId: command.playbackInstanceId,
         queuePosition: 0,
         actualPackageRevision: command.packageRevision,
       },
@@ -128,7 +158,8 @@ export class ActionQueue {
       const sameActionKey = existing.command.actionKey === command.actionKey;
       const sameMutex = incomingMutex !== null && existingMutex === incomingMutex;
       if (sameActionKey || sameMutex) {
-        this.items.splice(i, 1);
+        const [removed] = this.items.splice(i, 1);
+        if (removed) this.recordRemoval(removed, "coalesced");
       }
     }
     this.reindex();
@@ -185,21 +216,21 @@ export class ActionQueue {
   }
 
   private removeExpired(): void {
-    const before = this.items.length;
-    this.items = this.items.filter((item) => !this.isExpired(item.command));
-    if (this.items.length !== before) {
-      this.reindex();
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const item = this.items[i];
+      if (!this.isExpired(item.command)) continue;
+      this.items.splice(i, 1);
+      this.recordRemoval(item, "expired");
     }
+    this.reindex();
   }
 
   private enforcePerActionKeyLimit(actionKey: string): void {
     const matches = this.items.filter((item) => item.command.actionKey === actionKey);
     while (matches.length >= this.limits.perActionKey) {
       const victim = matches.shift();
-      if (!victim) {
-        break;
-      }
-      this.remove(victim.command.commandId);
+      if (!victim) break;
+      this.removeTracked(victim.command.commandId, "per_action_limit");
     }
   }
 
@@ -209,17 +240,13 @@ export class ActionQueue {
     );
     while (matches.length >= this.limits.perMutexGroup) {
       const victim = matches.shift();
-      if (!victim) {
-        break;
-      }
-      this.remove(victim.command.commandId);
+      if (!victim) break;
+      this.removeTracked(victim.command.commandId, "mutex_limit");
     }
   }
 
-  private evictWeakest(): boolean {
-    if (this.items.length === 0) {
-      return false;
-    }
+  private evictWeakest(reason: QueueRemovalReason): boolean {
+    if (this.items.length === 0) return false;
     let victimIndex = -1;
     let victimScore = Number.POSITIVE_INFINITY;
     for (let i = 0; i < this.items.length; i++) {
@@ -231,18 +258,27 @@ export class ActionQueue {
         victimIndex = i;
       }
     }
-    if (victimIndex < 0) {
-      return false;
-    }
-    this.items.splice(victimIndex, 1);
+    if (victimIndex < 0) return false;
+    const [victim] = this.items.splice(victimIndex, 1);
+    if (victim) this.recordRemoval(victim, reason);
     this.reindex();
     return true;
   }
 
+  private removeTracked(commandId: string, reason: QueueRemovalReason): void {
+    const index = this.items.findIndex((item) => item.command.commandId === commandId);
+    if (index < 0) return;
+    const [item] = this.items.splice(index, 1);
+    if (item) this.recordRemoval(item, reason);
+    this.reindex();
+  }
+
+  private recordRemoval(item: QueuedCommand, reason: QueueRemovalReason): void {
+    this.removals.push({ item, reason });
+  }
+
   private computeEvictionScore(item: QueuedCommand, isExpired: boolean, index: number): number {
-    if (isExpired) {
-      return -1000000 - index;
-    }
+    if (isExpired) return -1000000 - index;
     const priorityScore = item.command.priority * 1000;
     const recencyScore = index;
     return priorityScore + recencyScore;
