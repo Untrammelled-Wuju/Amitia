@@ -5,9 +5,21 @@ let cachedConfig: DeploymentModeConfig | null = null;
 
 export const LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899";
 
+// Canonical registry for Desktop Pet state-authority routes. Cloud deployment
+// code must consult this registry rather than open-coding singular/plural path
+// checks in individual feature modules. Both namespaces are local because the
+// API historically uses /desktop-pets for package/installation resources and
+// /desktop-pet for Behavior control.
+export const DESKTOP_PET_DEVICE_LOCAL_ROUTE_PREFIXES = [
+  "/api/desktop-pets",
+  "/api/desktop-pet",
+] as const;
+
 export function isDeviceLocalApiPath(path: string): boolean {
   const normalized = String(path || "").split("?", 1)[0];
-  return normalized === "/api/desktop-pets" || normalized.startsWith("/api/desktop-pets/");
+  return DESKTOP_PET_DEVICE_LOCAL_ROUTE_PREFIXES.some(
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
+  );
 }
 
 export async function getApiBaseURLForPath(path: string): Promise<string> {
