@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,6 +69,9 @@ type RegenerationWorker struct {
 	workerID          string
 	stopCh            chan struct{}
 	wg                sync.WaitGroup
+	lifecycleMu       sync.Mutex
+	running           bool
+	alive             atomic.Bool
 	sem               chan struct{}
 }
 
@@ -89,18 +93,40 @@ func NewRegenerationWorker(repo Repository, genAdapter GenerationAdapter, assetS
 }
 
 func (w *RegenerationWorker) Start(ctx context.Context) {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	if w.running {
+		return
+	}
+	w.stopCh = make(chan struct{})
+	w.running = true
+	w.alive.Store(true)
 	w.recoverStaleJobs(ctx)
 	w.wg.Add(1)
 	go w.run(ctx)
 }
 
 func (w *RegenerationWorker) Stop() {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	if !w.running {
+		return
+	}
 	close(w.stopCh)
 	w.wg.Wait()
+	w.running = false
+	w.alive.Store(false)
+}
+
+func (w *RegenerationWorker) IsRunning() bool {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	return w.running && w.alive.Load()
 }
 
 func (w *RegenerationWorker) run(ctx context.Context) {
 	defer w.wg.Done()
+	defer w.alive.Store(false)
 	ticker := time.NewTicker(w.pollInterval)
 	defer ticker.Stop()
 	w.pollAndProcess(ctx)
