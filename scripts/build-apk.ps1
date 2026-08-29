@@ -207,11 +207,13 @@ if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root 'artifacts\apk' 
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $target = Join-Path ([System.IO.Path]::GetFullPath($OutputDirectory)) "amitia-$version-release-debug-overlay-arm64-v8a.apk"
 $temp = Join-Path 'D:\' ('amitia-apk-build-' + [guid]::NewGuid().ToString('N'))
+$previousPubHostedUrl = $env:PUB_HOSTED_URL
 try {
     New-Item -ItemType Directory -Path $temp | Out-Null
     Get-ChildItem $mobile -Force | Where-Object { $_.Name -notin @('build', '.dart_tool', '.idea') } | ForEach-Object { Copy-Item $_.FullName $temp -Recurse -Force }
     Push-Location $temp
     try {
+        $env:PUB_HOSTED_URL = 'https://pub.dev'
         & '.\android\gradlew.bat' --stop
         & $flutter clean
         if (-not $SkipPubGet) { & $flutter pub get }
@@ -220,7 +222,9 @@ try {
         $flutterExitCode = $LASTEXITCODE
         $source = @(
             (Join-Path $temp 'build\app\outputs\flutter-apk\app-release.apk'),
-            (Join-Path $temp 'android\app\build\outputs\flutter-apk\app-release.apk')
+            (Join-Path $temp 'build\app\outputs\apk\release\app-release.apk'),
+            (Join-Path $temp 'android\app\build\outputs\flutter-apk\app-release.apk'),
+            (Join-Path $temp 'android\app\build\outputs\apk\release\app-release.apk')
         ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
         if (-not $source -and $flutterExitCode -ne 0) { throw 'Flutter Release 构建失败。' }
         if (-not $source) { throw 'Flutter APK 构建失败。' }
@@ -230,6 +234,8 @@ try {
         try { & '.\android\gradlew.bat' --stop } catch { }
         Remove-Item Env:AMITIA_RUNTIME_CANDIDATE_BUILD -ErrorAction SilentlyContinue
         Remove-Item Env:FROZEN_RUNTIME_PACKAGE_PATH -ErrorAction SilentlyContinue
+        if ($null -eq $previousPubHostedUrl) { Remove-Item Env:PUB_HOSTED_URL -ErrorAction SilentlyContinue }
+        else { $env:PUB_HOSTED_URL = $previousPubHostedUrl }
         Pop-Location
     }
 }
