@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/u-ai/backend/log"
@@ -40,6 +41,7 @@ type BehaviorEngine struct {
 
 	mu      sync.RWMutex
 	running bool
+	alive   atomic.Bool
 	stopCh  chan struct{}
 	wg      sync.WaitGroup
 
@@ -143,6 +145,7 @@ func (e *BehaviorEngine) Start(ctx context.Context) error {
 		return nil
 	}
 	e.running = true
+	e.alive.Store(true)
 	e.stopCh = make(chan struct{})
 
 	e.wg.Add(1)
@@ -164,6 +167,7 @@ func (e *BehaviorEngine) Stop() error {
 	e.running = false
 	close(e.stopCh)
 	e.wg.Wait()
+	e.alive.Store(false)
 	log.Info("behavior engine stopped")
 	return nil
 }
@@ -171,7 +175,7 @@ func (e *BehaviorEngine) Stop() error {
 func (e *BehaviorEngine) IsRunning() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.running
+	return e.running && e.alive.Load()
 }
 
 func (e *BehaviorEngine) SubmitEvent(ctx context.Context, event BehaviorEventEnvelope) error {
@@ -520,6 +524,7 @@ func (e *BehaviorEngine) saveContextCAS(ctx context.Context, expectedRevision in
 
 func (e *BehaviorEngine) inboxWorker(ctx context.Context) {
 	defer e.wg.Done()
+	defer e.alive.Store(false)
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()

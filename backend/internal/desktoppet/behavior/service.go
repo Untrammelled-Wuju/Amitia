@@ -80,6 +80,10 @@ func (s *BehaviorService) Stop() error {
 	return s.engine.Stop()
 }
 
+func (s *BehaviorService) IsRunning() bool {
+	return s != nil && s.engine != nil && s.engine.IsRunning()
+}
+
 func (s *BehaviorService) SubmitEvent(ctx context.Context, event BehaviorEventEnvelope) error {
 	return s.engine.SubmitEvent(ctx, event)
 }
