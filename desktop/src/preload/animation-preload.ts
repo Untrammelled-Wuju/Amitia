@@ -150,8 +150,8 @@ const animationApi = {
       ipcRenderer.removeListener(ANIMATION_IPC_CHANNELS.resume, listener);
   },
 
-  onStop(callback: () => void): () => void {
-    const listener = () => callback();
+  onStop(callback: (reason: string) => void): () => void {
+    const listener = (_event: Electron.IpcRendererEvent, reason?: string) => callback(reason || "user_disabled");
     ipcRenderer.on(ANIMATION_IPC_CHANNELS.stop, listener);
     return () =>
       ipcRenderer.removeListener(ANIMATION_IPC_CHANNELS.stop, listener);
