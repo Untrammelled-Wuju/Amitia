@@ -18,6 +18,7 @@ const (
 
 	EventPlaybackCommandAccepted   = "runtime.playback.command_accepted"
 	EventPlaybackActionStarted     = "runtime.playback.action_started"
+	EventPlaybackActionFirstCycle  = "runtime.playback.action_first_cycle"
 	EventPlaybackActionHolding     = "runtime.playback.action_holding"
 	EventPlaybackActionCompleted   = "runtime.playback.action_completed"
 	EventPlaybackActionInterrupted = "runtime.playback.action_interrupted"
@@ -44,7 +45,7 @@ func IsEventType(t string) bool {
 	case EventRuntimeConnected, EventRuntimeDisconnected, EventRuntimeHeartbeat,
 		EventPointerClicked, EventPointerDoubleClicked, EventPointerHovered,
 		EventDragStarted, EventDragMoved, EventDragCompleted, EventDragCancelled,
-		EventPlaybackCommandAccepted, EventPlaybackActionStarted, EventPlaybackActionHolding,
+		EventPlaybackCommandAccepted, EventPlaybackActionStarted, EventPlaybackActionFirstCycle, EventPlaybackActionHolding,
 		EventPlaybackActionCompleted, EventPlaybackActionInterrupted, EventPlaybackActionFailed,
 		EventStateDesiredApplied, EventStateDesiredRejected, EventStateSnapshot,
 		EventHealthChanged, EventWindowShown, EventWindowHidden, EventWindowMoved,
@@ -81,6 +82,7 @@ const (
 	InterruptReasonResourceFailure      InterruptReason = "resource_failure"
 	InterruptReasonWindowDestroyed      InterruptReason = "window_destroyed"
 	InterruptReasonRuntimeReconnect     InterruptReason = "runtime_reconnect"
+	InterruptReasonRuntimeStop          InterruptReason = "runtime_stop"
 	InterruptReasonUserDisable          InterruptReason = "user_disable"
 	InterruptReasonMaxDurationReached   InterruptReason = "max_duration_reached"
 	InterruptReasonCommandCancelled     InterruptReason = "command_cancelled"

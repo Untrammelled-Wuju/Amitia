@@ -473,3 +473,112 @@ func TestHandleCommandAckRejectsWrongGenerationBeforeMutation(t *testing.T) {
 		t.Fatalf("wrong-generation ack mutated command: %s", stored.Status)
 	}
 }
+
+func TestPlayActionCompletionPolicyOnStartedCompletesAtStarted(t *testing.T) {
+	db, services, handler := newHandlerP0DB(t)
+	cmd := createPolicyCommand(t, db, "cmd-policy-started", PlayActionCompletionOnStarted)
+	payload, _ := json.Marshal(map[string]any{
+		"commandId":          cmd.ID,
+		"playbackInstanceId": "pbi-started",
+		"occurredAt":         time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	if err := handler.applyRuntimeEventCommandProgress(nil, "", &Envelope{MessageName: EventPlaybackActionStarted, Payload: payload}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := services.Commands.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != string(CommandStatusCompleted) || got.PlaybackRequestID != "pbi-started" {
+		t.Fatalf("on_started must complete with playback identity, got status=%s playback=%s", got.Status, got.PlaybackRequestID)
+	}
+}
+
+func TestPlayActionCompletionPolicyOnFirstCycleCompletesAtFirstCycle(t *testing.T) {
+	db, services, handler := newHandlerP0DB(t)
+	cmd := createPolicyCommand(t, db, "cmd-policy-cycle", PlayActionCompletionOnFirstCycle)
+	started, _ := json.Marshal(map[string]any{"commandId": cmd.ID, "playbackInstanceId": "pbi-cycle"})
+	if err := handler.applyRuntimeEventCommandProgress(nil, "", &Envelope{MessageName: EventPlaybackActionStarted, Payload: started}); err != nil {
+		t.Fatal(err)
+	}
+	mid, err := services.Commands.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mid.Status != string(CommandStatusPlaybackStarted) {
+		t.Fatalf("on_first_cycle completed too early: %s", mid.Status)
+	}
+	firstCycle, _ := json.Marshal(map[string]any{"commandId": cmd.ID, "playbackInstanceId": "pbi-cycle"})
+	if err := handler.applyRuntimeEventCommandProgress(nil, "", &Envelope{MessageName: EventPlaybackActionFirstCycle, Payload: firstCycle}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := services.Commands.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != string(CommandStatusCompleted) {
+		t.Fatalf("on_first_cycle must complete at first-cycle event: %s", got.Status)
+	}
+}
+
+func TestPlayActionInterruptionCancelsUnlessPolicyDeclaresSuccess(t *testing.T) {
+	tests := []struct {
+		name       string
+		policy     string
+		reason     string
+		wantStatus CommandStatus
+	}{
+		{name: "default interruption cancels", policy: PlayActionCompletionOnStarted, reason: "higher_priority_action", wantStatus: CommandStatusCancelled},
+		{name: "on_interrupted succeeds", policy: PlayActionCompletionOnInterrupted, reason: "higher_priority_action", wantStatus: CommandStatusCompleted},
+		{name: "manual_stop succeeds only for runtime stop", policy: PlayActionCompletionManualStop, reason: "runtime_stop", wantStatus: CommandStatusCompleted},
+		{name: "manual_stop preemption cancels", policy: PlayActionCompletionManualStop, reason: "package_switch", wantStatus: CommandStatusCancelled},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, services, handler := newHandlerP0DB(t)
+			cmd := createPolicyCommand(t, db, "cmd-policy-interrupt", tt.policy)
+			payload, _ := json.Marshal(map[string]any{
+				"commandId":          cmd.ID,
+				"playbackInstanceId": "pbi-interrupt",
+				"interruptReason":    tt.reason,
+			})
+			if err := handler.applyRuntimeEventCommandProgress(nil, "", &Envelope{MessageName: EventPlaybackActionInterrupted, Payload: payload}); err != nil {
+				t.Fatal(err)
+			}
+			got, err := services.Commands.GetCommand(cmd.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Status != string(tt.wantStatus) {
+				t.Fatalf("status=%s want=%s", got.Status, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func createPolicyCommand(t *testing.T, db *gorm.DB, commandID, policy string) *RuntimeCommand {
+	t.Helper()
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	payload, err := json.Marshal(PlayActionPayload{ActionKey: "wave", CompletionPolicy: policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := &RuntimeCommand{
+		ID:                   commandID,
+		UserID:               "user-policy",
+		DeviceID:             "device-policy",
+		RuntimeID:            "runtime-policy",
+		CommandType:          string(CommandTypePlayAction),
+		Durability:           "ephemeral",
+		Status:               string(CommandStatusRendererAccepted),
+		PayloadJSON:          string(payload),
+		PayloadHash:          ComputePayloadHash(payload),
+		PayloadSchemaVersion: 1,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+	return cmd
+}

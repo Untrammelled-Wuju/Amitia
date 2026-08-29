@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
@@ -22,16 +24,70 @@ const (
 type DesiredStateOutboxWorker struct {
 	repo      RepositoryV2
 	publisher coordinator.RuntimeDesiredStatePublisher
+	mu        sync.Mutex
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	running   atomic.Bool
 }
 
 func NewDesiredStateOutboxWorker(repo RepositoryV2, publisher coordinator.RuntimeDesiredStatePublisher) *DesiredStateOutboxWorker {
 	return &DesiredStateOutboxWorker{repo: repo, publisher: publisher}
 }
 
+func (w *DesiredStateOutboxWorker) Start(ctx context.Context) error {
+	if w == nil || w.repo == nil || w.publisher == nil {
+		return fmt.Errorf("desired outbox worker: dependencies are not configured")
+	}
+	w.mu.Lock()
+	if w.running.Load() {
+		w.mu.Unlock()
+		return nil
+	}
+	workerCtx, cancel := context.WithCancel(ctx)
+	w.cancel = cancel
+	w.running.Store(true)
+	w.wg.Add(1)
+	w.mu.Unlock()
+	go func() {
+		defer w.wg.Done()
+		defer w.running.Store(false)
+		if err := w.run(workerCtx); err != nil && workerCtx.Err() == nil {
+			log.Error("installation desired outbox worker stopped: ", err)
+		}
+	}()
+	return nil
+}
+
+func (w *DesiredStateOutboxWorker) Stop() {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	cancel := w.cancel
+	w.cancel = nil
+	w.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	w.wg.Wait()
+}
+
+func (w *DesiredStateOutboxWorker) IsRunning() bool {
+	return w != nil && w.running.Load()
+}
+
 func (w *DesiredStateOutboxWorker) Run(ctx context.Context) error {
 	if w == nil || w.repo == nil || w.publisher == nil {
 		return fmt.Errorf("desired outbox worker: dependencies are not configured")
 	}
+	if !w.running.CompareAndSwap(false, true) {
+		return nil
+	}
+	defer w.running.Store(false)
+	return w.run(ctx)
+}
+
+func (w *DesiredStateOutboxWorker) run(ctx context.Context) error {
 	if err := w.processBatch(ctx); err != nil && ctx.Err() == nil {
 		log.Warn("installation desired outbox initial batch failed: ", err)
 	}

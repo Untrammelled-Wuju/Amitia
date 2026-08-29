@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -76,6 +78,10 @@ type RecoveryWorker struct {
 	runtimeRecovery       *RuntimeRecovery
 	switchRecovery        *SwitchRecovery
 	desiredStateFinalizer DesiredStateFinalizer
+	mu                    sync.Mutex
+	cancel                context.CancelFunc
+	wg                    sync.WaitGroup
+	running               atomic.Bool
 }
 
 type RecoveryWorkerOption func(*RecoveryWorker)
@@ -125,7 +131,60 @@ func (w *RecoveryWorker) ConfigureRecoveries(staging *StagingRecovery, db *DBRec
 	w.desiredStateFinalizer = desiredStateFinalizer
 }
 
+func (w *RecoveryWorker) Start(ctx context.Context) error {
+	if w == nil || w.repo == nil {
+		return errors.New("installation recovery: worker dependencies are not configured")
+	}
+	w.mu.Lock()
+	if w.running.Load() {
+		w.mu.Unlock()
+		return nil
+	}
+	workerCtx, cancel := context.WithCancel(ctx)
+	w.cancel = cancel
+	w.running.Store(true)
+	w.wg.Add(1)
+	w.mu.Unlock()
+	go func() {
+		defer w.wg.Done()
+		defer w.running.Store(false)
+		if err := w.run(workerCtx); err != nil && workerCtx.Err() == nil {
+			log.Error("installation recovery worker stopped: ", err)
+		}
+	}()
+	return nil
+}
+
+func (w *RecoveryWorker) Stop() {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	cancel := w.cancel
+	w.cancel = nil
+	w.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	w.wg.Wait()
+}
+
+func (w *RecoveryWorker) IsRunning() bool {
+	return w != nil && w.running.Load()
+}
+
 func (w *RecoveryWorker) Run(ctx context.Context) error {
+	if w == nil || w.repo == nil {
+		return errors.New("installation recovery: worker dependencies are not configured")
+	}
+	if !w.running.CompareAndSwap(false, true) {
+		return nil
+	}
+	defer w.running.Store(false)
+	return w.run(ctx)
+}
+
+func (w *RecoveryWorker) run(ctx context.Context) error {
 	ticker := time.NewTicker(w.scanInterval)
 	defer ticker.Stop()
 	for {
