@@ -36,6 +36,17 @@ function assert(condition, message) {
 
 const manager = await read("desktop/src/main/pet/manager.ts");
 const deploymentLifecycle = await read("desktop/src/main/deployment-lifecycle.ts");
+const viteConfig = await read("desktop/vite.config.ts");
+const copyStaticAssets = await read("desktop/scripts/copy-static-assets.mjs");
+const rendererBuildVerifier = await read("desktop/scripts/verify-renderer-build.mjs");
+const packagedPetVerifier = await read("desktop/scripts/verify-packaged-desktop-pet.mjs");
+const packageSchema = await read("desktop/src/shared/package-schema.ts");
+const resourceLoader = await read("desktop/src/main/pet/resource-loader.ts");
+const visualSurface = await read("desktop/src/desktop-pet/animation/surface/canvas-pet-visual-surface.ts");
+const backendPackageValidator = await read("backend/internal/desktoppet/packageformat/validator.go");
+const backendSchemaRegistry = await read("backend/internal/desktoppet/packageformat/schema_registry.go");
+const backendPackageManifest = await read("backend/internal/desktoppet/packageformat/manifest.go");
+const backendReleaseService = await read("backend/internal/desktoppet/release/service.go");
 const backendModel = await read("backend/internal/desktoppet/installation/model.go");
 const backendDto = await read("backend/internal/desktoppet/installation/dto.go");
 const configStore = await read("desktop/src/main/config-store.ts");
@@ -194,9 +205,56 @@ assert(
 );
 assert(
   manager.includes("await this.runLifecycleMutation(() => this.shutdownInternal())") &&
-    manager.includes("await this.runLifecycleMutation(() => this.recoverRuntimeInternal(reason))"),
-  "shutdown and runtime recovery must share the serialized lifecycle mutation queue",
+    manager.includes("await this.runLifecycleMutation(() => this.recoverRuntimeInternal(reason))") &&
+    manager.includes("this.initializeInternal(options.restoreActiveInstallation ?? true)") &&
+    manager.includes("this.handleCharacterSwitchedInternal(characterId)"),
+  "initialize, character reconciliation, shutdown and runtime recovery must share the serialized lifecycle mutation queue",
 );
+assert(
+  viteConfig.includes('"pet-main": resolve(__dirname, "src/renderer/pet-main.ts")') &&
+    viteConfig.includes('chunkInfo.name === "pet-main"') &&
+    !copyStaticAssets.includes('dist-types/src/renderer/pet-main.js'),
+  "production pet renderer must be a real Vite/Rollup entry, never a copied standalone tsc module",
+);
+assert(
+  rendererBuildVerifier.includes("checkRendererModuleGraph") &&
+    rendererBuildVerifier.includes("pet-main.js still contains source-tree relative imports") &&
+    packagedPetVerifier.includes('"pet-main.js"') &&
+    packagedPetVerifier.includes("collectRendererBundleFiles"),
+  "release verification must prove pet-main and its bundled dependency graph are present before and after ASAR packaging",
+);
+assert(
+  packageSchema.includes("Number.isInteger(numberValue)") &&
+    packageSchema.includes("requireV2PlaybackMode") &&
+    packageSchema.includes("maximumPlayMs: number | null") &&
+    resourceLoader.includes("maximumPlayMs: action.maximumPlayMs ?? null") &&
+    resourceLoader.includes("interruptAfterMs: action.interruptAfterMs") &&
+    backendPackageValidator.includes("DecodeStrictTopLevelJSON(data, &cfg, actionConfigAllowedFields)") &&
+    backendPackageValidator.includes("validateV2ActionNestedRequiredFields") &&
+    backendPackageValidator.includes("ErrCodePackageResourceHashMismatch") &&
+    backendPackageValidator.includes("validateLegacyActionConfigLayer") &&
+    backendSchemaRegistry.includes("v2ManifestRequiredFields") &&
+    backendSchemaRegistry.includes("isJSONNull"),
+  "Package V2 readers must preserve null/zero semantics, enforce nested/hash integrity, and retain real V1 compatibility",
+);
+assert(
+  backendPackageValidator.includes("expectedIntegrityAlgorithm := IntegrityAlgorithmV2") &&
+    backendPackageValidator.includes("isLegacyV1 && action.QualityVerdict == QualityVerdictSkipped") &&
+    backendPackageManifest.includes('Builder:    "amitia-packageformat-v2"') &&
+    backendReleaseService.includes('"maximumPlayMs":          nil') &&
+    backendReleaseService.includes('"mutexGroup":             nil') &&
+    backendReleaseService.includes('"supportsDefaultIdle":    supportsDefaultIdle') &&
+    backendReleaseService.includes('"isStableStateCandidate": isStableStateCandidate') &&
+    backendReleaseService.includes('"isTransitionOnly":       isTransitionOnly'),
+  "V2 package producers and validators must emit and enforce the same canonical semantic fields",
+);
+assert(
+  visualSurface.includes('anchorType === "normalized_canvas"') &&
+    visualSurface.includes("anchor.x * canvasWidth") &&
+    visualSurface.includes("anchor.y * canvasHeight"),
+  "normalized_canvas anchors must be resolved against canvas dimensions instead of treated as pixel coordinates",
+);
+
 assert(
   deploymentLifecycle.includes("private shuttingDown = false") &&
     deploymentLifecycle.includes("private shutdownPromise: Promise<void> | null = null") &&
@@ -205,7 +263,7 @@ assert(
     deploymentLifecycle.includes("if (localRuntimeAvailable)") &&
     deploymentLifecycle.includes("coreBaseURL: this.topology.businessCore.baseURL") &&
     deploymentLifecycle.includes("getBackendSessionClient().getMainProcessAuthHeaders()") &&
-    deploymentLifecycle.includes("await this.desktopPetManager.initialize()") &&
+    deploymentLifecycle.includes("await this.desktopPetManager.initialize({ restoreActiveInstallation: false })") &&
     deploymentLifecycle.includes("await this.desktopPetManager.shutdown()") &&
     deploymentLifecycle.includes("await this.reconcileChain"),
   "deployment lifecycle must keep the desktop-pet body local in local/cloud modes and reconcile its character authority correctly",
@@ -380,6 +438,14 @@ for (const file of await collectFiles("desktop/src", [".ts", ".tsx"])) {
   assert(
     allowedLoginItemFiles.has(relative),
     `unexpected OS auto-launch authority: ${relative}`,
+  );
+}
+
+for (const file of await collectFiles("backend/internal/desktoppet", [".go"])) {
+  const source = await fs.readFile(file, "utf8");
+  assert(
+    !source.includes("internal/gamehost"),
+    `desktop-pet backend must not depend on GameHost internals: ${path.relative(repoRoot, file)}`,
   );
 }
 
