@@ -185,6 +185,7 @@ func DefaultMigrations() []Migration {
 		DesktopPetEditingCanonicalFinalizationMigration(),
 		DesktopPetSchemaFinalizationMigration(),
 		DesktopPetBehaviorDecisionRecoveryMigration(),
+		DesktopPetProcessingOwnershipBackfillMigration(),
 	}
 }
 
