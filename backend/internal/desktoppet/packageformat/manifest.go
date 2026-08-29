@@ -231,7 +231,10 @@ func NewManifest() *Manifest {
 			Policy: BindingPolicyUnbound,
 		},
 		Compatibility: ManifestCompatibility{
-			RenderMode: RenderModeSprite,
+			// 0.0.0 is the canonical "no minimum runtime" floor for package-v2.
+			// Release builders overwrite this with the concrete runtime contract.
+			MinRuntimeVersion: "0.0.0",
+			RenderMode:        RenderModeSprite,
 		},
 		Canvas: ManifestCanvas{
 			CoordinateSystem: CoordinateSystemTopLeft,
@@ -242,6 +245,10 @@ func NewManifest() *Manifest {
 		Capabilities: ManifestCapabilities{
 			TransparentBackground: true,
 			FrameSequence:         true,
+		},
+		Provenance: ManifestProvenance{
+			SourceType: "generated",
+			Builder:    "amitia-packageformat-v2",
 		},
 	}
 }

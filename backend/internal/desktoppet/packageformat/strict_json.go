@@ -101,3 +101,36 @@ func scanValue(dec *json.Decoder, tok json.Token, depth int) error {
 
 	return nil
 }
+
+// DecodeStrictTopLevelJSON validates duplicate keys/depth and rejects unknown
+// top-level fields while preserving JSON Schema's default behavior for nested
+// objects (additionalProperties is allowed unless a nested schema says
+// otherwise). This is used by package-v2 schemas whose additionalProperties:
+// false is declared only on the document root.
+func DecodeStrictTopLevelJSON(data []byte, target interface{}, allowedFields []string) error {
+	if len(data) > maxStrictJSONBytes {
+		return NewPackageError(ErrCodePackageManifestInvalid, fmt.Sprintf("json payload exceeds %d bytes", maxStrictJSONBytes), nil)
+	}
+	if err := checkDuplicateKeysAndDepth(data); err != nil {
+		return err
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return NewPackageError(ErrCodePackageManifestInvalid, "failed to decode json object", err)
+	}
+	allowed := make(map[string]struct{}, len(allowedFields))
+	for _, field := range allowedFields {
+		allowed[field] = struct{}{}
+	}
+	for field := range fields {
+		if _, ok := allowed[field]; !ok {
+			return NewPackageError(ErrCodePackageJsonUnknownField, fmt.Sprintf("unknown top-level field: %s", field), nil)
+		}
+	}
+
+	if err := json.Unmarshal(data, target); err != nil {
+		return NewPackageError(ErrCodePackageManifestInvalid, "json decode failed", err)
+	}
+	return nil
+}
