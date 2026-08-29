@@ -26,17 +26,11 @@ internal open class ProotEnvironmentAssembler(
 
         return ProotLaunchSpec(
             binaryPath = "",
-            rootfsPath = layout.rootfsRoot.absolutePath,
+            rootfsPath = runtimePath(layout.rootfsRoot),
             workingDirectory = GuestLayout.BACKEND_DIR,
             command = listOf("/usr/bin/true"),
             bindMounts = bindMounts,
             environment = environment,
-            // The embedded runtime does not need a fake uid 0. Enabling PRoot's
-            // root-id extension (-0) activates extra syscall emulation and the
-            // frozen Android PRoot build can terminate its first tracee with
-            // SIGSEGV before exec completes. Keep the runtime unprivileged;
-            // every writable guest path is already backed by an app-private
-            // bind mount owned by the Android application uid.
             fakeRoot = false,
         )
     }
@@ -51,14 +45,11 @@ internal open class ProotEnvironmentAssembler(
 
         return ProotLaunchSpec(
             binaryPath = "",
-            rootfsPath = layout.rootfsRoot.absolutePath,
+            rootfsPath = runtimePath(layout.rootfsRoot),
             workingDirectory = GuestLayout.BACKEND_DIR,
             command = listOf(GuestLayout.BACKEND_SERVER, "--runtime-profile=$runtimeProfile"),
             bindMounts = bindMounts,
             environment = environment,
-            // See assembleRootfsProbe(): the backend, Node and Qdrant do not
-            // require uid 0. Avoid PRoot's -0/root-id extension so startup does
-            // not enter the crashing fake-root syscall-emulation path.
             fakeRoot = false,
         )
     }
@@ -83,9 +74,6 @@ internal open class ProotEnvironmentAssembler(
         val envResult = environmentBuilder.build(envRequest)
         return when (envResult) {
             is RuntimeEnvironmentResult.Success -> {
-                // Process-level keys (notably PROOT_TMP_DIR) must reach PRoot.
-                // Guest keys are applied last so HOME/TMPDIR resolve to guest
-                // paths while PRoot-specific host keys remain available.
                 val merged = LinkedHashMap<String, String>()
                 merged.putAll(envResult.environment.hostProcess)
                 merged.putAll(envResult.environment.guestRuntime)
@@ -97,7 +85,9 @@ internal open class ProotEnvironmentAssembler(
 
     private fun buildBindMounts(activeProgramSource: File): List<ProotBindMount> {
         val contract = MountContract.build(layout, activeProgramSource)
-        return contract.toProotBindMounts()
+        return contract.mounts.map { mount ->
+            ProotBindMount.create(runtimePath(File(mount.hostSource)), mount.guestTarget, readOnly = !mount.writable)
+        }
     }
 
     private fun ensureHostRuntimeDirectories() {
@@ -133,6 +123,8 @@ internal open class ProotEnvironmentAssembler(
             }
         }
     }
+
+    private fun runtimePath(file: File): String = file.canonicalFile.absolutePath
 }
 
 internal class ProotEnvironmentException(
