@@ -421,23 +421,6 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 	}()
 
 	go services.Reconciliation.RunWorker(appCtx, 10*time.Minute, mindruntime.DefaultReconciliationWorkerTargets())
-	if services.InstallationProjectionBridge != nil {
-		services.InstallationProjectionBridge.Start(appCtx)
-	}
-	if services.InstallationDesiredOutbox != nil {
-		go func() {
-			if err := services.InstallationDesiredOutbox.Run(appCtx); err != nil && appCtx.Err() == nil {
-				log.Error("installation desired outbox worker stopped: ", err)
-			}
-		}()
-	}
-	if services.InstallationRecoveryWorker != nil {
-		go func() {
-			if err := services.InstallationRecoveryWorker.Run(appCtx); err != nil && appCtx.Err() == nil {
-				log.Error("installation recovery worker stopped: ", err)
-			}
-		}()
-	}
 	return nil
 }
 
