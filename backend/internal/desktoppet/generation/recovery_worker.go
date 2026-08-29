@@ -8,9 +8,12 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 )
 
@@ -64,6 +67,10 @@ type RecoveryWorker struct {
 	providerQuery ProviderQueryFunc
 	fileVerifier  FileVerifyFunc
 	stopCh        chan struct{}
+	wg            sync.WaitGroup
+	lifecycleMu   sync.Mutex
+	running       bool
+	alive         atomic.Bool
 }
 
 func NewRecoveryWorker(db *gorm.DB, attemptRepo AttemptRepository, artifactRepo ArtifactRepository, receiptRepo ReceiptRepository, config RecoveryWorkerConfig) *RecoveryWorker {
@@ -90,6 +97,44 @@ func (w *RecoveryWorker) WithFileVerifier(fn FileVerifyFunc) *RecoveryWorker {
 }
 
 func (w *RecoveryWorker) Start(ctx context.Context) {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	if w.running {
+		return
+	}
+	w.stopCh = make(chan struct{})
+	w.running = true
+	w.alive.Store(true)
+	w.wg.Add(1)
+	go w.run(ctx)
+}
+
+func (w *RecoveryWorker) Stop() {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	if !w.running {
+		return
+	}
+	close(w.stopCh)
+	w.wg.Wait()
+	w.running = false
+	w.alive.Store(false)
+}
+
+func (w *RecoveryWorker) IsRunning() bool {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	return w.running && w.alive.Load()
+}
+
+func (w *RecoveryWorker) run(ctx context.Context) {
+	defer w.wg.Done()
+	defer w.alive.Store(false)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Logger.Errorf("generation recovery worker panic: %v", r)
+		}
+	}()
 	ticker := time.NewTicker(w.config.ScanInterval)
 	defer ticker.Stop()
 	for {
@@ -101,14 +146,6 @@ func (w *RecoveryWorker) Start(ctx context.Context) {
 		case <-ticker.C:
 			_ = w.scanOnce(ctx)
 		}
-	}
-}
-
-func (w *RecoveryWorker) Stop() {
-	select {
-	case <-w.stopCh:
-	default:
-		close(w.stopCh)
 	}
 }
 
