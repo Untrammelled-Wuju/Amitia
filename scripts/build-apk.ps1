@@ -8,6 +8,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+$unixDomainTemp = 'C:\Temp'
+if (-not (Test-Path -LiteralPath $unixDomainTemp)) {
+    New-Item -ItemType Directory -Path $unixDomainTemp -Force | Out-Null
+}
+if ($env:JAVA_TOOL_OPTIONS -notmatch 'jdk\.net\.unixdomain\.tmpdir=') {
+    $env:JAVA_TOOL_OPTIONS = (($env:JAVA_TOOL_OPTIONS, "-Djdk.net.unixdomain.tmpdir=$unixDomainTemp" -join ' ').Trim())
+}
 $root = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $mobile = Join-Path $root 'mobile_app'
 $pubspec = Join-Path $mobile 'pubspec.yaml'
