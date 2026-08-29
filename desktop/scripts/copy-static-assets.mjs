@@ -16,18 +16,6 @@ const STATIC_SOURCES = [
     to: "dist/renderer/pet.html",
     recursive: false,
   },
-  {
-    from: "dist-types/src/renderer/pet-main.js",
-    to: "dist/renderer/pet-main.js",
-    recursive: false,
-  },
-];
-
-const NEVER_OVERWRITE = [
-  "dist/renderer/index.html",
-  "dist/renderer/pet.html",
-  "dist/renderer/pet-main.js",
-  "dist/renderer/assets/",
 ];
 
 function copyStaticAssets() {
