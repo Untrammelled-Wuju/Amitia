@@ -249,6 +249,21 @@ func (rt *Runtime) InvokeDeviceHandler(
 	input []byte,
 	deadline time.Duration,
 ) (capability.UnifiedToolResult, error) {
+	return rt.InvokeDeviceHandlerWithRuntimeType(ctx, userID, targetDeviceID, capability.RuntimeTypeGameHost, handlerName, input, deadline)
+}
+
+// InvokeDeviceHandlerWithRuntimeType is the generic cloud-to-device control
+// plane primitive. It keeps GameHost compatibility while allowing internal
+// subsystems such as Desktop Pet Behavior to use their own runtime identity.
+func (rt *Runtime) InvokeDeviceHandlerWithRuntimeType(
+	ctx context.Context,
+	userID runtimeidentity.UserID,
+	targetDeviceID runtimeidentity.DeviceID,
+	runtimeType capability.RuntimeType,
+	handlerName string,
+	input []byte,
+	deadline time.Duration,
+) (capability.UnifiedToolResult, error) {
 	if rt == nil || rt.Hub == nil || rt.PendingInvocations == nil {
 		return capability.UnifiedToolResult{}, fmt.Errorf("devicemesh: invocation runtime unavailable")
 	}
@@ -266,7 +281,7 @@ func (rt *Runtime) InvokeDeviceHandler(
 	})
 	route := capability.RuntimeExecutionRoute{
 		Binding: capability.RuntimeBinding{
-			RuntimeType: capability.RuntimeTypeGameHost,
+			RuntimeType: runtimeType,
 			HandlerName: handlerName,
 		},
 		Placement:    capability.ProviderPlacementDevice,
