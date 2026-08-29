@@ -1,21 +1,47 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
-import type { DesktopPetPlayerPort, PlayerLifecyclePort, PlayerState } from "./player-port";
+import type {
+  DesktopPetPlayerPort,
+  PlayerLifecyclePort,
+  PlayerState,
+  PlayerSubmissionIdentity,
+  PlayerSwitchContext,
+} from "./player-port";
 import type { AnimationIpcAdapter, RendererDeliveryResult } from "./animation-ipc";
-import type { PlayActionCommand, LoopType, ReturnTarget, PlaybackSnapshot } from "../../desktop-pet/animation/contracts";
+import type {
+  PlayActionCommand,
+  LoopType,
+  ReturnTarget,
+  PlaybackEvent,
+  PlaybackSnapshot,
+} from "../../desktop-pet/animation/contracts";
 
-function toLoopType(loopType: string): LoopType {
-  if (loopType === "loop" || loopType === "once" || loopType === "hold" || loopType === "ping_pong") {
-    return loopType;
-  }
-  return "loop";
-}
 
 function buildReturnTarget(action: RuntimeAction): ReturnTarget {
+  if (action.returnTo) {
+    switch (action.returnTo.type) {
+      case "action":
+        return { type: "action", actionKey: action.returnTo.actionKey };
+      case "previous":
+        return { type: "previous" };
+      case "current_activity":
+        return { type: "current_activity" };
+      case "none":
+        return { type: "none" };
+      case "default":
+      default:
+        return { type: "default" };
+    }
+  }
   if (action.returnAction) {
     return { type: "action", actionKey: action.returnAction };
   }
   return { type: "default" };
+}
+
+function finiteNonNegative(value: number | null | undefined): number | undefined {
+  if (value === null || value === undefined || !Number.isFinite(value) || value < 0) return undefined;
+  return Math.floor(value);
 }
 
 export interface AnimationPlayerBridgeCallbacks {
@@ -28,6 +54,8 @@ export interface AnimationPlayerBridgeCallbacks {
 
 export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecyclePort {
   private pendingAction: RuntimeAction | null = null;
+  private pendingPlaybackId: string | null = null;
+  private pendingCommandId: string | null = null;
   private currentAction: RuntimeAction | null = null;
   private state: PlayerState = "idle";
   private loopCount = 0;
@@ -40,6 +68,7 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
   private petInstanceId = "";
   private packageRevision = 0;
   private currentPlaybackId: string | null = null;
+  private currentCommandId: string | null = null;
 
   constructor(callbacks?: AnimationPlayerBridgeCallbacks) {
     this.callbacks = callbacks ?? {};
@@ -61,6 +90,7 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
 
   detachLoaded(): void {
     this.loaded = null;
+    this.clearAllPlaybackState();
   }
 
   setSustainedActionMap(map: Record<string, string>): void {
@@ -72,7 +102,7 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
     }
   }
 
-  play(action: RuntimeAction): void {
+  play(action: RuntimeAction, context?: PlayerSwitchContext): PlayerSubmissionIdentity | void {
     if (!action) {
       this.reportError(new Error("ACTION_REQUIRED"));
       return;
@@ -86,17 +116,28 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
       return;
     }
 
+    const commandId = context?.commandId?.trim() || randomUUID();
+    const playbackInstanceId = context?.playbackInstanceId?.trim() || randomUUID();
     const oldKey = this.currentAction?.key ?? null;
+
     this.pendingAction = action;
+    this.pendingPlaybackId = playbackInstanceId;
+    this.pendingCommandId = commandId;
     this.loopCount = 0;
     this.currentFrameIndex = 0;
     this.state = "loading";
 
-    if (oldKey !== action.key) {
-      this.callbacks.onActionSwitch?.(action.key, oldKey, this.currentPlaybackId ?? "");
+    // The new playback identity is created before any switch callback or IPC
+    // delivery. Never associate a new command with the previous playback id.
+    if (oldKey !== action.key || this.currentPlaybackId !== playbackInstanceId) {
+      this.callbacks.onActionSwitch?.(action.key, oldKey, playbackInstanceId);
     }
 
-    this.sendPlayCommand(action);
+    const delivered = this.sendPlayCommand(action, commandId, playbackInstanceId, context);
+    if (!delivered) {
+      return;
+    }
+    return { commandId, playbackInstanceId };
   }
 
   pause(): void {
@@ -112,17 +153,29 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
     this.animationIpc?.sendResume();
   }
 
-  stop(): void {
+  stop(reason = "user_disabled"): void {
+    const action = this.currentAction ?? this.pendingAction;
+    const playbackId = this.currentPlaybackId ?? this.pendingPlaybackId ?? undefined;
     this.state = "stopped";
     this.loopCount = 0;
     this.currentFrameIndex = 0;
-    this.pendingAction = null;
-    this.currentPlaybackId = null;
-    this.animationIpc?.sendStop();
+    // Deliver the interruption reason before clearing local mirrors. Renderer
+    // playback identity remains authoritative for the terminal event when IPC
+    // succeeds; on delivery failure, surface a bridge failure so Manager can
+    // terminalize the already-accepted Runtime v2 play command itself.
+    const result = this.animationIpc?.sendStop(reason);
+    if (result && result.status !== "delivered" && action) {
+      this.callbacks.onActionFailed?.(
+        action.key,
+        `STOP_DELIVERY_FAILED:${result.reason ?? "send_failed"}`,
+        playbackId,
+      );
+    }
+    this.clearAllPlaybackState();
   }
 
-  switchAction(action: RuntimeAction): void {
-    this.play(action);
+  switchAction(action: RuntimeAction, context?: PlayerSwitchContext): PlayerSubmissionIdentity | void {
+    return this.play(action, context);
   }
 
   getCurrentAction(): RuntimeAction | null {
@@ -134,7 +187,7 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
   }
 
   getCurrentPlaybackId(): string | null {
-    return this.currentPlaybackId;
+    return this.currentPlaybackId ?? this.pendingPlaybackId;
   }
 
   getState(): PlayerState {
@@ -191,49 +244,72 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
     return result;
   }
 
-  handlePlaybackEvent(event: { type: string; actionKey?: string; reason?: string; playbackInstanceId?: string; frameIndex?: number }): void {
+  handlePlaybackEvent(event: PlaybackEvent): void {
+    const eventPlaybackId = event.playbackInstanceId ?? "";
     switch (event.type) {
-      case "playback.action_started":
+      case "playback.action_started": {
+        if (eventPlaybackId && this.pendingPlaybackId && eventPlaybackId !== this.pendingPlaybackId) {
+          // A late start from a superseded generation must not become current.
+          return;
+        }
         if (event.actionKey) {
-          const loaded = this.loaded;
-          const newAction = loaded?.actions.get(event.actionKey) ?? null;
+          const newAction = this.loaded?.actions.get(event.actionKey) ?? null;
           if (newAction) {
             this.currentAction = newAction;
-            this.pendingAction = null;
-            this.state = "playing";
           }
         }
-        if (event.playbackInstanceId) {
-          this.currentPlaybackId = event.playbackInstanceId;
-        }
+        this.currentPlaybackId = eventPlaybackId || this.pendingPlaybackId;
+        this.currentCommandId = event.commandId ?? this.pendingCommandId;
+        this.pendingAction = null;
+        this.pendingPlaybackId = null;
+        this.pendingCommandId = null;
+        this.state = "playing";
         break;
-      case "playback.action_completed":
+      }
+      case "playback.action_completed": {
+        const matchesCurrent = this.matchesTerminalPlayback(event);
+        if (!matchesCurrent) return;
         this.loopCount += 1;
-        if (this.currentAction) {
-          this.callbacks.onActionCompleted?.(this.currentAction.key, this.loopCount, this.currentPlaybackId ?? "");
-        }
-        if (this.currentAction?.loopType === "once") {
-          this.state = "stopped";
-        }
-        break;
-      case "playback.action_interrupted":
-        if (this.currentAction) {
-          this.callbacks.onActionInterrupted?.(this.currentAction.key, this.loopCount, this.currentPlaybackId ?? "");
+        const key = event.actionKey ?? this.currentAction?.key ?? "";
+        if (key) {
+          this.callbacks.onActionCompleted?.(key, this.loopCount, eventPlaybackId || this.currentPlaybackId || "");
         }
         this.state = "stopped";
+        this.clearCurrentPlaybackState();
         break;
-      case "playback.action_failed":
+      }
+      case "playback.action_interrupted": {
+        const matchesCurrent = this.matchesTerminalPlayback(event);
+        if (!matchesCurrent) return;
+        const key = event.actionKey ?? this.currentAction?.key ?? "";
+        if (key) {
+          this.callbacks.onActionInterrupted?.(key, this.loopCount, eventPlaybackId || this.currentPlaybackId || "");
+        }
         this.state = "stopped";
-        if (this.currentAction || this.pendingAction) {
-          const key = this.currentAction?.key ?? this.pendingAction?.key ?? "";
-          this.callbacks.onActionFailed?.(key, event.reason, this.currentPlaybackId ?? undefined);
-        }
-        if (event.reason) {
-          this.reportError(new Error(`PLAYBACK_FAILED: ${event.reason}`));
+        this.clearCurrentPlaybackState();
+        break;
+      }
+      case "playback.action_failed": {
+        const isPending = !!eventPlaybackId && eventPlaybackId === this.pendingPlaybackId;
+        const isCurrent = this.matchesTerminalPlayback(event);
+        if (!isPending && !isCurrent && eventPlaybackId) return;
+        this.state = "stopped";
+        // Renderer lifecycle events are reported to Runtime v2 exclusively by
+        // DesktopPetManager.handlePlaybackEvent(). Calling onActionFailed here
+        // would cause the same renderer/synthetic failed event to be reported
+        // twice. The callback is reserved for bridge-local failures that cannot
+        // produce a renderer lifecycle event (for example sendStop rejection).
+        if (isPending) this.clearPendingPlaybackState();
+        if (isCurrent) this.clearCurrentPlaybackState();
+        if (event.error?.message || event.reason) {
+          this.reportError(new Error(`PLAYBACK_FAILED: ${event.error?.message ?? event.reason}`));
         }
         break;
+      }
       case "playback.action_holding":
-        this.state = "paused";
+        if (!eventPlaybackId || eventPlaybackId === this.currentPlaybackId) {
+          this.state = "paused";
+        }
         break;
     }
   }
@@ -246,35 +322,84 @@ export class AnimationPlayerBridge implements DesktopPetPlayerPort, PlayerLifecy
       const action = this.loaded.actions.get(snapshot.currentActionKey);
       if (action && action.available) {
         this.currentAction = action;
-        this.pendingAction = null;
       }
     }
   }
 
-  private sendPlayCommand(action: RuntimeAction): void {
-    if (!this.animationIpc) return;
+  private sendPlayCommand(
+    action: RuntimeAction,
+    commandId: string,
+    playbackInstanceId: string,
+    context?: PlayerSwitchContext,
+  ): boolean {
+    if (!this.animationIpc) {
+      this.state = "stopped";
+      this.clearPendingPlaybackState();
+      this.reportError(new Error("ANIMATION_IPC_UNAVAILABLE"));
+      return false;
+    }
     const command: PlayActionCommand = {
-      commandId: randomUUID(),
-      idempotencyKey: createHash("sha256").update(`${action.key}-${Date.now()}`).digest("hex").slice(0, 16),
+      commandId,
+      playbackInstanceId,
+      idempotencyKey: context?.idempotencyKey?.trim()
+        || createHash("sha256").update(`${commandId}:${playbackInstanceId}`).digest("hex").slice(0, 32),
       installationId: this.installationId,
       petInstanceId: this.petInstanceId,
       packageRevision: this.packageRevision,
       actionKey: action.key,
-      priority: 50,
-      queuePolicy: "replace_current",
-      interruptPolicy: "force_system",
-      playbackRate: 1.0,
+      priority: Number.isFinite(context?.priority) ? Math.floor(context?.priority ?? action.priority ?? 50) : (action.priority ?? 50),
+      queuePolicy: context?.queuePolicy ?? "replace_current",
+      interruptPolicy: context?.interruptPolicy ?? "respect_action",
+      playbackRate: Number.isFinite(context?.playbackRate) && (context?.playbackRate ?? 0) > 0
+        ? context?.playbackRate ?? 1
+        : 1,
       issuedAt: new Date().toISOString(),
-      returnOverride: buildReturnTarget(action),
+      expiresAt: context?.expiresAt,
+      returnOverride: context?.returnOverride ?? buildReturnTarget(action),
+      minimumPlayMs: finiteNonNegative(context?.minimumPlayMs ?? action.minimumPlayMs),
+      maximumPlayMs: finiteNonNegative(context?.maximumPlayMs ?? action.maximumPlayMs),
+      interruptAfterMs: finiteNonNegative(context?.interruptAfterMs ?? action.interruptAfterMs),
+      completionPolicy: context?.completionPolicy,
+      traceId: context?.traceId,
+      source: context?.source,
     };
     const result: RendererDeliveryResult = this.animationIpc.sendPlayAction(command);
     if (result.status !== "delivered" && result.status !== "queued") {
       this.state = "stopped";
-      this.pendingAction = null;
+      this.clearPendingPlaybackState();
       this.reportError(
         new Error(`DELIVERY_FAILED: ${result.reason}${result.error ? ` (${result.error})` : ""}`),
       );
+      return false;
     }
+    return true;
+  }
+
+  private matchesTerminalPlayback(event: PlaybackEvent): boolean {
+    if (event.playbackInstanceId) {
+      return event.playbackInstanceId === this.currentPlaybackId;
+    }
+    if (event.commandId && this.currentCommandId) {
+      return event.commandId === this.currentCommandId;
+    }
+    return !!this.currentAction;
+  }
+
+  private clearPendingPlaybackState(): void {
+    this.pendingAction = null;
+    this.pendingPlaybackId = null;
+    this.pendingCommandId = null;
+  }
+
+  private clearCurrentPlaybackState(): void {
+    this.currentAction = null;
+    this.currentPlaybackId = null;
+    this.currentCommandId = null;
+  }
+
+  private clearAllPlaybackState(): void {
+    this.clearPendingPlaybackState();
+    this.clearCurrentPlaybackState();
   }
 
   private reportError(error: Error): void {

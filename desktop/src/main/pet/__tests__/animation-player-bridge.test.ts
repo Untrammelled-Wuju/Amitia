@@ -79,18 +79,20 @@ describe("AnimationPlayerBridge", () => {
       packageRevision: 11,
       actionKey: "idle",
       queuePolicy: "replace_current",
-      interruptPolicy: "force_system",
+      interruptPolicy: "respect_action",
     });
 
     bridge.handlePlaybackEvent({
       type: "playback.action_started",
       actionKey: "idle",
-      playbackInstanceId: "playback-1",
+      playbackInstanceId: sent[0].playbackInstanceId,
+      commandId: sent[0].commandId,
+      timestamp: Date.now(),
     });
 
     expect(bridge.getState()).toBe("playing");
     expect(bridge.getCurrentAction()?.key).toBe("idle");
-    expect(bridge.getCurrentPlaybackId()).toBe("playback-1");
+    expect(bridge.getCurrentPlaybackId()).toBe(sent[0].playbackInstanceId);
   });
 
   it("fails closed when renderer delivery rejects a command", () => {
@@ -145,6 +147,7 @@ describe("AnimationPlayerBridge", () => {
       type: "playback.action_started",
       actionKey: "wave",
       playbackInstanceId: "playback-wave",
+      timestamp: Date.now(),
     });
     bridge.handleSnapshotUpdate({
       phase: "playing",
@@ -161,11 +164,129 @@ describe("AnimationPlayerBridge", () => {
       defaultActionKey: "wave",
       lastTransitionAtMonotonicMs: 120,
     });
-    bridge.handlePlaybackEvent({ type: "playback.action_completed", actionKey: "wave" });
+    bridge.handlePlaybackEvent({
+      type: "playback.action_completed",
+      actionKey: "wave",
+      timestamp: Date.now(),
+    });
 
     expect(bridge.getCurrentFrameIndex()).toBe(4);
     expect(bridge.getLoopCount()).toBe(1);
     expect(bridge.getState()).toBe("stopped");
     expect(onCompleted).toHaveBeenCalledWith("wave", 1, "playback-wave");
   });
+  it("preserves package return/timing semantics when Runtime does not override them", () => {
+    const action = makeAction("contract", {
+      returnTo: { type: "previous" },
+      minimumPlayMs: 0,
+      interruptAfterMs: 0,
+      maximumPlayMs: null,
+    });
+    const loaded = makeLoaded([action], action.key);
+    const { adapter, sent } = makeIpc();
+    const bridge = new AnimationPlayerBridge();
+
+    bridge.attachLoaded(loaded);
+    bridge.setAnimationIpc(adapter);
+    bridge.setInstallationContext("install-test", "pet-test", 7);
+    bridge.play(action, { priority: 61, queuePolicy: "enqueue" });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      actionKey: action.key,
+      priority: 61,
+      queuePolicy: "enqueue",
+      returnOverride: { type: "previous" },
+      minimumPlayMs: 0,
+      interruptAfterMs: 0,
+    });
+    expect(sent[0].maximumPlayMs).toBeUndefined();
+  });
+
+  it("explicit Runtime return override wins over package returnTo", () => {
+    const action = makeAction("contract", { returnTo: { type: "previous" } });
+    const loaded = makeLoaded([action], action.key);
+    const { adapter, sent } = makeIpc();
+    const bridge = new AnimationPlayerBridge();
+
+    bridge.attachLoaded(loaded);
+    bridge.setAnimationIpc(adapter);
+    bridge.setInstallationContext("install-test", "pet-test", 7);
+    bridge.play(action, { returnOverride: { type: "none" } });
+
+    expect(sent[0].returnOverride).toEqual({ type: "none" });
+  });
+
+  it("does not duplicate Runtime failure callbacks for renderer lifecycle failures", () => {
+    const action = makeAction("active");
+    const loaded = makeLoaded([action], action.key);
+    const onFailed = vi.fn();
+    const onError = vi.fn();
+    const { adapter, sent } = makeIpc();
+    const bridge = new AnimationPlayerBridge({
+      onActionFailed: onFailed,
+      onError,
+    });
+
+    bridge.attachLoaded(loaded);
+    bridge.setAnimationIpc(adapter);
+    bridge.setInstallationContext("install-test", "pet-test", 7);
+    bridge.play(action);
+    bridge.handlePlaybackEvent({
+      type: "playback.action_started",
+      actionKey: action.key,
+      playbackInstanceId: sent[0].playbackInstanceId,
+      commandId: sent[0].commandId,
+      timestamp: Date.now(),
+    });
+
+    bridge.handlePlaybackEvent({
+      type: "playback.action_failed",
+      actionKey: action.key,
+      playbackInstanceId: sent[0].playbackInstanceId,
+      commandId: sent[0].commandId,
+      reason: "renderer_delivery_failed",
+      error: { code: "renderer_delivery_failed", message: "delivery failed" },
+      timestamp: Date.now(),
+    });
+
+    expect(onFailed).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(bridge.getCurrentPlaybackId()).toBeNull();
+    expect(bridge.getState()).toBe("stopped");
+  });
+
+  it("terminalizes stop delivery failure with the active playback identity", () => {
+    const action = makeAction("active");
+    const loaded = makeLoaded([action], action.key);
+    const onFailed = vi.fn();
+    const { adapter, sent } = makeIpc();
+    (adapter as unknown as { sendStop: ReturnType<typeof vi.fn> }).sendStop = vi.fn(() => ({
+      status: "rejected",
+      reason: "renderer_not_ready",
+    }));
+    const bridge = new AnimationPlayerBridge({ onActionFailed: onFailed });
+
+    bridge.attachLoaded(loaded);
+    bridge.setAnimationIpc(adapter);
+    bridge.setInstallationContext("install-test", "pet-test", 7);
+    bridge.play(action);
+    bridge.handlePlaybackEvent({
+      type: "playback.action_started",
+      actionKey: action.key,
+      playbackInstanceId: sent[0].playbackInstanceId,
+      commandId: sent[0].commandId,
+      timestamp: Date.now(),
+    });
+
+    bridge.stop("runtime_stop");
+
+    expect(onFailed).toHaveBeenCalledWith(
+      action.key,
+      "STOP_DELIVERY_FAILED:renderer_not_ready",
+      sent[0].playbackInstanceId,
+    );
+    expect(bridge.getCurrentPlaybackId()).toBeNull();
+  });
+
 });

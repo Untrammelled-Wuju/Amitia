@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { LoadedInstallation, RuntimeAction } from "../resource-loader";
-import type { DesktopPetPlayerPort, PlayerLifecyclePort, PlayerState } from "../player-port";
+import type {
+  DesktopPetPlayerPort,
+  PlayerLifecyclePort,
+  PlayerState,
+  PlayerSubmissionIdentity,
+  PlayerSwitchContext,
+} from "../player-port";
 import {
   ActionPriorities,
   DesktopPetActionScheduler,
@@ -97,6 +103,24 @@ class SchedulerTestPlayer implements DesktopPetPlayerPort, PlayerLifecyclePort {
   }
 }
 
+class IdentitySchedulerTestPlayer extends SchedulerTestPlayer {
+  private sequence = 0;
+  lastContext: PlayerSwitchContext | undefined;
+
+  override switchAction(
+    action: RuntimeAction,
+    context?: PlayerSwitchContext,
+  ): PlayerSubmissionIdentity {
+    this.lastContext = context;
+    super.switchAction(action);
+    this.sequence += 1;
+    return {
+      commandId: context?.commandId ?? `test-command-${this.sequence}`,
+      playbackInstanceId: context?.playbackInstanceId ?? `test-playback-${this.sequence}`,
+    };
+  }
+}
+
 interface SchedulerSpy {
   events: Array<{
     event: SchedulerEvent;
@@ -184,6 +208,105 @@ describe("DesktopPetActionScheduler", () => {
 
     expect(result).toBe("played");
     expect(player.getCurrentAction()?.key).toBe("dragged");
+  });
+
+  it("显式 0ms timing 合同不会被默认 300ms 下限覆盖", () => {
+    const loaded = attachAndAdvance();
+    const current = makeRuntimeAction({
+      key: "contract_current",
+      loopType: "loop",
+      interruptible: true,
+      minimumPlayMs: 0,
+      interruptAfterMs: 0,
+    });
+    const next = makeRuntimeAction({
+      key: "contract_next",
+      loopType: "loop",
+      interruptible: true,
+    });
+    loaded.actions.set(current.key, current);
+    loaded.actions.set(next.key, next);
+
+    expect(scheduler.submit(
+      makeRequest({
+        actionKey: current.key,
+        source: EventSources.MANUAL,
+        priority: ActionPriorities.EMOTION,
+        interrupt: true,
+        metadata: { minimumPlayMs: "0", interruptAfterMs: "0" },
+      }),
+    )).toBe("played");
+
+    expect(scheduler.submit(
+      makeRequest({
+        actionKey: next.key,
+        source: EventSources.MANUAL,
+        priority: ActionPriorities.THINKING,
+        interrupt: true,
+      }),
+    )).toBe("played");
+    expect(player.getCurrentAction()?.key).toBe(next.key);
+  });
+
+  it("显式 returnTo=default 会覆盖包自身返回策略", () => {
+    const identityPlayer = new IdentitySchedulerTestPlayer();
+    const localScheduler = new DesktopPetActionScheduler(identityPlayer);
+    const loaded = makeLoadedInstallation();
+    const action = makeRuntimeAction({
+      key: "runtime_return_default",
+      returnTo: { type: "previous" },
+    });
+    loaded.actions.set(action.key, action);
+    localScheduler.attachLoaded(loaded);
+    raf.nextTick(500);
+
+    expect(localScheduler.submit(
+      makeRequest({
+        actionKey: action.key,
+        source: EventSources.MANUAL,
+        priority: ActionPriorities.THINKING,
+        interrupt: true,
+        metadata: { returnTo: "default" },
+      }),
+    )).toBe("played");
+    expect(identityPlayer.lastContext?.returnOverride).toEqual({ type: "default" });
+
+    localScheduler.dispose();
+  });
+
+  it("完全缺省 timing 时保留 300ms 安全下限", () => {
+    const loaded = attachAndAdvance();
+    const current = makeRuntimeAction({
+      key: "default_timing_current",
+      loopType: "loop",
+      interruptible: true,
+    });
+    const next = makeRuntimeAction({
+      key: "default_timing_next",
+      loopType: "loop",
+      interruptible: true,
+    });
+    loaded.actions.set(current.key, current);
+    loaded.actions.set(next.key, next);
+
+    expect(scheduler.submit(
+      makeRequest({
+        actionKey: current.key,
+        source: EventSources.MANUAL,
+        priority: ActionPriorities.EMOTION,
+        interrupt: true,
+      }),
+    )).toBe("played");
+
+    expect(scheduler.submit(
+      makeRequest({
+        actionKey: next.key,
+        source: EventSources.MANUAL,
+        priority: ActionPriorities.THINKING,
+        interrupt: true,
+      }),
+    )).toBe("queued");
+    expect(player.getCurrentAction()?.key).toBe(current.key);
   });
 
   it("低优先级不得打断高优先级", () => {
@@ -914,4 +1037,52 @@ describe("DesktopPetActionScheduler", () => {
 
     expect(() => scheduler.attachLoaded(loaded)).not.toThrow();
   });
+
+  it("晚到的旧 playback 终态不会清除已经切换的新动作", () => {
+    const identityPlayer = new IdentitySchedulerTestPlayer();
+    const identityScheduler = new DesktopPetActionScheduler(identityPlayer);
+    const loaded = makeLoadedInstallation();
+    loaded.actions.set(
+      "first",
+      makeRuntimeAction({ key: "first", loopType: "loop", interruptible: true }),
+    );
+    loaded.actions.set(
+      "second",
+      makeRuntimeAction({ key: "second", loopType: "loop", interruptible: true }),
+    );
+
+    identityScheduler.attachLoaded(loaded);
+    raf.nextTick(500);
+    expect(
+      identityScheduler.submit(
+        makeRequest({
+          actionKey: "first",
+          source: EventSources.EMOTION,
+          priority: ActionPriorities.EMOTION,
+          interrupt: true,
+          metadata: { runtimeCommandId: "cmd-first" },
+        }),
+      ),
+    ).toBe("played");
+    raf.nextTick(500);
+    expect(
+      identityScheduler.submit(
+        makeRequest({
+          actionKey: "second",
+          source: EventSources.USER_DRAG,
+          priority: ActionPriorities.DRAG,
+          interrupt: true,
+          metadata: { runtimeCommandId: "cmd-second" },
+        }),
+      ),
+    ).toBe("played");
+
+    expect(identityScheduler.getCurrent()?.actionKey).toBe("second");
+    identityScheduler.notifyActionInterrupted("first", "test-playback-2", "cmd-first");
+    identityScheduler.notifyActionCompleted("first", "test-playback-2", "cmd-first");
+    expect(identityScheduler.getCurrent()?.actionKey).toBe("second");
+
+    identityScheduler.dispose();
+  });
+
 });
