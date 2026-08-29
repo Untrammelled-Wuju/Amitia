@@ -1667,13 +1667,19 @@ func (s *BehaviorRuntimeEventSink) OnRuntimeEvent(ctx context.Context, event run
 	case "runtime.pointer.clicked", "runtime.pointer.double_clicked", "runtime.pointer.hovered",
 		"runtime.drag.started", "runtime.drag.moved", "runtime.drag.completed", "runtime.drag.cancelled",
 		"runtime.pet.fall.started", "runtime.pet.edge.reached", "runtime.pet.interacted":
+		dedupOrdinal := event.Timestamp.Format(time.RFC3339Nano)
+		if event.Sequence > 0 {
+			dedupOrdinal = fmt.Sprintf("s%d", event.Sequence)
+		}
 		builder := events.NewEnvelope(canonicalEventType, behavior.OriginDesktop).
 			UserID(event.UserID).
 			CharacterID(characterID).
+			SessionID(event.SessionID).
 			PetInstanceID(petInstanceID).
 			InstallationID(event.InstallationID).
+			Sequence(event.Sequence).
 			OccurredAt(event.Timestamp).
-			DedupKey(events.BuildDedupKey(petInstanceID, canonicalEventType, event.Timestamp.Format(time.RFC3339Nano)))
+			DedupKey(events.BuildDedupKey(petInstanceID, canonicalEventType, dedupOrdinal))
 		if len(event.Payload) > 0 {
 			builder.PayloadRaw(event.Payload)
 		}
@@ -1712,13 +1718,19 @@ func (s *BehaviorRuntimeEventSink) submitPlaybackEvent(ctx context.Context, even
 		}
 	}
 
+	dedupOrdinal := event.Timestamp.Format(time.RFC3339Nano)
+	if event.Sequence > 0 {
+		dedupOrdinal = fmt.Sprintf("s%d", event.Sequence)
+	}
 	builder := events.NewEnvelope(eventType, behavior.OriginPlayback).
 		UserID(event.UserID).
 		CharacterID(characterID).
+		SessionID(event.SessionID).
 		PetInstanceID(petInstanceID).
 		InstallationID(event.InstallationID).
+		Sequence(event.Sequence).
 		OccurredAt(event.Timestamp).
-		DedupKey(events.BuildDedupKey(commandID, eventType, event.Timestamp.Format(time.RFC3339Nano)))
+		DedupKey(events.BuildDedupKey(commandID, eventType, dedupOrdinal))
 
 	if commandID != "" {
 		builder.PayloadField("commandId", commandID)
