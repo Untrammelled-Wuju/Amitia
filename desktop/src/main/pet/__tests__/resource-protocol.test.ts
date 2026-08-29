@@ -50,6 +50,39 @@ describe("amitia-pet resource protocol", () => {
     ]);
   });
 
+
+  it("rejects relative installation roots instead of resolving against cwd", async () => {
+    const relativePath = "actions/idle/action.json";
+    const manifest = {
+      integrity: {
+        files: [
+          {
+            path: relativePath,
+            sha256: "0".repeat(64),
+            bytes: 1,
+            mediaType: "application/json",
+          },
+        ],
+      },
+    } as never;
+
+    registerPetProtocol(() => ({
+      installationId: "install-relative",
+      installPath: "desktop-pets/installations/install-relative",
+      manifest,
+      resourceIndex: buildResourceIndex(manifest),
+    }));
+
+    const response = await protocolMock.handler!(
+      new Request(
+        "amitia-pet://installation/install-relative/actions/idle/action.json",
+      ),
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ error: "invalid_install_root" });
+  });
+
   it("returns CORS headers for declared resources", async () => {
     const installPath = await mkdtemp(join(tmpdir(), "amitia-pet-protocol-"));
     tempDirs.push(installPath);
