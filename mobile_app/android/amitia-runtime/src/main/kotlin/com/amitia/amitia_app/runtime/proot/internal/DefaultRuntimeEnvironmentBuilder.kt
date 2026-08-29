@@ -122,7 +122,7 @@ internal class DefaultRuntimeEnvironmentBuilder(
         env["AMITIA_TEMP_DIR"] = GuestLayoutContract.TEMP_ROOT
         env["AMITIA_WORKSPACE_DIR"] = GuestLayoutContract.WORKSPACE_ROOT
 
-        env["AMITIA_RUNTIME_MODE"] = "android-native"
+        env["AMITIA_RUNTIME_MODE"] = "android-proot"
         env["AMITIA_SECURITY_MODE"] = "local_single_user"
         env["AMITIA_ALLOW_REMOTE_ACCESS"] = "false"
         env["AMITIA_LOCAL_TOKEN_FILE"] = GuestLayout.LOCAL_TOKEN
