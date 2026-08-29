@@ -61,6 +61,7 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.srcDir("src/main/jniLibs")
+            jniLibs.srcDir(layout.buildDirectory.dir("generated/jniLibs"))
         }
     }
 }
@@ -88,6 +89,17 @@ tasks.withType<Test>().configureEach {
 val prootArmDir = layout.projectDirectory.dir("src/main/jniLibs/arm64-v8a")
 val prootArmFile = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libamitia_proot.so")
 val prootMetadataFile = layout.projectDirectory.file("src/main/res/raw/proot_artifact.json")
+val androidBackendInput = providers.gradleProperty("amitiaAndroidBackendArm64").orNull?.let(::file)
+val androidBackendOutput = layout.buildDirectory.file("generated/jniLibs/arm64-v8a/libamitia_server.so")
+
+tasks.register<Copy>("stageAndroidBackend") {
+    val input = androidBackendInput ?: throw GradleException("stageAndroidBackend requires -PamitiaAndroidBackendArm64=<android arm64 backend>")
+    from(input)
+    into(androidBackendOutput.get().asFile.parentFile)
+    rename { "libamitia_server.so" }
+    inputs.file(input)
+    outputs.file(androidBackendOutput)
+}
 
 tasks.register("verifyProotArtifact") {
     group = "verification"
@@ -134,6 +146,7 @@ tasks.register("verifyProotArtifact") {
 
 tasks.named("preBuild").configure {
     dependsOn("verifyProotArtifact")
+    dependsOn("stageAndroidBackend")
 }
 
 dependencies {
