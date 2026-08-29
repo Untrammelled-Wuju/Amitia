@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -62,6 +63,9 @@ type Worker struct {
 	stopCh            chan struct{}
 	wg                sync.WaitGroup
 	sem               chan struct{}
+	lifecycleMu       sync.Mutex
+	running           bool
+	alive             atomic.Bool
 }
 
 func NewWorker(db *gorm.DB, repo desktoppet.Repository, registry *imageprovider.Registry) *Worker {
@@ -117,29 +121,42 @@ func NewWorker(db *gorm.DB, repo desktoppet.Repository, registry *imageprovider.
 }
 
 func (w *Worker) Start(ctx context.Context) {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	if w.running {
+		return
+	}
+	w.stopCh = make(chan struct{})
+	w.running = true
+	w.alive.Store(true)
 	w.RecoverOnStartup(ctx)
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				log.Logger.Errorf("worker recoveryWorker panic: %v", r)
-			}
-		}()
-		w.recoveryWorker.Start(ctx)
-	}()
+	w.recoveryWorker.Start(ctx)
 	w.wg.Add(1)
 	go w.pollLoop(ctx)
 }
 
 func (w *Worker) Stop() {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	if !w.running {
+		return
+	}
 	close(w.stopCh)
 	w.recoveryWorker.Stop()
 	w.wg.Wait()
+	w.running = false
+	w.alive.Store(false)
+}
+
+func (w *Worker) IsRunning() bool {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	return w.running && w.alive.Load() && w.recoveryWorker.IsRunning()
 }
 
 func (w *Worker) pollLoop(ctx context.Context) {
 	defer w.wg.Done()
+	defer w.alive.Store(false)
 	defer func() {
 		if r := recover(); r != nil {
 			log.Logger.Errorf("worker pollLoop panic: %v", r)
