@@ -88,7 +88,9 @@ object AndroidRuntimeModule {
         )
         cachedRuntimePackageSource = runtimePackageSource
 
-        val environmentBuilder = com.amitia.amitia_app.runtime.proot.internal.DefaultRuntimeEnvironmentBuilder()
+        val environmentBuilder = com.amitia.amitia_app.runtime.proot.internal.DefaultRuntimeEnvironmentBuilder(
+            File(appContext.applicationInfo.nativeLibraryDir, "libamitia_loader.so").absolutePath,
+        )
         val prootEnvironmentAssembler = com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler(
             layout = layout,
             environmentBuilder = environmentBuilder,

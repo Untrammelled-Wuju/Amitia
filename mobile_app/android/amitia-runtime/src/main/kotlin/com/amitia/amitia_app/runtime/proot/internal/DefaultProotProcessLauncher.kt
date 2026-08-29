@@ -14,7 +14,7 @@ internal class DefaultProotProcessLauncher(private val sessionIdGenerator: Sessi
             val fullCommand = ArrayList<String>(command.arguments.size + 1)
             fullCommand.add(command.binaryPath); fullCommand.addAll(command.arguments)
             val pb = ProcessBuilder(fullCommand); pb.directory(File("/"))
-            if (command.environment.isNotEmpty()) { pb.environment().clear(); pb.environment().putAll(command.environment) }
+            if (command.environment.isNotEmpty()) { pb.environment().putAll(command.environment) }
             val process = pb.start()
             val session = DefaultProotSession(
                 sessionId = sessionId,
