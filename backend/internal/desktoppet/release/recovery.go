@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/packageformat"
@@ -28,6 +29,7 @@ type ReleaseRecoveryWorker struct {
 	wg             sync.WaitGroup
 	mu             sync.Mutex
 	running        bool
+	alive          atomic.Bool
 }
 
 type LeaseManagerPort interface {
@@ -69,28 +71,36 @@ func (w *ReleaseRecoveryWorker) Start(ctx context.Context) {
 	}
 	w.running = true
 	w.stopCh = make(chan struct{})
+	w.alive.Store(true)
+	w.wg.Add(1)
 	w.mu.Unlock()
 
-	w.wg.Add(1)
 	go w.run(ctx)
 	log.Logger.Info("Release recovery worker started")
 }
 
 func (w *ReleaseRecoveryWorker) Stop() {
 	w.mu.Lock()
+	defer w.mu.Unlock()
 	if !w.running {
-		w.mu.Unlock()
 		return
 	}
-	w.running = false
 	close(w.stopCh)
-	w.mu.Unlock()
 	w.wg.Wait()
+	w.running = false
+	w.alive.Store(false)
 	log.Logger.Info("Release recovery worker stopped")
+}
+
+func (w *ReleaseRecoveryWorker) IsRunning() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.running && w.alive.Load()
 }
 
 func (w *ReleaseRecoveryWorker) run(ctx context.Context) {
 	defer w.wg.Done()
+	defer w.alive.Store(false)
 	ticker := time.NewTicker(w.checkInterval)
 	defer ticker.Stop()
 	for {
