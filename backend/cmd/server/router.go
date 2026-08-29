@@ -804,21 +804,24 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 	}
 
-	desktopPetWriteGroup := r.Group("/api")
-	desktopPetWriteGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
-		Mode:             config.AppCfg.Security.Mode,
-		JWTSecret:        config.AppCfg.JWT.Secret,
-		JWTIssuer:        config.AppCfg.JWT.Issuer,
-		JWTAudience:      config.AppCfg.JWT.Audience,
-		LocalCredentials: localCredentialStore,
-		LocalUserID:      config.AppCfg.Security.LocalUserID,
-		ListenAddress:    config.AppCfg.Server.Host,
-		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-		SessionService:   sessionSvc,
-		AccountSessions:  accountSessionRuntime.Validator,
-	}))
-	desktopPetWriteGroup.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
-	{
+	// Desktop-pet entity mutations and Runtime v2 are device-local authority.
+	// CloudCore exposes catalog/control-plane reads and mesh gateways only; the
+	// desktop routes these writes to the loopback Device Agent.
+	if services.RuntimePolicy.DesktopPet {
+		desktopPetWriteGroup := r.Group("/api")
+		desktopPetWriteGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
+			Mode:             config.AppCfg.Security.Mode,
+			JWTSecret:        config.AppCfg.JWT.Secret,
+			JWTIssuer:        config.AppCfg.JWT.Issuer,
+			JWTAudience:      config.AppCfg.JWT.Audience,
+			LocalCredentials: localCredentialStore,
+			LocalUserID:      config.AppCfg.Security.LocalUserID,
+			ListenAddress:    config.AppCfg.Server.Host,
+			AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+			SessionService:   sessionSvc,
+			AccountSessions:  accountSessionRuntime.Validator,
+		}))
+		desktopPetWriteGroup.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
 		desktoppet.RegisterDesktopPetWriteRouter(desktopPetWriteGroup, ctx, services.PathRegistry)
 		processing.RegisterProcessingRouter(desktopPetWriteGroup, ctx, services.PathRegistry)
 		editing.RegisterEditingRouterWithService(desktopPetWriteGroup, services.EditingService, services.OwnershipGuard, services.PathRegistry)
@@ -827,20 +830,21 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		release.RegisterRoutes(desktopPetWriteGroup, services.NewReleaseService, services.OwnershipGuard)
 		registerImportStagingRoutes(desktopPetWriteGroup, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard, services.PackageImporter)
 		behavior.RegisterRoutes(desktopPetWriteGroup, services.BehaviorService)
+
+		runtimev2.RegisterInternalRoutes(
+			r,
+			services.DesktopPetRuntimeV2,
+			services.SafeMode,
+			func(ctx context.Context, rawTicket string, runtimeID runtimeidentity.RuntimeID, deviceID runtimeidentity.DeviceID) (runtimeidentity.UserID, error) {
+				ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, string(runtimeID), string(deviceID))
+				if err != nil {
+					return "", err
+				}
+				return runtimeidentity.UserID(ticket.UserID), nil
+			},
+		)
+		runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
 	}
-	runtimev2.RegisterInternalRoutes(
-		r,
-		services.DesktopPetRuntimeV2,
-		services.SafeMode,
-		func(ctx context.Context, rawTicket string, runtimeID runtimeidentity.RuntimeID, deviceID runtimeidentity.DeviceID) (runtimeidentity.UserID, error) {
-			ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, string(runtimeID), string(deviceID))
-			if err != nil {
-				return "", err
-			}
-			return runtimeidentity.UserID(ticket.UserID), nil
-		},
-	)
-	runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
 
 	maintenanceAuthGroup := r.Group("/api")
 	maintenanceAuthGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{

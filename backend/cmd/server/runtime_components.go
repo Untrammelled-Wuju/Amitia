@@ -348,8 +348,12 @@ type desktopPetComponent struct {
 }
 
 type workerStartState struct {
-	releaseRecoveryWorkerOk bool
-	behaviorOk              bool
+	installationProjectionOK bool
+	installationOutboxOK     bool
+	installationRecoveryOK   bool
+	releaseRecoveryWorkerOk  bool
+	releaseEventOutboxOK     bool
+	behaviorOk               bool
 }
 
 func newDesktopPetComponent(services *AppServices) *desktopPetComponent {
@@ -361,7 +365,7 @@ func (c *desktopPetComponent) Descriptor() runtimeorchestrator.ComponentDescript
 		ID:       runtimeorchestrator.ComponentDesktopPet,
 		Phase:    runtimeorchestrator.PhaseApplication,
 		Enabled:  config.AppCfg.DesktopPetRuntime.Enabled,
-		Required: false,
+		Required: config.AppCfg.DesktopPetRuntime.Enabled,
 		Dependencies: []runtimeorchestrator.ComponentID{
 			runtimeorchestrator.ComponentSQLite,
 			runtimeorchestrator.ComponentExtensionKernel,
@@ -435,12 +439,75 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 			return err
 		}
 	}
-	if svc.ReleaseRecoveryWorker != nil {
-		if err := runDesktopPetWorkerStart("release-recovery", func() { svc.ReleaseRecoveryWorker.Start(ctx) }); err != nil {
-			c.stopAllLocked(ctx, svc)
-			return err
-		}
-		c.state.releaseRecoveryWorkerOk = true
+	// Installation reliability is part of the desktop-pet runtime body. Keeping
+	// these workers inside this component guarantees that both local and
+	// device-agent profiles own the same durable desired-state lifecycle.
+	if svc.InstallationProjectionBridge == nil {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("installation projection bridge not initialized")
+	}
+	if err := runDesktopPetWorkerStart("installation-projection", func() { svc.InstallationProjectionBridge.Start(ctx) }); err != nil {
+		c.stopAllLocked(ctx, svc)
+		return err
+	}
+	c.state.installationProjectionOK = svc.InstallationProjectionBridge.IsRunning()
+	if !c.state.installationProjectionOK {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("installation projection bridge failed to start")
+	}
+
+	if svc.InstallationDesiredOutbox == nil {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("installation desired outbox worker not initialized")
+	}
+	if err := svc.InstallationDesiredOutbox.Start(ctx); err != nil {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("installation desired outbox start: %w", err)
+	}
+	c.state.installationOutboxOK = svc.InstallationDesiredOutbox.IsRunning()
+	if !c.state.installationOutboxOK {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("installation desired outbox worker failed to start")
+	}
+
+	if svc.InstallationRecoveryWorker == nil {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("installation recovery worker not initialized")
+	}
+	if err := svc.InstallationRecoveryWorker.Start(ctx); err != nil {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("installation recovery start: %w", err)
+	}
+	c.state.installationRecoveryOK = svc.InstallationRecoveryWorker.IsRunning()
+	if !c.state.installationRecoveryOK {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("installation recovery worker failed to start")
+	}
+	if svc.ReleaseRecoveryWorker == nil {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("release recovery worker not initialized")
+	}
+	if err := runDesktopPetWorkerStart("release-recovery", func() { svc.ReleaseRecoveryWorker.Start(ctx) }); err != nil {
+		c.stopAllLocked(ctx, svc)
+		return err
+	}
+	c.state.releaseRecoveryWorkerOk = svc.ReleaseRecoveryWorker.IsRunning()
+	if !c.state.releaseRecoveryWorkerOk {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("release recovery worker failed to start")
+	}
+	if svc.ReleaseEventOutboxDispatcher == nil {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("release event outbox dispatcher not initialized")
+	}
+	if err := runDesktopPetWorkerStart("release-event-outbox", func() { svc.ReleaseEventOutboxDispatcher.Start(ctx) }); err != nil {
+		c.stopAllLocked(ctx, svc)
+		return err
+	}
+	c.state.releaseEventOutboxOK = svc.ReleaseEventOutboxDispatcher.IsRunning()
+	if !c.state.releaseEventOutboxOK {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("release event outbox dispatcher failed to start")
 	}
 	if svc.BehaviorService != nil {
 		if err := svc.BehaviorService.Start(ctx); err != nil {
@@ -522,8 +589,20 @@ func (c *desktopPetComponent) readyLocked(svc *AppServices) error {
 	if svc.BridgeRecoveryWorker == nil || !svc.BridgeRecoveryWorker.IsRunning() {
 		return fmt.Errorf("desktop pet revision bridge recovery worker not running")
 	}
+	if svc.InstallationProjectionBridge == nil || !svc.InstallationProjectionBridge.IsRunning() {
+		return fmt.Errorf("desktop pet installation projection bridge not running")
+	}
+	if svc.InstallationDesiredOutbox == nil || !svc.InstallationDesiredOutbox.IsRunning() {
+		return fmt.Errorf("desktop pet installation desired outbox worker not running")
+	}
+	if svc.InstallationRecoveryWorker == nil || !svc.InstallationRecoveryWorker.IsRunning() {
+		return fmt.Errorf("desktop pet installation recovery worker not running")
+	}
 	if svc.ReleaseRecoveryWorker == nil || !svc.ReleaseRecoveryWorker.IsRunning() {
 		return fmt.Errorf("desktop pet release recovery worker not running")
+	}
+	if svc.ReleaseEventOutboxDispatcher == nil || !svc.ReleaseEventOutboxDispatcher.IsRunning() {
+		return fmt.Errorf("desktop pet release event outbox dispatcher not running")
 	}
 	if svc.BehaviorService == nil || !svc.BehaviorService.IsRunning() {
 		return fmt.Errorf("desktop pet behavior service not running")
@@ -563,8 +642,20 @@ func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppService
 	if c.state.behaviorOk && svc.BehaviorService != nil {
 		_ = svc.BehaviorService.Stop()
 	}
+	if c.state.releaseEventOutboxOK && svc.ReleaseEventOutboxDispatcher != nil {
+		svc.ReleaseEventOutboxDispatcher.Stop()
+	}
 	if c.state.releaseRecoveryWorkerOk && svc.ReleaseRecoveryWorker != nil {
 		svc.ReleaseRecoveryWorker.Stop()
+	}
+	if c.state.installationRecoveryOK && svc.InstallationRecoveryWorker != nil {
+		svc.InstallationRecoveryWorker.Stop()
+	}
+	if c.state.installationOutboxOK && svc.InstallationDesiredOutbox != nil {
+		svc.InstallationDesiredOutbox.Stop()
+	}
+	if c.state.installationProjectionOK && svc.InstallationProjectionBridge != nil {
+		svc.InstallationProjectionBridge.Stop()
 	}
 	if svc.BridgeRecoveryWorker != nil {
 		svc.BridgeRecoveryWorker.Stop()

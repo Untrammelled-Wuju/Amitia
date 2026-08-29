@@ -63,6 +63,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
 	releaserepo "github.com/u-ai/backend/internal/desktoppet/release/repository"
 	releasestorage "github.com/u-ai/backend/internal/desktoppet/release/storage"
+	releaseworker "github.com/u-ai/backend/internal/desktoppet/release/worker"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
@@ -153,12 +154,14 @@ type AppServices struct {
 	NewReleaseService            release.ReleaseService
 	ReleaseRecoveryWorker        *release.ReleaseRecoveryWorker
 	ReleaseEventPublisher        *release.ReleaseEventPublisher
+	ReleaseEventOutboxDispatcher *releaseworker.EventOutboxDispatcher
 	DesktopPetRuntimeV2          *runtimev2.RuntimeFacade
 	EditingService               editing.Service
 	RegenerationWorker           *editing.RegenerationWorker
 	BridgeRecoveryWorker         *revisioncommit.RecoveryWorker
 	BehaviorService              *behavior.BehaviorService
 	AdapterManager               *adapters.AdapterManager
+	DesktopPetOwnerMapper        *desktopPetOwnerMapper
 	Reconciliation               *mindruntime.ReconciliationEngine
 	CircuitBreakers              *mindruntime.CircuitBreakerRegistry
 	VoiceEntry                   *interaction.VoiceEntry
@@ -812,6 +815,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
 	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
+	releaseEventOutboxDispatcher := releaseworker.NewEventOutboxDispatcher(
+		releaseRepo,
+		newDesktopPetReleaseEventSink(kernelContainer.EventService),
+	)
 	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher, newGeneratedReleasePackageSource(processingService))
 
 	pathRegistry := desktoppetsecurity.NewPathRootRegistry()
@@ -907,9 +914,15 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	_ = journalManager
 
 	var adapterManager *adapters.AdapterManager
+	var behaviorMeshPublisher *desktopPetBehaviorMeshPublisher
 	if behaviorAssembled != nil && behaviorAssembled.Engine != nil {
+		var behaviorPublisher behavior.BehaviorEventPublisher = adapters.NewEnginePublisher(behaviorAssembled.Engine)
+		if runtimeProfile == runtimeprofile.ProfileCloudCore {
+			behaviorMeshPublisher = newDesktopPetBehaviorMeshPublisher()
+			behaviorPublisher = behaviorMeshPublisher
+		}
 		adapterManager = adapters.NewAdapterManager(
-			adapters.NewEnginePublisher(behaviorAssembled.Engine),
+			behaviorPublisher,
 			adapters.AdapterManagerOptions{
 				Clock: behavior.NewRealClock(),
 			},
@@ -999,6 +1012,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		return nil, fmt.Errorf("initialize canonical MCP compatibility runtime: %w", mcpCompatibilityErr)
 	}
 
+	var desktopPetOwnerMapper *desktopPetOwnerMapper
+	if runtimeProfile.IsDeviceAgent() {
+		desktopPetOwnerMapper, err = newDesktopPetOwnerMapper(ctx.DB)
+		if err != nil {
+			return nil, fmt.Errorf("initialize desktop pet owner mapper: %w", err)
+		}
+	}
+
 	services := &AppServices{
 		RuntimeProfile:               runtimeProfile,
 		RuntimePolicy:                policy,
@@ -1030,6 +1051,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		NewReleaseService:            newReleaseService,
 		ReleaseRecoveryWorker:        releaseRecoveryWorker,
 		ReleaseEventPublisher:        releaseEventPublisher,
+		ReleaseEventOutboxDispatcher: releaseEventOutboxDispatcher,
 		DesktopPetRuntimeV2:          runtimeV2Facade,
 		EditingService:               editingSvc,
 		RegenerationWorker:           regenerationWorker,
@@ -1037,6 +1059,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 		BehaviorService:              behaviorSvc,
 		AdapterManager:               adapterManager,
+		DesktopPetOwnerMapper:        desktopPetOwnerMapper,
 		Reconciliation:               reconciliationEngine,
 		CircuitBreakers:              cbRegistry,
 		VoiceEntry:                   voiceEntry,
@@ -1084,6 +1107,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("device-agent task runtime service is required")
 		}
 		localRuntimeDispatcher := devicemeshagent.NewRuntimeDispatcher()
+		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshHandler, newDesktopPetBehaviorMeshInvokeHandler(services))
 		if kernelContainer.GameHost != nil {
 			localRuntimeDispatcher.RegisterCancellable(gameHostManagementInvokeHandler, newGameHostManagementInvokeHandler(services))
 		}
@@ -1098,6 +1122,22 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("failed to construct device-agent mesh runtime: %w", meshErr)
 		}
 		services.DeviceMesh = deviceMeshRuntime
+		if deviceMeshRuntime.LocalHandler == nil {
+			return nil, fmt.Errorf("device-agent local mesh handler is required for desktop pet owner mapping")
+		}
+		deviceMeshRuntime.LocalHandler.SetCredentialObserver(func(cred *devicemeshagent.StoredCredential) error {
+			if cred == nil {
+				return nil
+			}
+			return bindDesktopPetOwnerFromCredential(context.Background(), services, cred.UserID.String(), cred.DeviceID.String())
+		})
+		if cred, loadErr := deviceMeshRuntime.LocalHandler.LoadCredential(); loadErr != nil {
+			return nil, fmt.Errorf("load device-agent credential for desktop pet owner mapping: %w", loadErr)
+		} else if cred != nil {
+			if bindErr := bindDesktopPetOwnerFromCredential(context.Background(), services, cred.UserID.String(), cred.DeviceID.String()); bindErr != nil {
+				return nil, fmt.Errorf("restore desktop pet owner mapping: %w", bindErr)
+			}
+		}
 	} else {
 		sqlDB, dbErr := ctx.DB.DB()
 		if dbErr != nil {
@@ -1119,6 +1159,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			deviceMeshRuntime.SetTaskRuntime(NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService))
 		}
 		services.DeviceMesh = deviceMeshRuntime
+		if behaviorMeshPublisher != nil {
+			behaviorMeshPublisher.SetRuntime(deviceMeshRuntime)
+		}
 	}
 
 	if runtimeV2Facade != nil {
