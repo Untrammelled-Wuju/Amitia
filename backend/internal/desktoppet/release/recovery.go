@@ -2,6 +2,7 @@ package release
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/log"
@@ -817,9 +819,7 @@ func (w *ReleaseRecoveryWorker) updateOp(op *ReleaseBuildOperation) error {
 }
 
 type ReleaseEventPublisher struct {
-	repo   ReleaseRepository
-	events []ReleaseEvent
-	mu     sync.Mutex
+	repo ReleaseRepository
 }
 
 func NewReleaseEventPublisher(repo ReleaseRepository) *ReleaseEventPublisher {
@@ -827,41 +827,50 @@ func NewReleaseEventPublisher(repo ReleaseRepository) *ReleaseEventPublisher {
 }
 
 func (o *ReleaseEventPublisher) PublishReleaseEvent(event ReleaseEvent) error {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.events = append(o.events, event)
+	if o == nil || o.repo == nil {
+		return errors.New("release event publisher repository unavailable")
+	}
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
-	log.Logger.Infof("Release event published: %s - %s", event.EventType, string(data))
-	return nil
-}
-
-func (o *ReleaseEventPublisher) Flush(ctx context.Context) error {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if len(o.events) == 0 {
-		return nil
+	aggregateID := strings.TrimSpace(event.ReleaseID)
+	if aggregateID == "" {
+		aggregateID = strings.TrimSpace(event.PetID)
 	}
-	flushed := 0
-	for _, event := range o.events {
-		data, err := json.Marshal(event)
+	if aggregateID == "" {
+		aggregateID = strings.TrimSpace(event.ProcessingTaskID)
+	}
+	if aggregateID == "" {
+		return errors.New("release event aggregate id is empty")
+	}
+	now := time.Now().UTC()
+	if strings.TrimSpace(event.OccurredAt) == "" {
+		event.OccurredAt = now.Format(time.RFC3339Nano)
+		data, err = json.Marshal(event)
 		if err != nil {
-			return fmt.Errorf("marshal release event %s: %w", event.EventType, err)
+			return err
 		}
-		log.Logger.Infof("Release event flushed: %s - %s", event.EventType, string(data))
-		flushed++
 	}
-	o.events = o.events[:0]
-	log.Logger.Infof("Flushed %d release events", flushed)
+	hash := sha256.Sum256(data)
+	eventID := "dprel_evt_" + uuid.NewString()
+	outbox := &ReleaseEventOutbox{
+		ID:            "dprel_outbox_" + uuid.NewString(),
+		EventID:       eventID,
+		EventType:     event.EventType,
+		AggregateType: "desktop_pet_release",
+		AggregateID:   aggregateID,
+		PayloadJSON:   string(data),
+		PayloadHash:   fmt.Sprintf("%x", hash[:]),
+		Status:        "pending",
+		AvailableAt:   formatRecoveryTimestamp(now),
+		CreatedAt:     formatRecoveryTimestamp(now),
+	}
+	if err := o.repo.CreateEventOutbox(outbox); err != nil {
+		return fmt.Errorf("persist release event outbox: %w", err)
+	}
+	log.Logger.Debugf("Release event queued durably: %s event=%s", event.EventType, eventID)
 	return nil
-}
-
-func (o *ReleaseEventPublisher) PendingCount() int {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	return len(o.events)
 }
 
 func formatRecoveryTimestamp(t time.Time) string {

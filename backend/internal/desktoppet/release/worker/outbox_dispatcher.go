@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -53,6 +54,12 @@ func (d *EventOutboxDispatcher) Start(ctx context.Context) {
 	log.Logger.Info("Event outbox dispatcher started")
 }
 
+func (d *EventOutboxDispatcher) IsRunning() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.running
+}
+
 func (d *EventOutboxDispatcher) Stop() {
 	d.mu.Lock()
 	if !d.running {
@@ -68,6 +75,11 @@ func (d *EventOutboxDispatcher) Stop() {
 
 func (d *EventOutboxDispatcher) run(ctx context.Context) {
 	defer d.wg.Done()
+	defer func() {
+		d.mu.Lock()
+		d.running = false
+		d.mu.Unlock()
+	}()
 	ticker := time.NewTicker(d.checkInterval)
 	defer ticker.Stop()
 	for {
@@ -109,13 +121,28 @@ func (d *EventOutboxDispatcher) dispatchPending(ctx context.Context) error {
 func (d *EventOutboxDispatcher) dispatchEvent(ctx context.Context, event *release.ReleaseEventOutbox) error {
 	event.AttemptCount++
 
-	if d.sink != nil {
+	if d.sink == nil {
+		err := fmt.Errorf("release event sink unavailable")
+		event.LastError = err.Error()
+		event.Status = "pending"
+		event.AvailableAt = formatOutboxTimestamp(time.Now().Add(exponentialBackoff(event.AttemptCount)))
+		if persistErr := d.repo.UpdateOutboxEvent(event); persistErr != nil {
+			return persistErr
+		}
+		return err
+	}
+
+	{
 		err := d.sink.Deliver(ctx, event.EventType, event.AggregateID, []byte(event.PayloadJSON))
 		if err != nil {
 			event.LastError = err.Error()
-			event.Status = "failed"
+			// Delivery failures stay pending with a future availability time so
+			// ListPendingOutboxEvents() will retry them.
+			event.Status = "pending"
 			event.AvailableAt = formatOutboxTimestamp(time.Now().Add(exponentialBackoff(event.AttemptCount)))
-			d.repo.UpdateOutboxEvent(event)
+			if persistErr := d.repo.UpdateOutboxEvent(event); persistErr != nil {
+				return persistErr
+			}
 			return err
 		}
 	}

@@ -34,10 +34,6 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 	if cmd.InterruptPolicy == "force" {
 		queuePolicy = runtimev2.PlayActionQueueReplaceCurrent
 	}
-	returnTo := cmd.ReturnPolicy
-	if returnTo == "" {
-		returnTo = "default"
-	}
 	payload := runtimev2.PlayActionPayload{
 		RuntimeID:        cmd.RuntimeID,
 		ActionKey:        cmd.ActionKey,
@@ -48,7 +44,7 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		Priority:         cmd.Priority,
 		QueuePolicy:      queuePolicy,
 		Interruptible:    cmd.InterruptPolicy != "uninterruptible",
-		ReturnTo:         returnTo,
+		ReturnTo:         cmd.ReturnPolicy,
 		PlaybackRate:     1,
 		MinimumPlayMs:    cmd.MinimumPlayMS,
 		MaximumPlayMs:    cmd.MaximumPlayMS,

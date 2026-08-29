@@ -43,25 +43,16 @@ type DoctorFinding struct {
 }
 
 type DoctorReport struct {
-	Status                  string          `json:"status"`
-	Mode                    DoctorMode      `json:"mode"`
-	StartedAt               string          `json:"startedAt"`
-	CompletedAt             string          `json:"completedAt"`
-	DurationMs              int64           `json:"durationMs"`
-	TotalFindings           int             `json:"totalFindings"`
-	BlockingFindings        int             `json:"blockingFindings"`
-	Findings                []DoctorFinding `json:"findings"`
-	Categories              map[string]int  `json:"categories"`
-	AuthFailOpenCount       int             `json:"authFailOpenCount"`
-	UnscopedHandlerCount    int             `json:"unscopedHandlerCount"`
-	UnsafePathWriteCount    int             `json:"unsafePathWriteCount"`
-	UnsafeDeleteCount       int             `json:"unsafeDeleteCount"`
-	LegacyWriterCount       int             `json:"legacyWriterCount"`
-	UnresolvedConflictCount int             `json:"unresolvedConflictCount"`
-	BlockingJournalCount    int             `json:"blockingJournalCount"`
-	RequiredWorkerDownCount int             `json:"requiredWorkerDownCount"`
-	ContractMismatchCount   int             `json:"contractMismatchCount"`
-	GofmtViolationCount     int             `json:"gofmtViolationCount"`
+	Status           string          `json:"status"`
+	Mode             DoctorMode      `json:"mode"`
+	StartedAt        string          `json:"startedAt"`
+	CompletedAt      string          `json:"completedAt"`
+	DurationMs       int64           `json:"durationMs"`
+	TotalFindings    int             `json:"totalFindings"`
+	BlockingFindings int             `json:"blockingFindings"`
+	Findings         []DoctorFinding `json:"findings"`
+	Categories       map[string]int  `json:"categories"`
+	ExecutedCheckers []string        `json:"executedCheckers"`
 }
 
 type DoctorChecker interface {
@@ -90,22 +81,28 @@ func (d *DesktopPetDoctor) Run() *DoctorReport {
 	startedAt := d.nowFn().UTC()
 	startStr := startedAt.Format(time.RFC3339Nano)
 	report := &DoctorReport{
-		Status:     "running",
-		Mode:       d.mode,
-		StartedAt:  startStr,
-		Categories: make(map[string]int),
-		Findings:   make([]DoctorFinding, 0),
+		Status:           "running",
+		Mode:             d.mode,
+		StartedAt:        startStr,
+		Categories:       make(map[string]int),
+		Findings:         make([]DoctorFinding, 0),
+		ExecutedCheckers: make([]string, 0, len(d.checkers)),
 	}
 
 	for _, checker := range d.checkers {
+		report.ExecutedCheckers = append(report.ExecutedCheckers, checker.Name())
 		findings, err := checker.Check()
 		if err != nil {
-			report.Findings = append(report.Findings, DoctorFinding{
+			finding := DoctorFinding{
 				Code:     "checker_error",
 				Severity: SeverityError,
 				Category: checker.Name(),
 				Message:  fmt.Sprintf("Checker failed: %v", err),
-			})
+			}
+			report.Findings = append(report.Findings, finding)
+			report.Categories[finding.Category]++
+			report.TotalFindings++
+			report.BlockingFindings++
 			continue
 		}
 		for _, f := range findings {
@@ -114,28 +111,6 @@ func (d *DesktopPetDoctor) Run() *DoctorReport {
 			report.TotalFindings++
 			if f.Severity == SeverityError || f.Severity == SeverityCritical {
 				report.BlockingFindings++
-			}
-			switch f.Code {
-			case "auth_fail_open":
-				report.AuthFailOpenCount++
-			case "unscoped_handler":
-				report.UnscopedHandlerCount++
-			case "unsafe_path_write":
-				report.UnsafePathWriteCount++
-			case "unsafe_delete":
-				report.UnsafeDeleteCount++
-			case "legacy_writer":
-				report.LegacyWriterCount++
-			case "unresolved_conflict":
-				report.UnresolvedConflictCount++
-			case "blocking_journal":
-				report.BlockingJournalCount++
-			case "required_worker_down":
-				report.RequiredWorkerDownCount++
-			case "contract_mismatch":
-				report.ContractMismatchCount++
-			case "gofmt_violation":
-				report.GofmtViolationCount++
 			}
 		}
 	}
@@ -152,17 +127,7 @@ func (d *DesktopPetDoctor) Run() *DoctorReport {
 }
 
 func (r *DoctorReport) IsHealthy() bool {
-	return r.BlockingFindings == 0 &&
-		r.AuthFailOpenCount == 0 &&
-		r.UnscopedHandlerCount == 0 &&
-		r.UnsafePathWriteCount == 0 &&
-		r.UnsafeDeleteCount == 0 &&
-		r.LegacyWriterCount == 0 &&
-		r.UnresolvedConflictCount == 0 &&
-		r.BlockingJournalCount == 0 &&
-		r.RequiredWorkerDownCount == 0 &&
-		r.ContractMismatchCount == 0 &&
-		r.GofmtViolationCount == 0
+	return r != nil && r.BlockingFindings == 0
 }
 
 type Doctor struct {

@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
@@ -53,6 +55,10 @@ func (runtimeCommandProjection) TableName() string { return "desktop_pet_runtime
 type ProjectionBridge struct {
 	db      *gorm.DB
 	service *Service
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	running atomic.Bool
 }
 
 func NewProjectionBridge(db *gorm.DB, service *Service) *ProjectionBridge {
@@ -60,10 +66,42 @@ func NewProjectionBridge(db *gorm.DB, service *Service) *ProjectionBridge {
 }
 
 func (b *ProjectionBridge) Start(ctx context.Context) {
-	if b == nil || b.db == nil || b.service == nil {
+	if b == nil || b.db == nil || b.service == nil || ctx == nil {
 		return
 	}
-	go b.run(ctx)
+	b.mu.Lock()
+	if b.running.Load() {
+		b.mu.Unlock()
+		return
+	}
+	workerCtx, cancel := context.WithCancel(ctx)
+	b.cancel = cancel
+	b.running.Store(true)
+	b.wg.Add(1)
+	b.mu.Unlock()
+	go func() {
+		defer b.wg.Done()
+		defer b.running.Store(false)
+		b.run(workerCtx)
+	}()
+}
+
+func (b *ProjectionBridge) Stop() {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	cancel := b.cancel
+	b.cancel = nil
+	b.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	b.wg.Wait()
+}
+
+func (b *ProjectionBridge) IsRunning() bool {
+	return b != nil && b.running.Load()
 }
 
 func (b *ProjectionBridge) run(ctx context.Context) {

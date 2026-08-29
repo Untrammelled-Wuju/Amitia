@@ -571,6 +571,8 @@ type runtimeEventMetadata struct {
 	DecisionID         string `json:"decisionId"`
 	ErrorCode          string `json:"errorCode"`
 	ErrorMessage       string `json:"errorMessage"`
+	Reason             string `json:"reason"`
+	InterruptReason    string `json:"interruptReason"`
 	OccurredAt         string `json:"occurredAt"`
 }
 
@@ -584,6 +586,11 @@ func decodeRuntimeEventMetadata(payload []byte) runtimeEventMetadata {
 	meta.InstallationID = strings.TrimSpace(meta.InstallationID)
 	meta.CharacterID = strings.TrimSpace(meta.CharacterID)
 	meta.PetInstanceID = strings.TrimSpace(meta.PetInstanceID)
+	meta.Reason = strings.TrimSpace(meta.Reason)
+	meta.InterruptReason = strings.TrimSpace(meta.InterruptReason)
+	if meta.Reason == "" {
+		meta.Reason = meta.InterruptReason
+	}
 	return meta
 }
 
@@ -608,7 +615,7 @@ func (h *Handler) validateRuntimeEventCommandOwnership(conn *Connection, session
 		return nil
 	}
 	switch env.MessageName {
-	case EventPlaybackActionStarted, EventPlaybackActionCompleted, EventPlaybackActionInterrupted, EventPlaybackActionFailed:
+	case EventPlaybackActionStarted, EventPlaybackActionFirstCycle, EventPlaybackActionCompleted, EventPlaybackActionInterrupted, EventPlaybackActionFailed:
 		if _, err := h.validateCommandOwnership(conn, sessionID, meta.CommandID); err != nil {
 			return fmt.Errorf("validate runtime event command ownership: %w", err)
 		}
@@ -632,9 +639,32 @@ func (h *Handler) applyRuntimeEventCommandProgress(conn *Connection, sessionID s
 	now := runtimeEventOccurredAt(meta)
 	switch env.MessageName {
 	case EventPlaybackActionStarted:
-		return h.commands.MarkPlaybackStarted(meta.CommandID, meta.PlaybackInstanceID, now)
-	case EventPlaybackActionCompleted, EventPlaybackActionInterrupted:
+		if err := h.commands.MarkPlaybackStarted(meta.CommandID, meta.PlaybackInstanceID, now); err != nil {
+			return err
+		}
+		if h.playActionCompletionPolicy(meta.CommandID) == PlayActionCompletionOnStarted {
+			return h.commands.MarkCompleted(meta.CommandID, meta.PlaybackInstanceID, now)
+		}
+		return nil
+	case EventPlaybackActionFirstCycle:
+		if h.playActionCompletionPolicy(meta.CommandID) == PlayActionCompletionOnFirstCycle {
+			return h.commands.MarkCompleted(meta.CommandID, meta.PlaybackInstanceID, now)
+		}
+		return nil
+	case EventPlaybackActionCompleted:
+		// Natural physical completion is a safe terminal fallback for every policy.
+		// Policies such as on_started/on_first_cycle may already have completed the
+		// command; commandService treats this late terminal event idempotently.
 		return h.commands.MarkCompleted(meta.CommandID, meta.PlaybackInstanceID, now)
+	case EventPlaybackActionInterrupted:
+		policy := h.playActionCompletionPolicy(meta.CommandID)
+		if policy == PlayActionCompletionOnInterrupted ||
+			(policy == PlayActionCompletionManualStop && strings.TrimSpace(meta.Reason) == "runtime_stop") {
+			return h.commands.MarkCompleted(meta.CommandID, meta.PlaybackInstanceID, now)
+		}
+		// Interruption is cancellation unless the contract explicitly declares the
+		// interruption itself (or an explicit manual stop) to be successful completion.
+		return h.commands.MarkCancelled(meta.CommandID, now)
 	case EventPlaybackActionFailed:
 		code := strings.TrimSpace(meta.ErrorCode)
 		if code == "" {
@@ -647,6 +677,26 @@ func (h *Handler) applyRuntimeEventCommandProgress(conn *Connection, sessionID s
 		return h.commands.MarkFailed(meta.CommandID, code, message, now)
 	default:
 		return nil
+	}
+}
+
+func (h *Handler) playActionCompletionPolicy(commandID string) string {
+	if h == nil || h.commands == nil || strings.TrimSpace(commandID) == "" {
+		return ""
+	}
+	cmd, err := h.commands.GetCommand(commandID)
+	if err != nil || cmd == nil || CommandType(cmd.CommandType) != CommandTypePlayAction {
+		return ""
+	}
+	var payload PlayActionPayload
+	if err := json.Unmarshal([]byte(cmd.PayloadJSON), &payload); err != nil {
+		return ""
+	}
+	switch strings.TrimSpace(payload.CompletionPolicy) {
+	case PlayActionCompletionOnStarted, PlayActionCompletionOnFirstCycle, PlayActionCompletionOnInterrupted, PlayActionCompletionManualStop:
+		return strings.TrimSpace(payload.CompletionPolicy)
+	default:
+		return ""
 	}
 }
 
