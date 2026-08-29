@@ -77,7 +77,7 @@ export class CommandGateway {
     }
 
     if (this.isCommandExpired(command, new Date())) {
-      const ack = this.buildAck(command, "expired", "command_expired", null, 0);
+      const ack = this.buildAck(command, "expired", "command_expired", command.playbackInstanceId, 0);
       this.rememberIdempotency(command.idempotencyKey, ack, monotonicMs);
       return { ack, decision: "expired" };
     }
@@ -88,12 +88,43 @@ export class CommandGateway {
 
     const currentAction = this.getCurrentAction();
     if (currentAction && this.isSameLoopAction(currentAction, command)) {
-      const ack = this.buildAck(command, "satisfied", "already_playing_loop", null, 0);
+      const ack = this.buildAck(command, "satisfied", "already_playing_loop", command.playbackInstanceId, 0);
       this.rememberIdempotency(command.idempotencyKey, ack, monotonicMs);
       return { ack, decision: "satisfied" };
     }
 
     return this.applyQueuePolicy(command, currentAction, monotonicMs);
+  }
+
+  /** Promote an already-queued command without passing through the external
+   * duplicate guard again. The queued idempotency entry is transitioned to
+   * accepted in-place, preserving the original command/playback identity. */
+  promoteQueuedCommand(command: PlayActionCommand, monotonicMs: number): ProcessCommandResult {
+    this.clearExpiredIdempotency(Date.now());
+    if (!this.isValidCommand(command)) return this.buildReject(command, "invalid_command_fields");
+    const actualRevision = this.getPackageRevision();
+    if (command.packageRevision !== actualRevision) {
+      const ack = this.buildAck(command, "stale", `package_revision_mismatch:${actualRevision}`, command.playbackInstanceId, 0);
+      this.rememberIdempotency(command.idempotencyKey, ack, monotonicMs);
+      return { ack, decision: "reject" };
+    }
+    if (this.isCommandExpired(command, new Date())) {
+      const ack = this.buildAck(command, "expired", "command_expired", command.playbackInstanceId, 0);
+      this.rememberIdempotency(command.idempotencyKey, ack, monotonicMs);
+      return { ack, decision: "expired" };
+    }
+    if (!this.hasAction(command.actionKey)) {
+      const ack = this.buildAck(command, "rejected", "action_not_found", command.playbackInstanceId, 0);
+      this.rememberIdempotency(command.idempotencyKey, ack, monotonicMs);
+      return { ack, decision: "reject" };
+    }
+    const existing = this.idempotency.get(command.idempotencyKey);
+    if (!existing || existing.ack.status !== "queued" || existing.ack.commandId !== command.commandId) {
+      const ack = this.buildAck(command, "rejected", "queued_state_lost", command.playbackInstanceId, 0);
+      this.rememberIdempotency(command.idempotencyKey, ack, monotonicMs);
+      return { ack, decision: "reject" };
+    }
+    return this.accept(command, monotonicMs);
   }
 
   getIdempotencyResult(idempotencyKey: string): CommandAck | null {
@@ -194,7 +225,7 @@ export class CommandGateway {
 
     if (policy === "coalesce") {
       if (currentAction && this.isSameLoopAction(currentAction, command)) {
-        const ack = this.buildAck(command, "satisfied", "coalesce_same_loop", null, 0);
+        const ack = this.buildAck(command, "satisfied", "coalesce_same_loop", command.playbackInstanceId, 0);
         this.rememberIdempotency(command.idempotencyKey, ack, monotonicMs);
         return { ack, decision: "satisfied" };
       }
@@ -208,7 +239,7 @@ export class CommandGateway {
   }
 
   private accept(command: PlayActionCommand, monotonicMs: number): ProcessCommandResult {
-    const ack = this.buildAck(command, "accepted", null, null, 0);
+    const ack = this.buildAck(command, "accepted", null, command.playbackInstanceId, 0);
     this.rememberIdempotency(command.idempotencyKey, ack, monotonicMs);
     return { ack, decision: "accept_and_load" };
   }
@@ -253,6 +284,9 @@ export class CommandGateway {
       return false;
     }
     if (!command.idempotencyKey) {
+      return false;
+    }
+    if (!command.playbackInstanceId) {
       return false;
     }
     if (!command.actionKey) {

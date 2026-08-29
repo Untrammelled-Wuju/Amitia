@@ -40,6 +40,8 @@ export type InterruptionReason =
   | "resource_failure"
   | "window_destroyed"
   | "runtime_reconnect"
+  | "runtime_stop"
+  | "command_cancelled"
   | "max_duration_reached"
   | "user_disabled";
 
@@ -153,6 +155,7 @@ export interface DecodedFrame {
 
 export interface PlayActionCommand {
   readonly commandId: string;
+  readonly playbackInstanceId: string;
   readonly idempotencyKey: string;
   readonly installationId: string;
   readonly petInstanceId: string;
@@ -165,6 +168,10 @@ export interface PlayActionCommand {
   readonly issuedAt: string;
   readonly expiresAt?: string;
   readonly returnOverride?: ReturnTarget;
+  readonly minimumPlayMs?: number;
+  readonly maximumPlayMs?: number;
+  readonly interruptAfterMs?: number;
+  readonly completionPolicy?: string;
   readonly traceId?: string;
   readonly source?: string;
 }
@@ -286,6 +293,7 @@ export type PlaybackEventType =
   | "playback.command_queued"
   | "playback.action_loading"
   | "playback.action_started"
+  | "playback.action_first_cycle"
   | "playback.frame_presented"
   | "playback.action_holding"
   | "playback.action_completed"

@@ -18,6 +18,8 @@ export interface PlayerState {
   currentAction: LoadedAction | null;
   currentCommandId: string | null;
   currentPlaybackInstanceId: string | null;
+  pendingCommandId: string | null;
+  pendingPlaybackInstanceId: string | null;
   frameIndex: number | null;
   localElapsedMs: number;
   cycleIndex: number;
@@ -38,9 +40,11 @@ export interface PlayerState {
 
 export type StateAction =
   | { type: "INITIALIZE_STARTED"; snapshot: PackagePlaybackSnapshot; generation: number }
-  | { type: "DEFAULT_LOADED"; action: LoadedAction; frames: DecodedFrame[]; generation: number }
+  | { type: "DEFAULT_LOADED"; action: LoadedAction; frames: DecodedFrame[]; generation: number; now: number }
   | { type: "DEFAULT_LOAD_FAILED"; error: PlaybackError; generation: number }
   | { type: "PLAY_ACCEPTED"; command: PlayActionCommand; playbackInstanceId: string; generation: number }
+  | { type: "INTERNAL_ACTION_REQUESTED"; playbackInstanceId: string; generation: number }
+  | { type: "INTERNAL_ACTION_LOADED"; action: LoadedAction; frames: DecodedFrame[]; playbackInstanceId: string; generation: number; now: number }
   | {
       type: "ACTION_LOADED";
       action: LoadedAction;
@@ -48,6 +52,7 @@ export type StateAction =
       command: PlayActionCommand;
       playbackInstanceId: string;
       generation: number;
+      now: number;
     }
   | { type: "ACTION_LOAD_FAILED"; error: PlaybackError; command: PlayActionCommand; generation: number }
   | { type: "TICK"; now: number; position: TimelinePosition }
@@ -58,7 +63,7 @@ export type StateAction =
   | { type: "ACTION_INTERRUPTED"; reason: string; now: number }
   | { type: "ACTION_FAILED"; error: PlaybackError }
   | { type: "PACKAGE_SWITCH_STARTED"; snapshot: PackagePlaybackSnapshot; generation: number }
-  | { type: "PACKAGE_SWITCH_COMMITTED"; action: LoadedAction; frames: DecodedFrame[]; generation: number }
+  | { type: "PACKAGE_SWITCH_COMMITTED"; action: LoadedAction; frames: DecodedFrame[]; generation: number; now: number }
   | { type: "DEFAULT_CHANGED"; newDefaultKey: string; newDefaultAction: LoadedAction | null }
   | { type: "WINDOW_HIDDEN"; now: number }
   | { type: "WINDOW_SHOWN"; now: number }
@@ -76,6 +81,8 @@ export function createInitialState(): PlayerState {
     currentAction: null,
     currentCommandId: null,
     currentPlaybackInstanceId: null,
+    pendingCommandId: null,
+    pendingPlaybackInstanceId: null,
     frameIndex: null,
     localElapsedMs: 0,
     cycleIndex: 0,
@@ -84,13 +91,13 @@ export function createInitialState(): PlayerState {
     defaultActionKey: null,
     lastTransitionAtMonotonicMs: 0,
     stateVersion: 0,
-    startMonotonicMs: 0,
+    startMonotonicMs: -1,
     pausedDurationMs: 0,
     pauseStartMonotonicMs: null,
     lastPresentedFrameIndex: null,
     presentedFrames: 0,
     droppedFramesEstimate: 0,
-    startedAtMonotonicMs: 0,
+    startedAtMonotonicMs: -1,
   };
 }
 
@@ -141,6 +148,8 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         currentAction: null,
         currentCommandId: null,
         currentPlaybackInstanceId: null,
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
         frameIndex: null,
         localElapsedMs: 0,
         cycleIndex: 0,
@@ -159,10 +168,16 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         currentAction: action.action,
         currentCommandId: null,
         currentPlaybackInstanceId: null,
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
         frameIndex: 0,
         localElapsedMs: 0,
         cycleIndex: 0,
         playbackRate: 1,
+        startMonotonicMs: action.now,
+        startedAtMonotonicMs: action.now,
+        pausedDurationMs: 0,
+        pauseStartMonotonicMs: null,
         lastPresentedFrameIndex: null,
         lastError: undefined,
         stateVersion: state.stateVersion + 1,
@@ -186,15 +201,51 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
     }
 
     case "PLAY_ACCEPTED": {
-      if (state.phase !== "playing" && state.phase !== "ready" && state.phase !== "holding") {
+      if (state.phase !== "playing" && state.phase !== "ready" && state.phase !== "holding" && state.phase !== "loading_action") {
         return state;
       }
       return {
         ...state,
         phase: "loading_action",
-        currentCommandId: action.command.commandId,
+        pendingCommandId: action.command.commandId,
+        pendingPlaybackInstanceId: action.playbackInstanceId,
+        lastError: undefined,
+        stateVersion: state.stateVersion + 1,
+      };
+    }
+
+
+    case "INTERNAL_ACTION_REQUESTED": {
+      if (state.phase !== "ready" && state.phase !== "playing" && state.phase !== "holding") return state;
+      return {
+        ...state,
+        phase: "loading_action",
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: action.playbackInstanceId,
+        lastError: undefined,
+        stateVersion: state.stateVersion + 1,
+      };
+    }
+
+    case "INTERNAL_ACTION_LOADED": {
+      if (state.phase !== "loading_action" || state.pendingPlaybackInstanceId !== action.playbackInstanceId) return state;
+      return {
+        ...state,
+        phase: "playing",
+        currentAction: action.action,
+        currentCommandId: null,
         currentPlaybackInstanceId: action.playbackInstanceId,
-        playbackRate: action.command.playbackRate,
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
+        playbackRate: 1,
+        frameIndex: 0,
+        localElapsedMs: 0,
+        cycleIndex: 0,
+        startMonotonicMs: action.now,
+        startedAtMonotonicMs: action.now,
+        pausedDurationMs: 0,
+        pauseStartMonotonicMs: null,
+        lastPresentedFrameIndex: null,
         lastError: undefined,
         stateVersion: state.stateVersion + 1,
       };
@@ -210,10 +261,16 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         currentAction: action.action,
         currentCommandId: action.command.commandId,
         currentPlaybackInstanceId: action.playbackInstanceId,
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
         playbackRate: action.command.playbackRate,
         frameIndex: 0,
         localElapsedMs: 0,
         cycleIndex: 0,
+        startMonotonicMs: action.now,
+        startedAtMonotonicMs: action.now,
+        pausedDurationMs: 0,
+        pauseStartMonotonicMs: null,
         lastPresentedFrameIndex: null,
         lastError: undefined,
         stateVersion: state.stateVersion + 1,
@@ -226,9 +283,9 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
       }
       return {
         ...state,
-        phase: "playing",
-        currentCommandId: null,
-        currentPlaybackInstanceId: null,
+        phase: state.currentAction ? "playing" : "ready",
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
         lastError: action.error.toView(),
         stateVersion: state.stateVersion + 1,
       };
@@ -316,8 +373,12 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         currentAction: null,
         currentCommandId: null,
         currentPlaybackInstanceId: null,
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
         frameIndex: null,
         localElapsedMs: 0,
+        startMonotonicMs: -1,
+        startedAtMonotonicMs: -1,
         cycleIndex: 0,
         previousStableActionKey: stableKey,
         lastTransitionAtMonotonicMs: action.now,
@@ -335,8 +396,12 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         currentAction: null,
         currentCommandId: null,
         currentPlaybackInstanceId: null,
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
         frameIndex: null,
         localElapsedMs: 0,
+        startMonotonicMs: -1,
+        startedAtMonotonicMs: -1,
         cycleIndex: 0,
         previousStableActionKey: stableKey,
         lastTransitionAtMonotonicMs: action.now,
@@ -355,8 +420,12 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         currentAction: null,
         currentCommandId: null,
         currentPlaybackInstanceId: null,
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
         frameIndex: null,
         localElapsedMs: 0,
+        startMonotonicMs: -1,
+        startedAtMonotonicMs: -1,
         cycleIndex: 0,
         previousStableActionKey: stableKey,
         lastError: action.error.toView(),
@@ -374,8 +443,12 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         currentAction: null,
         currentCommandId: null,
         currentPlaybackInstanceId: null,
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
         frameIndex: null,
         localElapsedMs: 0,
+        startMonotonicMs: -1,
+        startedAtMonotonicMs: -1,
         cycleIndex: 0,
         pauseStartMonotonicMs: null,
         stateVersion: state.stateVersion + 1,
@@ -392,10 +465,16 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         currentAction: action.action,
         currentCommandId: null,
         currentPlaybackInstanceId: null,
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
         frameIndex: 0,
         localElapsedMs: 0,
         cycleIndex: 0,
         playbackRate: 1,
+        startMonotonicMs: action.now,
+        startedAtMonotonicMs: action.now,
+        pausedDurationMs: 0,
+        pauseStartMonotonicMs: null,
         lastPresentedFrameIndex: null,
         lastError: undefined,
         stateVersion: state.stateVersion + 1,
@@ -488,7 +567,12 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         currentAction: null,
         currentCommandId: null,
         currentPlaybackInstanceId: null,
+        pendingCommandId: null,
+        pendingPlaybackInstanceId: null,
         frameIndex: null,
+        startMonotonicMs: -1,
+        startedAtMonotonicMs: -1,
+        pausedDurationMs: 0,
         localElapsedMs: action.snapshot.lastStableLocalElapsedMs,
         cycleIndex: action.snapshot.lastStableCycleIndex,
         previousStableActionKey: action.snapshot.lastStableActionKey,

@@ -58,6 +58,7 @@ function makePackageSnapshot(overrides?: Partial<PackagePlaybackSnapshot>): Pack
 function makeCommand(overrides?: Partial<PlayActionCommand>): PlayActionCommand {
   return {
     commandId: `cmd_${Math.random().toString(36).slice(2, 8)}`,
+    playbackInstanceId: `pbi_${Math.random().toString(36).slice(2, 8)}`,
     idempotencyKey: `idem_${Math.random().toString(36).slice(2, 8)}`,
     installationId: "inst-1",
     petInstanceId: "pet-1",
@@ -83,6 +84,7 @@ function buildPlayingState() {
     type: "DEFAULT_LOADED",
     action: makeLoadedAction(),
     frames: [],
+    now: 1000,
     generation: 1,
   });
   return state;
@@ -207,6 +209,7 @@ describe("playerReducer", () => {
         type: "DEFAULT_LOADED",
         action,
         frames: [],
+        now: 1000,
         generation: 1,
       });
       expect(next.phase).toBe("playing");
@@ -228,6 +231,7 @@ describe("playerReducer", () => {
           type: "DEFAULT_LOADED",
           action: makeLoadedAction(),
           frames: [],
+          now: 1000,
           generation: 1,
         }),
       ).toBe(uninitialized);
@@ -238,6 +242,7 @@ describe("playerReducer", () => {
           type: "DEFAULT_LOADED",
           action: makeLoadedAction({ actionKey: "other" }),
           frames: [],
+          now: 1000,
           generation: 1,
         }),
       ).toBe(playing);
@@ -382,6 +387,7 @@ describe("playerReducer", () => {
         frames: [],
         command,
         playbackInstanceId: pbi,
+        now: 1000,
         generation: 1,
       });
       expect(next.phase).toBe("playing");
@@ -557,6 +563,7 @@ describe("playerReducer", () => {
         type: "PACKAGE_SWITCH_COMMITTED",
         action,
         frames: [],
+        now: 1000,
         generation: 2,
       });
       expect(next.phase).toBe("playing");
@@ -573,6 +580,7 @@ describe("playerReducer", () => {
         type: "PACKAGE_SWITCH_COMMITTED",
         action,
         frames: [],
+        now: 1000,
         generation: 2,
       });
       expect(next).toBe(playing);

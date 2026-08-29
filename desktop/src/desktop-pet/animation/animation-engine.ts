@@ -101,6 +101,9 @@ export class DesktopPetAnimationEngine {
   private currentTimeline: FrameTimeline | null = null;
   private currentDecodedFrames: DecodedFrame[] = [];
   private tickHandle: number | null = null;
+  // Fence callbacks from an older playback loop. Platform cancellation can race
+  // with an already queued callback, so callback identity must be explicit.
+  private tickLoopEpoch = 0;
   private lastTickTime = 0;
   private lastGapMs = 0;
   private isFrozen = false;
@@ -108,6 +111,8 @@ export class DesktopPetAnimationEngine {
   private disposed = false;
   private listeners: Set<EventListener> = new Set();
   private finalizedIds: Map<string, FinalizedEntry> = new Map();
+  private firstCycleReportedIds: Set<string> = new Set();
+  private acceptedCommands: Map<string, PlayActionCommand> = new Map();
   private loadedActionCache: Map<string, LoadedAction> = new Map();
   private fallbackFrame: DecodedFrame | null = null;
   private lastCleanupTime = 0;
@@ -234,7 +239,13 @@ export class DesktopPetAnimationEngine {
       // Commit the state only after a real frame has been presented. RuntimeReady
       // is emitted by the renderer after initialize() resolves, so this ordering
       // prevents an invisible/failed package from being reported as ready.
-      this.dispatch({ type: "DEFAULT_LOADED", action: loaded.action, frames: entry.frames, generation: generation.generation });
+      this.dispatch({
+        type: "DEFAULT_LOADED",
+        action: loaded.action,
+        frames: entry.frames,
+        generation: generation.generation,
+        now: this.clock.now(),
+      });
 
       this.startTickLoop();
       const loadTime = this.clock.now();
@@ -269,11 +280,15 @@ export class DesktopPetAnimationEngine {
   async playAction(command: PlayActionCommand): Promise<CommandAck> {
     this.assertNotDisposed();
     const now = this.clock.now();
-
     this.cleanupExpired(now);
 
     const result = this.gateway.processCommand(command, now);
     const ack = result.ack;
+
+    if (result.decision === "accept_and_load" || result.decision === "queue") {
+      this.acceptedCommands.set(command.playbackInstanceId, command);
+    }
+    this.drainQueueRemovals();
 
     switch (result.decision) {
       case "accept_and_load":
@@ -282,6 +297,7 @@ export class DesktopPetAnimationEngine {
       case "queue":
         this.emit({
           type: "playback.command_queued",
+          playbackInstanceId: command.playbackInstanceId,
           commandId: command.commandId,
           actionKey: command.actionKey,
           timestamp: Date.now(),
@@ -291,32 +307,51 @@ export class DesktopPetAnimationEngine {
         this.telemetry.recordCommandReject();
         this.emit({
           type: "playback.command_rejected",
+          playbackInstanceId: command.playbackInstanceId,
           commandId: command.commandId,
           actionKey: command.actionKey,
           reason: ack.reason ?? "rejected",
           timestamp: Date.now(),
         });
+        this.emitCommandFailure(command, "PLAYBACK_COMMAND_REJECTED", ack.reason ?? "renderer rejected command");
         break;
       case "expired":
         this.emit({
           type: "playback.action_expired",
+          playbackInstanceId: command.playbackInstanceId,
           commandId: command.commandId,
           actionKey: command.actionKey,
           timestamp: Date.now(),
         });
+        this.emitCommandFailure(command, "PLAYBACK_COMMAND_EXPIRED", "renderer command expired before execution");
         break;
       case "satisfied":
+        this.acceptedCommands.set(command.playbackInstanceId, command);
+        this.finalizePlayback(
+          command.playbackInstanceId,
+          "completed",
+          ack.reason ?? "already_satisfied",
+          now,
+          { commandId: command.commandId, actionKey: command.actionKey, playedDurationMs: 0 },
+        );
+        break;
       case "duplicate":
+        // The original command owns lifecycle completion. Replays do not emit a
+        // second terminal event.
         break;
     }
 
     return ack;
   }
 
-  private async prepareAndSwitch(command: PlayActionCommand, ack: CommandAck): Promise<void> {
-    const playbackInstanceId = createPlaybackInstanceId();
-    const generation = this.generationManager.next(this.state.packageRevision);
+  private async prepareAndSwitch(command: PlayActionCommand, _ack: CommandAck): Promise<void> {
+    const playbackInstanceId = command.playbackInstanceId;
+    this.acceptedCommands.set(playbackInstanceId, command);
 
+    // A new generation cancels any previous in-flight preparation. The active
+    // playback identity remains untouched until the replacement is presented.
+    const generation = this.generationManager.next(this.state.packageRevision);
+    this.stopTickLoop();
     this.dispatch({
       type: "PLAY_ACCEPTED",
       command,
@@ -335,8 +370,15 @@ export class DesktopPetAnimationEngine {
     const loadStart = this.clock.now();
 
     try {
+      if (!this.packageSnapshot) {
+        throw new PlaybackError(
+          PLAYBACK_ERROR_CODES.INTERNAL_STATE_INVALID,
+          "package snapshot unavailable during action preparation",
+          { playbackInstanceId, commandId: command.commandId, actionKey: command.actionKey },
+        );
+      }
       const loaded = await this.assetRepository.loadAction({
-        packageSnapshot: this.packageSnapshot!,
+        packageSnapshot: this.packageSnapshot,
         actionKey: command.actionKey,
         signal: generation.signal,
         priority: "critical",
@@ -344,46 +386,106 @@ export class DesktopPetAnimationEngine {
 
       if (!generation.isCurrent() || command.packageRevision !== this.state.packageRevision) {
         this.releaseLoadedAssets(loaded);
+        this.emitCommandFailure(command, "PLAYBACK_COMMAND_CANCELLED", "playback preparation superseded by a newer generation");
         return;
       }
 
-      const entry = this.createLoadedEntry(loaded);
-      this.loadedActions.set(loaded.action.actionKey, entry);
-      this.loadedActionCache.set(loaded.action.actionKey, loaded.action);
-
-      const oldActionKey = this.state.currentAction?.actionKey ?? null;
-      if (oldActionKey && this.state.currentPlaybackInstanceId) {
-        this.finalizePlayback(this.state.currentPlaybackInstanceId, "interrupted", "replaced", this.clock.now());
+      const effectiveAction = this.applyCommandOverrides(loaded.action, command);
+      const entry = this.createLoadedEntry({ ...loaded, action: effectiveAction });
+      const firstFrame = entry.frames[0];
+      if (!firstFrame) {
+        this.releaseLoadedAssets(loaded);
+        throw new PlaybackError(
+          PLAYBACK_ERROR_CODES.SURFACE_FAILED,
+          `action has no decoded frame: ${command.actionKey}`,
+          { actionKey: command.actionKey, playbackInstanceId, commandId: command.commandId },
+        );
       }
 
+      const oldAction = this.state.currentAction;
+      const oldPlaybackId = this.state.currentPlaybackInstanceId;
+      const oldCommandId = this.state.currentCommandId;
+      const oldDuration = this.state.localElapsedMs;
+
+      // Present the replacement first frame before terminalizing the active
+      // playback. A failed replacement must leave the previous action active
+      // and resumable rather than creating a blank/ready gap.
+      const presentResult = await this.surface.present(firstFrame, {
+        anchor: effectiveAction.anchor,
+        frameIndex: 0,
+        actionKey: effectiveAction.actionKey,
+      });
+      if (!presentResult.presented) {
+        this.releaseLoadedAssets(loaded);
+        throw new PlaybackError(
+          PLAYBACK_ERROR_CODES.SURFACE_FAILED,
+          `action first frame was not presented: ${presentResult.error ?? "unknown surface error"}`,
+          {
+            actionKey: command.actionKey,
+            frameIndex: 0,
+            resourceUrl: firstFrame.sourceUrl,
+            playbackInstanceId,
+            commandId: command.commandId,
+          },
+        );
+      }
+      if (!generation.isCurrent() || command.packageRevision !== this.state.packageRevision) {
+        this.releaseLoadedAssets(loaded);
+        this.emitCommandFailure(command, "PLAYBACK_COMMAND_CANCELLED", "playback superseded after first-frame presentation");
+        return;
+      }
+
+      // The replacement is now visibly present. Only at this point may the old
+      // active identity be terminalized and cleared. Keep the pending identity
+      // by re-accepting after ACTION_INTERRUPTED resets the active reducer state.
+      if (oldAction) {
+        const interruptedAt = this.clock.now();
+        if (oldPlaybackId) {
+          this.finalizePlayback(oldPlaybackId, "interrupted", "replaced", interruptedAt, {
+            commandId: oldCommandId ?? undefined,
+            actionKey: oldAction.actionKey,
+            playedDurationMs: oldDuration,
+          });
+        } else {
+          this.emit({
+            type: "playback.action_interrupted",
+            actionKey: oldAction.actionKey,
+            reason: "replaced",
+            playedDurationMs: oldDuration,
+            timestamp: Date.now(),
+          });
+        }
+        this.dispatch({ type: "ACTION_INTERRUPTED", reason: "replaced", now: interruptedAt });
+        this.dispatch({
+          type: "PLAY_ACCEPTED",
+          command,
+          playbackInstanceId,
+          generation: generation.generation,
+        });
+      }
+
+      this.loadedActions.set(loaded.action.actionKey, entry);
+      this.loadedActionCache.set(loaded.action.actionKey, loaded.action);
       this.currentLoadedEntry = entry;
       this.currentTimeline = entry.timeline;
       this.currentDecodedFrames = entry.frames;
 
+      const startedAt = this.clock.now();
       this.dispatch({
         type: "ACTION_LOADED",
-        action: loaded.action,
+        action: effectiveAction,
         frames: entry.frames,
         command,
         playbackInstanceId,
         generation: generation.generation,
+        now: startedAt,
       });
-
-      const firstFrame = entry.frames[0];
-      if (firstFrame) {
-        this.surface.present(firstFrame, {
-          anchor: loaded.action.anchor,
-          frameIndex: 0,
-          actionKey: loaded.action.actionKey,
-        });
-      }
-
       this.startTickLoop();
 
-      const loadMs = this.clock.now() - loadStart;
+      const loadMs = startedAt - loadStart;
       this.telemetry.recordActionLoad(command.actionKey, loadMs);
       this.telemetry.recordActionSwitchFirstFrame(command.actionKey, loadMs);
-      this.telemetry.recordTransition(oldActionKey ?? "", command.actionKey, "replace");
+      this.telemetry.recordTransition(oldAction?.actionKey ?? "", command.actionKey, "replace");
 
       this.emit({
         type: "playback.action_started",
@@ -394,21 +496,24 @@ export class DesktopPetAnimationEngine {
         timestamp: Date.now(),
         packageId: this.state.packageId ?? undefined,
         packageRevision: this.state.packageRevision,
+        traceId: command.traceId,
       });
     } catch (error) {
-      if (PlaybackError.isAbort(error)) return;
-      const pbError = PlaybackError.fromUnknown(error);
-      this.dispatch({ type: "ACTION_LOAD_FAILED", error: pbError, command, generation: generation.generation });
+      const isAbort = PlaybackError.isAbort(error);
+      const pbError = isAbort
+        ? new PlaybackError(
+            PLAYBACK_ERROR_CODES.COMMAND_INVALID,
+            "playback preparation cancelled",
+            { playbackInstanceId, commandId: command.commandId, actionKey: command.actionKey },
+          )
+        : PlaybackError.fromUnknown(error);
+      if (this.state.pendingPlaybackInstanceId === playbackInstanceId) {
+        this.dispatch({ type: "ACTION_LOAD_FAILED", error: pbError, command, generation: generation.generation });
+      }
+      if (this.state.currentAction) this.startTickLoop();
       this.telemetry.recordActionLoadFailure();
       this.telemetry.recordError(pbError.toView());
-      this.emit({
-        type: "playback.action_failed",
-        playbackInstanceId,
-        commandId: command.commandId,
-        actionKey: command.actionKey,
-        error: pbError.toView(),
-        timestamp: Date.now(),
-      });
+      this.emitCommandFailureView(command, pbError.toView());
     }
   }
 
@@ -426,28 +531,72 @@ export class DesktopPetAnimationEngine {
     this.startTickLoop();
   }
 
-  stop(): void {
+  stop(reason: InterruptionReason = "user_disabled"): void {
     this.assertNotDisposed();
     const now = this.clock.now();
-    if (this.state.currentPlaybackInstanceId) {
-      this.finalizePlayback(this.state.currentPlaybackInstanceId, "interrupted", "user_disabled", now);
-    }
-    this.dispatch({ type: "ACTION_INTERRUPTED", reason: "user_disabled", now });
     this.stopTickLoop();
-    this.processQueueOrReturn();
+
+    const activeAction = this.state.currentAction;
+    const activePlaybackId = this.state.currentPlaybackInstanceId;
+    const activeCommandId = this.state.currentCommandId;
+    const activeDuration = this.state.localElapsedMs;
+    if (activeAction) {
+      if (activePlaybackId) {
+        this.finalizePlayback(activePlaybackId, "interrupted", reason, now, {
+          commandId: activeCommandId ?? undefined,
+          actionKey: activeAction.actionKey,
+          playedDurationMs: activeDuration,
+        });
+      } else {
+        this.emit({
+          type: "playback.action_interrupted",
+          actionKey: activeAction.actionKey,
+          reason,
+          playedDurationMs: activeDuration,
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    const pendingPlaybackId = this.state.pendingPlaybackInstanceId;
+    if (pendingPlaybackId && pendingPlaybackId !== activePlaybackId) {
+      const pending = this.acceptedCommands.get(pendingPlaybackId);
+      if (pending) this.emitCommandFailure(pending, "PLAYBACK_COMMAND_CANCELLED", `playback stopped: ${reason}`);
+    }
+
+    this.queue.clear();
+    this.drainQueueRemovals(`playback stopped: ${reason}`);
+    this.dispatch({ type: "ACTION_INTERRUPTED", reason, now });
   }
 
   async switchPackage(snapshot: PackagePlaybackSnapshot): Promise<void> {
     this.assertNotDisposed();
     this.isAtomicPackageCommit = true;
-
     this.recovery.captureSnapshot(this.createRecoveryContext());
+    this.stopTickLoop();
+
+    // Terminalize the old generation before clearing/replacing its identity.
+    const now = this.clock.now();
+    const activeAction = this.state.currentAction;
+    const activePlaybackId = this.state.currentPlaybackInstanceId;
+    if (activeAction && activePlaybackId) {
+      this.finalizePlayback(activePlaybackId, "interrupted", "package_switch", now, {
+        commandId: this.state.currentCommandId ?? undefined,
+        actionKey: activeAction.actionKey,
+        playedDurationMs: this.state.localElapsedMs,
+      });
+    }
+    const pendingPlaybackId = this.state.pendingPlaybackInstanceId;
+    if (pendingPlaybackId && pendingPlaybackId !== activePlaybackId) {
+      const pending = this.acceptedCommands.get(pendingPlaybackId);
+      if (pending) this.emitCommandFailure(pending, "PLAYBACK_COMMAND_CANCELLED", "package switch cancelled playback preparation");
+    }
+    this.queue.clear();
+    this.drainQueueRemovals("package switch evicted queued playback");
 
     const generation = this.generationManager.next(snapshot.packageRevision);
     this.dispatch({ type: "PACKAGE_SWITCH_STARTED", snapshot, generation: generation.generation });
-
     this.packageSnapshot = snapshot;
-    this.stopTickLoop();
 
     try {
       const loaded = await this.assetRepository.loadAction({
@@ -490,11 +639,7 @@ export class DesktopPetAnimationEngine {
         throw new PlaybackError(
           PLAYBACK_ERROR_CODES.SURFACE_FAILED,
           `package first frame was not presented: ${presentResult.error ?? "unknown surface error"}`,
-          {
-            actionKey: loaded.action.actionKey,
-            frameIndex: 0,
-            resourceUrl: firstFrame.sourceUrl,
-          },
+          { actionKey: loaded.action.actionKey, frameIndex: 0, resourceUrl: firstFrame.sourceUrl },
         );
       }
 
@@ -507,7 +652,13 @@ export class DesktopPetAnimationEngine {
       this.currentTimeline = entry.timeline;
       this.currentDecodedFrames = entry.frames;
 
-      this.dispatch({ type: "PACKAGE_SWITCH_COMMITTED", action: loaded.action, frames: entry.frames, generation: generation.generation });
+      this.dispatch({
+        type: "PACKAGE_SWITCH_COMMITTED",
+        action: loaded.action,
+        frames: entry.frames,
+        generation: generation.generation,
+        now: this.clock.now(),
+      });
       this.startTickLoop();
 
       this.emit({
@@ -521,11 +672,7 @@ export class DesktopPetAnimationEngine {
       if (PlaybackError.isAbort(error)) return;
       const pbError = PlaybackError.fromUnknown(error);
       this.telemetry.recordError(pbError.toView());
-      this.emit({
-        type: "playback.action_failed",
-        error: pbError.toView(),
-        timestamp: Date.now(),
-      });
+      this.emit({ type: "playback.action_failed", error: pbError.toView(), timestamp: Date.now() });
       await this.tryFallback(pbError, generation);
       throw pbError;
     } finally {
@@ -630,15 +777,35 @@ export class DesktopPetAnimationEngine {
 
   dispose(): void {
     if (this.disposed) return;
-    this.disposed = true;
     this.stopTickLoop();
+
+    const now = this.clock.now();
+    const active = this.state.currentAction;
+    const activeId = this.state.currentPlaybackInstanceId;
+    if (active && activeId) {
+      this.finalizePlayback(activeId, "interrupted", "window_destroyed", now, {
+        commandId: this.state.currentCommandId ?? undefined,
+        actionKey: active.actionKey,
+        playedDurationMs: this.state.localElapsedMs,
+      });
+    }
+    const pendingId = this.state.pendingPlaybackInstanceId;
+    if (pendingId && pendingId !== activeId) {
+      const pending = this.acceptedCommands.get(pendingId);
+      if (pending) this.emitCommandFailure(pending, "PLAYBACK_COMMAND_CANCELLED", "renderer disposed during preparation");
+    }
+    this.queue.clear();
+    this.drainQueueRemovals("renderer disposed with queued command");
+
+    this.disposed = true;
     this.dispatch({ type: "DISPOSE" });
     this.releaseFallbackFrame();
     this.surface.dispose();
-    this.queue.clear();
     this.loadedActions.clear();
     this.loadedActionCache.clear();
     this.finalizedIds.clear();
+    this.firstCycleReportedIds.clear();
+    this.acceptedCommands.clear();
     this.listeners.clear();
     this.generationManager.markCurrentStale();
   }
@@ -656,23 +823,31 @@ export class DesktopPetAnimationEngine {
     if (this.state.phase !== "playing") return;
     if (this.tickHandle !== null) return;
     this.lastTickTime = this.clock.now();
-    this.tickHandle = this.clock.requestTick((now) => this.onTick(now));
+    const epoch = ++this.tickLoopEpoch;
+    this.tickHandle = this.clock.requestTick((now) => this.onTick(now, epoch));
   }
 
   private stopTickLoop(): void {
+    // Invalidate the closure even when cancelTick races with a callback that is
+    // already queued for execution.
+    this.tickLoopEpoch += 1;
     if (this.tickHandle !== null) {
       this.clock.cancelTick(this.tickHandle);
       this.tickHandle = null;
     }
   }
 
-  private onTick(now: number): void {
+  private onTick(now: number, epoch: number): void {
+    // A stale callback belongs to an older playback loop. It must not clear or
+    // reschedule the handle owned by the current generation.
+    if (epoch !== this.tickLoopEpoch) return;
+
+    // The current scheduled handle has fired; clear it before early returns so
+    // this same generation may establish its next frame.
+    this.tickHandle = null;
     if (this.disposed) return;
     if (this.state.phase !== "playing") return;
-    if (!this.currentTimeline || !this.state.currentAction) {
-      this.tickHandle = null;
-      return;
-    }
+    if (!this.currentTimeline || !this.state.currentAction) return;
 
     const delta = now - this.lastTickTime;
     this.lastTickTime = now;
@@ -684,18 +859,26 @@ export class DesktopPetAnimationEngine {
 
     const localElapsed = this.computeLocalElapsed(now);
     const position = this.currentTimeline.locate(localElapsed, this.state.currentAction.loopType);
-
     this.dispatch({ type: "TICK", now, position });
+
+    const activePlaybackId = this.state.currentPlaybackInstanceId;
+    if (activePlaybackId && position.cycleIndex >= 1 && !this.firstCycleReportedIds.has(activePlaybackId)) {
+      this.firstCycleReportedIds.add(activePlaybackId);
+      this.emit({
+        type: "playback.action_first_cycle",
+        playbackInstanceId: activePlaybackId,
+        commandId: this.state.currentCommandId ?? undefined,
+        actionKey: this.state.currentAction.actionKey,
+        timestamp: Date.now(),
+      });
+    }
 
     if (position.completed) {
       this.handleActionComplete(now);
       return;
     }
 
-    if (
-      this.state.currentAction.maximumPlayMs !== null &&
-      localElapsed >= this.state.currentAction.maximumPlayMs
-    ) {
+    if (this.state.currentAction.maximumPlayMs !== null && localElapsed >= this.state.currentAction.maximumPlayMs) {
       this.handleMaxDurationReached(now);
       return;
     }
@@ -705,21 +888,22 @@ export class DesktopPetAnimationEngine {
       const frame = this.currentDecodedFrames[frameIndex];
       if (frame && this.state.lastPresentedFrameIndex !== frameIndex) {
         const presentStart = this.clock.now();
-        this.surface.present(frame, {
+        void Promise.resolve(this.surface.present(frame, {
           anchor: this.state.currentAction.anchor,
           frameIndex,
           actionKey: this.state.currentAction.actionKey,
-        });
+        })).catch(() => undefined);
         this.telemetry.recordFramePresent(this.clock.now() - presentStart);
       }
     }
 
-    this.tickHandle = this.clock.requestTick((t) => this.onTick(t));
+    if (epoch !== this.tickLoopEpoch || this.state.phase !== "playing") return;
+    this.tickHandle = this.clock.requestTick((t) => this.onTick(t, epoch));
   }
 
   private computeLocalElapsed(now: number): number {
     const state = this.state;
-    if (state.startMonotonicMs === 0) return 0;
+    if (state.startMonotonicMs < 0) return 0;
     let elapsed = now - state.startMonotonicMs - state.pausedDurationMs;
     if (state.pauseStartMonotonicMs !== null) {
       elapsed -= Math.max(0, now - state.pauseStartMonotonicMs);
@@ -730,18 +914,29 @@ export class DesktopPetAnimationEngine {
 
   private handleActionComplete(now: number): void {
     const instanceId = this.state.currentPlaybackInstanceId;
+    const commandId = this.state.currentCommandId;
     const action = this.state.currentAction;
     if (!action) return;
+    const playedDurationMs = this.state.localElapsedMs;
+    const presentedFrames = this.state.presentedFrames;
+    const droppedFramesEstimate = this.state.droppedFramesEstimate;
 
     if (action.loopType === "hold") {
       this.dispatch({ type: "HOLD_ENTERED" });
       this.stopTickLoop();
       if (instanceId) {
-        this.finalizePlayback(instanceId, "completed", "natural_end", now);
+        this.finalizePlayback(instanceId, "completed", "natural_end", now, {
+          commandId: commandId ?? undefined,
+          actionKey: action.actionKey,
+          playedDurationMs,
+          presentedFrames,
+          droppedFramesEstimate,
+        });
       }
       this.emit({
         type: "playback.action_holding",
         playbackInstanceId: instanceId ?? undefined,
+        commandId: commandId ?? undefined,
         actionKey: action.actionKey,
         frameIndex: this.state.frameIndex ?? undefined,
         timestamp: Date.now(),
@@ -750,140 +945,146 @@ export class DesktopPetAnimationEngine {
     }
 
     if (instanceId) {
-      this.finalizePlayback(instanceId, "completed", "natural_end", now);
+      this.finalizePlayback(instanceId, "completed", "natural_end", now, {
+        commandId: commandId ?? undefined,
+        actionKey: action.actionKey,
+        playedDurationMs,
+        presentedFrames,
+        droppedFramesEstimate,
+      });
+    } else {
+      this.emit({
+        type: "playback.action_completed",
+        actionKey: action.actionKey,
+        reason: "natural_end",
+        playedDurationMs,
+        presentedFrames,
+        droppedFramesEstimate,
+        timestamp: Date.now(),
+      });
     }
 
     this.dispatch({ type: "ACTION_COMPLETED", reason: "natural_end", now });
-
-    this.emit({
-      type: "playback.action_completed",
-      playbackInstanceId: instanceId ?? undefined,
-      actionKey: action.actionKey,
-      reason: "natural_end",
-      playedDurationMs: this.state.localElapsedMs,
-      presentedFrames: this.state.presentedFrames,
-      droppedFramesEstimate: this.state.droppedFramesEstimate,
-      timestamp: Date.now(),
-    });
-
     this.telemetry.recordTransition(action.actionKey, "", "completed");
-    this.processQueueOrReturn();
+    this.processQueueOrReturn(action.returnTarget);
   }
 
   private handleMaxDurationReached(now: number): void {
     const instanceId = this.state.currentPlaybackInstanceId;
+    const commandId = this.state.currentCommandId;
     const action = this.state.currentAction;
     if (!action) return;
+    const playedDurationMs = this.state.localElapsedMs;
 
     if (instanceId) {
-      this.finalizePlayback(instanceId, "interrupted", "max_duration_reached", now);
+      this.finalizePlayback(instanceId, "interrupted", "max_duration_reached", now, {
+        commandId: commandId ?? undefined,
+        actionKey: action.actionKey,
+        playedDurationMs,
+      });
+    } else {
+      this.emit({
+        type: "playback.action_interrupted",
+        actionKey: action.actionKey,
+        reason: "max_duration_reached",
+        playedDurationMs,
+        timestamp: Date.now(),
+      });
     }
 
     this.dispatch({ type: "ACTION_INTERRUPTED", reason: "max_duration_reached", now });
-
-    this.emit({
-      type: "playback.action_interrupted",
-      playbackInstanceId: instanceId ?? undefined,
-      actionKey: action.actionKey,
-      reason: "max_duration_reached",
-      playedDurationMs: this.state.localElapsedMs,
-      timestamp: Date.now(),
-    });
-
-    this.processQueueOrReturn();
+    this.processQueueOrReturn(action.returnTarget);
   }
 
-  private processQueueOrReturn(): void {
-    const next = this.queue.dequeue();
-    if (next) {
-      this.playAction(next.command);
-      return;
+  private processQueueOrReturn(returnTarget?: ReturnTarget): void {
+    this.drainQueueRemovals();
+    while (true) {
+      const next = this.queue.dequeue();
+      if (!next) break;
+      const promoted = this.gateway.promoteQueuedCommand(next.command, this.clock.now());
+      if (promoted.decision === "accept_and_load") {
+        void this.prepareAndSwitch(next.command, promoted.ack);
+        return;
+      }
+      if (promoted.decision === "expired") {
+        this.emitCommandFailure(next.command, "PLAYBACK_COMMAND_EXPIRED", "queued playback expired before execution");
+        continue;
+      }
+      this.emitCommandFailure(next.command, "PLAYBACK_COMMAND_CANCELLED", promoted.ack.reason ?? "queued playback could not be promoted");
     }
 
-    const action = this.state.currentAction;
-    if (!action) {
-      this.returnToDefault();
+    if (!returnTarget) {
+      void this.returnToDefault();
       return;
     }
-
-    const resolveResult = this.returnResolver.resolve({
-      actionReturnTarget: action.returnTarget,
-      queueHasItems: false,
-    });
-
+    const resolveResult = this.returnResolver.resolve({ actionReturnTarget: returnTarget, queueHasItems: false });
     if (resolveResult.targetActionKey) {
-      this.loadAndPlayReturn(resolveResult.targetActionKey);
+      void this.loadAndPlayReturn(resolveResult.targetActionKey);
     } else if (resolveResult.target.type === "none") {
       this.stopTickLoop();
     } else {
-      this.returnToDefault();
+      void this.returnToDefault();
     }
   }
 
   private async loadAndPlayReturn(actionKey: string): Promise<void> {
     if (!this.packageSnapshot) return;
-    if (actionKey === this.state.currentAction?.actionKey) {
-      this.returnToDefault();
-      return;
-    }
 
     const generation = this.generationManager.next(this.state.packageRevision);
+    const playbackInstanceId = createPlaybackInstanceId();
+    this.stopTickLoop();
+    this.dispatch({ type: "INTERNAL_ACTION_REQUESTED", playbackInstanceId, generation: generation.generation });
 
     try {
-      const loaded = await this.assetRepository.loadAction({
-        packageSnapshot: this.packageSnapshot,
-        actionKey,
-        signal: generation.signal,
-        priority: "high",
-      });
-
-      if (!generation.isCurrent()) {
-        this.releaseLoadedAssets(loaded);
-        return;
+      let entry = this.loadedActions.get(actionKey) ?? null;
+      if (!entry) {
+        const loaded = await this.assetRepository.loadAction({
+          packageSnapshot: this.packageSnapshot,
+          actionKey,
+          signal: generation.signal,
+          priority: "high",
+        });
+        if (!generation.isCurrent()) {
+          this.releaseLoadedAssets(loaded);
+          return;
+        }
+        entry = this.createLoadedEntry(loaded);
+        this.loadedActions.set(actionKey, entry);
+        this.loadedActionCache.set(actionKey, loaded.action);
       }
 
-      const entry = this.createLoadedEntry(loaded);
-      this.loadedActions.set(actionKey, entry);
-      this.loadedActionCache.set(actionKey, loaded.action);
+      const firstFrame = entry.frames[0];
+      if (!firstFrame) throw new PlaybackError(PLAYBACK_ERROR_CODES.SURFACE_FAILED, `return action has no frame: ${actionKey}`);
+      const presentResult = await this.surface.present(firstFrame, {
+        anchor: entry.action.anchor,
+        frameIndex: 0,
+        actionKey: entry.action.actionKey,
+      });
+      if (!presentResult.presented) {
+        throw new PlaybackError(
+          PLAYBACK_ERROR_CODES.SURFACE_FAILED,
+          `return action first frame was not presented: ${presentResult.error ?? "unknown surface error"}`,
+          { actionKey, frameIndex: 0, resourceUrl: firstFrame.sourceUrl, playbackInstanceId },
+        );
+      }
+      if (!generation.isCurrent()) return;
+
       this.currentLoadedEntry = entry;
       this.currentTimeline = entry.timeline;
       this.currentDecodedFrames = entry.frames;
-
       this.dispatch({
-        type: "ACTION_LOADED",
-        action: loaded.action,
+        type: "INTERNAL_ACTION_LOADED",
+        action: entry.action,
         frames: entry.frames,
-        command: {
-          commandId: `return_${Date.now()}`,
-          idempotencyKey: `return:${actionKey}:${Date.now()}`,
-          installationId: "",
-          petInstanceId: "",
-          packageRevision: this.state.packageRevision,
-          actionKey,
-          priority: loaded.action.defaultPriority,
-          queuePolicy: "replace_current",
-          interruptPolicy: "force_system",
-          playbackRate: 1,
-          issuedAt: new Date().toISOString(),
-        },
-        playbackInstanceId: createPlaybackInstanceId(),
+        playbackInstanceId,
         generation: generation.generation,
+        now: this.clock.now(),
       });
-
-      const firstFrame = entry.frames[0];
-      if (firstFrame) {
-        this.surface.present(firstFrame, {
-          anchor: loaded.action.anchor,
-          frameIndex: 0,
-          actionKey: loaded.action.actionKey,
-        });
-      }
-
       this.startTickLoop();
-
       this.emit({
         type: "playback.action_started",
-        actionKey: loaded.action.actionKey,
+        playbackInstanceId,
+        actionKey: entry.action.actionKey,
         frameIndex: 0,
         timestamp: Date.now(),
         packageId: this.state.packageId ?? undefined,
@@ -891,7 +1092,16 @@ export class DesktopPetAnimationEngine {
       });
     } catch (error) {
       if (PlaybackError.isAbort(error)) return;
-      this.returnToDefault();
+      const pbError = PlaybackError.fromUnknown(error);
+      this.dispatch({ type: "ACTION_FAILED", error: pbError });
+      this.telemetry.recordError(pbError.toView());
+      this.emit({
+        type: "playback.action_failed",
+        playbackInstanceId,
+        actionKey,
+        error: pbError.toView(),
+        timestamp: Date.now(),
+      });
     }
   }
 
@@ -900,49 +1110,7 @@ export class DesktopPetAnimationEngine {
       this.stopTickLoop();
       return;
     }
-
-    const defaultKey = this.state.defaultActionKey;
-    const cached = this.loadedActions.get(defaultKey);
-    if (cached) {
-      this.currentLoadedEntry = cached;
-      this.currentTimeline = cached.timeline;
-      this.currentDecodedFrames = cached.frames;
-
-      this.dispatch({
-        type: "ACTION_LOADED",
-        action: cached.action,
-        frames: cached.frames,
-        command: {
-          commandId: `default_${Date.now()}`,
-          idempotencyKey: `default:${defaultKey}:${Date.now()}`,
-          installationId: "",
-          petInstanceId: "",
-          packageRevision: this.state.packageRevision,
-          actionKey: defaultKey,
-          priority: cached.action.defaultPriority,
-          queuePolicy: "replace_current",
-          interruptPolicy: "force_system",
-          playbackRate: 1,
-          issuedAt: new Date().toISOString(),
-        },
-        playbackInstanceId: createPlaybackInstanceId(),
-        generation: this.generationManager.current()?.generation ?? 0,
-      });
-
-      const firstFrame = cached.frames[0];
-      if (firstFrame) {
-        this.surface.present(firstFrame, {
-          anchor: cached.action.anchor,
-          frameIndex: 0,
-          actionKey: cached.action.actionKey,
-        });
-      }
-
-      this.startTickLoop();
-      return;
-    }
-
-    await this.loadAndPlayReturn(defaultKey);
+    await this.loadAndPlayReturn(this.state.defaultActionKey);
   }
 
   private async tryFallback(
@@ -1114,22 +1282,103 @@ export class DesktopPetAnimationEngine {
     type: "completed" | "interrupted",
     reason: string,
     now: number,
-  ): void {
-    const existing = this.finalizedIds.get(instanceId);
-    if (existing) return;
+    context?: {
+      commandId?: string;
+      actionKey?: string;
+      playedDurationMs?: number;
+      presentedFrames?: number;
+      droppedFramesEstimate?: number;
+    },
+  ): boolean {
+    if (!instanceId || this.finalizedIds.has(instanceId)) return false;
 
     this.finalizedIds.set(instanceId, { timestamp: now });
+    this.firstCycleReportedIds.delete(instanceId);
+    const command = this.acceptedCommands.get(instanceId);
+    this.acceptedCommands.delete(instanceId);
     this.cleanupExpired(now);
 
-    if (type === "interrupted") {
+    const commandId = context?.commandId ?? command?.commandId;
+    const actionKey = context?.actionKey ?? command?.actionKey;
+    const playedDurationMs = context?.playedDurationMs ?? 0;
+    if (type === "completed") {
+      this.emit({
+        type: "playback.action_completed",
+        playbackInstanceId: instanceId,
+        commandId,
+        actionKey,
+        reason,
+        playedDurationMs,
+        presentedFrames: context?.presentedFrames,
+        droppedFramesEstimate: context?.droppedFramesEstimate,
+        timestamp: Date.now(),
+        traceId: command?.traceId,
+      });
+    } else {
       this.emit({
         type: "playback.action_interrupted",
         playbackInstanceId: instanceId,
+        commandId,
+        actionKey,
         reason,
-        playedDurationMs: this.state.localElapsedMs,
+        playedDurationMs,
         timestamp: Date.now(),
+        traceId: command?.traceId,
       });
     }
+    return true;
+  }
+
+  private emitCommandFailure(command: PlayActionCommand, code: string, message: string): void {
+    this.emitCommandFailureView(command, {
+      code,
+      message,
+      actionKey: command.actionKey,
+      playbackInstanceId: command.playbackInstanceId,
+      commandId: command.commandId,
+      traceId: command.traceId,
+    });
+  }
+
+  private emitCommandFailureView(command: PlayActionCommand, error: PlaybackErrorView): void {
+    const instanceId = command.playbackInstanceId;
+    if (!instanceId || this.finalizedIds.has(instanceId)) return;
+    const now = this.clock.now();
+    this.finalizedIds.set(instanceId, { timestamp: now });
+    this.firstCycleReportedIds.delete(instanceId);
+    this.acceptedCommands.delete(instanceId);
+    this.cleanupExpired(now);
+    this.emit({
+      type: "playback.action_failed",
+      playbackInstanceId: instanceId,
+      commandId: command.commandId,
+      actionKey: command.actionKey,
+      error,
+      reason: error.code,
+      timestamp: Date.now(),
+      traceId: command.traceId,
+    });
+  }
+
+  private drainQueueRemovals(messagePrefix = "queued playback removed before execution"): void {
+    for (const removal of this.queue.drainRemovals()) {
+      this.emitCommandFailure(
+        removal.item.command,
+        "PLAYBACK_COMMAND_CANCELLED",
+        `${messagePrefix}: ${removal.reason}`,
+      );
+    }
+  }
+
+  private applyCommandOverrides(action: LoadedAction, command: PlayActionCommand): LoadedAction {
+    return {
+      ...action,
+      defaultPriority: command.priority,
+      minimumPlayMs: command.minimumPlayMs ?? action.minimumPlayMs,
+      maximumPlayMs: command.maximumPlayMs ?? action.maximumPlayMs,
+      interruptAfterMs: command.interruptAfterMs ?? action.interruptAfterMs,
+      returnTarget: command.returnOverride ?? action.returnTarget,
+    };
   }
 
   private cleanupExpired(now: number): void {
