@@ -92,13 +92,20 @@ val prootMetadataFile = layout.projectDirectory.file("src/main/res/raw/proot_art
 val androidBackendInput = providers.gradleProperty("amitiaAndroidBackendArm64").orNull?.let(::file)
 val androidBackendOutput = layout.buildDirectory.file("generated/jniLibs/arm64-v8a/libamitia_server.so")
 
+// PRoot mode launches the backend from the installed rootfs
+// (versionsRoot/<version>/backend/amitia-server), so no native .so is required.
+// Android-native builds must still opt in explicitly by passing
+// -PamitiaAndroidBackendArm64=<android arm64 backend>.
 tasks.register<Copy>("stageAndroidBackend") {
-    val input = androidBackendInput ?: throw GradleException("stageAndroidBackend requires -PamitiaAndroidBackendArm64=<android arm64 backend>")
-    from(input)
-    into(androidBackendOutput.get().asFile.parentFile)
-    rename { "libamitia_server.so" }
-    inputs.file(input)
-    outputs.file(androidBackendOutput)
+    val input = androidBackendInput
+    onlyIf { input != null }
+    if (input != null) {
+        from(input)
+        into(androidBackendOutput.get().asFile.parentFile)
+        rename { "libamitia_server.so" }
+        inputs.file(input)
+        outputs.file(androidBackendOutput)
+    }
 }
 
 tasks.register("verifyProotArtifact") {

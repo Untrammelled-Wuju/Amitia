@@ -19,11 +19,10 @@ internal class DefaultProotProcessLauncher(
             }
             val fullCommand = ArrayList<String>(command.arguments.size + 1)
             fullCommand.add(command.binaryPath); fullCommand.addAll(command.arguments)
-            val shellCommand = ArrayList<String>(fullCommand.size + 4)
+            val shellCommand = ArrayList<String>(fullCommand.size + 3)
             shellCommand.add("/system/bin/sh")
             shellCommand.add("-c")
             shellCommand.add("exec \"\$@\"")
-            shellCommand.add("amitia-proot")
             shellCommand.addAll(fullCommand)
             val pb = ProcessBuilder(shellCommand); pb.directory(File("/"))
             if (command.environment.isNotEmpty()) {
