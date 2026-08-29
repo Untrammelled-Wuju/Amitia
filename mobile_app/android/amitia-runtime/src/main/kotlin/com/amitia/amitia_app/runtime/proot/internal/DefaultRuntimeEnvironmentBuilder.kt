@@ -12,7 +12,9 @@ import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentResult
 import java.io.File
 import java.security.SecureRandom
 
-internal class DefaultRuntimeEnvironmentBuilder : RuntimeEnvironmentBuilder {
+internal class DefaultRuntimeEnvironmentBuilder(
+    private val prootLoaderPath: String = "",
+) : RuntimeEnvironmentBuilder {
 
     override fun build(request: RuntimeEnvironmentRequest): RuntimeEnvironmentResult {
         if (!validateHostLayout(request.hostLayout)) {
@@ -80,6 +82,7 @@ internal class DefaultRuntimeEnvironmentBuilder : RuntimeEnvironmentBuilder {
 
     private fun buildHostProcessEnvironment(layout: RuntimeHostLayout): Map<String, String> {
         val env = LinkedHashMap<String, String>()
+        if (prootLoaderPath.isNotBlank()) env["PROOT_LOADER"] = prootLoaderPath
         env["PROOT_TMP_DIR"] = File(layout.runRoot, "proot-tmp").absolutePath
 
         // The bundled Android PRoot clears/inherits only the environment we
