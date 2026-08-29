@@ -542,8 +542,18 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 
 	for i := range manifest.Actions {
 		a := &manifest.Actions[i]
+		a.SupportsDefaultIdle = a.Key == manifest.DefaultAction
+		a.IsStableStateCandidate = a.SupportsDefaultIdle || strings.HasPrefix(a.Key, "idle_") || strings.HasPrefix(a.Key, "sleep_")
+		a.IsTransitionOnly = false
 		cfgPath := filepath.Join(stagingDir, filepath.FromSlash(a.Config))
-		meta, err := convertLegacyActionConfig(cfgPath, a.Key, a.Name)
+		meta, err := convertLegacyActionConfig(
+			cfgPath,
+			a.Key,
+			a.Name,
+			a.SupportsDefaultIdle,
+			a.IsStableStateCandidate,
+			a.IsTransitionOnly,
+		)
 		if err != nil {
 			_ = s.storage.RemoveStagingDir(record.ID)
 			return nil, NewReleaseError("ACTION_CONFIG_CONVERT_FAILED", "转换动作配置失败: "+a.Key, err)
@@ -553,8 +563,6 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 		a.PlaybackMode = meta.PlaybackMode
 		a.FPS = meta.FPS
 		a.FrameCount = meta.FrameCount
-		a.SupportsDefaultIdle = a.Key == manifest.DefaultAction
-		a.IsStableStateCandidate = a.SupportsDefaultIdle || strings.HasPrefix(a.Key, "idle_") || strings.HasPrefix(a.Key, "sleep_")
 	}
 
 	fileManifest, err := packageformat.BuildFileManifestFromDir(stagingDir)
@@ -674,7 +682,10 @@ type legacyActionConfig struct {
 	ReturnPolicy string `json:"returnPolicy"`
 }
 
-func convertLegacyActionConfig(path, actionKey, displayName string) (*convertedActionMetadata, error) {
+func convertLegacyActionConfig(
+	path, actionKey, displayName string,
+	supportsDefaultIdle, isStableStateCandidate, isTransitionOnly bool,
+) (*convertedActionMetadata, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -721,7 +732,30 @@ func convertLegacyActionConfig(path, actionKey, displayName string) (*convertedA
 	if legacy.ReturnAction != "" {
 		returnTo = map[string]any{"type": "action", "actionKey": legacy.ReturnAction}
 	}
-	out := map[string]any{"schemaVersion": packageformat.ActionConfigSchemaVersion, "actionKey": actionKey, "displayName": displayName, "fps": fps, "playbackMode": mode, "frames": frames, "returnTo": returnTo, "anchor": map[string]any{"x": clamp01(legacy.Anchor.X), "y": clamp01(legacy.Anchor.Y), "coordinateSpace": "normalized_canvas"}}
+	out := map[string]any{
+		"schemaVersion":          packageformat.ActionConfigSchemaVersion,
+		"actionKey":              actionKey,
+		"displayName":            displayName,
+		"version":                1,
+		"playbackMode":           mode,
+		"fps":                    fps,
+		"interruptible":          true,
+		"priority":               50,
+		"cooldownMs":             0,
+		"minimumPlayMs":          0,
+		"maximumPlayMs":          nil,
+		"mutexGroup":             nil,
+		"supportsDefaultIdle":    supportsDefaultIdle,
+		"isStableStateCandidate": isStableStateCandidate,
+		"isTransitionOnly":       isTransitionOnly,
+		"frames":                 frames,
+		"returnTo":               returnTo,
+		"anchor": map[string]any{
+			"x":               clamp01(legacy.Anchor.X),
+			"y":               clamp01(legacy.Anchor.Y),
+			"coordinateSpace": "normalized_canvas",
+		},
+	}
 	encoded, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return nil, err

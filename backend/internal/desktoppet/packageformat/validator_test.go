@@ -11,14 +11,24 @@ import (
 )
 
 type testActionConfig struct {
-	SchemaVersion int              `json:"schemaVersion"`
-	ActionKey     string           `json:"actionKey"`
-	DisplayName   string           `json:"displayName"`
-	Fps           int              `json:"fps"`
-	PlaybackMode  string           `json:"playbackMode"`
-	Frames        []testFrameEntry `json:"frames"`
-	ReturnTo      testReturnTo     `json:"returnTo"`
-	Anchor        testAnchor       `json:"anchor"`
+	SchemaVersion          int              `json:"schemaVersion"`
+	ActionKey              string           `json:"actionKey"`
+	DisplayName            string           `json:"displayName"`
+	Version                int              `json:"version"`
+	Fps                    int              `json:"fps"`
+	PlaybackMode           string           `json:"playbackMode"`
+	Interruptible          bool             `json:"interruptible"`
+	Priority               int              `json:"priority"`
+	CooldownMs             int              `json:"cooldownMs"`
+	MinimumPlayMs          int              `json:"minimumPlayMs"`
+	MaximumPlayMs          *int             `json:"maximumPlayMs"`
+	MutexGroup             *string          `json:"mutexGroup"`
+	SupportsDefaultIdle    bool             `json:"supportsDefaultIdle"`
+	IsStableStateCandidate bool             `json:"isStableStateCandidate"`
+	IsTransitionOnly       bool             `json:"isTransitionOnly"`
+	Frames                 []testFrameEntry `json:"frames"`
+	ReturnTo               testReturnTo     `json:"returnTo"`
+	Anchor                 testAnchor       `json:"anchor"`
 }
 
 type testFrameEntry struct {
@@ -81,11 +91,21 @@ func createValidTestPackage(t *testing.T) (string, *Manifest) {
 	frameHash := sha256Hex(frameData)
 
 	cfg := testActionConfig{
-		SchemaVersion: 2,
-		ActionKey:     "idle",
-		DisplayName:   "Idle",
-		Fps:           10,
-		PlaybackMode:  "loop",
+		SchemaVersion:          2,
+		ActionKey:              "idle",
+		DisplayName:            "Idle",
+		Version:                1,
+		Interruptible:          true,
+		Priority:               50,
+		CooldownMs:             0,
+		MinimumPlayMs:          0,
+		MaximumPlayMs:          nil,
+		MutexGroup:             nil,
+		SupportsDefaultIdle:    true,
+		IsStableStateCandidate: false,
+		IsTransitionOnly:       false,
+		Fps:                    10,
+		PlaybackMode:           "loop",
 		Frames: []testFrameEntry{
 			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 100, AssetID: "asset_idle_0", ContentHash: frameHash},
 			{Index: 1, FrameID: "idle_1", File: "frames/1.png", DurationMs: 100, AssetID: "asset_idle_1", ContentHash: frameHash},
@@ -290,11 +310,21 @@ func TestValidateDirectory_InvalidPlaybackMode(t *testing.T) {
 	frameData := pngFrameData()
 	frameHash := sha256Hex(frameData)
 	cfg := &testActionConfig{
-		SchemaVersion: 2,
-		ActionKey:     "idle",
-		DisplayName:   "Idle",
-		Fps:           10,
-		PlaybackMode:  "unknown",
+		SchemaVersion:          2,
+		ActionKey:              "idle",
+		DisplayName:            "Idle",
+		Version:                1,
+		Interruptible:          true,
+		Priority:               50,
+		CooldownMs:             0,
+		MinimumPlayMs:          0,
+		MaximumPlayMs:          nil,
+		MutexGroup:             nil,
+		SupportsDefaultIdle:    true,
+		IsStableStateCandidate: false,
+		IsTransitionOnly:       false,
+		Fps:                    10,
+		PlaybackMode:           "unknown",
 		Frames: []testFrameEntry{
 			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 100, AssetID: "asset_idle_0", ContentHash: frameHash},
 			{Index: 1, FrameID: "idle_1", File: "frames/1.png", DurationMs: 100, AssetID: "asset_idle_1", ContentHash: frameHash},
@@ -315,14 +345,24 @@ func TestValidateDirectory_InvalidPlaybackMode(t *testing.T) {
 
 func TestValidateDirectory_EmptyFrames(t *testing.T) {
 	cfg := &testActionConfig{
-		SchemaVersion: 2,
-		ActionKey:     "idle",
-		DisplayName:   "Idle",
-		Fps:           10,
-		PlaybackMode:  "loop",
-		Frames:        []testFrameEntry{},
-		ReturnTo:      testReturnTo{Type: "none"},
-		Anchor:        testAnchor{X: 0.5, Y: 1.0, CoordinateSpace: "normalized_canvas"},
+		SchemaVersion:          2,
+		ActionKey:              "idle",
+		DisplayName:            "Idle",
+		Version:                1,
+		Interruptible:          true,
+		Priority:               50,
+		CooldownMs:             0,
+		MinimumPlayMs:          0,
+		MaximumPlayMs:          nil,
+		MutexGroup:             nil,
+		SupportsDefaultIdle:    true,
+		IsStableStateCandidate: false,
+		IsTransitionOnly:       false,
+		Fps:                    10,
+		PlaybackMode:           "loop",
+		Frames:                 []testFrameEntry{},
+		ReturnTo:               testReturnTo{Type: "none"},
+		Anchor:                 testAnchor{X: 0.5, Y: 1.0, CoordinateSpace: "normalized_canvas"},
 	}
 	dir, manifest := createTestPackageWithConfig(t, cfg)
 	v := NewValidator()
@@ -339,11 +379,21 @@ func TestValidateDirectory_ReturnToActionInvalid(t *testing.T) {
 	frameData := pngFrameData()
 	frameHash := sha256Hex(frameData)
 	cfg := &testActionConfig{
-		SchemaVersion: 2,
-		ActionKey:     "idle",
-		DisplayName:   "Idle",
-		Fps:           10,
-		PlaybackMode:  "loop",
+		SchemaVersion:          2,
+		ActionKey:              "idle",
+		DisplayName:            "Idle",
+		Version:                1,
+		Interruptible:          true,
+		Priority:               50,
+		CooldownMs:             0,
+		MinimumPlayMs:          0,
+		MaximumPlayMs:          nil,
+		MutexGroup:             nil,
+		SupportsDefaultIdle:    true,
+		IsStableStateCandidate: false,
+		IsTransitionOnly:       false,
+		Fps:                    10,
+		PlaybackMode:           "loop",
 		Frames: []testFrameEntry{
 			{Index: 0, FrameID: "idle_0", File: "frames/0.png", DurationMs: 100, AssetID: "asset_idle_0", ContentHash: frameHash},
 			{Index: 1, FrameID: "idle_1", File: "frames/1.png", DurationMs: 100, AssetID: "asset_idle_1", ContentHash: frameHash},
@@ -439,5 +489,246 @@ func TestDirectoryPackageFS_PathTraversal(t *testing.T) {
 	_, err = fs.Open("/etc/passwd")
 	if err == nil {
 		t.Error("expected error for absolute path Open /etc/passwd, got nil")
+	}
+}
+
+func TestIsForbiddenExecutable(t *testing.T) {
+	for _, relPath := range []string{
+		"payload.exe",
+		"actions/idle/helper.DLL",
+		"scripts/install.ps1",
+		"scripts/runtime.sh",
+		"payload.wasm",
+		"mac/Companion.app/Contents/MacOS/Companion",
+	} {
+		if !isForbiddenExecutable(relPath) {
+			t.Errorf("isForbiddenExecutable(%q) = false, want true", relPath)
+		}
+	}
+	for _, relPath := range []string{
+		"manifest.json",
+		"preview.png",
+		"actions/idle/action.json",
+		"actions/idle/frames/frame-0001.webp",
+		"NOTICE.txt",
+	} {
+		if isForbiddenExecutable(relPath) {
+			t.Errorf("isForbiddenExecutable(%q) = true, want false", relPath)
+		}
+	}
+}
+
+func TestV2ReaderRejectsMissingNestedRequiredField(t *testing.T) {
+	_, manifest := createValidTestPackage(t)
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal manifest: %v", err)
+	}
+	actions := raw["actions"].([]any)
+	first := actions[0].(map[string]any)
+	delete(first, "supportsDefaultIdle")
+	data, err = json.Marshal(raw)
+	if err != nil {
+		t.Fatalf("marshal mutated manifest: %v", err)
+	}
+	if _, err := (&V2Reader{}).ReadManifest(data); err == nil {
+		t.Fatal("expected V2Reader to reject an action missing supportsDefaultIdle")
+	}
+}
+
+func TestValidateDirectoryRejectsMissingRequiredFrameField(t *testing.T) {
+	dir, manifest := createValidTestPackage(t)
+	configPath := filepath.Join(dir, "actions", "idle", "action.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read action config: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal action config: %v", err)
+	}
+	frames := raw["frames"].([]any)
+	delete(frames[0].(map[string]any), "index")
+	data, err = json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mutated action config: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		t.Fatalf("write action config: %v", err)
+	}
+	manifest, err = (&ArchiveWriter{}).BuildManifestForArchive(dir, manifest)
+	if err != nil {
+		t.Fatalf("rebuild manifest: %v", err)
+	}
+	report := NewValidator().ValidateDirectory(dir, manifest)
+	if !hasFinding(report, ErrCodeActionConfigInvalid) {
+		t.Fatalf("expected %s for missing frame.index, findings=%+v", ErrCodeActionConfigInvalid, report.Findings)
+	}
+}
+
+func TestValidateDirectoryRejectsFrameHashNotMatchingIntegrity(t *testing.T) {
+	dir, manifest := createValidTestPackage(t)
+	configPath := filepath.Join(dir, "actions", "idle", "action.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read action config: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal action config: %v", err)
+	}
+	frames := raw["frames"].([]any)
+	frames[0].(map[string]any)["contentHash"] = string(make([]byte, 0)) + "0000000000000000000000000000000000000000000000000000000000000000"
+	data, err = json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mutated action config: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		t.Fatalf("write action config: %v", err)
+	}
+	manifest, err = (&ArchiveWriter{}).BuildManifestForArchive(dir, manifest)
+	if err != nil {
+		t.Fatalf("rebuild manifest: %v", err)
+	}
+	report := NewValidator().ValidateDirectory(dir, manifest)
+	if !hasFinding(report, ErrCodePackageResourceHashMismatch) {
+		t.Fatalf("expected %s, findings=%+v", ErrCodePackageResourceHashMismatch, report.Findings)
+	}
+}
+
+func TestValidateDirectoryLegacyV1Compatibility(t *testing.T) {
+	dir := t.TempDir()
+	legacyManifest := map[string]any{
+		"schemaVersion":     1,
+		"packageId":         "legacy-release-001",
+		"name":              "Legacy Pet",
+		"characterId":       "legacy-pet-001",
+		"generationTaskId":  "legacy-task-001",
+		"processingVersion": 1,
+		"createdAt":         "2026-08-29T00:00:00Z",
+		"canvas":            map[string]any{"width": 512, "height": 512},
+		"defaultAction":     "idle",
+		"preview":           "",
+		"actions":           []map[string]any{{"key": "idle", "name": "Idle", "config": "actions/idle/action.json", "loopType": "loop"}},
+		"capabilities":      map[string]any{"hasTransparentBackground": true, "supportsFrameSequence": true},
+	}
+	manifestData, err := json.MarshalIndent(legacyManifest, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal legacy manifest: %v", err)
+	}
+	writeTestFile(t, dir, "manifest.json", manifestData)
+	frameData := pngFrameData()
+	writeTestFile(t, dir, "actions/idle/frames/0.png", frameData)
+	legacyAction := map[string]any{
+		"key":           "idle",
+		"name":          "Idle",
+		"loopType":      "loop",
+		"fps":           10,
+		"frames":        []map[string]any{{"index": 0, "file": "frames/0.png", "durationMs": 100}},
+		"anchor":        map[string]any{"type": "feet_center", "x": 0.5, "y": 0.92},
+		"interruptible": true,
+	}
+	actionData, err := json.MarshalIndent(legacyAction, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal legacy action: %v", err)
+	}
+	writeTestFile(t, dir, "actions/idle/action.json", actionData)
+
+	manifest, err := NewSchemaRegistry().ReadManifest(manifestData)
+	if err != nil {
+		t.Fatalf("read legacy manifest: %v", err)
+	}
+	report := NewValidator().ValidateDirectory(dir, manifest)
+	if report.Verdict != "valid" && report.Verdict != "valid_with_warnings" {
+		t.Fatalf("legacy V1 package should remain importable, verdict=%s findings=%+v", report.Verdict, report.Findings)
+	}
+}
+
+func TestValidateDirectoryLegacyV1MissingFrameRejected(t *testing.T) {
+	dir := t.TempDir()
+	legacyManifest := map[string]any{
+		"schemaVersion":     1,
+		"packageId":         "legacy-release-002",
+		"name":              "Legacy Pet",
+		"characterId":       "legacy-pet-002",
+		"processingVersion": 1,
+		"canvas":            map[string]any{"width": 512, "height": 512},
+		"defaultAction":     "idle",
+		"actions":           []map[string]any{{"key": "idle", "name": "Idle", "config": "actions/idle/action.json", "loopType": "loop"}},
+		"capabilities":      map[string]any{},
+	}
+	manifestData, _ := json.Marshal(legacyManifest)
+	writeTestFile(t, dir, "manifest.json", manifestData)
+	legacyAction := map[string]any{
+		"key":      "idle",
+		"fps":      10,
+		"loopType": "loop",
+		"frames":   []string{"frames/missing.png"},
+	}
+	actionData, _ := json.Marshal(legacyAction)
+	writeTestFile(t, dir, "actions/idle/action.json", actionData)
+	manifest, err := NewSchemaRegistry().ReadManifest(manifestData)
+	if err != nil {
+		t.Fatalf("read legacy manifest: %v", err)
+	}
+	report := NewValidator().ValidateDirectory(dir, manifest)
+	if !hasFinding(report, ErrCodeFrameMissing) {
+		t.Fatalf("expected missing legacy frame to be rejected, findings=%+v", report.Findings)
+	}
+}
+
+func TestV2ReaderRejectsNullForNonNullableNestedField(t *testing.T) {
+	_, manifest := createValidTestPackage(t)
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal manifest: %v", err)
+	}
+	actions := raw["actions"].([]any)
+	actions[0].(map[string]any)["supportsDefaultIdle"] = nil
+	data, err = json.Marshal(raw)
+	if err != nil {
+		t.Fatalf("marshal mutated manifest: %v", err)
+	}
+	if _, err := (&V2Reader{}).ReadManifest(data); err == nil {
+		t.Fatal("expected V2Reader to reject supportsDefaultIdle:null")
+	}
+}
+
+func TestValidateDirectoryRejectsNullForNonNullableActionField(t *testing.T) {
+	dir, manifest := createValidTestPackage(t)
+	configPath := filepath.Join(dir, "actions", "idle", "action.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read action config: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal action config: %v", err)
+	}
+	raw["interruptible"] = nil
+	frames := raw["frames"].([]any)
+	frames[0].(map[string]any)["index"] = nil
+	data, err = json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mutated action config: %v", err)
+	}
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		t.Fatalf("write action config: %v", err)
+	}
+	manifest, err = (&ArchiveWriter{}).BuildManifestForArchive(dir, manifest)
+	if err != nil {
+		t.Fatalf("rebuild manifest: %v", err)
+	}
+	report := NewValidator().ValidateDirectory(dir, manifest)
+	if !hasFinding(report, ErrCodeActionConfigInvalid) {
+		t.Fatalf("expected null non-nullable V2 fields to be rejected, findings=%+v", report.Findings)
 	}
 }
