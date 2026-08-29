@@ -1,5 +1,7 @@
 import { ipcMain, BrowserWindow, powerMonitor } from "electron";
 import { join, isAbsolute, normalize, relative } from "node:path";
+import { getAmitiaDataDir } from "../path-manager";
+import { resolveDesktopPetInstallationRoot } from "./installation-path";
 import { ANIMATION_IPC_CHANNELS } from "../../shared/animation-ipc";
 import type {
   PetDragIpcPayload,
@@ -332,7 +334,9 @@ export class AnimationIpcAdapter {
   ): void => {
     if (!this.isCurrentPetRenderer(event)) return;
     this.bootstrapped = true;
-    this.flushDurableState();
+    // Bootstrap has exactly one package source: renderer invokes
+    // getPackageSnapshot() and awaits engine.initialize(). Do not push the
+    // durable package here or initialize() and switchPackage() can race.
     this.deps.onRendererBootstrapped?.();
   };
 
@@ -342,9 +346,33 @@ export class AnimationIpcAdapter {
   ): void => {
     if (!this.isCurrentPetRenderer(event)) return;
     if (!isValidRuntimeReadyPayload(payload)) return;
+
+    const expected = this.durable.packageSnapshot;
+    if (
+      expected &&
+      (payload.packageId !== expected.packageId ||
+        payload.packageRevision !== expected.packageRevision ||
+        payload.defaultActionKey !== expected.defaultActionKey)
+    ) {
+      const failure: RuntimeInitFailedPayload = {
+        reason: `runtime_ready_package_mismatch: expected ${expected.packageId}@${expected.packageRevision}/${expected.defaultActionKey}, got ${payload.packageId}@${payload.packageRevision}/${payload.defaultActionKey}`,
+        packageId: payload.packageId,
+        packageRevision: payload.packageRevision,
+      };
+      this.runtimeReady = false;
+      this.runtimeReadyPayload = null;
+      this.runtimeInitFailure = failure;
+      this.deps.onRuntimeInitFailed?.(failure);
+      this.rejectRuntimeReady(new Error(`RUNTIME_INIT_FAILED: ${failure.reason}`));
+      return;
+    }
+
     this.runtimeReady = true;
     this.runtimeReadyPayload = payload;
     this.runtimeInitFailure = null;
+    // Apply non-package durable state only after the renderer has completed the
+    // awaited initial package transaction. This keeps RuntimeReady truthful.
+    this.flushDurableState(false);
     this.flushPendingCommands();
     this.deps.onRuntimeReady?.(payload);
     this.resolveRuntimeReady(payload);
@@ -436,7 +464,8 @@ export class AnimationIpcAdapter {
     if (!installation || !loaded) {
       return { url: "", mime: "application/octet-stream" };
     }
-    if (!isPathSafe(installation.installPath, relativePath)) {
+    const installRoot = resolveDesktopPetInstallationRoot(installation.installPath, getAmitiaDataDir());
+    if (!installRoot || !isPathSafe(installRoot, relativePath)) {
       return { url: "", mime: "application/octet-stream" };
     }
     const cleanRelative = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
@@ -478,9 +507,11 @@ export class AnimationIpcAdapter {
       const installation = this.deps.getActiveInstallation();
       const loaded = this.deps.getLoadedInstallation();
       if (!installation || !loaded) return null;
+      const installPath = resolveDesktopPetInstallationRoot(installation.installPath, getAmitiaDataDir());
+      if (!installPath) return null;
       return {
         installationId: installation.id,
-        installPath: installation.installPath,
+        installPath,
         manifest: loaded.manifest,
         resourceIndex: buildResourceIndex(loaded.manifest),
       };
@@ -593,9 +624,9 @@ export class AnimationIpcAdapter {
     }
   }
 
-  private flushDurableState(): void {
+  private flushDurableState(includePackage = true): void {
     if (!this.bootstrapped) return;
-    if (this.durable.packageSnapshot) {
+    if (includePackage && this.durable.packageSnapshot) {
       this.sendToRenderer(ANIMATION_IPC_CHANNELS.switchPackage, this.durable.packageSnapshot);
     }
     if (this.durable.defaultActionKey) {

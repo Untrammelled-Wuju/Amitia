@@ -158,6 +158,15 @@ export class PetResourceProtocolRegistry {
           headers: JSON_HEADERS,
         });
       }
+      // The protocol is a filesystem security boundary. Never resolve a
+      // production resource root relative to process.cwd(); callers must pass a
+      // canonical absolute installation root.
+      if (!isAbsolute(active.installPath)) {
+        return new Response(JSON.stringify({ error: "invalid_install_root" }), {
+          status: 500,
+          headers: JSON_HEADERS,
+        });
+      }
 
       const parsed = parsePetUrl(request.url);
       if (!parsed) {

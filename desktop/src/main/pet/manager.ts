@@ -1710,8 +1710,8 @@ export class DesktopPetManager {
     this.registerChatStateIpc();
 
     // The IPC adapter must be live before the renderer is loaded. The initial
-    // package snapshot is durable inside the adapter and will be flushed after
-    // renderer bootstrap.
+    // package snapshot is stored durably for revision validation, while the
+    // renderer performs exactly one awaited bootstrap fetch via getPackageSnapshot().
     animationIpc.register();
     this.sendInitialPackageSnapshot();
     await windowAdapter.loadRenderer();
