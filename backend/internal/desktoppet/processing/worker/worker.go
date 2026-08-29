@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,6 +53,9 @@ type Worker struct {
 	dataDir           string
 	stopCh            chan struct{}
 	wg                sync.WaitGroup
+	lifecycleMu       sync.Mutex
+	running           bool
+	alive             atomic.Bool
 	sem               chan struct{}
 	stateEngine       *taskstate.Engine
 	onActionProcessed func(taskID, actionID, actionKey string)
@@ -81,18 +85,40 @@ func (w *Worker) SetOnActionProcessed(fn func(taskID, actionID, actionKey string
 }
 
 func (w *Worker) Start(ctx context.Context) {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	if w.running {
+		return
+	}
+	w.stopCh = make(chan struct{})
+	w.running = true
+	w.alive.Store(true)
 	w.recoverStuckTasks(ctx)
 	w.wg.Add(1)
 	go w.run(ctx)
 }
 
 func (w *Worker) Stop() {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	if !w.running {
+		return
+	}
 	close(w.stopCh)
 	w.wg.Wait()
+	w.running = false
+	w.alive.Store(false)
+}
+
+func (w *Worker) IsRunning() bool {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	return w.running && w.alive.Load()
 }
 
 func (w *Worker) run(ctx context.Context) {
 	defer w.wg.Done()
+	defer w.alive.Store(false)
 	ticker := time.NewTicker(processingPollInterval)
 	defer ticker.Stop()
 	for {
