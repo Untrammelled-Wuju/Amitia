@@ -384,6 +384,24 @@ export class DesktopRuntimeHandlerV2 {
     await this.sendRuntimeEvent("runtime.playback.action_started", payload);
   }
 
+  async sendPlaybackFirstCycle(
+    playbackId: string,
+    commandId: string,
+    actionKey: string,
+    context: RuntimeEventContext = {},
+  ): Promise<void> {
+    const payload: PlaybackEventPayload = {
+      type: "runtime.playback.action_first_cycle",
+      playbackInstanceId: playbackId,
+      commandId,
+      actionKey,
+      ...context,
+      cycleIndex: 1,
+      occurredAt: new Date().toISOString(),
+    };
+    await this.sendRuntimeEvent("runtime.playback.action_first_cycle", payload);
+  }
+
   async sendPlaybackEnded(
     playbackId: string,
     commandId: string,
