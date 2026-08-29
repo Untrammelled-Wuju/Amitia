@@ -5,6 +5,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -12,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -213,18 +213,12 @@ func (w *Worker) processTask(ctx context.Context, task *processing.ProcessingTas
 }
 
 func (w *Worker) runProcessingStages(ctx context.Context, task *processing.ProcessingTask, userID string, executionID string) error {
-	w.updateStage(task.ID, executionID, StageValidatingSources, ProgressValidatingSources)
-	sourceVal, err := w.validator.ValidateSources(task.GenerationTaskID, userID)
+	if err := w.updateStage(task.ID, executionID, StageValidatingSources, ProgressValidatingSources); err != nil {
+		return err
+	}
+	sourceVal, err := w.validator.ValidateProcessingSources(task.GenerationTaskID, userID)
 	if err != nil {
-		log.Logger.Warnf("validate sources for task %s failed: %v, continuing with source resolver", task.GenerationTaskID, err)
-		genTask, gErr := w.repo.GetGenerationTask(task.GenerationTaskID)
-		if gErr != nil {
-			return fmt.Errorf("get generation task for fallback source val failed: %w", gErr)
-		}
-		sourceVal = &processing.SourceValidationResult{
-			Task:       genTask,
-			FramePaths: make(map[string][]processing.FrameSourceInfo),
-		}
+		return fmt.Errorf("validate processing sources failed: %w", err)
 	}
 
 	actions, err := w.repo.ListProcessingActionsOrdered(task.ID)
@@ -253,12 +247,33 @@ func (w *Worker) runProcessingStages(ctx context.Context, task *processing.Proce
 		}
 
 		taskProgress := ProgressValidatingSources + (ProgressPreview-ProgressValidatingSources)*i/totalActions
-		w.updateProgress(task.ID, executionID, taskProgress)
+		if err := w.updateProgress(task.ID, executionID, taskProgress); err != nil {
+			return err
+		}
 
 		action := &actions[i]
+		validatedAttempt, ok := sourceVal.SourceAttempts[action.ActionKey]
+		if !ok || validatedAttempt <= 0 {
+			err := fmt.Errorf("validated source attempt missing for action %s", action.ActionKey)
+			log.Logger.Errorf("processing action %s source freeze failed: %v", action.ActionKey, err)
+			if failErr := w.failAction(action, err); failErr != nil {
+				return errors.Join(err, failErr)
+			}
+			continue
+		}
+		if validatedAttempt != action.SourceAttemptNumber {
+			err := fmt.Errorf("source generation attempt drift for action %s: frozen=%d current=%d", action.ActionKey, action.SourceAttemptNumber, validatedAttempt)
+			log.Logger.Errorf("processing action %s source freeze failed: %v", action.ActionKey, err)
+			if failErr := w.failAction(action, err); failErr != nil {
+				return errors.Join(err, failErr)
+			}
+			continue
+		}
 		if err := w.processAction(ctx, task, action, sourceVal, executionID); err != nil {
 			log.Logger.Errorf("processing action %s failed: %v", action.ActionKey, err)
-			w.failAction(action, err)
+			if failErr := w.failAction(action, err); failErr != nil {
+				return errors.Join(err, failErr)
+			}
 			continue
 		}
 	}
@@ -267,17 +282,21 @@ func (w *Worker) runProcessingStages(ctx context.Context, task *processing.Proce
 		return fmt.Errorf("cancelled")
 	}
 
-	w.updateStage(task.ID, executionID, StagePreview, ProgressPreview)
+	if err := w.updateStage(task.ID, executionID, StagePreview, ProgressPreview); err != nil {
+		return err
+	}
 
-	w.updateStage(task.ID, executionID, StagePackaging, ProgressManifest)
+	if err := w.updateStage(task.ID, executionID, StagePackaging, ProgressManifest); err != nil {
+		return err
+	}
 
-	w.updateProgress(task.ID, executionID, ProgressPackage)
+	if err := w.updateProgress(task.ID, executionID, ProgressPackage); err != nil {
+		return err
+	}
 	return nil
 }
 
-func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingTask, action *processing.ProcessingAction, sourceVal *processing.SourceValidationResult, executionID string) error {
-	w.publishActionEvent(task.ID, action.ActionKey, "started")
-
+func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingTask, action *processing.ProcessingAction, sourceVal *processing.SourceValidationResult, executionID string) (retErr error) {
 	tx := w.db.Begin()
 	if tx.Error != nil {
 		return fmt.Errorf("begin transaction for attempt failed: %w", tx.Error)
@@ -290,25 +309,46 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("commit attempt creation failed: %w", err)
 	}
+	w.publishActionEvent(task.ID, action.ActionKey, "started")
+	defer func() {
+		if retErr == nil {
+			return
+		}
+		now := time.Now().Format(processingTimeFormat)
+		result := w.db.Model(&processing.ProcessingActionAttempt{}).
+			Where("id = ? AND status != ?", attempt.ID, "committed").
+			Updates(map[string]interface{}{
+				"status":        "failed",
+				"error_message": retErr.Error(),
+				"completed_at":  now,
+				"updated_at":    now,
+			})
+		if result.Error != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("persist processing attempt %s failure: %w", attempt.ID, result.Error))
+		}
+	}()
 
 	configSnapshot := application.BuildConfigSnapshot(task)
 
 	resolveReq := source.ResolveRequest{
-		ProcessingTaskID:   task.ID,
-		ProcessingActionID: action.ID,
-		ActionKey:          action.ActionKey,
-		GenerationTaskID:   task.GenerationTaskID,
-		UserID:             sourceVal.Task.UserID,
-		SourceAttemptID:    attempt.ID,
-		CandidateIndex:     0,
-		DataDir:            w.dataDir,
+		ProcessingTaskID:              task.ID,
+		ProcessingActionID:            action.ID,
+		ActionKey:                     action.ActionKey,
+		GenerationTaskID:              task.GenerationTaskID,
+		UserID:                        sourceVal.Task.UserID,
+		SourceAttemptID:               attempt.ID,
+		SourceGenerationAttemptNumber: action.SourceAttemptNumber,
+		CandidateIndex:                0,
+		DataDir:                       w.dataDir,
 	}
 	sourceDesc, err := w.sourceResolver.Resolve(ctx, resolveReq)
 	if err != nil {
 		return fmt.Errorf("resolve source descriptor failed: %w", err)
 	}
 
-	w.updateActionProgress(action, StageBackgroundRemoval, ProgressBackgroundRemoval)
+	if err := w.updateActionProgress(action, StageBackgroundRemoval, ProgressBackgroundRemoval); err != nil {
+		return fmt.Errorf("persist background-removal progress failed: %w", err)
+	}
 
 	pipelineReq := application.ProcessActionRequest{
 		Context:             ctx,
@@ -327,16 +367,43 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 		return fmt.Errorf("pipeline process action failed: %w", err)
 	}
 
-	w.updateActionProgress(action, StageWriteFrames, ProgressWriteFrames)
+	if err := w.updateActionProgress(action, StageWriteFrames, ProgressWriteFrames); err != nil {
+		return fmt.Errorf("persist write-frames progress failed: %w", err)
+	}
 
 	configSnapshotJSON, err := json.Marshal(configSnapshot)
 	if err != nil {
 		return fmt.Errorf("marshal config snapshot failed: %w", err)
 	}
 
+	if err := w.updateActionProgress(action, StageActionJSON, ProgressActionJSON); err != nil {
+		return fmt.Errorf("persist action-json progress failed: %w", err)
+	}
+	if err := w.writeActionJSON(task, action, result.FrameCount); err != nil {
+		w.cleanupDerivedActionResources(task, action)
+		return fmt.Errorf("write action json failed: %w", err)
+	}
+
+	if err := w.updateActionProgress(action, StagePreview, ProgressPreview); err != nil {
+		w.cleanupDerivedActionResources(task, action)
+		return fmt.Errorf("persist preview progress failed: %w", err)
+	}
+	previewImgs, err := w.loadPipelineFrames(result)
+	if err != nil {
+		w.cleanupDerivedActionResources(task, action)
+		return fmt.Errorf("load pipeline frames for preview failed: %w", err)
+	}
+	if _, err := w.previewGenerator.GenerateActionPreview(task.GenerationTaskID, task.ProcessingVersion, action.ActionKey, previewImgs); err != nil {
+		w.cleanupDerivedActionResources(task, action)
+		return fmt.Errorf("generate action preview failed: %w", err)
+	}
+
 	characterID := task.CharacterID
 	if characterID == "" {
-		characterID = sourceVal.Task.UserID
+		characterID = sourceVal.Task.CharacterID
+	}
+	if characterID == "" {
+		return fmt.Errorf("processing task %s character id is empty", task.ID)
 	}
 
 	commitReq := &commit.CommitRequest{
@@ -360,23 +427,9 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 		LeaseOwner:                 processingWorkerID,
 	}
 
-	commitResult, err := w.committer.Commit(commitReq)
-	if err != nil {
+	if _, err := w.committer.Commit(commitReq); err != nil {
+		w.cleanupDerivedActionResources(task, action)
 		return fmt.Errorf("commit processing result failed: %w", err)
-	}
-
-	w.updateActionProgress(action, StageActionJSON, ProgressActionJSON)
-	if err := w.writeActionJSON(task, action, result.FrameCount); err != nil {
-		return fmt.Errorf("write action json failed: %w", err)
-	}
-
-	w.updateActionProgress(action, StagePreview, ProgressPreview)
-	previewImgs, err := w.loadRevisionFrames(commitResult.RootStorageKey)
-	if err != nil {
-		return fmt.Errorf("load revision frames for preview failed: %w", err)
-	}
-	if _, err := w.previewGenerator.GenerateActionPreview(task.GenerationTaskID, task.ProcessingVersion, action.ActionKey, previewImgs); err != nil {
-		return fmt.Errorf("generate action preview failed: %w", err)
 	}
 
 	w.publishActionEvent(action.ProcessingTaskID, action.ActionKey, "succeeded")
@@ -429,35 +482,56 @@ func (w *Worker) writeActionJSON(task *processing.ProcessingTask, action *proces
 	return nil
 }
 
-func (w *Worker) loadRevisionFrames(rootRelPath string) ([]image.Image, error) {
-	dir := filepath.Join(w.dataDir, rootRelPath, "frames")
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
+func (w *Worker) loadPipelineFrames(result *application.ProcessActionResult) ([]image.Image, error) {
+	if result == nil || result.WorkDir == nil {
+		return nil, fmt.Errorf("pipeline result/work directory is nil")
+	}
+	if len(result.Frames) == 0 {
+		return nil, fmt.Errorf("pipeline result has no frames")
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name() < entries[j].Name()
-	})
-
-	frames := make([]image.Image, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-			continue
+	frames := append([]application.PipelineFrameResult(nil), result.Frames...)
+	sort.Slice(frames, func(i, j int) bool { return frames[i].Index < frames[j].Index })
+	imgs := make([]image.Image, 0, len(frames))
+	for expectedIndex, frame := range frames {
+		if frame.Index != expectedIndex {
+			return nil, fmt.Errorf("pipeline frame index is not contiguous: expected=%d actual=%d", expectedIndex, frame.Index)
 		}
-		f, err := os.Open(filepath.Join(dir, entry.Name()))
+		name := filepath.Base(frame.FileName)
+		if name == "." || name == "" || name != frame.FileName {
+			return nil, fmt.Errorf("invalid pipeline frame file name: %s", frame.FileName)
+		}
+		path := filepath.Join(result.WorkDir.FramesDir, name)
+		f, err := os.Open(path)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("open pipeline frame %d: %w", frame.Index, err)
 		}
-		img, _, err := image.Decode(f)
-		f.Close()
-		if err != nil {
-			return nil, err
+		img, _, decodeErr := image.Decode(f)
+		closeErr := f.Close()
+		if decodeErr != nil {
+			return nil, fmt.Errorf("decode pipeline frame %d: %w", frame.Index, decodeErr)
 		}
-		frames = append(frames, img)
+		if closeErr != nil {
+			return nil, fmt.Errorf("close pipeline frame %d: %w", frame.Index, closeErr)
+		}
+		imgs = append(imgs, img)
 	}
-	return frames, nil
+	return imgs, nil
+}
+
+func (w *Worker) cleanupDerivedActionResources(task *processing.ProcessingTask, action *processing.ProcessingAction) {
+	if task == nil || action == nil || task.GenerationTaskID == "" || action.ActionKey == "" {
+		return
+	}
+	actionDir := filepath.Join(
+		w.dataDir,
+		"desktop-pets", "generation-tasks", task.GenerationTaskID,
+		"processed", fmt.Sprintf("version-%d", task.ProcessingVersion),
+		"actions", action.ActionKey,
+	)
+	if err := os.RemoveAll(actionDir); err != nil {
+		log.Logger.Errorf("cleanup derived processing action resources %s failed: %v", action.ID, err)
+	}
 }
 
 func (w *Worker) startHeartbeat(ctx context.Context, taskID, executionID string, leaseLostCancel context.CancelFunc) {
@@ -505,56 +579,69 @@ func (w *Worker) startHeartbeat(ctx context.Context, taskID, executionID string,
 	}()
 }
 
-func (w *Worker) updateStage(taskID, executionID, stage string, progress int) {
+func (w *Worker) updateStage(taskID, executionID, stage string, progress int) error {
 	now := time.Now().Format(processingTimeFormat)
-	owned, _ := w.repo.UpdateProcessingTaskOwned(taskID, executionID, map[string]interface{}{
+	owned, err := w.repo.UpdateProcessingTaskOwned(taskID, executionID, map[string]interface{}{
 		"current_stage": stage,
 		"progress":      progress,
 		"updated_at":    now,
 	})
+	if err != nil {
+		return fmt.Errorf("processing task %s updateStage persistence failed: %w", taskID, err)
+	}
 	if !owned {
-		log.Logger.Warnf("processing task %s ownership lost during updateStage", taskID)
-		return
+		return fmt.Errorf("processing task %s ownership lost during updateStage", taskID)
 	}
 	w.publishProgress(taskID, progress, stage)
+	return nil
 }
 
-func (w *Worker) updateProgress(taskID, executionID string, progress int) {
+func (w *Worker) updateProgress(taskID, executionID string, progress int) error {
 	now := time.Now().Format(processingTimeFormat)
-	owned, _ := w.repo.UpdateProcessingTaskOwned(taskID, executionID, map[string]interface{}{
+	owned, err := w.repo.UpdateProcessingTaskOwned(taskID, executionID, map[string]interface{}{
 		"progress":   progress,
 		"updated_at": now,
 	})
+	if err != nil {
+		return fmt.Errorf("processing task %s progress persistence failed: %w", taskID, err)
+	}
 	if !owned {
-		log.Logger.Warnf("processing task %s ownership lost during updateProgress", taskID)
-		return
+		return fmt.Errorf("processing task %s ownership lost during updateProgress", taskID)
 	}
 	w.publishProgress(taskID, progress, "")
+	return nil
 }
 
-func (w *Worker) updateActionProgress(action *processing.ProcessingAction, stage string, progress int) {
+func (w *Worker) updateActionProgress(action *processing.ProcessingAction, stage string, progress int) error {
 	now := time.Now().Format(processingTimeFormat)
-	_ = w.repo.UpdateProcessingActionNoTx(action.ID, map[string]interface{}{
+	if err := w.repo.UpdateProcessingActionNoTx(action.ID, map[string]interface{}{
 		"progress":   progress,
 		"updated_at": now,
-	})
+	}); err != nil {
+		return fmt.Errorf("processing action %s progress persistence failed: %w", action.ID, err)
+	}
 	w.publishActionProgress(action.ProcessingTaskID, action.ActionKey, stage, progress)
+	return nil
 }
 
-func (w *Worker) failAction(action *processing.ProcessingAction, err error) {
+func (w *Worker) failAction(action *processing.ProcessingAction, cause error) error {
 	now := time.Now().Format(processingTimeFormat)
 	errMsg := ""
-	if err != nil {
-		errMsg = err.Error()
+	if cause != nil {
+		errMsg = cause.Error()
 	}
-	_ = w.repo.UpdateProcessingActionNoTx(action.ID, map[string]interface{}{
+	if updateErr := w.repo.UpdateProcessingActionNoTx(action.ID, map[string]interface{}{
 		"status":        "failed",
 		"progress":      100,
 		"error_message": errMsg,
 		"completed_at":  now,
 		"updated_at":    now,
-	})
+	}); updateErr != nil {
+		return fmt.Errorf("processing action %s terminal failure persistence failed: %w", action.ID, updateErr)
+	}
+	action.Status = "failed"
 	w.publishActionEvent(action.ProcessingTaskID, action.ActionKey, "failed")
+	return nil
 }
 
 func (w *Worker) isCancelled(taskID string) bool {
@@ -581,7 +668,7 @@ func (w *Worker) finalizeTask(taskID string, processErr error, executionID strin
 	actions, err := w.repo.ListProcessingActions(taskID)
 	if err != nil {
 		log.Logger.Errorf("list processing actions for finalize failed: %v", err)
-		actions = nil
+		return
 	}
 
 	succeeded, failed, hasActiveChildren := 0, 0, false
@@ -607,7 +694,11 @@ func (w *Worker) finalizeTask(taskID string, processErr error, executionID strin
 	currentStatus := contracts.LifecycleStatus(task.Status)
 
 	if decision.Status == currentStatus && !currentStatus.IsTerminal() {
-		w.publishCompleted(taskID, string(decision.Status), succeeded, failed, total)
+		log.Logger.Warnf(
+			"processing task %s aggregate remains non-terminal (%s); suppressing completed event and leaving task for recovery",
+			taskID,
+			decision.Status,
+		)
 		return
 	}
 

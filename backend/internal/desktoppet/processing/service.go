@@ -14,7 +14,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/taskstate"
-	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -204,24 +203,9 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 		return nil, NewProcessingError(ErrCodeGenerationTaskNotReady, "生成任务 ID 为空")
 	}
 
-	validation, valErr := s.validator.ValidateSources(req.GenerationTaskID, req.UserID)
+	validation, valErr := s.validator.ValidateProcessingSources(req.GenerationTaskID, req.UserID)
 	if valErr != nil {
-		log.Logger.Warnf("兼容校验 ValidateSources 失败（非阻断）: %v，回退到直接查询成功动作", valErr)
-		succeededActions, listErr := s.repo.ListSucceededActions(req.GenerationTaskID)
-		if listErr != nil {
-			return nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "查询成功动作失败", listErr)
-		}
-		if len(succeededActions) == 0 {
-			return nil, NewProcessingError(ErrCodeNoSuccessfulActions, "没有可处理的成功动作")
-		}
-		validation = &SourceValidationResult{
-			SucceededActions: succeededActions,
-			InvalidActions:   []InvalidActionInfo{},
-			FramePaths:       map[string][]FrameSourceInfo{},
-		}
-		for _, sa := range succeededActions {
-			validation.FramePaths[sa.ActionKey] = []FrameSourceInfo{}
-		}
+		return nil, wrapValidationError(valErr)
 	}
 
 	existingTasks, err := s.repo.ListProcessingTasksByGenerationTask(req.GenerationTaskID)
@@ -246,6 +230,8 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 	task := &ProcessingTask{
 		ID:                         taskID,
 		GenerationTaskID:           req.GenerationTaskID,
+		UserID:                     req.UserID,
+		CharacterID:                validation.Task.CharacterID,
 		ProcessingVersion:          processingVersion,
 		Status:                     "pending",
 		CurrentStage:               "created",
@@ -274,17 +260,12 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 		if _, ok := validation.FramePaths[genAction.ActionKey]; !ok {
 			continue
 		}
-		var attemptNumber int
-		if valErr != nil {
-			attemptNumber = genAction.CurrentAttempt
-			if attemptNumber <= 0 {
-				attemptNumber = 1
-			}
-		} else {
-			attemptNumber, err = s.validator.ResolveActiveAttempt(genAction)
-			if err != nil {
-				return nil, wrapValidationError(err)
-			}
+		attemptNumber := validation.SourceAttempts[genAction.ActionKey]
+		if attemptNumber <= 0 {
+			return nil, NewProcessingError(
+				ErrCodeSourceAttemptNotFound,
+				fmt.Sprintf("动作 %s 缺少已验证的源 attempt", genAction.ActionKey),
+			)
 		}
 		pa := ProcessingAction{
 			ID:                      uuid.New().String(),

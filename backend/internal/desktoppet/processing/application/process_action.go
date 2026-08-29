@@ -2,12 +2,14 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/u-ai/backend/internal/desktoppet/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	pcontracts "github.com/u-ai/backend/internal/desktoppet/processing/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/processing/source"
+	"gorm.io/gorm"
 )
 
 type RepoSourceResolver struct {
@@ -78,9 +80,17 @@ func (r *RepoSourceResolver) resolveGenerationMode(req source.ResolveRequest) (s
 		return "", fmt.Errorf("%w: %v", source.ErrSourcePlanNotFound, err)
 	}
 
-	attempt, err := r.artifactRepo.GetActiveAttemptInfo(taskActionID)
+	var attempt *source.AttemptInfo
+	if req.SourceGenerationAttemptNumber > 0 {
+		attempt, err = r.artifactRepo.GetAttemptInfo(taskActionID, req.SourceGenerationAttemptNumber)
+	} else {
+		attempt, err = r.artifactRepo.GetActiveAttemptInfo(taskActionID)
+	}
 	if err != nil {
-		return string(contracts.GenerationModeLegacyFrame), nil
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return string(contracts.GenerationModeLegacyFrame), nil
+		}
+		return "", fmt.Errorf("resolve active generation attempt: %w", err)
 	}
 	if attempt == nil {
 		return string(contracts.GenerationModeLegacyFrame), nil
@@ -178,9 +188,10 @@ func (a *RepoArtifactSourceAdapter) GetTaskActionID(taskID, actionKey string) (s
 func (a *RepoArtifactSourceAdapter) GetActiveAttemptInfo(taskActionID string) (*source.AttemptInfo, error) {
 	db := a.repo.DB()
 	var attempt struct {
-		ID     string `gorm:"column:id"`
-		Mode   string `gorm:"column:mode"`
-		Status string `gorm:"column:status"`
+		ID            string `gorm:"column:id"`
+		AttemptNumber int    `gorm:"column:attempt_number"`
+		Mode          string `gorm:"column:mode"`
+		Status        string `gorm:"column:status"`
 	}
 	err := db.Table("desktop_pet_action_generation_attempts").
 		Where("task_action_id = ? AND status = ?", taskActionID, "succeeded").
@@ -190,9 +201,34 @@ func (a *RepoArtifactSourceAdapter) GetActiveAttemptInfo(taskActionID string) (*
 		return nil, err
 	}
 	return &source.AttemptInfo{
-		ID:     attempt.ID,
-		Mode:   attempt.Mode,
-		Status: attempt.Status,
+		ID:            attempt.ID,
+		AttemptNumber: attempt.AttemptNumber,
+		Mode:          attempt.Mode,
+		Status:        attempt.Status,
+	}, nil
+}
+
+func (a *RepoArtifactSourceAdapter) GetAttemptInfo(taskActionID string, attemptNumber int) (*source.AttemptInfo, error) {
+	if attemptNumber <= 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var attempt struct {
+		ID            string `gorm:"column:id"`
+		AttemptNumber int    `gorm:"column:attempt_number"`
+		Mode          string `gorm:"column:mode"`
+		Status        string `gorm:"column:status"`
+	}
+	err := a.repo.DB().Table("desktop_pet_action_generation_attempts").
+		Where("task_action_id = ? AND attempt_number = ? AND status = ?", taskActionID, attemptNumber, "succeeded").
+		First(&attempt).Error
+	if err != nil {
+		return nil, err
+	}
+	return &source.AttemptInfo{
+		ID:            attempt.ID,
+		AttemptNumber: attempt.AttemptNumber,
+		Mode:          attempt.Mode,
+		Status:        attempt.Status,
 	}, nil
 }
 
@@ -207,6 +243,7 @@ func (a *RepoArtifactSourceAdapter) GetPrimaryArtifact(attemptID string) (*sourc
 		Status       string `gorm:"column:status"`
 		RelativePath string `gorm:"column:relative_path"`
 		Hash         string `gorm:"column:hash"`
+		ContentHash  string `gorm:"column:content_hash"`
 		Width        int    `gorm:"column:width"`
 		Height       int    `gorm:"column:height"`
 		LayoutJSON   string `gorm:"column:layout_json"`
@@ -219,6 +256,10 @@ func (a *RepoArtifactSourceAdapter) GetPrimaryArtifact(attemptID string) (*sourc
 	if err != nil {
 		return nil, err
 	}
+	artifactHash := artifact.Hash
+	if artifactHash == "" {
+		artifactHash = artifact.ContentHash
+	}
 	return &source.ArtifactInfo{
 		ArtifactID:   artifact.ID,
 		TaskID:       artifact.TaskID,
@@ -227,7 +268,7 @@ func (a *RepoArtifactSourceAdapter) GetPrimaryArtifact(attemptID string) (*sourc
 		ArtifactType: artifact.ArtifactType,
 		Status:       artifact.Status,
 		RelativePath: artifact.RelativePath,
-		Hash:         artifact.Hash,
+		Hash:         artifactHash,
 		Width:        artifact.Width,
 		Height:       artifact.Height,
 		LayoutJSON:   artifact.LayoutJSON,

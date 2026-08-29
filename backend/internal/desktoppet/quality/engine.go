@@ -4,6 +4,7 @@ package quality
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -215,7 +216,9 @@ func (ex *EngineExecutor) ExecuteEvaluation(ctx context.Context, eval *QualityEv
 		eval.ErrorCode = ErrorCode(err)
 		eval.ErrorMessage = err.Error()
 		eval.CompletedAt = time.Now().UTC().Format(time.RFC3339)
-		_ = ex.repo.UpdateEvaluation(ctx, eval)
+		if persistErr := ex.repo.UpdateEvaluation(ctx, eval); persistErr != nil {
+			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to persist failed evaluation", errors.Join(err, persistErr))
+		}
 		_ = ex.events.PublishQualityEvent(ctx, QualityEvent{
 			JobID:            req.ExecutionID,
 			ProcessingTaskID: req.ProcessingTaskID,
@@ -274,7 +277,9 @@ func (ex *EngineExecutor) ExecuteEvaluation(ctx context.Context, eval *QualityEv
 		if err := ex.repo.CreateDimensionScores(ctx, scoreRecords); err != nil {
 			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to persist dimension scores", err)
 		}
-		_ = ex.repo.SetActiveEvaluation(ctx, req.ProcessingTaskID, req.ActionKey, eval.ID)
+		if err := ex.repo.SetActiveEvaluation(ctx, req.ProcessingTaskID, req.ActionKey, eval.ID); err != nil {
+			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to set active evaluation", err)
+		}
 	}
 
 	_ = ex.events.PublishQualityEvent(ctx, QualityEvent{

@@ -130,6 +130,12 @@ func (s *BindingService) BindActiveArtifact(tx *gorm.DB, req BindRequest) error 
 		return nil
 	}
 
+	if existing.ActiveAttemptID == req.AttemptID &&
+		existing.ActivePrimaryArtifactID == req.PrimaryArtifactID &&
+		(existing.ArtifactContentHash == req.ArtifactHash || req.ArtifactHash == "") {
+		return nil
+	}
+
 	newBinding.CreatedAt = existing.CreatedAt
 	ok, err := s.repo.CASUpdate(tx, req.TaskActionID, existing.BindingRevision, newBinding)
 	if err != nil {

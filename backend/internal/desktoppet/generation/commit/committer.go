@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -189,20 +190,32 @@ func (c *ArtifactCommitter) Commit(input CommitInput) (*CommitResult, error) {
 
 	if err := c.journalRepo.Create(input.Tx, journal); err != nil {
 		_ = os.Remove(stagingPath)
-		_ = c.artifactRepo.UpdateArtifactTx(input.Tx, artifactID, map[string]interface{}{
+		markErr := c.artifactRepo.UpdateArtifactTx(input.Tx, artifactID, map[string]interface{}{
 			"status":     string(generation.ArtifactStatusPublishFailed),
 			"updated_at": nowRFC3339(),
 		})
-		return nil, fmt.Errorf("create publish journal: %w", err)
+		cause := fmt.Errorf("create publish journal: %w", err)
+		if markErr != nil {
+			cause = errors.Join(cause, fmt.Errorf("mark artifact publish failed: %w", markErr))
+		}
+		return nil, cause
 	}
 
 	if err := os.MkdirAll(finalDir, 0755); err != nil {
-		c.markRenameFailure(artifactID, journalID, input.Tx, fmt.Sprintf("create final dir: %v", err))
-		return nil, fmt.Errorf("create final dir: %w", err)
+		_ = os.Remove(stagingPath)
+		cause := fmt.Errorf("create final dir: %w", err)
+		if markErr := c.markRenameFailure(artifactID, journalID, input.Tx, cause.Error()); markErr != nil {
+			cause = errors.Join(cause, markErr)
+		}
+		return nil, cause
 	}
 	if err := os.Rename(stagingPath, finalPath); err != nil {
-		c.markRenameFailure(artifactID, journalID, input.Tx, fmt.Sprintf("rename to final path: %v", err))
-		return nil, fmt.Errorf("rename to final path: %w", err)
+		_ = os.Remove(stagingPath)
+		cause := fmt.Errorf("rename to final path: %w", err)
+		if markErr := c.markRenameFailure(artifactID, journalID, input.Tx, cause.Error()); markErr != nil {
+			cause = errors.Join(cause, markErr)
+		}
+		return nil, cause
 	}
 
 	if err := c.artifactRepo.UpdateArtifactTx(input.Tx, artifactID, map[string]interface{}{
@@ -211,11 +224,20 @@ func (c *ArtifactCommitter) Commit(input CommitInput) (*CommitResult, error) {
 		"storage_key":   input.StorageKey,
 		"content_hash":  contentHash,
 	}); err != nil {
-		_ = c.journalRepo.UpdateStatus(input.Tx, journalID, JournalStatusFailed, fmt.Sprintf("update artifact persisted: %v", err))
-		return nil, fmt.Errorf("update artifact to persisted: %w", err)
+		cause := fmt.Errorf("update artifact to persisted: %w", err)
+		if journalErr := c.journalRepo.UpdateStatus(input.Tx, journalID, JournalStatusFailed, cause.Error()); journalErr != nil {
+			cause = errors.Join(cause, fmt.Errorf("mark publish journal failed: %w", journalErr))
+		}
+		if cleanupErr := os.Remove(finalPath); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
+			cause = errors.Join(cause, fmt.Errorf("rollback published file: %w", cleanupErr))
+		}
+		return nil, cause
 	}
 
 	if err := c.journalRepo.UpdateStatus(input.Tx, journalID, JournalStatusPersisted, ""); err != nil {
+		if cleanupErr := os.Remove(finalPath); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
+			return nil, fmt.Errorf("update journal to persisted: %w; rollback published file: %v", err, cleanupErr)
+		}
 		return nil, fmt.Errorf("update journal to persisted: %w", err)
 	}
 
@@ -232,13 +254,19 @@ func (c *ArtifactCommitter) Commit(input CommitInput) (*CommitResult, error) {
 	}, nil
 }
 
-func (c *ArtifactCommitter) markRenameFailure(artifactID, journalID string, tx *gorm.DB, errMsg string) {
+func (c *ArtifactCommitter) markRenameFailure(artifactID, journalID string, tx *gorm.DB, errMsg string) error {
 	now := nowRFC3339()
-	_ = c.artifactRepo.UpdateArtifactTx(tx, artifactID, map[string]interface{}{
+	var errs []error
+	if err := c.artifactRepo.UpdateArtifactTx(tx, artifactID, map[string]interface{}{
 		"status":     string(generation.ArtifactStatusPublishFailed),
 		"updated_at": now,
-	})
-	_ = c.journalRepo.UpdateStatus(tx, journalID, JournalStatusFailed, errMsg)
+	}); err != nil {
+		errs = append(errs, fmt.Errorf("mark artifact publish failed: %w", err))
+	}
+	if err := c.journalRepo.UpdateStatus(tx, journalID, JournalStatusFailed, errMsg); err != nil {
+		errs = append(errs, fmt.Errorf("mark publish journal failed: %w", err))
+	}
+	return errors.Join(errs...)
 }
 
 func extensionForMIME(mime, format string) string {

@@ -108,7 +108,9 @@ func (s *installer) InstallPackage(packageId, userId, characterId string) (*Inst
 
 	defer func() {
 		if r := recover(); r != nil {
-			s.rollback(installId, state)
+			if rollbackErr := s.rollback(installId, state); rollbackErr != nil {
+				panic(fmt.Errorf("installer panic: %v; rollback failed: %w", r, rollbackErr))
+			}
 			panic(r)
 		}
 	}()
@@ -600,33 +602,48 @@ func (s *installer) atomicMoveDir(src, dst string) error {
 	return removeTree(src)
 }
 
-func (s *installer) rollback(installId string, state *installState) {
+func (s *installer) rollback(installId string, state *installState) error {
 	if state == nil {
-		return
+		return nil
 	}
 
+	var rollbackErrs []error
 	tmpDir := s.installTmpDir(installId)
 	finalDir := s.installFinalDir(installId)
 
 	if state.tmpCreated {
 		if _, err := os.Stat(tmpDir); err == nil {
-			_ = removeTree(tmpDir)
+			if err := removeTree(tmpDir); err != nil {
+				rollbackErrs = append(rollbackErrs, fmt.Errorf("remove temporary installation tree: %w", err))
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("stat temporary installation tree: %w", err))
 		}
 	}
 
 	if state.finalMoved {
 		if _, err := os.Stat(finalDir); err == nil {
-			_ = removeTree(finalDir)
+			if err := removeTree(finalDir); err != nil {
+				rollbackErrs = append(rollbackErrs, fmt.Errorf("remove final installation tree: %w", err))
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("stat final installation tree: %w", err))
 		}
 	}
 
 	if state.dbRecordCreated {
-		_ = s.repo.UpdateInstallationStatus(installId, StatusInvalid)
+		if err := s.repo.UpdateInstallationStatus(installId, StatusInvalid); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("mark installation invalid: %w", err))
+		}
 	}
+
+	return errors.Join(rollbackErrs...)
 }
 
 func (s *installer) failWithRollback(installId string, state *installState, message string, err error) error {
-	s.rollback(installId, state)
+	if rollbackErr := s.rollback(installId, state); rollbackErr != nil {
+		err = errors.Join(err, fmt.Errorf("installation rollback failed: %w", rollbackErr))
+	}
 	return NewInstallationError(ErrCodeInstallationFailed, message, err)
 }
 

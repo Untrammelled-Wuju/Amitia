@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,6 +15,11 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider"
 	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
+)
+
+var (
+	errGenerationPersistence     = errors.New("generation executor persistence failure")
+	errGenerationRecoveryPending = errors.New("generation attempt requires recovery")
 )
 
 const (
@@ -85,6 +91,9 @@ func (e *GenerationExecutor) Execute(
 	attempt, err := e.attemptFactory.CreateInitial(createTx, task.ID, action.ID, task.ExecutionID, task.WorkerID, plan)
 	if err != nil {
 		createTx.Rollback()
+		if errors.Is(err, generation.ErrAttemptAlreadyActive) {
+			return fmt.Errorf("%w: active generation attempt already exists for action %s: %v", errGenerationRecoveryPending, action.ID, err)
+		}
 		return fmt.Errorf("创建初始 attempt 失败: %w", err)
 	}
 	if err := createTx.Commit().Error; err != nil {
@@ -94,23 +103,25 @@ func (e *GenerationExecutor) Execute(
 	log.Logger.Infof("desktoppet generation executor started: task=%s action=%s attempt=%s provider=%s model=%s",
 		task.ID, action.ID, attempt.ID, providerName, modelName)
 
-	e.updateActionProgress(task, action, string(generation.AttemptStatusPending))
+	if err := e.updateActionProgress(task, action, string(generation.AttemptStatusPending)); err != nil {
+		return fmt.Errorf("%w: persist pending action progress: %v", errGenerationPersistence, err)
+	}
 
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 
 	if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusPreparingReference, nil); err != nil {
-		log.Logger.Warnf("desktoppet executor update attempt %s to preparing_reference failed: %v", attempt.ID, err)
+		return fmt.Errorf("%w: persist attempt preparing_reference: %v", errGenerationPersistence, err)
 	}
-	e.updateActionProgress(task, action, string(generation.AttemptStatusPreparingReference))
+	if err := e.updateActionProgress(task, action, string(generation.AttemptStatusPreparingReference)); err != nil {
+		return fmt.Errorf("%w: persist preparing_reference action progress: %v", errGenerationPersistence, err)
+	}
 
 	referenceImages, refErr := e.resolveReferenceImages(plan, task)
 	if refErr != nil {
 		errMsg := fmt.Sprintf("加载参考图失败: %v", refErr)
-		e.failAttempt(attempt.ID, desktoppet.ErrCodeImageGenerationRequestInvalid, errMsg)
-		e.failAction(action, desktoppet.ErrCodeImageGenerationRequestInvalid, errMsg)
-		return fmt.Errorf("%s: %w", desktoppet.ErrCodeImageGenerationRequestInvalid, refErr)
+		return e.failExecution(attempt.ID, action, desktoppet.ErrCodeImageGenerationRequestInvalid, errMsg, refErr)
 	}
 
 	if ctx.Err() != nil {
@@ -120,9 +131,11 @@ func (e *GenerationExecutor) Execute(
 	if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusSubmitting, map[string]interface{}{
 		"submitted_at": time.Now().Format(workerTimeFormat),
 	}); err != nil {
-		log.Logger.Warnf("desktoppet executor update attempt %s to submitting failed: %v", attempt.ID, err)
+		return fmt.Errorf("%w: persist attempt submitting: %v", errGenerationPersistence, err)
 	}
-	e.updateActionProgress(task, action, string(generation.AttemptStatusSubmitting))
+	if err := e.updateActionProgress(task, action, string(generation.AttemptStatusSubmitting)); err != nil {
+		return fmt.Errorf("%w: persist submitting action progress: %v", errGenerationPersistence, err)
+	}
 
 	request := e.buildImageGenerationRequest(task, plan, referenceImages)
 	requestHash := computeRequestHash(request)
@@ -144,30 +157,37 @@ func (e *GenerationExecutor) Execute(
 			errCode = desktoppet.ErrCodeImageGenerationProviderRejected
 		}
 		errMsg := fmt.Sprintf("提交生图请求失败: %v", err)
-		e.failAttempt(attempt.ID, errCode, errMsg)
-		e.failAction(action, errCode, errMsg)
-		return fmt.Errorf("%s: %w", errCode, err)
+		return e.failExecution(attempt.ID, action, errCode, errMsg, err)
 	}
 
 	if submission == nil {
 		errMsg := "提供者返回空提交结果"
-		e.failAttempt(attempt.ID, desktoppet.ErrCodeImageGenerationEmptyResult, errMsg)
-		e.failAction(action, desktoppet.ErrCodeImageGenerationEmptyResult, errMsg)
-		return fmt.Errorf("%s", errMsg)
+		return e.failExecution(attempt.ID, action, desktoppet.ErrCodeImageGenerationEmptyResult, errMsg, nil)
 	}
 
 	receiptWriteErr := e.persistProviderReceipt(attempt.ID, providerName, modelName, submission, requestHash)
 	if receiptWriteErr != nil {
-		log.Logger.Errorf("desktoppet executor persist receipt failed for attempt %s: %v", attempt.ID, receiptWriteErr)
-		if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusUnknownSubmission, map[string]interface{}{
-			"provider_request_id":   submission.RequestID,
-			"provider_operation_id": submission.OperationID,
-		}); err != nil {
-			log.Logger.Warnf("desktoppet executor update attempt %s to unknown_submission failed: %v", attempt.ID, err)
+		// A synchronous terminal response is already authoritative and still in
+		// memory. Do not discard a paid, successfully returned image solely because
+		// the auxiliary provider-receipt row could not be written; the artifact
+		// commit/finalizer transaction below remains the durable source of truth.
+		// Non-terminal/ambiguous submissions still fail closed into recovery.
+		if submission.Result != nil && (submission.Result.Status == "succeeded" || submission.Result.Status == "failed") {
+			log.Logger.Warnf("desktoppet executor provider receipt write failed for terminal response; continuing with durable result commit: attempt=%s err=%v", attempt.ID, receiptWriteErr)
+		} else {
+			log.Logger.Errorf("desktoppet executor persist receipt failed for attempt %s: %v", attempt.ID, receiptWriteErr)
+			if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusUnknownSubmission, map[string]interface{}{
+				"provider_request_id":   submission.RequestID,
+				"provider_operation_id": submission.OperationID,
+			}); err != nil {
+				return fmt.Errorf("%w: persist unknown_submission after receipt failure: %v", errGenerationPersistence, err)
+			}
+			errMsg := fmt.Sprintf("Provider Receipt 持久化失败，进入 unknown_submission 状态等待恢复: %v", receiptWriteErr)
+			if err := e.updateActionProgress(task, action, string(generation.AttemptStatusUnknownSubmission)); err != nil {
+				return fmt.Errorf("%w: persist unknown_submission action progress after receipt failure: %v", errGenerationPersistence, err)
+			}
+			return fmt.Errorf("%w: %s: %v", errGenerationRecoveryPending, generation.ErrCodeProviderReceiptPersistFailed, receiptWriteErr)
 		}
-		errMsg := fmt.Sprintf("Provider Receipt 持久化失败，进入 unknown_submission 状态: %v", receiptWriteErr)
-		e.failAction(action, generation.ErrCodeProviderReceiptPersistFailed, errMsg)
-		return fmt.Errorf("%s: %w", generation.ErrCodeProviderReceiptPersistFailed, receiptWriteErr)
 	}
 
 	var result *imageprovider.ImageGenerationResult
@@ -177,12 +197,14 @@ func (e *GenerationExecutor) Execute(
 			"provider_request_id":   submission.RequestID,
 			"provider_operation_id": submission.OperationID,
 		}); err != nil {
-			log.Logger.Warnf("desktoppet executor update attempt %s to submitted failed: %v", attempt.ID, err)
+			return fmt.Errorf("%w: persist attempt submitted: %v", errGenerationPersistence, err)
 		}
 		if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusPolling, nil); err != nil {
-			log.Logger.Warnf("desktoppet executor update attempt %s to polling failed: %v", attempt.ID, err)
+			return fmt.Errorf("%w: persist attempt polling: %v", errGenerationPersistence, err)
 		}
-		e.updateActionProgress(task, action, string(generation.AttemptStatusPolling))
+		if err := e.updateActionProgress(task, action, string(generation.AttemptStatusPolling)); err != nil {
+			return fmt.Errorf("%w: persist polling action progress: %v", errGenerationPersistence, err)
+		}
 
 		pollResult, pollErr := e.pollProvider(ctx, provider, modelConfig, submission.OperationID)
 		if pollErr != nil {
@@ -191,9 +213,7 @@ func (e *GenerationExecutor) Execute(
 				errCode = desktoppet.ErrCodeImageGenerationPollFailed
 			}
 			errMsg := fmt.Sprintf("轮询生图结果失败: %v", pollErr)
-			e.failAttempt(attempt.ID, errCode, errMsg)
-			e.failAction(action, errCode, errMsg)
-			return fmt.Errorf("%s: %w", errCode, pollErr)
+			return e.failExecution(attempt.ID, action, errCode, errMsg, pollErr)
 		}
 		result = pollResult
 	} else if submission.Status == "succeeded" || submission.Status == "failed" {
@@ -203,19 +223,19 @@ func (e *GenerationExecutor) Execute(
 			"provider_request_id":   submission.RequestID,
 			"provider_operation_id": submission.OperationID,
 		}); err != nil {
-			log.Logger.Warnf("desktoppet executor update attempt %s to unknown_submission failed: %v", attempt.ID, err)
+			return fmt.Errorf("%w: persist unknown_submission: %v", errGenerationPersistence, err)
 		}
-		e.updateActionProgress(task, action, string(generation.AttemptStatusUnknownSubmission))
+		if err := e.updateActionProgress(task, action, string(generation.AttemptStatusUnknownSubmission)); err != nil {
+			return fmt.Errorf("%w: persist unknown_submission action progress: %v", errGenerationPersistence, err)
+		}
 		log.Logger.Warnf("desktoppet executor attempt %s entered unknown_submission state: submission.Status=%s", attempt.ID, submission.Status)
 		errMsg := fmt.Sprintf("提交状态不确定: %s，进入 unknown_submission 等待 Recovery Worker 处理", submission.Status)
-		return fmt.Errorf("%s", errMsg)
+		return fmt.Errorf("%w: %s", errGenerationRecoveryPending, errMsg)
 	}
 
 	if result == nil {
 		errMsg := "生图结果为空"
-		e.failAttempt(attempt.ID, desktoppet.ErrCodeImageGenerationEmptyResult, errMsg)
-		e.failAction(action, desktoppet.ErrCodeImageGenerationEmptyResult, errMsg)
-		return fmt.Errorf("%s", errMsg)
+		return e.failExecution(attempt.ID, action, desktoppet.ErrCodeImageGenerationEmptyResult, errMsg, nil)
 	}
 
 	if result.Status == "failed" {
@@ -227,43 +247,41 @@ func (e *GenerationExecutor) Execute(
 		if errMsg == "" {
 			errMsg = "提供者返回失败状态"
 		}
-		e.failAttempt(attempt.ID, errCode, errMsg)
-		e.failAction(action, errCode, errMsg)
-		return fmt.Errorf("提供者返回失败状态: %s", errMsg)
+		return e.failExecution(attempt.ID, action, errCode, errMsg, nil)
 	}
 
 	if len(result.Images) == 0 {
 		errMsg := "生图结果未包含任何图片"
-		e.failAttempt(attempt.ID, desktoppet.ErrCodeImageGenerationEmptyResult, errMsg)
-		e.failAction(action, desktoppet.ErrCodeImageGenerationEmptyResult, errMsg)
-		return fmt.Errorf("%s", errMsg)
+		return e.failExecution(attempt.ID, action, desktoppet.ErrCodeImageGenerationEmptyResult, errMsg, nil)
 	}
 
 	if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusResultReceived, map[string]interface{}{
 		"provider_request_id":   result.RequestID,
 		"provider_operation_id": result.OperationID,
 	}); err != nil {
-		log.Logger.Warnf("desktoppet executor update attempt %s to result_received failed: %v", attempt.ID, err)
+		return fmt.Errorf("%w: persist attempt result_received: %v", errGenerationPersistence, err)
 	}
-	e.updateActionProgress(task, action, string(generation.AttemptStatusResultReceived))
+	if err := e.updateActionProgress(task, action, string(generation.AttemptStatusResultReceived)); err != nil {
+		return fmt.Errorf("%w: persist result_received action progress: %v", errGenerationPersistence, err)
+	}
 
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 
 	if err := e.updateAttemptStatus(attempt.ID, generation.AttemptStatusPersisting, nil); err != nil {
-		log.Logger.Warnf("desktoppet executor update attempt %s to persisting failed: %v", attempt.ID, err)
+		return fmt.Errorf("%w: persist attempt persisting: %v", errGenerationPersistence, err)
 	}
-	e.updateActionProgress(task, action, string(generation.AttemptStatusPersisting))
+	if err := e.updateActionProgress(task, action, string(generation.AttemptStatusPersisting)); err != nil {
+		return fmt.Errorf("%w: persist persisting action progress: %v", errGenerationPersistence, err)
+	}
 
 	genResult := convertToGenerationResult(result)
 
 	persistTx := e.db.Begin()
 	if persistTx.Error != nil {
 		errMsg := fmt.Sprintf("开启持久化事务失败: %v", persistTx.Error)
-		e.failAttempt(attempt.ID, desktoppet.ErrCodeGenerationWorkerError, errMsg)
-		e.failAction(action, desktoppet.ErrCodeGenerationWorkerError, errMsg)
-		return fmt.Errorf("%s", errMsg)
+		return e.failExecution(attempt.ID, action, desktoppet.ErrCodeGenerationWorkerError, errMsg, persistTx.Error)
 	}
 
 	persistResult, err := e.artifactPersister.Persist(generation.PersistInput{
@@ -279,11 +297,11 @@ func (e *GenerationExecutor) Execute(
 		ProviderOperationID: result.OperationID,
 	})
 	if err != nil {
-		persistTx.Rollback()
+		if rollbackErr := persistTx.Rollback().Error; rollbackErr != nil {
+			err = errors.Join(err, fmt.Errorf("rollback persistence transaction: %w", rollbackErr))
+		}
 		errMsg := fmt.Sprintf("持久化产物失败: %v", err)
-		e.failAttempt(attempt.ID, generation.ErrCodeArtifactPersistFailed, errMsg)
-		e.failAction(action, generation.ErrCodeArtifactPersistFailed, errMsg)
-		return fmt.Errorf("%s", errMsg)
+		return e.failExecution(attempt.ID, action, generation.ErrCodeArtifactPersistFailed, errMsg, err)
 	}
 
 	actualCost := 0.0
@@ -308,18 +326,26 @@ func (e *GenerationExecutor) Execute(
 		AutoPromote:       true,
 	})
 	if finalizeErr != nil {
-		persistTx.Rollback()
-		errMsg := fmt.Sprintf("Finalize 失败: %v", finalizeErr)
-		e.failAttempt(attempt.ID, generation.ErrCodeFinalizeFailed, errMsg)
-		e.failAction(action, generation.ErrCodeFinalizeFailed, errMsg)
-		return fmt.Errorf("%s", errMsg)
+		rollbackErr := e.rollbackGenerationPersistence(persistTx, persistResult)
+		combinedErr := finalizeErr
+		if rollbackErr != nil {
+			combinedErr = errors.Join(finalizeErr, rollbackErr)
+		}
+		errMsg := fmt.Sprintf("Finalize 失败: %v", combinedErr)
+		return e.failExecution(attempt.ID, action, generation.ErrCodeFinalizeFailed, errMsg, combinedErr)
 	}
 
 	if err := persistTx.Commit().Error; err != nil {
-		errMsg := fmt.Sprintf("提交持久化事务失败: %v", err)
-		e.failAttempt(attempt.ID, desktoppet.ErrCodeGenerationWorkerError, errMsg)
-		e.failAction(action, desktoppet.ErrCodeGenerationWorkerError, errMsg)
-		return fmt.Errorf("%s", errMsg)
+		cleanupErr := e.artifactPersister.RollbackPersistedFiles("", persistResult)
+		if rollbackErr := persistTx.Rollback().Error; rollbackErr != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("rollback failed persistence transaction: %w", rollbackErr))
+		}
+		combinedErr := err
+		if cleanupErr != nil {
+			combinedErr = errors.Join(err, cleanupErr)
+		}
+		errMsg := fmt.Sprintf("提交持久化事务失败: %v", combinedErr)
+		return e.failExecution(attempt.ID, action, desktoppet.ErrCodeGenerationWorkerError, errMsg, combinedErr)
 	}
 
 	successProgress := generation.CalculateActionProgressFromString(string(generation.AttemptStatusSucceeded))
@@ -339,6 +365,21 @@ func (e *GenerationExecutor) Execute(
 	log.Logger.Infof("desktoppet generation executor succeeded: task=%s action=%s attempt=%s artifacts=%d",
 		task.ID, action.ID, attempt.ID, len(persistResult.Artifacts))
 	return nil
+}
+
+func (e *GenerationExecutor) rollbackGenerationPersistence(tx *gorm.DB, result *generation.PersistResult) error {
+	var rollbackErrs []error
+	if e.artifactPersister != nil {
+		if err := e.artifactPersister.RollbackPersistedFiles("", result); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("rollback published generation artifacts: %w", err))
+		}
+	}
+	if tx != nil {
+		if err := tx.Rollback().Error; err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("rollback generation persistence transaction: %w", err))
+		}
+	}
+	return errors.Join(rollbackErrs...)
 }
 
 func (e *GenerationExecutor) pollProvider(
@@ -415,14 +456,16 @@ func (e *GenerationExecutor) updateAttemptStatus(attemptID string, status genera
 	return e.db.Model(&generation.ActionGenerationAttempt{}).Where("id = ?", attemptID).Updates(updates).Error
 }
 
-func (e *GenerationExecutor) updateActionProgress(task *desktoppet.GenerationTask, action *desktoppet.GenerationTaskAction, stage string) {
+func (e *GenerationExecutor) updateActionProgress(task *desktoppet.GenerationTask, action *desktoppet.GenerationTaskAction, stage string) error {
 	progress := generation.CalculateActionProgressFromString(stage)
-	action.Progress = progress
 	now := time.Now().Format(workerTimeFormat)
-	_ = e.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
+	if err := e.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
 		"progress":   progress,
 		"updated_at": now,
-	})
+	}); err != nil {
+		return err
+	}
+	action.Progress = progress
 	desktoppet.PublishTaskEvent(task.ID, "action.progress", map[string]interface{}{
 		"task_id":    task.ID,
 		"action_id":  action.ID,
@@ -430,32 +473,50 @@ func (e *GenerationExecutor) updateActionProgress(task *desktoppet.GenerationTas
 		"stage":      stage,
 		"progress":   progress,
 	})
+	return nil
 }
 
-func (e *GenerationExecutor) failAttempt(attemptID, code, message string) {
+func (e *GenerationExecutor) failAttempt(attemptID, code, message string) error {
 	now := time.Now().Format(workerTimeFormat)
-	if err := e.db.Model(&generation.ActionGenerationAttempt{}).Where("id = ?", attemptID).Updates(map[string]interface{}{
+	return e.db.Model(&generation.ActionGenerationAttempt{}).Where("id = ?", attemptID).Updates(map[string]interface{}{
 		"status":        string(generation.AttemptStatusFailed),
 		"error_code":    code,
 		"error_message": message,
 		"completed_at":  now,
 		"updated_at":    now,
-	}).Error; err != nil {
-		log.Logger.Warnf("failed to mark attempt %s as failed: %v", attemptID, err)
-	}
+	}).Error
 }
 
-func (e *GenerationExecutor) failAction(action *desktoppet.GenerationTaskAction, code, message string) {
+func (e *GenerationExecutor) failAction(action *desktoppet.GenerationTaskAction, code, message string) error {
 	now := time.Now().Format(workerTimeFormat)
-	if err := e.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
+	return e.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
 		"status":        "failed",
 		"error_code":    code,
 		"error_message": message,
 		"completed_at":  now,
 		"updated_at":    now,
-	}); err != nil {
-		log.Logger.Warnf("failed to mark action %s as failed: %v", action.ID, err)
+	})
+}
+
+func (e *GenerationExecutor) failExecution(attemptID string, action *desktoppet.GenerationTaskAction, code, message string, cause error) error {
+	var persistenceErrs []error
+	if err := e.failAttempt(attemptID, code, message); err != nil {
+		persistenceErrs = append(persistenceErrs, fmt.Errorf("attempt %s: %w", attemptID, err))
 	}
+	if err := e.failAction(action, code, message); err != nil {
+		persistenceErrs = append(persistenceErrs, fmt.Errorf("action %s: %w", action.ID, err))
+	}
+	if len(persistenceErrs) > 0 {
+		return fmt.Errorf("%w: %v", errGenerationPersistence, errors.Join(persistenceErrs...))
+	}
+	action.Status = "failed"
+	if cause != nil {
+		return fmt.Errorf("%s: %w", code, cause)
+	}
+	if code != "" {
+		return fmt.Errorf("%s: %s", code, message)
+	}
+	return errors.New(message)
 }
 
 func convertToGenerationResult(legacy *imageprovider.ImageGenerationResult) *imageprovider.GenerationResult {

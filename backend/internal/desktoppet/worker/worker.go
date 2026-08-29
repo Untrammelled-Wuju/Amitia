@@ -33,12 +33,13 @@ import (
 )
 
 const (
-	workerTimeFormat   = "2006-01-02 15:04:05"
-	pollInterval       = 3 * time.Second
-	heartbeatInterval  = 30 * time.Second
-	leaseDuration      = 5 * time.Minute
-	maxConcurrentTasks = 4
-	maxFrameRetries    = 2
+	workerTimeFormat     = "2006-01-02 15:04:05"
+	pollInterval         = 3 * time.Second
+	heartbeatInterval    = 30 * time.Second
+	leaseDuration        = 5 * time.Minute
+	maxConcurrentTasks   = 4
+	maxFrameRetries      = 2
+	taskRecoveryInterval = 30 * time.Second
 )
 
 type Worker struct {
@@ -64,6 +65,7 @@ type Worker struct {
 	wg                sync.WaitGroup
 	sem               chan struct{}
 	lifecycleMu       sync.Mutex
+	lastRecoveryScan  time.Time
 	running           bool
 	alive             atomic.Bool
 }
@@ -112,6 +114,11 @@ func NewWorker(db *gorm.DB, repo desktoppet.Repository, registry *imageprovider.
 		stopCh:            make(chan struct{}),
 		sem:               make(chan struct{}, maxConcurrentTasks),
 	}
+	recoveryWorker.
+		WithArtifactPersister(artifactPersister).
+		WithFinalizer(finalizer).
+		WithProviderQuery(w.queryGenerationProviderForRecovery).
+		WithTerminalCallback(w.onGenerationAttemptRecovered)
 	w.genExecutor = NewGenerationExecutor(
 		db, repo, registry, attemptFactory, artifactPersister, artifactCommitter,
 		w.downloader, refAssetRepo, receiptRepo, finalizer, bindingService,
@@ -182,6 +189,10 @@ func (w *Worker) pollLoop(ctx context.Context) {
 }
 
 func (w *Worker) pollOnce(ctx context.Context) {
+	if w.lastRecoveryScan.IsZero() || time.Since(w.lastRecoveryScan) >= taskRecoveryInterval {
+		w.recoverExpiredTasks(ctx)
+		w.lastRecoveryScan = time.Now()
+	}
 	tasks, err := w.repo.ListQueuedTasks()
 	if err != nil {
 		log.Logger.Errorf("desktoppet worker poll tasks failed: %v", err)
@@ -265,10 +276,14 @@ func (w *Worker) processTask(ctx context.Context, task *desktoppet.GenerationTas
 	heartbeatCtx, heartbeatCancel := context.WithCancel(ctx)
 	w.startHeartbeat(heartbeatCtx, task.ID, executionID, workerID, taskCancel)
 
-	results := w.runActions(taskCtx, task)
+	results, runErr := w.runActions(taskCtx, task)
 
 	heartbeatCancel()
 
+	if runErr != nil {
+		log.Logger.Errorf("desktoppet task %s action scan failed; leaving task non-terminal for lease recovery: %v", task.ID, runErr)
+		return
+	}
 	w.finalizeTask(ctx, task, results)
 }
 
@@ -299,7 +314,7 @@ func (w *Worker) startHeartbeat(ctx context.Context, taskID, executionID, worker
 				}
 				if !owned {
 					log.Logger.Errorf("heartbeat task %s ownership lost, stopping heartbeat", taskID)
-					_, _ = w.stateEngine.Transition(ctx, taskstate.TransitionRequest{
+					if _, transitionErr := w.stateEngine.Transition(ctx, taskstate.TransitionRequest{
 						EntityType:    contracts.EntityGenerationTask,
 						EntityID:      taskID,
 						From:          []contracts.LifecycleStatus{contracts.StatusProcessing},
@@ -310,7 +325,9 @@ func (w *Worker) startHeartbeat(ctx context.Context, taskID, executionID, worker
 						ActorID:       workerID,
 						ExecutionID:   executionID,
 						NeedOwnership: true,
-					})
+					}); transitionErr != nil {
+						log.Logger.Errorf("heartbeat task %s lease-loss transition failed: %v", taskID, transitionErr)
+					}
 					taskCancel()
 					return
 				}
@@ -324,11 +341,10 @@ type actionResult struct {
 	status   string
 }
 
-func (w *Worker) runActions(ctx context.Context, task *desktoppet.GenerationTask) []actionResult {
+func (w *Worker) runActions(ctx context.Context, task *desktoppet.GenerationTask) ([]actionResult, error) {
 	actions, err := w.repo.ListActionsByTaskIDOrdered(task.ID)
 	if err != nil {
-		log.Logger.Errorf("list actions for task %s failed: %v", task.ID, err)
-		return nil
+		return nil, fmt.Errorf("list actions for task %s: %w", task.ID, err)
 	}
 	results := make([]actionResult, 0, len(actions))
 	totalExpectedFrames := 0
@@ -339,10 +355,14 @@ func (w *Worker) runActions(ctx context.Context, task *desktoppet.GenerationTask
 	updateTaskProgress := func() {
 		if totalExpectedFrames > 0 {
 			now := time.Now().Format(workerTimeFormat)
-			owned, _ := w.repo.UpdateTaskOwned(task.ID, task.ExecutionID, map[string]interface{}{
+			owned, updateErr := w.repo.UpdateTaskOwned(task.ID, task.ExecutionID, map[string]interface{}{
 				"progress":   completedFrames * 100 / totalExpectedFrames,
 				"updated_at": now,
 			})
+			if updateErr != nil {
+				log.Logger.Errorf("persist task %s progress failed: %v", task.ID, updateErr)
+				return
+			}
 			if !owned {
 				log.Logger.Warnf("task %s ownership lost during progress update", task.ID)
 			}
@@ -369,11 +389,15 @@ func (w *Worker) runActions(ctx context.Context, task *desktoppet.GenerationTask
 
 		if w.isTaskCancelled(task.ID) {
 			now := time.Now().Format(workerTimeFormat)
-			_ = w.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
+			if err := w.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
 				"status":       "skipped",
 				"updated_at":   now,
 				"completed_at": now,
-			})
+			}); err != nil {
+				log.Logger.Errorf("persist skipped action %s failed: %v", action.ID, err)
+				results = append(results, actionResult{actionID: action.ID, status: "persistence_failed"})
+				continue
+			}
 			results = append(results, actionResult{actionID: action.ID, status: "skipped"})
 			updateTaskProgress()
 			continue
@@ -384,7 +408,7 @@ func (w *Worker) runActions(ctx context.Context, task *desktoppet.GenerationTask
 		completedFrames += action.Progress * action.FrameCount / 100
 		updateTaskProgress()
 	}
-	return results
+	return results, nil
 }
 
 func (w *Worker) isTaskCancelled(taskID string) bool {
@@ -424,32 +448,27 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 		spec, ok = specs.GetSpec(action.ActionKey)
 	}
 	if !ok {
-		w.failAction(action, desktoppet.ErrCodeActionNotFound, "动作规格不存在: "+action.ActionKey)
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeActionNotFound, "动作规格不存在: "+action.ActionKey)
 	}
 
 	resolved, errCode, errMsg := w.resolveGenerationProvider(ctx, task)
 	if resolved == nil {
-		w.failAction(action, errCode, errMsg)
-		return "failed"
+		return w.failAction(action, errCode, errMsg)
 	}
 	providerName := resolved.ProviderName
 	provider := resolved.Provider
 	modelConfig := resolved.ModelConfig
 
 	if err := provider.ValidateConfig(ctx, modelConfig); err != nil {
-		w.failAction(action, desktoppet.ErrCodeImageGenerationRequestInvalid, fmt.Sprintf("生图模型校验失败: %v", err))
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeImageGenerationRequestInvalid, fmt.Sprintf("生图模型校验失败: %v", err))
 	}
 
 	capabilities, err := provider.Capabilities(ctx, modelConfig)
 	if err != nil {
-		w.failAction(action, desktoppet.ErrCodeImageModelCapabilityUnsupported, fmt.Sprintf("获取模型能力失败: %v", err))
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeImageModelCapabilityUnsupported, fmt.Sprintf("获取模型能力失败: %v", err))
 	}
 	if !capabilities.SupportsReferenceImage {
-		w.failAction(action, desktoppet.ErrCodeImageModelCapabilityUnsupported, "生图模型不支持参考图")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeImageModelCapabilityUnsupported, "生图模型不支持参考图")
 	}
 
 	if task.GenerationPlanVersion > 0 {
@@ -459,13 +478,11 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 	now := time.Now().Format(workerTimeFormat)
 	tx := w.db.Begin()
 	if tx.Error != nil {
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "开启事务失败")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "开启事务失败")
 	}
 	if err := w.repo.IncrementActionAttempt(tx, action.ID); err != nil {
 		tx.Rollback()
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "递增尝试次数失败")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "递增尝试次数失败")
 	}
 	if err := w.repo.UpdateActionStatus(tx, action.ID, map[string]interface{}{
 		"status":     "running",
@@ -473,12 +490,10 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 		"updated_at": now,
 	}); err != nil {
 		tx.Rollback()
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "更新动作状态失败")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "更新动作状态失败")
 	}
 	if err := tx.Commit().Error; err != nil {
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "提交动作事务失败")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "提交动作事务失败")
 	}
 
 	actionAttempt := action.AttemptNumber + 1
@@ -509,17 +524,14 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 	}
 	createTx := w.db.Begin()
 	if createTx.Error != nil {
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "创建帧事务失败")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "创建帧事务失败")
 	}
 	if err := w.repo.EnsureGenerationFrames(createTx, frames); err != nil {
 		createTx.Rollback()
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, fmt.Sprintf("创建帧失败: %v", err))
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, fmt.Sprintf("创建帧失败: %v", err))
 	}
 	if err := createTx.Commit().Error; err != nil {
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "提交帧事务失败")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "提交帧事务失败")
 	}
 
 	successCount := 0
@@ -532,10 +544,13 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 		progress := (successCount + failCount) * 100 / spec.FrameCount
 		action.Progress = progress
 		progressNow := time.Now().Format(workerTimeFormat)
-		_ = w.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
+		if err := w.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
 			"progress":   progress,
 			"updated_at": progressNow,
-		})
+		}); err != nil {
+			log.Logger.Errorf("persist action %s progress failed: %v", action.ID, err)
+			return
+		}
 		desktoppet.PublishTaskEvent(task.ID, "action.progress", map[string]interface{}{
 			"task_id":     task.ID,
 			"action_key":  action.ActionKey,
@@ -545,12 +560,17 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 			"frame_total": spec.FrameCount,
 		})
 		if taskProgress, ok := w.computeTaskProgress(task.ID); ok {
-			owned, _ := w.repo.UpdateTaskOwned(task.ID, task.ExecutionID, map[string]interface{}{
+			owned, updateErr := w.repo.UpdateTaskOwned(task.ID, task.ExecutionID, map[string]interface{}{
 				"progress":   taskProgress,
 				"updated_at": progressNow,
 			})
+			if updateErr != nil {
+				log.Logger.Errorf("persist task %s progress failed: %v", task.ID, updateErr)
+				return
+			}
 			if !owned {
 				log.Logger.Warnf("task %s ownership lost during action progress", task.ID)
+				return
 			}
 			desktoppet.PublishTaskEvent(task.ID, "task.progress", map[string]interface{}{
 				"task_id":  task.ID,
@@ -563,21 +583,27 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 		select {
 		case <-w.stopCh:
 			skipNow := time.Now().Format(workerTimeFormat)
-			_ = w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
+			if err := w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
 				"status":       "skipped",
 				"updated_at":   skipNow,
 				"completed_at": skipNow,
-			})
+			}); err != nil {
+				log.Logger.Errorf("persist skipped frame %s failed: %v", frame.ID, err)
+				return "persistence_failed"
+			}
 			failCount++
 			updateActionProgress()
 			continue
 		case <-ctx.Done():
 			skipNow := time.Now().Format(workerTimeFormat)
-			_ = w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
+			if err := w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
 				"status":       "skipped",
 				"updated_at":   skipNow,
 				"completed_at": skipNow,
-			})
+			}); err != nil {
+				log.Logger.Errorf("persist cancelled frame %s failed: %v", frame.ID, err)
+				return "persistence_failed"
+			}
 			failCount++
 			updateActionProgress()
 			continue
@@ -586,17 +612,23 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 
 		if w.isTaskCancelled(task.ID) {
 			skipNow := time.Now().Format(workerTimeFormat)
-			_ = w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
+			if err := w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
 				"status":       "skipped",
 				"updated_at":   skipNow,
 				"completed_at": skipNow,
-			})
+			}); err != nil {
+				log.Logger.Errorf("persist task-cancelled frame %s failed: %v", frame.ID, err)
+				return "persistence_failed"
+			}
 			failCount++
 			updateActionProgress()
 			continue
 		}
 
 		status := w.runFrame(ctx, task, action, actionAttempt, spec, frame, previousFramePath, modelConfig, provider)
+		if status == "persistence_failed" {
+			return status
+		}
 		if status == "succeeded" {
 			successCount++
 			previousFramePath = frame.ResultImagePath
@@ -619,12 +651,16 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 		progress = (successCount + failCount) * 100 / spec.FrameCount
 	}
 	action.Progress = progress
-	_ = w.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
+	if err := w.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
 		"status":       actionStatus,
 		"progress":     progress,
 		"completed_at": now,
 		"updated_at":   now,
-	})
+	}); err != nil {
+		log.Logger.Errorf("persist terminal state for action %s failed: %v", action.ID, err)
+		return "persistence_failed"
+	}
+	action.Status = actionStatus
 	desktoppet.PublishTaskEvent(task.ID, "action.completed", map[string]interface{}{
 		"task_id":         task.ID,
 		"action_key":      action.ActionKey,
@@ -634,7 +670,7 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 		"frame_total":     spec.FrameCount,
 	})
 
-	_ = w.downloader.WriteMetadata(task.ID, action.ActionKey, actionAttempt, map[string]interface{}{
+	if err := w.downloader.WriteMetadata(task.ID, action.ActionKey, actionAttempt, map[string]interface{}{
 		"provider":     providerName,
 		"model":        resolved.ModelName,
 		"frameCount":   spec.FrameCount,
@@ -643,7 +679,9 @@ func (w *Worker) runAction(ctx context.Context, task *desktoppet.GenerationTask,
 		"outputWidth":  task.OutputWidth,
 		"outputHeight": task.OutputHeight,
 		"specVersion":  spec.Version,
-	})
+	}); err != nil {
+		log.Logger.Warnf("desktoppet action %s metadata write failed after durable completion: %v", action.ID, err)
+	}
 
 	log.Logger.Infof("desktoppet action %s (task=%s) finished: status=%s success=%d fail=%d", action.ID, task.ID, actionStatus, successCount, failCount)
 	return actionStatus
@@ -664,8 +702,7 @@ func (w *Worker) executeWithGenerationExecutor(
 	layoutPlanner := generationlayout.DefaultPlanner(spec.FrameCount)
 	layoutResult, err := layoutPlanner.Plan()
 	if err != nil {
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, fmt.Sprintf("布局规划失败: %v", err))
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, fmt.Sprintf("布局规划失败: %v", err))
 	}
 
 	framePhases := make([]generationprompt.FramePhaseInput, len(spec.FramePhases))
@@ -698,22 +735,19 @@ func (w *Worker) executeWithGenerationExecutor(
 
 	promptSnapshot, err := generationprompt.BuildSheetPrompt(promptDoc)
 	if err != nil {
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, fmt.Sprintf("Prompt 构建失败: %v", err))
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, fmt.Sprintf("Prompt 构建失败: %v", err))
 	}
 
 	var caps imageprovider.ProviderCapabilities
 	if extProvider, ok := provider.(imageprovider.ExtendedProvider); ok {
 		caps, err = extProvider.ExtendedCapabilities(ctx, modelConfig)
 		if err != nil {
-			w.failAction(action, desktoppet.ErrCodeImageModelCapabilityUnsupported, fmt.Sprintf("获取扩展能力失败: %v", err))
-			return "failed"
+			return w.failAction(action, desktoppet.ErrCodeImageModelCapabilityUnsupported, fmt.Sprintf("获取扩展能力失败: %v", err))
 		}
 	} else {
 		basicCaps, err := provider.Capabilities(ctx, modelConfig)
 		if err != nil {
-			w.failAction(action, desktoppet.ErrCodeImageModelCapabilityUnsupported, fmt.Sprintf("获取能力失败: %v", err))
-			return "failed"
+			return w.failAction(action, desktoppet.ErrCodeImageModelCapabilityUnsupported, fmt.Sprintf("获取能力失败: %v", err))
 		}
 		caps = imageprovider.ProviderCapabilities{
 			Provider:               providerName,
@@ -735,13 +769,11 @@ func (w *Worker) executeWithGenerationExecutor(
 	now := time.Now().Format(workerTimeFormat)
 	runTx := w.db.Begin()
 	if runTx.Error != nil {
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "开启事务失败")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "开启事务失败")
 	}
 	if err := w.repo.IncrementActionAttempt(runTx, action.ID); err != nil {
 		runTx.Rollback()
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "递增尝试次数失败")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "递增尝试次数失败")
 	}
 	if err := w.repo.UpdateActionStatus(runTx, action.ID, map[string]interface{}{
 		"status":     "running",
@@ -749,12 +781,10 @@ func (w *Worker) executeWithGenerationExecutor(
 		"updated_at": now,
 	}); err != nil {
 		runTx.Rollback()
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "更新动作状态失败")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "更新动作状态失败")
 	}
 	if err := runTx.Commit().Error; err != nil {
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "提交动作事务失败")
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, "提交动作事务失败")
 	}
 
 	planner := generation.NewActionGenerationPlanner(action.ActionKey, spec.FrameCount).
@@ -771,13 +801,15 @@ func (w *Worker) executeWithGenerationExecutor(
 
 	plan, err := planner.Plan()
 	if err != nil {
-		w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, fmt.Sprintf("生成计划失败: %v", err))
-		return "failed"
+		return w.failAction(action, desktoppet.ErrCodeGenerationWorkerError, fmt.Sprintf("生成计划失败: %v", err))
 	}
 
 	execErr := w.genExecutor.Execute(ctx, task, action, plan, providerName, modelName, provider, modelConfig)
 	if execErr != nil {
 		log.Logger.Errorf("desktoppet generation executor failed: task=%s action=%s: %v", task.ID, action.ID, execErr)
+		if errors.Is(execErr, errGenerationPersistence) || errors.Is(execErr, errGenerationRecoveryPending) || errors.Is(execErr, context.Canceled) || errors.Is(execErr, context.DeadlineExceeded) {
+			return "persistence_failed"
+		}
 		return "failed"
 	}
 
@@ -795,7 +827,10 @@ func (w *Worker) runFrame(ctx context.Context, task *desktoppet.GenerationTask, 
 	if previousFramePath != "" {
 		updates["previous_frame_path"] = previousFramePath
 	}
-	_ = w.repo.UpdateFrame(w.db, frame.ID, updates)
+	if err := w.repo.UpdateFrame(w.db, frame.ID, updates); err != nil {
+		log.Logger.Errorf("persist frame %s running state failed: %v", frame.ID, err)
+		return "persistence_failed"
+	}
 	desktoppet.PublishTaskEvent(task.ID, "frame.started", map[string]interface{}{
 		"task_id":     task.ID,
 		"action_key":  action.ActionKey,
@@ -825,7 +860,7 @@ func (w *Worker) runFrame(ctx context.Context, task *desktoppet.GenerationTask, 
 	}
 	callLogID := uuid.New().String()
 	callLogStartedAt := time.Now().Format(workerTimeFormat)
-	_ = w.repo.CreateCallLog(&desktoppet.GenerationCallLog{
+	if err := w.repo.CreateCallLog(&desktoppet.GenerationCallLog{
 		ID:               callLogID,
 		TaskID:           task.ID,
 		TaskActionID:     action.ID,
@@ -836,17 +871,23 @@ func (w *Worker) runFrame(ctx context.Context, task *desktoppet.GenerationTask, 
 		RequestStartedAt: callLogStartedAt,
 		RequestStatus:    "submitted",
 		AttemptNumber:    actionAttempt,
-	})
+	}); err != nil {
+		log.Logger.Warnf("create generation call log %s failed: %v", callLogID, err)
+	}
 
 	result, errCode, errMsg := w.submitWithRetry(ctx, provider, modelConfig, request, frame)
 	if result == nil {
-		w.markFrameFailed(task, action, frame, errCode, errMsg)
+		if !w.markFrameFailed(task, action, frame, errCode, errMsg) {
+			return "persistence_failed"
+		}
 		w.finalizeCallLog(callLogID, "failed", time.Now().Format(workerTimeFormat), "unknown", errCode, errMsg, "")
 		return "failed"
 	}
 
 	if len(result.Images) == 0 {
-		w.markFrameFailed(task, action, frame, desktoppet.ErrCodeImageGenerationEmptyResult, "未返回任何图片")
+		if !w.markFrameFailed(task, action, frame, desktoppet.ErrCodeImageGenerationEmptyResult, "未返回任何图片") {
+			return "persistence_failed"
+		}
 		w.finalizeCallLog(callLogID, "failed", time.Now().Format(workerTimeFormat), serializeUsage(result.Usage), desktoppet.ErrCodeImageGenerationEmptyResult, "未返回任何图片", result.RequestID)
 		return "failed"
 	}
@@ -854,13 +895,15 @@ func (w *Worker) runFrame(ctx context.Context, task *desktoppet.GenerationTask, 
 	img := result.Images[0]
 	path, width, height, size, hash, err := w.downloader.DownloadAndSave(img.Bytes, img.MimeType, task.ID, action.ActionKey, actionAttempt, frame.FrameIndex)
 	if err != nil {
-		w.markFrameFailed(task, action, frame, desktoppet.ErrCodeImageResultSaveFailed, err.Error())
+		if !w.markFrameFailed(task, action, frame, desktoppet.ErrCodeImageResultSaveFailed, err.Error()) {
+			return "persistence_failed"
+		}
 		w.finalizeCallLog(callLogID, "failed", time.Now().Format(workerTimeFormat), serializeUsage(result.Usage), desktoppet.ErrCodeImageResultSaveFailed, err.Error(), result.RequestID)
 		return "failed"
 	}
 
 	now = time.Now().Format(workerTimeFormat)
-	_ = w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
+	if err := w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
 		"status":                "succeeded",
 		"result_image_path":     path,
 		"result_mime_type":      img.MimeType,
@@ -874,7 +917,10 @@ func (w *Worker) runFrame(ctx context.Context, task *desktoppet.GenerationTask, 
 		"provider_operation_id": result.OperationID,
 		"completed_at":          now,
 		"updated_at":            now,
-	})
+	}); err != nil {
+		log.Logger.Errorf("persist terminal success for frame %s failed: %v", frame.ID, err)
+		return "persistence_failed"
+	}
 	w.finalizeCallLog(callLogID, "succeeded", now, serializeUsage(result.Usage), "", "", result.RequestID)
 	frame.ResultImagePath = path
 	desktoppet.PublishTaskEvent(task.ID, "frame.succeeded", map[string]interface{}{
@@ -891,9 +937,12 @@ func (w *Worker) submitWithRetry(ctx context.Context, provider imageprovider.Ima
 
 	for attempt := 0; attempt <= maxFrameRetries; attempt++ {
 		if attempt > 0 {
-			_ = w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
+			if err := w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
 				"provider_attempt": attempt,
-			})
+			}); err != nil {
+				log.Logger.Errorf("persist provider attempt for frame %s failed: %v", frame.ID, err)
+				return nil, desktoppet.ErrCodeGenerationWorkerError, "持久化 provider attempt 失败"
+			}
 			backoff := time.Duration(attempt) * time.Second
 			select {
 			case <-time.After(backoff):
@@ -962,6 +1011,13 @@ func (w *Worker) submitWithRetry(ctx context.Context, provider imageprovider.Ima
 }
 
 func (w *Worker) finalizeTask(ctx context.Context, task *desktoppet.GenerationTask, results []actionResult) {
+	for _, r := range results {
+		if r.status == "persistence_failed" {
+			log.Logger.Errorf("desktoppet task %s has an unpersisted child terminal state; leaving task non-terminal for lease recovery", task.ID)
+			return
+		}
+	}
+
 	successCount := 0
 	failedCount := 0
 	skippedCount := 0
@@ -1052,28 +1108,95 @@ func (w *Worker) finalizeTask(ctx context.Context, task *desktoppet.GenerationTa
 }
 
 func (w *Worker) RecoverOnStartup(ctx context.Context) {
+	w.recoverExpiredTasks(ctx)
+	w.lastRecoveryScan = time.Now()
+}
+
+func (w *Worker) recoverExpiredTasks(ctx context.Context) {
 	tasks, err := w.repo.ListRecoverableTasks()
 	if err != nil {
 		log.Logger.Errorf("desktoppet recover list tasks failed: %v", err)
 		return
 	}
 	recovered := 0
+	deferred := 0
 	for i := range tasks {
 		task := &tasks[i]
+		if task.GenerationPlanVersion > 0 {
+			hasRecoverableAttempt, checkErr := w.taskHasRecoverableGenerationAttempts(task.ID)
+			if checkErr != nil {
+				log.Logger.Errorf("desktoppet inspect recoverable attempts for task %s failed: %v", task.ID, checkErr)
+				continue
+			}
+			if hasRecoverableAttempt {
+				deferred++
+				continue
+			}
+		}
+
 		now := time.Now().Format(workerTimeFormat)
-		ok, err := w.repo.RecoverExpiredTask(task.ID, task.ExecutionID, task.LeaseExpiresAt, now)
+		applied := false
+		err := w.db.Transaction(func(tx *gorm.DB) error {
+			result := tx.Model(&desktoppet.GenerationTask{}).
+				Where("id = ? AND execution_id = ? AND lease_expires_at = ? AND status = ?", task.ID, task.ExecutionID, task.LeaseExpiresAt, "processing").
+				Updates(map[string]interface{}{
+					"status":             "queued",
+					"current_stage":      "queued",
+					"status_reason":      string(contracts.ReasonSystemLeaseExpired),
+					"worker_id":          "",
+					"execution_id":       "",
+					"lease_expires_at":   "",
+					"last_heartbeat_at":  "",
+					"completed_at":       "",
+					"error_code":         "",
+					"error_message":      "",
+					"last_transition_at": now,
+					"updated_at":         now,
+					"row_version":        gorm.Expr("row_version + 1"),
+				})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return nil
+			}
+			if err := tx.Model(&desktoppet.GenerationTaskAction{}).
+				Where("task_id = ? AND status = ?", task.ID, "running").
+				Updates(map[string]interface{}{
+					"status":        "pending",
+					"progress":      0,
+					"error_code":    "",
+					"error_message": "",
+					"started_at":    "",
+					"completed_at":  "",
+					"updated_at":    now,
+				}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&desktoppet.GenerationFrame{}).
+				Where("task_id = ? AND status = ?", task.ID, "running").
+				Updates(map[string]interface{}{
+					"status":        "pending",
+					"error_code":    "",
+					"error_message": "",
+					"started_at":    "",
+					"completed_at":  "",
+					"updated_at":    now,
+				}).Error; err != nil {
+				return err
+			}
+			applied = true
+			return nil
+		})
 		if err != nil {
-			log.Logger.Errorf("desktoppet recover task %s failed: %v", task.ID, err)
+			log.Logger.Errorf("desktoppet recover task %s transaction failed: %v", task.ID, err)
 			continue
 		}
-		if !ok {
-			log.Logger.Warnf("desktoppet recover task %s skipped (ownership changed)", task.ID)
+		if !applied {
 			continue
 		}
 		recovered++
-		log.Logger.Infof("desktoppet recovered task %s (lease expired), reset to queued", task.ID)
-
-		_ = w.stateStore.WriteAudit(ctx, taskstate.AuditRecord{
+		if err := w.stateStore.WriteAudit(ctx, taskstate.AuditRecord{
 			ID:          taskstate.NewAuditID(),
 			EntityType:  contracts.EntityGenerationTask,
 			EntityID:    task.ID,
@@ -1085,33 +1208,101 @@ func (w *Worker) RecoverOnStartup(ctx context.Context) {
 			ActorID:     "system",
 			ExecutionID: task.ExecutionID,
 			CreatedAt:   now,
-		})
-
-		actions, _ := w.repo.ListActionsByTaskID(task.ID)
-		for _, a := range actions {
-			if a.Status == "running" {
-				_ = w.repo.ResetActionToPending(a.ID)
-			}
+		}); err != nil {
+			log.Logger.Errorf("desktoppet recover task %s audit write failed: %v", task.ID, err)
 		}
-		_ = w.repo.ResetRunningFramesToPending(task.ID)
-
-		frames, _ := w.repo.ListPollingFrames(task.ID)
-		if len(frames) > 0 {
-			log.Logger.Infof("desktoppet task %s has %d polling frames (sync provider, no polling recovery needed)", task.ID, len(frames))
-		}
+		log.Logger.Infof("desktoppet recovered expired task %s and its running children atomically", task.ID)
 	}
-	log.Logger.Infof("desktoppet recovery complete: recovered %d tasks", recovered)
+	if recovered > 0 || deferred > 0 {
+		log.Logger.Infof("desktoppet recovery scan complete: recovered=%d deferred_to_generation_recovery=%d", recovered, deferred)
+	}
 }
 
-func (w *Worker) markFrameFailed(task *desktoppet.GenerationTask, action *desktoppet.GenerationTaskAction, frame *desktoppet.GenerationFrame, code, message string) {
+func (w *Worker) taskHasRecoverableGenerationAttempts(taskID string) (bool, error) {
+	actions, err := w.repo.ListActionsByTaskIDOrdered(taskID)
+	if err != nil {
+		return false, err
+	}
+	for i := range actions {
+		action := &actions[i]
+		if action.Status != "running" {
+			continue
+		}
+		attempts, err := w.attemptRepo.ListAttemptsByActionID(action.ID)
+		if err != nil {
+			return false, err
+		}
+		for j := len(attempts) - 1; j >= 0; j-- {
+			attempt := &attempts[j]
+			if action.CurrentAttempt > 0 && attempt.AttemptNumber != action.CurrentAttempt {
+				continue
+			}
+			if attempt.IsActive() || attempt.IsTerminal() {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func (w *Worker) onGenerationAttemptRecovered(ctx context.Context, attempt *generation.ActionGenerationAttempt) error {
+	if attempt == nil || attempt.TaskID == "" {
+		return nil
+	}
+	task, err := w.repo.GetTaskByID(attempt.TaskID)
+	if err != nil {
+		return fmt.Errorf("load recovered generation task %s: %w", attempt.TaskID, err)
+	}
+	if task == nil || task.Status != "processing" || task.ExecutionID != attempt.ExecutionID {
+		return nil
+	}
+
+	actions, err := w.repo.ListActionsByTaskIDOrdered(task.ID)
+	if err != nil {
+		return fmt.Errorf("list actions before recovered task requeue: %w", err)
+	}
+	for i := range actions {
+		if actions[i].Status == "running" {
+			return nil
+		}
+	}
+
+	_, err = w.stateEngine.Transition(ctx, taskstate.TransitionRequest{
+		EntityType:    contracts.EntityGenerationTask,
+		EntityID:      task.ID,
+		From:          []contracts.LifecycleStatus{contracts.StatusProcessing},
+		To:            contracts.StatusQueued,
+		Stage:         contracts.StageQueued,
+		Reason:        contracts.ReasonSystemRecovered,
+		ActorType:     contracts.ActorRecovery,
+		ActorID:       "generation-recovery-worker",
+		ExecutionID:   attempt.ExecutionID,
+		NeedOwnership: true,
+		AttemptID:     attempt.ID,
+	})
+	if err != nil {
+		latest, loadErr := w.repo.GetTaskByID(task.ID)
+		if loadErr == nil && latest != nil && latest.Status != "processing" {
+			return nil
+		}
+		return fmt.Errorf("requeue recovered generation task %s: %w", task.ID, err)
+	}
+	log.Logger.Infof("generation recovery converged task %s after attempt %s; task requeued", task.ID, attempt.ID)
+	return nil
+}
+
+func (w *Worker) markFrameFailed(task *desktoppet.GenerationTask, action *desktoppet.GenerationTaskAction, frame *desktoppet.GenerationFrame, code, message string) bool {
 	now := time.Now().Format(workerTimeFormat)
-	_ = w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
+	if err := w.repo.UpdateFrame(w.db, frame.ID, map[string]interface{}{
 		"status":        "failed",
 		"error_code":    code,
 		"error_message": message,
 		"completed_at":  now,
 		"updated_at":    now,
-	})
+	}); err != nil {
+		log.Logger.Errorf("persist terminal failure for frame %s failed: %v", frame.ID, err)
+		return false
+	}
 	desktoppet.PublishTaskEvent(task.ID, "frame.failed", map[string]interface{}{
 		"task_id":       task.ID,
 		"action_key":    action.ActionKey,
@@ -1119,9 +1310,10 @@ func (w *Worker) markFrameFailed(task *desktoppet.GenerationTask, action *deskto
 		"error_code":    code,
 		"error_message": message,
 	})
+	return true
 }
 
-func (w *Worker) failAction(action *desktoppet.GenerationTaskAction, code, message string) {
+func (w *Worker) failAction(action *desktoppet.GenerationTaskAction, code, message string) string {
 	now := time.Now().Format(workerTimeFormat)
 	if err := w.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
 		"status":        "failed",
@@ -1130,8 +1322,11 @@ func (w *Worker) failAction(action *desktoppet.GenerationTaskAction, code, messa
 		"completed_at":  now,
 		"updated_at":    now,
 	}); err != nil {
-		log.Logger.Warnf("failed to mark action %s as failed: %v", action.ID, err)
+		log.Logger.Errorf("failed to persist terminal failure for action %s: %v", action.ID, err)
+		return "persistence_failed"
 	}
+	action.Status = "failed"
+	return "failed"
 }
 
 func (w *Worker) finalizeCallLog(logID, status, completedAt, usage, errCode, errMsg, providerRequestID string) {

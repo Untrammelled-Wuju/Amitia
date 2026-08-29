@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/processing/measurement"
 	"github.com/u-ai/backend/internal/desktoppet/processing/source"
 	"github.com/u-ai/backend/internal/desktoppet/processing/workspace"
+	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 )
 
@@ -127,28 +129,32 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 
 	if err := c.copyPipelineToStaging(req.PipelineResult, stagingDir); err != nil {
 		cleanupStaging(stagingDir)
-		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
+		c.markJournalFailure(commitID, err.Error())
 		return nil, fmt.Errorf("commit: copy to staging: %w", err)
 	}
 
-	_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusStagingPrepared, "")
+	if err := c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusStagingPrepared, ""); err != nil {
+		cleanupStaging(stagingDir)
+		c.markJournalFailure(commitID, "persist staging_prepared: "+err.Error())
+		return nil, fmt.Errorf("commit: persist staging_prepared journal state: %w", err)
+	}
 
 	if err := c.writeRevisionManifest(stagingDir, revisionID, req); err != nil {
 		cleanupStaging(stagingDir)
-		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
+		c.markJournalFailure(commitID, err.Error())
 		return nil, fmt.Errorf("commit: write revision manifest: %w", err)
 	}
 
 	if err := c.writeSourceManifestRef(stagingDir, req); err != nil {
 		cleanupStaging(stagingDir)
-		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
+		c.markJournalFailure(commitID, err.Error())
 		return nil, fmt.Errorf("commit: write source manifest ref: %w", err)
 	}
 
 	contentRootHash, err := c.computeContentRootHash(req.PipelineResult, stagingDir, req)
 	if err != nil {
 		cleanupStaging(stagingDir)
-		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
+		c.markJournalFailure(commitID, err.Error())
 		return nil, fmt.Errorf("commit: compute content root hash: %w", err)
 	}
 
@@ -160,7 +166,7 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 	revisionNumber, err := c.allocateRevisionNumber(req.ProcessingActionID)
 	if err != nil {
 		cleanupStaging(stagingDir)
-		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
+		c.markJournalFailure(commitID, err.Error())
 		return nil, fmt.Errorf("commit: allocate revision number: %w", err)
 	}
 
@@ -222,18 +228,25 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 		return nil
 	}); err != nil {
 		cleanupStaging(stagingDir)
-		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
+		c.markJournalFailure(commitID, err.Error())
 		return nil, fmt.Errorf("commit: db transaction: %w", err)
 	}
 
 	finalDir := c.workspace.FinalDir(req.ProcessingTaskID, req.ProcessingActionID, revisionID)
 	if err := c.workspace.AtomicPublish(stagingDir, finalDir); err != nil {
-		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, "atomic_publish_failed: "+err.Error())
-		return nil, fmt.Errorf("commit: atomic publish: %w", err)
+		cleanupStaging(stagingDir)
+		failureErr := c.failUnpublishedRevision(req.Ctx, revisionID, commitID, "atomic_publish_failed", err)
+		return nil, fmt.Errorf("commit: atomic publish: %w", failureErr)
 	}
 
-	_ = c.commitJournal.UpdatePaths(c.db, commitID, stagingDir, finalDir, contentRootHash)
-	_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFilesPublished, "")
+	if err := c.commitJournal.UpdatePaths(c.db, commitID, stagingDir, finalDir, contentRootHash); err != nil {
+		failureErr := c.rollbackPublishedRevision(req.Ctx, req.ProcessingTaskID, req.ProcessingActionID, revisionID, commitID, "published_paths_persist_failed", err)
+		return nil, fmt.Errorf("commit: persist published paths: %w", failureErr)
+	}
+	if err := c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFilesPublished, ""); err != nil {
+		failureErr := c.rollbackPublishedRevision(req.Ctx, req.ProcessingTaskID, req.ProcessingActionID, revisionID, commitID, "files_published_state_persist_failed", err)
+		return nil, fmt.Errorf("commit: persist files_published journal state: %w", failureErr)
+	}
 
 	if err := c.db.WithContext(req.Ctx).Transaction(func(tx *gorm.DB) error {
 		nowInner := c.now()
@@ -300,12 +313,15 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 		}
 		return nil
 	}); err != nil {
-		c.markRevisionFailed(req.Ctx, revisionID, "db_final_commit_failed", err.Error())
-		_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, err.Error())
-		return nil, fmt.Errorf("commit: final db transaction: %w", err)
+		failureErr := c.rollbackPublishedRevision(req.Ctx, req.ProcessingTaskID, req.ProcessingActionID, revisionID, commitID, "db_final_commit_failed", err)
+		return nil, fmt.Errorf("commit: final db transaction: %w", failureErr)
 	}
 
-	_ = c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusCompleted, "")
+	if err := c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusCompleted, ""); err != nil {
+		// The revision/action/outbox transaction is already committed. A journal-only
+		// failure must not turn a successful processing result into a false failure.
+		log.Logger.Errorf("processing commit %s completed but journal completion persistence failed: %v", commitID, err)
+	}
 
 	return &CommitResult{
 		CommitID:        commitID,
@@ -493,9 +509,9 @@ func (c *ProcessingCommitter) buildTransformRecords(revisionID string, req *Comm
 	return records
 }
 
-func (c *ProcessingCommitter) markRevisionFailed(ctx context.Context, revisionID, errorCode, errorMessage string) {
+func (c *ProcessingCommitter) markRevisionFailed(ctx context.Context, revisionID, errorCode, errorMessage string) error {
 	now := c.now()
-	_ = c.db.WithContext(ctx).
+	if err := c.db.WithContext(ctx).
 		Model(&processing.ProcessingRevision{}).
 		Where("id = ?", revisionID).
 		Updates(map[string]interface{}{
@@ -503,7 +519,52 @@ func (c *ProcessingCommitter) markRevisionFailed(ctx context.Context, revisionID
 			"error_code":    errorCode,
 			"error_message": errorMessage,
 			"updated_at":    now,
-		}).Error
+		}).Error; err != nil {
+		log.Logger.Errorf("processing revision %s failure state persistence failed: %v", revisionID, err)
+		return err
+	}
+	return nil
+}
+
+func (c *ProcessingCommitter) markJournalFailure(commitID, message string) error {
+	if err := c.commitJournal.UpdateStatus(c.db, commitID, events.CommitJournalStatusFailedRetryable, message); err != nil {
+		log.Logger.Errorf("processing commit %s journal failure state persistence failed: %v", commitID, err)
+		return err
+	}
+	return nil
+}
+
+func (c *ProcessingCommitter) failUnpublishedRevision(ctx context.Context, revisionID, commitID, errorCode string, cause error) error {
+	errs := []error{cause}
+	if err := c.markRevisionFailed(ctx, revisionID, errorCode, cause.Error()); err != nil {
+		errs = append(errs, fmt.Errorf("persist revision failure state: %w", err))
+	}
+	if err := c.markJournalFailure(commitID, errorCode+": "+cause.Error()); err != nil {
+		errs = append(errs, fmt.Errorf("persist commit journal failure state: %w", err))
+	}
+	return errors.Join(errs...)
+}
+
+func (c *ProcessingCommitter) rollbackPublishedRevision(
+	ctx context.Context,
+	processingTaskID string,
+	processingActionID string,
+	revisionID string,
+	commitID string,
+	errorCode string,
+	cause error,
+) error {
+	errs := []error{cause}
+	if err := c.workspace.CleanupPublishedRevision(processingTaskID, processingActionID, revisionID); err != nil {
+		errs = append(errs, fmt.Errorf("cleanup published revision: %w", err))
+	}
+	if err := c.markRevisionFailed(ctx, revisionID, errorCode, cause.Error()); err != nil {
+		errs = append(errs, fmt.Errorf("persist revision failure state: %w", err))
+	}
+	if err := c.markJournalFailure(commitID, errorCode+": "+cause.Error()); err != nil {
+		errs = append(errs, fmt.Errorf("persist commit journal failure state: %w", err))
+	}
+	return errors.Join(errs...)
 }
 
 func (c *ProcessingCommitter) copyPipelineToStaging(result *application.ProcessActionResult, stagingDir string) error {

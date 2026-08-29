@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
@@ -181,7 +182,9 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 			// A pre-existing unattempted ephemeral row is not safe to retarget across
 			// reconnect. It must already be bound to this exact session.
 			if v2Cmd.RuntimeSessionID != targetSessionID {
-				_ = a.facade.Commands().MarkSuperseded(v2Cmd.ID, "stale idempotent ephemeral command on runtime reconnect", time.Now().UTC())
+				if markErr := a.facade.Commands().MarkSuperseded(v2Cmd.ID, "stale idempotent ephemeral command on runtime reconnect", time.Now().UTC()); markErr != nil {
+					return rejectedRuntimeReceipt(v2Cmd.ID, behavior.ErrCodeRuntimeCommandFailed, "failed to fence stale runtime command"), behavior.NewBehaviorError(behavior.ErrCodeRuntimeCommandFailed, fmt.Sprintf("failed to supersede stale runtime command: %v", markErr))
+				}
 				return rejectedRuntimeReceipt(v2Cmd.ID, behavior.ErrCodeRuntimeOffline, "idempotent command belongs to a previous runtime session"), nil
 			}
 		default:
@@ -195,7 +198,9 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 	currentSessionID, currentGeneration := targetConn.SessionSnapshot()
 	if targetConn.GetState() != runtimev2.ConnStateConnected ||
 		currentSessionID != targetSessionID || currentGeneration != targetGeneration {
-		_ = a.facade.Commands().MarkSuperseded(v2Cmd.ID, "runtime session changed during ephemeral command creation", time.Now().UTC())
+		if markErr := a.facade.Commands().MarkSuperseded(v2Cmd.ID, "runtime session changed during ephemeral command creation", time.Now().UTC()); markErr != nil {
+			return rejectedRuntimeReceipt(v2Cmd.ID, behavior.ErrCodeRuntimeCommandFailed, "failed to fence stale runtime command"), behavior.NewBehaviorError(behavior.ErrCodeRuntimeCommandFailed, fmt.Sprintf("failed to supersede runtime command after session race: %v", markErr))
+		}
 		return &behavior.CommandReceipt{
 			CommandID: v2Cmd.ID, Accepted: false, Status: behavior.CmdOffline,
 			PendingReason: behavior.ErrCodeRuntimeOffline, Error: "runtime session changed while scheduling action", ReceivedAt: time.Now(),
@@ -204,7 +209,9 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 	currentSessionID, currentGeneration = targetConn.SessionSnapshot()
 	if targetConn.GetState() != runtimev2.ConnStateConnected ||
 		currentSessionID != targetSessionID || currentGeneration != targetGeneration {
-		_ = a.facade.Commands().MarkSuperseded(v2Cmd.ID, "runtime session changed after ephemeral route bind", time.Now().UTC())
+		if markErr := a.facade.Commands().MarkSuperseded(v2Cmd.ID, "runtime session changed after ephemeral route bind", time.Now().UTC()); markErr != nil {
+			return rejectedRuntimeReceipt(v2Cmd.ID, behavior.ErrCodeRuntimeCommandFailed, "failed to fence stale runtime command"), behavior.NewBehaviorError(behavior.ErrCodeRuntimeCommandFailed, fmt.Sprintf("failed to supersede runtime command after route-bind race: %v", markErr))
+		}
 		return &behavior.CommandReceipt{
 			CommandID: v2Cmd.ID, Accepted: false, Status: behavior.CmdOffline,
 			PendingReason: behavior.ErrCodeRuntimeOffline, Error: "runtime session changed after scheduling action", ReceivedAt: time.Now(),
