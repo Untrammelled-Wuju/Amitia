@@ -524,7 +524,16 @@ export class DesktopPetManager {
       installations,
       characterId,
     );
-    if (!candidate) return;
+    if (!candidate) {
+      // Character-bound pets must never survive a switch to a character that
+      // has no usable installation. Disable both the local runtime and the
+      // authoritative backend active-installation state so a later restart
+      // cannot resurrect the previous character's pet.
+      if (this.activeInstallationId || this.state === "enabled") {
+        await this.disableInstallation();
+      }
+      return;
+    }
     if (
       this.activeInstallationId === candidate.id &&
       this.state === "enabled"

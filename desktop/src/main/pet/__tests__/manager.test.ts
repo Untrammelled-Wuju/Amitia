@@ -726,6 +726,26 @@ describe("DesktopPetManager character reconciliation", () => {
     expect(internal.switchInstallation).toHaveBeenCalledWith("pet-b-preferred");
   });
 
+  it("disables the previous character pet when the new character has no usable installation", async () => {
+    const manager = makeManager();
+    const internal = manager as never as {
+      state: string;
+      activeInstallationId: string | null;
+      ensureInitialized: () => Promise<void>;
+      listInstallations: () => Promise<unknown[]>;
+      disableInstallation: () => Promise<void>;
+    };
+    internal.state = "enabled";
+    internal.activeInstallationId = "pet-character-a";
+    internal.ensureInitialized = vi.fn(async () => undefined);
+    internal.listInstallations = vi.fn(async () => []);
+    internal.disableInstallation = vi.fn(async () => undefined);
+
+    await manager.handleCharacterSwitched("character-without-pet");
+
+    expect(internal.disableInstallation).toHaveBeenCalledTimes(1);
+  });
+
   it("propagates switch failures so CharacterWatcher does not commit the new character", async () => {
     const manager = makeManager();
     const switchFailure = new Error("switch failed");

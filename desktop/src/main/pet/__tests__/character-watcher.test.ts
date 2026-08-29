@@ -75,4 +75,32 @@ describe("CharacterWatcher", () => {
     expect(onChanged).toHaveBeenCalledTimes(2);
     watcher.stop();
   });
+  it("does not reconcile after stop when an in-flight request resolves", async () => {
+    let resolveFetch: ((response: Response) => void) | null = null;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onChanged = vi.fn(async () => undefined);
+    const watcher = new CharacterWatcher({
+      pollIntervalMs: 60_000,
+      requestTimeoutMs: 60_000,
+      onActiveCharacterChanged: onChanged,
+    });
+
+    const startPromise = watcher.start();
+    await Promise.resolve();
+    watcher.stop();
+    resolveFetch?.(
+      jsonResponse({ code: 200, data: { characterId: "character-after-stop" } }),
+    );
+    await startPromise;
+
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
 });
