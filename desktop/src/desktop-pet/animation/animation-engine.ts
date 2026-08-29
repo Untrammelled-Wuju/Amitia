@@ -109,6 +109,7 @@ export class DesktopPetAnimationEngine {
   private listeners: Set<EventListener> = new Set();
   private finalizedIds: Map<string, FinalizedEntry> = new Map();
   private loadedActionCache: Map<string, LoadedAction> = new Map();
+  private fallbackFrame: DecodedFrame | null = null;
   private lastCleanupTime = 0;
 
   constructor(deps: AnimationEngineDeps) {
@@ -188,13 +189,15 @@ export class DesktopPetAnimationEngine {
       }
 
       const entry = this.createLoadedEntry(loaded);
-      this.loadedActions.set(loaded.action.actionKey, entry);
-      this.loadedActionCache.set(loaded.action.actionKey, loaded.action);
-      this.currentLoadedEntry = entry;
-      this.currentTimeline = entry.timeline;
-      this.currentDecodedFrames = entry.frames;
-
-      this.dispatch({ type: "DEFAULT_LOADED", action: loaded.action, frames: entry.frames, generation: generation.generation });
+      const firstFrame = entry.frames[0];
+      if (!firstFrame) {
+        this.releaseLoadedAssets(loaded);
+        throw new PlaybackError(
+          PLAYBACK_ERROR_CODES.SURFACE_FAILED,
+          `default action has no decoded frame: ${loaded.action.actionKey}`,
+          { actionKey: loaded.action.actionKey },
+        );
+      }
 
       this.surface.configureCanvas({
         width: snapshot.canvas.width,
@@ -203,14 +206,35 @@ export class DesktopPetAnimationEngine {
         interpolationMode: snapshot.interpolationMode ?? "smooth",
       });
 
-      const firstFrame = entry.frames[0];
-      if (firstFrame) {
-        this.surface.present(firstFrame, {
-          anchor: loaded.action.anchor,
-          frameIndex: 0,
-          actionKey: loaded.action.actionKey,
-        });
+      const presentResult = await this.surface.present(firstFrame, {
+        anchor: loaded.action.anchor,
+        frameIndex: 0,
+        actionKey: loaded.action.actionKey,
+      });
+      if (!presentResult.presented) {
+        this.releaseLoadedAssets(loaded);
+        throw new PlaybackError(
+          PLAYBACK_ERROR_CODES.SURFACE_FAILED,
+          `default first frame was not presented: ${presentResult.error ?? "unknown surface error"}`,
+          {
+            actionKey: loaded.action.actionKey,
+            frameIndex: 0,
+            resourceUrl: firstFrame.sourceUrl,
+          },
+        );
       }
+
+      this.releaseFallbackFrame();
+      this.loadedActions.set(loaded.action.actionKey, entry);
+      this.loadedActionCache.set(loaded.action.actionKey, loaded.action);
+      this.currentLoadedEntry = entry;
+      this.currentTimeline = entry.timeline;
+      this.currentDecodedFrames = entry.frames;
+
+      // Commit the state only after a real frame has been presented. RuntimeReady
+      // is emitted by the renderer after initialize() resolves, so this ordering
+      // prevents an invisible/failed package from being reported as ready.
+      this.dispatch({ type: "DEFAULT_LOADED", action: loaded.action, frames: entry.frames, generation: generation.generation });
 
       this.startTickLoop();
       const loadTime = this.clock.now();
@@ -234,7 +258,11 @@ export class DesktopPetAnimationEngine {
         error: pbError.toView(),
         timestamp: Date.now(),
       });
-      this.tryFallback();
+      await this.tryFallback(pbError, generation);
+      // A preview fallback keeps an already-visible runtime from becoming blank,
+      // but it is not a successfully initialized default action. Propagate the
+      // failure so the startup handshake cannot emit a false RuntimeReady.
+      throw pbError;
     }
   }
 
@@ -435,6 +463,42 @@ export class DesktopPetAnimationEngine {
       }
 
       const entry = this.createLoadedEntry(loaded);
+      const firstFrame = entry.frames[0];
+      if (!firstFrame) {
+        this.releaseLoadedAssets(loaded);
+        throw new PlaybackError(
+          PLAYBACK_ERROR_CODES.SURFACE_FAILED,
+          `package default action has no decoded frame: ${loaded.action.actionKey}`,
+          { actionKey: loaded.action.actionKey },
+        );
+      }
+
+      this.surface.configureCanvas({
+        width: snapshot.canvas.width,
+        height: snapshot.canvas.height,
+        scale: 1,
+        interpolationMode: snapshot.interpolationMode ?? "smooth",
+      });
+
+      const presentResult = await this.surface.present(firstFrame, {
+        anchor: loaded.action.anchor,
+        frameIndex: 0,
+        actionKey: loaded.action.actionKey,
+      });
+      if (!presentResult.presented) {
+        this.releaseLoadedAssets(loaded);
+        throw new PlaybackError(
+          PLAYBACK_ERROR_CODES.SURFACE_FAILED,
+          `package first frame was not presented: ${presentResult.error ?? "unknown surface error"}`,
+          {
+            actionKey: loaded.action.actionKey,
+            frameIndex: 0,
+            resourceUrl: firstFrame.sourceUrl,
+          },
+        );
+      }
+
+      this.releaseFallbackFrame();
       this.loadedActions.clear();
       this.loadedActionCache.clear();
       this.loadedActions.set(loaded.action.actionKey, entry);
@@ -444,23 +508,6 @@ export class DesktopPetAnimationEngine {
       this.currentDecodedFrames = entry.frames;
 
       this.dispatch({ type: "PACKAGE_SWITCH_COMMITTED", action: loaded.action, frames: entry.frames, generation: generation.generation });
-
-      this.surface.configureCanvas({
-        width: snapshot.canvas.width,
-        height: snapshot.canvas.height,
-        scale: 1,
-        interpolationMode: snapshot.interpolationMode ?? "smooth",
-      });
-
-      const firstFrame = entry.frames[0];
-      if (firstFrame) {
-        this.surface.present(firstFrame, {
-          anchor: loaded.action.anchor,
-          frameIndex: 0,
-          actionKey: loaded.action.actionKey,
-        });
-      }
-
       this.startTickLoop();
 
       this.emit({
@@ -479,7 +526,8 @@ export class DesktopPetAnimationEngine {
         error: pbError.toView(),
         timestamp: Date.now(),
       });
-      this.tryFallback();
+      await this.tryFallback(pbError, generation);
+      throw pbError;
     } finally {
       this.isAtomicPackageCommit = false;
     }
@@ -585,6 +633,7 @@ export class DesktopPetAnimationEngine {
     this.disposed = true;
     this.stopTickLoop();
     this.dispatch({ type: "DISPOSE" });
+    this.releaseFallbackFrame();
     this.surface.dispose();
     this.queue.clear();
     this.loadedActions.clear();
@@ -896,25 +945,168 @@ export class DesktopPetAnimationEngine {
     await this.loadAndPlayReturn(defaultKey);
   }
 
-  private tryFallback(): void {
+  private async tryFallback(
+    cause: PlaybackError,
+    generation?: GenerationToken,
+  ): Promise<boolean> {
     this.telemetry.recordFallback();
-    if (!this.packageSnapshot) return;
-
+    const snapshot = this.packageSnapshot;
     this.emit({
       type: "playback.fallback_started",
       timestamp: Date.now(),
+      packageId: snapshot?.packageId,
+      packageRevision: snapshot?.packageRevision,
     });
 
-    if (this.packageSnapshot.previewUrl) {
+    const previewUrl = snapshot?.previewUrl;
+    if (!snapshot || !previewUrl) {
       this.emit({
         type: "playback.fallback_failed",
         error: {
           code: PLAYBACK_ERROR_CODES.FALLBACK_FAILED,
-          message: "default action load failed",
+          message: `preview fallback unavailable after: ${cause.message}`,
         },
         timestamp: Date.now(),
       });
+      return false;
     }
+
+    try {
+      const frame = await this.loadPreviewFrame(previewUrl, generation?.signal);
+      if (generation && !generation.isCurrent()) {
+        this.closeFrameBitmap(frame);
+        return false;
+      }
+
+      this.surface.configureCanvas({
+        width: snapshot.canvas.width,
+        height: snapshot.canvas.height,
+        scale: 1,
+        interpolationMode: snapshot.interpolationMode ?? "smooth",
+      });
+      const result = await this.surface.present(frame, {
+        anchor: { type: "center", x: 0, y: 0 },
+        frameIndex: 0,
+        actionKey: "__fallback_preview__",
+      });
+      if (!result.presented) {
+        this.closeFrameBitmap(frame);
+        throw new Error(result.error ?? "preview surface present failed");
+      }
+
+      this.releaseFallbackFrame();
+      this.fallbackFrame = frame;
+      this.emit({
+        type: "playback.frame_presented",
+        actionKey: "__fallback_preview__",
+        frameIndex: 0,
+        timestamp: Date.now(),
+        packageId: snapshot.packageId,
+        packageRevision: snapshot.packageRevision,
+      });
+      return true;
+    } catch (error) {
+      if (PlaybackError.isAbort(error)) return false;
+      const message = error instanceof Error ? error.message : String(error);
+      this.emit({
+        type: "playback.fallback_failed",
+        error: {
+          code: PLAYBACK_ERROR_CODES.FALLBACK_FAILED,
+          message: `preview fallback failed: ${message}`,
+          resourceUrl: previewUrl,
+        },
+        timestamp: Date.now(),
+        packageId: snapshot.packageId,
+        packageRevision: snapshot.packageRevision,
+      });
+      return false;
+    }
+  }
+
+  private async loadPreviewFrame(
+    previewUrl: string,
+    signal?: AbortSignal,
+  ): Promise<DecodedFrame> {
+    if (typeof createImageBitmap === "function") {
+      const response = await fetch(previewUrl, signal ? { signal } : undefined);
+      if (!response.ok) {
+        throw new Error(`preview fetch failed: ${response.status} ${response.statusText}`);
+      }
+      const blob = await response.blob();
+      const bitmap = await createImageBitmap(blob);
+      return {
+        frameIndex: 0,
+        bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        estimatedBytes: bitmap.width * bitmap.height * 4,
+        sourceUrl: previewUrl,
+        decoderName: "fallback-image-bitmap",
+        contentHash: "",
+      };
+    }
+
+    if (typeof Image === "undefined") {
+      throw new Error("no image decoder available for preview fallback");
+    }
+
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        image.onload = null;
+        image.onerror = null;
+        signal?.removeEventListener("abort", onAbort);
+      };
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) reject(error);
+        else resolve();
+      };
+      const onAbort = () => {
+        image.src = "";
+        const error = new Error("preview fallback aborted");
+        error.name = "AbortError";
+        finish(error);
+      };
+      image.onload = () => finish();
+      image.onerror = () => finish(new Error(`preview image load failed: ${previewUrl}`));
+      if (signal?.aborted) {
+        onAbort();
+        return;
+      }
+      signal?.addEventListener("abort", onAbort, { once: true });
+      image.src = previewUrl;
+    });
+
+    return {
+      frameIndex: 0,
+      bitmap: image,
+      width: image.naturalWidth || image.width,
+      height: image.naturalHeight || image.height,
+      estimatedBytes: (image.naturalWidth || image.width) * (image.naturalHeight || image.height) * 4,
+      sourceUrl: previewUrl,
+      decoderName: "fallback-html-image",
+      contentHash: "",
+    };
+  }
+
+  private closeFrameBitmap(frame: DecodedFrame): void {
+    if (frame.bitmap && typeof (frame.bitmap as ImageBitmap).close === "function") {
+      try {
+        (frame.bitmap as ImageBitmap).close();
+      } catch {
+        void 0;
+      }
+    }
+  }
+
+  private releaseFallbackFrame(): void {
+    if (!this.fallbackFrame) return;
+    this.closeFrameBitmap(this.fallbackFrame);
+    this.fallbackFrame = null;
   }
 
   private finalizePlayback(

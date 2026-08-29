@@ -60,8 +60,12 @@ export class CanvasPetVisualSurface implements PetVisualSurface {
     const physicalHeight = Math.max(1, Math.round(input.height * this.dpr));
     this.canvas.width = physicalWidth;
     this.canvas.height = physicalHeight;
-    this.canvas.style.width = `${input.width}px`;
-    this.canvas.style.height = `${input.height}px`;
+    // Keep the backing store in package logical pixels, but let CSS fill the
+    // BrowserWindow. The main process owns runtime scale by resizing the window;
+    // fixed inline pixel sizes here would cause clipping/transparent padding at
+    // non-1.0 scale values.
+    this.canvas.style.width = "100%";
+    this.canvas.style.height = "100%";
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.ctx.imageSmoothingEnabled = interpolationMode !== "nearest";
   }
