@@ -1,72 +1,46 @@
-Amitia 桌宠系统定版收口修复清单
-源包: U-Ai-source.tar(20260827-205023).gz
-修复日期: 2026-08-28
+Amitia Desktop Pet Finalization Fix
+Date: 2026-08-29
+Base source: U-Ai-source.tar(20260829-081610).gz
 
-目标
-- 收口桌宠 Runtime v2 / Package v2 版本身份。
-- 在 Runtime v2 Hello 阶段拒绝不兼容 Contract。
-- 修复 amitia-pet:// 资源运行期完整性校验缓存绕过。
-- 收敛 Release 为唯一生产构建入口，移除未接线的备用编排/Worker。
-- 统一桌宠 Renderer 开发/生产 HTML 来源，移除开发机绝对路径。
-- 清理活动 UI 中的实验性/Legacy 状态。
-- 移除 plugin_boundary 中未使用且 GetInstallation 为 not implemented 的死桥接。
-- 加强构建 Gate，阻止桌面/后端 Runtime 版本再次漂移。
+Scope
+- Fix production resource-root resolution for backend relative install paths.
+- Enforce absolute filesystem root at amitia-pet:// protocol boundary.
+- Remove renderer bootstrap initialize()/switchPackage() race.
+- Reject stale/mismatched RuntimeReady payloads.
+- Require a real presented default first frame before RuntimeReady can be emitted.
+- Implement real preview-image fallback rendering instead of telemetry-only fallback.
+- Make Canvas CSS fill the BrowserWindow so non-1.0 runtime scale does not clip/pad.
+- Map click/hover/drag coordinates back to package logical Canvas coordinates after scaling.
+- Add regression tests for install path, protocol root, readiness/fallback, Canvas scale, and pointer mapping.
 
-关键版本
-- Desktop Pet Runtime Version: 2.0.0
-- Desktop Pet Runtime Contract Version: 2.0.0
-- 版本源: desktop/package.json + backend/internal/desktoppet/contracts/runtime_version.go
-- 构建 Gate: desktop/scripts/verify-desktop-pet-package.mjs 强制两端一致。
+Complete replacement files
+1. desktop/src/desktop-pet/animation/animation-engine.ts
+2. desktop/src/desktop-pet/animation/surface/canvas-pet-visual-surface.ts
+3. desktop/src/main/pet/__tests__/resource-protocol.test.ts
+4. desktop/src/main/pet/animation-ipc.ts
+5. desktop/src/main/pet/manager.ts
+6. desktop/src/main/pet/resource-protocol.ts
+7. desktop/src/renderer/pet-main.ts
 
-替换方式
-- 本压缩包只包含本轮新增/修改的完整文件，不包含 diff/片段。
-- 将压缩包中的 U-Ai/ 按相同目录层级覆盖到原源码 U-Ai/ 即可。
-- 本轮无需要删除的文件；release/build/orchestrator.go 与 release/worker/build_worker.go
-  已作为完整文件退役旧备用入口，保留 package 以避免目录/引用层面的破坏。
+New files
+8. desktop/src/desktop-pet/animation/__tests__/animation-engine-readiness.test.ts
+9. desktop/src/desktop-pet/animation/__tests__/canvas-pet-visual-surface.test.ts
+10. desktop/src/main/pet/__tests__/installation-path.test.ts
+11. desktop/src/main/pet/installation-path.ts
+12. desktop/src/renderer/__tests__/pet-pointer-coordinates.test.ts
+13. desktop/src/renderer/pet-pointer-coordinates.ts
 
-验证状态
-PASS  gofmt: 本轮所有 Go 修改文件均可被 gofmt 解析且格式一致。
-PASS  node --check: desktop/scripts/verify-desktop-pet-package.mjs。
-PASS  JSON 解析: desktop/package.json、desktop/tsconfig.json。
-PASS  Runtime 版本静态一致性: desktop/backend/runtime-v2 envelope 均为 2.0.0 唯一身份。
-PASS  TypeScript 语法级检查: 修改的 TS 文件未发现语法错误；当前环境缺 node_modules，模块解析错误不计入该门禁。
-PASS  定版残留反查: 无生产 not implemented、旧 Release 双入口、Runtime 旧硬编码、开发机 pet-main.ts 绝对路径、活动实验性 UI 标记。
-LIMIT 完整 Go test 未执行: 当前容器 Go 1.23.2，而项目 go.mod 要求 Go 1.26.1；自动工具链下载受网络限制。
-LIMIT pnpm build/typecheck/test 未执行: 当前容器未安装项目 node_modules 且无法在线补依赖。
+Validation completed in this environment
+- TypeScript transpile/syntax check for all modified/new TS files: PASS
+- Semantic TypeScript compile for animation engine/surface: PASS
+- Semantic TypeScript compile for renderer pet-main/pointer mapping: PASS
+- Runtime harness: animation readiness + failed first-frame rejection: PASS
+- Runtime harness: installation path resolution/traversal rejection: PASS
+- Runtime harness: scaled pointer coordinate mapping: PASS
+- verify-pet-player-singleton: PASS
+- verify-desktop-pet-runtime-singletrack: PASS
+- verify-desktop-pet-finalization: PASS
+- verify-cloud-device-execution-finalization: PASS
 
-完整替换文件
-- U-Ai/backend/cmd/server/services.go
-- U-Ai/backend/internal/desktoppet/contracts/runtime_version.go
-- U-Ai/backend/internal/desktoppet/plugin_boundary/adapters.go
-- U-Ai/backend/internal/desktoppet/release/build/orchestrator.go
-- U-Ai/backend/internal/desktoppet/release/build/snapshot.go
-- U-Ai/backend/internal/desktoppet/release/importer/package_validator.go
-- U-Ai/backend/internal/desktoppet/release/importer/package_validator_test.go
-- U-Ai/backend/internal/desktoppet/release/service.go
-- U-Ai/backend/internal/desktoppet/release/worker/build_worker.go
-- U-Ai/backend/internal/desktoppet/runtime/protocol/v2/envelope.go
-- U-Ai/backend/internal/desktoppet/runtime/protocol/v2/handler.go
-- U-Ai/backend/internal/desktoppet/runtime/protocol/v2/handler_p0_test.go
-- U-Ai/contracts/desktop-pet/package-v2/runtime-compatibility.md
-- U-Ai/desktop/package.json
-- U-Ai/desktop/scripts/verify-desktop-pet-package.mjs
-- U-Ai/desktop/src/desktop-pet/runtime/protocol-v2.ts
-- U-Ai/desktop/src/desktop-pet/runtime/runtime-handler-v2.ts
-- U-Ai/desktop/src/main/pet/manager.ts
-- U-Ai/desktop/src/main/pet/resource-loader.ts
-- U-Ai/desktop/src/main/pet/resource-protocol.ts
-- U-Ai/desktop/src/main/pet/window-adapter.ts
-- U-Ai/desktop/src/main/window.ts
-- U-Ai/desktop/src/shared/desktop-pet-runtime-version.ts
-- U-Ai/desktop/tsconfig.json
-- U-Ai/desktop/vite.config.ts
-- U-Ai/front/pet.html
-- U-Ai/front/src/views/creative-workshop/PetCreationView.vue
-- U-Ai/front/src/views/creative-workshop/PetHubView.vue
-- U-Ai/front/src/views/creative-workshop/PetInstallationsView.vue
-- U-Ai/front/src/views/creative-workshop/PetProcessingReviewView.vue
-- U-Ai/front/src/views/creative-workshop/PetTaskListView.vue
-
-替换源码文件数: 31
-附加清单文件数: 1
-压缩包文件总数: 32
+Environment limitation
+- Full pnpm release:gate could not be executed because the supplied source archive has no desktop/node_modules and pnpm is not locally installed; network access is unavailable. No Go source was changed.
