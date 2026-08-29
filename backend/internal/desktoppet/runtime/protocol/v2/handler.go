@@ -673,6 +673,7 @@ func (h *Handler) appendRuntimeDomainEvent(conn *Connection, env *Envelope) erro
 		InstallationID string          `json:"InstallationID"`
 		UserID         string          `json:"UserID"`
 		CharacterID    string          `json:"CharacterID"`
+		Sequence       int64           `json:"Sequence"`
 		Timestamp      time.Time       `json:"Timestamp"`
 		Payload        json.RawMessage `json:"Payload"`
 	}{
@@ -683,6 +684,7 @@ func (h *Handler) appendRuntimeDomainEvent(conn *Connection, env *Envelope) erro
 		InstallationID: meta.InstallationID,
 		UserID:         string(conn.UserID),
 		CharacterID:    meta.CharacterID,
+		Sequence:       env.Sequence,
 		Timestamp:      occurredAt,
 		Payload:        json.RawMessage(env.Payload),
 	}
