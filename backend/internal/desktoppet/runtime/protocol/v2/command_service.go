@@ -4,23 +4,41 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
+const (
+	defaultEphemeralCommandTTL = 30 * time.Second
+	// Once Renderer has started playback, expiresAt is no longer applicable.
+	// A missing physical terminal is cleaned by an independent liveness budget.
+	// Commands with an explicit maximumPlayMs use that exact budget plus grace;
+	// otherwise use a conservative ceiling so legitimate long actions are never
+	// killed by the transport ACK timeout.
+	defaultPlaybackLivenessCeiling = 24 * time.Hour
+	minimumPlaybackTerminalGrace   = 60 * time.Second
+	ephemeralExpiryReconcileGrace  = 5 * time.Second
+	// Fixed-width UTC keeps the TEXT column chronologically sortable while
+	// remaining valid RFC3339. RFC3339Nano is variable-width and is not safe for
+	// lexical SQL comparisons around whole-second/fractional boundaries.
+	runtimeCommandExpiryLayout = "2006-01-02T15:04:05.000000000Z"
+)
+
 type CommandService interface {
 	CreateDurableCommand(userID, deviceID, commandType, idempotencyKey, coalesceKey string, deviceSeq int64, payload RevisionPayload) (*RuntimeCommand, error)
 	CreateEphemeralCommand(userID, deviceID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error)
+	CreateEphemeralCommandForSession(userID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error)
 	GetCommand(commandID string) (*RuntimeCommand, error)
 	GetCommandByIdempotencyKey(idempotencyKey string) (*RuntimeCommand, error)
 	UpdateStatus(commandID string, from, to CommandStatus, t time.Time) error
-	MarkDispatching(commandID, runtimeID string, t time.Time) error
+	MarkDispatching(commandID, runtimeID, sessionID string, t time.Time) error
 	MarkTransportDispatched(commandID, runtimeID string, t time.Time) error
 	MarkRuntimeReceived(commandID, runtimeID, sessionID string, t time.Time) error
 	MarkRuntimeAccepted(commandID, runtimeID, sessionID string, t time.Time) error
-	MarkRendererAccepted(commandID, runtimeID, sessionID string, t time.Time) error
+	MarkRendererAccepted(commandID, runtimeID, sessionID, playbackID string, t time.Time) error
 	MarkPlaybackStarted(commandID, playbackID string, t time.Time) error
 	MarkCompleted(commandID, playbackID string, t time.Time) error
 	MarkFailed(commandID, errCode, errMsg string, t time.Time) error
@@ -28,6 +46,8 @@ type CommandService interface {
 	RequeueDurableCommand(commandID, runtimeID string, t time.Time) error
 	MarkExpired(commandID string, t time.Time) error
 	MarkCancelled(commandID string, t time.Time) error
+	MarkSuperseded(commandID, reason string, t time.Time) error
+	SupersedeEphemeralCommands(userID, deviceID, runtimeID, sessionID, reason string, t time.Time) error
 	GetLatestCommand(userID, deviceID, commandType string) (*RuntimeCommand, error)
 	ListCommandsToDispatch(limit int) ([]*RuntimeCommand, error)
 	ListCommandsToDispatchForConnection(userID, deviceID, runtimeID string, limit int) ([]*RuntimeCommand, error)
@@ -54,6 +74,9 @@ func NewCommandService(db *gorm.DB) CommandService {
 func (s *commandService) DB() *gorm.DB { return s.db }
 
 func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, idempotencyKey, coalesceKey string, deviceSeq int64, payload RevisionPayload) (*RuntimeCommand, error) {
+	if !CommandType(commandType).IsDurable() {
+		return nil, fmt.Errorf("unsupported durable runtime command type %q", commandType)
+	}
 	now := time.Now().UTC()
 	nowText := now.Format("2006-01-02 15:04:05")
 	payloadBytes, err := marshalJSON(payload)
@@ -198,21 +221,78 @@ func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, ide
 }
 
 func (s *commandService) CreateEphemeralCommand(userID, deviceID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error) {
+	// Ephemeral commands are physical effects owned by one concrete runtime
+	// websocket session. Creating an unbound command would allow a reconnecting
+	// runtime to inherit stale work, so fail closed and require the session-bound
+	// constructor everywhere. Keep this method only for interface compatibility.
+	return nil, errors.New("unbound ephemeral command creation is disabled; use CreateEphemeralCommandForSession")
+}
+
+func (s *commandService) CreateEphemeralCommandForSession(userID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error) {
+	if !CommandType(commandType).IsEphemeral() {
+		return nil, fmt.Errorf("unsupported ephemeral runtime command type %q", commandType)
+	}
+	if strings.TrimSpace(runtimeID) == "" || strings.TrimSpace(sessionID) == "" {
+		return nil, errors.New("session-bound ephemeral command requires runtime and session ids")
+	}
 	seq, err := s.AllocateDeviceSequence(nil, userID, deviceID, time.Now().UTC())
 	if err != nil {
 		return nil, err
 	}
-	return s.createEphemeralCommand(userID, deviceID, "", "", commandType, idempotencyKey, seq, payload)
+	return s.createEphemeralCommand(userID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey, seq, payload)
 }
 
-func (s *commandService) createEphemeralCommand(userID, deviceID, runtimeID, installationID, commandType, idempotencyKey string, deviceSeq int64, payload []byte) (*RuntimeCommand, error) {
-	now := time.Now().Format("2006-01-02 15:04:05")
+func (s *commandService) createEphemeralCommand(userID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, deviceSeq int64, payload []byte) (*RuntimeCommand, error) {
+	nowTime := time.Now().UTC()
+	now := nowTime.Format("2006-01-02 15:04:05")
 	hash := ComputePayloadHash(payload)
+	expiresAt := nowTime.Add(defaultEphemeralCommandTTL)
+	if CommandType(commandType) == CommandTypePlayAction {
+		var playPayload PlayActionPayload
+		if err := json.Unmarshal(payload, &playPayload); err != nil {
+			return nil, fmt.Errorf("invalid play_action payload: %w", err)
+		}
+		if strings.TrimSpace(playPayload.ActionKey) == "" {
+			return nil, errors.New("play_action requires actionKey")
+		}
+		if strings.TrimSpace(playPayload.RuntimeID) != strings.TrimSpace(runtimeID) {
+			return nil, errors.New("play_action runtimeId must match the bound runtime")
+		}
+		if strings.TrimSpace(playPayload.PetInstanceID) != strings.TrimSpace(runtimeID) {
+			return nil, errors.New("play_action petInstanceId must match the bound runtime pet instance")
+		}
+		if strings.TrimSpace(playPayload.InstallationID) == "" || strings.TrimSpace(playPayload.InstallationID) != strings.TrimSpace(installationID) {
+			return nil, errors.New("play_action installationId must match the bound installation")
+		}
+		if strings.TrimSpace(playPayload.CharacterID) == "" {
+			return nil, errors.New("play_action requires characterId")
+		}
+		if strings.TrimSpace(playPayload.ExpiresAt) != "" {
+			parsed, parseErr := time.Parse(time.RFC3339Nano, playPayload.ExpiresAt)
+			if parseErr != nil {
+				parsed, parseErr = time.Parse(time.RFC3339, playPayload.ExpiresAt)
+			}
+			if parseErr != nil {
+				return nil, fmt.Errorf("invalid play_action expiresAt: %w", parseErr)
+			}
+			// The producer may shorten the admission window but can never extend
+			// the server-owned Ephemeral lifetime. This prevents a stale behavior
+			// candidate or compromised caller from turning play_action into durable
+			// physical intent.
+			if parsed.UTC().Before(expiresAt) {
+				expiresAt = parsed.UTC()
+			}
+		}
+	}
+	if !expiresAt.After(nowTime) {
+		return nil, errors.New("ephemeral command expiresAt must be in the future")
+	}
 	cmd := &RuntimeCommand{
 		ID:                   "rtcmdv2_" + uuid.NewString(),
 		UserID:               userID,
 		DeviceID:             deviceID,
 		RuntimeID:            runtimeID,
+		RuntimeSessionID:     sessionID,
 		InstallationID:       installationID,
 		CommandType:          commandType,
 		Durability:           "ephemeral",
@@ -222,6 +302,7 @@ func (s *commandService) createEphemeralCommand(userID, deviceID, runtimeID, ins
 		PayloadJSON:          string(payload),
 		PayloadHash:          hash,
 		PayloadSchemaVersion: 1,
+		ExpiresAt:            expiresAt.UTC().Format(runtimeCommandExpiryLayout),
 		CreatedAt:            now,
 		UpdatedAt:            now,
 	}
@@ -283,28 +364,43 @@ func (s *commandService) UpdateStatus(commandID string, from, to CommandStatus, 
 	return nil
 }
 
-func commandProgressRank(status CommandStatus) int {
-	switch status {
-	case CommandStatusCreated:
-		return 0
-	case CommandStatusQueued:
-		return 1
-	case CommandStatusDispatching:
-		return 2
+func isValidProgressTransition(cmd *RuntimeCommand, target CommandStatus) bool {
+	if cmd == nil {
+		return false
+	}
+	current := CommandStatus(cmd.Status)
+	if current == target {
+		return true
+	}
+	switch target {
 	case CommandStatusTransportDispatched:
-		return 3
+		return current == CommandStatusDispatching
 	case CommandStatusRuntimeReceived:
-		return 4
+		// The runtime can ACK immediately after the websocket write succeeds and
+		// race the dispatcher persistence of transport_dispatched.
+		return current == CommandStatusTransportDispatched || current == CommandStatusDispatching
 	case CommandStatusRuntimeAccepted:
-		return 5
+		return current == CommandStatusRuntimeReceived
 	case CommandStatusRendererAccepted:
-		return 6
+		return CommandType(cmd.CommandType) == CommandTypePlayAction && current == CommandStatusRuntimeAccepted
 	case CommandStatusPlaybackStarted:
-		return 7
+		return CommandType(cmd.CommandType) == CommandTypePlayAction && current == CommandStatusRendererAccepted
 	case CommandStatusCompleted:
-		return 8
+		switch CommandType(cmd.CommandType) {
+		case CommandTypePlayAction:
+			// already_satisfied can complete immediately after renderer acceptance;
+			// every physically started policy completes from playback_started.
+			return current == CommandStatusRendererAccepted || current == CommandStatusPlaybackStarted
+		case CommandTypeSyncDesiredState, CommandTypeEnsureAbsent, CommandTypeReloadRelease:
+			// Durable desired commands are completed only by desired_applied.
+			return current == CommandStatusRuntimeAccepted
+		default:
+			// Runtime-only commands (recenter/stop/pause/resume) have no renderer
+			// lifecycle and may complete after runtime validation/application.
+			return current == CommandStatusRuntimeAccepted
+		}
 	default:
-		return -1
+		return false
 	}
 }
 
@@ -330,9 +426,10 @@ func (s *commandService) advanceProgress(
 			}
 			return fmt.Errorf("command %s already terminal: %s", commandID, current)
 		}
-		currentRank := commandProgressRank(current)
-		targetRank := commandProgressRank(target)
-		if currentRank >= 0 && targetRank >= 0 && currentRank >= targetRank {
+		if !isValidProgressTransition(&cmd, target) {
+			return fmt.Errorf("illegal command progress transition %s -> %s for %s", current, target, commandID)
+		}
+		if current == target {
 			return nil
 		}
 		updates := map[string]interface{}{
@@ -359,13 +456,16 @@ func (s *commandService) advanceProgress(
 	})
 }
 
-func (s *commandService) MarkDispatching(commandID, runtimeID string, t time.Time) error {
+func (s *commandService) MarkDispatching(commandID, runtimeID, sessionID string, t time.Time) error {
 	if commandID == "" {
 		return errors.New("command id is empty")
 	}
+	if strings.TrimSpace(sessionID) == "" {
+		return errors.New("dispatching command requires runtime session id")
+	}
 	updates := map[string]interface{}{
 		"status":             string(CommandStatusDispatching),
-		"runtime_session_id": "",
+		"runtime_session_id": sessionID,
 		"error_code":         "",
 		"error_message":      "",
 		"updated_at":         t,
@@ -393,37 +493,128 @@ func (s *commandService) MarkDispatching(commandID, runtimeID string, t time.Tim
 	return fmt.Errorf("command %s is not dispatchable from status %s", commandID, cmd.Status)
 }
 
+func (s *commandService) updateLastAttempt(commandID string, fields map[string]interface{}, t time.Time) error {
+	if commandID == "" || len(fields) == 0 {
+		return nil
+	}
+	var cmd RuntimeCommand
+	if err := s.db.Select("last_attempt_id").Where("id = ?", commandID).Take(&cmd).Error; err != nil {
+		return err
+	}
+	if cmd.LastAttemptID == "" {
+		return nil
+	}
+	updates := make(map[string]interface{}, len(fields)+1)
+	for key, value := range fields {
+		updates[key] = value
+	}
+	updates["updated_at"] = t.UTC().Format("2006-01-02 15:04:05")
+	return s.db.Model(&CommandAttempt{}).Where("attempt_id = ?", cmd.LastAttemptID).Updates(updates).Error
+}
+
 func (s *commandService) MarkTransportDispatched(commandID, runtimeID string, t time.Time) error {
-	return s.advanceProgress(commandID, CommandStatusTransportDispatched, runtimeID, "", t, nil)
+	// The websocket write and the peer ACK are concurrent. A very fast runtime can
+	// legitimately move the command to runtime_received before the dispatcher
+	// persists transport_dispatched. Never regress that state; only backfill the
+	// attempt timestamp in that race.
+	var cmd RuntimeCommand
+	if err := s.db.Select("status").Where("id = ?", commandID).Take(&cmd).Error; err != nil {
+		return err
+	}
+	switch CommandStatus(cmd.Status) {
+	case CommandStatusRuntimeReceived, CommandStatusRuntimeAccepted, CommandStatusRendererAccepted,
+		CommandStatusPlaybackStarted, CommandStatusCompleted, CommandStatusFailedTerminal,
+		CommandStatusExpired, CommandStatusCancelled, CommandStatusSuperseded:
+		return s.updateLastAttempt(commandID, map[string]interface{}{
+			"dispatched_at": t.UTC().Format(time.RFC3339Nano),
+		}, t)
+	}
+	if err := s.advanceProgress(commandID, CommandStatusTransportDispatched, runtimeID, "", t, nil); err != nil {
+		return err
+	}
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"dispatched_at": t.UTC().Format(time.RFC3339Nano),
+	}, t)
 }
 
 func (s *commandService) MarkRuntimeReceived(commandID, runtimeID, sessionID string, t time.Time) error {
-	return s.advanceProgress(commandID, CommandStatusRuntimeReceived, runtimeID, sessionID, t, nil)
+	if err := s.advanceProgress(commandID, CommandStatusRuntimeReceived, runtimeID, sessionID, t, nil); err != nil {
+		return err
+	}
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"runtime_received_at": t.UTC().Format(time.RFC3339Nano),
+	}, t)
 }
 
 func (s *commandService) MarkRuntimeAccepted(commandID, runtimeID, sessionID string, t time.Time) error {
-	return s.advanceProgress(commandID, CommandStatusRuntimeAccepted, runtimeID, sessionID, t, nil)
+	if err := s.advanceProgress(commandID, CommandStatusRuntimeAccepted, runtimeID, sessionID, t, nil); err != nil {
+		return err
+	}
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"runtime_accepted_at": t.UTC().Format(time.RFC3339Nano),
+	}, t)
 }
 
-func (s *commandService) MarkRendererAccepted(commandID, runtimeID, sessionID string, t time.Time) error {
-	return s.advanceProgress(commandID, CommandStatusRendererAccepted, runtimeID, sessionID, t, nil)
+func (s *commandService) MarkRendererAccepted(commandID, runtimeID, sessionID, playbackID string, t time.Time) error {
+	playbackID = strings.TrimSpace(playbackID)
+	if playbackID == "" {
+		return errors.New("renderer acceptance requires playback id")
+	}
+	if err := s.advanceProgress(commandID, CommandStatusRendererAccepted, runtimeID, sessionID, t, map[string]interface{}{
+		"runtime_playback_id": playbackID,
+	}); err != nil {
+		return err
+	}
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"renderer_accepted_at": t.UTC().Format(time.RFC3339Nano),
+	}, t)
 }
 
 func (s *commandService) MarkPlaybackStarted(commandID, playbackID string, t time.Time) error {
-	return s.advanceProgress(commandID, CommandStatusPlaybackStarted, "", "", t, map[string]interface{}{
-		"playback_request_id": playbackID,
-	})
+	playbackID = strings.TrimSpace(playbackID)
+	if playbackID == "" {
+		return errors.New("playback start requires playback id")
+	}
+	var cmd RuntimeCommand
+	if err := s.db.Select("command_type", "runtime_playback_id").Where("id = ?", commandID).Take(&cmd).Error; err != nil {
+		return err
+	}
+	if CommandType(cmd.CommandType) == CommandTypePlayAction && strings.TrimSpace(cmd.PlaybackRequestID) != playbackID {
+		return errors.New("playback start identity does not match renderer-accepted playback")
+	}
+	if err := s.advanceProgress(commandID, CommandStatusPlaybackStarted, "", "", t, map[string]interface{}{
+		"playback_started_at": t.UTC().Format(time.RFC3339Nano),
+	}); err != nil {
+		return err
+	}
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"playback_started_at": t.UTC().Format(time.RFC3339Nano),
+	}, t)
 }
 
 func (s *commandService) MarkCompleted(commandID, playbackID string, t time.Time) error {
-	return s.advanceProgress(commandID, CommandStatusCompleted, "", "", t, map[string]interface{}{
-		"playback_request_id": playbackID,
-		"completed_at":        t,
-	})
+	playbackID = strings.TrimSpace(playbackID)
+	var cmd RuntimeCommand
+	if err := s.db.Select("command_type", "runtime_playback_id").Where("id = ?", commandID).Take(&cmd).Error; err != nil {
+		return err
+	}
+	if CommandType(cmd.CommandType) == CommandTypePlayAction {
+		if playbackID == "" || strings.TrimSpace(cmd.PlaybackRequestID) != playbackID {
+			return errors.New("playback completion identity does not match renderer-accepted playback")
+		}
+	}
+	if err := s.advanceProgress(commandID, CommandStatusCompleted, "", "", t, map[string]interface{}{
+		"completed_at": t,
+	}); err != nil {
+		return err
+	}
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"finished_at": t.UTC().Format(time.RFC3339Nano),
+	}, t)
 }
 
 func (s *commandService) MarkFailed(commandID, errCode, errMsg string, t time.Time) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var cmd RuntimeCommand
 		if err := tx.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
 			return err
@@ -449,10 +640,18 @@ func (s *commandService) MarkFailed(commandID, errCode, errMsg string, t time.Ti
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"finished_at":   t.UTC().Format(time.RFC3339Nano),
+		"error_code":    errCode,
+		"error_message": errMsg,
+	}, t)
 }
 
 func (s *commandService) MarkFailedRetryable(commandID, errCode, errMsg string, t time.Time) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var cmd RuntimeCommand
 		if err := tx.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
 			return err
@@ -480,6 +679,14 @@ func (s *commandService) MarkFailedRetryable(commandID, errCode, errMsg string, 
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"finished_at":   t.UTC().Format(time.RFC3339Nano),
+		"error_code":    errCode,
+		"error_message": errMsg,
+	}, t)
 }
 
 func (s *commandService) RequeueDurableCommand(commandID, runtimeID string, t time.Time) error {
@@ -521,10 +728,10 @@ func (s *commandService) RequeueDurableCommand(commandID, runtimeID string, t ti
 }
 
 func (s *commandService) MarkExpired(commandID string, t time.Time) error {
-	result := s.db.Model(&RuntimeCommand{}).Where("id = ? AND status NOT IN (?, ?, ?, ?, ?, ?)",
+	result := s.db.Model(&RuntimeCommand{}).Where("id = ? AND status NOT IN (?, ?, ?, ?, ?)",
 		commandID,
 		string(CommandStatusCompleted), string(CommandStatusFailedTerminal), string(CommandStatusExpired),
-		string(CommandStatusCancelled), string(CommandStatusSuperseded), string(CommandStatusPlaybackStarted),
+		string(CommandStatusCancelled), string(CommandStatusSuperseded),
 	).Updates(map[string]interface{}{
 		"status":       string(CommandStatusExpired),
 		"completed_at": t,
@@ -538,12 +745,16 @@ func (s *commandService) MarkExpired(commandID string, t time.Time) error {
 		if err := s.db.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
 			return err
 		}
-		if CommandStatus(cmd.Status).IsTerminal() || cmd.Status == string(CommandStatusPlaybackStarted) {
+		if CommandStatus(cmd.Status).IsTerminal() {
 			return nil
 		}
 		return errors.New("command expiration transition updated no rows")
 	}
-	return nil
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"finished_at":   t.UTC().Format(time.RFC3339Nano),
+		"error_code":    "COMMAND_EXPIRED",
+		"error_message": "command expired",
+	}, t)
 }
 
 func (s *commandService) MarkCancelled(commandID string, t time.Time) error {
@@ -568,7 +779,100 @@ func (s *commandService) MarkCancelled(commandID string, t time.Time) error {
 		}
 		return errors.New("command cancellation transition updated no rows")
 	}
-	return nil
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"finished_at":   t.UTC().Format(time.RFC3339Nano),
+		"error_code":    "COMMAND_CANCELLED",
+		"error_message": "command cancelled",
+	}, t)
+}
+
+func (s *commandService) MarkSuperseded(commandID, reason string, t time.Time) error {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "command superseded"
+	}
+	result := s.db.Model(&RuntimeCommand{}).Where(
+		"id = ? AND status NOT IN (?, ?, ?, ?, ?)",
+		commandID,
+		string(CommandStatusCompleted), string(CommandStatusFailedTerminal), string(CommandStatusExpired),
+		string(CommandStatusCancelled), string(CommandStatusSuperseded),
+	).Updates(map[string]interface{}{
+		"status":        string(CommandStatusSuperseded),
+		"error_code":    "COMMAND_SUPERSEDED",
+		"error_message": reason,
+		"completed_at":  t,
+		"updated_at":    t,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		var cmd RuntimeCommand
+		if err := s.db.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
+			return err
+		}
+		if CommandStatus(cmd.Status).IsTerminal() {
+			return nil
+		}
+		return errors.New("command supersede transition updated no rows")
+	}
+	return s.updateLastAttempt(commandID, map[string]interface{}{
+		"finished_at":   t.UTC().Format(time.RFC3339Nano),
+		"error_code":    "COMMAND_SUPERSEDED",
+		"error_message": reason,
+	}, t)
+}
+
+func (s *commandService) SupersedeEphemeralCommands(userID, deviceID, runtimeID, sessionID, reason string, t time.Time) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		query := tx.Where(
+			"user_id = ? AND device_id = ? AND durability = ? AND status NOT IN (?, ?, ?, ?, ?)",
+			userID, deviceID, "ephemeral",
+			string(CommandStatusCompleted), string(CommandStatusFailedTerminal), string(CommandStatusExpired),
+			string(CommandStatusCancelled), string(CommandStatusSuperseded),
+		)
+		if runtimeID != "" {
+			query = query.Where("runtime_id = '' OR runtime_id IS NULL OR runtime_id = ?", runtimeID)
+		}
+		if sessionID != "" {
+			query = query.Where("runtime_session_id = '' OR runtime_session_id IS NULL OR runtime_session_id = ?", sessionID)
+		}
+		var cmds []RuntimeCommand
+		if err := query.Find(&cmds).Error; err != nil {
+			return err
+		}
+		for _, cmd := range cmds {
+			// A reconnect is a hard ephemeral boundary. This includes rows which were
+			// queued for the old connected runtime but had not yet created an Attempt;
+			// replaying those on the new session would execute stale physical intent.
+			result := tx.Model(&RuntimeCommand{}).Where(
+				"id = ? AND status = ?", cmd.ID, cmd.Status,
+			).Updates(map[string]interface{}{
+				"status":        string(CommandStatusSuperseded),
+				"error_code":    "CONNECTION_REPLACED",
+				"error_message": reason,
+				"completed_at":  t,
+				"updated_at":    t,
+			})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				continue
+			}
+			if cmd.LastAttemptID != "" {
+				if err := tx.Model(&CommandAttempt{}).Where("attempt_id = ?", cmd.LastAttemptID).Updates(map[string]interface{}{
+					"finished_at":   t.UTC().Format(time.RFC3339Nano),
+					"error_code":    "CONNECTION_REPLACED",
+					"error_message": reason,
+					"updated_at":    t.UTC().Format("2006-01-02 15:04:05"),
+				}).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func (s *commandService) GetLatestCommand(userID, deviceID, commandType string) (*RuntimeCommand, error) {
@@ -594,11 +898,13 @@ func (s *commandService) ListCommandsToDispatch(limit int) ([]*RuntimeCommand, e
 	if limit <= 0 {
 		limit = 100
 	}
-	retryBefore := time.Now().UTC().Add(-time.Second).Format("2006-01-02 15:04:05")
+	now := time.Now().UTC()
+	retryBefore := now.Add(-time.Second).Format("2006-01-02 15:04:05")
+	nowRFC3339 := now.Format(runtimeCommandExpiryLayout)
 	err := s.db.Where(
-		"status IN (?, ?) OR (status = ? AND updated_at <= ?)",
+		"(status IN (?, ?) OR (status = ? AND datetime(updated_at) <= datetime(?))) AND (expires_at = '' OR expires_at IS NULL OR expires_at > ?)",
 		string(CommandStatusCreated), string(CommandStatusQueued),
-		string(CommandStatusFailedRetryable), retryBefore,
+		string(CommandStatusFailedRetryable), retryBefore, nowRFC3339,
 	).Order("device_sequence ASC, created_at ASC").Limit(limit).Find(&cmds).Error
 	if err != nil {
 		return nil, err
@@ -611,12 +917,14 @@ func (s *commandService) ListCommandsToDispatchForConnection(userID, deviceID, r
 	if limit <= 0 {
 		limit = 100
 	}
-	retryBefore := time.Now().UTC().Add(-time.Second).Format("2006-01-02 15:04:05")
+	now := time.Now().UTC()
+	retryBefore := now.Add(-time.Second).Format("2006-01-02 15:04:05")
+	nowRFC3339 := now.Format(runtimeCommandExpiryLayout)
 	query := s.db.Where(
-		"user_id = ? AND device_id = ? AND (status IN (?, ?) OR (status = ? AND updated_at <= ?))",
+		"user_id = ? AND device_id = ? AND (status IN (?, ?) OR (status = ? AND datetime(updated_at) <= datetime(?))) AND (expires_at = '' OR expires_at IS NULL OR expires_at > ?)",
 		userID, deviceID,
 		string(CommandStatusCreated), string(CommandStatusQueued),
-		string(CommandStatusFailedRetryable), retryBefore,
+		string(CommandStatusFailedRetryable), retryBefore, nowRFC3339,
 	)
 	if runtimeID != "" {
 		query = query.Where("runtime_id = '' OR runtime_id IS NULL OR runtime_id = ?", runtimeID)
@@ -890,19 +1198,97 @@ func (s *commandService) QueryDedup(userID, deviceID, idempotencyKey string, sin
 	return &dedup, nil
 }
 
+func parseRuntimeCommandTime(value string) (time.Time, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, runtimeCommandExpiryLayout, "2006-01-02 15:04:05"} {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed.UTC(), true
+		}
+	}
+	return time.Time{}, false
+}
+
+func playbackLivenessDeadline(cmd *RuntimeCommand, timeoutSec int) (time.Time, bool) {
+	if cmd == nil || CommandType(cmd.CommandType) != CommandTypePlayAction {
+		return time.Time{}, false
+	}
+	startedAt, ok := parseRuntimeCommandTime(cmd.PlaybackStartedAt)
+	if !ok {
+		// Legacy rows may predate command-level playback_started_at persistence.
+		// updated_at is the transition timestamp for playback_started and is a safe
+		// conservative fallback for those rows.
+		startedAt, ok = parseRuntimeCommandTime(cmd.UpdatedAt)
+		if !ok {
+			return time.Time{}, false
+		}
+	}
+
+	grace := time.Duration(timeoutSec) * time.Second
+	if grace < minimumPlaybackTerminalGrace {
+		grace = minimumPlaybackTerminalGrace
+	}
+	budget := defaultPlaybackLivenessCeiling
+	var payload PlayActionPayload
+	if err := json.Unmarshal([]byte(cmd.PayloadJSON), &payload); err == nil && payload.MaximumPlayMs > 0 {
+		budget = time.Duration(payload.MaximumPlayMs)*time.Millisecond + grace
+	}
+	return startedAt.Add(budget), true
+}
+
 func (s *commandService) ListExpiredCommands(batchSize, timeoutSec int) ([]*RuntimeCommand, error) {
+	if batchSize <= 0 {
+		return []*RuntimeCommand{}, nil
+	}
 	var cmds []*RuntimeCommand
-	expiredBefore := time.Now().Add(-time.Duration(timeoutSec) * time.Second).Format("2006-01-02 15:04:05")
-	err := s.db.Where(
-		"status IN (?, ?, ?, ?, ?, ?, ?) AND updated_at < ?",
+	now := time.Now().UTC()
+	ackExpiredBefore := now.Add(-time.Duration(timeoutSec) * time.Second).Format("2006-01-02 15:04:05")
+	// Backend cleanup intentionally trails the physical admission deadline by a
+	// small delivery grace. Renderer/Main/Scheduler enforce the exact deadline;
+	// this grace prevents an action_started/command_accepted event that occurred
+	// just before expiry from losing a race against the asynchronous reconciler.
+	expiryReconcileBefore := now.Add(-ephemeralExpiryReconcileGrace).Format(runtimeCommandExpiryLayout)
+
+	// Admission/transport timeout applies only before physical playback starts.
+	if err := s.db.Where(
+		`status IN (?, ?, ?, ?, ?, ?, ?) AND (
+			(durability = 'ephemeral' AND expires_at <> '' AND expires_at IS NOT NULL AND expires_at <= ?) OR
+			(durability = 'ephemeral' AND (expires_at = '' OR expires_at IS NULL) AND datetime(updated_at) < datetime(?)) OR
+			(durability <> 'ephemeral' AND datetime(updated_at) < datetime(?))
+		)`,
 		string(CommandStatusCreated), string(CommandStatusQueued),
 		string(CommandStatusDispatching), string(CommandStatusTransportDispatched),
 		string(CommandStatusRuntimeReceived), string(CommandStatusRuntimeAccepted),
 		string(CommandStatusRendererAccepted),
-		expiredBefore,
-	).Limit(batchSize).Find(&cmds).Error
-	if err != nil {
+		expiryReconcileBefore, ackExpiredBefore, ackExpiredBefore,
+	).Order("updated_at ASC").Limit(batchSize).Find(&cmds).Error; err != nil {
 		return nil, err
+	}
+	if len(cmds) >= batchSize {
+		return cmds, nil
+	}
+
+	// Started playback uses a distinct liveness budget. Do not reuse command TTL
+	// or a fixed transport timeout: either would kill legitimate long actions.
+	var started []*RuntimeCommand
+	if err := s.db.Where(
+		"status = ? AND durability = 'ephemeral'",
+		string(CommandStatusPlaybackStarted),
+	).Order("updated_at ASC").Find(&started).Error; err != nil {
+		return nil, err
+	}
+	for _, cmd := range started {
+		deadline, ok := playbackLivenessDeadline(cmd, timeoutSec)
+		if !ok || now.Before(deadline) {
+			continue
+		}
+		cmds = append(cmds, cmd)
+		if len(cmds) >= batchSize {
+			break
+		}
 	}
 	return cmds, nil
 }

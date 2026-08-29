@@ -12,10 +12,25 @@ var Descriptor = protocol.Descriptor{
 }
 
 const (
-	EnvelopeVersion      = 2
-	ProtocolName         = "amitia.desktop-pet.runtime"
-	CurrentSchemaVersion = contracts.RuntimeContractVersion
+	EnvelopeVersion       = 2
+	ProtocolName          = "amitia.desktop-pet.runtime"
+	CurrentSchemaVersion  = contracts.RuntimeContractVersion
+	CurrentRuntimeVersion = contracts.RuntimeVersion
+
+	CapabilitySyncDesiredV2 = "runtime.sync_desired_v2"
+	CapabilityPlayActionV2  = "runtime.play_action_v2"
+	CapabilityRendererAckV2 = "runtime.renderer_ack_v2"
+	CapabilityExpiryRFC3339 = "runtime.expiry_rfc3339_v1"
 )
+
+func mandatoryRuntimeCapabilities() []string {
+	return []string{
+		CapabilitySyncDesiredV2,
+		CapabilityPlayActionV2,
+		CapabilityRendererAckV2,
+		CapabilityExpiryRFC3339,
+	}
+}
 
 type MessageType = protocol.MessageType
 

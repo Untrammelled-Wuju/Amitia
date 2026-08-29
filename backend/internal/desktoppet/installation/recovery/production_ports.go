@@ -356,12 +356,52 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 		return err
 	}
 	if op.OperationType == operation.TypeRecenter {
-		payload := []byte(fmt.Sprintf(`{"installationId":%q}`, firstNonEmpty(installationID, op.InstallationID)))
-		_, err := p.facade.Commands().CreateEphemeralCommand(userID, deviceID, string(runtimev2.CommandTypeRecenterOnce), fmt.Sprintf("recenter:%s", opID), payload)
-		if errors.Is(err, runtimev2.ErrCommandDuplication) {
-			return nil
+		var targetConn *runtimev2.Connection
+		targetSessionID := ""
+		targetGeneration := int64(0)
+		for _, conn := range p.facade.ListConnections(userID) {
+			if conn == nil || conn.GetState() != runtimev2.ConnStateConnected || string(conn.DeviceID) != deviceID {
+				continue
+			}
+			if runtimeID != "" && string(conn.RuntimeID) != runtimeID {
+				continue
+			}
+			sessionID, generation := conn.SessionSnapshot()
+			if sessionID == "" || generation <= 0 {
+				continue
+			}
+			targetConn, targetSessionID, targetGeneration = conn, sessionID, generation
+			break
 		}
-		return err
+		if targetConn == nil {
+			return errors.New("production runtime recovery: recenter target runtime is offline")
+		}
+		payload := []byte(fmt.Sprintf(`{"installationId":%q}`, firstNonEmpty(installationID, op.InstallationID)))
+		key := fmt.Sprintf("recenter:%s:%s", opID, targetSessionID)
+		cmd, err := p.facade.Commands().CreateEphemeralCommandForSession(
+			userID, deviceID, string(targetConn.RuntimeID), targetSessionID, firstNonEmpty(installationID, op.InstallationID),
+			string(runtimev2.CommandTypeRecenterOnce), key, payload,
+		)
+		if err != nil && !errors.Is(err, runtimev2.ErrCommandDuplication) {
+			return err
+		}
+		if cmd == nil {
+			return errors.New("production runtime recovery: recenter command creation returned nil")
+		}
+		currentSessionID, currentGeneration := targetConn.SessionSnapshot()
+		if targetConn.GetState() != runtimev2.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
+			_ = p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed during recenter creation", time.Now().UTC())
+			return errors.New("production runtime recovery: recenter runtime session changed")
+		}
+		if cmd.RuntimeSessionID != targetSessionID {
+			return errors.New("production runtime recovery: duplicate recenter belongs to stale runtime session")
+		}
+		currentSessionID, currentGeneration = targetConn.SessionSnapshot()
+		if targetConn.GetState() != runtimev2.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
+			_ = p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed after recenter route bind", time.Now().UTC())
+			return errors.New("production runtime recovery: recenter runtime session changed after bind")
+		}
+		return nil
 	}
 
 	var state desired.RuntimeDesiredState
@@ -407,10 +447,23 @@ func (p *ProductionRuntimeRepo) CancelDesiredCommand(ctx context.Context, opID, 
 		return err
 	}
 	idempotencyKey := fmt.Sprintf("desired:%s:%d", deviceID, op.DesiredRevision)
+	var command *runtimev2.RuntimeCommand
+	var err error
 	if op.OperationType == operation.TypeRecenter {
-		idempotencyKey = fmt.Sprintf("recenter:%s", op.ID)
+		prefix := fmt.Sprintf("recenter:%s", op.ID)
+		var latest runtimev2.RuntimeCommand
+		err = p.db.WithContext(ctx).Where(
+			"idempotency_key = ? OR idempotency_key LIKE ?", prefix, prefix+":%",
+		).Order("created_at DESC").First(&latest).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err == nil {
+			command = &latest
+		}
+	} else {
+		command, err = p.facade.Commands().GetCommandByIdempotencyKey(idempotencyKey)
 	}
-	command, err := p.facade.Commands().GetCommandByIdempotencyKey(idempotencyKey)
 	if err != nil {
 		return err
 	}
@@ -457,7 +510,13 @@ func (p *ProductionRuntimeRepo) QueryCommandTerminalStatusByIdempotencyKey(ctx c
 		return "", false, errors.New("production runtime recovery: runtime v2 unavailable")
 	}
 	var cmd runtimev2.RuntimeCommand
-	if err := p.db.WithContext(ctx).Where("idempotency_key = ?", idempotencyKey).Order("created_at DESC").First(&cmd).Error; err != nil {
+	query := p.db.WithContext(ctx)
+	if strings.HasPrefix(idempotencyKey, "recenter:") {
+		query = query.Where("idempotency_key = ? OR idempotency_key LIKE ?", idempotencyKey, idempotencyKey+":%")
+	} else {
+		query = query.Where("idempotency_key = ?", idempotencyKey)
+	}
+	if err := query.Order("created_at DESC").First(&cmd).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", false, nil
 		}

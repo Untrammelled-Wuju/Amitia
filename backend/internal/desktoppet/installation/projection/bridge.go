@@ -306,7 +306,11 @@ func (b *ProjectionBridge) completeRecenterOperationFromACK(ctx context.Context,
 	if !strings.HasPrefix(idempotencyKey, prefix) {
 		return nil
 	}
-	opID := strings.TrimPrefix(idempotencyKey, prefix)
+	recenterIdentity := strings.TrimPrefix(idempotencyKey, prefix)
+	if recenterIdentity == "" {
+		return errors.New("projection bridge: recenter command missing operation id")
+	}
+	opID := strings.SplitN(recenterIdentity, ":", 2)[0]
 	if opID == "" {
 		return errors.New("projection bridge: recenter command missing operation id")
 	}

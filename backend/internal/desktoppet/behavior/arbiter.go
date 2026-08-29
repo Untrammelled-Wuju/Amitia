@@ -135,6 +135,7 @@ func (a *Arbiter) Arbitrate(ctx *BehaviorContextSnapshot, candidates []Candidate
 		InterruptPolicy:    interruptPolicy,
 		MinimumPlayMS:      winner.MinPlay.Milliseconds(),
 		MaximumPlayMS:      winner.MaxPlay.Milliseconds(),
+		ExpiresAt:          winner.ExpiresAt,
 		Status:             DecisionStatusSelected,
 		ReasonCode:         "selected",
 		RejectedCandidates: rejected,

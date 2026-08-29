@@ -124,7 +124,7 @@ func (m *FrameAssetMapper) BuildRevisionFrames(
 	now string,
 ) []editing.ActionRevisionFrame {
 	frames := make([]editing.ActionRevisionFrame, 0, len(mappings))
-	for i, mp := range mappings {
+    for _, mp := range mappings {
 		idx := 0
 		if mp.Artifact.FrameIndex != nil {
 			idx = *mp.Artifact.FrameIndex

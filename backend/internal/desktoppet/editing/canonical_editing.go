@@ -79,7 +79,7 @@ func allocateActionStreamRevisionNumber(repo Repository, streamID string) (int, 
 				return result.Error
 			}
 			if result.RowsAffected == 1 {
-				allocated = next
+                allocated = int(next)
 				return nil
 			}
 		}

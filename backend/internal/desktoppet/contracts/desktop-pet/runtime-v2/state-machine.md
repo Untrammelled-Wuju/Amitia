@@ -58,6 +58,7 @@ created → queued → transport_dispatched → runtime_received
 |----------|----------|----------|
 | runtime_accepted | renderer_accepted | 收到 playback.command_accepted 事件 |
 | renderer_accepted | playback_started | 收到 playback.action_started 事件 |
+| renderer_accepted | completed | Renderer 已确认同一稳定 loop 已满足请求（already_satisfied），无需新首帧 |
 | renderer_accepted | failed_terminal | Renderer 拒绝或超时 |
 | playback_started | completed | 收到 playback.action_completed 事件 |
 | playback_started | cancelled | 收到 playback.action_interrupted 事件 |
@@ -85,8 +86,10 @@ created → queued → transport_dispatched → runtime_received
 
 ## TTL 规则
 
-- Ephemeral 命令必须设置 `expiresAt`
-- 超过 `expiresAt` 后命令标记 `expired`
+- Ephemeral 命令必须设置 Backend 权威 `expiresAt`；上游只能缩短，不能延长 Backend deadline
+- `expiresAt` 是首帧开始前的 admission deadline；Main / Scheduler / Renderer 必须 fail-closed，并在队列出队时复检
+- 超过 `expiresAt` 后不得再 dispatch 或开始播放；Backend reconciliation 可保留短暂事件传输宽限，但不能重新授权物理执行
+- 已进入 `playback_started` 后改用动作自身 `maximumPlayMs` + 终态宽限（无显式上限则使用保守失联兜底），禁止固定 5 分钟误杀合法长动作
 - Runtime 收到过期命令必须拒绝并返回 `command_expired` 错误
 
 ## Session 替换规则

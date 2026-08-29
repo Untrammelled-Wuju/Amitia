@@ -1,12 +1,14 @@
 {
   "messageType": "hello",
-  "runtimeVersion": "1.2.0",
+  "runtimeVersion": "2.0.0",
   "runtimeContractVersion": "2.0.0",
   "deviceId": "device_01JXYZ",
   "runtimeId": "runtime_01JXYZ",
   "capabilities": [
     "runtime.sync_desired_v2",
     "runtime.play_action_v2",
+    "runtime.expiry_rfc3339_v1",
+    "runtime.renderer_ack_v2",
     "runtime.stop_action_v2",
     "runtime.pause_resume_v2",
     "runtime.release_switch_v2",

@@ -253,6 +253,10 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sendCh:  make(chan outboundFrame, sendQueueSize),
 		doneCh:  make(chan struct{}),
 	}
+	conn.SetTransportCloser(func() {
+		ctx.closeDone()
+		_ = wsConn.Close()
+	})
 
 	go ctx.writeLoop()
 
