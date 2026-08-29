@@ -108,24 +108,23 @@ func (c *Coordinator) createMailboxLocked(key string) *charMailbox {
 func (c *Coordinator) runMailbox(key string, mb *charMailbox, ctx context.Context) {
 	defer c.wg.Done()
 
+	defer func() {
+		c.mu.Lock()
+		if current, ok := c.mailboxes[key]; ok && current == mb {
+			delete(c.mailboxes, key)
+		}
+		c.mu.Unlock()
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
-			c.drainMailbox(key, mb)
 			return
 		case event := <-mb.ch:
+			if ctx.Err() != nil {
+				return
+			}
 			safeProcess(c.processFn, ctx, event)
-		}
-	}
-}
-
-func (c *Coordinator) drainMailbox(key string, mb *charMailbox) {
-	for {
-		select {
-		case event := <-mb.ch:
-			safeProcess(c.processFn, context.Background(), event)
-		default:
-			return
 		}
 	}
 }

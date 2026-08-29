@@ -276,6 +276,7 @@ func EnvelopeFromDesktopEvent(evt behavior.DesktopGestureEvent, now time.Time) b
 		UserID(evt.UserID).
 		CharacterID(evt.CharacterID).
 		PetInstanceID(evt.PetInstanceID).
+		Sequence(evt.Sequence).
 		OccurredAt(evt.OccurredAt).
 		DedupKey(BuildDedupKey(evt.GestureID, evt.GestureType, fmt.Sprintf("s%d", evt.Sequence)))
 

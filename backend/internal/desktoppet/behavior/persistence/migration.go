@@ -70,6 +70,9 @@ var DesktopPetBehaviorTableSQL = []string{
     interrupt_policy TEXT NOT NULL DEFAULT '',
     minimum_play_ms INTEGER NOT NULL DEFAULT 0,
     maximum_play_ms INTEGER NOT NULL DEFAULT 0,
+    fallback_depth INTEGER NOT NULL DEFAULT 0,
+    return_policy TEXT NOT NULL DEFAULT '',
+    context_hash TEXT NOT NULL DEFAULT '',
     semantic TEXT NOT NULL DEFAULT '',
     action_key TEXT NOT NULL DEFAULT '',
     priority INTEGER NOT NULL DEFAULT 0,
@@ -111,6 +114,9 @@ var DesktopPetBehaviorTableSQL = []string{
 var DesktopPetBehaviorIndexDefs = []BehaviorIndexDef{
 	{Name: "ux_desktop_pet_behavior_inbox_dedup", Table: "desktop_pet_behavior_inbox", Columns: []string{"dedup_key"}, Unique: true},
 	{Name: "idx_behavior_inbox_char", Table: "desktop_pet_behavior_inbox", Columns: []string{"character_id", "status"}, Unique: false},
+	{Name: "idx_behavior_inbox_status_available", Table: "desktop_pet_behavior_inbox", Columns: []string{"status", "available_at", "occurred_at"}, Unique: false},
+	{Name: "idx_behavior_inbox_status_lease", Table: "desktop_pet_behavior_inbox", Columns: []string{"status", "lease_expires_at"}, Unique: false},
 	{Name: "idx_behavior_decisions_char", Table: "desktop_pet_behavior_decisions", Columns: []string{"character_id", "created_at"}, Unique: false},
+	{Name: "idx_behavior_decisions_event", Table: "desktop_pet_behavior_decisions", Columns: []string{"event_id", "created_at"}, Unique: false},
 	{Name: "idx_behavior_bindings_user_char", Table: "desktop_pet_behavior_bindings", Columns: []string{"user_id", "character_id"}, Unique: false},
 }

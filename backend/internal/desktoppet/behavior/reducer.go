@@ -43,6 +43,15 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		return next, result, nil
 	}
 
+	sequenceKey := behaviorSourceSequenceKey(event)
+	if sequenceKey != "" && next.LastSourceRevisions != nil {
+		if last := next.LastSourceRevisions[sequenceKey]; last > 0 && event.Sequence <= last {
+			result.IsOutOfOrder = true
+			result.Reason = "source sequence is stale"
+			return next, result, nil
+		}
+	}
+
 	changed := false
 	layersChanged := []string{}
 
@@ -316,15 +325,69 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 
 	r.checkLeases(&next, now)
 
-	result.ContextChanged = changed
+	sequenceAdvanced := false
+	if sequenceKey != "" {
+		if next.LastSourceRevisions == nil {
+			next.LastSourceRevisions = make(map[string]int64)
+		}
+		if event.Sequence > next.LastSourceRevisions[sequenceKey] {
+			next.LastSourceRevisions[sequenceKey] = event.Sequence
+			sequenceAdvanced = true
+		}
+	}
+
+	contextChanged := changed || sequenceAdvanced
+	result.ContextChanged = contextChanged
 	result.LayersChanged = layersChanged
+	// Advancing only the source sequence is persistence metadata, not a reason
+	// to produce another animation decision.
 	result.NeedsDecision = changed && !result.IsDuplicate && !result.IsExpired
 	next.UpdatedAt = now
-	if changed {
+	if contextChanged {
 		next.Revision++
 	}
 
 	return next, result, nil
+}
+
+func behaviorSourceSequenceKey(event BehaviorEventEnvelope) string {
+	if event.Sequence <= 0 {
+		return ""
+	}
+	switch event.Origin {
+	case OriginDesktop, OriginPlayback, OriginRuntime:
+	default:
+		return ""
+	}
+
+	// Runtime V2 sequence numbers belong to a runtime session. Prefer the
+	// session identity so a reconnect that legitimately restarts a sequence
+	// cannot be rejected by a cursor persisted for the previous session.
+	if event.SessionID != "" {
+		return "runtime:" + event.SessionID
+	}
+
+	// Adapter-originated playback feedback may use a per-command sequence
+	// instead of Runtime V2's session-global sequence. Scope that cursor to the
+	// command/decision so the next playback is allowed to restart at sequence 1.
+	if event.Origin == OriginPlayback {
+		payload := parsePayload(event.Payload)
+		if commandID, _ := payload["commandId"].(string); commandID != "" {
+			return "playback-command:" + commandID
+		}
+		if decisionID, _ := payload["decisionId"].(string); decisionID != "" {
+			return "playback-decision:" + decisionID
+		}
+	}
+
+	streamID := event.PetInstanceID
+	if streamID == "" {
+		streamID = event.InstallationID
+	}
+	if streamID == "" {
+		return ""
+	}
+	return "runtime:" + streamID
 }
 
 func (r *Reducer) isDuplicateEvent(ctx BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
@@ -774,9 +837,16 @@ func (r *Reducer) reduceProactiveSuppressed(ctx *BehaviorContextSnapshot, event 
 	return true
 }
 
+func desktopEventSequence(event BehaviorEventEnvelope, payload map[string]interface{}) int64 {
+	if event.Sequence > 0 {
+		return event.Sequence
+	}
+	return int64(getInt(payload, "sequence"))
+}
+
 func (r *Reducer) reduceDesktopClicked(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
-	seq := int64(getInt(payload, "sequence"))
+	seq := desktopEventSequence(event, payload)
 	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
 		return false
 	}
@@ -788,7 +858,7 @@ func (r *Reducer) reduceDesktopClicked(ctx *BehaviorContextSnapshot, event Behav
 
 func (r *Reducer) reduceDesktopDoubleClicked(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
-	seq := int64(getInt(payload, "sequence"))
+	seq := desktopEventSequence(event, payload)
 	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
 		return false
 	}
@@ -805,7 +875,7 @@ func (r *Reducer) reduceDesktopHovered(ctx *BehaviorContextSnapshot, event Behav
 
 func (r *Reducer) reduceDesktopDragStarted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
-	seq := int64(getInt(payload, "sequence"))
+	seq := desktopEventSequence(event, payload)
 	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
 		return false
 	}
@@ -821,7 +891,7 @@ func (r *Reducer) reduceDesktopDragMoved(ctx *BehaviorContextSnapshot, event Beh
 
 func (r *Reducer) reduceDesktopDragEnded(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
-	seq := int64(getInt(payload, "sequence"))
+	seq := desktopEventSequence(event, payload)
 	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
 		return false
 	}
@@ -842,7 +912,7 @@ func (r *Reducer) reduceDesktopEdgeReached(ctx *BehaviorContextSnapshot, event B
 
 func (r *Reducer) reduceDesktopInteracted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
-	seq := int64(getInt(payload, "sequence"))
+	seq := desktopEventSequence(event, payload)
 	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
 		return false
 	}
@@ -956,16 +1026,23 @@ func (s BehaviorContextSnapshot) Copy() BehaviorContextSnapshot {
 		c.RecentSemantics = make([]RecentSemanticRecord, len(s.RecentSemantics))
 		copy(c.RecentSemantics, s.RecentSemantics)
 	}
+	if s.LastSourceRevisions != nil {
+		c.LastSourceRevisions = make(map[string]int64, len(s.LastSourceRevisions))
+		for k, v := range s.LastSourceRevisions {
+			c.LastSourceRevisions[k] = v
+		}
+	}
 	return c
 }
 
 func NewDefaultContext(userID, characterID string) BehaviorContextSnapshot {
 	return BehaviorContextSnapshot{
-		UserID:      userID,
-		CharacterID: characterID,
-		Revision:    1,
-		ActiveTools: make(map[string]ToolOperationState),
-		Cooldowns:   make(map[string]time.Time),
-		Desired:     DesiredBehaviorState{Semantic: "fallback_idle", SourceLayer: "stable"},
+		UserID:              userID,
+		CharacterID:         characterID,
+		Revision:            1,
+		ActiveTools:         make(map[string]ToolOperationState),
+		Cooldowns:           make(map[string]time.Time),
+		LastSourceRevisions: make(map[string]int64),
+		Desired:             DesiredBehaviorState{Semantic: "fallback_idle", SourceLayer: "stable"},
 	}
 }

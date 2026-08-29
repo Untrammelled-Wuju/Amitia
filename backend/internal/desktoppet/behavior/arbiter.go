@@ -40,7 +40,7 @@ func (a *Arbiter) Arbitrate(ctx *BehaviorContextSnapshot, candidates []Candidate
 
 	available := make(map[string]bool)
 	for key, cap := range activePet.Actions {
-		if cap.Available && !a.unavailable.disabled[key] {
+		if cap.Available && !a.unavailable.IsDisabled(key) {
 			available[key] = true
 		}
 	}
@@ -117,6 +117,10 @@ func (a *Arbiter) Arbitrate(ctx *BehaviorContextSnapshot, candidates []Candidate
 		a.cooldown.ApplyCooldown(ctx, "semantic:"+winner.Semantic, winner.Cooldown, "")
 	}
 
+	interruptPolicy := winner.InterruptPolicy
+	if interruptPolicy == "" {
+		interruptPolicy = "queue"
+	}
 	decision := &BehaviorDecision{
 		DecisionID:         UUIDNew(),
 		EventID:            winner.SourceEventID,
@@ -128,6 +132,9 @@ func (a *Arbiter) Arbitrate(ctx *BehaviorContextSnapshot, candidates []Candidate
 		Semantic:           winner.Semantic,
 		ActionKey:          actionKey,
 		Priority:           winner.Priority,
+		InterruptPolicy:    interruptPolicy,
+		MinimumPlayMS:      winner.MinPlay.Milliseconds(),
+		MaximumPlayMS:      winner.MaxPlay.Milliseconds(),
 		Status:             DecisionStatusSelected,
 		ReasonCode:         "selected",
 		RejectedCandidates: rejected,

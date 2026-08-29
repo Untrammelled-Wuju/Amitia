@@ -3,6 +3,7 @@ package behavior
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 type FallbackGraph struct {
@@ -188,6 +189,7 @@ func (g *FallbackGraph) EdgesString() string {
 }
 
 type ActionUnavailableCache struct {
+	mu       sync.RWMutex
 	disabled map[string]bool
 }
 
@@ -196,11 +198,19 @@ func NewActionUnavailableCache() *ActionUnavailableCache {
 }
 
 func (c *ActionUnavailableCache) MarkUnavailable(actionKey string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.disabled[actionKey] = true
 }
 
+func (c *ActionUnavailableCache) IsDisabled(actionKey string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.disabled[actionKey]
+}
+
 func (c *ActionUnavailableCache) IsAvailable(actionKey string, installationActions map[string]ActionCapability) bool {
-	if c.disabled[actionKey] {
+	if c.IsDisabled(actionKey) {
 		return false
 	}
 	cap, ok := installationActions[actionKey]
@@ -208,5 +218,7 @@ func (c *ActionUnavailableCache) IsAvailable(actionKey string, installationActio
 }
 
 func (c *ActionUnavailableCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.disabled = make(map[string]bool)
 }

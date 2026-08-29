@@ -3,10 +3,12 @@ package behavior
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/u-ai/backend/internal/desktoppet/behavior/bindings"
 	"github.com/u-ai/backend/log"
 )
 
@@ -16,6 +18,13 @@ type EngineConfig struct {
 	MailboxCapacity       int
 	MaxCASRetries         int
 }
+
+const (
+	maxInboxAttempts       = 8
+	maxInboxBackoff        = 30 * time.Second
+	inboxLeaseDuration     = 30 * time.Second
+	inboxHeartbeatInterval = 10 * time.Second
+)
 
 func DefaultEngineConfig() EngineConfig {
 	return EngineConfig{
@@ -39,11 +48,13 @@ type BehaviorEngine struct {
 	reconciler    *Reconciler
 	coordinator   *Coordinator
 
-	mu      sync.RWMutex
-	running bool
-	alive   atomic.Bool
-	stopCh  chan struct{}
-	wg      sync.WaitGroup
+	lifecycleMu sync.Mutex
+	mu          sync.RWMutex
+	running     bool
+	alive       atomic.Bool
+	stopCh      chan struct{}
+	runCancel   context.CancelFunc
+	wg          sync.WaitGroup
 
 	metrics *EngineMetrics
 }
@@ -139,33 +150,64 @@ func NewBehaviorEngine(
 }
 
 func (e *BehaviorEngine) Start(ctx context.Context) error {
+	e.lifecycleMu.Lock()
+	defer e.lifecycleMu.Unlock()
+
 	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.running {
+	if e.running && e.alive.Load() {
+		e.mu.Unlock()
 		return nil
 	}
+	runCtx, cancel := context.WithCancel(ctx)
 	e.running = true
 	e.alive.Store(true)
 	e.stopCh = make(chan struct{})
-
+	e.runCancel = cancel
+	// Coordinator.Stop is terminal; every start gets a fresh coordinator.
+	coordinator := NewCoordinator(e.config.MailboxCapacity, e.processEvent)
+	e.coordinator = coordinator
+	shadowMode := e.config.ShadowMode
+	runtimeCommandEnabled := e.config.RuntimeCommandEnabled
 	e.wg.Add(1)
-	go e.inboxWorker(ctx)
+	go e.inboxWorker(runCtx, coordinator)
+	e.mu.Unlock()
 
 	log.Info("behavior engine started", map[string]interface{}{
-		"shadowMode":            e.config.ShadowMode,
-		"runtimeCommandEnabled": e.config.RuntimeCommandEnabled,
+		"shadowMode":            shadowMode,
+		"runtimeCommandEnabled": runtimeCommandEnabled,
 	})
 	return nil
 }
 
 func (e *BehaviorEngine) Stop() error {
+	e.lifecycleMu.Lock()
+	defer e.lifecycleMu.Unlock()
+
 	e.mu.Lock()
-	defer e.mu.Unlock()
-	if !e.running {
+	if !e.running && !e.alive.Load() {
+		e.mu.Unlock()
 		return nil
 	}
 	e.running = false
-	close(e.stopCh)
+	stopCh := e.stopCh
+	cancel := e.runCancel
+	coordinator := e.coordinator
+	e.runCancel = nil
+	e.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if stopCh != nil {
+		select {
+		case <-stopCh:
+		default:
+			close(stopCh)
+		}
+	}
+	if coordinator != nil {
+		coordinator.Stop()
+	}
 	e.wg.Wait()
 	e.alive.Store(false)
 	log.Info("behavior engine stopped")
@@ -181,6 +223,20 @@ func (e *BehaviorEngine) IsRunning() bool {
 func (e *BehaviorEngine) SubmitEvent(ctx context.Context, event BehaviorEventEnvelope) error {
 	if !e.IsRunning() {
 		return NewBehaviorError(ErrCodeRulesetInvalid, "engine not running")
+	}
+
+	now := e.clock.Now()
+	if event.EventID == "" {
+		event.EventID = e.idGen.NewID()
+	}
+	if event.DedupKey == "" {
+		event.DedupKey = event.EventID
+	}
+	if event.OccurredAt.IsZero() {
+		event.OccurredAt = now
+	}
+	if event.ReceivedAt.IsZero() {
+		event.ReceivedAt = now
 	}
 
 	e.metrics.IncEventReceived(event.EventType)
@@ -209,7 +265,6 @@ func (e *BehaviorEngine) SubmitEvent(ctx context.Context, event BehaviorEventEnv
 		}
 	}
 
-	now := e.clock.Now()
 	if event.ExpiresAt != nil && now.After(*event.ExpiresAt) {
 		e.metrics.IncExpired()
 		return nil
@@ -251,25 +306,47 @@ func (e *BehaviorEngine) SubmitEvent(ctx context.Context, event BehaviorEventEnv
 }
 
 func (e *BehaviorEngine) HandlePlaybackFeedback(ctx context.Context, feedback PlaybackFeedback) error {
-	payload, _ := json.Marshal(map[string]interface{}{
+	if feedback.DecisionID == "" {
+		return NewBehaviorError(ErrCodeEventSchemaInvalid, "playback feedback missing decisionId")
+	}
+	decision, err := e.repo.FindDecisionByID(ctx, feedback.DecisionID)
+	if err != nil {
+		return err
+	}
+	if decision == nil {
+		return NewBehaviorError(ErrCodeEventSchemaInvalid, "playback feedback decision not found")
+	}
+
+	payload, err := json.Marshal(map[string]interface{}{
 		"commandId":  feedback.CommandID,
 		"decisionId": feedback.DecisionID,
 		"actionKey":  feedback.ActionKey,
 		"errorClass": feedback.ErrorClass,
 	})
-
-	eventType := "runtime.playback.action_" + string(feedback.Phase)
-	event := BehaviorEventEnvelope{
-		EventID:       "pb_" + feedback.CommandID + "_" + string(feedback.Phase),
-		EventType:     eventType,
-		SchemaVersion: 1,
-		OccurredAt:    feedback.OccurredAt,
-		ReceivedAt:    e.clock.Now(),
-		Payload:       payload,
-		Origin:        OriginPlayback,
-		DedupKey:      feedback.CommandID + ":" + string(feedback.Phase) + ":" + intToStr(feedback.Sequence),
+	if err != nil {
+		return err
 	}
 
+	occurredAt := feedback.OccurredAt
+	if occurredAt.IsZero() {
+		occurredAt = e.clock.Now()
+	}
+	eventType := "runtime.playback.action_" + string(feedback.Phase)
+	event := BehaviorEventEnvelope{
+		EventID:        "pb_" + feedback.CommandID + "_" + string(feedback.Phase) + "_" + intToStr(feedback.Sequence),
+		EventType:      eventType,
+		SchemaVersion:  1,
+		OccurredAt:     occurredAt,
+		ReceivedAt:     e.clock.Now(),
+		UserID:         decision.UserID,
+		CharacterID:    decision.CharacterID,
+		InstallationID: decision.InstallationID,
+		PetInstanceID:  feedback.PetInstanceID,
+		Sequence:       feedback.Sequence,
+		Payload:        payload,
+		Origin:         OriginPlayback,
+		DedupKey:       feedback.CommandID + ":" + string(feedback.Phase) + ":" + intToStr(feedback.Sequence),
+	}
 	return e.SubmitEvent(ctx, event)
 }
 
@@ -303,7 +380,10 @@ func (e *BehaviorEngine) Simulate(ctx context.Context, event BehaviorEventEnvelo
 		}, nil
 	}
 
-	activePet, err := e.activePetPort.ResolveActivePet(ctx, event.UserID, event.CharacterID)
+	activePet, err := e.resolveActivePet(ctx, event)
+	if err != nil && !IsErrorCode(err, ErrCodeNoActiveInstallation) {
+		return nil, err
+	}
 	if err != nil || activePet == nil {
 		return &BehaviorDecision{
 			Status:     DecisionStatusIgnored,
@@ -346,118 +426,236 @@ func (e *BehaviorEngine) SetRuntimeCommandEnabled(enabled bool) {
 	e.config.RuntimeCommandEnabled = enabled
 }
 
-func (e *BehaviorEngine) SetBindingEvaluator(fn func(scope interface{}, eventType string, origin EventOrigin, payload map[string]interface{}) []interface{}) {
+func (e *BehaviorEngine) SetBindingEvaluator(fn func(scope bindings.EvaluatorScope, eventType string, origin EventOrigin, payload map[string]interface{}) []interface{}) {
 	e.resolver.SetBindingEvaluator(fn)
 }
 
+func (e *BehaviorEngine) runtimeExecutionConfig() (shadowMode, runtimeCommandEnabled bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.config.ShadowMode, e.config.RuntimeCommandEnabled
+}
+
 func (e *BehaviorEngine) processEvent(ctx context.Context, event BehaviorEventEnvelope) {
-	currentCtx, err := e.repo.LoadContext(ctx, event.UserID, event.CharacterID)
+	status, err := e.processEventOnce(ctx, event, "")
 	if err != nil {
-		log.Warn("behavior engine: failed to load context", map[string]interface{}{
-			"error":       err.Error(),
+		log.Warn("behavior engine: event processing failed", map[string]interface{}{
+			"eventId":     event.EventID,
+			"eventType":   event.EventType,
 			"characterId": event.CharacterID,
+			"status":      status,
+			"error":       err.Error(),
 		})
-		return
-	}
-
-	nextCtx, reduceResult, err := e.reducer.Reduce(*currentCtx, event)
-	if err != nil {
-		log.Warn("behavior engine: reducer error", map[string]interface{}{
-			"error":     err.Error(),
-			"eventType": event.EventType,
-		})
-		return
-	}
-
-	if reduceResult.IsDuplicate {
-		e.metrics.IncDeduped()
-		return
-	}
-	if reduceResult.IsExpired {
-		e.metrics.IncExpired()
-		return
-	}
-	if !reduceResult.NeedsDecision {
-		if reduceResult.ContextChanged {
-			e.saveContextCAS(ctx, currentCtx.Revision, nextCtx)
-		}
-		return
-	}
-
-	saved := e.saveContextCAS(ctx, currentCtx.Revision, nextCtx)
-	if !saved {
-		e.metrics.IncCASConflict()
-		for retry := 0; retry < e.config.MaxCASRetries; retry++ {
-			currentCtx, err = e.repo.LoadContext(ctx, event.UserID, event.CharacterID)
-			if err != nil {
-				return
-			}
-			nextCtx, reduceResult, err = e.reducer.Reduce(*currentCtx, event)
-			if err != nil || !reduceResult.NeedsDecision {
-				return
-			}
-			if e.saveContextCAS(ctx, currentCtx.Revision, nextCtx) {
-				saved = true
-				break
-			}
-			e.metrics.IncCASConflict()
-		}
-		if !saved {
-			log.Warn("behavior engine: CAS conflict exhausted", map[string]interface{}{
-				"characterId": event.CharacterID,
-				"eventType":   event.EventType,
-			})
-			return
-		}
-	}
-
-	activePet, err := e.activePetPort.ResolveActivePet(ctx, event.UserID, event.CharacterID)
-	if err != nil || activePet == nil {
-		e.metrics.IncIgnored()
-		return
-	}
-
-	candidates, err := e.resolver.Resolve(&nextCtx, event, activePet)
-	if err != nil {
-		log.Warn("behavior engine: resolver error", map[string]interface{}{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	decision, err := e.arbiter.Arbitrate(&nextCtx, candidates, activePet, activePet.RuntimeOnline)
-	if err != nil {
-		log.Warn("behavior engine: arbiter error", map[string]interface{}{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	e.metrics.IncDecision()
-	if decision.Status == DecisionStatusNoAction {
-		e.metrics.IncNoAction()
-	}
-
-	audit := BehaviorDecisionAudit{
-		BehaviorDecision: *decision,
-		ContextHash:      hashContext(&nextCtx),
-	}
-	if err := e.repo.AppendDecision(ctx, audit); err != nil {
-		log.Error("behavior engine: failed to append decision audit", map[string]interface{}{
-			"error":      err.Error(),
-			"decisionId": decision.DecisionID,
-		})
-		return
-	}
-
-	if !e.config.ShadowMode && e.config.RuntimeCommandEnabled && decision.Status == DecisionStatusSelected {
-		e.submitRuntimeCommand(ctx, decision, activePet, &nextCtx)
 	}
 }
 
-func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *BehaviorDecision, activePet *ActivePetSnapshot, ctxSnapshot *BehaviorContextSnapshot) {
+func (e *BehaviorEngine) processEventOnce(ctx context.Context, event BehaviorEventEnvelope, leaseToken string) (InboxStatus, error) {
+	// Reliable inbox events use the decision row as their durable processing
+	// checkpoint. Ephemeral mailbox events deliberately skip this database lookup.
+	if leaseToken != "" {
+		existing, err := e.repo.FindDecisionByEventID(ctx, event.EventID)
+		if err != nil {
+			return InboxRetry, fmt.Errorf("load committed decision: %w", err)
+		}
+		if existing != nil {
+			if err := e.resumeCommittedDecision(ctx, event, &existing.BehaviorDecision); err != nil {
+				return InboxRetry, err
+			}
+			if err := e.applyPlaybackDecisionStatus(ctx, event); err != nil {
+				return InboxRetry, err
+			}
+			return InboxProcessed, nil
+		}
+	}
+
+	maxRetries := e.config.MaxCASRetries
+	if maxRetries <= 0 {
+		maxRetries = MaxCASRetries
+	}
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return InboxRetry, err
+		}
+		currentCtx, err := e.repo.LoadContext(ctx, event.UserID, event.CharacterID)
+		if err != nil {
+			return InboxRetry, fmt.Errorf("load context: %w", err)
+		}
+
+		nextCtx, reduceResult, err := e.reducer.Reduce(*currentCtx, event)
+		if err != nil {
+			return InboxRetry, fmt.Errorf("reduce event: %w", err)
+		}
+		if reduceResult.IsDuplicate {
+			e.metrics.IncDeduped()
+			return InboxIgnored, nil
+		}
+		if reduceResult.IsExpired {
+			e.metrics.IncExpired()
+			return InboxIgnored, nil
+		}
+		if reduceResult.IsOutOfOrder {
+			e.metrics.IncIgnored()
+			return InboxIgnored, nil
+		}
+		if !reduceResult.NeedsDecision {
+			// Playback status updates are idempotent and monotonic. Apply them
+			// before the context/inbox atomic commit so a crash can never leave
+			// an acknowledged durable event with an unapplied decision status.
+			if err := e.applyPlaybackDecisionStatus(ctx, event); err != nil {
+				return InboxRetry, err
+			}
+
+			if reduceResult.ContextChanged {
+				var committed bool
+				if leaseToken != "" {
+					committed, err = e.repo.CommitLeasedContextAndInboxCAS(
+						ctx, currentCtx.Revision, nextCtx, event.EventID, leaseToken, InboxProcessed,
+					)
+				} else {
+					committed, err = e.repo.SaveContextCAS(ctx, currentCtx.Revision, nextCtx)
+				}
+				if err != nil {
+					return InboxRetry, fmt.Errorf("save context: %w", err)
+				}
+				if !committed {
+					e.metrics.IncCASConflict()
+					continue
+				}
+			}
+			return InboxProcessed, nil
+		}
+
+		activePet, resolveErr := e.resolveActivePet(ctx, event)
+		if resolveErr != nil && !IsErrorCode(resolveErr, ErrCodeNoActiveInstallation) {
+			return InboxRetry, fmt.Errorf("resolve active pet: %w", resolveErr)
+		}
+
+		var decision *BehaviorDecision
+		if activePet == nil || resolveErr != nil {
+			e.metrics.IncIgnored()
+			decision = &BehaviorDecision{
+				Status:     DecisionStatusIgnored,
+				ReasonCode: ErrCodeNoActiveInstallation,
+				CreatedAt:  e.clock.Now(),
+			}
+		} else {
+			candidates, err := e.resolver.Resolve(&nextCtx, event, activePet)
+			if err != nil {
+				return InboxRetry, fmt.Errorf("resolve candidates: %w", err)
+			}
+
+			decision, err = e.arbiter.Arbitrate(&nextCtx, candidates, activePet, activePet.RuntimeOnline)
+			if err != nil {
+				return InboxRetry, fmt.Errorf("arbitrate candidates: %w", err)
+			}
+		}
+
+		if decision == nil {
+			return InboxRetry, NewBehaviorError(ErrCodeRulesetInvalid, "arbiter returned nil decision")
+		}
+		e.normalizeDecision(decision, event, activePet, nextCtx.Revision)
+		e.metrics.IncDecision()
+		if decision.Status == DecisionStatusNoAction {
+			e.metrics.IncNoAction()
+		}
+
+		audit := BehaviorDecisionAudit{
+			BehaviorDecision: *decision,
+			ContextHash:      hashContext(&nextCtx),
+		}
+		var committed bool
+		if leaseToken != "" {
+			committed, err = e.repo.CommitLeasedContextAndDecisionCAS(ctx, currentCtx.Revision, nextCtx, audit, event.EventID, leaseToken)
+		} else {
+			committed, err = e.repo.CommitContextAndDecisionCAS(ctx, currentCtx.Revision, nextCtx, audit)
+		}
+		if err != nil {
+			return InboxRetry, fmt.Errorf("commit context and decision: %w", err)
+		}
+		if !committed {
+			e.metrics.IncCASConflict()
+			continue
+		}
+
+		if err := e.resumeCommittedDecision(ctx, event, decision); err != nil {
+			return InboxRetry, err
+		}
+		if err := e.applyPlaybackDecisionStatus(ctx, event); err != nil {
+			return InboxRetry, err
+		}
+		return InboxProcessed, nil
+	}
+
+	return InboxRetry, NewBehaviorError(ErrCodeContextConflict, "behavior context CAS retries exhausted")
+}
+
+func (e *BehaviorEngine) resolveActivePet(ctx context.Context, event BehaviorEventEnvelope) (*ActivePetSnapshot, error) {
+	if e.activePetPort == nil {
+		return nil, NewBehaviorError(ErrCodeNoActiveInstallation, "active pet port unavailable")
+	}
+	if targeted, ok := e.activePetPort.(EventTargetedActivePetPort); ok {
+		return targeted.ResolveActivePetForEvent(ctx, event)
+	}
+	return e.activePetPort.ResolveActivePet(ctx, event.UserID, event.CharacterID)
+}
+
+func (e *BehaviorEngine) normalizeDecision(decision *BehaviorDecision, event BehaviorEventEnvelope, activePet *ActivePetSnapshot, contextRevision int64) {
+	if decision.DecisionID == "" {
+		decision.DecisionID = e.idGen.NewID()
+	}
+	if decision.EventID == "" {
+		decision.EventID = event.EventID
+	}
+	if decision.UserID == "" {
+		decision.UserID = event.UserID
+	}
+	if decision.CharacterID == "" {
+		decision.CharacterID = event.CharacterID
+	}
+	if decision.InstallationID == "" && activePet != nil {
+		decision.InstallationID = activePet.InstallationID
+	}
+	if decision.ContextRevision == 0 {
+		decision.ContextRevision = contextRevision
+	}
+	if decision.RulesetVersion == 0 {
+		decision.RulesetVersion = int(CurrentRulesetVersion)
+	}
+	if decision.CreatedAt.IsZero() {
+		decision.CreatedAt = e.clock.Now()
+	}
+}
+
+func (e *BehaviorEngine) resumeCommittedDecision(ctx context.Context, event BehaviorEventEnvelope, decision *BehaviorDecision) error {
+	if decision == nil || decision.Status != DecisionStatusSelected {
+		return nil
+	}
+	shadowMode, runtimeCommandEnabled := e.runtimeExecutionConfig()
+	if shadowMode || !runtimeCommandEnabled {
+		return nil
+	}
+
+	targetEvent := event
+	if targetEvent.InstallationID == "" {
+		targetEvent.InstallationID = decision.InstallationID
+	}
+	activePet, err := e.resolveActivePet(ctx, targetEvent)
+	if err != nil || activePet == nil {
+		if err != nil && !IsErrorCode(err, ErrCodeNoActiveInstallation) {
+			return fmt.Errorf("resume active pet resolution: %w", err)
+		}
+		// The decision is already durably committed. Keep it selected and retry
+		// until the original installation/runtime returns or the inbox reaches
+		// its dead-letter threshold; finalizing it here would lose recovery.
+		return NewBehaviorError(ErrCodeNoActiveInstallation, "committed behavior target is temporarily unavailable")
+	}
+	return e.submitRuntimeCommand(ctx, decision, activePet)
+}
+
+func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *BehaviorDecision, activePet *ActivePetSnapshot) error {
 	if e.runtimePort == nil {
-		return
+		return NewBehaviorError(ErrCodeRuntimeOffline, "runtime action port unavailable")
 	}
 
 	cmd := BehaviorRuntimeCommand{
@@ -471,7 +669,7 @@ func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *Beh
 		PetInstanceID:        activePet.PetInstanceID,
 		InstallationID:       activePet.InstallationID,
 		InstallationRevision: activePet.StateRevision,
-		ContextRevision:      ctxSnapshot.Revision,
+		ContextRevision:      decision.ContextRevision,
 		ActionKey:            decision.ActionKey,
 		Semantic:             decision.Semantic,
 		Priority:             decision.Priority,
@@ -483,57 +681,104 @@ func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *Beh
 		Durable:              decision.ReturnPolicy != "",
 	}
 
-	receipt, err := e.runtimePort.SubmitBehaviorCommand(ctx, cmd)
-	if err != nil {
+	receipt, runtimeErr := e.runtimePort.SubmitBehaviorCommand(ctx, cmd)
+	if runtimeErr != nil {
 		e.metrics.IncRuntimeFail()
 		log.Warn("behavior engine: runtime command failed", map[string]interface{}{
-			"error":      err.Error(),
+			"error":      runtimeErr.Error(),
 			"actionKey":  decision.ActionKey,
 			"decisionId": decision.DecisionID,
 		})
-		decision.Status = DecisionStatusFailed
-		decision.ReasonCode = ErrCodeRuntimeOffline
-		return
+		// Keep the committed decision in selected state. The inbox retry will
+		// resume this exact decision, and Runtime V2 idempotency prevents a
+		// duplicate command if transport acceptance happened before the error.
+		return runtimeErr
+	}
+	if receipt == nil {
+		e.metrics.IncRuntimeFail()
+		return NewBehaviorError(ErrCodeRuntimeCommandFailed, "runtime returned an empty receipt")
 	}
 
-	e.metrics.IncRuntimeCmd()
-
-	if receipt != nil && receipt.Accepted {
+	now := e.clock.Now()
+	if receipt.Accepted {
+		e.metrics.IncRuntimeCmd()
 		decision.Status = DecisionStatusCommandSubmitted
+		decision.StartedAt = &now
 		if receipt.CommandID != "" {
 			decision.RuntimeCommandID = receipt.CommandID
 		} else {
 			decision.RuntimeCommandID = cmd.CommandID
 		}
-	} else if receipt != nil {
-		decision.Status = DecisionStatusFailed
-		decision.ReasonCode = receipt.PendingReason
+		return e.repo.UpdateDecisionOutcome(ctx, *decision)
 	}
+
+	if receipt.Status == CmdOffline {
+		e.metrics.IncRuntimeFail()
+		return NewBehaviorError(ErrCodeRuntimeOffline, "target desktop pet runtime is offline")
+	}
+
+	e.metrics.IncRuntimeFail()
+	decision.Status = DecisionStatusFailed
+	decision.CompletedAt = &now
+	decision.ReasonCode = receipt.PendingReason
+	if decision.ReasonCode == "" {
+		decision.ReasonCode = ErrCodeRuntimeCommandFailed
+	}
+	return e.repo.UpdateDecisionOutcome(ctx, *decision)
 }
 
-func (e *BehaviorEngine) saveContextCAS(ctx context.Context, expectedRevision int64, next BehaviorContextSnapshot) bool {
-	ok, err := e.repo.SaveContextCAS(ctx, expectedRevision, next)
-	if err != nil {
-		log.Warn("behavior engine: save context error", map[string]interface{}{
-			"error": err.Error(),
-		})
-		return false
+func (e *BehaviorEngine) applyPlaybackDecisionStatus(ctx context.Context, event BehaviorEventEnvelope) error {
+	var status DecisionStatus
+	switch event.EventType {
+	case "runtime.playback.action_started":
+		status = DecisionStatusPlaying
+	case "runtime.playback.action_completed":
+		status = DecisionStatusCompleted
+	case "runtime.playback.action_interrupted":
+		status = DecisionStatusInterrupted
+	case "runtime.playback.action_failed":
+		status = DecisionStatusFailed
+	default:
+		return nil
 	}
-	return ok
+
+	payload := parsePayload(event.Payload)
+	decisionID, _ := payload["decisionId"].(string)
+	if decisionID == "" {
+		return nil
+	}
+	occurredAt := event.OccurredAt
+	if occurredAt.IsZero() {
+		occurredAt = e.clock.Now()
+	}
+	if err := e.repo.UpdateDecisionStatus(ctx, decisionID, status, occurredAt); err != nil {
+		return fmt.Errorf("update playback decision status: %w", err)
+	}
+	return nil
 }
 
-func (e *BehaviorEngine) inboxWorker(ctx context.Context) {
+func (e *BehaviorEngine) inboxWorker(ctx context.Context, coordinator *Coordinator) {
 	defer e.wg.Done()
-	defer e.alive.Store(false)
+	defer func() {
+		if coordinator != nil {
+			coordinator.Stop()
+		}
+		e.mu.Lock()
+		if e.coordinator == coordinator {
+			e.running = false
+			e.alive.Store(false)
+		}
+		e.mu.Unlock()
+	}()
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-e.stopCh:
-			return
 		case <-ctx.Done():
+			return
+		case <-e.stopCh:
 			return
 		case <-ticker.C:
 			e.processInboxBatch(ctx)
@@ -544,36 +789,155 @@ func (e *BehaviorEngine) inboxWorker(ctx context.Context) {
 func (e *BehaviorEngine) processInboxBatch(ctx context.Context) {
 	leaseToken := e.idGen.NewID()
 	records, err := e.repo.LeaseInbox(ctx, 16, leaseToken)
-	if err != nil || len(records) == 0 {
+	if err != nil {
+		log.Warn("behavior engine: lease inbox failed", map[string]interface{}{"error": err.Error()})
 		return
 	}
 
 	for _, record := range records {
-		env := BehaviorEventEnvelope{
-			EventID:       record.EventID,
-			EventType:     record.EventType,
-			SchemaVersion: record.SchemaVersion,
-			OccurredAt:    record.OccurredAt,
-			ReceivedAt:    record.ReceivedAt,
-			ExpiresAt:     record.ExpiresAt,
-			UserID:        record.UserID,
-			CharacterID:   record.CharacterID,
-			Origin:        record.Origin,
-			CorrelationID: record.CorrelationID,
-			CausationID:   record.CausationID,
-			Payload:       record.Payload,
-			DedupKey:      record.DedupKey,
+		if ctx.Err() != nil {
+			return
+		}
+		renewed, err := e.repo.RenewInboxLease(ctx, record.EventID, leaseToken, time.Now().UTC().Add(inboxLeaseDuration))
+		if err != nil {
+			log.Warn("behavior engine: renew inbox lease failed", map[string]interface{}{"eventId": record.EventID, "error": err.Error()})
+			continue
+		}
+		if !renewed {
+			continue
 		}
 
-		e.processEvent(ctx, env)
+		leaseCtx, cancel := context.WithCancel(ctx)
+		heartbeatDone := make(chan struct{})
+		go e.inboxLeaseHeartbeat(leaseCtx, cancel, record.EventID, leaseToken, heartbeatDone)
+		status, processErr := e.safeProcessInboxEvent(leaseCtx, inboxRecordEnvelope(record), leaseToken)
+		cancel()
+		<-heartbeatDone
 
-		if err := e.repo.MarkInboxStatus(ctx, record.EventID, InboxProcessed, ""); err != nil {
-			log.Warn("behavior engine: failed to mark inbox processed", map[string]interface{}{
-				"eventId": record.EventID,
-				"error":   err.Error(),
-			})
+		if processErr != nil {
+			errorCode := behaviorProcessingErrorCode(processErr)
+			if record.AttemptCount >= maxInboxAttempts {
+				// Finalize the inbox row and any still-selected decision in one DB
+				// transaction. This prevents an orphaned selected decision after the
+				// event has already become terminal. Lease fencing remains mandatory.
+				if err := e.repo.MarkInboxDeadLetter(ctx, record.EventID, leaseToken, errorCode, truncateBehaviorError(processErr.Error()), e.clock.Now()); err != nil {
+					if err != context.Canceled {
+						log.Warn("behavior engine: failed to dead-letter inbox event", map[string]interface{}{"eventId": record.EventID, "error": err.Error()})
+					}
+				}
+				continue
+			}
+			retryAt := time.Now().UTC().Add(inboxRetryBackoff(record.AttemptCount))
+			if err := e.repo.MarkInboxRetry(ctx, record.EventID, leaseToken, errorCode, truncateBehaviorError(processErr.Error()), retryAt); err != nil {
+				log.Warn("behavior engine: failed to requeue inbox event", map[string]interface{}{"eventId": record.EventID, "error": err.Error()})
+			}
+			continue
+		}
+
+		if status == "" || status == InboxRetry || status == InboxLeased || status == InboxPending {
+			status = InboxProcessed
+		}
+		if err := e.repo.MarkInboxStatus(ctx, record.EventID, leaseToken, status, "", ""); err != nil {
+			// A lost lease means another worker is authoritative. Any duplicated
+			// Runtime V2 submission is fenced by the decision idempotency key.
+			log.Warn("behavior engine: failed to acknowledge inbox event", map[string]interface{}{"eventId": record.EventID, "status": status, "error": err.Error()})
 		}
 	}
+}
+
+func (e *BehaviorEngine) inboxLeaseHeartbeat(ctx context.Context, cancel context.CancelFunc, eventID, leaseToken string, done chan<- struct{}) {
+	defer close(done)
+	ticker := time.NewTicker(inboxHeartbeatInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ok, err := e.repo.RenewInboxLease(ctx, eventID, leaseToken, time.Now().UTC().Add(inboxLeaseDuration))
+			if err != nil || !ok {
+				cancel()
+				return
+			}
+		}
+	}
+}
+
+func (e *BehaviorEngine) safeProcessInboxEvent(ctx context.Context, event BehaviorEventEnvelope, leaseToken string) (status InboxStatus, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			status = InboxRetry
+			err = fmt.Errorf("panic while processing behavior event: %v", recovered)
+		}
+	}()
+	return e.processEventOnce(ctx, event, leaseToken)
+}
+
+func inboxRecordEnvelope(record InboxRecord) BehaviorEventEnvelope {
+	if len(record.EventEnvelopeJSON) > 0 {
+		var env BehaviorEventEnvelope
+		if err := json.Unmarshal(record.EventEnvelopeJSON, &env); err == nil && env.EventID != "" {
+			// Payload JSON is persisted separately and is the canonical filtered
+			// payload used by the reducer.
+			if len(record.Payload) > 0 {
+				env.Payload = record.Payload
+			}
+			return env
+		}
+	}
+	return BehaviorEventEnvelope{
+		EventID:         record.EventID,
+		EventType:       record.EventType,
+		SchemaVersion:   record.SchemaVersion,
+		OccurredAt:      record.OccurredAt,
+		ReceivedAt:      record.ReceivedAt,
+		ExpiresAt:       record.ExpiresAt,
+		UserID:          record.UserID,
+		CharacterID:     record.CharacterID,
+		ConversationID:  record.ConversationID,
+		InteractionID:   record.InteractionID,
+		SessionID:       record.SessionID,
+		ToolOperationID: record.ToolOperationID,
+		InstallationID:  record.InstallationID,
+		PetInstanceID:   record.PetInstanceID,
+		ReleaseID:       record.ReleaseID,
+		Origin:          record.Origin,
+		CorrelationID:   record.CorrelationID,
+		CausationID:     record.CausationID,
+		Sequence:        record.Sequence,
+		Payload:         record.Payload,
+		DedupKey:        record.DedupKey,
+	}
+}
+
+func inboxRetryBackoff(attempt int) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	shift := attempt - 1
+	if shift > 5 {
+		shift = 5
+	}
+	backoff := time.Second * time.Duration(1<<shift)
+	if backoff > maxInboxBackoff {
+		return maxInboxBackoff
+	}
+	return backoff
+}
+
+func behaviorProcessingErrorCode(err error) string {
+	if be, ok := IsBehaviorError(err); ok && be.Code != "" {
+		return be.Code
+	}
+	return "behavior_processing_failed"
+}
+
+func truncateBehaviorError(message string) string {
+	const maxLen = 1024
+	if len(message) <= maxLen {
+		return message
+	}
+	return message[:maxLen]
 }
 
 func hashContext(ctx *BehaviorContextSnapshot) string {

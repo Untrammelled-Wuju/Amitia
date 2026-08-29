@@ -1,7 +1,10 @@
 package behavior
 
 import (
+	"sync"
 	"time"
+
+	"github.com/u-ai/backend/internal/desktoppet/behavior/bindings"
 )
 
 type bindingCandidate interface {
@@ -20,7 +23,8 @@ type Resolver struct {
 }
 
 type BindingResolver struct {
-	evaluate func(scope interface{}, eventType string, origin EventOrigin, payload map[string]interface{}) []interface{}
+	mu       sync.RWMutex
+	evaluate func(scope bindings.EvaluatorScope, eventType string, origin EventOrigin, payload map[string]interface{}) []interface{}
 }
 
 func NewResolver(clock Clock, fallback *FallbackGraph) *Resolver {
@@ -30,11 +34,13 @@ func NewResolver(clock Clock, fallback *FallbackGraph) *Resolver {
 	if fallback == nil {
 		fallback = DefaultFallbackGraph()
 	}
-	return &Resolver{clock: clock, fallback: fallback}
+	return &Resolver{clock: clock, fallback: fallback, bindings: &BindingResolver{}}
 }
 
-func (r *Resolver) SetBindingEvaluator(fn func(scope interface{}, eventType string, origin EventOrigin, payload map[string]interface{}) []interface{}) {
-	r.bindings = &BindingResolver{evaluate: fn}
+func (r *Resolver) SetBindingEvaluator(fn func(scope bindings.EvaluatorScope, eventType string, origin EventOrigin, payload map[string]interface{}) []interface{}) {
+	r.bindings.mu.Lock()
+	r.bindings.evaluate = fn
+	r.bindings.mu.Unlock()
 }
 
 func (r *Resolver) Resolve(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope, activePet *ActivePetSnapshot) ([]CandidateAction, error) {
@@ -52,11 +58,11 @@ func (r *Resolver) Resolve(ctx *BehaviorContextSnapshot, event BehaviorEventEnve
 		available[activePet.DefaultAction] = true
 	}
 
-	candidates := r.generateCandidates(ctx, event, available)
+	candidates := r.generateCandidates(ctx, event, available, activePet.InstallationID)
 	return candidates, nil
 }
 
-func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope, available map[string]bool) []CandidateAction {
+func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope, available map[string]bool, installationID string) []CandidateAction {
 	var candidates []CandidateAction
 	now := r.clock.Now()
 
@@ -164,36 +170,49 @@ func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event Behavi
 		candidates = append(candidates, makeCandidate("fallback_idle", []string{"idle_normal"}, event.EventID, "stable", 100, now))
 	}
 
-	if r.bindings != nil && r.bindings.evaluate != nil {
-		payload := parsePayload(event.Payload)
-		rawMatched := r.bindings.evaluate(nil, event.EventType, event.Origin, payload)
-		for _, rb := range rawMatched {
-			b, ok := rb.(bindingCandidate)
-			if !ok {
-				continue
+	if r.bindings != nil {
+		r.bindings.mu.RLock()
+		evaluate := r.bindings.evaluate
+		r.bindings.mu.RUnlock()
+		if evaluate != nil {
+			payload := parsePayload(event.Payload)
+			scope := bindings.EvaluatorScope{
+				UserID:         event.UserID,
+				CharacterID:    event.CharacterID,
+				InstallationID: installationID,
 			}
-			if !b.IsEnabled() {
-				continue
+			rawMatched := evaluate(scope, event.EventType, event.Origin, payload)
+			for _, rb := range rawMatched {
+				b, ok := rb.(bindingCandidate)
+				if !ok {
+					continue
+				}
+				if !b.IsEnabled() {
+					continue
+				}
+				keys := []string{b.GetPreferredAction()}
+				priority := 300 + b.GetPriorityOffset()
+				if priority > 900 {
+					priority = 900
+				}
+				cooldown := time.Duration(0)
+				if cooldownMS := b.GetCooldownMS(); cooldownMS > 0 {
+					cooldown = time.Duration(cooldownMS) * time.Millisecond
+					if cooldown < 500*time.Millisecond {
+						cooldown = 500 * time.Millisecond
+					}
+				}
+				candidates = append(candidates, CandidateAction{
+					Semantic:      b.GetSemantic(),
+					PreferredKeys: keys,
+					SourceEventID: event.EventID,
+					SourceLayer:   "binding",
+					Priority:      priority,
+					CreatedAt:     now,
+					CooldownKey:   b.GetID(),
+					Cooldown:      cooldown,
+				})
 			}
-			keys := []string{b.GetPreferredAction()}
-			priority := 300 + b.GetPriorityOffset()
-			if priority > 900 {
-				priority = 900
-			}
-			cooldown := time.Duration(b.GetCooldownMS()) * time.Millisecond
-			if cooldown < 500*time.Millisecond {
-				cooldown = 500 * time.Millisecond
-			}
-			candidates = append(candidates, CandidateAction{
-				Semantic:      b.GetSemantic(),
-				PreferredKeys: keys,
-				SourceEventID: event.EventID,
-				SourceLayer:   "binding",
-				Priority:      priority,
-				CreatedAt:     now,
-				CooldownKey:   b.GetID(),
-				Cooldown:      cooldown,
-			})
 		}
 	}
 
@@ -307,7 +326,11 @@ func withMin(ms time.Duration) func(*CandidateAction) {
 }
 
 func withExpires(d time.Duration) func(*CandidateAction) {
-	return func(c *CandidateAction) { c.ExpiresAt = timePtr(time.Now().Add(d)) }
+	return func(c *CandidateAction) {
+		// Candidate creation already uses the resolver clock. Base expiry on that
+		// timestamp so injected clocks remain deterministic and replay-safe.
+		c.ExpiresAt = timePtr(c.CreatedAt.Add(d))
+	}
 }
 
 func withUninterruptible(v bool) func(*CandidateAction) {

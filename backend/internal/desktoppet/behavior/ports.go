@@ -8,6 +8,13 @@ type ActivePetPort interface {
 	ResolveActivePet(ctx context.Context, userID, characterID string) (*ActivePetSnapshot, error)
 }
 
+// EventTargetedActivePetPort is implemented by adapters that can preserve
+// device/installation affinity carried by a behavior event. Engines fall back
+// to ActivePetPort when the adapter does not support targeted resolution.
+type EventTargetedActivePetPort interface {
+	ResolveActivePetForEvent(ctx context.Context, event BehaviorEventEnvelope) (*ActivePetSnapshot, error)
+}
+
 type RuntimeActionPort interface {
 	SubmitBehaviorCommand(ctx context.Context, command BehaviorRuntimeCommand) (*CommandReceipt, error)
 	QueryPlayback(ctx context.Context, petInstanceID string) (*PlaybackSnapshot, error)
@@ -16,11 +23,20 @@ type RuntimeActionPort interface {
 type BehaviorStateRepository interface {
 	LoadContext(ctx context.Context, userID, characterID string) (*BehaviorContextSnapshot, error)
 	SaveContextCAS(ctx context.Context, currentRevision int64, next BehaviorContextSnapshot) (bool, error)
+	CommitLeasedContextAndInboxCAS(ctx context.Context, currentRevision int64, next BehaviorContextSnapshot, eventID, leaseToken string, status InboxStatus) (bool, error)
 	InsertInboxIfAbsent(ctx context.Context, event BehaviorEventEnvelope) (bool, error)
 	LeaseInbox(ctx context.Context, limit int, leaseToken string) ([]InboxRecord, error)
-	MarkInboxStatus(ctx context.Context, eventID string, status InboxStatus, errorCode string) error
+	RenewInboxLease(ctx context.Context, eventID, leaseToken string, leaseExpiresAt interface{}) (bool, error)
+	MarkInboxStatus(ctx context.Context, eventID, leaseOwner string, status InboxStatus, errorCode, errorMessage string) error
+	MarkInboxDeadLetter(ctx context.Context, eventID, leaseOwner, errorCode, errorMessage string, failedAt interface{}) error
+	MarkInboxRetry(ctx context.Context, eventID, leaseOwner, errorCode, errorMessage string, availableAt interface{}) error
 	AppendDecision(ctx context.Context, decision BehaviorDecisionAudit) error
+	CommitContextAndDecisionCAS(ctx context.Context, currentRevision int64, next BehaviorContextSnapshot, decision BehaviorDecisionAudit) (bool, error)
+	CommitLeasedContextAndDecisionCAS(ctx context.Context, currentRevision int64, next BehaviorContextSnapshot, decision BehaviorDecisionAudit, eventID, leaseToken string) (bool, error)
+	FindDecisionByEventID(ctx context.Context, eventID string) (*BehaviorDecisionAudit, error)
+	FindDecisionByID(ctx context.Context, decisionID string) (*BehaviorDecisionAudit, error)
 	UpdateDecisionStatus(ctx context.Context, decisionID string, status DecisionStatus, at interface{}) error
+	UpdateDecisionOutcome(ctx context.Context, decision BehaviorDecision) error
 	LoadCooldowns(ctx context.Context, userID, characterID string) ([]CooldownRecord, error)
 	SaveCooldown(ctx context.Context, record CooldownRecord) error
 	CleanupExpiredCooldowns(ctx context.Context, before interface{}) error
