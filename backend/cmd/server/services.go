@@ -834,7 +834,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	coordRepo := installation.NewCoordinatorRepoAdapter(installationRepoV2)
 	coordValidator := &coordinatorReleaseValidator{releases: releaseRepo}
 	coordStager := installation.NewReleaseStager(ctx.DB, pathRegistry)
-	coordPublisher := &coordinatorRuntimePublisher{facade: runtimeV2Facade}
+	coordPublisher := &coordinatorRuntimePublisher{facade: runtimeV2Facade, installations: coordRepo}
 	desiredOutboxWorker := installation.NewDesiredStateOutboxWorker(installationRepoV2, coordPublisher)
 	projectionService := installationprojection.NewService(ctx.DB)
 	coordProjection := installationprojection.NewCoordinatorAdapter(projectionService)
