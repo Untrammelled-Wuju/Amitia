@@ -85,6 +85,24 @@ const SNAPSHOT_FRAME_MERGE_MS = 500;
 const SNAPSHOT_HIDDEN_MS = 5000;
 const DRAG_THRESHOLD_PX = 5;
 
+function normalizeInterruptionReason(reason: string): import("../desktop-pet/animation/contracts").InterruptionReason {
+  switch (reason) {
+    case "replaced":
+    case "system_force":
+    case "package_switch":
+    case "resource_failure":
+    case "window_destroyed":
+    case "runtime_reconnect":
+    case "runtime_stop":
+    case "command_cancelled":
+    case "max_duration_reached":
+    case "user_disabled":
+      return reason;
+    default:
+      return "system_force";
+  }
+}
+
 const KEY_SNAPSHOT_EVENTS: ReadonlySet<PlaybackEventType> = new Set<PlaybackEventType>([
   "playback.action_started",
   "playback.action_completed",
@@ -389,8 +407,8 @@ async function main(): Promise<void> {
     engine.resume();
   });
 
-  const unsubStop = api.onStop(() => {
-    engine.stop();
+  const unsubStop = api.onStop((reason) => {
+    engine.stop(normalizeInterruptionReason(reason));
   });
 
   const unsubSwitchPackage = api.onSwitchPackage((snapshot: PackagePlaybackSnapshot) => {

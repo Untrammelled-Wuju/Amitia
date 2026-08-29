@@ -27,7 +27,7 @@ export interface PetAnimationApi {
   onPlayAction(callback: (command: PlayActionCommand) => void): () => void;
   onPause(callback: () => void): () => void;
   onResume(callback: () => void): () => void;
-  onStop(callback: () => void): () => void;
+  onStop(callback: (reason: string) => void): () => void;
   onSwitchPackage(callback: (snapshot: PackagePlaybackSnapshot) => void): () => void;
   onWindowHidden(callback: () => void): () => void;
   onWindowShown(callback: () => void): () => void;
