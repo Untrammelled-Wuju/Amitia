@@ -35,6 +35,8 @@ export class CharacterWatcher {
   private stopped = true;
   private timer: NodeJS.Timeout | null = null;
   private tickInFlight = false;
+  private lifecycleGeneration = 0;
+  private activeRequest: AbortController | null = null;
 
   constructor(options: CharacterWatcherOptions = {}) {
     this.coreBaseURL = (options.coreBaseURL ?? DEFAULT_CORE_BASE_URL).replace(
@@ -49,11 +51,13 @@ export class CharacterWatcher {
   }
 
   async start(): Promise<void> {
+    if (!this.stopped) return;
+    const generation = ++this.lifecycleGeneration;
+    this.stopped = false;
+    this.lastCharacterId = null;
     if (!this.onActiveCharacterChanged || this.pollIntervalMs <= 0) {
-      this.stopped = false;
       return;
     }
-    this.stopped = false;
 
     // Initial reconciliation is deliberate. The active character can change while
     // Electron is stopped, so merely remembering the first observed ID would leave
@@ -61,21 +65,25 @@ export class CharacterWatcher {
     // A transient auth/network failure must not disable the watcher permanently; the
     // interval below remains armed so reconciliation is retried automatically.
     try {
-      await this.tick();
+      await this.tick(generation);
     } catch (err) {
-      console.warn(
-        "[CharacterWatcher] 首次角色同步失败，将继续重试:",
-        err instanceof Error ? err.message : String(err),
-      );
-    }
-
-    if (this.stopped) return;
-    this.timer = setInterval(() => {
-      void this.tick().catch((err) => {
+      if (!this.stopped && generation === this.lifecycleGeneration) {
         console.warn(
-          "[CharacterWatcher] 轮询失败:",
+          "[CharacterWatcher] 首次角色同步失败，将继续重试:",
           err instanceof Error ? err.message : String(err),
         );
+      }
+    }
+
+    if (this.stopped || generation !== this.lifecycleGeneration) return;
+    this.timer = setInterval(() => {
+      void this.tick(generation).catch((err) => {
+        if (!this.stopped && generation === this.lifecycleGeneration) {
+          console.warn(
+            "[CharacterWatcher] 轮询失败:",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
       });
     }, this.pollIntervalMs);
     this.timer.unref?.();
@@ -83,31 +91,51 @@ export class CharacterWatcher {
 
   stop(): void {
     this.stopped = true;
+    this.lifecycleGeneration += 1;
+    this.activeRequest?.abort();
+    this.activeRequest = null;
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
     }
   }
 
-  private async tick(): Promise<void> {
-    if (this.stopped || this.tickInFlight) return;
+  private async tick(generation = this.lifecycleGeneration): Promise<void> {
+    if (
+      this.stopped ||
+      generation !== this.lifecycleGeneration ||
+      this.tickInFlight
+    ) {
+      return;
+    }
     this.tickInFlight = true;
     try {
-      const characterId = await this.fetchActiveCharacterId();
-      if (!characterId || this.lastCharacterId === characterId) return;
+      const characterId = await this.fetchActiveCharacterId(generation);
+      if (
+        this.stopped ||
+        generation !== this.lifecycleGeneration ||
+        !characterId ||
+        this.lastCharacterId === characterId
+      ) {
+        return;
+      }
 
       // Commit the observed ID only after the local pet has reconciled
       // successfully. A failed switch is retried on the next poll instead of being
-      // silently acknowledged forever.
+      // silently acknowledged forever. Re-check the lifecycle token after every
+      // await so a stopped watcher can never reconcile against a manager that is
+      // already shutting down.
       await this.onActiveCharacterChanged?.(characterId);
+      if (this.stopped || generation !== this.lifecycleGeneration) return;
       this.lastCharacterId = characterId;
     } finally {
       this.tickInFlight = false;
     }
   }
 
-  private async fetchActiveCharacterId(): Promise<string> {
+  private async fetchActiveCharacterId(generation: number): Promise<string> {
     const controller = new AbortController();
+    this.activeRequest = controller;
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     timeout.unref?.();
 
@@ -149,6 +177,12 @@ export class CharacterWatcher {
       return this.extractCharacterId(parsed as RoleProfilePayload);
     } finally {
       clearTimeout(timeout);
+      if (
+        generation === this.lifecycleGeneration &&
+        this.activeRequest === controller
+      ) {
+        this.activeRequest = null;
+      }
     }
   }
 
