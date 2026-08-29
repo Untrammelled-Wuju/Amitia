@@ -1,0 +1,62 @@
+Amitia Desktop Pet Behavior Finalization Fix
+Source: U-Ai-source.tar(20260829-085327).gz
+Date: 2026-08-29
+
+Scope
+- Finalize durable/recoverable behavior inbox leasing, retry, dead-letter, fencing and crash recovery.
+- Make context/decision persistence crash-safe and resume committed decisions idempotently.
+- Complete binding cold-load/hot-reload and fail-closed evaluator behavior.
+- Make multi-device active-pet selection deterministic and preserve runtime/installation affinity.
+- Fix behavior coordinator lifecycle, runtime connection state synchronization and state-source isolation/error handling.
+- Complete Runtime V2 command routing/idempotency result handling and playback/runtime sequence propagation.
+- Add decision recovery schema fields/indexes and forward migration 202608290006.
+
+Changed source files: 32
+
+Verification performed
+- gofmt: PASS for every modified Go file.
+- git diff --check equivalent: no whitespace errors.
+- baseline.sql executed successfully against SQLite in-memory database: PASS.
+- Behavior GORM model column set vs baseline behavior table columns: PASS.
+- Desktop Pet Runtime V2 single-track static gate: PASS.
+- Desktop Pet player singleton static gate: PASS.
+- Desktop Pet finalization static gate: PASS.
+- Cloud -> local device execution finalization static gate: PASS.
+- Regression scans: no evaluate(nil)/EvaluatorScope nil assertion path; inbox lease query includes retry and expired leased rows; state source user filtering present; coordinator shutdown present.
+
+Environment limitation
+- Full Go build/test/race was not executed because this environment has Go 1.23.2 while the project requires Go 1.26.1, and outbound DNS/module download is unavailable. No claim is made that full CI ran here.
+
+Files
+- backend/cmd/server/services.go
+- backend/internal/desktoppet/behavior/adapters/playback.go
+- backend/internal/desktoppet/behavior/arbiter.go
+- backend/internal/desktoppet/behavior/bindings/evaluator.go
+- backend/internal/desktoppet/behavior/bindings/repository.go
+- backend/internal/desktoppet/behavior/bindings/validator.go
+- backend/internal/desktoppet/behavior/coordinator.go
+- backend/internal/desktoppet/behavior/engine.go
+- backend/internal/desktoppet/behavior/events/envelope.go
+- backend/internal/desktoppet/behavior/fallback.go
+- backend/internal/desktoppet/behavior/handler.go
+- backend/internal/desktoppet/behavior/model.go
+- backend/internal/desktoppet/behavior/persistence/migration.go
+- backend/internal/desktoppet/behavior/persistence/models.go
+- backend/internal/desktoppet/behavior/persistence/repository.go
+- backend/internal/desktoppet/behavior/ports.go
+- backend/internal/desktoppet/behavior/reconcile.go
+- backend/internal/desktoppet/behavior/reducer.go
+- backend/internal/desktoppet/behavior/resolver.go
+- backend/internal/desktoppet/behavior/service.go
+- backend/internal/desktoppet/behavior/wiring/active_pet_v2_port.go
+- backend/internal/desktoppet/behavior/wiring/assembly.go
+- backend/internal/desktoppet/behavior/wiring/runtime_v2_action_port.go
+- backend/internal/desktoppet/behavior/wiring/state_source.go
+- backend/internal/desktoppet/runtime/event_types.go
+- backend/internal/desktoppet/runtime/protocol/v2/facade.go
+- backend/internal/desktoppet/runtime/protocol/v2/handler.go
+- backend/internal/desktoppet/runtime/protocol/v2/router.go
+- backend/internal/migration/baseline.sql
+- backend/internal/migration/desktop_pet_behavior_system.go
+- backend/internal/migration/migration_versions_test.go
+- backend/internal/migration/migrations.go
