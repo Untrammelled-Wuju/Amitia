@@ -358,6 +358,7 @@ func (r *Reconciler) buildAndSubmitCommand(ctx context.Context, decision *Behavi
 		InterruptPolicy:      decision.InterruptPolicy,
 		MinimumPlayMS:        decision.MinimumPlayMS,
 		MaximumPlayMS:        decision.MaximumPlayMS,
+		ExpiresAt:            decision.ExpiresAt,
 		ReturnPolicy:         decision.ReturnPolicy,
 		ReasonCode:           "reconcile",
 		Durable:              true,

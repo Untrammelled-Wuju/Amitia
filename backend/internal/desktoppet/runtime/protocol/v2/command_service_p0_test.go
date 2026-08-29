@@ -33,7 +33,7 @@ func TestCommandProgressNeverRegressesWhenAckBeatsTransportMark(t *testing.T) {
 	if err := db.Create(cmd).Error; err != nil {
 		t.Fatalf("create command: %v", err)
 	}
-	if err := svc.MarkDispatching(cmd.ID, "runtime-1", now); err != nil {
+	if err := svc.MarkDispatching(cmd.ID, "runtime-1", "session-1", now); err != nil {
 		t.Fatalf("dispatching: %v", err)
 	}
 	if err := svc.MarkRuntimeReceived(cmd.ID, "runtime-1", "session-1", now.Add(time.Millisecond)); err != nil {
@@ -58,7 +58,7 @@ func TestCompletedCommandCannotBeOverwrittenByLateFailure(t *testing.T) {
 	now := time.Now().UTC()
 	cmd := &RuntimeCommand{
 		ID: "cmd-terminal", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral",
-		Status: string(CommandStatusQueued), PayloadJSON: `{}`, CreatedAt: now.Format(time.RFC3339), UpdatedAt: now.Format(time.RFC3339),
+		Status: string(CommandStatusRuntimeAccepted), PayloadJSON: `{}`, CreatedAt: now.Format(time.RFC3339), UpdatedAt: now.Format(time.RFC3339),
 	}
 	if err := db.Create(cmd).Error; err != nil {
 		t.Fatalf("create command: %v", err)
@@ -91,7 +91,7 @@ func TestCompletedCommandCannotReenterDispatching(t *testing.T) {
 	if err := db.Create(cmd).Error; err != nil {
 		t.Fatalf("create completed command: %v", err)
 	}
-	if err := svc.MarkDispatching(cmd.ID, "runtime-1", now.Add(time.Second)); err == nil {
+	if err := svc.MarkDispatching(cmd.ID, "runtime-1", "session-1", now.Add(time.Second)); err == nil {
 		t.Fatal("completed command must not re-enter dispatching")
 	}
 	got, err := svc.GetCommand(cmd.ID)
@@ -132,10 +132,69 @@ func TestExpiredDurableDuplicateRevivesSameCommand(t *testing.T) {
 	}
 }
 
+func TestDurableCommandCreationRejectsNonDurableType(t *testing.T) {
+	svc := NewCommandService(newCommandServiceTestDB(t))
+	payload := SyncDesiredStatePayload{DesiredRevision: 1, DesiredHash: "hash-1"}
+	if _, err := svc.CreateDurableCommand(
+		"u", "d", string(CommandTypeRecenterOnce), "bad-durable:1", "desired:d", 1, payload,
+	); err == nil {
+		t.Fatal("non-durable command type must not be persisted as durable")
+	}
+}
+
+func TestUnboundEphemeralCommandCreationIsRejected(t *testing.T) {
+	svc := NewCommandService(newCommandServiceTestDB(t))
+	if _, err := svc.CreateEphemeralCommand("u", "d", string(CommandTypeRecenterOnce), "unsafe:1", []byte(`{}`)); err == nil {
+		t.Fatal("unbound ephemeral creation must fail closed")
+	}
+}
+
+func TestSessionBoundEphemeralRejectsUnknownCommandType(t *testing.T) {
+	svc := NewCommandService(newCommandServiceTestDB(t))
+	if _, err := svc.CreateEphemeralCommandForSession(
+		"u", "d", "runtime-1", "session-1", "installation-1",
+		"runtime.command.typo", "unknown:1", []byte(`{}`),
+	); err == nil {
+		t.Fatal("unknown ephemeral runtime command type must fail closed")
+	}
+}
+
+func TestAllSessionBoundEphemeralCommandsCarryAuthoritativeExpiry(t *testing.T) {
+	svc := NewCommandService(newCommandServiceTestDB(t))
+	types := []CommandType{
+		CommandTypePlayAction,
+		CommandTypeStopAction,
+		CommandTypePauseAction,
+		CommandTypeResumeAction,
+		CommandTypeRecenterOnce,
+	}
+	for i, commandType := range types {
+		payload := []byte(`{}`)
+		if commandType == CommandTypePlayAction {
+			payload = []byte(`{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"installation-1"}`)
+		}
+		before := time.Now().UTC()
+		cmd, err := svc.CreateEphemeralCommandForSession(
+			"u", "d", "runtime-1", "session-1", "installation-1",
+			string(commandType), fmt.Sprintf("ephemeral-expiry:%d", i), payload,
+		)
+		if err != nil {
+			t.Fatalf("create %s: %v", commandType, err)
+		}
+		expiresAt, err := time.Parse(time.RFC3339Nano, cmd.ExpiresAt)
+		if err != nil {
+			t.Fatalf("%s expiresAt is invalid: %q err=%v", commandType, cmd.ExpiresAt, err)
+		}
+		if !expiresAt.After(before) || expiresAt.After(before.Add(defaultEphemeralCommandTTL+2*time.Second)) {
+			t.Fatalf("%s authoritative expiry out of bounds: %s", commandType, expiresAt)
+		}
+	}
+}
+
 func TestEphemeralCommandGetsDeviceSequence(t *testing.T) {
 	db := newCommandServiceTestDB(t)
 	svc := NewCommandService(db)
-	cmd, err := svc.CreateEphemeralCommand("u", "d", string(CommandTypeRecenterOnce), "recenter:1", []byte(`{}`))
+	cmd, err := svc.CreateEphemeralCommandForSession("u", "d", "runtime-1", "session-1", "installation-1", string(CommandTypeRecenterOnce), "recenter:1", []byte(`{}`))
 	if err != nil {
 		t.Fatalf("create ephemeral: %v", err)
 	}
@@ -187,7 +246,7 @@ func TestDurableTransportFailureBecomesRetryableAndDispatchable(t *testing.T) {
 		ID: "durable-retry", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1",
 		CommandType: string(CommandTypeSyncDesiredState), Durability: "durable", Status: string(CommandStatusTransportDispatched),
 		DeviceSequence: 7, PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1,
-		RuntimeSessionID: "old-session", CreatedAt: now.Add(-time.Minute).Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05"),
+		RuntimeSessionID: "old-session", CreatedAt: now.Add(-10 * time.Minute).Format("2006-01-02 15:04:05"), UpdatedAt: now.Add(-6 * time.Minute).Format("2006-01-02 15:04:05"),
 	}
 	if err := db.Create(cmd).Error; err != nil {
 		t.Fatalf("create command: %v", err)
@@ -232,7 +291,7 @@ func TestHelloReconciliationUsesAuthoritativeDesiredStateAndRequeuesInflight(t *
 	if err != nil {
 		t.Fatalf("create durable: %v", err)
 	}
-	if err := svc.MarkDispatching(cmd.ID, "runtime-1", time.Now().UTC()); err != nil {
+	if err := svc.MarkDispatching(cmd.ID, "runtime-1", "old-session", time.Now().UTC()); err != nil {
 		t.Fatalf("mark dispatching: %v", err)
 	}
 	if err := svc.MarkRuntimeReceived(cmd.ID, "runtime-1", "old-session", time.Now().UTC()); err != nil {
@@ -347,5 +406,298 @@ func TestHelloReconciliationRetargetsQueuedDesiredCommandToCurrentRuntime(t *tes
 	}
 	if len(cmds) != 1 || cmds[0].ID != cmd.ID {
 		t.Fatalf("retargeted command not dispatchable on new runtime: %#v", cmds)
+	}
+}
+
+func TestSessionBoundEphemeralCarriesAuthoritativeExpiry(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	payload := []byte(`{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"inst-1"}`)
+	before := time.Now().UTC()
+	cmd, err := svc.CreateEphemeralCommandForSession("u", "d", "runtime-1", "session-1", "inst-1", string(CommandTypePlayAction), "play:expiry", payload)
+	if err != nil {
+		t.Fatalf("create session-bound ephemeral: %v", err)
+	}
+	if cmd.RuntimeID != "runtime-1" || cmd.RuntimeSessionID != "session-1" || cmd.InstallationID != "inst-1" {
+		t.Fatalf("ephemeral route was not bound atomically: %#v", cmd)
+	}
+	expiresAt, err := time.Parse(time.RFC3339Nano, cmd.ExpiresAt)
+	if err != nil {
+		t.Fatalf("expiresAt is not RFC3339Nano: %q err=%v", cmd.ExpiresAt, err)
+	}
+	if !expiresAt.After(before) || expiresAt.After(before.Add(defaultEphemeralCommandTTL+2*time.Second)) {
+		t.Fatalf("unexpected authoritative expiry: %s", expiresAt)
+	}
+}
+
+func TestSessionBoundPlayActionCannotExtendServerTTL(t *testing.T) {
+	svc := NewCommandService(newCommandServiceTestDB(t))
+	requested := time.Now().UTC().Add(6 * time.Hour)
+	payload := []byte(fmt.Sprintf(`{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"inst-1","expiresAt":%q}`, requested.Format(time.RFC3339Nano)))
+	before := time.Now().UTC()
+	cmd, err := svc.CreateEphemeralCommandForSession("u", "d", "runtime-1", "session-1", "inst-1", string(CommandTypePlayAction), "play:ttl-cap", payload)
+	if err != nil {
+		t.Fatalf("create session-bound ephemeral: %v", err)
+	}
+	expiresAt, err := time.Parse(time.RFC3339Nano, cmd.ExpiresAt)
+	if err != nil {
+		t.Fatalf("parse authoritative expiry: %v", err)
+	}
+	if expiresAt.After(before.Add(defaultEphemeralCommandTTL + 2*time.Second)) {
+		t.Fatalf("producer extended server TTL: expires=%s requested=%s", expiresAt, requested)
+	}
+}
+
+func TestExpiryReconcilerAllowsShortEventDeliveryGrace(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	now := time.Now().UTC()
+	cmd := &RuntimeCommand{
+		ID: "cmd-expiry-grace", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRendererAccepted),
+		ExpiresAt:   now.Add(-ephemeralExpiryReconcileGrace / 2).Format(runtimeCommandExpiryLayout),
+		PayloadJSON: `{}`, CreatedAt: now.Add(-time.Minute).Format("2006-01-02 15:04:05"), UpdatedAt: now.Add(-time.Minute).Format("2006-01-02 15:04:05"),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+	expired, err := svc.ListExpiredCommands(10, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, got := range expired {
+		if got.ID == cmd.ID {
+			t.Fatal("renderer-accepted command inside delivery grace must not be reconciled before late start/accept events can arrive")
+		}
+	}
+}
+
+func TestSessionBoundPlayActionRejectsInvalidAuthoritativeExpiry(t *testing.T) {
+	svc := NewCommandService(newCommandServiceTestDB(t))
+	payload := []byte(`{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"inst-1","expiresAt":"not-a-time"}`)
+	if _, err := svc.CreateEphemeralCommandForSession("u", "d", "runtime-1", "session-1", "inst-1", string(CommandTypePlayAction), "play:bad-expiry", payload); err == nil {
+		t.Fatal("invalid play_action expiresAt must fail closed")
+	}
+}
+
+func TestRendererAcceptanceBindsPlaybackIdentity(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	now := time.Now().UTC()
+	cmd := &RuntimeCommand{
+		ID: "cmd-renderer-bind", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRuntimeAccepted),
+		PayloadJSON: `{}`, CreatedAt: now.Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05"),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkRendererAccepted(cmd.ID, "runtime-1", "session-1", "playback-1", now); err != nil {
+		t.Fatalf("renderer accepted: %v", err)
+	}
+	stored, err := svc.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != string(CommandStatusRendererAccepted) || stored.PlaybackRequestID != "playback-1" {
+		t.Fatalf("renderer acceptance did not bind playback identity: status=%s playback=%s", stored.Status, stored.PlaybackRequestID)
+	}
+	if err := svc.MarkPlaybackStarted(cmd.ID, "playback-wrong", now.Add(time.Millisecond)); err == nil {
+		t.Fatal("mismatched playback identity must not start command")
+	}
+	stored, err = svc.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != string(CommandStatusRendererAccepted) {
+		t.Fatalf("mismatched playback start mutated status: %s", stored.Status)
+	}
+}
+
+func TestExpiryReconcilerIncludesPlaybackStartedEphemeral(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	now := time.Now().UTC()
+	started := now.Add(-defaultPlaybackLivenessCeiling - time.Minute)
+	cmd := &RuntimeCommand{
+		ID: "cmd-started-expired", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusPlaybackStarted),
+		PlaybackRequestID: "playback-1", ExpiresAt: started.Add(-time.Second).Format(runtimeCommandExpiryLayout),
+		PayloadJSON: `{}`, PlaybackStartedAt: started.Format(time.RFC3339Nano),
+		CreatedAt: started.Format("2006-01-02 15:04:05"), UpdatedAt: started.Format("2006-01-02 15:04:05"),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+	expired, err := svc.ListExpiredCommands(10, 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range expired {
+		if item.ID == cmd.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expired playback_started ephemeral command was not reconciled")
+	}
+}
+
+func TestPlaybackStartedUsesLivenessTimeoutNotAdmissionExpiry(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	now := time.Now().UTC()
+	cmd := &RuntimeCommand{
+		ID: "cmd-started-still-live", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusPlaybackStarted),
+		PlaybackRequestID: "playback-1", ExpiresAt: now.Add(-time.Minute).Format(runtimeCommandExpiryLayout),
+		PayloadJSON: `{}`, CreatedAt: now.Add(-2 * time.Minute).Format("2006-01-02 15:04:05"), UpdatedAt: now.Add(-2 * time.Minute).Format("2006-01-02 15:04:05"),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+	expired, err := svc.ListExpiredCommands(10, 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range expired {
+		if item.ID == cmd.ID {
+			t.Fatal("started playback must not be expired by its pre-start admission deadline")
+		}
+	}
+}
+
+func TestReconnectSupersedeIsScopedToOldSession(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	now := time.Now().UTC()
+	old := &RuntimeCommand{ID: "old", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-old", CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral", Status: string(CommandStatusQueued), PayloadJSON: `{}`, CreatedAt: now.Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05")}
+	fresh := &RuntimeCommand{ID: "fresh", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-new", CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral", Status: string(CommandStatusQueued), PayloadJSON: `{}`, CreatedAt: now.Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05")}
+	if err := db.Create(old).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(fresh).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SupersedeEphemeralCommands("u", "d", "runtime-1", "session-old", "replaced", now); err != nil {
+		t.Fatal(err)
+	}
+	gotOld, _ := svc.GetCommand(old.ID)
+	gotFresh, _ := svc.GetCommand(fresh.ID)
+	if gotOld.Status != string(CommandStatusSuperseded) {
+		t.Fatalf("old session command not superseded: %s", gotOld.Status)
+	}
+	if gotFresh.Status != string(CommandStatusQueued) {
+		t.Fatalf("new session command was incorrectly superseded: %s", gotFresh.Status)
+	}
+}
+
+func TestSessionBoundPlayActionRejectsIncompleteTargetIdentity(t *testing.T) {
+	svc := NewCommandService(newCommandServiceTestDB(t))
+	cases := []struct {
+		name    string
+		payload string
+	}{
+		{"missing runtime", `{"actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"inst-1"}`},
+		{"missing character", `{"runtimeId":"runtime-1","actionKey":"wave","petInstanceId":"runtime-1","installationId":"inst-1"}`},
+		{"missing pet instance", `{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","installationId":"inst-1"}`},
+		{"stale installation", `{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"inst-old"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := svc.CreateEphemeralCommandForSession("u", "d", "runtime-1", "session-1", "inst-1", string(CommandTypePlayAction), "play:identity:"+tc.name, []byte(tc.payload)); err == nil {
+				t.Fatalf("invalid target identity must fail closed: %s", tc.payload)
+			}
+		})
+	}
+}
+
+func TestPlaybackStartedUsesCommandMaximumInsteadOfTransportTimeout(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	now := time.Now().UTC()
+	started := now.Add(-10 * time.Minute)
+	cmd := &RuntimeCommand{
+		ID: "cmd-long-playback", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusPlaybackStarted),
+		PayloadJSON: `{"maximumPlayMs":3600000}`, PlaybackStartedAt: started.Format(time.RFC3339Nano),
+		CreatedAt: started.Format("2006-01-02 15:04:05"), UpdatedAt: started.Format("2006-01-02 15:04:05"),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+	expired, err := svc.ListExpiredCommands(10, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, got := range expired {
+		if got.ID == cmd.ID {
+			t.Fatal("10-minute playback with a 1-hour maximum must not be killed by the 30-second transport timeout")
+		}
+	}
+}
+
+func TestPlaybackStartedExpiresAfterMaximumPlusGrace(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	started := time.Now().UTC().Add(-3 * time.Minute)
+	cmd := &RuntimeCommand{
+		ID: "cmd-stale-playback", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusPlaybackStarted),
+		PayloadJSON: `{"maximumPlayMs":1000}`, PlaybackStartedAt: started.Format(time.RFC3339Nano),
+		CreatedAt: started.Format("2006-01-02 15:04:05"), UpdatedAt: started.Format("2006-01-02 15:04:05"),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatal(err)
+	}
+	expired, err := svc.ListExpiredCommands(10, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, got := range expired {
+		if got.ID == cmd.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("playback missing its terminal beyond maximumPlayMs + grace must be reclaimed")
+	}
+}
+
+func TestDispatchingBindsRuntimeSessionBeforeTransportWrite(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	now := time.Now().UTC()
+	cmd := &RuntimeCommand{
+		ID: "cmd-dispatch-session", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1",
+		RuntimeSessionID: "old-session", CommandType: string(CommandTypePlayAction), Durability: "ephemeral",
+		Status: string(CommandStatusQueued), PayloadJSON: `{}`, CreatedAt: now.Format(time.RFC3339), UpdatedAt: now.Format(time.RFC3339),
+	}
+	if err := db.Create(cmd).Error; err != nil {
+		t.Fatalf("create command: %v", err)
+	}
+	if err := svc.MarkDispatching(cmd.ID, "runtime-1", "old-session", now); err != nil {
+		t.Fatalf("mark dispatching: %v", err)
+	}
+	got, err := svc.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatalf("get command: %v", err)
+	}
+	if got.RuntimeSessionID != "old-session" || got.Status != string(CommandStatusDispatching) {
+		t.Fatalf("dispatching identity mismatch: status=%s session=%s", got.Status, got.RuntimeSessionID)
+	}
+	if err := svc.SupersedeEphemeralCommands("u", "d", "runtime-1", "old-session", "runtime connection replaced", now.Add(time.Second)); err != nil {
+		t.Fatalf("supersede: %v", err)
+	}
+	got, err = svc.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatalf("get superseded command: %v", err)
+	}
+	if got.Status != string(CommandStatusSuperseded) {
+		t.Fatalf("dispatching old-session ephemeral escaped reconnect fence: %s", got.Status)
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/log"
+	"gorm.io/gorm"
 )
 
 type ConnectionCommandDispatcher struct {
@@ -74,6 +75,36 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 	now := time.Now().Format("2006-01-02 15:04:05")
 
 	for _, cmd := range cmds {
+		if !cmd.HasValidClassification() {
+			if markErr := d.commands.MarkFailed(cmd.ID, "COMMAND_CLASSIFICATION_INVALID", "stored runtime command type/durability classification is invalid", time.Now().UTC()); markErr != nil {
+				log.Warn("[v2-dispatcher] mark invalid command classification failed: ", markErr)
+			}
+			continue
+		}
+		if !cmd.IsDurable() && cmd.RuntimeSessionID != sessionID {
+			if markErr := d.commands.MarkSuperseded(cmd.ID, "ephemeral command is not bound to the active runtime session", time.Now().UTC()); markErr != nil {
+				log.Warn("[v2-dispatcher] supersede stale ephemeral command failed: ", markErr)
+			}
+			continue
+		}
+		if !connectionSupportsCommand(conn, CommandType(cmd.CommandType)) {
+			if markErr := d.commands.MarkFailed(cmd.ID, "RUNTIME_CAPABILITY_UNSUPPORTED", "connected runtime does not advertise required command capability", time.Now().UTC()); markErr != nil {
+				log.Warn("[v2-dispatcher] mark unsupported command failed: ", markErr)
+			}
+			continue
+		}
+		if cmd.ExpiresAt != "" {
+			expiresAt, parseErr := time.Parse(time.RFC3339Nano, cmd.ExpiresAt)
+			if parseErr != nil {
+				expiresAt, parseErr = time.Parse(time.RFC3339, cmd.ExpiresAt)
+			}
+			if parseErr != nil || !expiresAt.After(time.Now().UTC()) {
+				if markErr := d.commands.MarkExpired(cmd.ID, time.Now().UTC()); markErr != nil {
+					log.Warn("[v2-dispatcher] mark expired command failed: ", markErr)
+				}
+				continue
+			}
+		}
 		targetRuntimeID := cmd.RuntimeID
 		if targetRuntimeID == "" && cmd.CommandType == string(CommandTypePlayAction) {
 			var playPayload PlayActionPayload
@@ -85,7 +116,38 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 			continue
 		}
 
-		if err := d.commands.MarkDispatching(cmd.ID, string(conn.RuntimeID), time.Now()); err != nil {
+		if err := d.commands.MarkDispatching(cmd.ID, string(conn.RuntimeID), sessionID, time.Now()); err != nil {
+			continue
+		}
+		attemptID := "attempt_" + cmd.ID + "_" + fmt.Sprint(generation) + "_" + fmt.Sprint(time.Now().UTC().UnixNano())
+		attemptNow := time.Now().UTC().Format("2006-01-02 15:04:05")
+		attempt := &CommandAttempt{
+			AttemptID: attemptID, CommandID: cmd.ID, RuntimeSessionID: sessionID,
+			ConnectionGeneration: generation, InsertedAt: attemptNow, UpdatedAt: attemptNow,
+		}
+		if err := d.commands.DB().Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(attempt).Error; err != nil {
+				return err
+			}
+			result := tx.Model(&RuntimeCommand{}).Where(
+				"id = ? AND status = ?", cmd.ID, string(CommandStatusDispatching),
+			).Update("last_attempt_id", attemptID)
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("bind command attempt lost dispatch CAS")
+			}
+			return nil
+		}); err != nil {
+			log.Warn("[v2-dispatcher] persist dispatch attempt failed: ", err)
+			if cmd.IsDurable() {
+				if markErr := d.commands.MarkFailedRetryable(cmd.ID, "ATTEMPT_PERSIST_FAILED", err.Error(), time.Now().UTC()); markErr != nil {
+					log.Warn("[v2-dispatcher] mark attempt persistence retryable failure failed: ", markErr)
+				}
+			} else if markErr := d.commands.MarkFailed(cmd.ID, "ATTEMPT_PERSIST_FAILED", err.Error(), time.Now().UTC()); markErr != nil {
+				log.Warn("[v2-dispatcher] mark attempt persistence terminal failure failed: ", markErr)
+			}
 			continue
 		}
 
@@ -119,6 +181,7 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 				InstallationID:   cmd.InstallationID,
 				PetID:            cmd.PetID,
 				ReleaseID:        cmd.ReleaseID,
+				ExpiresAt:        cmd.ExpiresAt,
 				Payload:          rawPayload,
 			},
 			conn.UserID,
@@ -155,6 +218,24 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 		if err := d.commands.MarkTransportDispatched(cmd.ID, string(conn.RuntimeID), time.Now().UTC()); err != nil {
 			log.Warn("[v2-dispatcher] mark transport dispatched failed: ", err)
 		}
+	}
+}
+
+func connectionSupportsCommand(conn *Connection, commandType CommandType) bool {
+	if conn == nil {
+		return false
+	}
+	switch commandType {
+	case CommandTypeSyncDesiredState, CommandTypeEnsureAbsent, CommandTypeReloadRelease:
+		return conn.HasCapability(CapabilitySyncDesiredV2)
+	case CommandTypePlayAction:
+		return conn.HasCapability(CapabilityPlayActionV2) &&
+			conn.HasCapability(CapabilityRendererAckV2) &&
+			conn.HasCapability(CapabilityExpiryRFC3339)
+	case CommandTypeStopAction, CommandTypePauseAction, CommandTypeResumeAction, CommandTypeRecenterOnce:
+		return conn.HasCapability(CapabilityExpiryRFC3339)
+	default:
+		return false
 	}
 }
 

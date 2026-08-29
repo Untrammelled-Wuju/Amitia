@@ -113,6 +113,26 @@ func TestCommandTypeClassification(t *testing.T) {
 		if !ct.IsEphemeral() {
 			t.Errorf("%s should be ephemeral", ct)
 		}
+		if !ct.IsKnown() {
+			t.Errorf("%s should be known", ct)
+		}
+	}
+
+	unknown := CommandType("runtime.command.typo")
+	if unknown.IsDurable() || unknown.IsEphemeral() || unknown.IsKnown() {
+		t.Fatalf("unknown command type must fail closed, got durable=%v ephemeral=%v known=%v",
+			unknown.IsDurable(), unknown.IsEphemeral(), unknown.IsKnown())
+	}
+
+	validDurable := &RuntimeCommand{CommandType: string(CommandTypeSyncDesiredState), Durability: "durable"}
+	validEphemeral := &RuntimeCommand{CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral"}
+	invalidMismatch := &RuntimeCommand{CommandType: string(CommandTypeSyncDesiredState), Durability: "ephemeral"}
+	invalidUnknown := &RuntimeCommand{CommandType: string(unknown), Durability: "ephemeral"}
+	if !validDurable.HasValidClassification() || !validEphemeral.HasValidClassification() {
+		t.Fatal("known command classifications must be valid")
+	}
+	if invalidMismatch.HasValidClassification() || invalidUnknown.HasValidClassification() {
+		t.Fatal("mismatched or unknown stored command classification must fail closed")
 	}
 }
 

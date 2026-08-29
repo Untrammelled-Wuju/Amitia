@@ -28,6 +28,7 @@ var interactionActiveStatuses = []string{
 var voiceActiveStatuses = []string{
 	"received", "normalized", "queued", "processing",
 	"context_ready", "decided", "generated", "committed",
+	"delivery_pending", "delivered",
 }
 
 var toolActiveStatuses = []string{"PENDING", "RUNNING"}

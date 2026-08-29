@@ -53,6 +53,9 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		Semantic:         cmd.Semantic,
 		ReasonCode:       cmd.ReasonCode,
 	}
+	if cmd.ExpiresAt != nil {
+		payload.ExpiresAt = cmd.ExpiresAt.UTC().Format(time.RFC3339Nano)
+	}
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -80,7 +83,9 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "runtime route identity is incomplete")
 	}
 
-	targetOnline := false
+	var targetConn *runtimev2.Connection
+	targetSessionID := ""
+	targetGeneration := int64(0)
 	for _, conn := range a.facade.ListConnections(cmd.UserID) {
 		if conn == nil || conn.GetState() != runtimev2.ConnStateConnected {
 			continue
@@ -91,10 +96,16 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		if cmd.RuntimeID != "" && string(conn.RuntimeID) != cmd.RuntimeID {
 			continue
 		}
-		targetOnline = true
+		sessionID, generation := conn.SessionSnapshot()
+		if sessionID == "" || generation <= 0 {
+			continue
+		}
+		targetConn = conn
+		targetSessionID = sessionID
+		targetGeneration = generation
 		break
 	}
-	if !targetOnline {
+	if targetConn == nil {
 		return &behavior.CommandReceipt{
 			CommandID:  "",
 			Accepted:   false,
@@ -104,8 +115,9 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "target desktop pet runtime is offline")
 	}
 
-	v2Cmd, err := a.facade.Commands().CreateEphemeralCommand(
-		cmd.UserID, cmd.DeviceID, string(runtimev2.CommandTypePlayAction), idempotencyKey, payloadBytes,
+	v2Cmd, err := a.facade.Commands().CreateEphemeralCommandForSession(
+		cmd.UserID, cmd.DeviceID, string(targetConn.RuntimeID), targetSessionID, cmd.InstallationID,
+		string(runtimev2.CommandTypePlayAction), idempotencyKey, payloadBytes,
 	)
 	duplicate := errors.Is(err, runtimev2.ErrCommandDuplication)
 	if err != nil && !duplicate {
@@ -151,45 +163,56 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		case runtimev2.CommandStatusDispatching, runtimev2.CommandStatusTransportDispatched,
 			runtimev2.CommandStatusRuntimeReceived, runtimev2.CommandStatusRuntimeAccepted,
 			runtimev2.CommandStatusRendererAccepted, runtimev2.CommandStatusPlaybackStarted:
-			// An in-flight ephemeral command must never be retargeted to a new
-			// runtime incarnation: that could execute the same decision twice.
-			if cmd.RuntimeID != "" && v2Cmd.RuntimeID != "" && v2Cmd.RuntimeID != cmd.RuntimeID {
+			// An in-flight ephemeral command is owned by one exact RuntimeSession.
+			// Never treat a duplicate from another session as accepted.
+			if v2Cmd.RuntimeSessionID != targetSessionID ||
+				(cmd.RuntimeID != "" && v2Cmd.RuntimeID != "" && v2Cmd.RuntimeID != cmd.RuntimeID) {
 				return &behavior.CommandReceipt{
 					CommandID:     v2Cmd.ID,
 					Accepted:      false,
 					Status:        behavior.CmdOffline,
 					PendingReason: behavior.ErrCodeRuntimeOffline,
-					Error:         "idempotent command is in flight on a previous runtime incarnation",
+					Error:         "idempotent command belongs to a previous runtime session",
 					ReceivedAt:    time.Now(),
-				}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "idempotent command is in flight on a previous runtime incarnation")
+				}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "idempotent command belongs to a previous runtime session")
 			}
 			return acceptedRuntimeReceipt(v2Cmd.ID), nil
 		case runtimev2.CommandStatusCreated, runtimev2.CommandStatusQueued, runtimev2.CommandStatusFailedRetryable:
-			// Dispatchable rows may safely be pinned to the currently selected
-			// runtime before their next dispatch attempt.
+			// A pre-existing unattempted ephemeral row is not safe to retarget across
+			// reconnect. It must already be bound to this exact session.
+			if v2Cmd.RuntimeSessionID != targetSessionID {
+				_ = a.facade.Commands().MarkSuperseded(v2Cmd.ID, "stale idempotent ephemeral command on runtime reconnect", time.Now().UTC())
+				return rejectedRuntimeReceipt(v2Cmd.ID, behavior.ErrCodeRuntimeOffline, "idempotent command belongs to a previous runtime session"), nil
+			}
 		default:
 			return rejectedRuntimeReceipt(v2Cmd.ID, behavior.ErrCodeRuntimeCommandFailed, "existing idempotent runtime command has an unknown status"), nil
 		}
 	}
 
-	updates := map[string]interface{}{}
-	if cmd.RuntimeID != "" {
-		updates["runtime_id"] = cmd.RuntimeID
+	// Fence the create/bind race against HandleConnect replacement. If the
+	// selected connection changed after command creation, this physical intent
+	// belongs to the old session and must never be replayed on the new one.
+	currentSessionID, currentGeneration := targetConn.SessionSnapshot()
+	if targetConn.GetState() != runtimev2.ConnStateConnected ||
+		currentSessionID != targetSessionID || currentGeneration != targetGeneration {
+		_ = a.facade.Commands().MarkSuperseded(v2Cmd.ID, "runtime session changed during ephemeral command creation", time.Now().UTC())
+		return &behavior.CommandReceipt{
+			CommandID: v2Cmd.ID, Accepted: false, Status: behavior.CmdOffline,
+			PendingReason: behavior.ErrCodeRuntimeOffline, Error: "runtime session changed while scheduling action", ReceivedAt: time.Now(),
+		}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "runtime session changed while scheduling action")
 	}
-	if cmd.InstallationID != "" {
-		updates["installation_id"] = cmd.InstallationID
+	currentSessionID, currentGeneration = targetConn.SessionSnapshot()
+	if targetConn.GetState() != runtimev2.ConnStateConnected ||
+		currentSessionID != targetSessionID || currentGeneration != targetGeneration {
+		_ = a.facade.Commands().MarkSuperseded(v2Cmd.ID, "runtime session changed after ephemeral route bind", time.Now().UTC())
+		return &behavior.CommandReceipt{
+			CommandID: v2Cmd.ID, Accepted: false, Status: behavior.CmdOffline,
+			PendingReason: behavior.ErrCodeRuntimeOffline, Error: "runtime session changed after scheduling action", ReceivedAt: time.Now(),
+		}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "runtime session changed after scheduling action")
 	}
-	if len(updates) > 0 {
-		if err := a.facade.Commands().DB().Model(&runtimev2.RuntimeCommand{}).Where("id = ?", v2Cmd.ID).Updates(updates).Error; err != nil {
-			log.Logger.Warnf("wiring/runtime_v2_action_port: pin command route failed commandId=%s runtimeId=%s err=%v", v2Cmd.ID, cmd.RuntimeID, err)
-			if markErr := a.facade.Commands().MarkFailed(v2Cmd.ID, "runtime_route_persist_failed", err.Error(), time.Now()); markErr != nil {
-				log.Logger.Errorf("wiring/runtime_v2_action_port: persist route failure status failed commandId=%s err=%v", v2Cmd.ID, markErr)
-			}
-			return rejectedRuntimeReceipt(v2Cmd.ID, "runtime_route_persist_failed", "persist runtime route failed"), nil
-		}
-		v2Cmd.RuntimeID = cmd.RuntimeID
-		v2Cmd.InstallationID = cmd.InstallationID
-	}
+	v2Cmd.RuntimeID = string(targetConn.RuntimeID)
+	v2Cmd.RuntimeSessionID = targetSessionID
+	v2Cmd.InstallationID = cmd.InstallationID
 
 	return acceptedRuntimeReceipt(v2Cmd.ID), nil
 }

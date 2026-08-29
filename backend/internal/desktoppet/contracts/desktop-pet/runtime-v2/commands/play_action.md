@@ -6,6 +6,10 @@ Ephemeral 命令，播放一个动作。
 
 ```json
 {
+  "runtimeId": "desktop-runtime-1",
+  "characterId": "character-1",
+  "petInstanceId": "desktop-runtime-1",
+  "installationId": "installation-1",
   "actionKey": "wave",
   "actionSpecHash": "sha256...",
   "playbackMode": "once",
@@ -17,9 +21,22 @@ Ephemeral 命令，播放一个动作。
   "returnTo": "idle",
   "playbackRate": 1.0,
   "triggerSource": "runtime_command",
-  "commandId": "cmd_xxx"
+  "commandId": "cmd_xxx",
+  "expiresAt": "2026-08-02T10:00:30.000Z"
 }
 ```
+
+
+## Target identity
+
+`play_action` 是物理副作用命令，必须在创建时完整绑定当前执行目标：
+
+- `runtimeId` 必须等于命令绑定的 Runtime；
+- `petInstanceId` 必须等于当前桌宠 Runtime pet instance；
+- `installationId` 必须等于当前激活安装；
+- `characterId` 必须存在并等于该安装当前角色。
+
+任一字段缺失或不匹配均 fail-closed，禁止用“字段缺失则跳过比对”的兼容逻辑，否则角色/安装切换后的延迟命令可能命中新桌宠。
 
 ## CompletionPolicy
 
@@ -38,23 +55,27 @@ Ephemeral 命令，播放一个动作。
 ```
 created → queued → dispatching → transport_dispatched → runtime_received
 → runtime_accepted → renderer_accepted → playback_started
-→ completed / failed / cancelled / expired
+→ completed / failed_terminal / cancelled / expired
 ```
 
 ## TTL
 
-必须设置 `expiresAt`。默认值根据 ActionSpec 计算：
+必须设置 `expiresAt`，格式固定为 RFC3339 UTC。它是**开始执行前的 admission deadline**：命令在 Renderer 首帧开始前必须持续校验，过期后禁止进入播放。
 
-- Loop: 无自然 Completion Timeout，但设 max command lifetime
-- Once: 估算帧数 * 帧间隔 * 1.5
-- Holding: 按 on_holding 或 manual_stop
+- Backend 创建 Ephemeral `play_action` 时拥有最终 deadline 权威；当前默认 admission TTL 为 30 秒。上游 payload 若给出更早的合法 `expiresAt` 可以缩短 deadline，但不得把 Backend deadline 延长。
+- WebSocket 外层 `CommandDispatchPayload.expiresAt` 是 Desktop Runtime 必须采用的 authoritative deadline；禁止用内部 payload 或本地常量覆盖它。
+- 尚未 `playback_started`：Backend / Main / Scheduler / Renderer 都按 authoritative `expiresAt` fail-closed，Scheduler 入队和出队均需复检。
+- 已 `playback_started`：不再用 admission TTL 中途杀死合法长动作；Backend 使用独立 playback liveness 上限清理永久缺失终态的命令。显式 `maximumPlayMs` 使用该上限加终态宽限；无显式上限时使用保守失联兜底。
+- Backend expiry reconciler 允许短暂的事件传输宽限（当前 5 秒），仅用于接收 deadline 前已经在本机发生的 Renderer 终态；该宽限不得重新允许过期命令 dispatch 或开始播放。
+- Loop / Holding：仍必须由 ActionSpec 的 `maximumPlayMs`、CompletionPolicy 或 manual stop 提供有界生命周期。
 
-## ACK 规则
+## ACK / 状态真值规则
 
-- `runtime_received`: Runtime 验证 Envelope/Sequence/Dedup 后返回
-- `runtime_accepted`: Runtime 校验 Capability/Release/Action 存在/TTL 后返回
-- `renderer_accepted`: 收到 Renderer `playback.command_accepted` 事件后返回
-- `playback_started`: 收到 Renderer `playback.action_started` 事件后返回
+- `runtime_received`: Runtime 验证 Envelope/Sequence/Dedup 后通过 `command_ack` 上报
+- `runtime_accepted`: Runtime 完成本地 Capability/Release/Action/TTL 校验并成功提交到 Renderer 通道后通过 `command_ack` 上报
+- `renderer_accepted`: **不是 `command_ack`**。仅由 Renderer `runtime.playback.command_accepted` 事件推进，事件同时绑定 Renderer 生成的 `playbackInstanceId`
+- `playback_started`: **不是 `command_ack`**。仅由 Renderer `runtime.playback.action_started` 事件推进，并且 `commandId + playbackInstanceId` 必须与 `command_accepted` 完全一致
+- `completed` / `failed_terminal`（物理播放阶段）不得由 Runtime 合成；必须由 Renderer playback event 推进
 
 ## 命令完成条件
 

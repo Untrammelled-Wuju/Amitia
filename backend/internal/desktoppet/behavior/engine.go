@@ -677,6 +677,7 @@ func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *Beh
 		ReasonCode:           decision.ReasonCode,
 		MinimumPlayMS:        decision.MinimumPlayMS,
 		MaximumPlayMS:        decision.MaximumPlayMS,
+		ExpiresAt:            decision.ExpiresAt,
 		ReturnPolicy:         decision.ReturnPolicy,
 		Durable:              decision.ReturnPolicy != "",
 	}

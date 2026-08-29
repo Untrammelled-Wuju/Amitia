@@ -7,11 +7,17 @@ Runtime 连接后必须发送 Hello 消息作为第一条消息：
 ```json
 {
   "messageType": "hello",
-  "runtimeVersion": "1.2.0",
+  "runtimeVersion": "2.0.0",
   "runtimeContractVersion": "2.0.0",
   "deviceId": "device_xxx",
   "runtimeId": "runtime_xxx",
-  "capabilities": ["runtime.sync_desired_v2", "runtime.play_action_v2", ...],
+  "capabilities": [
+    "runtime.sync_desired_v2",
+    "runtime.play_action_v2",
+    "runtime.renderer_ack_v2",
+    "runtime.expiry_rfc3339_v1",
+    ...
+  ],
   "lastAppliedDesiredRevision": 42,
   "lastProcessedCommandSequence": 120,
   "lastEventSequence": 300,
@@ -83,8 +89,8 @@ Runtime Hello
 新连接建立时：
 
 1. ConnectionGeneration 递增
-2. 旧 Session 标 `superseded`
-3. 旧 Socket 发送 `control.superseded` 消息后关闭
+2. 旧 Session 标 `superseded`，并同步收口该 Session 的 Ephemeral attempts
+3. Backend 在 reconnect fence 内主动关闭旧 Socket；不依赖旧连接再成功接收控制帧
 4. 旧 Session 后续事件全部拒绝
 
 ## 旧 Session 事件拒绝规则
@@ -101,7 +107,7 @@ Runtime Hello
 
 1. 所有 `dispatching` 和 `transport_dispatched` 状态的 Attempt 标 `connection_replaced`
 2. Durable 命令可在新 Session 新 Attempt 重投
-3. Ephemeral 命令不自动重投，标记为 `failed_terminal`
+3. Ephemeral 命令不自动重投，旧 Session 绑定的命令标记为 `superseded`
 
 ## Durable 命令重放规则
 

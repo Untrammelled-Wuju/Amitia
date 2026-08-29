@@ -2,6 +2,7 @@ package v2
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,8 +33,9 @@ func TestHandleHelloRejectsUnsupportedRuntimeContractBeforeSessionAcquire(t *tes
 		State:     ConnStateHandshake,
 	}
 	payload := &HelloPayload{
-		RuntimeVersion:         "2.0.0",
+		RuntimeVersion:         CurrentRuntimeVersion,
 		RuntimeContractVersion: "3.0.0",
+		Capabilities:           mandatoryRuntimeCapabilities(),
 		DeviceID:               conn.DeviceID,
 		RuntimeID:              conn.RuntimeID,
 	}
@@ -54,56 +56,41 @@ func TestHandleHelloRejectsUnsupportedRuntimeContractBeforeSessionAcquire(t *tes
 	}
 }
 
-func TestHandlerCommandAckUsesRuntimeEnvelopeSequenceAndTerminalStatus(t *testing.T) {
+func TestHandlerCommandAckRejectsRendererTerminalAuthority(t *testing.T) {
 	db, services, handler := newHandlerP0DB(t)
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	session := &RuntimeSession{ID: "sess-1", UserID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", ConnectionGeneration: 1, Status: string(SessionStatusReady), CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(session).Error; err != nil {
 		t.Fatal(err)
 	}
-	cmd := &RuntimeCommand{ID: "cmd-1", UserID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", RuntimeSessionID: session.ID, CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRendererAccepted), PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now}
+	cmd := &RuntimeCommand{ID: "cmd-1", UserID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", RuntimeSessionID: session.ID, CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRendererAccepted), PlaybackRequestID: "pbi-1", PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(cmd).Error; err != nil {
 		t.Fatal(err)
 	}
 	conn := &Connection{ID: "conn-1", UserID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", State: ConnStateConnected}
 	conn.ActivateSession(session.ID, 1, 3)
-	payload, _ := json.Marshal(CommandAckPayload{CommandID: cmd.ID, CommandSequence: 7, Status: string(CommandStatusCompleted), RuntimeSessionID: session.ID, ReceivedAt: time.Now().UTC()})
-	env := &Envelope{
-		UserID:               conn.UserID,
-		DeviceID:             conn.DeviceID,
-		RuntimeID:            conn.RuntimeID,
-		RuntimeSessionID:     session.ID,
-		ConnectionGeneration: 1,
-		Sequence:             100,
-		Payload:              payload,
-		PayloadHash:          ComputePayloadHash(payload),
-	}
-	if err := handler.HandleCommandAck(conn, env, &CommandAckPayload{CommandID: cmd.ID, CommandSequence: 7, Status: string(CommandStatusCompleted), RuntimeSessionID: session.ID, ReceivedAt: time.Now().UTC()}); err != nil {
-		t.Fatal(err)
+	ack := &CommandAckPayload{CommandID: cmd.ID, CommandSequence: 7, Status: string(CommandStatusCompleted), RuntimeSessionID: session.ID, ReceivedAt: time.Now().UTC()}
+	payload, _ := json.Marshal(ack)
+	env := &Envelope{UserID: conn.UserID, DeviceID: conn.DeviceID, RuntimeID: conn.RuntimeID, RuntimeSessionID: session.ID, ConnectionGeneration: 1, Sequence: 100, Payload: payload, PayloadHash: ComputePayloadHash(payload)}
+	if err := handler.HandleCommandAck(conn, env, ack); err == nil {
+		t.Fatal("play_action completed command_ack must be rejected; renderer playback event is canonical")
 	}
 	got, err := services.Commands.GetCommand(cmd.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != string(CommandStatusCompleted) {
-		t.Fatalf("expected completed, got %s", got.Status)
+	if got.Status != string(CommandStatusRendererAccepted) {
+		t.Fatalf("forbidden command_ack mutated status: %s", got.Status)
 	}
-	if conn.LastInboundSequence() != 100 {
-		t.Fatalf("expected inbound sequence 100, got %d", conn.LastInboundSequence())
+	if conn.LastInboundSequence() != 3 {
+		t.Fatalf("rejected command_ack advanced inbound sequence: %d", conn.LastInboundSequence())
 	}
-	storedSession, err := services.Sessions.GetSession(session.ID)
-	if err != nil {
+	var eventCount int64
+	if err := db.Model(&EventRecord{}).Where("runtime_session_id = ? AND sequence = ?", session.ID, 100).Count(&eventCount).Error; err != nil {
 		t.Fatal(err)
 	}
-	if storedSession.LastEventSequence != 100 {
-		t.Fatalf("expected persisted event sequence 100, got %d", storedSession.LastEventSequence)
-	}
-	var event EventRecord
-	if err := db.Where("runtime_session_id = ? AND sequence = ?", session.ID, 100).First(&event).Error; err != nil {
-		t.Fatal(err)
-	}
-	if event.CommandID != cmd.ID {
-		t.Fatalf("expected command id %s, got %s", cmd.ID, event.CommandID)
+	if eventCount != 0 {
+		t.Fatalf("rejected command_ack appended event: %d", eventCount)
 	}
 }
 
@@ -192,6 +179,33 @@ func TestPersistActualStateSnapshotProjectsAuthoritativeRuntimeState(t *testing.
 	}
 }
 
+func TestPersistActualStateSnapshotRejectsMissingDesiredHash(t *testing.T) {
+	_, _, handler := newHandlerP0DB(t)
+	conn := &Connection{ID: "conn-missing-hash", UserID: "user-missing-hash", DeviceID: "device-missing-hash", RuntimeID: "runtime-missing-hash", State: ConnStateConnected}
+	conn.ActivateSession("sess-missing-hash", 1, 0)
+	payload, err := json.Marshal(StateSnapshotPayload{
+		ConnectionGeneration:    1,
+		EventSequence:           1,
+		ActualStateHash:         "sha256:actual",
+		InstanceStatus:          InstanceStatusReady,
+		WindowStatus:            WindowStatusVisible,
+		RendererStatus:          RendererStatusRuntimeReady,
+		PlaybackStatus:          PlaybackStatusIdle,
+		AppliedDesiredRevision:  1,
+		AppliedSettingsRevision: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = handler.persistActualStateSnapshot(conn, &Envelope{MessageName: EventStateSnapshot, Sequence: 1, Payload: payload})
+	if err == nil {
+		t.Fatal("expected applied desired revision without hash to be rejected")
+	}
+	if protocolErr, ok := err.(*ProtocolError); !ok || protocolErr.Code != ErrCodeDesiredHashMismatch {
+		t.Fatalf("expected %s, got %T: %v", ErrCodeDesiredHashMismatch, err, err)
+	}
+}
+
 func TestPersistActualStateSnapshotRejectsStaleProjection(t *testing.T) {
 	_, services, handler := newHandlerP0DB(t)
 	conn := &Connection{ID: "conn-stale", UserID: "user-stale", DeviceID: "device-stale", RuntimeID: "runtime-stale", State: ConnStateConnected}
@@ -209,6 +223,7 @@ func TestPersistActualStateSnapshotRejectsStaleProjection(t *testing.T) {
 			CurrentActionKey:        action,
 			ActualStateHash:         "sha256:" + action,
 			AppliedDesiredRevision:  1,
+			AppliedDesiredHash:      "sha256:desired-stale",
 			AppliedSettingsRevision: 1,
 		})
 		if err != nil {
@@ -245,6 +260,7 @@ func TestPersistActualStateSnapshotRejectsCursorMismatch(t *testing.T) {
 		RendererStatus:          RendererStatusRuntimeReady,
 		PlaybackStatus:          PlaybackStatusIdle,
 		AppliedDesiredRevision:  1,
+		AppliedDesiredHash:      "sha256:desired",
 		AppliedSettingsRevision: 1,
 	})
 	if err != nil {
@@ -289,6 +305,7 @@ func TestHandleEventRejectsInvalidStateSnapshotBeforeConsumingSequence(t *testin
 		RendererStatus:          RendererStatusRuntimeReady,
 		PlaybackStatus:          PlaybackStatusIdle,
 		AppliedDesiredRevision:  1,
+		AppliedDesiredHash:      "sha256:desired",
 		AppliedSettingsRevision: 1,
 	})
 	if err != nil {
@@ -328,10 +345,11 @@ func TestReconnectFencesSupersededConnectionBeforeCommandAckMutation(t *testing.
 		t.Fatal(err)
 	}
 	hello := &HelloPayload{
-		RuntimeVersion:         "2.0.0",
+		RuntimeVersion:         CurrentRuntimeVersion,
 		RuntimeContractVersion: CurrentSchemaVersion,
 		DeviceID:               oldConn.DeviceID,
 		RuntimeID:              oldConn.RuntimeID,
+		Capabilities:           mandatoryRuntimeCapabilities(),
 	}
 	ack, err := handler.HandleHello(oldConn, hello)
 	if err != nil {
@@ -351,6 +369,7 @@ func TestReconnectFencesSupersededConnectionBeforeCommandAckMutation(t *testing.
 		CommandType:          string(CommandTypePlayAction),
 		Durability:           "ephemeral",
 		Status:               string(CommandStatusRendererAccepted),
+		PlaybackRequestID:    "pbi-" + strings.TrimPrefix(commandID, "cmd-policy-"),
 		PayloadJSON:          `{}`,
 		PayloadHash:          ComputePayloadHash([]byte(`{}`)),
 		PayloadSchemaVersion: 1,
@@ -402,8 +421,8 @@ func TestReconnectFencesSupersededConnectionBeforeCommandAckMutation(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.Status != string(CommandStatusRendererAccepted) {
-		t.Fatalf("stale ack mutated command status: %s", stored.Status)
+	if stored.Status != string(CommandStatusSuperseded) {
+		t.Fatalf("reconnect must terminalize old-session ephemeral command, got: %s", stored.Status)
 	}
 	var eventCount int64
 	if err := db.Model(&EventRecord{}).Where("runtime_session_id = ? AND sequence = ?", ack.SessionID, 10).Count(&eventCount).Error; err != nil {
@@ -427,10 +446,11 @@ func TestReconnectFencesSupersededHandshakeBeforeSessionAcquire(t *testing.T) {
 		t.Fatalf("old handshake was not fenced: %s", oldConn.GetState())
 	}
 	if _, err := handler.HandleHello(oldConn, &HelloPayload{
-		RuntimeVersion:         "2.0.0",
+		RuntimeVersion:         CurrentRuntimeVersion,
 		RuntimeContractVersion: CurrentSchemaVersion,
 		DeviceID:               oldConn.DeviceID,
 		RuntimeID:              oldConn.RuntimeID,
+		Capabilities:           mandatoryRuntimeCapabilities(),
 	}); err == nil {
 		t.Fatal("superseded handshake must not acquire a runtime session")
 	}

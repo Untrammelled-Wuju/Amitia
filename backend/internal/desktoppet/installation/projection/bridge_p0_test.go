@@ -41,7 +41,7 @@ func TestProjectionBridge_RecenterACKCompletesOriginalOperation(t *testing.T) {
 	if err := db.Create(op).Error; err != nil {
 		t.Fatalf("create operation: %v", err)
 	}
-	if err := db.Create(&runtimeCommandProjection{ID: "cmd-1", IdempotencyKey: "recenter:" + op.ID}).Error; err != nil {
+	if err := db.Create(&runtimeCommandProjection{ID: "cmd-1", IdempotencyKey: "recenter:" + op.ID + ":session-1"}).Error; err != nil {
 		t.Fatalf("create command projection: %v", err)
 	}
 	payload, err := json.Marshal(CommandAckPayload{CommandID: "cmd-1", Status: "completed"})

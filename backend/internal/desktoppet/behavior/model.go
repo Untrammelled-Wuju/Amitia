@@ -223,6 +223,7 @@ type BehaviorDecision struct {
 	InterruptPolicy    string              `json:"interruptPolicy,omitempty"`
 	MinimumPlayMS      int64               `json:"minimumPlayMs,omitempty"`
 	MaximumPlayMS      int64               `json:"maximumPlayMs,omitempty"`
+	ExpiresAt          *time.Time          `json:"expiresAt,omitempty"`
 	Status             DecisionStatus      `json:"status"`
 	ReasonCode         string              `json:"reasonCode"`
 	RejectedCandidates []RejectedCandidate `json:"rejectedCandidates,omitempty"`

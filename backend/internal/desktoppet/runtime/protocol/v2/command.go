@@ -40,7 +40,16 @@ func (c CommandType) IsDurable() bool {
 }
 
 func (c CommandType) IsEphemeral() bool {
-	return !c.IsDurable()
+	switch c {
+	case CommandTypePlayAction, CommandTypeStopAction, CommandTypePauseAction,
+		CommandTypeResumeAction, CommandTypeRecenterOnce:
+		return true
+	}
+	return false
+}
+
+func (c CommandType) IsKnown() bool {
+	return c.IsDurable() || c.IsEphemeral()
 }
 
 type CommandStatus string
@@ -122,16 +131,18 @@ type RuntimeCommand struct {
 
 	ExpiresAt string `gorm:"column:expires_at;type:text" json:"expiresAt,omitempty"`
 
-	LastAttemptID string `gorm:"column:last_attempt_id;type:text" json:"lastAttemptId,omitempty"`
+	LastAttemptID     string `gorm:"column:last_attempt_id;type:text" json:"lastAttemptId,omitempty"`
+	PlaybackRequestID string `gorm:"column:runtime_playback_id;type:text" json:"playbackRequestId,omitempty"`
 
 	SupersededByCommandID string `gorm:"column:superseded_by_command_id;type:text" json:"supersededByCommandId,omitempty"`
 
 	ErrorCode    string `gorm:"column:error_code;type:text" json:"errorCode,omitempty"`
 	ErrorMessage string `gorm:"column:error_message;type:text" json:"errorMessage,omitempty"`
 
-	CreatedAt   string `gorm:"column:created_at;type:text" json:"createdAt"`
-	UpdatedAt   string `gorm:"column:updated_at;type:text" json:"updatedAt"`
-	CompletedAt string `gorm:"column:completed_at;type:text" json:"completedAt,omitempty"`
+	CreatedAt         string `gorm:"column:created_at;type:text" json:"createdAt"`
+	UpdatedAt         string `gorm:"column:updated_at;type:text" json:"updatedAt"`
+	PlaybackStartedAt string `gorm:"column:playback_started_at;type:text" json:"playbackStartedAt,omitempty"`
+	CompletedAt       string `gorm:"column:completed_at;type:text" json:"completedAt,omitempty"`
 }
 
 func (RuntimeCommand) TableName() string {
@@ -144,6 +155,21 @@ func (c *RuntimeCommand) IsTerminal() bool {
 
 func (c *RuntimeCommand) IsDurable() bool {
 	return CommandType(c.CommandType).IsDurable()
+}
+
+func (c *RuntimeCommand) HasValidClassification() bool {
+	if c == nil {
+		return false
+	}
+	commandType := CommandType(c.CommandType)
+	switch c.Durability {
+	case "durable":
+		return commandType.IsDurable()
+	case "ephemeral":
+		return commandType.IsEphemeral()
+	default:
+		return false
+	}
 }
 
 type SyncDesiredStatePayload struct {
@@ -183,6 +209,7 @@ type PlayActionPayload struct {
 	DecisionID       string  `json:"decisionId,omitempty"`
 	Semantic         string  `json:"semantic,omitempty"`
 	ReasonCode       string  `json:"reasonCode,omitempty"`
+	ExpiresAt        string  `json:"expiresAt,omitempty"`
 }
 
 type CommandAckPayload struct {
@@ -220,6 +247,7 @@ type CommandDispatchPayload struct {
 	InstallationID   string          `json:"installationId"`
 	PetID            string          `json:"petId"`
 	ReleaseID        string          `json:"releaseId"`
+	ExpiresAt        string          `json:"expiresAt,omitempty"`
 	Payload          json.RawMessage `json:"payload,omitempty"`
 }
 

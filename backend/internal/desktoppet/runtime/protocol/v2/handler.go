@@ -46,9 +46,12 @@ type Connection struct {
 	LastBeat       time.Time
 	HandshakeAcked bool
 
-	mu      sync.RWMutex
-	fenceMu sync.RWMutex
-	sendCh  []byte
+	mu             sync.RWMutex
+	fenceMu        sync.RWMutex
+	sendCh         []byte
+	runtimeVersion string
+	capabilities   map[string]struct{}
+	closeTransport func()
 }
 
 func (c *Connection) ActivateSession(sessionID string, generation, lastInboundSeq int64) {
@@ -71,6 +74,41 @@ func (c *Connection) IsHandshakeAcked() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.HandshakeAcked
+}
+
+func (c *Connection) SetNegotiatedRuntime(version string, capabilities []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.runtimeVersion = strings.TrimSpace(version)
+	c.capabilities = make(map[string]struct{}, len(capabilities))
+	for _, capability := range capabilities {
+		capability = strings.TrimSpace(capability)
+		if capability != "" {
+			c.capabilities[capability] = struct{}{}
+		}
+	}
+}
+
+func (c *Connection) HasCapability(capability string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	_, ok := c.capabilities[strings.TrimSpace(capability)]
+	return ok
+}
+
+func (c *Connection) SetTransportCloser(closeFn func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closeTransport = closeFn
+}
+
+func (c *Connection) CloseTransport() {
+	c.mu.RLock()
+	closeFn := c.closeTransport
+	c.mu.RUnlock()
+	if closeFn != nil {
+		closeFn()
+	}
 }
 
 func (c *Connection) SessionSnapshot() (string, int64) {
@@ -201,6 +239,12 @@ func (h *Handler) HandleConnect(userID runtimeidentity.UserID, deviceID runtimei
 		existingState := existing.GetState()
 		existingSessionID := existing.SessionIDValue()
 		if existingState != ConnStateClosed && existingState != ConnStateClosing {
+			if h.commands != nil {
+				if err := h.commands.SupersedeEphemeralCommands(string(userID), string(deviceID), string(runtimeID), existingSessionID, "runtime connection replaced", time.Now().UTC()); err != nil {
+					existing.fenceMu.Unlock()
+					return nil, fmt.Errorf("supersede ephemeral runtime commands: %w", err)
+				}
+			}
 			if existingSessionID != "" {
 				if err := h.sessions.SupersedeSession(existingSessionID, "new_connection"); err != nil {
 					existing.fenceMu.Unlock()
@@ -210,6 +254,7 @@ func (h *Handler) HandleConnect(userID runtimeidentity.UserID, deviceID runtimei
 			existing.SetState(ConnStateClosing)
 		}
 		existing.fenceMu.Unlock()
+		existing.CloseTransport()
 	}
 
 	conn := &Connection{
@@ -251,6 +296,12 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 	if strings.TrimSpace(payload.RuntimeVersion) == "" {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "runtimeVersion is required")
 	}
+	if strings.TrimSpace(payload.RuntimeVersion) != CurrentRuntimeVersion {
+		return nil, NewProtocolError(
+			ErrCodeProtocolUnsupported,
+			fmt.Sprintf("unsupported desktop-pet runtime version: got %q, want %q", payload.RuntimeVersion, CurrentRuntimeVersion),
+		)
+	}
 
 	if payload.RuntimeContractVersion != CurrentSchemaVersion {
 		return nil, NewProtocolError(
@@ -258,6 +309,17 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 			fmt.Sprintf("unsupported desktop-pet runtime contract version: got %q, want %q", payload.RuntimeContractVersion, CurrentSchemaVersion),
 		)
 	}
+	mandatoryCapabilities := mandatoryRuntimeCapabilities()
+	capabilitySet := make(map[string]struct{}, len(payload.Capabilities))
+	for _, capability := range payload.Capabilities {
+		capabilitySet[strings.TrimSpace(capability)] = struct{}{}
+	}
+	for _, required := range mandatoryCapabilities {
+		if _, ok := capabilitySet[required]; !ok {
+			return nil, NewProtocolError(ErrCodeProtocolUnsupported, "runtime missing mandatory capability: "+required)
+		}
+	}
+	conn.SetNegotiatedRuntime(payload.RuntimeVersion, payload.Capabilities)
 
 	now := time.Now().UTC()
 
@@ -370,6 +432,9 @@ func (h *Handler) validateCommandOwnership(conn *Connection, sessionID, commandI
 	if err != nil {
 		return nil, err
 	}
+	if !cmd.HasValidClassification() {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "stored runtime command classification is invalid")
+	}
 	if cmd.UserID != string(conn.UserID) || cmd.DeviceID != string(conn.DeviceID) {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "command ownership mismatch")
 	}
@@ -414,8 +479,7 @@ func (h *Handler) HandleCommandAck(conn *Connection, env *Envelope, ack *Command
 	}
 	status := CommandStatus(ack.Status)
 	switch status {
-	case CommandStatusRuntimeReceived, CommandStatusRuntimeAccepted, CommandStatusRendererAccepted,
-		CommandStatusCompleted, CommandStatusFailedTerminal:
+	case CommandStatusRuntimeReceived, CommandStatusRuntimeAccepted, CommandStatusCompleted, CommandStatusFailedTerminal, CommandStatusExpired:
 	default:
 		return NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("unsupported command ack status: %s", ack.Status))
 	}
@@ -426,6 +490,28 @@ func (h *Handler) HandleCommandAck(conn *Connection, env *Envelope, ack *Command
 	}
 	if cmd.DeviceSequence > 0 && ack.CommandSequence != cmd.DeviceSequence {
 		return NewProtocolError(ErrCodeEnvelopeInvalid, "command ack sequence mismatch")
+	}
+	commandType := CommandType(cmd.CommandType)
+	if status == CommandStatusCompleted {
+		if commandType == CommandTypePlayAction || commandType.IsDurable() {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "completed command_ack is forbidden for renderer/durable desired commands")
+		}
+	}
+	if status == CommandStatusFailedTerminal {
+		if commandType.IsDurable() {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "failed_terminal command_ack is forbidden for durable desired commands; use desired_rejected")
+		}
+		if commandType == CommandTypePlayAction && strings.TrimSpace(cmd.PlaybackRequestID) != "" {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "failed_terminal command_ack is forbidden after renderer acceptance; use playback.action_failed")
+		}
+	}
+	if status == CommandStatusExpired {
+		if commandType.IsDurable() {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "expired command_ack is forbidden for durable desired commands")
+		}
+		if commandType == CommandTypePlayAction && strings.TrimSpace(cmd.PlaybackRequestID) != "" {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "expired command_ack is forbidden after renderer acceptance; use playback failure event")
+		}
 	}
 
 	now := time.Now().UTC()
@@ -442,13 +528,13 @@ func (h *Handler) HandleCommandAck(conn *Connection, env *Envelope, ack *Command
 			if err := h.commands.MarkRuntimeAccepted(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
 				return fmt.Errorf("mark runtime accepted: %w", err)
 			}
-		case CommandStatusRendererAccepted:
-			if err := h.commands.MarkRendererAccepted(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
-				return fmt.Errorf("mark renderer accepted: %w", err)
-			}
 		case CommandStatusCompleted:
 			if err := h.commands.MarkCompleted(ackCmdID, "", now); err != nil {
-				return fmt.Errorf("mark command completed: %w", err)
+				return fmt.Errorf("mark runtime command completed: %w", err)
+			}
+		case CommandStatusExpired:
+			if err := h.commands.MarkExpired(ackCmdID, now); err != nil {
+				return fmt.Errorf("mark runtime command expired: %w", err)
 			}
 		case CommandStatusFailedTerminal:
 			if err := h.commands.MarkFailed(ackCmdID, ack.RejectErrorCode, ack.RejectReason, now); err != nil {
@@ -509,6 +595,12 @@ func (h *Handler) HandleEvent(conn *Connection, env *Envelope) (*EventRecord, er
 		}
 	}
 	if err := h.validateRuntimeEventCommandOwnership(conn, sessionID, env); err != nil {
+		return nil, err
+	}
+	// Reject semantically impossible lifecycle events before EventRecord
+	// persistence. Otherwise an invalid event could permanently occupy its
+	// session sequence and a corrected retry would conflict with that record.
+	if err := h.validateRuntimeEventProgressPrecondition(env); err != nil {
 		return nil, err
 	}
 
@@ -574,6 +666,9 @@ type runtimeEventMetadata struct {
 	Reason             string `json:"reason"`
 	InterruptReason    string `json:"interruptReason"`
 	OccurredAt         string `json:"occurredAt"`
+	DesiredRevision    int64  `json:"desiredRevision"`
+	DesiredHash        string `json:"desiredHash"`
+	AppliedDesiredHash string `json:"appliedDesiredHash"`
 }
 
 func decodeRuntimeEventMetadata(payload []byte) runtimeEventMetadata {
@@ -588,6 +683,11 @@ func decodeRuntimeEventMetadata(payload []byte) runtimeEventMetadata {
 	meta.PetInstanceID = strings.TrimSpace(meta.PetInstanceID)
 	meta.Reason = strings.TrimSpace(meta.Reason)
 	meta.InterruptReason = strings.TrimSpace(meta.InterruptReason)
+	meta.DesiredHash = strings.TrimSpace(meta.DesiredHash)
+	meta.AppliedDesiredHash = strings.TrimSpace(meta.AppliedDesiredHash)
+	if meta.DesiredHash == "" {
+		meta.DesiredHash = meta.AppliedDesiredHash
+	}
 	if meta.Reason == "" {
 		meta.Reason = meta.InterruptReason
 	}
@@ -615,12 +715,109 @@ func (h *Handler) validateRuntimeEventCommandOwnership(conn *Connection, session
 		return nil
 	}
 	switch env.MessageName {
-	case EventPlaybackActionStarted, EventPlaybackActionFirstCycle, EventPlaybackActionCompleted, EventPlaybackActionInterrupted, EventPlaybackActionFailed:
-		if _, err := h.validateCommandOwnership(conn, sessionID, meta.CommandID); err != nil {
+	case EventPlaybackCommandAccepted, EventPlaybackActionStarted, EventPlaybackActionFirstCycle, EventPlaybackActionHolding, EventPlaybackActionCompleted, EventPlaybackActionInterrupted, EventPlaybackActionFailed:
+		cmd, err := h.validateCommandOwnership(conn, sessionID, meta.CommandID)
+		if err != nil {
 			return fmt.Errorf("validate runtime event command ownership: %w", err)
+		}
+		if CommandType(cmd.CommandType) != CommandTypePlayAction {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "playback event is bound to a non-play_action command")
+		}
+		if meta.PlaybackInstanceID == "" {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "playback event requires playbackInstanceId")
+		}
+		boundPlaybackID := strings.TrimSpace(cmd.PlaybackRequestID)
+		if env.MessageName == EventPlaybackCommandAccepted {
+			if boundPlaybackID != "" && boundPlaybackID != meta.PlaybackInstanceID {
+				return NewProtocolError(ErrCodeEnvelopeInvalid, "renderer playback identity mismatch")
+			}
+			return nil
+		}
+		if boundPlaybackID == "" {
+			// A renderer can reject/fail a submitted command before command_accepted.
+			// That pre-accept failure is the only physical event allowed without an
+			// already bound playback identity.
+			if env.MessageName == EventPlaybackActionFailed && CommandStatus(cmd.Status) == CommandStatusRuntimeAccepted {
+				return nil
+			}
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "playback identity is not bound by command_accepted")
+		}
+		if boundPlaybackID != meta.PlaybackInstanceID {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "playback event identity does not match renderer-accepted playback")
+		}
+	case EventStateDesiredApplied, EventStateDesiredRejected:
+		cmd, err := h.validateCommandOwnership(conn, sessionID, meta.CommandID)
+		if err != nil {
+			return fmt.Errorf("validate runtime event command ownership: %w", err)
+		}
+		if !CommandType(cmd.CommandType).IsDurable() {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "desired-state event is bound to a non-durable command")
+		}
+		var desired SyncDesiredStatePayload
+		if err := json.Unmarshal([]byte(cmd.PayloadJSON), &desired); err != nil {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "stored desired-state command payload is invalid")
+		}
+		if meta.DesiredRevision != desired.DesiredRevision || meta.DesiredRevision <= 0 {
+			return NewProtocolError(ErrCodeEnvelopeInvalid, "desired-state event revision mismatch")
+		}
+		if desired.DesiredHash == "" || meta.DesiredHash == "" || meta.DesiredHash != desired.DesiredHash {
+			return NewProtocolError(ErrCodeDesiredHashMismatch, "desired-state event hash mismatch")
 		}
 	}
 	return nil
+}
+
+func (h *Handler) validateRuntimeEventProgressPrecondition(env *Envelope) error {
+	if env == nil || h.commands == nil {
+		return nil
+	}
+	meta := decodeRuntimeEventMetadata(env.Payload)
+	if meta.CommandID == "" {
+		return nil
+	}
+	cmd, err := h.commands.GetCommand(meta.CommandID)
+	if err != nil {
+		return err
+	}
+	current := CommandStatus(cmd.Status)
+	valid := func(ok bool, expected string) error {
+		if ok {
+			return nil
+		}
+		return NewProtocolError(
+			ErrCodeEnvelopeInvalid,
+			fmt.Sprintf("invalid %s lifecycle event from command status %s", expected, current),
+		)
+	}
+
+	switch env.MessageName {
+	case EventPlaybackCommandAccepted:
+		return valid(current == CommandStatusRendererAccepted || isValidProgressTransition(cmd, CommandStatusRendererAccepted), env.MessageName)
+	case EventPlaybackActionStarted:
+		return valid(current == CommandStatusPlaybackStarted || isValidProgressTransition(cmd, CommandStatusPlaybackStarted), env.MessageName)
+	case EventPlaybackActionFirstCycle, EventPlaybackActionHolding:
+		// on_started completion may already have moved the logical command to
+		// completed while the same renderer playback continues physically.
+		return valid(current == CommandStatusPlaybackStarted || current == CommandStatusCompleted, env.MessageName)
+	case EventPlaybackActionCompleted:
+		return valid(current == CommandStatusCompleted || isValidProgressTransition(cmd, CommandStatusCompleted), env.MessageName)
+	case EventPlaybackActionInterrupted:
+		return valid(
+			current == CommandStatusRendererAccepted || current == CommandStatusPlaybackStarted || current == CommandStatusCompleted || current == CommandStatusCancelled,
+			env.MessageName,
+		)
+	case EventPlaybackActionFailed:
+		return valid(
+			current == CommandStatusRuntimeAccepted || current == CommandStatusRendererAccepted || current == CommandStatusPlaybackStarted || current == CommandStatusCompleted || current == CommandStatusFailedTerminal,
+			env.MessageName,
+		)
+	case EventStateDesiredApplied:
+		return valid(current == CommandStatusRuntimeAccepted || current == CommandStatusCompleted, env.MessageName)
+	case EventStateDesiredRejected:
+		return valid(current == CommandStatusRuntimeAccepted || current == CommandStatusFailedTerminal, env.MessageName)
+	default:
+		return nil
+	}
 }
 
 func (h *Handler) applyRuntimeEventCommandProgress(conn *Connection, sessionID string, env *Envelope) error {
@@ -638,6 +835,20 @@ func (h *Handler) applyRuntimeEventCommandProgress(conn *Connection, sessionID s
 	_ = sessionID
 	now := runtimeEventOccurredAt(meta)
 	switch env.MessageName {
+	case EventPlaybackCommandAccepted:
+		return h.commands.MarkRendererAccepted(meta.CommandID, string(conn.RuntimeID), sessionID, meta.PlaybackInstanceID, now)
+	case EventStateDesiredApplied:
+		return h.commands.MarkCompleted(meta.CommandID, "", now)
+	case EventStateDesiredRejected:
+		code := strings.TrimSpace(meta.ErrorCode)
+		if code == "" {
+			code = "DESIRED_STATE_REJECTED"
+		}
+		message := strings.TrimSpace(meta.ErrorMessage)
+		if message == "" {
+			message = "runtime rejected desired state"
+		}
+		return h.commands.MarkFailed(meta.CommandID, code, message, now)
 	case EventPlaybackActionStarted:
 		if err := h.commands.MarkPlaybackStarted(meta.CommandID, meta.PlaybackInstanceID, now); err != nil {
 			return err
@@ -666,6 +877,16 @@ func (h *Handler) applyRuntimeEventCommandProgress(conn *Connection, sessionID s
 		// interruption itself (or an explicit manual stop) to be successful completion.
 		return h.commands.MarkCancelled(meta.CommandID, now)
 	case EventPlaybackActionFailed:
+		if strings.EqualFold(strings.TrimSpace(meta.ErrorCode), "PLAYBACK_COMMAND_EXPIRED") {
+			return h.commands.MarkExpired(meta.CommandID, now)
+		}
+		// Completion policies such as on_started/on_first_cycle can terminalize
+		// the logical command while the physical playback continues. A later
+		// renderer failure is still valid telemetry but must not rewrite a
+		// successfully completed command.
+		if cmd, getErr := h.commands.GetCommand(meta.CommandID); getErr == nil && cmd != nil && CommandStatus(cmd.Status) == CommandStatusCompleted {
+			return nil
+		}
 		code := strings.TrimSpace(meta.ErrorCode)
 		if code == "" {
 			code = "PLAYBACK_FAILED"
@@ -802,6 +1023,9 @@ func (h *Handler) runtimeActualStateFromSnapshot(conn *Connection, env *Envelope
 	}
 	if snapshot.AppliedDesiredRevision < 0 || snapshot.AppliedSettingsRevision < 0 || snapshot.LastProcessedCommandSequence < 0 {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "state snapshot revisions and command cursor must be non-negative")
+	}
+	if snapshot.AppliedDesiredRevision > 0 && strings.TrimSpace(snapshot.AppliedDesiredHash) == "" {
+		return nil, NewProtocolError(ErrCodeDesiredHashMismatch, "state snapshot appliedDesiredHash is required when appliedDesiredRevision > 0")
 	}
 	if !validInstanceStatus(snapshot.InstanceStatus) || !validWindowStatus(snapshot.WindowStatus) ||
 		!validRendererStatus(snapshot.RendererStatus) || !validPlaybackStatus(snapshot.PlaybackStatus) {
@@ -967,6 +1191,14 @@ func (h *Handler) HandleDisconnect(conn *Connection) error {
 		return nil
 	}
 	sessionID, generation := conn.SessionSnapshot()
+	if sessionID != "" && h.commands != nil {
+		if err := h.commands.SupersedeEphemeralCommands(
+			string(conn.UserID), string(conn.DeviceID), string(conn.RuntimeID), sessionID,
+			"runtime connection disconnected", time.Now().UTC(),
+		); err != nil {
+			log.Warn("[v2] supersede disconnected ephemeral commands failed: ", err)
+		}
+	}
 
 	if h.deviceRuntimeSessions != nil {
 		if sessionID != "" && generation > 0 {

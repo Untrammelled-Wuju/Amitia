@@ -205,11 +205,11 @@ func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 	}
 
 	helloPayload := HelloPayload{
-		RuntimeVersion:         "1.0.0",
+		RuntimeVersion:         CurrentRuntimeVersion,
 		RuntimeContractVersion: CurrentSchemaVersion,
 		DeviceID:               "device-ws",
 		RuntimeID:              "runtime-ws",
-		Capabilities:           []string{"runtime.command-ack"},
+		Capabilities:           mandatoryRuntimeCapabilities(),
 	}
 	helloBytes, err := json.Marshal(helloPayload)
 	if err != nil {
