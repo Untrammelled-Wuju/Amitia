@@ -10,15 +10,16 @@ import (
 )
 
 type LocalHandler struct {
-	identity      *IdentityStore
-	credStore     *CredentialStore
-	mesh          *MeshClient
-	platform      runtimeidentity.Platform
-	dataDir       string
-	dispatcher    RuntimeDispatcher
-	taskWorker    TaskWorkerIface
-	taskRuntime   TaskRuntimeExecutor
-	taskWorkerSet bool
+	identity           *IdentityStore
+	credStore          *CredentialStore
+	mesh               *MeshClient
+	platform           runtimeidentity.Platform
+	dataDir            string
+	dispatcher         RuntimeDispatcher
+	taskWorker         TaskWorkerIface
+	taskRuntime        TaskRuntimeExecutor
+	taskWorkerSet      bool
+	credentialObserver func(*StoredCredential) error
 }
 
 func NewLocalHandler(dataDir string, platform runtimeidentity.Platform) *LocalHandler {
@@ -47,6 +48,13 @@ func (h *LocalHandler) SetTaskWorker(w TaskWorkerIface) {
 func (h *LocalHandler) SetTaskRuntime(tr TaskRuntimeExecutor) {
 	h.taskRuntime = tr
 	h.taskWorkerSet = tr != nil || h.taskWorker != nil
+}
+
+// SetCredentialObserver installs a device-local binding callback. It is used by
+// subsystems that must persist canonical ownership when a Cloud credential is
+// exchanged, without coupling Device Mesh to those subsystems.
+func (h *LocalHandler) SetCredentialObserver(observer func(*StoredCredential) error) {
+	h.credentialObserver = observer
 }
 
 func (h *LocalHandler) TaskWorkerSet() bool {
@@ -139,6 +147,13 @@ func (h *LocalHandler) handleBootstrap(c *gin.Context) {
 	if err := h.credStore.SaveCredential(cred); err != nil {
 		c.JSON(500, gin.H{"code": "storage_error", "message": err.Error()})
 		return
+	}
+	if h.credentialObserver != nil {
+		if err := h.credentialObserver(cred); err != nil {
+			_ = h.credStore.DeleteCredential()
+			c.JSON(500, gin.H{"code": "owner_mapping_error", "message": err.Error()})
+			return
+		}
 	}
 
 	if err := h.credStore.DeleteCursor(); err != nil {
