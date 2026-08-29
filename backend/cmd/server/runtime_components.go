@@ -376,6 +376,9 @@ func (c *desktopPetComponent) Descriptor() runtimeorchestrator.ComponentDescript
 func (c *desktopPetComponent) Start(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("desktop pet start context: %w", err)
+	}
 	if c.started {
 		return nil
 	}
@@ -393,13 +396,50 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 		}
 		return fmt.Errorf("readiness blocked: %d blocking", snap.BlockingCount)
 	}
-	startWorkerAsync(ctx, svc.DesktopPetWorker, logWorkerPanic)
-	startWorkerAsync(ctx, svc.ProcessingWorker, logWorkerPanic)
-	startWorkerAsync(ctx, svc.QualityWorker, logWorkerPanic)
-	startWorkerAsync(ctx, svc.RegenerationWorker, logWorkerPanic)
-	startWorkerAsync(ctx, svc.BridgeRecoveryWorker, logWorkerPanic)
+	workerStarts := []struct {
+		name  string
+		start func()
+	}{
+		{name: "generation", start: func() {
+			if svc.DesktopPetWorker != nil {
+				svc.DesktopPetWorker.Start(ctx)
+			}
+		}},
+		{name: "processing", start: func() {
+			if svc.ProcessingWorker != nil {
+				svc.ProcessingWorker.Start(ctx)
+			}
+		}},
+		{name: "quality", start: func() {
+			if svc.QualityWorker != nil {
+				svc.QualityWorker.Start(ctx)
+			}
+		}},
+		{name: "regeneration", start: func() {
+			if svc.RegenerationWorker != nil {
+				svc.RegenerationWorker.Start(ctx)
+			}
+		}},
+		{name: "revision-bridge-recovery", start: func() {
+			if svc.BridgeRecoveryWorker != nil {
+				svc.BridgeRecoveryWorker.Start(ctx)
+			}
+		}},
+	}
+	for _, item := range workerStarts {
+		if err := runDesktopPetWorkerStart(item.name, item.start); err != nil {
+			c.stopAllLocked(ctx, svc)
+			if svc.SafeMode != nil {
+				svc.SafeMode.Enter("desktop pet worker start failed")
+			}
+			return err
+		}
+	}
 	if svc.ReleaseRecoveryWorker != nil {
-		svc.ReleaseRecoveryWorker.Start(ctx)
+		if err := runDesktopPetWorkerStart("release-recovery", func() { svc.ReleaseRecoveryWorker.Start(ctx) }); err != nil {
+			c.stopAllLocked(ctx, svc)
+			return err
+		}
 		c.state.releaseRecoveryWorkerOk = true
 	}
 	if svc.BehaviorService != nil {
@@ -412,9 +452,6 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 		}
 		c.state.behaviorOk = true
 	}
-	if svc.RuntimeDomainEventConsumer != nil {
-		svc.RuntimeDomainEventConsumer.Start(ctx)
-	}
 	if svc.DesktopPetRuntimeV2 != nil {
 		if err := svc.DesktopPetRuntimeV2.Start(ctx); err != nil {
 			c.stopAllLocked(ctx, svc)
@@ -424,35 +461,78 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 			return fmt.Errorf("runtime v2 start: %w", err)
 		}
 	}
+	if svc.RuntimeDomainEventConsumer != nil {
+		svc.RuntimeDomainEventConsumer.Start(ctx)
+	}
+	if err := ctx.Err(); err != nil {
+		c.stopAllLocked(ctx, svc)
+		return fmt.Errorf("desktop pet start context cancelled: %w", err)
+	}
 	c.started = true
+	if err := c.readyLocked(svc); err != nil {
+		c.started = false
+		c.stopAllLocked(ctx, svc)
+		if svc.SafeMode != nil {
+			svc.SafeMode.Enter("desktop pet runtime start incomplete")
+		}
+		return err
+	}
 	return nil
 }
 
-func startWorkerAsync(ctx context.Context, w interface{ Start(ctx context.Context) }, onPanic func(name string, r any)) {
-	if w == nil {
-		return
-	}
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if onPanic != nil {
-					onPanic(fmt.Sprintf("%T", w), r)
-				}
-			}
-		}()
-		w.Start(ctx)
+func runDesktopPetWorkerStart(name string, start func()) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("desktop pet %s worker start panic: %v", name, r)
+		}
 	}()
+	start()
+	return nil
 }
 
 func (c *desktopPetComponent) Ready(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	svc := c.services
+	if !c.started || svc == nil {
+		return fmt.Errorf("desktop pet not ready")
+	}
+	return c.readyLocked(svc)
+}
+
+func (c *desktopPetComponent) readyLocked(svc *AppServices) error {
 	if svc == nil || svc.DesktopPetRuntimeV2 == nil || svc.Readiness == nil {
 		return fmt.Errorf("desktop pet not ready")
 	}
 	if svc.Readiness.Snapshot().OverallStatus == readiness.StatusBlocked {
 		return fmt.Errorf("readiness blocked")
+	}
+	if svc.DesktopPetWorker == nil || !svc.DesktopPetWorker.IsRunning() {
+		return fmt.Errorf("desktop pet generation worker not running")
+	}
+	if svc.ProcessingWorker == nil || !svc.ProcessingWorker.IsRunning() {
+		return fmt.Errorf("desktop pet processing worker not running")
+	}
+	if svc.QualityWorker == nil || !svc.QualityWorker.IsRunning() {
+		return fmt.Errorf("desktop pet quality worker not running")
+	}
+	if svc.RegenerationWorker == nil || !svc.RegenerationWorker.IsRunning() {
+		return fmt.Errorf("desktop pet regeneration worker not running")
+	}
+	if svc.BridgeRecoveryWorker == nil || !svc.BridgeRecoveryWorker.IsRunning() {
+		return fmt.Errorf("desktop pet revision bridge recovery worker not running")
+	}
+	if svc.ReleaseRecoveryWorker == nil || !svc.ReleaseRecoveryWorker.IsRunning() {
+		return fmt.Errorf("desktop pet release recovery worker not running")
+	}
+	if svc.BehaviorService == nil || !svc.BehaviorService.IsRunning() {
+		return fmt.Errorf("desktop pet behavior service not running")
+	}
+	if !svc.DesktopPetRuntimeV2.IsStarted() {
+		return fmt.Errorf("desktop pet runtime v2 not running")
+	}
+	if svc.RuntimeDomainEventConsumer == nil || !svc.RuntimeDomainEventConsumer.IsRunning() {
+		return fmt.Errorf("desktop pet runtime domain event consumer not running")
 	}
 	return nil
 }
@@ -471,14 +551,17 @@ func (c *desktopPetComponent) Stop(ctx context.Context) error {
 }
 
 func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppServices) {
-	if c.state.behaviorOk && svc.BehaviorService != nil {
-		_ = svc.BehaviorService.Stop()
-	}
+	// Stop event ingress before the behavior engine so no new domain event can
+	// race into a service that is already draining. Runtime v2 is closed next,
+	// followed by behavior and the background workers in reverse dependency order.
 	if svc.RuntimeDomainEventConsumer != nil {
 		svc.RuntimeDomainEventConsumer.Stop()
 	}
 	if svc.DesktopPetRuntimeV2 != nil {
 		_ = svc.DesktopPetRuntimeV2.Close(ctx)
+	}
+	if c.state.behaviorOk && svc.BehaviorService != nil {
+		_ = svc.BehaviorService.Stop()
 	}
 	if c.state.releaseRecoveryWorkerOk && svc.ReleaseRecoveryWorker != nil {
 		svc.ReleaseRecoveryWorker.Stop()
@@ -498,10 +581,6 @@ func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppService
 	if svc.DesktopPetWorker != nil {
 		svc.DesktopPetWorker.Stop()
 	}
-}
-
-func logWorkerPanic(name string, r any) {
-	fmt.Printf("[worker-panic] %s recovered: %v\n", name, r)
 }
 
 type browserComponent struct {
