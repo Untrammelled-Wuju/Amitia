@@ -1527,6 +1527,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_inbox (
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_desktop_pet_behavior_inbox_dedup ON desktop_pet_behavior_inbox(dedup_key);
 CREATE INDEX IF NOT EXISTS idx_behavior_inbox_char ON desktop_pet_behavior_inbox(character_id, status);
+CREATE INDEX IF NOT EXISTS idx_behavior_inbox_status_available ON desktop_pet_behavior_inbox(status, available_at, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_behavior_inbox_status_lease ON desktop_pet_behavior_inbox(status, lease_expires_at);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_behavior_decisions (
     decision_id TEXT PRIMARY KEY,
@@ -1539,6 +1541,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_decisions (
     interrupt_policy TEXT NOT NULL DEFAULT '',
     minimum_play_ms INTEGER NOT NULL DEFAULT 0,
     maximum_play_ms INTEGER NOT NULL DEFAULT 0,
+    fallback_depth INTEGER NOT NULL DEFAULT 0,
+    return_policy TEXT NOT NULL DEFAULT '',
+    context_hash TEXT NOT NULL DEFAULT '',
     semantic TEXT NOT NULL DEFAULT '',
     action_key TEXT NOT NULL DEFAULT '',
     priority INTEGER NOT NULL DEFAULT 0,
@@ -1552,6 +1557,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_decisions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_behavior_decisions_char ON desktop_pet_behavior_decisions(character_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_behavior_decisions_event ON desktop_pet_behavior_decisions(event_id, created_at);
 
 CREATE TABLE IF NOT EXISTS desktop_pet_behavior_cooldowns (
     user_id TEXT NOT NULL DEFAULT '',

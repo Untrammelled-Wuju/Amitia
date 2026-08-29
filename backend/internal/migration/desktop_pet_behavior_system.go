@@ -58,3 +58,34 @@ func DesktopPetBehaviorV2ColumnsMigration() Migration {
 		},
 	}
 }
+
+// DesktopPetBehaviorDecisionRecoveryMigration preserves all fields required to
+// resume a committed behavior decision after a process crash. It is forward-only
+// so already-applied behavior migrations keep their released checksums intact.
+func DesktopPetBehaviorDecisionRecoveryMigration() Migration {
+	return Migration{
+		Version: "202608290006",
+		Name:    "finalize_desktop_pet_behavior_decision_recovery",
+		Up: func(s *Step) error {
+			if err := s.AddColumn("desktop_pet_behavior_decisions", "fallback_depth", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+				return err
+			}
+			if err := s.AddColumn("desktop_pet_behavior_decisions", "return_policy", "TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+			if err := s.AddColumn("desktop_pet_behavior_decisions", "context_hash", "TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+			for _, idx := range []persistence.BehaviorIndexDef{
+				{Name: "idx_behavior_inbox_status_available", Table: "desktop_pet_behavior_inbox", Columns: []string{"status", "available_at", "occurred_at"}},
+				{Name: "idx_behavior_inbox_status_lease", Table: "desktop_pet_behavior_inbox", Columns: []string{"status", "lease_expires_at"}},
+				{Name: "idx_behavior_decisions_event", Table: "desktop_pet_behavior_decisions", Columns: []string{"event_id", "created_at"}},
+			} {
+				if err := s.CreateIndex(idx.Name, idx.Table, idx.Columns, idx.Unique); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+}
