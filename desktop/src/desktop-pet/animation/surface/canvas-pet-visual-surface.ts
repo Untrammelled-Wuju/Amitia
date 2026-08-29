@@ -94,7 +94,13 @@ export class CanvasPetVisualSurface implements PetVisualSurface {
     const anchorType = input.anchor.type;
     let destX: number;
     let destY: number;
-    if (anchorType === "bottom_center") {
+    if (anchorType === "normalized_canvas") {
+      // Package V2 anchors are normalized points in canvas space. They identify
+      // where the frame's own normalized anchor point lands on the canvas, so
+      // (0.5, 1) means bottom-center regardless of runtime scale.
+      destX = input.anchor.x * canvasWidth - input.anchor.x * drawWidth;
+      destY = input.anchor.y * canvasHeight - input.anchor.y * drawHeight;
+    } else if (anchorType === "bottom_center") {
       destX = (canvasWidth - drawWidth) / 2 + input.anchor.x * scale;
       destY = canvasHeight - drawHeight + input.anchor.y * scale;
     } else if (anchorType === "center") {

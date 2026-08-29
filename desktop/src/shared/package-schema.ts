@@ -48,11 +48,12 @@ export interface RuntimeAction {
   fps: number;
   playbackMode: PlaybackMode;
   interruptible: boolean;
+  interruptAfterMs?: number;
   priority: number;
   cooldownMs: number;
   minimumPlayMs: number;
-  maximumPlayMs: number;
-  mutexGroup: string;
+  maximumPlayMs: number | null;
+  mutexGroup: string | null;
   returnTo: ReturnToRule;
   anchor: RuntimeAnchor;
   frames: RuntimeFrame[];
@@ -330,6 +331,16 @@ function requireNumber(value: unknown, field: string, code: PackageErrorCode): n
   return value as number;
 }
 
+function requireInteger(value: unknown, field: string, code: PackageErrorCode): number {
+  const numberValue = requireNumber(value, field, code);
+  assertCondition(
+    Number.isInteger(numberValue),
+    code,
+    `${field} is required and must be an integer`,
+  );
+  return numberValue;
+}
+
 function requireBoolean(value: unknown, field: string, code: PackageErrorCode): boolean {
   assertCondition(
     typeof value === "boolean",
@@ -338,6 +349,66 @@ function requireBoolean(value: unknown, field: string, code: PackageErrorCode): 
   );
   return value as boolean;
 }
+
+function assertNoUnknownTopLevelFields(
+  value: Record<string, unknown>,
+  allowedFields: readonly string[],
+  context: string,
+  actionKey?: string,
+): void {
+  const allowed = new Set(allowedFields);
+  const unknown = Object.keys(value).filter((key) => !allowed.has(key));
+  assertCondition(
+    unknown.length === 0,
+    "PACKAGE_MANIFEST_INVALID",
+    `${context} contains unknown field(s): ${unknown.join(", ")}`,
+    { actionKey, actual: unknown.join(",") },
+  );
+}
+
+
+const V2_MANIFEST_TOP_LEVEL_FIELDS = [
+  "schemaVersion",
+  "manifestFormat",
+  "petId",
+  "releaseId",
+  "version",
+  "name",
+  "description",
+  "author",
+  "license",
+  "compatibility",
+  "binding",
+  "canvas",
+  "defaultAction",
+  "preview",
+  "actions",
+  "capabilities",
+  "integrity",
+  "provenance",
+] as const;
+
+const V2_ACTION_TOP_LEVEL_FIELDS = [
+  "schemaVersion",
+  "actionKey",
+  "displayName",
+  "version",
+  "playbackMode",
+  "fps",
+  "interruptible",
+  "interruptAfterMs",
+  "priority",
+  "cooldownMs",
+  "minimumPlayMs",
+  "maximumPlayMs",
+  "mutexGroup",
+  "supportsDefaultIdle",
+  "isStableStateCandidate",
+  "isTransitionOnly",
+  "returnTo",
+  "anchor",
+  "frames",
+] as const;
 
 function normalizePlaybackModeValue(
   raw: unknown,
@@ -362,6 +433,16 @@ function normalizePlaybackModeValue(
     `UNKNOWN_PLAYBACK_MODE: ${raw} (action: ${actionKey})`,
     { actionKey, actual: raw },
   );
+}
+
+function requireV2PlaybackMode(raw: unknown, actionKey: string): PlaybackMode {
+  assertCondition(
+    typeof raw === "string" && (VALID_PLAYBACK_MODES as readonly string[]).includes(raw),
+    "PACKAGE_MANIFEST_INVALID",
+    `playbackMode must be one of ${VALID_PLAYBACK_MODES.join(", ")} (action: ${actionKey})`,
+    { actionKey, actual: String(raw) },
+  );
+  return raw as PlaybackMode;
 }
 
 function normalizeReturnToRule(
@@ -488,9 +569,9 @@ function normalizeFramesStrict(
       );
     }
     seenFrameIds.add(frameId);
-    const index = requireNumber(f.index, `frame[${i}].index`, "PACKAGE_MANIFEST_INVALID");
+    const index = requireInteger(f.index, `frame[${i}].index`, "PACKAGE_MANIFEST_INVALID");
     const file = requireString(f.file, `frame[${i}].file`, "PACKAGE_MANIFEST_INVALID");
-    const durationMs = requireNumber(f.durationMs, `frame[${i}].durationMs`, "PACKAGE_MANIFEST_INVALID");
+    const durationMs = requireInteger(f.durationMs, `frame[${i}].durationMs`, "PACKAGE_MANIFEST_INVALID");
     assertCondition(
       durationMs >= 8 && durationMs <= 60000,
       "PACKAGE_MANIFEST_INVALID",
@@ -533,10 +614,11 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       "manifest is missing or not an object",
     );
     const m = raw as Record<string, unknown>;
+    assertNoUnknownTopLevelFields(m, V2_MANIFEST_TOP_LEVEL_FIELDS, "manifest");
 
     const schemaVersion = m.schemaVersion;
     assertCondition(
-      typeof schemaVersion === "number" && schemaVersion === 2,
+      typeof schemaVersion === "number" && Number.isInteger(schemaVersion) && schemaVersion === 2,
       "PACKAGE_SCHEMA_UNSUPPORTED",
       `schemaVersion must be 2, got ${schemaVersion}`,
       { expected: "2", actual: String(schemaVersion) },
@@ -561,17 +643,38 @@ export class Schema2PackageReader implements StrictPackageContractReader {
     );
     const displayName = requireString(m.name, "name", "PACKAGE_MANIFEST_INVALID");
 
+    if (m.description !== undefined) {
+      assertCondition(typeof m.description === "string", "PACKAGE_MANIFEST_INVALID", "description must be a string");
+    }
     const description = typeof m.description === "string" ? m.description : "";
+
+    if (m.author !== undefined) {
+      assertCondition(m.author !== null && typeof m.author === "object", "PACKAGE_MANIFEST_INVALID", "author must be an object");
+      const author = m.author as Record<string, unknown>;
+      requireString(author.name, "author.name", "PACKAGE_MANIFEST_INVALID");
+      if (author.id !== undefined) {
+        assertCondition(typeof author.id === "string", "PACKAGE_MANIFEST_INVALID", "author.id must be a string");
+      }
+    }
+    if (m.license !== undefined) {
+      assertCondition(m.license !== null && typeof m.license === "object", "PACKAGE_MANIFEST_INVALID", "license must be an object");
+      const license = m.license as Record<string, unknown>;
+      for (const field of ["spdx", "noticePath"] as const) {
+        if (license[field] !== undefined) {
+          assertCondition(typeof license[field] === "string", "PACKAGE_MANIFEST_INVALID", `license.${field} must be a string`);
+        }
+      }
+    }
 
     const defaultActionKey = requireString(m.defaultAction, "defaultAction", "PACKAGE_MANIFEST_INVALID");
 
     const previewRaw = m.preview;
     assertCondition(
-      previewRaw === null || typeof previewRaw === "string",
+      previewRaw === undefined || previewRaw === null || typeof previewRaw === "string",
       "PACKAGE_MANIFEST_INVALID",
       "preview must be a string or null",
     );
-    const preview = previewRaw === null ? null : previewRaw;
+    const preview = typeof previewRaw === "string" ? previewRaw : null;
 
     const canvasRaw = m.canvas;
     assertCondition(
@@ -580,8 +683,8 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       "canvas is required",
     );
     const cv = canvasRaw as { width?: number; height?: number; coordinateSystem?: string };
-    const canvasWidth = requireNumber(cv.width, "canvas.width", "PACKAGE_MANIFEST_INVALID");
-    const canvasHeight = requireNumber(cv.height, "canvas.height", "PACKAGE_MANIFEST_INVALID");
+    const canvasWidth = requireInteger(cv.width, "canvas.width", "PACKAGE_MANIFEST_INVALID");
+    const canvasHeight = requireInteger(cv.height, "canvas.height", "PACKAGE_MANIFEST_INVALID");
     assertCondition(
       canvasWidth >= 1 && canvasWidth <= 4096,
       "PACKAGE_MANIFEST_INVALID",
@@ -617,22 +720,27 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       const key = requireString(ae.key, `actions[${i}].key`, "PACKAGE_MANIFEST_INVALID");
       const name = requireString(ae.name, `actions[${i}].name`, "PACKAGE_MANIFEST_INVALID");
       const config = requireString(ae.config, `actions[${i}].config`, "PACKAGE_MANIFEST_INVALID");
-      const playbackMode = normalizePlaybackModeValue(ae.playbackMode, key);
-      const fps = requireNumber(ae.fps, `actions[${i}].fps`, "PACKAGE_MANIFEST_INVALID");
+      const playbackMode = requireV2PlaybackMode(ae.playbackMode, key);
+      const fps = requireInteger(ae.fps, `actions[${i}].fps`, "PACKAGE_MANIFEST_INVALID");
       assertCondition(fps >= 1 && fps <= 120, "PACKAGE_MANIFEST_INVALID", `actions[${i}].fps must be between 1 and 120`);
-      const frameCount = requireNumber(ae.frameCount, `actions[${i}].frameCount`, "PACKAGE_MANIFEST_INVALID");
+      const frameCount = requireInteger(ae.frameCount, `actions[${i}].frameCount`, "PACKAGE_MANIFEST_INVALID");
       assertCondition(frameCount >= 1, "PACKAGE_MANIFEST_INVALID", `actions[${i}].frameCount must be >= 1`);
       const supportsDefaultIdle = requireBoolean(ae.supportsDefaultIdle, `actions[${i}].supportsDefaultIdle`, "PACKAGE_MANIFEST_INVALID");
       const isStableStateCandidate = requireBoolean(ae.isStableStateCandidate, `actions[${i}].isStableStateCandidate`, "PACKAGE_MANIFEST_INVALID");
       const isTransitionOnly = requireBoolean(ae.isTransitionOnly, `actions[${i}].isTransitionOnly`, "PACKAGE_MANIFEST_INVALID");
 
       let qualityVerdict: QualityVerdict | undefined;
-      if (ae.qualityVerdict !== undefined && ae.qualityVerdict !== null) {
-        const qv = ae.qualityVerdict as string;
-        if ((VALID_QUALITY_VERDICTS as readonly string[]).includes(qv)) {
-          qualityVerdict = qv as QualityVerdict;
-        } else {
-          qualityVerdict = mapLegacyQualityVerdict(qv);
+      if (ae.qualityVerdict !== undefined) {
+        assertCondition(
+          typeof ae.qualityVerdict === "string" && (VALID_QUALITY_VERDICTS as readonly string[]).includes(ae.qualityVerdict),
+          "PACKAGE_MANIFEST_INVALID",
+          `actions[${i}].qualityVerdict is invalid`,
+        );
+        qualityVerdict = ae.qualityVerdict as QualityVerdict;
+      }
+      for (const field of ["revisionId", "qualityEvaluationId"] as const) {
+        if (ae[field] !== undefined) {
+          assertCondition(typeof ae[field] === "string", "PACKAGE_MANIFEST_INVALID", `actions[${i}].${field} must be a string`);
         }
       }
 
@@ -640,8 +748,8 @@ export class Schema2PackageReader implements StrictPackageContractReader {
         key,
         name,
         config,
-        revisionId: typeof ae.revisionId === "string" ? ae.revisionId : undefined,
-        qualityEvaluationId: typeof ae.qualityEvaluationId === "string" ? ae.qualityEvaluationId : undefined,
+        revisionId: ae.revisionId as string | undefined,
+        qualityEvaluationId: ae.qualityEvaluationId as string | undefined,
         qualityVerdict,
         playbackMode,
         fps,
@@ -701,6 +809,36 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       "binding.policy must be one of bound, unbound, legacy_inferred",
       { actual: String(binding.policy) },
     );
+    if (binding.sourceCharacterId !== undefined) {
+      assertCondition(typeof binding.sourceCharacterId === "string", "PACKAGE_MANIFEST_INVALID", "binding.sourceCharacterId must be a string");
+    }
+
+    const capabilitiesRaw = m.capabilities;
+    assertCondition(
+      capabilitiesRaw !== null && typeof capabilitiesRaw === "object",
+      "PACKAGE_MANIFEST_INVALID",
+      "capabilities is required",
+    );
+    const capabilities = capabilitiesRaw as Record<string, unknown>;
+    for (const field of ["transparentBackground", "frameSequence", "perFrameDuration", "audio"] as const) {
+      if (capabilities[field] !== undefined) {
+        assertCondition(typeof capabilities[field] === "boolean", "PACKAGE_MANIFEST_INVALID", `capabilities.${field} must be a boolean`);
+      }
+    }
+
+    const provenanceRaw = m.provenance;
+    assertCondition(
+      provenanceRaw !== null && typeof provenanceRaw === "object",
+      "PACKAGE_MANIFEST_INVALID",
+      "provenance is required",
+    );
+    const provenance = provenanceRaw as Record<string, unknown>;
+    requireString(provenance.builder, "provenance.builder", "PACKAGE_MANIFEST_INVALID");
+    for (const field of ["sourceType", "generationTaskId", "processingTaskId", "builtAt"] as const) {
+      if (provenance[field] !== undefined) {
+        assertCondition(typeof provenance[field] === "string", "PACKAGE_MANIFEST_INVALID", `provenance.${field} must be a string`);
+      }
+    }
 
     const integrityRaw = m.integrity;
     assertCondition(
@@ -730,9 +868,9 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       "integrity.contentRootHash must be a valid sha256",
       { actual: contentRootHash },
     );
-    const fileCount = requireNumber(ig.fileCount, "integrity.fileCount", "PACKAGE_MANIFEST_INVALID");
+    const fileCount = requireInteger(ig.fileCount, "integrity.fileCount", "PACKAGE_MANIFEST_INVALID");
     assertCondition(fileCount >= 1, "PACKAGE_MANIFEST_INVALID", "integrity.fileCount must be >= 1");
-    const totalBytes = requireNumber(ig.totalBytes, "integrity.totalBytes", "PACKAGE_MANIFEST_INVALID");
+    const totalBytes = requireInteger(ig.totalBytes, "integrity.totalBytes", "PACKAGE_MANIFEST_INVALID");
     assertCondition(totalBytes >= 0, "PACKAGE_MANIFEST_INVALID", "integrity.totalBytes must be >= 0");
 
     const filesRaw = ig.files;
@@ -751,21 +889,21 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       );
       const fe = f as Record<string, unknown>;
       const fpath = requireString(fe.path, `integrity.files[${i}].path`, "PACKAGE_MANIFEST_INVALID");
-      let sha256: string | undefined;
-      if (typeof fe.sha256 === "string") {
-        sha256 = fe.sha256;
-      } else if (typeof fe.hash === "string") {
-        sha256 = fe.hash;
-      }
+      const sha256 = fe.sha256;
       assertCondition(
         typeof sha256 === "string" && SHA256_RE.test(sha256),
         "PACKAGE_MANIFEST_INVALID",
         `integrity.files[${i}].sha256 is required and must be a valid sha256`,
         { path: fpath },
       );
-      const fbytes = requireNumber(fe.bytes, `integrity.files[${i}].bytes`, "PACKAGE_MANIFEST_INVALID");
+      const fbytes = requireInteger(fe.bytes, `integrity.files[${i}].bytes`, "PACKAGE_MANIFEST_INVALID");
       const fmediaType = requireString(fe.mediaType, `integrity.files[${i}].mediaType`, "PACKAGE_MANIFEST_INVALID");
       const frole = requireString(fe.role, `integrity.files[${i}].role`, "PACKAGE_MANIFEST_INVALID");
+      for (const field of ["actionKey", "frameId"] as const) {
+        if (fe[field] !== undefined) {
+          assertCondition(typeof fe[field] === "string", "PACKAGE_MANIFEST_INVALID", `integrity.files[${i}].${field} must be a string`);
+        }
+      }
       files.push({
         path: fpath,
         sha256,
@@ -815,10 +953,16 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       { actionKey },
     );
     const a = raw as Record<string, unknown>;
+    assertNoUnknownTopLevelFields(
+      a,
+      V2_ACTION_TOP_LEVEL_FIELDS,
+      `action config ${actionKey}`,
+      actionKey,
+    );
 
     const sv = a.schemaVersion;
     assertCondition(
-      typeof sv === "number" && sv === 2,
+      typeof sv === "number" && Number.isInteger(sv) && sv === 2,
       "PACKAGE_ACTION_CONFIG_SCHEMA_UNSUPPORTED",
       `action.schemaVersion must be 2 (action: ${actionKey})`,
       { actionKey, expected: "2", actual: String(sv) },
@@ -833,30 +977,35 @@ export class Schema2PackageReader implements StrictPackageContractReader {
     );
 
     const displayName = requireString(a.displayName, "displayName", "PACKAGE_MANIFEST_INVALID");
-    const version = requireNumber(a.version, "version", "PACKAGE_MANIFEST_INVALID");
+    const version = requireInteger(a.version, "version", "PACKAGE_MANIFEST_INVALID");
     assertCondition(version >= 1, "PACKAGE_MANIFEST_INVALID", `version must be >= 1 (action: ${actionKey})`);
-    const playbackMode = normalizePlaybackModeValue(a.playbackMode, actionKey);
-    const fps = requireNumber(a.fps, "fps", "PACKAGE_MANIFEST_INVALID");
+    const playbackMode = requireV2PlaybackMode(a.playbackMode, actionKey);
+    const fps = requireInteger(a.fps, "fps", "PACKAGE_MANIFEST_INVALID");
     assertCondition(fps >= 1 && fps <= 120, "PACKAGE_MANIFEST_INVALID", `fps must be between 1 and 120 (action: ${actionKey})`);
     const interruptible = requireBoolean(a.interruptible, "interruptible", "PACKAGE_MANIFEST_INVALID");
-    const priority = requireNumber(a.priority, "priority", "PACKAGE_MANIFEST_INVALID");
+    let interruptAfterMs: number | undefined;
+    if (a.interruptAfterMs !== undefined) {
+      interruptAfterMs = requireInteger(a.interruptAfterMs, "interruptAfterMs", "PACKAGE_MANIFEST_INVALID");
+      assertCondition(interruptAfterMs >= 0, "PACKAGE_MANIFEST_INVALID", `interruptAfterMs must be >= 0 (action: ${actionKey})`);
+    }
+    const priority = requireInteger(a.priority, "priority", "PACKAGE_MANIFEST_INVALID");
     assertCondition(priority >= 0 && priority <= 100, "PACKAGE_MANIFEST_INVALID", `priority must be between 0 and 100 (action: ${actionKey})`);
-    const cooldownMs = requireNumber(a.cooldownMs, "cooldownMs", "PACKAGE_MANIFEST_INVALID");
+    const cooldownMs = requireInteger(a.cooldownMs, "cooldownMs", "PACKAGE_MANIFEST_INVALID");
     assertCondition(cooldownMs >= 0, "PACKAGE_MANIFEST_INVALID", `cooldownMs must be >= 0 (action: ${actionKey})`);
-    const minimumPlayMs = requireNumber(a.minimumPlayMs, "minimumPlayMs", "PACKAGE_MANIFEST_INVALID");
+    const minimumPlayMs = requireInteger(a.minimumPlayMs, "minimumPlayMs", "PACKAGE_MANIFEST_INVALID");
     assertCondition(minimumPlayMs >= 0, "PACKAGE_MANIFEST_INVALID", `minimumPlayMs must be >= 0 (action: ${actionKey})`);
 
-    let maximumPlayMs: number;
+    let maximumPlayMs: number | null;
     if (a.maximumPlayMs === null) {
-      maximumPlayMs = 0;
+      maximumPlayMs = null;
     } else {
-      maximumPlayMs = requireNumber(a.maximumPlayMs, "maximumPlayMs", "PACKAGE_MANIFEST_INVALID");
+      maximumPlayMs = requireInteger(a.maximumPlayMs, "maximumPlayMs", "PACKAGE_MANIFEST_INVALID");
       assertCondition(maximumPlayMs >= 0, "PACKAGE_MANIFEST_INVALID", `maximumPlayMs must be >= 0 (action: ${actionKey})`);
     }
 
-    let mutexGroup: string;
-    if (a.mutexGroup === null || a.mutexGroup === undefined) {
-      mutexGroup = "";
+    let mutexGroup: string | null;
+    if (a.mutexGroup === null) {
+      mutexGroup = null;
     } else {
       assertCondition(typeof a.mutexGroup === "string", "PACKAGE_MANIFEST_INVALID", `mutexGroup must be a string or null (action: ${actionKey})`);
       mutexGroup = a.mutexGroup as string;
@@ -875,6 +1024,7 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       fps,
       playbackMode,
       interruptible,
+      interruptAfterMs,
       priority,
       cooldownMs,
       minimumPlayMs,
@@ -1061,11 +1211,22 @@ export class Schema1PackageReader implements PackageReader {
     const fps = typeof a.fps === "number" ? a.fps : typeof a.defaultFps === "number" ? a.defaultFps : 0;
     const version = typeof a.version === "number" ? a.version : 1;
     const interruptible = typeof a.interruptible === "boolean" ? a.interruptible : true;
+    const interruptAfterMs = typeof a.interruptAfterMs === "number" ? a.interruptAfterMs : undefined;
     const priority = typeof a.priority === "number" ? a.priority : 50;
     const cooldownMs = typeof a.cooldownMs === "number" ? a.cooldownMs : 0;
     const minimumPlayMs = typeof a.minimumPlayMs === "number" ? a.minimumPlayMs : 0;
-    const maximumPlayMs = typeof a.maximumPlayMs === "number" ? a.maximumPlayMs : 0;
-    const mutexGroup = typeof a.mutexGroup === "string" ? a.mutexGroup : "";
+    // Legacy packages historically used a missing/zero maximumPlayMs and an
+    // empty mutexGroup to mean "not constrained". Preserve that meaning when
+    // mapping into the V2 runtime contract so the stricter V2 zero/null
+    // semantics do not turn old actions into 0 ms actions or one shared mutex.
+    const maximumPlayMs =
+      typeof a.maximumPlayMs === "number" && a.maximumPlayMs > 0
+        ? a.maximumPlayMs
+        : null;
+    const mutexGroup =
+      typeof a.mutexGroup === "string" && a.mutexGroup.trim().length > 0
+        ? a.mutexGroup
+        : null;
     const supportsDefaultIdle = typeof a.supportsDefaultIdle === "boolean" ? a.supportsDefaultIdle : true;
     const isStableStateCandidate = typeof a.isStableStateCandidate === "boolean" ? a.isStableStateCandidate : playbackMode === "loop";
     const isTransitionOnly = typeof a.isTransitionOnly === "boolean" ? a.isTransitionOnly : false;
@@ -1082,6 +1243,7 @@ export class Schema1PackageReader implements PackageReader {
       fps,
       playbackMode,
       interruptible,
+      interruptAfterMs,
       priority,
       cooldownMs,
       minimumPlayMs,

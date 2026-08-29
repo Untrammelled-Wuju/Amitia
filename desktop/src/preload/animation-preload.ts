@@ -3,6 +3,7 @@ import { ANIMATION_IPC_CHANNELS } from "../shared/animation-ipc";
 import type {
   PetDragIpcPayload,
   PetHitMaskPayload,
+  PetPointerIpcPayload,
   RuntimeReadyPayload,
   RuntimeInitFailedPayload,
 } from "../shared/animation-ipc";
@@ -80,16 +81,16 @@ const animationApi = {
     return ipcRenderer.invoke(ANIMATION_IPC_CHANNELS.getDiagnostics);
   },
 
-  sendClick(x: number, y: number): void {
-    ipcRenderer.send(ANIMATION_IPC_CHANNELS.sendClick, { x, y });
+  sendClick(payload: PetPointerIpcPayload): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.sendClick, payload);
   },
 
-  sendDoubleClick(x: number, y: number): void {
-    ipcRenderer.send(ANIMATION_IPC_CHANNELS.sendDoubleClick, { x, y });
+  sendDoubleClick(payload: PetPointerIpcPayload): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.sendDoubleClick, payload);
   },
 
-  sendHover(x: number, y: number): void {
-    ipcRenderer.send(ANIMATION_IPC_CHANNELS.sendHover, { x, y });
+  sendHover(payload: PetPointerIpcPayload): void {
+    ipcRenderer.send(ANIMATION_IPC_CHANNELS.sendHover, payload);
   },
 
   sendRendererBootstrapped(): void {

@@ -213,10 +213,17 @@ function resolveAnchor(
     }
     const nx = typeof ax === "number" ? ax : Number(ax);
     const ny = typeof ay === "number" ? ay : Number(ay);
-    if (!Number.isFinite(nx) || !Number.isFinite(ny)) {
+    if (
+      !Number.isFinite(nx) ||
+      !Number.isFinite(ny) ||
+      nx < 0 ||
+      nx > 1 ||
+      ny < 0 ||
+      ny > 1
+    ) {
       throw new PlaybackError(
         PLAYBACK_ERROR_CODES.ACTION_CONFIG_INVALID,
-        `anchor invalid x or y for action: ${raw.actionKey}`,
+        `anchor x/y must be normalized to [0, 1] for action: ${raw.actionKey}`,
         { actionKey: raw.actionKey },
       );
     }

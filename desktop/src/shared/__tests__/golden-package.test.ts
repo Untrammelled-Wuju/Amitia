@@ -44,6 +44,13 @@ const goldenManifest = {
   ],
   compatibility: { minRuntimeVersion: "1.0.0", renderMode: "sprite" },
   binding: { policy: "bound" },
+  capabilities: {
+    transparentBackground: true,
+    frameSequence: true,
+    perFrameDuration: true,
+    audio: false,
+  },
+  provenance: { builder: "golden-test", sourceType: "generated" },
   integrity: {
     algorithm: INTEGRITY_ALGORITHM_V2,
     manifestHash: "0".repeat(64),
@@ -215,7 +222,7 @@ describe("Golden Package", () => {
       displayName: "Bounce",
       version: 1,
       fps: 10,
-      playbackMode: "ping-pong",
+      playbackMode: "ping_pong",
       interruptible: true,
       priority: 50,
       cooldownMs: 0,
