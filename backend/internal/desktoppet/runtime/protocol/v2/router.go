@@ -75,7 +75,7 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
 			views = append(views, gin.H{
 				"runtimeId": conn.RuntimeID,
 				"deviceId":  conn.DeviceID,
-				"state":     conn.State,
+				"state":     conn.GetState(),
 				"sessionId": conn.SessionIDValue(),
 				"lastSeq":   conn.LastInboundSequence(),
 				"lastBeat":  conn.LastHeartbeat().Format(time.RFC3339),
@@ -102,7 +102,7 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{
 			"runtimeId": conn.RuntimeID,
 			"deviceId":  conn.DeviceID,
-			"state":     conn.State,
+			"state":     conn.GetState(),
 			"sessionId": conn.SessionIDValue(),
 			"lastSeq":   conn.LastInboundSequence(),
 			"lastBeat":  conn.LastHeartbeat().Format(time.RFC3339),

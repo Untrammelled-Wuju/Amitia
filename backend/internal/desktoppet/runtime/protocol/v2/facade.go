@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -223,13 +224,23 @@ func (f *RuntimeFacade) runRetentionGC(ctx context.Context) {
 
 func (f *RuntimeFacade) ListConnections(userID string) []*Connection {
 	f.handler.mu.RLock()
-	defer f.handler.mu.RUnlock()
-	var result []*Connection
+	result := make([]*Connection, 0, len(f.handler.connections))
 	for _, conn := range f.handler.connections {
 		if conn != nil && string(conn.UserID) == userID {
 			result = append(result, conn)
 		}
 	}
+	f.handler.mu.RUnlock()
+
+	// Handler storage is a map. Always expose a stable ordering so callers do
+	// not accidentally turn Go's randomized map iteration into device routing.
+	sort.Slice(result, func(i, j int) bool {
+		leftDevice, rightDevice := string(result[i].DeviceID), string(result[j].DeviceID)
+		if leftDevice != rightDevice {
+			return leftDevice < rightDevice
+		}
+		return string(result[i].RuntimeID) < string(result[j].RuntimeID)
+	})
 	return result
 }
 
