@@ -24,7 +24,7 @@ import { ResourceCache } from "./resource-cache";
 import type { PlaybackEvent, PlaybackSnapshot, PlayActionCommand } from "../../desktop-pet/animation/contracts";
 import { DesktopPetWindowAdapter } from "./window-adapter";
 import { AnimationIpcAdapter } from "./animation-ipc";
-import type { PetDragIpcPayload, PetHitMaskPayload, RuntimeInitFailedPayload, RuntimeReadyPayload } from "../../shared/animation-ipc";
+import type { PetDragIpcPayload, PetHitMaskPayload, PetPointerIpcPayload, RuntimeInitFailedPayload, RuntimeReadyPayload } from "../../shared/animation-ipc";
 import { AnimationPlayerBridge } from "./animation-player-bridge";
 import {
   DesktopPetActionScheduler,
@@ -509,7 +509,17 @@ export class DesktopPetManager {
 
   async handleCharacterSwitched(characterId: string): Promise<void> {
     if (!characterId) return;
-    await this.ensureInitialized();
+    await this.runLifecycleMutation(() =>
+      this.handleCharacterSwitchedInternal(characterId),
+    );
+  }
+
+  private async handleCharacterSwitchedInternal(characterId: string): Promise<void> {
+    // Character reconciliation is authoritative at application start. Do not
+    // restore a previously active installation before we know which character
+    // is active, otherwise the stale pet can become visible for one startup
+    // cycle before the watcher corrects it.
+    await this.ensureInitializedWithinMutation(false);
     let installations: InstallationInfo[];
     try {
       installations = await this.listInstallations();
@@ -525,12 +535,8 @@ export class DesktopPetManager {
       characterId,
     );
     if (!candidate) {
-      // Character-bound pets must never survive a switch to a character that
-      // has no usable installation. Disable both the local runtime and the
-      // authoritative backend active-installation state so a later restart
-      // cannot resurrect the previous character's pet.
       if (this.activeInstallationId || this.state === "enabled") {
-        await this.disableInstallation();
+        await this.disableInternal(true);
       }
       return;
     }
@@ -541,7 +547,7 @@ export class DesktopPetManager {
       return;
     }
     try {
-      await this.switchInstallation(candidate.id);
+      await this.switchInstallationInternal(candidate.id);
     } catch (err) {
       console.warn(
         "[DesktopPetManager] 角色切换后切换桌宠失败:",
@@ -602,12 +608,16 @@ export class DesktopPetManager {
     };
   }
 
-  async initialize(): Promise<void> {
+  async initialize(
+    options: { restoreActiveInstallation?: boolean } = {},
+  ): Promise<void> {
+    await this.runLifecycleMutation(() =>
+      this.initializeInternal(options.restoreActiveInstallation ?? true),
+    );
+  }
+
+  private async initializeInternal(restoreActiveInstallation: boolean): Promise<void> {
     if (this.initialized) {
-      return;
-    }
-    if (this.initializing) {
-      await this.ensureInitialized();
       return;
     }
     this.initializing = true;
@@ -622,7 +632,9 @@ export class DesktopPetManager {
     try {
       await this.waitCoreReady();
       await this.registerDeviceIdentity();
-      await this.restoreActiveInstallation();
+      if (restoreActiveInstallation) {
+        await this.restoreActiveInstallation();
+      }
       this.startBridge();
       this.initialized = true;
       this.initializationError = null;
@@ -655,7 +667,7 @@ export class DesktopPetManager {
     if (!installationId) {
       throw new Error("INSTALLATION_ID_REQUIRED");
     }
-    await this.ensureInitialized();
+    await this.ensureInitializedWithinMutation();
     if (
       this.activeInstallationId === installationId &&
       this.state === "enabled"
@@ -758,56 +770,55 @@ export class DesktopPetManager {
     if (!installationId) {
       throw new Error("INSTALLATION_ID_REQUIRED");
     }
-    await this.runLifecycleMutation(async () => {
-      await this.ensureInitialized();
+    await this.runLifecycleMutation(() =>
+      this.switchInstallationInternal(installationId),
+    );
+  }
+
+  private async switchInstallationInternal(installationId: string): Promise<void> {
+    await this.ensureInitializedWithinMutation();
+    if (
+      this.activeInstallationId === installationId &&
+      this.state === "enabled"
+    ) {
+      return;
+    }
+
+    const previousInstallationId =
+      this.state === "enabled" ? this.activeInstallationId : null;
+
+    await this.disableInternal(false);
+    try {
+      await this.enableInstallationInternal(installationId, true, false);
+    } catch (switchError) {
       if (
-        this.activeInstallationId === installationId &&
-        this.state === "enabled"
+        previousInstallationId &&
+        previousInstallationId !== installationId
       ) {
-        return;
-      }
-
-      const previousInstallationId =
-        this.state === "enabled" ? this.activeInstallationId : null;
-
-      await this.disableInternal(false);
-      try {
-        await this.enableInstallationInternal(installationId, true, false);
-      } catch (switchError) {
-        if (
-          previousInstallationId &&
-          previousInstallationId !== installationId
-        ) {
-          try {
-            // Switching is transactional from the user's perspective. If the
-            // target package/runtime cannot become ready, restore the exact pet
-            // that was running before the switch instead of leaving the desktop
-            // empty. The backend enable call also restores authoritative active
-            // installation state if target enable had already committed.
-            await this.enableInstallationInternal(
-              previousInstallationId,
-              true,
-              false,
-            );
-          } catch (restoreError) {
-            this.petLogger.logRuntimeCrash(
-              "switchInstallation.restorePrevious",
-              restoreError,
-            );
-            this.setState(
-              "degraded",
-              previousInstallationId,
-              `桌宠切换失败且恢复旧桌宠失败: ${this.errorMessage(restoreError)}`,
-            );
-            throw new AggregateError(
-              [switchError, restoreError],
-              "PET_SWITCH_FAILED_AND_ROLLBACK_FAILED",
-            );
-          }
+        try {
+          await this.enableInstallationInternal(
+            previousInstallationId,
+            true,
+            false,
+          );
+        } catch (restoreError) {
+          this.petLogger.logRuntimeCrash(
+            "switchInstallation.restorePrevious",
+            restoreError,
+          );
+          this.setState(
+            "degraded",
+            previousInstallationId,
+            `桌宠切换失败且恢复旧桌宠失败: ${this.errorMessage(restoreError)}`,
+          );
+          throw new AggregateError(
+            [switchError, restoreError],
+            "PET_SWITCH_FAILED_AND_ROLLBACK_FAILED",
+          );
         }
-        throw switchError;
       }
-    });
+      throw switchError;
+    }
   }
 
   async playAction(actionKey: string): Promise<void> {
@@ -1357,16 +1368,11 @@ export class DesktopPetManager {
     return payload ? mapRuntimeSettingsPayload(payload) : null;
   }
 
-  private async ensureInitialized(): Promise<void> {
+  private async ensureInitializedWithinMutation(
+    restoreActiveInstallation = true,
+  ): Promise<void> {
     if (this.initialized) return;
-    if (this.initializing) {
-      while (this.initializing) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
-      if (this.initialized) return;
-      throw this.initializationError ?? new Error("DESKTOP_PET_INITIALIZATION_FAILED");
-    }
-    await this.initialize();
+    await this.initializeInternal(restoreActiveInstallation);
     if (!this.initialized) {
       throw this.initializationError ?? new Error("DESKTOP_PET_INITIALIZATION_FAILED");
     }
@@ -1602,19 +1608,19 @@ export class DesktopPetManager {
       getPetWindow: () => windowAdapter.getNativeWindow(),
       onPlaybackEvent: (event) => this.handlePlaybackEvent(event),
       onSnapshotUpdate: (snapshot) => this.handleSnapshotUpdate(snapshot),
-      onClick: (x, y) => {
+      onClick: (payload) => {
         this.vitalityController?.notifyInteraction("click");
-        this.handleClick(x, y);
-        this.eventBridge?.handleClick(x, y);
+        this.handleClick(payload);
+        this.eventBridge?.handleClick(payload.canvasX, payload.canvasY);
       },
-      onDoubleClick: (x, y) => {
-        this.handleDoubleClick(x, y);
-        this.eventBridge?.handleDoubleClick(x, y);
+      onDoubleClick: (payload) => {
+        this.handleDoubleClick(payload);
+        this.eventBridge?.handleDoubleClick(payload.canvasX, payload.canvasY);
       },
-      onHover: (x, y) => {
+      onHover: (payload) => {
         this.vitalityController?.notifyInteraction("hover");
-        this.handleHover(x, y);
-        this.eventBridge?.handleHover(x, y);
+        this.handleHover(payload);
+        this.eventBridge?.handleHover(payload.canvasX, payload.canvasY);
       },
       onHitMask: (payload) => this.handleHitMask(payload),
       onRendererBootstrapped: () => this.handleRendererBootstrapped(),
@@ -2201,54 +2207,56 @@ export class DesktopPetManager {
     });
   }
 
-  private handleClick(x: number, y: number): void {
+  private handleClick(payload: PetPointerIpcPayload): void {
     void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.clicked", {
       ...this.runtimeEventContext(),
       gestureId: randomUUID(),
-      sequence: Date.now(),
+      sequence: payload.occurredAt,
       button: "left",
       clickCount: 1,
-      canvasX: x,
-      canvasY: y,
-      screenX: x,
-      screenY: y,
+      canvasX: payload.canvasX,
+      canvasY: payload.canvasY,
+      screenX: payload.screenX,
+      screenY: payload.screenY,
       frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
       actionKey: this.currentActionKey ?? "",
-      occurredAt: new Date().toISOString(),
+      occurredAt: new Date(payload.occurredAt).toISOString(),
     }).catch((err) => {
       console.warn("[DesktopPetManager] 上报单击事件失败:", this.errorMessage(err));
     });
   }
 
-  private handleDoubleClick(x: number, y: number): void {
+  private handleDoubleClick(payload: PetPointerIpcPayload): void {
     void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.double_clicked", {
       ...this.runtimeEventContext(),
       gestureId: randomUUID(),
-      sequence: Date.now(),
+      sequence: payload.occurredAt,
       button: "left",
       clickCount: 2,
-      canvasX: x,
-      canvasY: y,
-      screenX: x,
-      screenY: y,
+      canvasX: payload.canvasX,
+      canvasY: payload.canvasY,
+      screenX: payload.screenX,
+      screenY: payload.screenY,
       frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
       actionKey: this.currentActionKey ?? "",
-      occurredAt: new Date().toISOString(),
+      occurredAt: new Date(payload.occurredAt).toISOString(),
     }).catch((err) => {
       console.warn("[DesktopPetManager] 上报双击事件失败:", this.errorMessage(err));
     });
   }
 
-  private handleHover(x: number, y: number): void {
+  private handleHover(payload: PetPointerIpcPayload): void {
     void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.hovered", {
       ...this.runtimeEventContext(),
       gestureId: randomUUID(),
-      sequence: Date.now(),
-      x,
-      y,
+      sequence: payload.occurredAt,
+      canvasX: payload.canvasX,
+      canvasY: payload.canvasY,
+      screenX: payload.screenX,
+      screenY: payload.screenY,
       actionKey: this.currentActionKey ?? "",
       frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
-      occurredAt: new Date().toISOString(),
+      occurredAt: new Date(payload.occurredAt).toISOString(),
     }).catch((err) => {
       console.warn("[DesktopPetManager] 上报悬停事件失败:", this.errorMessage(err));
     });

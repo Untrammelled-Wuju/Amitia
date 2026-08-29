@@ -93,6 +93,15 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, "../front/index.html"),
+        "pet-main": resolve(__dirname, "src/renderer/pet-main.ts"),
+      },
+      output: {
+        entryFileNames: (chunkInfo) =>
+          chunkInfo.name === "pet-main"
+            ? "pet-main.js"
+            : "assets/[name]-[hash].js",
+        chunkFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
       },
     },
   },

@@ -18,7 +18,7 @@ import type {
   PlayActionCommand,
 } from "../desktop-pet/animation/contracts";
 import type { PetAnimationApi } from "./pet-animation-globals";
-import type { PetDragIpcPayload, PetHitMaskPayload, RuntimeReadyPayload } from "../shared/animation-ipc";
+import type { PetDragIpcPayload, PetHitMaskPayload, PetPointerIpcPayload, RuntimeReadyPayload } from "../shared/animation-ipc";
 import { resolveLogicalCanvasPoint } from "./pet-pointer-coordinates";
 
 function resolveResourceUrl(relativePath: string, configUrl: string): string {
@@ -84,6 +84,13 @@ const SNAPSHOT_HEARTBEAT_MS = 15000;
 const SNAPSHOT_FRAME_MERGE_MS = 500;
 const SNAPSHOT_HIDDEN_MS = 5000;
 const DRAG_THRESHOLD_PX = 5;
+const DOUBLE_CLICK_THRESHOLD_MS = 250;
+const DOUBLE_CLICK_DISTANCE_PX = 8;
+const DRAG_CLICK_SUPPRESSION_MS = 350;
+
+interface InteractionState {
+  suppressClickUntil: number;
+}
 
 function normalizeInterruptionReason(reason: string): import("../desktop-pet/animation/contracts").InterruptionReason {
   switch (reason) {
@@ -175,52 +182,94 @@ function startSnapshotReporting(
   };
 }
 
+function buildPointerPayload(
+  e: MouseEvent,
+  canvas: HTMLCanvasElement,
+): PetPointerIpcPayload {
+  const point = resolveLogicalCanvasPoint(canvas, e.clientX, e.clientY);
+  return {
+    canvasX: point.x,
+    canvasY: point.y,
+    screenX: e.screenX,
+    screenY: e.screenY,
+    occurredAt: Date.now(),
+  };
+}
+
 function attachInteractionListeners(
   api: PetAnimationApi,
   canvas: HTMLCanvasElement,
+  interactionState: InteractionState,
 ): () => void {
   let clickTimer: ReturnType<typeof setTimeout> | null = null;
-  let lastClickX = 0;
-  let lastClickY = 0;
+  let pendingClick: PetPointerIpcPayload | null = null;
   let lastHoverX = 0;
   let lastHoverY = 0;
   let lastHoverTime = 0;
   let isHovering = false;
 
+  const flushPendingSingleClick = () => {
+    if (!pendingClick) return;
+    const payload = pendingClick;
+    pendingClick = null;
+    api.sendClick(payload);
+  };
+
   const onClick = (e: MouseEvent) => {
-    const point = resolveLogicalCanvasPoint(canvas, e.clientX, e.clientY);
-    if (clickTimer !== null) {
-      clearTimeout(clickTimer);
-      clickTimer = null;
-      api.sendDoubleClick(point.x, point.y);
+    if (e.button !== 0 || Date.now() < interactionState.suppressClickUntil) {
       return;
     }
-    lastClickX = point.x;
-    lastClickY = point.y;
+    const payload = buildPointerPayload(e, canvas);
+    if (clickTimer !== null && pendingClick) {
+      const dx = payload.canvasX - pendingClick.canvasX;
+      const dy = payload.canvasY - pendingClick.canvasY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance <= DOUBLE_CLICK_DISTANCE_PX) {
+        clearTimeout(clickTimer);
+        clickTimer = null;
+        pendingClick = null;
+        api.sendDoubleClick(payload);
+        return;
+      }
+
+      // A second click far away is not a double click. Deliver the first click
+      // immediately and begin a fresh double-click window for the new point.
+      clearTimeout(clickTimer);
+      clickTimer = null;
+      flushPendingSingleClick();
+    }
+
+    pendingClick = payload;
     clickTimer = setTimeout(() => {
       clickTimer = null;
-      api.sendClick(lastClickX, lastClickY);
-    }, 250);
+      flushPendingSingleClick();
+    }, DOUBLE_CLICK_THRESHOLD_MS);
   };
 
   const onMouseMove = (e: MouseEvent) => {
     const now = Date.now();
-    const point = resolveLogicalCanvasPoint(canvas, e.clientX, e.clientY);
-    const dx = point.x - lastHoverX;
-    const dy = point.y - lastHoverY;
+    const payload = buildPointerPayload(e, canvas);
+    const dx = payload.canvasX - lastHoverX;
+    const dy = payload.canvasY - lastHoverY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (isHovering && now - lastHoverTime < 100 && dist < 8) return;
     isHovering = true;
-    lastHoverX = point.x;
-    lastHoverY = point.y;
+    lastHoverX = payload.canvasX;
+    lastHoverY = payload.canvasY;
     lastHoverTime = now;
-    api.sendHover(point.x, point.y);
+    api.sendHover(payload);
   };
 
-  const onMouseLeave = () => {
+  const onMouseLeave = (e: MouseEvent) => {
     if (!isHovering) return;
     isHovering = false;
-    api.sendHover(-1, -1);
+    api.sendHover({
+      canvasX: -1,
+      canvasY: -1,
+      screenX: e.screenX,
+      screenY: e.screenY,
+      occurredAt: Date.now(),
+    });
   };
 
   document.addEventListener("click", onClick);
@@ -235,6 +284,7 @@ function attachInteractionListeners(
       clearTimeout(clickTimer);
       clickTimer = null;
     }
+    pendingClick = null;
   };
 }
 
@@ -256,6 +306,7 @@ function buildDragPayload(
 function attachDragListeners(
   api: PetAnimationApi,
   canvas: HTMLCanvasElement,
+  interactionState: InteractionState,
 ): () => void {
   let pointerDown = false;
   let dragging = false;
@@ -279,6 +330,7 @@ function attachDragListeners(
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (!dragging && dist >= DRAG_THRESHOLD_PX) {
       dragging = true;
+      interactionState.suppressClickUntil = Date.now() + DRAG_CLICK_SUPPRESSION_MS;
       api.sendDragStart(buildDragPayload(e, canvas));
       return;
     }
@@ -290,6 +342,7 @@ function attachDragListeners(
   const onPointerUp = (e: PointerEvent) => {
     if (!pointerDown || e.pointerId !== activePointerId) return;
     if (dragging) {
+      interactionState.suppressClickUntil = Date.now() + DRAG_CLICK_SUPPRESSION_MS;
       api.sendDragEnd(buildDragPayload(e, canvas));
     }
     pointerDown = false;
@@ -300,6 +353,7 @@ function attachDragListeners(
   const onPointerCancel = (e: PointerEvent) => {
     if (!pointerDown || e.pointerId !== activePointerId) return;
     if (dragging) {
+      interactionState.suppressClickUntil = Date.now() + DRAG_CLICK_SUPPRESSION_MS;
       api.sendDragCancel(buildDragPayload(e, canvas));
     }
     pointerDown = false;
@@ -392,8 +446,9 @@ async function main(): Promise<void> {
   };
   const unsubEvent = engine.onEvent(eventListener);
 
-  const disposeListeners = attachInteractionListeners(api, canvas);
-  const disposeDragListeners = attachDragListeners(api, canvas);
+  const interactionState: InteractionState = { suppressClickUntil: 0 };
+  const disposeListeners = attachInteractionListeners(api, canvas, interactionState);
+  const disposeDragListeners = attachDragListeners(api, canvas, interactionState);
 
   const unsubPlayAction = api.onPlayAction((command: PlayActionCommand) => {
     void engine.playAction(command);

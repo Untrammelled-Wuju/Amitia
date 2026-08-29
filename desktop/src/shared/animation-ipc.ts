@@ -33,6 +33,15 @@ export const ANIMATION_IPC_CHANNELS = {
 export type AnimationIpcChannel =
   (typeof ANIMATION_IPC_CHANNELS)[keyof typeof ANIMATION_IPC_CHANNELS];
 
+
+export interface PetPointerIpcPayload {
+  canvasX: number;
+  canvasY: number;
+  screenX: number;
+  screenY: number;
+  occurredAt: number;
+}
+
 export interface PetDragIpcPayload {
   pointerId: number;
   screenX: number;

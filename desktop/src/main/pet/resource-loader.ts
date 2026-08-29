@@ -48,7 +48,7 @@ interface ActionFile {
   cooldownMs?: number;
   minimumPlayMs?: number;
   maximumPlayMs?: number | null;
-  mutexGroup?: string;
+  mutexGroup?: string | null;
   supportsDefaultIdle?: boolean;
   isStableStateCandidate?: boolean;
   isTransitionOnly?: boolean;
@@ -469,14 +469,6 @@ export class ResourceLoader {
     const returnAction =
       action.returnTo.type === "action" ? action.returnTo.actionKey : undefined;
 
-    const extended = action as SharedRuntimeAction & {
-      supportsDefaultIdle?: boolean;
-      isStableStateCandidate?: boolean;
-      isTransitionOnly?: boolean;
-      interruptAfterMs?: number;
-      category?: string;
-    };
-
     return {
       key: action.actionKey,
       name: action.displayName,
@@ -494,15 +486,14 @@ export class ResourceLoader {
       playbackMode: action.playbackMode,
       priority: action.priority,
       cooldownMs: action.cooldownMs,
-      mutexGroup: action.mutexGroup || undefined,
+      mutexGroup: action.mutexGroup ?? undefined,
       minimumPlayMs: action.minimumPlayMs,
-      maximumPlayMs: action.maximumPlayMs || null,
+      maximumPlayMs: action.maximumPlayMs ?? null,
       returnTo: action.returnTo,
-      supportsDefaultIdle: extended.supportsDefaultIdle,
-      isStableStateCandidate: extended.isStableStateCandidate,
-      isTransitionOnly: extended.isTransitionOnly,
-      interruptAfterMs: extended.interruptAfterMs,
-      category: extended.category,
+      supportsDefaultIdle: action.supportsDefaultIdle,
+      isStableStateCandidate: action.isStableStateCandidate,
+      isTransitionOnly: action.isTransitionOnly,
+      interruptAfterMs: action.interruptAfterMs,
     };
   }
 

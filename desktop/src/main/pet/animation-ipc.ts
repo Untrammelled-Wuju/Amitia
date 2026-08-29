@@ -6,6 +6,7 @@ import { ANIMATION_IPC_CHANNELS } from "../../shared/animation-ipc";
 import type {
   PetDragIpcPayload,
   PetHitMaskPayload,
+  PetPointerIpcPayload,
   RuntimeInitFailedPayload,
   RuntimeReadyPayload,
 } from "../../shared/animation-ipc";
@@ -91,10 +92,6 @@ function isPathSafe(basePath: string, targetPath: string): boolean {
   return !rel.startsWith("..") && !isAbsolute(rel);
 }
 
-function isValidCoordinate(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= MAX_COORDINATE;
-}
-
 function isValidPlaybackEvent(payload: unknown): payload is PlaybackEvent {
   if (!payload || typeof payload !== "object") return false;
   const p = payload as Record<string, unknown>;
@@ -132,6 +129,19 @@ function isValidHitMaskPayload(payload: unknown): payload is PetHitMaskPayload {
   if (typeof p.playbackInstanceId !== "string" || p.playbackInstanceId.length > MAX_STRING_LENGTH) return false;
   if (typeof p.maskRevision !== "number" || p.maskRevision < 0 || p.maskRevision > MAX_MASK_REVISION) return false;
   return true;
+}
+
+
+function isValidPointerPayload(payload: unknown): payload is PetPointerIpcPayload {
+  if (!payload || typeof payload !== "object") return false;
+  const p = payload as Record<string, unknown>;
+  for (const key of ["canvasX", "canvasY", "screenX", "screenY"] as const) {
+    const value = p[key];
+    if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > MAX_COORDINATE) {
+      return false;
+    }
+  }
+  return typeof p.occurredAt === "number" && Number.isFinite(p.occurredAt);
 }
 
 function isValidDragPayload(payload: unknown): payload is PetDragIpcPayload {
@@ -239,9 +249,9 @@ export interface AnimationIpcAdapterDeps {
   getPetWindow: () => BrowserWindow | null;
   onPlaybackEvent?: (event: PlaybackEvent) => void;
   onSnapshotUpdate?: (snapshot: PlaybackSnapshot) => void;
-  onClick?: (x: number, y: number) => void;
-  onDoubleClick?: (x: number, y: number) => void;
-  onHover?: (x: number, y: number) => void;
+  onClick?: (payload: PetPointerIpcPayload) => void;
+  onDoubleClick?: (payload: PetPointerIpcPayload) => void;
+  onHover?: (payload: PetPointerIpcPayload) => void;
   onHitMask?: (payload: PetHitMaskPayload) => void;
   onRendererBootstrapped?: () => void;
   onRuntimeReady?: (payload: RuntimeReadyPayload) => void;
@@ -305,29 +315,29 @@ export class AnimationIpcAdapter {
 
   private readonly onSendClick = (
     event: Electron.IpcMainEvent,
-    data: { x: number; y: number },
+    payload: PetPointerIpcPayload,
   ): void => {
     if (!this.isCurrentPetRenderer(event)) return;
-    if (!data || !isValidCoordinate(data.x) || !isValidCoordinate(data.y)) return;
-    this.deps.onClick?.(data.x, data.y);
+    if (!isValidPointerPayload(payload)) return;
+    this.deps.onClick?.(payload);
   };
 
   private readonly onSendDoubleClick = (
     event: Electron.IpcMainEvent,
-    data: { x: number; y: number },
+    payload: PetPointerIpcPayload,
   ): void => {
     if (!this.isCurrentPetRenderer(event)) return;
-    if (!data || !isValidCoordinate(data.x) || !isValidCoordinate(data.y)) return;
-    this.deps.onDoubleClick?.(data.x, data.y);
+    if (!isValidPointerPayload(payload)) return;
+    this.deps.onDoubleClick?.(payload);
   };
 
   private readonly onSendHover = (
     event: Electron.IpcMainEvent,
-    data: { x: number; y: number },
+    payload: PetPointerIpcPayload,
   ): void => {
     if (!this.isCurrentPetRenderer(event)) return;
-    if (!data || !isValidCoordinate(data.x) || !isValidCoordinate(data.y)) return;
-    this.deps.onHover?.(data.x, data.y);
+    if (!isValidPointerPayload(payload)) return;
+    this.deps.onHover?.(payload);
   };
 
   private readonly onRendererBootstrapped = (

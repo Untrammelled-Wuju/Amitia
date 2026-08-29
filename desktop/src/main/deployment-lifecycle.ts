@@ -286,7 +286,7 @@ export class DesktopDeploymentLifecycle {
     });
 
     try {
-      await this.desktopPetManager.initialize();
+      await this.desktopPetManager.initialize({ restoreActiveInstallation: false });
     } catch (err) {
       console.warn("[DeploymentLifecycle] DesktopPetManager 初始化失败:", err);
     }

@@ -116,6 +116,22 @@ describe("Schema1PackageReader", () => {
       expect(result.action.fps).toBe(10);
       expect(result.action.configPath).toBe("actions/idle/action.json");
       expect(result.action.frames).toHaveLength(2);
+      expect(result.action.maximumPlayMs).toBeNull();
+      expect(result.action.mutexGroup).toBeNull();
+    });
+
+    it("legacy maximumPlayMs=0 和空 mutexGroup 保持为无约束语义", () => {
+      const raw = {
+        name: "Idle Action",
+        loopType: "loop",
+        fps: 12,
+        maximumPlayMs: 0,
+        mutexGroup: "",
+        frames: ["f0.png"],
+      };
+      const result = reader.readAction(raw, "idle", "actions/idle/action.json");
+      expect(result.action.maximumPlayMs).toBeNull();
+      expect(result.action.mutexGroup).toBeNull();
     });
   });
 });
@@ -148,6 +164,13 @@ describe("Schema2PackageReader", () => {
       ],
       compatibility: { minRuntimeVersion: "2.0.0", renderMode: "sprite" },
       binding: { policy: "bound" },
+      capabilities: {
+        transparentBackground: true,
+        frameSequence: true,
+        perFrameDuration: true,
+        audio: false,
+      },
+      provenance: { builder: "package-schema-test", sourceType: "generated" },
       integrity: {
         algorithm: INTEGRITY_ALGORITHM_V2,
         manifestHash: "0".repeat(64),
@@ -249,7 +272,7 @@ describe("Schema2PackageReader", () => {
       expect(() => reader.readManifest(raw)).toThrow();
     });
 
-    it("integrity.files 使用 hash 字段兼容旧写法", () => {
+    it("V2 integrity.files 不接受 legacy hash 字段", () => {
       const raw = buildValidManifest({
         integrity: {
           algorithm: INTEGRITY_ALGORITHM_V2,
@@ -268,20 +291,21 @@ describe("Schema2PackageReader", () => {
           ],
         },
       });
-      const result = reader.readManifest(raw);
-      expect(result.data.integrity.files[0].sha256).toBe("a".repeat(64));
+      expect(() => reader.readManifest(raw)).toThrow();
     });
   });
 
   describe("readAction", () => {
-    it("playbackMode 直接读取，fps 不回退到 defaultFps", () => {
-      const raw = buildValidAction({
-        fps: 15,
-        defaultFps: 30,
-      });
+    it("playbackMode 直接读取且显式 fps 被保留", () => {
+      const raw = buildValidAction({ fps: 15 });
       const result = reader.readAction(raw, "wave", "actions/wave/action.json");
       expect(result.action.playbackMode).toBe("ping_pong");
       expect(result.action.fps).toBe(15);
+    });
+
+    it("V2 action 拒绝 defaultFps 等未知顶层字段", () => {
+      const raw = buildValidAction({ defaultFps: 30 });
+      expect(() => reader.readAction(raw, "wave", "actions/wave/action.json")).toThrow();
     });
 
     it("缺少 schemaVersion 时抛出错误", () => {
@@ -364,6 +388,13 @@ describe("RuntimePackageNormalizer", () => {
       ],
       compatibility: { minRuntimeVersion: "1.0.0", renderMode: "sprite" },
       binding: { policy: "bound" },
+      capabilities: {
+        transparentBackground: true,
+        frameSequence: true,
+        perFrameDuration: true,
+        audio: false,
+      },
+      provenance: { builder: "normalizer-test", sourceType: "generated" },
       integrity: {
         algorithm: INTEGRITY_ALGORITHM_V2,
         manifestHash: "0".repeat(64),

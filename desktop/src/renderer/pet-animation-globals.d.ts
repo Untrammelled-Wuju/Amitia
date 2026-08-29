@@ -1,6 +1,6 @@
 import type { PackagePlaybackSnapshot } from "../desktop-pet/animation/contracts";
 import type { PlaybackEvent, PlaybackSnapshot, PlayActionCommand, PlaybackRecoverySnapshot } from "../desktop-pet/animation/contracts";
-import type { PetDragIpcPayload, PetHitMaskPayload, RuntimeInitFailedPayload, RuntimeReadyPayload } from "../shared/animation-ipc";
+import type { PetDragIpcPayload, PetHitMaskPayload, PetPointerIpcPayload, RuntimeInitFailedPayload, RuntimeReadyPayload } from "../shared/animation-ipc";
 
 export interface ResolveResourceUrlResult {
   url: string;
@@ -13,9 +13,9 @@ export interface PetAnimationApi {
   reportEvent(event: PlaybackEvent): void;
   reportSnapshot(snapshot: PlaybackSnapshot): void;
   getDiagnostics(): Promise<unknown>;
-  sendClick(x: number, y: number): void;
-  sendDoubleClick(x: number, y: number): void;
-  sendHover(x: number, y: number): void;
+  sendClick(payload: PetPointerIpcPayload): void;
+  sendDoubleClick(payload: PetPointerIpcPayload): void;
+  sendHover(payload: PetPointerIpcPayload): void;
   sendRendererBootstrapped(): void;
   sendRuntimeReady(payload: RuntimeReadyPayload): void;
   sendRuntimeInitFailed(payload: RuntimeInitFailedPayload): void;
@@ -45,9 +45,9 @@ declare global {
       onLoadError(callback: (payload: unknown) => void): () => void;
       onState(callback: (payload: unknown) => void): () => void;
       onChatState(callback: (payload: unknown) => void): () => void;
-      sendClick(x: number, y: number): void;
-      sendDoubleClick(x: number, y: number): void;
-      sendHover(x: number, y: number): void;
+      sendClick(payload: PetPointerIpcPayload): void;
+      sendDoubleClick(payload: PetPointerIpcPayload): void;
+      sendHover(payload: PetPointerIpcPayload): void;
     };
   }
 }
