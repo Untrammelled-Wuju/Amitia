@@ -19,6 +19,7 @@ import type {
 } from "../desktop-pet/animation/contracts";
 import type { PetAnimationApi } from "./pet-animation-globals";
 import type { PetDragIpcPayload, PetHitMaskPayload, RuntimeReadyPayload } from "../shared/animation-ipc";
+import { resolveLogicalCanvasPoint } from "./pet-pointer-coordinates";
 
 function resolveResourceUrl(relativePath: string, configUrl: string): string {
   try {
@@ -156,7 +157,10 @@ function startSnapshotReporting(
   };
 }
 
-function attachInteractionListeners(api: PetAnimationApi): () => void {
+function attachInteractionListeners(
+  api: PetAnimationApi,
+  canvas: HTMLCanvasElement,
+): () => void {
   let clickTimer: ReturnType<typeof setTimeout> | null = null;
   let lastClickX = 0;
   let lastClickY = 0;
@@ -166,14 +170,15 @@ function attachInteractionListeners(api: PetAnimationApi): () => void {
   let isHovering = false;
 
   const onClick = (e: MouseEvent) => {
+    const point = resolveLogicalCanvasPoint(canvas, e.clientX, e.clientY);
     if (clickTimer !== null) {
       clearTimeout(clickTimer);
       clickTimer = null;
-      api.sendDoubleClick(e.offsetX, e.offsetY);
+      api.sendDoubleClick(point.x, point.y);
       return;
     }
-    lastClickX = e.offsetX;
-    lastClickY = e.offsetY;
+    lastClickX = point.x;
+    lastClickY = point.y;
     clickTimer = setTimeout(() => {
       clickTimer = null;
       api.sendClick(lastClickX, lastClickY);
@@ -182,15 +187,16 @@ function attachInteractionListeners(api: PetAnimationApi): () => void {
 
   const onMouseMove = (e: MouseEvent) => {
     const now = Date.now();
-    const dx = e.offsetX - lastHoverX;
-    const dy = e.offsetY - lastHoverY;
+    const point = resolveLogicalCanvasPoint(canvas, e.clientX, e.clientY);
+    const dx = point.x - lastHoverX;
+    const dy = point.y - lastHoverY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (isHovering && now - lastHoverTime < 100 && dist < 8) return;
     isHovering = true;
-    lastHoverX = e.offsetX;
-    lastHoverY = e.offsetY;
+    lastHoverX = point.x;
+    lastHoverY = point.y;
     lastHoverTime = now;
-    api.sendHover(e.offsetX, e.offsetY);
+    api.sendHover(point.x, point.y);
   };
 
   const onMouseLeave = () => {
@@ -214,18 +220,25 @@ function attachInteractionListeners(api: PetAnimationApi): () => void {
   };
 }
 
-function buildDragPayload(e: PointerEvent): PetDragIpcPayload {
+function buildDragPayload(
+  e: PointerEvent,
+  canvas: HTMLCanvasElement,
+): PetDragIpcPayload {
+  const point = resolveLogicalCanvasPoint(canvas, e.clientX, e.clientY);
   return {
     pointerId: e.pointerId,
     screenX: e.screenX,
     screenY: e.screenY,
-    canvasX: e.offsetX,
-    canvasY: e.offsetY,
+    canvasX: point.x,
+    canvasY: point.y,
     occurredAt: Date.now(),
   };
 }
 
-function attachDragListeners(api: PetAnimationApi): () => void {
+function attachDragListeners(
+  api: PetAnimationApi,
+  canvas: HTMLCanvasElement,
+): () => void {
   let pointerDown = false;
   let dragging = false;
   let startX = 0;
@@ -248,18 +261,18 @@ function attachDragListeners(api: PetAnimationApi): () => void {
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (!dragging && dist >= DRAG_THRESHOLD_PX) {
       dragging = true;
-      api.sendDragStart(buildDragPayload(e));
+      api.sendDragStart(buildDragPayload(e, canvas));
       return;
     }
     if (dragging) {
-      api.sendDragMove(buildDragPayload(e));
+      api.sendDragMove(buildDragPayload(e, canvas));
     }
   };
 
   const onPointerUp = (e: PointerEvent) => {
     if (!pointerDown || e.pointerId !== activePointerId) return;
     if (dragging) {
-      api.sendDragEnd(buildDragPayload(e));
+      api.sendDragEnd(buildDragPayload(e, canvas));
     }
     pointerDown = false;
     dragging = false;
@@ -269,7 +282,7 @@ function attachDragListeners(api: PetAnimationApi): () => void {
   const onPointerCancel = (e: PointerEvent) => {
     if (!pointerDown || e.pointerId !== activePointerId) return;
     if (dragging) {
-      api.sendDragCancel(buildDragPayload(e));
+      api.sendDragCancel(buildDragPayload(e, canvas));
     }
     pointerDown = false;
     dragging = false;
@@ -361,8 +374,8 @@ async function main(): Promise<void> {
   };
   const unsubEvent = engine.onEvent(eventListener);
 
-  const disposeListeners = attachInteractionListeners(api);
-  const disposeDragListeners = attachDragListeners(api);
+  const disposeListeners = attachInteractionListeners(api, canvas);
+  const disposeDragListeners = attachDragListeners(api, canvas);
 
   const unsubPlayAction = api.onPlayAction((command: PlayActionCommand) => {
     void engine.playAction(command);
@@ -381,7 +394,9 @@ async function main(): Promise<void> {
   });
 
   const unsubSwitchPackage = api.onSwitchPackage((snapshot: PackagePlaybackSnapshot) => {
-    void engine.switchPackage(snapshot);
+    void engine.switchPackage(snapshot).catch((error) => {
+      console.error("[PetAnimation] package switch failed:", error);
+    });
   });
 
   const unsubWindowHidden = api.onWindowHidden(() => {
@@ -447,6 +462,9 @@ async function main(): Promise<void> {
     if (snapshot) {
       currentPackageRevision = snapshot.packageRevision;
       await engine.initialize(snapshot);
+      if (engine.getPhase() !== "playing") {
+        throw new Error(`runtime initialized without playable first frame: phase=${engine.getPhase()}`);
+      }
       console.log("[PetAnimation] engine initialized successfully");
       const runtimeReadyPayload: RuntimeReadyPayload = {
         snapshotApplied: true,
