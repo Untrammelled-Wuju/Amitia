@@ -766,16 +766,36 @@ export class DesktopPetManager {
       } catch (stopErr) {
         this.petLogger.logRuntimeCrash("enableInstallation.stopRuntime", stopErr);
       }
+      let backendRollbackError: unknown = null;
       if (backendEnableCommitted) {
         try {
           await this.callDisableApi(installationId);
         } catch (rollbackErr) {
+          backendRollbackError = rollbackErr;
           this.petLogger.logRuntimeCrash(
             "enableInstallation.rollbackBackendEnable",
             rollbackErr,
           );
         }
       }
+
+      if (backendRollbackError) {
+        // The backend enable is still the authoritative desired state. Do not
+        // pretend the installation is locally absent: retaining the active
+        // identity lets Runtime v2 report a degraded instance and converge it
+        // once connectivity/backend health returns, instead of creating the
+        // split-brain state "backend enabled / desktop has no active pet".
+        this.setState(
+          "degraded",
+          installationId,
+          `桌宠启动失败且后端 enable 回滚失败: ${this.errorMessage(backendRollbackError)}`,
+        );
+        throw new AggregateError(
+          [err, backendRollbackError],
+          "PET_ENABLE_FAILED_AND_BACKEND_ROLLBACK_FAILED",
+        );
+      }
+
       this.activeInstallationId = null;
       this.activeInstallation = null;
       this.activeSettings = null;
