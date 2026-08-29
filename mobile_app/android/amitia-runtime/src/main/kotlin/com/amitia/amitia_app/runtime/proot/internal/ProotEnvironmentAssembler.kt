@@ -85,9 +85,13 @@ internal open class ProotEnvironmentAssembler(
 
     private fun buildBindMounts(activeProgramSource: File): List<ProotBindMount> {
         val contract = MountContract.build(layout, activeProgramSource)
-        return contract.mounts.map { mount ->
+        val mounts = contract.mounts.map { mount ->
             ProotBindMount.create(runtimePath(File(mount.hostSource)), mount.guestTarget, readOnly = !mount.writable)
         }
+        return mounts + listOf(
+            ProotBindMount.create("/system", "/system", readOnly = true),
+            ProotBindMount.create("/apex", "/apex", readOnly = true),
+        )
     }
 
     private fun ensureHostRuntimeDirectories() {

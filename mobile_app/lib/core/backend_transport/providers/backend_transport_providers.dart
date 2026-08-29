@@ -234,6 +234,8 @@ final rawBackendServiceApiProvider = Provider<BackendServiceApi?>((ref) {
 
 final backendServiceProvider = Provider<BackendServiceApi>((ref) {
   final logService = ref.read(debugLogServiceProvider);
+  DateTime? lastUnavailableAt;
+  String? lastUnavailableKey;
   return DynamicBackendServiceApiProxy(
     currentApi: () => ref.read(rawBackendServiceApiProvider),
     currentStatus: () => ref.read(runtimeStatusCurrentProvider),
@@ -247,6 +249,15 @@ final backendServiceProvider = Provider<BackendServiceApi>((ref) {
           api.generation == status.generation;
     },
     onUnavailable: (error) {
+      final now = DateTime.now();
+      final key = '${error.phase.name}:${error.generation}:${error.primaryError?.code ?? 'BUSINESS_UNAVAILABLE'}';
+      if (lastUnavailableKey == key &&
+          lastUnavailableAt != null &&
+          now.difference(lastUnavailableAt!) < const Duration(seconds: 5)) {
+        return;
+      }
+      lastUnavailableKey = key;
+      lastUnavailableAt = now;
       logService.addBackendLog(
         'Business backend unavailable: $error',
         DebugLogLevel.error,

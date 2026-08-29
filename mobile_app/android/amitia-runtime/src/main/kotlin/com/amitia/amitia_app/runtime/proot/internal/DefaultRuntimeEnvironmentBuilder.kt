@@ -122,7 +122,7 @@ internal class DefaultRuntimeEnvironmentBuilder(
         env["AMITIA_TEMP_DIR"] = GuestLayoutContract.TEMP_ROOT
         env["AMITIA_WORKSPACE_DIR"] = GuestLayoutContract.WORKSPACE_ROOT
 
-        env["AMITIA_RUNTIME_MODE"] = "android-proot"
+        env["AMITIA_RUNTIME_MODE"] = "android-native"
         env["AMITIA_SECURITY_MODE"] = "local_single_user"
         env["AMITIA_ALLOW_REMOTE_ACCESS"] = "false"
         env["AMITIA_LOCAL_TOKEN_FILE"] = GuestLayout.LOCAL_TOKEN
@@ -164,7 +164,7 @@ internal class DefaultRuntimeEnvironmentBuilder(
     private fun ensureRuntimeConfig(layout: RuntimeHostLayout, securityMaterial: LocalSecurityMaterial) {
         ensureDirectory(layout.configRoot)
         val configFile = File(layout.configRoot, "config.yml")
-        val value = "jwt:\n  secret: \"${securityMaterial.jwtSecret}\"\n"
+        val value = "jwt:\n  secret: \"${securityMaterial.jwtSecret}\"\ndesktopPetRuntime:\n  enabled: false\n"
         configFile.writeText(value, Charsets.UTF_8)
         configFile.setReadable(false, false)
         configFile.setWritable(false, false)
