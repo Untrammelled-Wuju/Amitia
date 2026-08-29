@@ -91,9 +91,11 @@ func (v *Validator) Validate(binding BehaviorBinding, condition ConditionNode) e
 		return NewBindingError(ErrCodeBindingInvalid,
 			fmt.Sprintf("priorityOffset must not exceed system safety band of %d", MaxUserPriority))
 	}
-	if binding.CooldownMS < MinCooldownMS {
+	// Zero means "use the resolver default". Explicit non-zero values must
+	// respect the minimum guard interval that prevents animation storms.
+	if binding.CooldownMS != 0 && binding.CooldownMS < MinCooldownMS {
 		return NewBindingError(ErrCodeBindingInvalid,
-			fmt.Sprintf("cooldownMs must be at least %d", MinCooldownMS))
+			fmt.Sprintf("cooldownMs must be 0 or at least %d", MinCooldownMS))
 	}
 	if condition != nil {
 		allowedFields := v.allowedFields[binding.EventType]

@@ -40,11 +40,8 @@ func (r *GormBehaviorStateRepository) LoadContext(ctx context.Context, userID, c
 		Where("user_id = ? AND character_id = ?", userID, characterID).
 		First(&model).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return &behavior.BehaviorContextSnapshot{
-			UserID:      userID,
-			CharacterID: characterID,
-			Revision:    1,
-		}, nil
+		initial := behavior.NewDefaultContext(userID, characterID)
+		return &initial, nil
 	}
 	if err != nil {
 		return nil, err
@@ -61,6 +58,86 @@ func contextJSONOrEmpty(v interface{}) string {
 }
 
 func (r *GormBehaviorStateRepository) SaveContextCAS(ctx context.Context, currentRevision int64, next behavior.BehaviorContextSnapshot) (bool, error) {
+	var success bool
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		ok, err := saveContextCASTx(tx, currentRevision, next)
+		if err != nil {
+			return err
+		}
+		success = ok
+		return nil
+	})
+	return success, err
+}
+
+func (r *GormBehaviorStateRepository) CommitLeasedContextAndInboxCAS(ctx context.Context, currentRevision int64, next behavior.BehaviorContextSnapshot, eventID, leaseToken string, status behavior.InboxStatus) (bool, error) {
+	leaseToken = strings.TrimSpace(leaseToken)
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" || leaseToken == "" {
+		return false, nil
+	}
+	if status != behavior.InboxProcessed && status != behavior.InboxIgnored {
+		return false, fmt.Errorf("invalid terminal inbox status for atomic context commit: %s", status)
+	}
+
+	committed := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		leaseOwned, nowStr, err := refreshInboxLeaseForCommitTx(tx, eventID, leaseToken)
+		if err != nil {
+			return err
+		}
+		if !leaseOwned {
+			return nil
+		}
+
+		ok, err := saveContextCASTx(tx, currentRevision, next)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+
+		result := tx.Model(&BehaviorInboxModel{}).
+			Where("event_id = ? AND status = ? AND lease_owner = ?", eventID, string(behavior.InboxLeased), leaseToken).
+			Updates(map[string]interface{}{
+				"status":             string(status),
+				"last_error_code":    "",
+				"last_error_message": "",
+				"lease_owner":        "",
+				"lease_expires_at":   "",
+				"heartbeat_at":       "",
+				"available_at":       "",
+				"processed_at":       nowStr,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		committed = true
+		return nil
+	})
+	return committed, err
+}
+
+func refreshInboxLeaseForCommitTx(tx *gorm.DB, eventID, leaseToken string) (bool, string, error) {
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339)
+	result := tx.Model(&BehaviorInboxModel{}).
+		Where("event_id = ? AND status = ? AND lease_owner = ? AND lease_expires_at > ?", eventID, string(behavior.InboxLeased), leaseToken, nowStr).
+		Updates(map[string]interface{}{
+			"heartbeat_at":     nowStr,
+			"lease_expires_at": now.Add(30 * time.Second).Format(time.RFC3339),
+		})
+	if result.Error != nil {
+		return false, nowStr, result.Error
+	}
+	return result.RowsAffected == 1, nowStr, nil
+}
+
+func saveContextCASTx(tx *gorm.DB, currentRevision int64, next behavior.BehaviorContextSnapshot) (bool, error) {
 	stableJSON := contextJSONOrEmpty(next.Stable)
 	transientJSON := contextJSONOrEmpty(next.Transient)
 	activeToolsJSON := contextJSONOrEmpty(next.ActiveTools)
@@ -76,63 +153,62 @@ func (r *GormBehaviorStateRepository) SaveContextCAS(ctx context.Context, curren
 		updatedAt = time.Now()
 	}
 
-	var success bool
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&BehaviorContextModel{}).
-			Where("user_id = ? AND character_id = ? AND revision = ?", next.UserID, next.CharacterID, currentRevision).
-			Updates(map[string]interface{}{
-				"revision":                   next.Revision,
-				"stable_state_json":          stableJSON,
-				"transient_state_json":       transientJSON,
-				"active_tools_json":          activeToolsJSON,
-				"voice_state_json":           voiceJSON,
-				"desktop_gesture_json":       desktopGestureJSON,
-				"foreground_json":            foregroundJSON,
-				"cooldowns_json":             cooldownsJSON,
-				"recent_semantics_json":      recentSemanticsJSON,
-				"desired_state_json":         desiredJSON,
-				"last_source_revisions_json": lastSourceRevisionsJSON,
-				"updated_at":                 updatedAt.Format(time.RFC3339),
-			})
-		if result.Error != nil {
-			return result.Error
+	result := tx.Model(&BehaviorContextModel{}).
+		Where("user_id = ? AND character_id = ? AND revision = ?", next.UserID, next.CharacterID, currentRevision).
+		Updates(map[string]interface{}{
+			"revision":                   next.Revision,
+			"stable_state_json":          stableJSON,
+			"transient_state_json":       transientJSON,
+			"active_tools_json":          activeToolsJSON,
+			"voice_state_json":           voiceJSON,
+			"desktop_gesture_json":       desktopGestureJSON,
+			"foreground_json":            foregroundJSON,
+			"cooldowns_json":             cooldownsJSON,
+			"recent_semantics_json":      recentSemanticsJSON,
+			"desired_state_json":         desiredJSON,
+			"last_source_revisions_json": lastSourceRevisionsJSON,
+			"updated_at":                 updatedAt.Format(time.RFC3339),
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	if result.RowsAffected > 0 {
+		return true, nil
+	}
+
+	var count int64
+	if err := tx.Model(&BehaviorContextModel{}).
+		Where("user_id = ? AND character_id = ?", next.UserID, next.CharacterID).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	if count != 0 {
+		return false, nil
+	}
+
+	model := BehaviorContextModel{
+		UserID:                  next.UserID,
+		CharacterID:             next.CharacterID,
+		Revision:                next.Revision,
+		StableStateJSON:         stableJSON,
+		TransientStateJSON:      transientJSON,
+		ActiveToolsJSON:         activeToolsJSON,
+		VoiceStateJSON:          voiceJSON,
+		DesktopGestureJSON:      desktopGestureJSON,
+		ForegroundJSON:          foregroundJSON,
+		CooldownsJSON:           cooldownsJSON,
+		RecentSemanticsJSON:     recentSemanticsJSON,
+		DesiredStateJSON:        desiredJSON,
+		LastSourceRevisionsJSON: lastSourceRevisionsJSON,
+		UpdatedAt:               updatedAt.Format(time.RFC3339),
+	}
+	if err := tx.Create(&model).Error; err != nil {
+		if isUniqueConstraintError(err) {
+			return false, nil
 		}
-		if result.RowsAffected > 0 {
-			success = true
-			return nil
-		}
-		var count int64
-		if err := tx.Model(&BehaviorContextModel{}).
-			Where("user_id = ? AND character_id = ?", next.UserID, next.CharacterID).
-			Count(&count).Error; err != nil {
-			return err
-		}
-		if count == 0 {
-			model := BehaviorContextModel{
-				UserID:                  next.UserID,
-				CharacterID:             next.CharacterID,
-				Revision:                next.Revision,
-				StableStateJSON:         stableJSON,
-				TransientStateJSON:      transientJSON,
-				ActiveToolsJSON:         activeToolsJSON,
-				VoiceStateJSON:          voiceJSON,
-				DesktopGestureJSON:      desktopGestureJSON,
-				ForegroundJSON:          foregroundJSON,
-				CooldownsJSON:           cooldownsJSON,
-				RecentSemanticsJSON:     recentSemanticsJSON,
-				DesiredStateJSON:        desiredJSON,
-				LastSourceRevisionsJSON: lastSourceRevisionsJSON,
-				UpdatedAt:               updatedAt.Format(time.RFC3339),
-			}
-			if err := tx.Create(&model).Error; err != nil {
-				return err
-			}
-			success = true
-			return nil
-		}
-		return nil
-	})
-	return success, err
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *GormBehaviorStateRepository) InsertInboxIfAbsent(ctx context.Context, event behavior.BehaviorEventEnvelope) (bool, error) {
@@ -198,100 +274,232 @@ func (r *GormBehaviorStateRepository) InsertInboxIfAbsent(ctx context.Context, e
 }
 
 func (r *GormBehaviorStateRepository) LeaseInbox(ctx context.Context, limit int, leaseToken string) ([]behavior.InboxRecord, error) {
-	now := time.Now()
+	if limit <= 0 {
+		return nil, nil
+	}
+	leaseToken = strings.TrimSpace(leaseToken)
+	if leaseToken == "" {
+		return nil, fmt.Errorf("lease token is required")
+	}
+
+	now := time.Now().UTC()
 	nowStr := now.Format(time.RFC3339)
 	leaseExpires := now.Add(30 * time.Second).Format(time.RFC3339)
-	availableAtStr := nowStr
+	leaseableStatuses := []string{string(behavior.InboxPending), string(behavior.InboxRetry)}
+	eligibleSQL := `((status IN ? AND (available_at IS NULL OR available_at = '' OR available_at <= ?)) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <> '' AND lease_expires_at <= ?))`
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var models []BehaviorInboxModel
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("status = ? AND available_at <= ? AND (lease_expires_at IS NULL OR lease_expires_at <= ?)",
-				string(behavior.InboxPending), availableAtStr, nowStr).
-			Order("occurred_at ASC").
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where(eligibleSQL, leaseableStatuses, nowStr, string(behavior.InboxLeased), nowStr).
+			Order("occurred_at ASC, created_at ASC").
 			Limit(limit).
-			Find(&models).Error
-		if err != nil {
+			Find(&models).Error; err != nil {
 			return err
 		}
 		if len(models) == 0 {
 			return nil
 		}
 
-		eventIDs := make([]string, len(models))
-		for i, m := range models {
-			eventIDs[i] = m.EventID
+		eventIDs := make([]string, 0, len(models))
+		for _, model := range models {
+			eventIDs = append(eventIDs, model.EventID)
 		}
 
 		result := tx.Model(&BehaviorInboxModel{}).
-			Where("event_id IN ? AND status = ? AND available_at <= ? AND (lease_expires_at IS NULL OR lease_expires_at <= ?)",
-				eventIDs, string(behavior.InboxPending), availableAtStr, nowStr).
+			Where("event_id IN ?", eventIDs).
+			Where(eligibleSQL, leaseableStatuses, nowStr, string(behavior.InboxLeased), nowStr).
 			Updates(map[string]interface{}{
 				"status":           string(behavior.InboxLeased),
 				"lease_owner":      leaseToken,
 				"lease_expires_at": leaseExpires,
+				"heartbeat_at":     nowStr,
 				"attempt_count":    gorm.Expr("attempt_count + 1"),
 			})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return nil
-		}
-
-		records := make([]behavior.InboxRecord, 0, result.RowsAffected)
-		for _, m := range models {
-			record := inboxModelToRecord(&m)
-			record.Status = behavior.InboxLeased
-			record.AttemptCount = m.AttemptCount + 1
-			record.LeaseOwner = leaseToken
-			records = append(records, record)
-		}
-
-		_ = records
-		return nil
+		return result.Error
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	var resultModels []BehaviorInboxModel
-	err = r.db.WithContext(ctx).
-		Where("lease_owner = ? AND status = ?", leaseToken, string(behavior.InboxLeased)).
-		Order("occurred_at ASC").
+	if err := r.db.WithContext(ctx).
+		Where("lease_owner = ? AND status = ? AND lease_expires_at > ?", leaseToken, string(behavior.InboxLeased), time.Now().UTC().Format(time.RFC3339)).
+		Order("occurred_at ASC, created_at ASC").
 		Limit(limit).
-		Find(&resultModels).Error
-	if err != nil {
+		Find(&resultModels).Error; err != nil {
 		return nil, err
 	}
 
 	records := make([]behavior.InboxRecord, len(resultModels))
-	for i, m := range resultModels {
-		records[i] = inboxModelToRecord(&m)
+	for i := range resultModels {
+		records[i] = inboxModelToRecord(&resultModels[i])
 	}
 	return records, nil
 }
 
-func (r *GormBehaviorStateRepository) MarkInboxStatus(ctx context.Context, eventID string, status behavior.InboxStatus, errorCode string) error {
-	updates := map[string]interface{}{
-		"status":          string(status),
-		"last_error_code": errorCode,
+func (r *GormBehaviorStateRepository) RenewInboxLease(ctx context.Context, eventID, leaseToken string, leaseExpiresAt interface{}) (bool, error) {
+	leaseToken = strings.TrimSpace(leaseToken)
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" || leaseToken == "" {
+		return false, nil
 	}
-	if status == behavior.InboxProcessed || status == behavior.InboxIgnored || status == behavior.InboxDeadLetter {
-		updates["processed_at"] = time.Now().Format(time.RFC3339)
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339)
+	expiresAt := interfaceToTimeString(leaseExpiresAt)
+	if expiresAt == "" {
+		expiresAt = now.Add(30 * time.Second).Format(time.RFC3339)
 	}
-	return r.db.WithContext(ctx).
+	result := r.db.WithContext(ctx).
 		Model(&BehaviorInboxModel{}).
-		Where("event_id = ?", eventID).
-		Updates(updates).Error
+		Where("event_id = ? AND status = ? AND lease_owner = ? AND lease_expires_at > ?", eventID, string(behavior.InboxLeased), leaseToken, nowStr).
+		Updates(map[string]interface{}{
+			"lease_expires_at": expiresAt,
+			"heartbeat_at":     nowStr,
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected == 1, nil
 }
 
-func (r *GormBehaviorStateRepository) AppendDecision(ctx context.Context, decision behavior.BehaviorDecisionAudit) error {
+func (r *GormBehaviorStateRepository) MarkInboxStatus(ctx context.Context, eventID, leaseOwner string, status behavior.InboxStatus, errorCode, errorMessage string) error {
+	eventID = strings.TrimSpace(eventID)
+	leaseOwner = strings.TrimSpace(leaseOwner)
+	if eventID == "" || leaseOwner == "" {
+		return gorm.ErrRecordNotFound
+	}
+
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339)
+	updates := map[string]interface{}{
+		"status":             string(status),
+		"last_error_code":    errorCode,
+		"last_error_message": errorMessage,
+		"lease_owner":        "",
+		"lease_expires_at":   "",
+		"heartbeat_at":       "",
+	}
+	if status == behavior.InboxProcessed || status == behavior.InboxIgnored || status == behavior.InboxDeadLetter {
+		updates["processed_at"] = nowStr
+		updates["available_at"] = ""
+	}
+	if status == behavior.InboxRetry {
+		updates["available_at"] = now.Add(time.Second).Format(time.RFC3339)
+	}
+	result := r.db.WithContext(ctx).
+		Model(&BehaviorInboxModel{}).
+		Where("event_id = ? AND status = ? AND lease_owner = ? AND lease_expires_at > ?", eventID, string(behavior.InboxLeased), leaseOwner, nowStr).
+		Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 1 {
+		return nil
+	}
+
+	// Atomic context+inbox commits may have already finalized the row. Treat an
+	// identical terminal status as an idempotent acknowledgement, but never let
+	// an expired/stolen lease mutate a row that is still leased by another worker.
+	var current BehaviorInboxModel
+	err := r.db.WithContext(ctx).
+		Select("event_id", "status").
+		Where("event_id = ?", eventID).
+		First(&current).Error
+	if err != nil {
+		return err
+	}
+	if current.Status == string(status) && (status == behavior.InboxProcessed || status == behavior.InboxIgnored || status == behavior.InboxDeadLetter) {
+		return nil
+	}
+	return gorm.ErrRecordNotFound
+}
+
+func (r *GormBehaviorStateRepository) MarkInboxDeadLetter(ctx context.Context, eventID, leaseOwner, errorCode, errorMessage string, failedAt interface{}) error {
+	eventID = strings.TrimSpace(eventID)
+	leaseOwner = strings.TrimSpace(leaseOwner)
+	if eventID == "" || leaseOwner == "" {
+		return gorm.ErrRecordNotFound
+	}
+
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339)
+	failedAtStr := interfaceToTimeString(failedAt)
+	if failedAtStr == "" {
+		failedAtStr = nowStr
+	}
+
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		inboxResult := tx.Model(&BehaviorInboxModel{}).
+			Where("event_id = ? AND status = ? AND lease_owner = ? AND lease_expires_at > ?", eventID, string(behavior.InboxLeased), leaseOwner, nowStr).
+			Updates(map[string]interface{}{
+				"status":             string(behavior.InboxDeadLetter),
+				"last_error_code":    errorCode,
+				"last_error_message": errorMessage,
+				"lease_owner":        "",
+				"lease_expires_at":   "",
+				"heartbeat_at":       "",
+				"available_at":       "",
+				"processed_at":       nowStr,
+			})
+		if inboxResult.Error != nil {
+			return inboxResult.Error
+		}
+		if inboxResult.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+
+		decisionResult := tx.Model(&BehaviorDecisionModel{}).
+			Where("event_id = ? AND status = ?", eventID, string(behavior.DecisionStatusSelected)).
+			Updates(map[string]interface{}{
+				"status":       string(behavior.DecisionStatusFailed),
+				"reason_code":  errorCode,
+				"completed_at": failedAtStr,
+			})
+		return decisionResult.Error
+	})
+}
+
+func (r *GormBehaviorStateRepository) MarkInboxRetry(ctx context.Context, eventID, leaseOwner, errorCode, errorMessage string, availableAt interface{}) error {
+	eventID = strings.TrimSpace(eventID)
+	leaseOwner = strings.TrimSpace(leaseOwner)
+	if eventID == "" || leaseOwner == "" {
+		return gorm.ErrRecordNotFound
+	}
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339)
+	availableAtStr := interfaceToTimeString(availableAt)
+	if availableAtStr == "" {
+		availableAtStr = now.Add(time.Second).Format(time.RFC3339)
+	}
+	result := r.db.WithContext(ctx).
+		Model(&BehaviorInboxModel{}).
+		Where("event_id = ? AND status = ? AND lease_owner = ? AND lease_expires_at > ?", eventID, string(behavior.InboxLeased), leaseOwner, nowStr).
+		Updates(map[string]interface{}{
+			"status":             string(behavior.InboxRetry),
+			"last_error_code":    errorCode,
+			"last_error_message": errorMessage,
+			"lease_owner":        "",
+			"lease_expires_at":   "",
+			"heartbeat_at":       "",
+			"available_at":       availableAtStr,
+			"processed_at":       "",
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func decisionToModel(decision behavior.BehaviorDecisionAudit) (*BehaviorDecisionModel, error) {
 	rejectedJSON := "[]"
 	if len(decision.RejectedCandidates) > 0 {
 		data, err := json.Marshal(decision.RejectedCandidates)
 		if err != nil {
-			return fmt.Errorf("marshal rejected candidates: %w", err)
+			return nil, fmt.Errorf("marshal rejected candidates: %w", err)
 		}
 		rejectedJSON = string(data)
 	}
@@ -307,7 +515,7 @@ func (r *GormBehaviorStateRepository) AppendDecision(ctx context.Context, decisi
 	if createdAt.IsZero() {
 		createdAt = time.Now()
 	}
-	model := BehaviorDecisionModel{
+	return &BehaviorDecisionModel{
 		DecisionID:             decision.DecisionID,
 		EventID:                decision.EventID,
 		UserID:                 decision.UserID,
@@ -318,6 +526,9 @@ func (r *GormBehaviorStateRepository) AppendDecision(ctx context.Context, decisi
 		InterruptPolicy:        decision.InterruptPolicy,
 		MinimumPlayMS:          decision.MinimumPlayMS,
 		MaximumPlayMS:          decision.MaximumPlayMS,
+		FallbackDepth:          decision.FallbackDepth,
+		ReturnPolicy:           decision.ReturnPolicy,
+		ContextHash:            decision.ContextHash,
 		Semantic:               decision.Semantic,
 		ActionKey:              decision.ActionKey,
 		Priority:               decision.Priority,
@@ -328,11 +539,167 @@ func (r *GormBehaviorStateRepository) AppendDecision(ctx context.Context, decisi
 		CreatedAt:              createdAt.Format(time.RFC3339),
 		StartedAt:              startedAt,
 		CompletedAt:            completedAt,
+	}, nil
+}
+
+func decisionModelToAudit(model *BehaviorDecisionModel) (*behavior.BehaviorDecisionAudit, error) {
+	if model == nil {
+		return nil, nil
 	}
-	return r.db.WithContext(ctx).Create(&model).Error
+	decision := &behavior.BehaviorDecisionAudit{
+		BehaviorDecision: behavior.BehaviorDecision{
+			DecisionID:       model.DecisionID,
+			EventID:          model.EventID,
+			UserID:           model.UserID,
+			CharacterID:      model.CharacterID,
+			InstallationID:   model.InstallationID,
+			ContextRevision:  model.ContextRevision,
+			RulesetVersion:   model.RulesetVersion,
+			InterruptPolicy:  model.InterruptPolicy,
+			MinimumPlayMS:    model.MinimumPlayMS,
+			MaximumPlayMS:    model.MaximumPlayMS,
+			FallbackDepth:    model.FallbackDepth,
+			ReturnPolicy:     model.ReturnPolicy,
+			Semantic:         model.Semantic,
+			ActionKey:        model.ActionKey,
+			Priority:         model.Priority,
+			Status:           behavior.DecisionStatus(model.Status),
+			ReasonCode:       model.ReasonCode,
+			RuntimeCommandID: model.RuntimeCommandID,
+		},
+		ContextHash: model.ContextHash,
+	}
+	if model.RejectedCandidatesJSON != "" && model.RejectedCandidatesJSON != "[]" {
+		if err := json.Unmarshal([]byte(model.RejectedCandidatesJSON), &decision.RejectedCandidates); err != nil {
+			return nil, fmt.Errorf("unmarshal rejected candidates: %w", err)
+		}
+	}
+	if model.CreatedAt != "" {
+		if t, err := time.Parse(time.RFC3339, model.CreatedAt); err == nil {
+			decision.CreatedAt = t
+		}
+	}
+	if model.StartedAt != "" {
+		if t, err := time.Parse(time.RFC3339, model.StartedAt); err == nil {
+			decision.StartedAt = &t
+		}
+	}
+	if model.CompletedAt != "" {
+		if t, err := time.Parse(time.RFC3339, model.CompletedAt); err == nil {
+			decision.CompletedAt = &t
+		}
+	}
+	return decision, nil
+}
+
+func (r *GormBehaviorStateRepository) AppendDecision(ctx context.Context, decision behavior.BehaviorDecisionAudit) error {
+	model, err := decisionToModel(decision)
+	if err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Create(model).Error
+}
+
+func (r *GormBehaviorStateRepository) CommitContextAndDecisionCAS(ctx context.Context, currentRevision int64, next behavior.BehaviorContextSnapshot, decision behavior.BehaviorDecisionAudit) (bool, error) {
+	model, err := decisionToModel(decision)
+	if err != nil {
+		return false, err
+	}
+	committed := false
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		ok, err := saveContextCASTx(tx, currentRevision, next)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		if err := tx.Create(model).Error; err != nil {
+			return err
+		}
+		committed = true
+		return nil
+	})
+	return committed, err
+}
+
+func (r *GormBehaviorStateRepository) CommitLeasedContextAndDecisionCAS(ctx context.Context, currentRevision int64, next behavior.BehaviorContextSnapshot, decision behavior.BehaviorDecisionAudit, eventID, leaseToken string) (bool, error) {
+	leaseToken = strings.TrimSpace(leaseToken)
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" || leaseToken == "" {
+		return false, nil
+	}
+	model, err := decisionToModel(decision)
+	if err != nil {
+		return false, err
+	}
+	committed := false
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		leaseOwned, _, err := refreshInboxLeaseForCommitTx(tx, eventID, leaseToken)
+		if err != nil {
+			return err
+		}
+		if !leaseOwned {
+			return nil
+		}
+
+		ok, err := saveContextCASTx(tx, currentRevision, next)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		if err := tx.Create(model).Error; err != nil {
+			return err
+		}
+		committed = true
+		return nil
+	})
+	return committed, err
+}
+
+func (r *GormBehaviorStateRepository) FindDecisionByEventID(ctx context.Context, eventID string) (*behavior.BehaviorDecisionAudit, error) {
+	if strings.TrimSpace(eventID) == "" {
+		return nil, nil
+	}
+	var model BehaviorDecisionModel
+	err := r.db.WithContext(ctx).
+		Where("event_id = ?", eventID).
+		Order("created_at DESC").
+		Limit(1).
+		First(&model).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return decisionModelToAudit(&model)
+}
+
+func (r *GormBehaviorStateRepository) FindDecisionByID(ctx context.Context, decisionID string) (*behavior.BehaviorDecisionAudit, error) {
+	if strings.TrimSpace(decisionID) == "" {
+		return nil, nil
+	}
+	var model BehaviorDecisionModel
+	err := r.db.WithContext(ctx).
+		Where("decision_id = ?", decisionID).
+		First(&model).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return decisionModelToAudit(&model)
 }
 
 func (r *GormBehaviorStateRepository) UpdateDecisionStatus(ctx context.Context, decisionID string, status behavior.DecisionStatus, at interface{}) error {
+	decisionID = strings.TrimSpace(decisionID)
+	if decisionID == "" {
+		return gorm.ErrRecordNotFound
+	}
 	updates := map[string]interface{}{
 		"status": string(status),
 	}
@@ -345,10 +712,92 @@ func (r *GormBehaviorStateRepository) UpdateDecisionStatus(ctx context.Context, 
 			updates["completed_at"] = atStr
 		}
 	}
-	return r.db.WithContext(ctx).
+
+	query := r.db.WithContext(ctx).Model(&BehaviorDecisionModel{}).Where("decision_id = ?", decisionID)
+	if prior := allowedDecisionPriorStatuses(status); len(prior) > 0 {
+		query = query.Where("status IN ?", prior)
+	}
+	result := query.Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 1 {
+		return nil
+	}
+	return decisionTransitionNoopOrNotFound(ctx, r.db, decisionID)
+}
+
+func (r *GormBehaviorStateRepository) UpdateDecisionOutcome(ctx context.Context, decision behavior.BehaviorDecision) error {
+	decisionID := strings.TrimSpace(decision.DecisionID)
+	if decisionID == "" {
+		return gorm.ErrRecordNotFound
+	}
+	updates := map[string]interface{}{
+		"status":             string(decision.Status),
+		"reason_code":        decision.ReasonCode,
+		"runtime_command_id": decision.RuntimeCommandID,
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	switch decision.Status {
+	case behavior.DecisionStatusCommandSubmitted, behavior.DecisionStatusPlaying:
+		if decision.StartedAt != nil {
+			updates["started_at"] = decision.StartedAt.UTC().Format(time.RFC3339)
+		} else {
+			updates["started_at"] = now
+		}
+	case behavior.DecisionStatusCompleted, behavior.DecisionStatusInterrupted, behavior.DecisionStatusFailed, behavior.DecisionStatusExpired:
+		if decision.CompletedAt != nil {
+			updates["completed_at"] = decision.CompletedAt.UTC().Format(time.RFC3339)
+		} else {
+			updates["completed_at"] = now
+		}
+	}
+
+	query := r.db.WithContext(ctx).Model(&BehaviorDecisionModel{}).Where("decision_id = ?", decisionID)
+	if prior := allowedDecisionPriorStatuses(decision.Status); len(prior) > 0 {
+		query = query.Where("status IN ?", prior)
+	}
+	result := query.Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 1 {
+		return nil
+	}
+	return decisionTransitionNoopOrNotFound(ctx, r.db, decisionID)
+}
+
+func allowedDecisionPriorStatuses(status behavior.DecisionStatus) []string {
+	switch status {
+	case behavior.DecisionStatusCommandSubmitted:
+		return []string{string(behavior.DecisionStatusSelected)}
+	case behavior.DecisionStatusPlaying:
+		return []string{string(behavior.DecisionStatusSelected), string(behavior.DecisionStatusCommandSubmitted)}
+	case behavior.DecisionStatusCompleted, behavior.DecisionStatusInterrupted, behavior.DecisionStatusFailed, behavior.DecisionStatusExpired:
+		return []string{
+			string(behavior.DecisionStatusSelected),
+			string(behavior.DecisionStatusCommandSubmitted),
+			string(behavior.DecisionStatusPlaying),
+		}
+	default:
+		return nil
+	}
+}
+
+func decisionTransitionNoopOrNotFound(ctx context.Context, db *gorm.DB, decisionID string) error {
+	var count int64
+	if err := db.WithContext(ctx).
 		Model(&BehaviorDecisionModel{}).
 		Where("decision_id = ?", decisionID).
-		Updates(updates).Error
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	// The decision exists but has already advanced to the same or a terminal
+	// state. Late/replayed runtime feedback must not regress it.
+	return nil
 }
 
 func (r *GormBehaviorStateRepository) LoadCooldowns(ctx context.Context, userID, characterID string) ([]behavior.CooldownRecord, error) {
@@ -442,8 +891,10 @@ func contextModelToSnapshot(m *BehaviorContextModel) (*behavior.BehaviorContextS
 		UserID:              m.UserID,
 		CharacterID:         m.CharacterID,
 		Revision:            m.Revision,
+		ActiveTools:         make(map[string]behavior.ToolOperationState),
 		Cooldowns:           make(map[string]time.Time),
 		RecentSemantics:     make([]behavior.RecentSemanticRecord, 0),
+		Desired:             behavior.DesiredBehaviorState{Semantic: "fallback_idle", SourceLayer: "stable"},
 		LastSourceRevisions: make(map[string]int64),
 	}
 	if m.StableStateJSON != "" && m.StableStateJSON != "{}" && m.StableStateJSON != "null" {
@@ -528,6 +979,9 @@ func inboxModelToRecord(m *BehaviorInboxModel) behavior.InboxRecord {
 		LastErrorCode:    m.LastErrorCode,
 		LastErrorMessage: m.LastErrorMessage,
 	}
+	if m.EventEnvelopeJSON != "" && m.EventEnvelopeJSON != "{}" {
+		rec.EventEnvelopeJSON = json.RawMessage(m.EventEnvelopeJSON)
+	}
 	if m.OccurredAt != "" {
 		if t, err := time.Parse(time.RFC3339, m.OccurredAt); err == nil {
 			rec.OccurredAt = t
@@ -600,12 +1054,12 @@ func interfaceToTimeString(v interface{}) string {
 	}
 	switch val := v.(type) {
 	case time.Time:
-		return val.Format(time.RFC3339)
+		return val.UTC().Format(time.RFC3339)
 	case *time.Time:
 		if val == nil {
 			return ""
 		}
-		return val.Format(time.RFC3339)
+		return val.UTC().Format(time.RFC3339)
 	case string:
 		return val
 	default:

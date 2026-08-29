@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
@@ -30,41 +31,108 @@ func NewV2ActivePetAdapter(installRepo installation.Repository, facade *runtimev
 }
 
 func (a *V2ActivePetAdapter) ResolveActivePet(ctx context.Context, userID, characterID string) (*behavior.ActivePetSnapshot, error) {
+	return a.resolveActivePet(ctx, userID, characterID, "", "")
+}
+
+func (a *V2ActivePetAdapter) ResolveActivePetForEvent(ctx context.Context, event behavior.BehaviorEventEnvelope) (*behavior.ActivePetSnapshot, error) {
+	return a.resolveActivePet(ctx, event.UserID, event.CharacterID, event.InstallationID, event.PetInstanceID)
+}
+
+func (a *V2ActivePetAdapter) resolveActivePet(ctx context.Context, userID, characterID, installationHint, petInstanceHint string) (*behavior.ActivePetSnapshot, error) {
 	if a.installRepo == nil {
 		return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "installation repository unavailable")
 	}
 
 	var selected *installation.Installation
-	var selectedDeviceID string
 	var selectedRuntimeID string
 	runtimeOnline := false
 
+	// Preserve explicit event affinity first. Runtime/playback events already
+	// carry installation or pet-instance identity and must never jump devices.
+	if installationHint != "" {
+		candidate, err := a.installRepo.GetInstallation(installationHint)
+		if err != nil {
+			return nil, err
+		}
+		if !v2InstallationMatches(candidate, userID, characterID) {
+			return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "event installation is not active for character")
+		}
+		selected = candidate
+	}
+
+	connections := []*runtimev2.Connection(nil)
 	if a.facade != nil {
-		for _, conn := range a.facade.ListConnections(userID) {
-			if conn == nil || conn.State != runtimev2.ConnStateConnected {
+		connections = a.facade.ListConnections(userID)
+	}
+
+	if selected == nil && petInstanceHint != "" {
+		for _, conn := range connections {
+			if conn == nil || conn.GetState() != runtimev2.ConnStateConnected || string(conn.RuntimeID) != petInstanceHint {
 				continue
 			}
-			deviceID := string(conn.DeviceID)
-			installations, err := a.installRepo.ListInstallationsForUserDevice(userID, deviceID)
+			installations, err := a.installRepo.ListInstallationsForUserDevice(userID, string(conn.DeviceID))
 			if err != nil {
-				continue
+				return nil, err
 			}
+			v2SortInstallations(installations)
 			for _, candidate := range installations {
-				if candidate == nil || candidate.Status != installation.StatusEnabled || candidate.IsActive != 1 {
-					continue
+				if v2InstallationMatches(candidate, userID, characterID) {
+					selected = candidate
+					selectedRuntimeID = string(conn.RuntimeID)
+					runtimeOnline = true
+					break
 				}
-				if characterID != "" && candidate.CharacterID != characterID {
-					continue
-				}
-				selected = candidate
-				selectedDeviceID = deviceID
-				selectedRuntimeID = string(conn.RuntimeID)
-				runtimeOnline = true
-				break
 			}
 			if selected != nil {
 				break
 			}
+		}
+		if selected == nil {
+			return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "event runtime is not connected for character")
+		}
+	}
+
+	if selected == nil {
+		// Generic behavior events have no device identity. Choose the most
+		// recently enabled active installation across all connected devices,
+		// then use stable IDs as a deterministic tie-breaker. This avoids both
+		// Go-map randomness and an arbitrary lexical-device preference.
+		type onlineCandidate struct {
+			installation *installation.Installation
+			runtimeID    string
+		}
+		var candidates []onlineCandidate
+		for _, conn := range connections {
+			if conn == nil || conn.GetState() != runtimev2.ConnStateConnected {
+				continue
+			}
+			installations, err := a.installRepo.ListInstallationsForUserDevice(userID, string(conn.DeviceID))
+			if err != nil {
+				return nil, err
+			}
+			for _, candidate := range installations {
+				if v2InstallationMatches(candidate, userID, characterID) {
+					candidates = append(candidates, onlineCandidate{installation: candidate, runtimeID: string(conn.RuntimeID)})
+				}
+			}
+		}
+		sort.SliceStable(candidates, func(i, j int) bool {
+			left, right := candidates[i].installation, candidates[j].installation
+			if v2InstallationActivityKey(left) != v2InstallationActivityKey(right) {
+				return v2InstallationActivityKey(left) > v2InstallationActivityKey(right)
+			}
+			if left.DeviceID != right.DeviceID {
+				return left.DeviceID < right.DeviceID
+			}
+			if left.ID != right.ID {
+				return left.ID < right.ID
+			}
+			return candidates[i].runtimeID < candidates[j].runtimeID
+		})
+		if len(candidates) > 0 {
+			selected = candidates[0].installation
+			selectedRuntimeID = candidates[0].runtimeID
+			runtimeOnline = true
 		}
 	}
 
@@ -73,21 +141,37 @@ func (a *V2ActivePetAdapter) ResolveActivePet(ctx context.Context, userID, chara
 		if err != nil {
 			return nil, err
 		}
+		v2SortInstallations(installations)
 		for _, candidate := range installations {
-			if candidate == nil || candidate.Status != installation.StatusEnabled || candidate.IsActive != 1 {
-				continue
+			if v2InstallationMatches(candidate, userID, characterID) {
+				selected = candidate
+				break
 			}
-			if characterID != "" && candidate.CharacterID != characterID {
-				continue
-			}
-			selected = candidate
-			selectedDeviceID = candidate.DeviceID
-			break
 		}
 	}
 
 	if selected == nil {
 		return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "no active installation for character")
+	}
+
+	// If an explicit installation was selected before connection resolution,
+	// bind it only to the connection for that device (and, when supplied, that
+	// pet instance/runtime). This keeps cloud-triggered behavior device-local.
+	if !runtimeOnline {
+		for _, conn := range connections {
+			if conn == nil || conn.GetState() != runtimev2.ConnStateConnected {
+				continue
+			}
+			if string(conn.DeviceID) != selected.DeviceID {
+				continue
+			}
+			if petInstanceHint != "" && string(conn.RuntimeID) != petInstanceHint {
+				continue
+			}
+			selectedRuntimeID = string(conn.RuntimeID)
+			runtimeOnline = true
+			break
+		}
 	}
 
 	manifest, err := a.manifestReader(
@@ -113,7 +197,7 @@ func (a *V2ActivePetAdapter) ResolveActivePet(ctx context.Context, userID, chara
 	stateRevision := int64(selected.StateRevision)
 	return &behavior.ActivePetSnapshot{
 		UserID:         userID,
-		DeviceID:       selectedDeviceID,
+		DeviceID:       selected.DeviceID,
 		RuntimeID:      selectedRuntimeID,
 		InstallationID: selected.ID,
 		ReleaseID:      selected.CurrentReleaseID,
@@ -124,6 +208,41 @@ func (a *V2ActivePetAdapter) ResolveActivePet(ctx context.Context, userID, chara
 		DefaultAction:  selected.DefaultActionKey,
 		Actions:        actions,
 	}, nil
+}
+
+func v2SortInstallations(installations []*installation.Installation) {
+	sort.SliceStable(installations, func(i, j int) bool {
+		if installations[i] == nil {
+			return false
+		}
+		if installations[j] == nil {
+			return true
+		}
+		if v2InstallationActivityKey(installations[i]) != v2InstallationActivityKey(installations[j]) {
+			return v2InstallationActivityKey(installations[i]) > v2InstallationActivityKey(installations[j])
+		}
+		if installations[i].DeviceID != installations[j].DeviceID {
+			return installations[i].DeviceID < installations[j].DeviceID
+		}
+		return installations[i].ID < installations[j].ID
+	})
+}
+
+func v2InstallationActivityKey(candidate *installation.Installation) string {
+	if candidate == nil {
+		return ""
+	}
+	if candidate.LastEnabledAt != "" {
+		return candidate.LastEnabledAt
+	}
+	return candidate.UpdatedAt
+}
+
+func v2InstallationMatches(candidate *installation.Installation, userID, characterID string) bool {
+	if candidate == nil || candidate.UserID != userID || candidate.Status != installation.StatusEnabled || candidate.IsActive != 1 {
+		return false
+	}
+	return characterID == "" || candidate.CharacterID == characterID
 }
 
 func v2ReadManifestFromDisk(installPath, manifestPath string) (*processing.Manifest, error) {
@@ -159,3 +278,4 @@ func v2InferCategoryFromKey(actionKey string) string {
 }
 
 var _ behavior.ActivePetPort = (*V2ActivePetAdapter)(nil)
+var _ behavior.EventTargetedActivePetPort = (*V2ActivePetAdapter)(nil)

@@ -174,11 +174,12 @@ func (h *Handler) CreateBinding(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "semantic 不能为空", nil)
 		return
 	}
-	if err := h.service.CreateBinding(c.Request.Context(), binding); err != nil {
+	created, err := h.service.CreateBinding(c.Request.Context(), binding)
+	if err != nil {
 		writeBehaviorError(c, err)
 		return
 	}
-	util.SuccessMsgResponse(c, "绑定已创建", binding)
+	util.SuccessMsgResponse(c, "绑定已创建", created)
 }
 
 func (h *Handler) GetBinding(c *gin.Context) {

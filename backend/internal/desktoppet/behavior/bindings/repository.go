@@ -171,6 +171,44 @@ func (r *Repository) ListByUserCharacter(ctx context.Context, userID, characterI
 	return result, nil
 }
 
+// ListByScope returns bindings for exactly one persisted user/character scope.
+// Unlike ListByUserCharacter, an empty characterID means the global scope only.
+func (r *Repository) ListByScope(ctx context.Context, userID, characterID string) ([]BehaviorBinding, error) {
+	var models []BehaviorBindingModel
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Order("created_at ASC").
+		Find(&models).Error; err != nil {
+		return nil, err
+	}
+	result := make([]BehaviorBinding, 0, len(models))
+	for _, m := range models {
+		result = append(result, modelToBinding(m))
+	}
+	return result, nil
+}
+
+func (r *Repository) ListScopes(ctx context.Context) ([]EvaluatorScope, error) {
+	type scopeRow struct {
+		UserID      string `gorm:"column:user_id"`
+		CharacterID string `gorm:"column:character_id"`
+	}
+	var rows []scopeRow
+	if err := r.db.WithContext(ctx).
+		Model(&BehaviorBindingModel{}).
+		Select("user_id, character_id").
+		Group("user_id, character_id").
+		Order("user_id ASC, character_id ASC").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	result := make([]EvaluatorScope, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, EvaluatorScope{UserID: row.UserID, CharacterID: row.CharacterID})
+	}
+	return result, nil
+}
+
 func (r *Repository) ListByEventType(ctx context.Context, userID, characterID, eventType string) ([]BehaviorBinding, error) {
 	var models []BehaviorBindingModel
 	query := r.db.WithContext(ctx).Where("user_id = ? AND event_type = ?", userID, eventType)

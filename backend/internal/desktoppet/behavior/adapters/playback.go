@@ -39,6 +39,7 @@ func (a *PlaybackAdapter) OnPlaybackFeedback(ctx context.Context, feedback behav
 		UserID(userID).
 		CharacterID(characterID).
 		PetInstanceID(feedback.PetInstanceID).
+		Sequence(feedback.Sequence).
 		OccurredAt(occurredAt).
 		DedupKey(events.BuildDedupKey(feedback.CommandID, string(feedback.Phase), fmt.Sprintf("s%d", feedback.Sequence)))
 

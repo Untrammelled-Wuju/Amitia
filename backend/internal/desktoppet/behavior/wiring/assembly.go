@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/behavior/bindings"
@@ -78,6 +79,7 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 		activityPort,
 		activePetPort,
 		runtimeActionPort,
+		stateRepo,
 	)
 
 	engineConfig := behavior.EngineConfig{
@@ -97,6 +99,20 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 	)
 
 	validator := bindings.NewValidator()
+	bindingEvaluator := bindings.NewEvaluator()
+	engine.SetBindingEvaluator(func(scope bindings.EvaluatorScope, eventType string, origin behavior.EventOrigin, payload map[string]interface{}) []interface{} {
+		evalCtx := bindings.EvalContext{
+			Event:   map[string]interface{}{"eventType": eventType},
+			Origin:  string(origin),
+			Payload: payload,
+		}
+		matched := bindingEvaluator.Evaluate(scope, eventType, evalCtx)
+		result := make([]interface{}, 0, len(matched))
+		for _, match := range matched {
+			result = append(result, match.Binding)
+		}
+		return result
+	})
 
 	service := behavior.NewBehaviorService(
 		engine,
@@ -122,12 +138,17 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 			}
 			return fmt.Errorf("preferred action %s not in available actions", preferredAction)
 		}),
+		behavior.WithResetEvaluatorFunc(bindingEvaluator.Clear),
 		behavior.WithReloadEvaluatorFunc(func(ctx context.Context, eng *behavior.BehaviorEngine, repo behavior.BindingRepository, userID, characterID string) error {
-			bindingList, err := repo.ListByUserCharacter(ctx, userID, characterID)
+			bindingList, err := repo.ListByScope(ctx, userID, characterID)
 			if err != nil {
+				// Persistence is authoritative. If a post-mutation reload cannot
+				// read it, fail closed instead of continuing to execute a stale
+				// in-memory binding that the user may have disabled or deleted.
+				bindingEvaluator.ReplaceCharacterScopes(userID, characterID, nil)
 				return err
 			}
-			newEvaluator := bindings.NewEvaluator()
+			replacements := make(map[bindings.EvaluatorScope][]bindings.CompiledBinding)
 			for _, b := range bindingList {
 				if !b.Enabled {
 					continue
@@ -137,26 +158,22 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 					log.Logger.Warnf("wiring/assembly: skip binding %s compile error: %v", b.ID, err)
 					continue
 				}
+				if err := validator.Validate(b, cond); err != nil {
+					log.Logger.Warnf("wiring/assembly: skip binding %s validation error: %v", b.ID, err)
+					continue
+				}
 				scope := bindings.EvaluatorScope{
-					UserID:         userID,
-					CharacterID:    characterID,
+					UserID:         b.UserID,
+					CharacterID:    b.CharacterID,
 					InstallationID: b.InstallationID,
 				}
-				newEvaluator.AddBinding(scope, b, cond)
+				replacements[scope] = append(replacements[scope], bindings.CompiledBinding{
+					Binding:    b,
+					Condition:  cond,
+					CompiledAt: time.Now(),
+				})
 			}
-			eng.SetBindingEvaluator(func(scope interface{}, eventType string, origin behavior.EventOrigin, payload map[string]interface{}) []interface{} {
-				evalCtx := bindings.EvalContext{
-					Event:   map[string]interface{}{"eventType": eventType},
-					Origin:  string(origin),
-					Payload: payload,
-				}
-				matched := newEvaluator.Evaluate(scope.(bindings.EvaluatorScope), eventType, evalCtx)
-				result := make([]interface{}, 0, len(matched))
-				for _, m := range matched {
-					result = append(result, m.Binding)
-				}
-				return result
-			})
+			bindingEvaluator.ReplaceCharacterScopes(userID, characterID, replacements)
 			return nil
 		}),
 	)

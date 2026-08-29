@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
@@ -42,7 +43,7 @@ func (q *AmitiaStateSourceQuery) QueryActiveInteractions(ctx context.Context, us
 		ConversationID string `gorm:"column:conversation_id"`
 	}
 	var rows []interactionRow
-	err := q.db.Table("interaction_records").
+	err := q.db.WithContext(ctx).Table("interaction_records").
 		Select("id, status, status_version, conversation_id").
 		Where("user_id = ? AND character_id = ? AND status IN ?", userID, characterID, interactionActiveStatuses).
 		Order("updated_at DESC").
@@ -50,7 +51,7 @@ func (q *AmitiaStateSourceQuery) QueryActiveInteractions(ctx context.Context, us
 		Find(&rows).Error
 	if err != nil {
 		log.Logger.Warnf("state_source: query active interactions failed: %v", err)
-		return nil, nil
+		return nil, err
 	}
 	snapshots := make([]behavior.InteractionSnapshot, 0, len(rows))
 	for _, r := range rows {
@@ -76,18 +77,21 @@ func (q *AmitiaStateSourceQuery) QueryVoiceSession(ctx context.Context, userID, 
 		UpdatedAt     time.Time `gorm:"column:updated_at"`
 	}
 	var row voiceRow
-	err := q.db.Table("interaction_records").
+	err := q.db.WithContext(ctx).Table("interaction_records").
 		Select("id, session_id, status, status_version, updated_at").
-		Where("character_id = ? AND source = ? AND status IN ?", characterID, "voice", voiceActiveStatuses).
+		Where("user_id = ? AND character_id = ? AND source = ? AND status IN ?", userID, characterID, "voice", voiceActiveStatuses).
 		Order("updated_at DESC").
 		Limit(1).
 		Find(&row).Error
 	if err != nil {
 		log.Logger.Warnf("state_source: query voice session failed: %v", err)
-		return nil, nil
+		return nil, err
 	}
 	if row.ID == "" {
 		return nil, nil
+	}
+	if row.UpdatedAt.IsZero() {
+		return nil, fmt.Errorf("state_source: voice session %s has invalid updated_at", row.ID)
 	}
 	state := "listening"
 	if row.Status == "generated" || row.Status == "committed" || row.Status == "delivery_pending" || row.Status == "delivered" {
@@ -113,20 +117,35 @@ func (q *AmitiaStateSourceQuery) QueryActiveTools(ctx context.Context, userID, c
 		UpdatedAt string `gorm:"column:updated_at"`
 	}
 	var rows []toolRow
-	err := q.db.Table("tool_call_intents").
+	err := q.db.WithContext(ctx).Table("tool_call_intents").
 		Select("id, tool_name, status, created_at, updated_at").
 		Where("character_id = ? AND status IN ?", characterID, toolActiveStatuses).
+		Where(`EXISTS (
+			SELECT 1 FROM interaction_records AS ir
+			WHERE ir.user_id = ?
+			  AND ir.character_id = tool_call_intents.character_id
+			  AND (
+				(tool_call_intents.request_id <> '' AND ir.request_id = tool_call_intents.request_id)
+				OR (tool_call_intents.conversation_id <> '' AND ir.conversation_id = tool_call_intents.conversation_id)
+			  )
+		)`, userID).
 		Order("updated_at DESC").
 		Limit(20).
 		Find(&rows).Error
 	if err != nil {
 		log.Logger.Warnf("state_source: query active tools failed: %v", err)
-		return nil, nil
+		return nil, err
 	}
 	tools := make(map[string]behavior.ToolOperationState)
 	for _, r := range rows {
-		startedAt := parseStateSourceTime(r.CreatedAt)
-		lastActivityAt := parseStateSourceTime(r.UpdatedAt)
+		startedAt, err := parseStateSourceTime(r.CreatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("state_source: tool %s created_at: %w", r.ID, err)
+		}
+		lastActivityAt, err := parseStateSourceTime(r.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("state_source: tool %s updated_at: %w", r.ID, err)
+		}
 		tools[r.ID] = behavior.ToolOperationState{
 			OperationID:    r.ID,
 			ToolCategory:   r.ToolName,
@@ -138,9 +157,9 @@ func (q *AmitiaStateSourceQuery) QueryActiveTools(ctx context.Context, userID, c
 	return tools, nil
 }
 
-func parseStateSourceTime(s string) time.Time {
+func parseStateSourceTime(s string) (time.Time, error) {
 	if s == "" {
-		return time.Now()
+		return time.Time{}, fmt.Errorf("empty timestamp")
 	}
 	layouts := []string{
 		time.RFC3339,
@@ -150,10 +169,10 @@ func parseStateSourceTime(s string) time.Time {
 	}
 	for _, layout := range layouts {
 		if t, err := time.Parse(layout, s); err == nil {
-			return t
+			return t, nil
 		}
 	}
-	return time.Now()
+	return time.Time{}, fmt.Errorf("unsupported timestamp %q", s)
 }
 
 var _ behavior.StateSourceQuery = (*AmitiaStateSourceQuery)(nil)

@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 )
 
@@ -52,6 +53,7 @@ type EvaluatorScope struct {
 }
 
 type Evaluator struct {
+	mu               sync.RWMutex
 	compiledBindings map[string][]CompiledBinding
 }
 
@@ -66,6 +68,8 @@ func scopeKey(scope EvaluatorScope) string {
 }
 
 func (e *Evaluator) AddBinding(scope EvaluatorScope, binding interface{}, condition ConditionNode) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	key := scopeKey(scope)
 	e.compiledBindings[key] = append(e.compiledBindings[key], CompiledBinding{
 		Binding:    binding,
@@ -74,44 +78,115 @@ func (e *Evaluator) AddBinding(scope EvaluatorScope, binding interface{}, condit
 	})
 }
 
-func (e *Evaluator) Evaluate(scope EvaluatorScope, eventType string, ctx EvalContext) []CompiledBinding {
+// ReplaceScope atomically swaps the compiled set for a single persisted scope.
+// Readers therefore never observe a half-reloaded binding set.
+func (e *Evaluator) ReplaceScope(scope EvaluatorScope, bindings []CompiledBinding) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	key := scopeKey(scope)
-	var matched []CompiledBinding
-	for _, cb := range e.compiledBindings[key] {
-		if be, ok := cb.Binding.(bindingEntry); ok {
-			if !be.IsEnabled() {
-				continue
-			}
-			if be.GetEventType() != eventType {
-				continue
-			}
+	if len(bindings) == 0 {
+		delete(e.compiledBindings, key)
+		return
+	}
+	copied := make([]CompiledBinding, len(bindings))
+	copy(copied, bindings)
+	e.compiledBindings[key] = copied
+}
+
+// ReplaceCharacterScopes atomically replaces every installation-specific scope
+// for one user/character pair. It also removes scopes whose last binding was
+// deleted, preventing stale evaluator entries after CRUD operations.
+func (e *Evaluator) ReplaceCharacterScopes(userID, characterID string, replacements map[EvaluatorScope][]CompiledBinding) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	prefix := userID + "/" + characterID + "/"
+	for key := range e.compiledBindings {
+		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
+			delete(e.compiledBindings, key)
 		}
-		if cb.Condition == nil {
-			matched = append(matched, cb)
+	}
+	for scope, entries := range replacements {
+		if scope.UserID != userID || scope.CharacterID != characterID || len(entries) == 0 {
 			continue
 		}
-		if cb.Condition.Eval(ctx) {
-			matched = append(matched, cb)
+		copied := make([]CompiledBinding, len(entries))
+		copy(copied, entries)
+		e.compiledBindings[scopeKey(scope)] = copied
+	}
+}
+
+func evaluatorLookupScopes(scope EvaluatorScope) []EvaluatorScope {
+	result := make([]EvaluatorScope, 0, 4)
+	seen := make(map[string]struct{}, 4)
+	add := func(candidate EvaluatorScope) {
+		key := scopeKey(candidate)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		result = append(result, candidate)
+	}
+
+	// Most specific first, then installation-generic, character-generic, and
+	// finally user-global bindings. This preserves optional scope semantics.
+	add(scope)
+	if scope.InstallationID != "" {
+		add(EvaluatorScope{UserID: scope.UserID, CharacterID: scope.CharacterID})
+	}
+	if scope.CharacterID != "" {
+		add(EvaluatorScope{UserID: scope.UserID, InstallationID: scope.InstallationID})
+	}
+	add(EvaluatorScope{UserID: scope.UserID})
+	return result
+}
+
+func (e *Evaluator) Evaluate(scope EvaluatorScope, eventType string, ctx EvalContext) []CompiledBinding {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	var matched []CompiledBinding
+	for _, lookupScope := range evaluatorLookupScopes(scope) {
+		for _, cb := range e.compiledBindings[scopeKey(lookupScope)] {
+			if be, ok := cb.Binding.(bindingEntry); ok {
+				if !be.IsEnabled() {
+					continue
+				}
+				if be.GetEventType() != eventType {
+					continue
+				}
+			}
+			if cb.Condition == nil || cb.Condition.Eval(ctx) {
+				matched = append(matched, cb)
+			}
 		}
 	}
 	return matched
 }
 
 func (e *Evaluator) RemoveBinding(scope EvaluatorScope, id string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	key := scopeKey(scope)
-	bindings := e.compiledBindings[key]
-	for i, cb := range bindings {
+	entries := e.compiledBindings[key]
+	for i, cb := range entries {
 		if be, ok := cb.Binding.(bindingEntry); ok && be.GetID() == id {
-			e.compiledBindings[key] = append(bindings[:i], bindings[i+1:]...)
+			e.compiledBindings[key] = append(entries[:i], entries[i+1:]...)
+			if len(e.compiledBindings[key]) == 0 {
+				delete(e.compiledBindings, key)
+			}
 			return
 		}
 	}
 }
 
 func (e *Evaluator) RemoveScope(scope EvaluatorScope) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	delete(e.compiledBindings, scopeKey(scope))
 }
 
 func (e *Evaluator) Clear() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.compiledBindings = make(map[string][]CompiledBinding)
 }

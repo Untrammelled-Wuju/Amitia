@@ -71,6 +71,9 @@ type BehaviorDecisionModel struct {
 	InterruptPolicy        string `gorm:"column:interrupt_policy"`
 	MinimumPlayMS          int64  `gorm:"column:minimum_play_ms"`
 	MaximumPlayMS          int64  `gorm:"column:maximum_play_ms"`
+	FallbackDepth          int    `gorm:"column:fallback_depth"`
+	ReturnPolicy           string `gorm:"column:return_policy"`
+	ContextHash            string `gorm:"column:context_hash"`
 	Semantic               string `gorm:"column:semantic"`
 	ActionKey              string `gorm:"column:action_key"`
 	Priority               int    `gorm:"column:priority"`

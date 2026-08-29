@@ -3,6 +3,7 @@ package behavior
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/behavior/bindings"
@@ -18,6 +19,8 @@ type BindingRepository interface {
 	Delete(ctx context.Context, id string) error
 	GetByID(ctx context.Context, id string) (*bindings.BehaviorBinding, error)
 	ListByUserCharacter(ctx context.Context, userID, characterID string) ([]bindings.BehaviorBinding, error)
+	ListByScope(ctx context.Context, userID, characterID string) ([]bindings.BehaviorBinding, error)
+	ListScopes(ctx context.Context) ([]bindings.EvaluatorScope, error)
 	ListByEventType(ctx context.Context, userID, characterID, eventType string) ([]bindings.BehaviorBinding, error)
 }
 
@@ -29,6 +32,8 @@ type ValidateActionFunc func(preferredAction string, availableActions []string) 
 
 type ReloadEvaluatorFunc func(ctx context.Context, engine *BehaviorEngine, repo BindingRepository, userID, characterID string) error
 
+type ResetEvaluatorFunc func()
+
 type BehaviorService struct {
 	engine          *BehaviorEngine
 	repo            BindingRepository
@@ -37,6 +42,8 @@ type BehaviorService struct {
 	validateBinding ValidateBindingFunc
 	validateAction  ValidateActionFunc
 	reloadEvaluator ReloadEvaluatorFunc
+	resetEvaluator  ResetEvaluatorFunc
+	bindingMu       sync.Mutex
 }
 
 func (s *BehaviorService) SetAdapterManager(am any) {
@@ -61,6 +68,10 @@ func WithReloadEvaluatorFunc(fn ReloadEvaluatorFunc) ServiceOption {
 	return func(s *BehaviorService) { s.reloadEvaluator = fn }
 }
 
+func WithResetEvaluatorFunc(fn ResetEvaluatorFunc) ServiceOption {
+	return func(s *BehaviorService) { s.resetEvaluator = fn }
+}
+
 func NewBehaviorService(engine *BehaviorEngine, repo BindingRepository, opts ...ServiceOption) *BehaviorService {
 	svc := &BehaviorService{
 		engine: engine,
@@ -73,6 +84,32 @@ func NewBehaviorService(engine *BehaviorEngine, repo BindingRepository, opts ...
 }
 
 func (s *BehaviorService) Start(ctx context.Context) error {
+	if s == nil || s.engine == nil {
+		return NewBehaviorError(ErrCodeRulesetInvalid, "behavior engine unavailable")
+	}
+	if s.engine.IsRunning() {
+		return nil
+	}
+
+	s.bindingMu.Lock()
+	defer s.bindingMu.Unlock()
+	if s.reloadEvaluator != nil && s.repo != nil {
+		// The evaluator is a derived cache. A cold start/restart must rebuild it
+		// authoritatively from persistence so scopes removed while the engine was
+		// stopped cannot remain executable in memory.
+		if s.resetEvaluator != nil {
+			s.resetEvaluator()
+		}
+		scopes, err := s.repo.ListScopes(ctx)
+		if err != nil {
+			return err
+		}
+		for _, scope := range scopes {
+			if err := s.reloadBindingScopeLocked(ctx, scope.UserID, scope.CharacterID); err != nil {
+				return err
+			}
+		}
+	}
 	return s.engine.Start(ctx)
 }
 
@@ -112,14 +149,14 @@ func (s *BehaviorService) SetRuntimeCommandEnabled(enabled bool) {
 	s.engine.SetRuntimeCommandEnabled(enabled)
 }
 
-func (s *BehaviorService) CreateBinding(ctx context.Context, binding bindings.BehaviorBinding) error {
+func (s *BehaviorService) CreateBinding(ctx context.Context, binding bindings.BehaviorBinding) (*bindings.BehaviorBinding, error) {
 	if s.compile != nil && s.validateBinding != nil {
 		condition, err := s.compile(binding.ConditionsJSON)
 		if err != nil {
-			return NewBehaviorErrorWithCause(ErrCodeBindingInvalid, "条件编译失败", err)
+			return nil, NewBehaviorErrorWithCause(ErrCodeBindingInvalid, "条件编译失败", err)
 		}
 		if err := s.validateBinding(binding, condition); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if binding.ID == "" {
@@ -131,10 +168,19 @@ func (s *BehaviorService) CreateBinding(ctx context.Context, binding bindings.Be
 	if binding.Version == 0 {
 		binding.Version = 1
 	}
+	s.bindingMu.Lock()
+	defer s.bindingMu.Unlock()
 	if err := s.repo.Create(ctx, binding); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	if err := s.reloadBindingScopeLocked(ctx, binding.UserID, binding.CharacterID); err != nil {
+		return nil, err
+	}
+	created, err := s.repo.GetByID(ctx, binding.ID)
+	if err != nil {
+		return nil, err
+	}
+	return created, nil
 }
 
 var serviceBindingUpdateWhitelist = map[string]bool{
@@ -158,6 +204,8 @@ func filterServiceBindingUpdates(updates map[string]interface{}) map[string]inte
 }
 
 func (s *BehaviorService) UpdateBinding(ctx context.Context, id string, updates map[string]interface{}) error {
+	s.bindingMu.Lock()
+	defer s.bindingMu.Unlock()
 	existing, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return err
@@ -210,10 +258,15 @@ func (s *BehaviorService) UpdateBinding(ctx context.Context, id string, updates 
 	}
 
 	filtered["updated_at"] = time.Now().Format(time.RFC3339)
-	return s.repo.Update(ctx, id, filtered)
+	if err := s.repo.Update(ctx, id, filtered); err != nil {
+		return err
+	}
+	return s.reloadBindingScopeLocked(ctx, existing.UserID, existing.CharacterID)
 }
 
 func (s *BehaviorService) UpdateBindingTyped(ctx context.Context, req bindings.BindingUpdateRequest) (*bindings.BehaviorBinding, error) {
+	s.bindingMu.Lock()
+	defer s.bindingMu.Unlock()
 	existing, err := s.repo.GetByID(ctx, req.ID)
 	if err != nil {
 		return nil, err
@@ -261,11 +314,23 @@ func (s *BehaviorService) UpdateBindingTyped(ctx context.Context, req bindings.B
 		}
 		return nil, err
 	}
+	if err := s.reloadBindingScopeLocked(ctx, updated.UserID, updated.CharacterID); err != nil {
+		return nil, err
+	}
 	return updated, nil
 }
 
 func (s *BehaviorService) DeleteBinding(ctx context.Context, id string) error {
-	return s.repo.Delete(ctx, id)
+	s.bindingMu.Lock()
+	defer s.bindingMu.Unlock()
+	existing, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	return s.reloadBindingScopeLocked(ctx, existing.UserID, existing.CharacterID)
 }
 
 func (s *BehaviorService) ListBindings(ctx context.Context, userID, characterID string) ([]bindings.BehaviorBinding, error) {
@@ -276,9 +341,19 @@ func (s *BehaviorService) GetBinding(ctx context.Context, id string) (*bindings.
 	return s.repo.GetByID(ctx, id)
 }
 
-func (s *BehaviorService) CompileAndLoadBindings(ctx context.Context, userID, characterID string) error {
-	if s.reloadEvaluator != nil {
-		return s.reloadEvaluator(ctx, s.engine, s.repo, userID, characterID)
+func (s *BehaviorService) reloadBindingScopeLocked(ctx context.Context, userID, characterID string) error {
+	if s.reloadEvaluator == nil {
+		return nil
 	}
-	return nil
+	return s.reloadEvaluator(ctx, s.engine, s.repo, userID, characterID)
+}
+
+func (s *BehaviorService) reloadBindingScope(ctx context.Context, userID, characterID string) error {
+	s.bindingMu.Lock()
+	defer s.bindingMu.Unlock()
+	return s.reloadBindingScopeLocked(ctx, userID, characterID)
+}
+
+func (s *BehaviorService) CompileAndLoadBindings(ctx context.Context, userID, characterID string) error {
+	return s.reloadBindingScope(ctx, userID, characterID)
 }
