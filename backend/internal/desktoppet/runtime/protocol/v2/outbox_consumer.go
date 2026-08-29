@@ -4,6 +4,8 @@ package v2
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/u-ai/backend/log"
@@ -26,6 +28,9 @@ type OutboxConsumer struct {
 	pollInterval time.Duration
 	stopCh       chan struct{}
 	doneCh       chan struct{}
+	lifecycleMu  sync.Mutex
+	running      bool
+	alive        atomic.Bool
 }
 
 func NewOutboxConsumer(db *gorm.DB, handler OutboxHandler) *OutboxConsumer {
@@ -42,25 +47,51 @@ func (c *OutboxConsumer) Start(ctx context.Context) {
 	if c == nil || c.db == nil || c.handler == nil {
 		return
 	}
-	go c.run(ctx)
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	if c.running {
+		return
+	}
+	c.stopCh = make(chan struct{})
+	c.doneCh = make(chan struct{})
+	c.running = true
+	c.alive.Store(true)
+	go c.run(ctx, c.stopCh, c.doneCh)
 }
 
 func (c *OutboxConsumer) Stop() {
 	if c == nil {
 		return
 	}
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	if !c.running {
+		return
+	}
 	close(c.stopCh)
 	<-c.doneCh
+	c.running = false
+	c.alive.Store(false)
 }
 
-func (c *OutboxConsumer) run(ctx context.Context) {
-	defer close(c.doneCh)
+func (c *OutboxConsumer) IsRunning() bool {
+	if c == nil {
+		return false
+	}
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	return c.running && c.alive.Load()
+}
+
+func (c *OutboxConsumer) run(ctx context.Context, stopCh <-chan struct{}, doneCh chan<- struct{}) {
+	defer close(doneCh)
+	defer c.alive.Store(false)
 	ticker := time.NewTicker(c.pollInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-c.stopCh:
+		case <-stopCh:
 			return
 		case <-ctx.Done():
 			return

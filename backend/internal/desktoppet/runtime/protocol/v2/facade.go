@@ -56,9 +56,12 @@ type RuntimeFacade struct {
 
 	deviceRuntimeSessions *deviceruntime.Service
 
-	started     atomic.Bool
-	cancel      context.CancelFunc
-	lifecycleMu sync.Mutex
+	started         atomic.Bool
+	reconcilerAlive atomic.Bool
+	retentionAlive  atomic.Bool
+	cancel          context.CancelFunc
+	wg              sync.WaitGroup
+	lifecycleMu     sync.Mutex
 }
 
 func NewRuntimeFacade(db *gorm.DB, config *FacadeConfig) *RuntimeFacade {
@@ -106,10 +109,21 @@ func (f *RuntimeFacade) Start(ctx context.Context) error {
 	f.cancel = cancel
 
 	f.started.Store(true)
+	f.reconcilerAlive.Store(true)
+	f.retentionAlive.Store(true)
+	f.wg.Add(2)
 	log.Info("[v2-runtime-facade] started")
 
-	go f.runReconciler(fctx)
-	go f.runRetentionGC(fctx)
+	go func() {
+		defer f.wg.Done()
+		defer f.reconcilerAlive.Store(false)
+		f.runReconciler(fctx)
+	}()
+	go func() {
+		defer f.wg.Done()
+		defer f.retentionAlive.Store(false)
+		f.runRetentionGC(fctx)
+	}()
 	return nil
 }
 
@@ -125,12 +139,18 @@ func (f *RuntimeFacade) Close(ctx context.Context) error {
 		f.cancel()
 		f.cancel = nil
 	}
+	f.wg.Wait()
+	f.reconcilerAlive.Store(false)
+	f.retentionAlive.Store(false)
 	log.Info("[v2-runtime-facade] stopped")
 	return nil
 }
 
 func (f *RuntimeFacade) IsStarted() bool {
-	return f != nil && f.started.Load()
+	return f != nil &&
+		f.started.Load() &&
+		f.reconcilerAlive.Load() &&
+		f.retentionAlive.Load()
 }
 
 func (f *RuntimeFacade) Config() *FacadeConfig {
