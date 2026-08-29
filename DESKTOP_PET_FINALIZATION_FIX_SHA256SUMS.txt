@@ -1,0 +1,14 @@
+eb1dd314918812b4f972d12c790b3852b8d447d97f67b3d9953f3b45be3c220a  U-Ai/DESKTOP_PET_FINALIZATION_FIX_MANIFEST.txt
+520358f3fa1e0c199b961e308a6c42ff0ef0f00cdbae7d6b7cb490ee4fe12753  U-Ai/desktop/src/desktop-pet/animation/__tests__/animation-engine-readiness.test.ts
+94c3a875c1e58e74ca5917dfdb4865b8b80975852142b070bc435fbd0c96c17f  U-Ai/desktop/src/desktop-pet/animation/__tests__/canvas-pet-visual-surface.test.ts
+8d0e057db47bcb9957494ea173c01df461816516517180e360672b2b7774d60c  U-Ai/desktop/src/desktop-pet/animation/animation-engine.ts
+25ebdec036e8025d7cdf382a2caf575265793b4a12b1fa378f40f0bd06aa54da  U-Ai/desktop/src/desktop-pet/animation/surface/canvas-pet-visual-surface.ts
+212d7317a0a499d5b3ccde865c1f8e15aa3f345525c3fe0cd1cd1d5a696e68a7  U-Ai/desktop/src/main/pet/__tests__/installation-path.test.ts
+5fb9b95013d128d3d669b3c0171182e9e94a676a63120d486e5a380204fc0d36  U-Ai/desktop/src/main/pet/__tests__/resource-protocol.test.ts
+bd7fd9e7eba83233c9432fc851814a3d047047125a847d10b51e0c1f6228da43  U-Ai/desktop/src/main/pet/animation-ipc.ts
+52b8dbe6e4a9a962131562bdd3d633a7480e683ba67134ca1ea59bad1bc2d6f3  U-Ai/desktop/src/main/pet/installation-path.ts
+da9794a0628d2ae50410ef396bd659353c5e9aee291c211e9b6671376550c25f  U-Ai/desktop/src/main/pet/manager.ts
+c8a647b7179f9305fc581c530649df2fa76d45ea7732ff70f069b1ef57213ce6  U-Ai/desktop/src/main/pet/resource-protocol.ts
+dc448dd8ed62f07b0a89f1c647fed947678968abab30c4f56f9772f8471cf5f4  U-Ai/desktop/src/renderer/__tests__/pet-pointer-coordinates.test.ts
+4f283da883ba1d404e3377d9ffe6daab693ca3f7a8adfcdedae917c1cf6a3474  U-Ai/desktop/src/renderer/pet-main.ts
+3fb8382174f73d89a8d811632a2b04f5142daab7f44a7a0b052ef69f87c130d8  U-Ai/desktop/src/renderer/pet-pointer-coordinates.ts
