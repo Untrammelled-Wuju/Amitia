@@ -14,3 +14,16 @@ func TestIsDesktopDevelopmentOrigin(t *testing.T) {
 		}
 	}
 }
+
+func TestIsTrustedDesktopOrigin(t *testing.T) {
+	for _, origin := range []string{"app://amitia", "APP://AMITIA", "http://localhost:5178", "http://127.0.0.1:5178"} {
+		if !isTrustedDesktopOrigin(origin) {
+			t.Fatalf("origin %s should be trusted", origin)
+		}
+	}
+	for _, origin := range []string{"app://other", "file://", "null", "https://example.com"} {
+		if isTrustedDesktopOrigin(origin) {
+			t.Fatalf("origin %s should not be trusted", origin)
+		}
+	}
+}
