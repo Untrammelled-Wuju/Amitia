@@ -12,51 +12,36 @@ import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../shared/models/models.dart';
 
-List<SettingGroup> _buildSettingsGroups(bool isDevMode) => <SettingGroup>[
-  SettingGroup(title: '外观', items: [
-    SettingItem(title: '外观设置', icon: Icons.palette_outlined, route: AppRoutes.settingsAppearance),
-    SettingItem(title: '主题设置', icon: Icons.color_lens_outlined, route: AppRoutes.settingsTheme),
-  ]),
-  SettingGroup(title: 'AI 与对话', items: [
-    SettingItem(title: '模型设置', icon: Icons.psychology_outlined, route: AppRoutes.settingsModels),
+final _settingsGroups = <SettingGroup>[
+  SettingGroup(title: 'AI 与个性化', items: [
+    SettingItem(title: '模型设置', icon: Icons.psychology_outlined, value: 'GPT-4', route: AppRoutes.settingsModels),
     SettingItem(title: 'AI 配置', icon: Icons.smart_toy_outlined, route: AppRoutes.settingsAi),
     SettingItem(title: '语音识别', icon: Icons.transcribe_outlined, route: AppRoutes.settingsAsr),
+    SettingItem(title: '外观设置', icon: Icons.palette_outlined, value: '亮色', route: AppRoutes.settingsAppearance),
+    SettingItem(title: '主题设置', icon: Icons.color_lens_outlined, route: AppRoutes.settingsTheme),
+    SettingItem(title: '界面提供者', icon: Icons.dashboard_customize_outlined, route: AppRoutes.settingsUIProviders),
+    SettingItem(title: '用户设置', icon: Icons.person_outline, route: AppRoutes.settingsUser),
     SettingItem(title: '时间感知', icon: Icons.schedule_outlined, route: AppRoutes.settingsTemporal),
   ]),
-  SettingGroup(title: '消息与连接', items: [
-    SettingItem(title: '渠道中心', icon: Icons.forum_outlined, route: AppRoutes.channels),
-    SettingItem(title: '日程与提醒', icon: Icons.notifications_none_outlined, route: AppRoutes.reminders),
-  ]),
-  SettingGroup(title: '数据与隐私', items: [
-    SettingItem(title: '聊天记录', icon: Icons.chat_bubble_outline, route: AppRoutes.chatLogs),
-    SettingItem(title: '表情包', icon: Icons.emoji_emotions_outlined, route: AppRoutes.emotes),
-    SettingItem(title: '数据概览', icon: Icons.analytics_outlined, route: AppRoutes.dashboard),
-    SettingItem(title: '备份与恢复', icon: Icons.backup_outlined, route: AppRoutes.settingsBackup),
+  SettingGroup(title: '系统与维护', items: [
+    SettingItem(title: 'Runtime', icon: Icons.terminal, route: AppRoutes.settingsRuntime),
+    SettingItem(title: '运行模式', icon: Icons.hub_outlined, subtitle: '桌面本地 / 私有云部署模式', route: AppRoutes.settingsRuntimeMode),
+    SettingItem(title: '长期运行维护', icon: Icons.schedule_send_outlined, subtitle: '长期任务、健康历史与日志维护', route: AppRoutes.settingsLongRunning),
+    SettingItem(title: '高级系统', icon: Icons.admin_panel_settings_outlined, subtitle: '账号、审计、Usage、Bridge 与 Voice Session', route: AppRoutes.settingsAdvanced),
+    SettingItem(title: 'BDI 决策可视化', icon: Icons.account_tree_outlined, subtitle: 'BehaviorPlan、ExpressionPlan 与降级状态', route: AppRoutes.settingsDecisionViz),
+    SettingItem(title: '系统权限', icon: Icons.lock_outlined, route: AppRoutes.settingsPermissions),
     SettingItem(title: '存储管理', icon: Icons.storage_outlined, route: AppRoutes.settingsStorage),
-    SettingItem(title: '系统权限', icon: Icons.lock_outline, route: AppRoutes.settingsPermissions),
     SettingItem(title: '安全设置', icon: Icons.security_outlined, route: AppRoutes.settingsSafety),
-    SettingItem(title: '隐私扫描', icon: Icons.privacy_tip_outlined, route: AppRoutes.settingsPrivacyScan),
-  ]),
-  SettingGroup(title: '运行与部署', items: [
-    SettingItem(title: '运行模式', icon: Icons.hub_outlined, route: AppRoutes.settingsRuntimeMode),
-    SettingItem(title: '部署配置', icon: Icons.cloud_outlined, route: AppRoutes.settingsDeployment),
-    SettingItem(title: 'Runtime', icon: Icons.terminal_outlined, route: AppRoutes.settingsRuntime),
-    SettingItem(title: '长期运行维护', icon: Icons.schedule_send_outlined, route: AppRoutes.settingsLongRunning),
-  ]),
-  SettingGroup(title: '系统与高级', items: [
-    SettingItem(title: '系统设置', icon: Icons.settings_applications_outlined, route: AppRoutes.settingsSystem),
     SettingItem(title: '维护工具', icon: Icons.build_circle_outlined, route: AppRoutes.settingsMaintenance),
-    SettingItem(title: '高级系统', icon: Icons.admin_panel_settings_outlined, route: AppRoutes.settingsAdvanced),
-    SettingItem(title: 'BDI 决策可视化', icon: Icons.account_tree_outlined, route: AppRoutes.settingsDecisionViz),
-    SettingItem(title: '工具箱', icon: Icons.handyman_outlined, route: AppRoutes.settingsToolbox),
-    SettingItem(title: '界面提供者', icon: Icons.dashboard_customize_outlined, route: AppRoutes.settingsUIProviders),
-    if (isDevMode)
-      SettingItem(title: '开发者', icon: Icons.developer_mode_outlined, route: AppRoutes.developer),
+    SettingItem(title: '工具箱', icon: Icons.handyman_outlined, subtitle: '运行日志、状态诊断与开发辅助工具', value: '诊断工具', route: AppRoutes.settingsToolbox),
+  ]),
+  SettingGroup(title: '部署与隐私', items: [
+    SettingItem(title: '部署配置', icon: Icons.cloud_upload_outlined, route: AppRoutes.settingsDeployment),
+    SettingItem(title: '隐私扫描', icon: Icons.privacy_tip_outlined, route: AppRoutes.settingsPrivacyScan),
+    SettingItem(title: '系统设置', icon: Icons.settings_applications_outlined, route: AppRoutes.settingsSystem),
   ]),
   SettingGroup(title: '关于', items: [
-    SettingItem(title: '隐私政策', icon: Icons.privacy_tip_outlined, route: AppRoutes.settingsPrivacyPolicy),
-    SettingItem(title: '用户协议', icon: Icons.description_outlined, route: AppRoutes.settingsUserAgreement),
-    SettingItem(title: '检查更新', icon: Icons.system_update_outlined, route: AppRoutes.settingsAppUpdate),
+    SettingItem(title: '备份与恢复', icon: Icons.backup_outlined, route: AppRoutes.settingsBackup),
     SettingItem(title: '关于 Amitia', icon: Icons.info_outline, route: AppRoutes.settingsAbout),
   ]),
 ];
@@ -66,8 +51,8 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final groups = _settingsGroups;
     final isDevMode = ref.watch(isDeveloperModeProvider);
-    final groups = _buildSettingsGroups(isDevMode);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '设置',
@@ -86,7 +71,7 @@ class SettingsPage extends ConsumerWidget {
           for (int i = 0; i < groups.length; i++) ...[
             _SettingGroup(
               group: groups[i],
-              leading: groups[i].title == '系统与高级'
+              leading: groups[i].title == '系统与维护'
                   ? Padding(
                       padding: EdgeInsets.only(bottom: AppSpacing.sm),
                       child: _DevModeToggle(
@@ -113,9 +98,8 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
   final userAsync = ref.watch(currentUserProvider);
   return userAsync.when(
     data: (user) {
-      final isLoggedIn = user != null;
       final username = user?.username ?? '未登录';
-      final initial = isLoggedIn && username.isNotEmpty ? username.characters.first : '?';
+      final initial = username.isNotEmpty ? username.characters.first : '?';
       return GestureDetector(
         onTap: () => context.push(AppRoutes.settingsUser),
         child: Container(
@@ -171,13 +155,13 @@ Widget _buildUserInfoCard(BuildContext context, WidgetRef ref) {
                           width: 6,
                           height: 6,
                           decoration: BoxDecoration(
-                            color: isLoggedIn ? context.success : context.textTertiary,
+                            color: context.success,
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          isLoggedIn ? '已登录' : '未登录',
+                          '已登录',
                           style: TextStyle(
                             fontSize: 11,
                             color: context.textTertiary,
