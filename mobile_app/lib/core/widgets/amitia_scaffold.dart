@@ -140,11 +140,6 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
         effectiveLeading = IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 18),
           constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            side: BorderSide.none,
-            foregroundColor: context.textPrimary,
-          ),
           onPressed: () {
             final router = GoRouter.of(context);
             if (router.canPop()) {
@@ -161,11 +156,6 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
         effectiveLeading = IconButton(
           icon: const Icon(Icons.menu, size: 20),
           constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            side: BorderSide.none,
-            foregroundColor: context.textPrimary,
-          ),
           onPressed: () {
             final scope = ShellDrawerScope.of(context);
             if (scope != null) {
@@ -186,7 +176,6 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
       centerTitle: centerTitle,
       elevation: elevation,
       scrolledUnderElevation: 0,
-      surfaceTintColor: Colors.transparent,
       bottom: bottom,
     );
   }
@@ -219,7 +208,7 @@ class AmitiaCard extends StatelessWidget {
         variant[key] is num ? (variant[key] as num).toDouble() : fallback;
     final paddingX = number('paddingX', AppSpacing.cardPadding);
     final paddingY = number('paddingY', AppSpacing.cardPadding);
-    final radius = number('radius', 20);
+    final radius = number('radius', AppRadius.medium);
     final borderWidth = number('borderWidth', context.uiComponents.borderWidth);
     return GestureDetector(
       onTap: onTap,
@@ -256,15 +245,7 @@ class AmitiaSectionHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: AppTypography.sectionTitle(context).copyWith(
-              color: context.textTertiary,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: .15,
-            ),
-          ),
+          Text(title, style: AppTypography.sectionTitle(context)),
           if (actionText != null)
             GestureDetector(
               onTap: onAction,
@@ -305,12 +286,12 @@ class AmitiaListTile extends StatelessWidget {
       child: Container(
         constraints: BoxConstraints(minHeight: number('minHeight', context.uiLayout.listItemMinHeight)),
         padding: EdgeInsets.symmetric(
-          horizontal: number('paddingX', 13),
-          vertical: number('paddingY', 12),
+          horizontal: number('paddingX', AppSpacing.lg),
+          vertical: number('paddingY', 14),
         ),
         decoration: BoxDecoration(
           color: isSelected ? context.accentSoft : Colors.transparent,
-          borderRadius: BorderRadius.circular(number('radius', 14)),
+          borderRadius: BorderRadius.circular(number('radius', AppRadius.small)),
         ),
         child: Row(
           children: [

@@ -38,7 +38,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (username.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('请输入账号和密码'),
+          content: const Text('请输入用户名和密码'),
           duration: const Duration(seconds: 2),
           backgroundColor: context.warning,
         ),
@@ -57,7 +57,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
       if (!mounted) return;
 
-      ref.invalidate(currentUserProvider);
+      setState(() => _loginState = 2);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('登录成功，正在进入 Amitia...'),
+          duration: const Duration(seconds: 1),
+          backgroundColor: context.success,
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (!mounted) return;
       context.go(AppRoutes.chat);
     } catch (e) {
       if (!mounted) return;
@@ -72,8 +81,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           backgroundColor: context.error,
         ),
       );
-      // Keep the real backend error visible until the user edits or retries.
-
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (!mounted) return;
+      setState(() => _loginState = 0);
     }
   }
 
@@ -110,7 +120,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
               ),
               SizedBox(height: AppSpacing.sectionGap + 8),
-              Text('账号', style: AppTypography.label(context)),
+              Text('用户名', style: AppTypography.label(context)),
               SizedBox(height: AppSpacing.sm),
               Container(
                 decoration: BoxDecoration(
@@ -122,7 +132,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   controller: _usernameController,
                   style: AppTypography.body(context),
                   decoration: InputDecoration(
-                    hintText: '请输入账号',
+                    hintText: '请输入用户名',
                     hintStyle: TextStyle(color: context.textTertiary),
                     prefixIcon: Icon(Icons.person_outline, size: 22, color: context.textTertiary),
                     isDense: true,
@@ -144,7 +154,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   style: AppTypography.body(context),
-                  onSubmitted: (_) => _loginState == 1 ? null : _login(),
+                  onSubmitted: (_) => _loginState == 0 ? _login() : null,
                   decoration: InputDecoration(
                     hintText: '请输入密码',
                     hintStyle: TextStyle(color: context.textTertiary),
@@ -228,19 +238,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
               SizedBox(height: AppSpacing.xl),
               Center(
-                child: Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 14,
-                  children: [
-                    GestureDetector(
-                      onTap: () => context.push(AppRoutes.settingsUserAgreement),
-                      child: Text('用户协议', style: AppTypography.caption(context).copyWith(color: context.accentPrimary)),
+                child: GestureDetector(
+                  onTap: () => context.go(AppRoutes.onboarding),
+                  child: RichText(
+                    text: TextSpan(
+                      style: AppTypography.caption(context),
+                      children: [
+                        const TextSpan(text: '首次使用？'),
+                        TextSpan(
+                          text: '前往引导设置',
+                          style: TextStyle(color: context.accentPrimary, fontWeight: FontWeight.w500),
+                        ),
+                      ],
                     ),
-                    GestureDetector(
-                      onTap: () => context.push(AppRoutes.settingsPrivacyPolicy),
-                      child: Text('隐私政策', style: AppTypography.caption(context).copyWith(color: context.accentPrimary)),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],

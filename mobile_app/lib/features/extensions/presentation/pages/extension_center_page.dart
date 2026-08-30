@@ -28,7 +28,6 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
   List<ExtensionCenterCard> _discoverCards = [];
   List<ExtensionCenterCard> _updateCards = [];
   List<ExtensionCenterCard> _needsActionCards = [];
-  final Set<String> _busyExtensionIds = <String>{};
 
   final _categories = const ['全部', 'MCP', 'Skill', 'Tools', 'UI'];
 
@@ -87,19 +86,19 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
   Widget build(BuildContext context) {
     if (_loading) {
       return AmitiaScaffold(
-        appBar: AmitiaAppBar(title: '扩展中心', navigation: AmitiaAppBarNavigation.back),
+        appBar: AmitiaAppBar(title: '扩展', navigation: AmitiaAppBarNavigation.back),
         body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
       );
     }
     if (_error != null) {
       return AmitiaScaffold(
-        appBar: AmitiaAppBar(title: '扩展中心', navigation: AmitiaAppBarNavigation.back),
+        appBar: AmitiaAppBar(title: '扩展', navigation: AmitiaAppBarNavigation.back),
         body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadView)),
       );
     }
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '扩展中心',
+        title: '扩展',
         navigation: AmitiaAppBarNavigation.back,
       ),
       body: SafeArea(
@@ -210,30 +209,18 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
         isInstalled: isInstalled,
         isEnabled: isEnabled,
         isRecommended: isFromRecommended,
-        actionLabel: '安装入口',
         onAction: isInstalled
             ? null
-            : () => context.push(AppRoutes.extensionsPackages),
-        onToggle: isInstalled && !_busyExtensionIds.contains(e.extensionId)
-            ? (value) async {
-                setState(() => _busyExtensionIds.add(e.extensionId));
-                try {
-                  await ref.read(extensionServiceProvider).setKernelExtensionEnabled(e.extensionId, value);
-                  await _loadView();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${value ? "已启用" : "已禁用"} ${e.displayName}')),
-                    );
-                  }
-                } catch (error) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('操作失败：$error')),
-                    );
-                  }
-                } finally {
-                  if (mounted) setState(() => _busyExtensionIds.remove(e.extensionId));
-                }
+            : () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('安装 ${e.displayName}')),
+                );
+              },
+        onToggle: isInstalled
+            ? (value) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('${value ? "启用" : "禁用"} ${e.displayName}')),
+                );
               }
             : null,
       ),
