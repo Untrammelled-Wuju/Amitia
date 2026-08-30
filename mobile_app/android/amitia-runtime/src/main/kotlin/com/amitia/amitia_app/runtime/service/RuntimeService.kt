@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
+import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.amitia.amitia_app.runtime.AndroidRuntimeModule
@@ -952,6 +953,7 @@ class RuntimeService : Service() {
     private fun captureProotDiagnostic(stream: String, data: String) {
         val sanitized = sanitizeDiagnostic(data)
         if (sanitized.isBlank()) return
+        Log.e("AmitiaRuntime", "$stream: $sanitized")
         val lines = sanitized.lineSequence().filter { it.isNotBlank() }.take(8)
         synchronized(diagnosticTailLock) {
             for (line in lines) {
