@@ -7,12 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
-	"path"
 	"sort"
 	"strings"
 
+	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 )
 
@@ -68,16 +69,20 @@ func (i *ImportInspector) InspectAndMarkReady(
 	seen := map[string]struct{}{}
 
 	for _, entry := range archive.File {
-		clean := path.Clean(strings.ReplaceAll(entry.Name, `\`, "/"))
-		if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
-			return errors.New("archive path escape detected")
+		entryName := entry.Name
+		if entry.FileInfo().IsDir() {
+			entryName = strings.TrimSuffix(entryName, "/")
+		}
+		clean, pathErr := packageformat.NormalizePackagePath(entryName)
+		if pathErr != nil {
+			return fmt.Errorf("archive path is not Package V2 canonical: %s: %w", entry.Name, pathErr)
 		}
 
 		if clean == "manifest.json" {
 			continue
 		}
 
-		key := strings.ToLower(clean)
+		key := packageformat.CaseFoldPath(clean)
 		if _, exists := seen[key]; exists {
 			return errors.New("archive path collision detected")
 		}

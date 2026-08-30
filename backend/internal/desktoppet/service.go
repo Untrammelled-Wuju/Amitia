@@ -12,9 +12,7 @@ import (
 	"io"
 	"mime/multipart"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1321,56 +1319,125 @@ func dedupStrings(items []string) []string {
 func removeAllTaskDir(dir string) error {
 	const maxAttempts = 10
 	const retryDelay = 100 * time.Millisecond
+
+	root, err := filepath.Abs(filepath.Join(config.AppCfg.Storage.DataDir, "desktop-pets", "generation-tasks"))
+	if err != nil {
+		return fmt.Errorf("resolve generation task root: %w", err)
+	}
+	target, err := filepath.Abs(filepath.Clean(dir))
+	if err != nil {
+		return fmt.Errorf("resolve generation task target: %w", err)
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("refusing to remove path outside generation task root: %s", dir)
+	}
+	// Service-level task deletion is only allowed to delete one direct task
+	// directory. Nested paths belong to their dedicated domain cleanup APIs.
+	if strings.Contains(rel, string(filepath.Separator)) {
+		return fmt.Errorf("refusing to remove non-task generation path: %s", dir)
+	}
+
 	var lastErr error
 	for i := 0; i < maxAttempts; i++ {
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if _, statErr := os.Lstat(target); os.IsNotExist(statErr) {
 			return nil
+		} else if statErr != nil {
+			return statErr
 		}
-		if err := removeLocalDirNoSymlinks(dir); err != nil {
+		if err := ensureLocalPathNoSymlinks(root, target); err != nil {
+			return err
+		}
+		if err := removeLocalDirNoSymlinks(target); err != nil {
 			lastErr = err
 		}
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if _, statErr := os.Lstat(target); os.IsNotExist(statErr) {
 			return nil
+		} else if statErr != nil {
+			lastErr = statErr
 		}
 		if i < maxAttempts-1 {
 			time.Sleep(retryDelay)
 		}
 	}
-	if runtime.GOOS == "windows" {
-		if err := exec.Command("cmd", "/c", "rmdir", "/s", "/q", dir).Run(); err != nil {
-			if lastErr == nil {
-				lastErr = err
-			}
-		} else {
-			if _, err := os.Stat(dir); os.IsNotExist(err) {
-				return nil
-			}
-		}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("task directory still exists after removal: %s", target)
 	}
 	return lastErr
 }
 
+func ensureLocalPathNoSymlinks(root, target string) error {
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+	if rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
+		return fmt.Errorf("generation task root must be a real directory")
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return err
+	}
+	current := root
+	for _, component := range strings.Split(rel, string(filepath.Separator)) {
+		current = filepath.Join(current, component)
+		info, statErr := os.Lstat(current)
+		if statErr != nil {
+			return statErr
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("symlink is not allowed in task deletion path: %s", current)
+		}
+	}
+	return nil
+}
+
 func removeLocalDirNoSymlinks(path string) error {
 	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return os.Remove(path)
+		return fmt.Errorf("refusing to recursively delete symlink: %s", path)
 	}
 	if !info.IsDir() {
-		return os.Remove(path)
+		_ = os.Chmod(path, info.Mode()|0o200)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
 	}
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
-		if err := removeLocalDirNoSymlinks(filepath.Join(path, entry.Name())); err != nil {
+		child := filepath.Join(path, entry.Name())
+		childInfo, statErr := os.Lstat(child)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				continue
+			}
+			return statErr
+		}
+		if childInfo.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(child); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			continue
+		}
+		if err := removeLocalDirNoSymlinks(child); err != nil {
 			return err
 		}
 	}
-	return os.Remove(path)
+	_ = os.Chmod(path, info.Mode()|0o700)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func (s *service) GetTaskTransitions(taskID string, limit int) ([]taskstate.AuditRecord, error) {

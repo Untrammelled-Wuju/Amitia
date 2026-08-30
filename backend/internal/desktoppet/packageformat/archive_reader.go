@@ -61,9 +61,12 @@ func (r *ArchiveReader) OpenArchive(path string) (*zip.ReadCloser, *Manifest, er
 }
 
 func (r *ArchiveReader) openArchiveInternal(path string) (*zip.ReadCloser, []byte, *Manifest, error) {
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return nil, nil, nil, NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("archive not found: %s", path), err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, nil, nil, NewPackageError(ErrCodePackagePathInvalid, "archive must be a regular non-symlink file", nil)
 	}
 	if info.Size() > r.limits.MaxCompressedSize {
 		return nil, nil, nil, NewPackageError(ErrCodePackageArchiveBomb, "compressed size exceeds limit", nil)
@@ -86,6 +89,10 @@ func (r *ArchiveReader) openArchiveInternal(path string) (*zip.ReadCloser, []byt
 	seenCaseFold := make(map[string]string)
 
 	for _, f := range zipReader.File {
+		if err := r.validateZipEntry(f, seenPaths, seenCaseFold); err != nil {
+			zipReader.Close()
+			return nil, nil, nil, err
+		}
 		if f.FileInfo().IsDir() {
 			continue
 		}
@@ -96,12 +103,11 @@ func (r *ArchiveReader) openArchiveInternal(path string) (*zip.ReadCloser, []byt
 			return nil, nil, nil, NewPackageError(ErrCodePackageArchiveBomb, "file count exceeds limit", nil)
 		}
 
-		if err := r.validateZipEntry(f, seenPaths, seenCaseFold); err != nil {
+		normalized, normErr := NormalizePackagePath(f.Name)
+		if normErr != nil {
 			zipReader.Close()
-			return nil, nil, nil, err
+			return nil, nil, nil, NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("unsafe path in archive: %s", f.Name), normErr)
 		}
-
-		normalized := filepath.ToSlash(filepath.Clean(f.Name))
 
 		if len(normalized) > r.limits.MaxPathLength {
 			zipReader.Close()
@@ -184,21 +190,15 @@ func (r *ArchiveReader) validateZipEntry(f *zip.File, seenPaths map[string]bool,
 		return NewPackageError(ErrCodePackagePathInvalid, "empty entry name in archive", nil)
 	}
 
-	if filepath.IsAbs(name) {
-		return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("absolute path in archive: %s", name), nil)
+	entryName := name
+	if f.FileInfo().IsDir() {
+		entryName = strings.TrimSuffix(entryName, "/")
+		if entryName == "" || strings.HasSuffix(entryName, "/") {
+			return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("non-canonical directory entry in archive: %s", name), nil)
+		}
 	}
-
-	cleaned := filepath.Clean(name)
-	if strings.HasPrefix(cleaned, "..") || cleaned == ".." {
-		return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("path traversal in archive: %s", name), nil)
-	}
-
-	if strings.Contains(name, "\\") {
-		return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("backslash in archive path: %s", name), nil)
-	}
-
-	normalized := filepath.ToSlash(cleaned)
-	if _, err := NormalizePackagePath(normalized); err != nil {
+	normalized, err := NormalizePackagePath(entryName)
+	if err != nil {
 		return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("unsafe path in archive: %s", name), err)
 	}
 
@@ -226,11 +226,9 @@ func (r *ArchiveReader) validateZipEntry(f *zip.File, seenPaths map[string]bool,
 	if mode&os.ModeSocket != 0 {
 		return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("socket in archive: %s", normalized), nil)
 	}
-
 	if isForbiddenExecutable(normalized) {
 		return NewPackageError(ErrCodePackageExecutableForbidden, fmt.Sprintf("executable file in archive: %s", normalized), nil)
 	}
-
 	return nil
 }
 
@@ -248,6 +246,10 @@ func (r *ArchiveReader) ExtractArchive(path, destDir string) error {
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("failed to create destination: %s", destDir), err)
 	}
+	destDir, err = prepareExtractionRoot(destDir)
+	if err != nil {
+		return NewPackageError(ErrCodePackagePathInvalid, "unsafe extraction destination", err)
+	}
 
 	seenPaths := make(map[string]bool)
 	seenCaseFold := make(map[string]string)
@@ -259,15 +261,18 @@ func (r *ArchiveReader) ExtractArchive(path, destDir string) error {
 			return err
 		}
 
-		normalized := filepath.ToSlash(filepath.Clean(f.Name))
+		entryName := f.Name
+		if f.FileInfo().IsDir() {
+			entryName = strings.TrimSuffix(entryName, "/")
+		}
+		normalized, normErr := NormalizePackagePath(entryName)
+		if normErr != nil {
+			return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("unsafe path in archive: %s", f.Name), normErr)
+		}
 
 		if f.FileInfo().IsDir() {
-			dirPath, secErr := SecureJoinUnderRoot(destDir, normalized)
-			if secErr != nil {
-				return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("unsafe directory path: %s", normalized), secErr)
-			}
-			if err := os.MkdirAll(dirPath, 0o755); err != nil {
-				return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("failed to create directory: %s", normalized), err)
+			if err := ensureExtractionDirectory(destDir, normalized); err != nil {
+				return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("failed to create safe directory: %s", normalized), err)
 			}
 			continue
 		}
@@ -287,8 +292,16 @@ func (r *ArchiveReader) ExtractArchive(path, destDir string) error {
 			return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("unsafe file path: %s", normalized), secErr)
 		}
 
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
-			return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("failed to create parent directory for: %s", normalized), err)
+		parentRel := packagePathDir(normalized)
+		if parentRel != "" {
+			if err := ensureExtractionDirectory(destDir, parentRel); err != nil {
+				return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("failed to create safe parent directory for: %s", normalized), err)
+			}
+		}
+		if existing, statErr := os.Lstat(targetPath); statErr == nil {
+			return NewPackageError(ErrCodePackageDuplicateEntry, fmt.Sprintf("extraction target already exists: %s (%s)", normalized, existing.Mode().String()), nil)
+		} else if !os.IsNotExist(statErr) {
+			return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("failed to inspect extraction target: %s", normalized), statErr)
 		}
 
 		rc, openErr := f.Open()
@@ -313,12 +326,70 @@ func (r *ArchiveReader) ExtractArchive(path, destDir string) error {
 	return nil
 }
 
+func prepareExtractionRoot(destDir string) (string, error) {
+	absRoot, err := filepath.Abs(filepath.Clean(destDir))
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(absRoot)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return "", fmt.Errorf("destination root must be a real directory")
+	}
+	return absRoot, nil
+}
+
+func ensureExtractionDirectory(root, relPath string) error {
+	normalized, err := NormalizePackagePath(relPath)
+	if err != nil {
+		return err
+	}
+	current := root
+	for _, segment := range strings.Split(normalized, "/") {
+		current = filepath.Join(current, filepath.FromSlash(segment))
+		info, statErr := os.Lstat(current)
+		switch {
+		case statErr == nil:
+			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				return fmt.Errorf("package directory component is not a real directory: %s", segment)
+			}
+		case os.IsNotExist(statErr):
+			if mkErr := os.Mkdir(current, 0o700); mkErr != nil && !os.IsExist(mkErr) {
+				return mkErr
+			}
+			created, inspectErr := os.Lstat(current)
+			if inspectErr != nil {
+				return inspectErr
+			}
+			if created.Mode()&os.ModeSymlink != 0 || !created.IsDir() {
+				return fmt.Errorf("created package directory is unsafe: %s", segment)
+			}
+		default:
+			return statErr
+		}
+	}
+	return nil
+}
+
+func packagePathDir(packagePath string) string {
+	idx := strings.LastIndex(packagePath, "/")
+	if idx < 0 {
+		return ""
+	}
+	return packagePath[:idx]
+}
+
 func readManifestFromArchive(zr *zip.Reader) ([]byte, error) {
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() {
 			continue
 		}
-		normalized := filepath.ToSlash(filepath.Clean(f.Name))
+		normalized, normErr := NormalizePackagePath(f.Name)
+		if normErr != nil {
+			continue
+		}
 		if normalized == archiveManifestName {
 			rc, err := f.Open()
 			if err != nil {

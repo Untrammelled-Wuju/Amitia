@@ -5,10 +5,8 @@ package processing
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"sort"
+	"strings"
 	"time"
 )
 
@@ -21,141 +19,283 @@ func NewCleanupManager(dataDir string) *CleanupManager {
 }
 
 func (c *CleanupManager) CleanupTempDir(taskID string) error {
-	if taskID == "" {
-		return fmt.Errorf("taskID is empty")
+	target, root, err := c.safeOwnedPath(taskID, "processed", ".tmp")
+	if err != nil {
+		return err
 	}
-	tmpDir := c.tempDir(taskID)
-	return removeDirWithRetry(tmpDir, 5)
+	return removeOwnedDirWithRetry(root, target, 5)
 }
 
+// CleanupProcessingVersion intentionally removes only the mutable .tmp tree.
+// Committed version-N history is immutable and must never be deleted by this
+// compatibility API.
 func (c *CleanupManager) CleanupProcessingVersion(taskID string, processingVersion int) error {
-	if taskID == "" {
-		return fmt.Errorf("taskID is empty")
-	}
 	if processingVersion <= 0 {
 		return fmt.Errorf("processingVersion must be positive")
 	}
+	return c.CleanupTempDir(taskID)
+}
 
-	tmpDir := c.tempDir(taskID)
-	return removeDirWithRetry(tmpDir, 5)
+func (c *CleanupManager) CleanupActionResources(taskID string, processingVersion int, actionKey string) error {
+	if processingVersion <= 0 {
+		return fmt.Errorf("processingVersion must be positive")
+	}
+	if err := validateStorageComponent("actionKey", actionKey); err != nil {
+		return err
+	}
+	target, root, err := c.safeOwnedPath(taskID, "processed", fmt.Sprintf("version-%d", processingVersion), "actions", actionKey)
+	if err != nil {
+		return err
+	}
+	return removeOwnedDirWithRetry(root, target, 5)
 }
 
 func (c *CleanupManager) CleanupFailedPackage(taskID, packageID string) error {
-	if taskID == "" {
-		return fmt.Errorf("taskID is empty")
+	if err := validateStorageComponent("packageID", packageID); err != nil {
+		return err
 	}
-	if packageID == "" {
-		return fmt.Errorf("packageID is empty")
+	target, root, err := c.safeOwnedPath(taskID, "packages", packageID)
+	if err != nil {
+		return err
 	}
-	pkgDir := c.packageDir(taskID, packageID)
-	return removeDirWithRetry(pkgDir, 5)
+	return removeOwnedDirWithRetry(root, target, 5)
 }
 
 func (c *CleanupManager) EnsureVersionDir(taskID string, processingVersion int) (string, error) {
-	if taskID == "" {
-		return "", fmt.Errorf("taskID is empty")
-	}
 	if processingVersion <= 0 {
 		return "", fmt.Errorf("processingVersion must be positive")
 	}
-	dir := c.versionDir(taskID, processingVersion)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	target, root, err := c.safeOwnedPath(taskID, "processed", fmt.Sprintf("version-%d", processingVersion))
+	if err != nil {
+		return "", err
+	}
+	if err := mkdirOwnedPath(root, target, 0o755); err != nil {
 		return "", fmt.Errorf("create version dir failed: %w", err)
 	}
-	return dir, nil
+	return target, nil
 }
 
 func (c *CleanupManager) EnsureActionsDir(taskID string, processingVersion int, actionKey string) (string, error) {
-	if taskID == "" {
-		return "", fmt.Errorf("taskID is empty")
-	}
 	if processingVersion <= 0 {
 		return "", fmt.Errorf("processingVersion must be positive")
 	}
-	if actionKey == "" {
-		return "", fmt.Errorf("actionKey is empty")
+	if err := validateStorageComponent("actionKey", actionKey); err != nil {
+		return "", err
 	}
-	dir := c.actionsDir(taskID, processingVersion, actionKey)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	target, root, err := c.safeOwnedPath(taskID, "processed", fmt.Sprintf("version-%d", processingVersion), "actions", actionKey)
+	if err != nil {
+		return "", err
+	}
+	if err := mkdirOwnedPath(root, target, 0o755); err != nil {
 		return "", fmt.Errorf("create actions dir failed: %w", err)
 	}
-	return dir, nil
+	return target, nil
 }
 
-func (c *CleanupManager) processedDir(taskID string) string {
-	return filepath.Join(c.dataDir, "desktop-pets", "generation-tasks", taskID, "processed")
-}
-
-func (c *CleanupManager) tempDir(taskID string) string {
-	return filepath.Join(c.processedDir(taskID), ".tmp")
-}
-
-func (c *CleanupManager) versionDir(taskID string, processingVersion int) string {
-	return filepath.Join(c.processedDir(taskID), fmt.Sprintf("version-%d", processingVersion))
-}
-
-func (c *CleanupManager) actionsDir(taskID string, processingVersion int, actionKey string) string {
-	return filepath.Join(c.versionDir(taskID, processingVersion), "actions", actionKey)
-}
-
-func (c *CleanupManager) packageDir(taskID, packageID string) string {
-	return filepath.Join(c.dataDir, "desktop-pets", "generation-tasks", taskID, "packages", packageID)
-}
-
-func removeDirWithRetry(dir string, maxAttempts int) error {
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return nil
+func (c *CleanupManager) safeOwnedPath(taskID string, components ...string) (string, string, error) {
+	if err := validateStorageComponent("taskID", taskID); err != nil {
+		return "", "", err
 	}
-	var lastErr error
-	for i := 0; i < maxAttempts; i++ {
-		if err := removeTree(dir); err != nil {
-			lastErr = err
-			time.Sleep(200 * time.Millisecond)
-			continue
+	for index, component := range components {
+		if err := validateStorageComponent(fmt.Sprintf("path component %d", index), component); err != nil {
+			return "", "", err
 		}
-		time.Sleep(100 * time.Millisecond)
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			return nil
-		}
-		if runtime.GOOS == "windows" {
-			if err := powershellRemoveDir(dir); err == nil {
-				time.Sleep(100 * time.Millisecond)
-				if _, err := os.Stat(dir); os.IsNotExist(err) {
-					return nil
-				}
-			}
-		}
-		lastErr = fmt.Errorf("directory still exists after removal: %s", dir)
-		time.Sleep(200 * time.Millisecond)
 	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("failed to remove directory after %d attempts: %s", maxAttempts, dir)
+	root, err := filepath.Abs(filepath.Join(c.dataDir, "desktop-pets", "generation-tasks"))
+	if err != nil {
+		return "", "", fmt.Errorf("resolve generation root: %w", err)
 	}
-	return lastErr
+	parts := append([]string{root, taskID}, components...)
+	target, err := filepath.Abs(filepath.Join(parts...))
+	if err != nil {
+		return "", "", fmt.Errorf("resolve cleanup target: %w", err)
+	}
+	if err := ensureStrictDescendant(root, target); err != nil {
+		return "", "", err
+	}
+	return target, root, nil
 }
 
-func removeTree(dir string) error {
-	var paths []string
-	walkErr := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		paths = append(paths, p)
-		return nil
-	})
-	if walkErr != nil {
-		return walkErr
+func validateStorageComponent(name, value string) error {
+	if value == "" {
+		return fmt.Errorf("%s is empty", name)
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(paths)))
-	for _, p := range paths {
-		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			return err
+	if value == "." || value == ".." || filepath.IsAbs(value) || strings.ContainsAny(value, `/\\\x00`) {
+		return fmt.Errorf("%s is unsafe: %q", name, value)
+	}
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("%s contains control character", name)
 		}
 	}
 	return nil
 }
 
-func powershellRemoveDir(dir string) error {
-	cmd := exec.Command("pwsh", "-NoProfile", "-Command", fmt.Sprintf("Remove-Item -LiteralPath '%s' -Recurse -Force", dir))
-	return cmd.Run()
+func ensureStrictDescendant(root, target string) error {
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return fmt.Errorf("resolve owned path: %w", err)
+	}
+	if rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path escapes generation root: %s", target)
+	}
+	return nil
+}
+
+func mkdirOwnedPath(root, target string, mode os.FileMode) error {
+	if err := ensureStrictDescendant(root, target); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+	if rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
+		return fmt.Errorf("generation root is not a real directory")
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return err
+	}
+	current := root
+	for _, component := range strings.Split(rel, string(filepath.Separator)) {
+		current = filepath.Join(current, component)
+		info, statErr := os.Lstat(current)
+		switch {
+		case statErr == nil:
+			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				return fmt.Errorf("unsafe directory component: %s", current)
+			}
+		case os.IsNotExist(statErr):
+			if mkErr := os.Mkdir(current, mode); mkErr != nil && !os.IsExist(mkErr) {
+				return mkErr
+			}
+			created, inspectErr := os.Lstat(current)
+			if inspectErr != nil {
+				return inspectErr
+			}
+			if created.Mode()&os.ModeSymlink != 0 || !created.IsDir() {
+				return fmt.Errorf("created unsafe directory component: %s", current)
+			}
+		default:
+			return statErr
+		}
+	}
+	return nil
+}
+
+func removeOwnedDirWithRetry(root, target string, maxAttempts int) error {
+	if err := ensureStrictDescendant(root, target); err != nil {
+		return err
+	}
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if err := ensureNoSymlinkComponents(root, target); err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if err := removeTreeNoSymlinks(target); err != nil {
+			lastErr = err
+		} else if _, err := os.Lstat(target); os.IsNotExist(err) {
+			return nil
+		} else if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf("directory still exists after removal: %s", target)
+		}
+		if attempt+1 < maxAttempts {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("failed to remove directory: %s", target)
+	}
+	return lastErr
+}
+
+func ensureNoSymlinkComponents(root, target string) error {
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+	if rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
+		return fmt.Errorf("generation root is not a real directory")
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return err
+	}
+	current := root
+	for _, component := range strings.Split(rel, string(filepath.Separator)) {
+		current = filepath.Join(current, component)
+		info, statErr := os.Lstat(current)
+		if statErr != nil {
+			return statErr
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("symlink is not allowed in cleanup path: %s", current)
+		}
+	}
+	return nil
+}
+
+func removeTreeNoSymlinks(target string) error {
+	info, err := os.Lstat(target)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to remove symlink cleanup root: %s", target)
+	}
+	if !info.IsDir() {
+		_ = os.Chmod(target, info.Mode()|0o200)
+		return os.Remove(target)
+	}
+
+	entries, err := os.ReadDir(target)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		child := filepath.Join(target, entry.Name())
+		childInfo, statErr := os.Lstat(child)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				continue
+			}
+			return statErr
+		}
+		if childInfo.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(child); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			continue
+		}
+		if childInfo.IsDir() {
+			if err := removeTreeNoSymlinks(child); err != nil {
+				return err
+			}
+			continue
+		}
+		_ = os.Chmod(child, childInfo.Mode()|0o200)
+		if err := os.Remove(child); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	_ = os.Chmod(target, info.Mode()|0o700)
+	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }

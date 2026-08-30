@@ -23,6 +23,16 @@ func (s *manifestStore) Create(ctx context.Context, record *source.ProcessingSou
 	return s.db.WithContext(ctx).Create(record).Error
 }
 
+func (s *manifestStore) CreateInTx(ctx context.Context, tx *gorm.DB, record *source.ProcessingSourceManifestRecord) error {
+	if tx == nil {
+		return errors.New("manifest store: transaction is nil")
+	}
+	if record == nil {
+		return errors.New("manifest store: record is nil")
+	}
+	return tx.WithContext(ctx).Create(record).Error
+}
+
 func (s *manifestStore) GetByProcessingAction(ctx context.Context, processingActionID string) (*source.ProcessingSourceManifestRecord, error) {
 	var record source.ProcessingSourceManifestRecord
 	err := s.db.WithContext(ctx).
