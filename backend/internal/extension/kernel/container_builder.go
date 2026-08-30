@@ -784,7 +784,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	var sessionStore *deviceruntime.SQLiteSessionStore
 	var sessionService *deviceruntime.Service
-	if b.runtimeProfile == runtimeprofile.ProfileLocal || b.runtimeProfile == runtimeprofile.ProfileCloudCore {
+	if b.runtimeProfile == runtimeprofile.ProfileLocal || b.runtimeProfile == runtimeprofile.ProfileCloudCore || b.runtimeProfile == runtimeprofile.ProfileDeviceAgent {
 		sessionStore = deviceruntime.NewSQLiteSessionStore(db)
 		if err := sessionStore.EnsureSchema(ctx); err != nil {
 			return nil, fmt.Errorf("kernel: ensure session store schema: %w", err)
