@@ -337,6 +337,38 @@ func (h *Handler) CreateModel(c *gin.Context) {
 	if v, ok := raw["name"]; ok {
 		cfg.Name, _ = v.(string)
 	}
+	if v, ok := raw["protocol"]; ok {
+		cfg.Protocol, _ = v.(string)
+	}
+	if v, ok := raw["temperature"].(float64); ok {
+		cfg.Temperature = v
+	}
+	if v, ok := raw["maxTokens"].(float64); ok {
+		cfg.MaxTokens = int(v)
+	}
+	if v, ok := raw["contextWindow"].(float64); ok {
+		cfg.ContextWindow = int(v)
+	}
+	if v, ok := raw["maxOutputTokens"].(float64); ok {
+		cfg.MaxOutputTokens = int(v)
+	}
+	if v, ok := raw["topP"].(float64); ok {
+		cfg.TopP = v
+	}
+	if v, ok := raw["timeoutSeconds"].(float64); ok {
+		cfg.TimeoutSeconds = int(v)
+	}
+	if v, ok := raw["retryCount"].(float64); ok {
+		cfg.RetryCount = int(v)
+	}
+	if v, ok := raw["providerConfig"].(string); ok {
+		cfg.ProviderConfigJSON = v
+	} else if v, ok := raw["providerConfigJSON"].(string); ok {
+		cfg.ProviderConfigJSON = v
+	}
+	if v, ok := raw["capabilitiesJson"].(string); ok {
+		cfg.CapabilitiesJSON = v
+	}
 	if v, ok := raw["isActive"]; ok {
 		switch val := v.(type) {
 		case bool:
