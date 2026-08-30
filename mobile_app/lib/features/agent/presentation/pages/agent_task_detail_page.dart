@@ -46,7 +46,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
       appBar: AmitiaAppBar(
         title: '任务详情',
         showBackButton: true,
-        fallbackRoute: AppRoutes.agent,
+        fallbackRoute: AppRoutes.chat,
       ),
       body: taskAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

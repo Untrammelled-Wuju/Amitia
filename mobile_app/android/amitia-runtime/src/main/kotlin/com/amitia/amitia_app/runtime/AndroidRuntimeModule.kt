@@ -177,9 +177,7 @@ object AndroidRuntimeModule {
             binaryLocator = binaryLocator,
             artifactVerifier = artifactVerifier,
             commandBuilder = DefaultProotCommandBuilder(),
-            processLauncher = DefaultProotProcessLauncher(
-                nativeBackendPath = File(context.applicationInfo.nativeLibraryDir, "libamitia_server.so").absolutePath,
-            ),
+            processLauncher = DefaultProotProcessLauncher(),
             abiGate = abiGate,
         )
     }

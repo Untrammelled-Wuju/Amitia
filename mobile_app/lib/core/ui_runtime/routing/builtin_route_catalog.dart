@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/app_routes.dart';
 import '../../../app/route_transitions.dart';
 import '../../../features/chat/presentation/pages/chat_page.dart';
 import '../../../features/conversations/presentation/pages/conversation_list_page.dart';
-import '../../../features/agent/presentation/pages/agent_page.dart';
 import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_list_page.dart';
 import '../../../features/characters/presentation/pages/character_detail_page.dart';
@@ -77,7 +77,12 @@ import '../../../features/settings/presentation/pages/theme_settings_page.dart';
 import '../../../features/settings/presentation/pages/storage_page.dart';
 import '../../../features/settings/presentation/pages/user_settings_page.dart';
 import '../../../features/settings/presentation/pages/devices_page.dart';
+import '../../../features/settings/presentation/pages/device_add_page.dart';
+import '../../../features/settings/presentation/pages/device_settings_page.dart';
 import '../../../features/settings/presentation/pages/privacy_scan_page.dart';
+import '../../../features/settings/presentation/pages/privacy_policy_page.dart';
+import '../../../features/settings/presentation/pages/user_agreement_page.dart';
+import '../../../features/settings/presentation/pages/app_update_page.dart';
 import '../../../features/settings/presentation/pages/about_page_new.dart';
 import '../../../features/toolbox/presentation/pages/toolbox_page.dart';
 import '../../../features/toolbox/presentation/pages/toolbox_file_browser_page.dart';
@@ -153,8 +158,7 @@ GoRoute(
 ),
 GoRoute(
   path: '/agent',
-  pageBuilder: (context, state) =>
-      drawerSlideFadePage(state: state, child: const AgentPage()),
+  redirect: (context, state) => AppRoutes.chat,
 ),
 GoRoute(
   path: '/agent/task/:id',
@@ -709,11 +713,51 @@ GoRoute(
       drawerSlideFadePage(state: state, child: const DevicesPage()),
 ),
 GoRoute(
+  path: '/settings/devices/add',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const DeviceAddPage(),
+  ),
+),
+GoRoute(
+  path: '/settings/devices/settings',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const DeviceSettingsPage(),
+  ),
+),
+GoRoute(
   path: '/settings/privacy-scan',
   pageBuilder: (context, state) => slideFadePage(
     context: context,
     state: state,
     child: const PrivacyScanPage(),
+  ),
+),
+GoRoute(
+  path: '/settings/privacy-policy',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const PrivacyPolicyPage(),
+  ),
+),
+GoRoute(
+  path: '/settings/user-agreement',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const UserAgreementPage(),
+  ),
+),
+GoRoute(
+  path: '/settings/app-update',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const AppUpdatePage(),
   ),
 ),
 GoRoute(

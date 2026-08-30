@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/ui_runtime/ui_provider.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 
@@ -105,10 +108,10 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
     final ctx = snapshot?.context;
 
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('界面提供者'),
-        leading: BackButton(onPressed: () => Navigator.of(context).maybePop()),
+    return AmitiaScaffold(
+      appBar: const AmitiaAppBar(
+        title: '界面提供者',
+        navigation: AmitiaAppBarNavigation.back,
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -116,9 +119,9 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
           await _loadScope();
         },
         child: ListView(
-          padding: EdgeInsets.all(24),
+          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.md, AppSpacing.pagePadding, AppSpacing.xl),
           children: [
-            Text('UI Profile 按云端默认 → 用户 → 平台/设备 → 运行时分层合并；本页只修改当前 override 层。', style: TextStyle(color: scheme.onSurfaceVariant)),
+            Text('UI Profile 按云端默认 → 用户 → 平台/设备 → 运行时分层合并；本页只修改当前 override 层。', style: AppTypography.caption(context)),
             SizedBox(height: 12),
             if (usingLkg) ...[
               Card(child: Padding(padding: EdgeInsets.all(12), child: const Text('云端当前不可用，正在使用 Last-Known-Good UI 配置；连接恢复后会自动同步。'))),

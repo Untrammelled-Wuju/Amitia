@@ -23,8 +23,8 @@ class ModelConfigDto {
     return ModelConfigDto(
       id: (json['id'] ?? '').toString(),
       name: json['name'] as String? ?? '',
-      provider: json['provider'] as String? ?? '',
-      model: json['model'] as String? ?? '',
+      provider: (json['apiType'] ?? json['provider'] ?? '').toString(),
+      model: (json['modelName'] ?? json['model'] ?? '').toString(),
       baseUrl: json['baseUrl'] as String? ?? '',
       isActive: json['isActive'] as int? ?? 0,
       maxTokens: json['maxTokens'] as int? ?? 4096,
@@ -36,8 +36,8 @@ class ModelConfigDto {
     return {
       'id': id,
       'name': name,
-      'provider': provider,
-      'model': model,
+      'apiType': provider,
+      'modelName': model,
       'baseUrl': baseUrl,
       'isActive': isActive,
       'maxTokens': maxTokens,

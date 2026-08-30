@@ -91,6 +91,25 @@ final workspaceServiceProvider = Provider<WorkspaceService>((ref) => WorkspaceSe
 
 final deviceMeshServiceProvider = Provider<DeviceMeshService>((ref) => DeviceMeshService(_getDynamicServiceApi(ref)));
 
+final deviceMeshLocalServiceProvider = Provider<DeviceMeshLocalService?>((ref) {
+  final api = ref.watch(rawDeviceLocalBackendServiceApiProvider);
+  return api == null ? null : DeviceMeshLocalService(api);
+});
+
+final deviceMeshDevicesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(deviceMeshServiceProvider).devices();
+});
+
+final localDeviceMeshIdentityProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+  final service = ref.watch(deviceMeshLocalServiceProvider);
+  return service == null ? null : service.identity();
+});
+
+final localDeviceMeshStatusProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+  final service = ref.watch(deviceMeshLocalServiceProvider);
+  return service == null ? null : service.status();
+});
+
 final privacyServiceProvider = Provider<PrivacyService>((ref) => PrivacyService(_getDynamicServiceApi(ref)));
 
 final moodServiceProvider = Provider<MoodService>((ref) => MoodService(_getDynamicServiceApi(ref)));

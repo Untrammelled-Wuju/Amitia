@@ -14,8 +14,8 @@ class ModelSettingsPage extends ConsumerWidget {
   static const _types = <(IconData, String, String, String)>[
     (Icons.chat_outlined, '文本模型', '对话与文本生成', 'text'),
     (Icons.visibility_outlined, '视觉模型', '图像理解与描述', 'vision'),
-    (Icons.record_voice_over_outlined, '语音模型', '语音合成与识别', 'voice'),
-    (Icons.scatter_plot_outlined, '向量模型', '文本向量化与检索', 'vector'),
+    (Icons.record_voice_over_outlined, '语音合成模型', 'TTS 与实时语音使用的语音合成配置', 'voice'),
+    (Icons.scatter_plot_outlined, '向量模型', 'Embedding 与记忆检索', 'vector'),
     (Icons.image_outlined, '图像生成模型', '文生图与图像编辑', 'image'),
   ];
 
