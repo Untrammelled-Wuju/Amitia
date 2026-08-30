@@ -7,6 +7,7 @@ const (
 	MessageTypeHelloAck       MessageType = "hello_ack"
 	MessageTypeCommand        MessageType = "command"
 	MessageTypeCommandAck     MessageType = "command_ack"
+	MessageTypeEventAck       MessageType = "event_ack"
 	MessageTypeRuntimeInvoke  MessageType = "runtime.invoke"
 	MessageTypeRuntimeResult  MessageType = "runtime.result"
 	MessageTypeRuntimeError   MessageType = "runtime.error"
@@ -34,7 +35,7 @@ func (t MessageType) String() string {
 func (t MessageType) IsValid() bool {
 	switch t {
 	case MessageTypeHello, MessageTypeHelloAck, MessageTypeCommand,
-		MessageTypeCommandAck, MessageTypeRuntimeInvoke, MessageTypeRuntimeResult, MessageTypeRuntimeError,
+		MessageTypeCommandAck, MessageTypeEventAck, MessageTypeRuntimeInvoke, MessageTypeRuntimeResult, MessageTypeRuntimeError,
 		MessageTypeRuntimeCancel,
 		MessageTypeRuntimeEvent, MessageTypeStateSnapshot,
 		MessageTypeError, MessageTypePing, MessageTypePong,
