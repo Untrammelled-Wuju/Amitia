@@ -89,7 +89,7 @@ func (s *service) Create(req *CreateTtsConfigRequest) (*TtsConfig, error) {
 }
 
 func (s *service) Update(id int, updates map[string]interface{}) (*TtsConfig, error) {
-	if err := s.repo.Update(id, updates); err != nil {
+	if err := s.repo.Update(id, normalizeConfigUpdates(updates)); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
 	cfg, _ := s.repo.GetByID(id)
@@ -164,4 +164,45 @@ func (s *service) SynthesizeForCharacter(charID string, text string) (*Synthesiz
 
 func (s *service) ListProviders() []ProviderInfo {
 	return s.repo.ListProviders()
+}
+
+func normalizeConfigUpdates(updates map[string]interface{}) map[string]interface{} {
+	if len(updates) == 0 {
+		return updates
+	}
+	aliases := map[string]string{
+		"apiType":             "api_type",
+		"baseUrl":             "base_url",
+		"apiKey":              "api_key",
+		"modelName":           "model_name",
+		"isActive":            "is_active",
+		"maxTokens":           "max_tokens",
+		"contextWindow":       "context_window",
+		"maxOutputTokens":     "max_output_tokens",
+		"topP":                "top_p",
+		"timeoutSeconds":      "timeout_seconds",
+		"retryCount":          "retry_count",
+		"providerConfig":      "provider_config_json",
+		"providerConfigJSON":  "provider_config_json",
+		"capabilitiesJson":    "capabilities_json",
+		"lastTestStatus":      "last_test_status",
+		"lastTestMessage":     "last_test_message",
+		"lastTestAt":          "last_test_at",
+		"resourceId":          "resource_id",
+		"voiceType":           "voice_type",
+		"customVoiceId":       "custom_voice_id",
+		"cloneResourceId":     "clone_resource_id",
+		"realtimeAppId":       "realtime_app_id",
+		"realtimeAccessToken": "realtime_access_token",
+		"realtimeSecretKey":   "realtime_secret_key",
+	}
+	normalized := make(map[string]interface{}, len(updates))
+	for key, value := range updates {
+		if column, ok := aliases[key]; ok {
+			normalized[column] = value
+		} else {
+			normalized[key] = value
+		}
+	}
+	return normalized
 }
