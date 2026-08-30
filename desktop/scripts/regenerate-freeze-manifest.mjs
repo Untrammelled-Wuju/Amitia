@@ -37,8 +37,19 @@ const FREEZE_SCOPE = [
 const EXCLUDED_NAMES = new Set([
   "node_modules",
   "dist",
-  "build",
   "__pycache__",
+]);
+
+const EXCLUDED_TOP_LEVEL_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  ".git",
+  ".pub-cache",
+  ".dart_tool",
+  ".gradle",
+  ".kotlin",
+  ".cxx",
 ]);
 
 function sha256File(filePath) {

@@ -46,15 +46,28 @@ function main() {
     rmSync(releaseDir, { recursive: true, force: true });
   }
 
+  const targetPlatform = process.env.ELECTRON_BUILDER_TARGET || "win";
+  const targetArch = process.env.ELECTRON_BUILDER_ARCH || "x64";
+
+  const platformFlag = targetPlatform === "win" ? "--win" : targetPlatform === "linux" ? "--linux" : "--mac";
+  const archFlag = targetArch === "arm64" ? "--arm64" : "--x64";
+
   const builderArgs = [
     cliPath,
-    "--win",
-    "--x64",
+    platformFlag,
+    archFlag,
     "--publish",
     "never",
     ...process.argv.slice(2),
   ];
-  console.log("[build-release] building Windows package...");
+  console.log(`[build-release] building ${targetPlatform}-${targetArch} package...`);
+
+  const buildAmitiaCorePath = resolve(__dirname, "build-amitiacore.mjs");
+  const verifyPackagedCorePath = resolve(__dirname, "verify-packaged-core.mjs");
+
+  console.log("[build-release] building AmitiaCore from current source...");
+  run(process.execPath, [buildAmitiaCorePath]);
+
   run(process.execPath, builderArgs, {
     env: {
       ...process.env,
@@ -62,9 +75,13 @@ function main() {
     },
   });
 
-  const unpacked = resolve(releaseDir, "win-unpacked");
+  const unpackedBase = targetPlatform === "win" ? "win-unpacked" : targetPlatform === "linux" ? "linux-unpacked" : "mac-unpacked";
+  const unpacked = resolve(releaseDir, unpackedBase);
   console.log("[build-release] verifying packaged desktop pet...");
   run(process.execPath, [verifyPackagedPath, unpacked]);
+
+  console.log("[build-release] verifying packaged Core SHA...");
+  run(process.execPath, [verifyPackagedCorePath, unpacked]);
 
   const stamp = writeReleaseGateStamp();
   console.log(

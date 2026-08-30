@@ -16,27 +16,37 @@ export const releaseDir = resolve(desktopRoot, "release");
 export const releaseGateStampPath = resolve(releaseDir, ".desktop-pet-release-gate.json");
 
 const SOURCE_INPUTS = [
-  "desktop/package.json",
-  "desktop/vite.config.ts",
+  "backend",
   "desktop/src",
   "desktop/scripts",
-  "backend/internal/desktoppet",
-  "backend/internal/deviceruntime",
-  "backend/internal/runtimeprofile",
-  "backend/internal/migration",
-  "backend/cmd/server",
-  "front/src/runtime",
-  "front/src/composables",
-  "front/src/components",
-  "scripts/audit/verify-desktop-pet-runtime-singletrack.mjs",
-  "scripts/audit/verify-source-hygiene.mjs",
-  "scripts/pack-source.ps1",
-  ".github/workflows/desktop-pet.yml",
+  "desktop/package.json",
+  "desktop/pnpm-lock.yaml",
+  "desktop/pnpm-workspace.yaml",
+  "desktop/electron-builder.yml",
+  "desktop/patches",
+  "desktop/resources/config-template",
+  "front/src",
+  "front/package.json",
+  "front/pnpm-lock.yaml",
+  "mobile_app/lib",
+  "mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider",
+  "mobile_app/pubspec.yaml",
+  "scripts",
+  ".github/workflows",
+  ".tool-versions",
   "DESKTOP_PET_FINALIZATION_SHA256SUMS.txt",
 ];
 
 const EXCLUDED_SOURCE_NAMES = new Set([
   ".publish-config.json",
+  "node_modules",
+  "dist",
+  "build",
+  "dist-types",
+  ".dart_tool",
+  ".gradle",
+  "__pycache__",
+  ".cache",
 ]);
 
 export function sha256Buffer(buffer) {
