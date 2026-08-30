@@ -91,18 +91,18 @@ class AboutPageNew extends ConsumerWidget {
           padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: Column(children: [
             AmitiaButton(
-              label: '进入更新中心',
+              label: '检查更新',
               icon: Icons.system_update,
               isFullWidth: true,
-              onPressed: () => context.push('/developer/kernel/updates'),
+              onPressed: () => context.push(AppRoutes.settingsAppUpdate),
             ),
             SizedBox(height: AppSpacing.sm),
             AmitiaButton(
-              label: '隐私说明',
+              label: '隐私政策',
               icon: Icons.privacy_tip_outlined,
               isSecondary: true,
               isFullWidth: true,
-              onPressed: () => context.push(AppRoutes.privacy),
+              onPressed: () => context.push(AppRoutes.settingsPrivacyPolicy),
             ),
             if (sourceUrl.isNotEmpty) ...[
               SizedBox(height: AppSpacing.sm),

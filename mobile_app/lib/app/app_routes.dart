@@ -54,8 +54,13 @@ abstract final class AppRoutes {
   static const settingsTheme = '/settings/theme';
   static const settingsUser = '/settings/user';
   static const settingsDevices = '/settings/devices';
+  static const settingsDeviceAdd = '/settings/devices/add';
+  static const settingsDeviceSettings = '/settings/devices/settings';
   static const settingsPrivacyScan = '/settings/privacy-scan';
   static const settingsDeployment = '/settings/deployment';
+  static const settingsPrivacyPolicy = '/settings/privacy-policy';
+  static const settingsUserAgreement = '/settings/user-agreement';
+  static const settingsAppUpdate = '/settings/app-update';
   static const settingsAbout = '/settings/about';
   static const settingsToolbox = '/settings/toolbox';
   static const toolboxFileBrowser = '/settings/toolbox/file-browser';

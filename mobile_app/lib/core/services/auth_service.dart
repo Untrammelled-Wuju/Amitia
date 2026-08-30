@@ -53,8 +53,9 @@ class AuthService {
   Future<UserInfo?> get currentUser async {
     final userId = await _sessionStore.getUserId();
     final username = await _sessionStore.getUsername();
+    final role = await _sessionStore.getRole();
     if (userId == null || username == null) return null;
-    return UserInfo(id: userId, username: username, role: 'user');
+    return UserInfo(id: userId, username: username, role: role ?? 'user');
   }
 
   Future<void> saveSession({
@@ -157,6 +158,52 @@ class AuthService {
       userId: user.id,
       username: user.username,
       role: user.role,
+    );
+  }
+
+  Future<bool> hasAdmin() async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/public/auth/status');
+    return resp?['hasAdmin'] == true;
+  }
+
+  Future<AuthResult> setupAndLogin(
+    String username,
+    String password, {
+    String? setupToken,
+  }) async {
+    final token = setupToken?.trim() ?? '';
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/public/auth/setup',
+      data: {'username': username, 'password': password},
+      headers: token.isEmpty ? null : {'X-Amitia-Setup-Token': token},
+    );
+    if (resp == null) {
+      throw ServiceApiException(code: 10000, message: '初始化响应为空');
+    }
+    final userRaw = resp['user'];
+    final userMap = userRaw is Map ? Map<String, dynamic>.from(userRaw) : resp;
+    final user = UserInfo.fromJson(userMap);
+    final accessToken = (resp['accessToken'] ?? resp['token'] ?? '').toString();
+    if (accessToken.isEmpty) {
+      throw ServiceApiException(code: 10000, message: '初始化未返回访问令牌');
+    }
+    final sessionRaw = resp['session'];
+    final session = sessionRaw is Map ? Map<String, dynamic>.from(sessionRaw) : const <String, dynamic>{};
+    await saveSession(
+      accessToken: accessToken,
+      refreshToken: resp['refreshToken']?.toString(),
+      sessionId: session['sessionId']?.toString() ?? resp['sessionId']?.toString(),
+      accessTokenExpiresAt: resp['accessTokenExpiresAt']?.toString(),
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+    );
+    return AuthResult(
+      accessToken: accessToken,
+      refreshToken: resp['refreshToken']?.toString(),
+      sessionId: session['sessionId']?.toString() ?? resp['sessionId']?.toString(),
+      accessTokenExpiresAt: resp['accessTokenExpiresAt']?.toString(),
+      user: user,
     );
   }
 

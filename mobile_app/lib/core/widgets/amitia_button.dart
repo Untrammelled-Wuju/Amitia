@@ -36,7 +36,7 @@ class AmitiaButton extends StatelessWidget {
     double number(String key, double fallback) =>
         variant[key] is num ? (variant[key] as num).toDouble() : fallback;
     final effectiveHeight = number('height', number('minHeight', height));
-    final radius = number('radius', AppRadius.medium);
+    final radius = number('radius', 14);
     final iconSize = number('iconSize', 18);
     final gap = number('gap', 8);
     final fontSize = number('fontSize', context.uiTypography.buttonSize);
@@ -130,8 +130,12 @@ class AmitiaIconButton extends StatelessWidget {
           width: buttonSize,
           height: buttonSize,
           decoration: BoxDecoration(
-            color: backgroundColor ?? Colors.transparent,
-            borderRadius: BorderRadius.circular(number('radius', buttonSize / 2)),
+            color: backgroundColor ?? context.surfacePrimary,
+            borderRadius: BorderRadius.circular(number('radius', 13)),
+            border: Border.all(
+              color: context.borderPrimary,
+              width: number('borderWidth', .8),
+            ),
           ),
           child: Icon(
             icon,
@@ -178,7 +182,7 @@ class AmitiaTextField extends StatelessWidget {
     final variant = context.uiComponentVariant('input');
     double number(String key, double fallback) =>
         variant[key] is num ? (variant[key] as num).toDouble() : fallback;
-    final radius = number('radius', AppRadius.medium);
+    final radius = number('radius', 14);
     final normalBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(radius),
       borderSide: BorderSide.none,

@@ -130,6 +130,22 @@ class _RuntimeCursor {
 
 }
 
+class _PendingOutboundEnvelope {
+  final int sequence;
+  final String messageType;
+  final String messageName;
+  final Object? payload;
+  final bool replayAcrossReconnect;
+
+  const _PendingOutboundEnvelope({
+    required this.sequence,
+    required this.messageType,
+    required this.messageName,
+    required this.payload,
+    required this.replayAcrossReconnect,
+  });
+}
+
 class _PendingPosition {
   final String installationId;
   final int x;
@@ -219,6 +235,7 @@ class DesktopPetMobileRuntimeNotifier
   Timer? _watchdogTimer;
   Timer? _snapshotTimer;
   Timer? _interactionTimer;
+  Timer? _helloAckTimer;
   bool _disposed = false;
   bool _connecting = false;
   int _attachEpoch = 0;
@@ -230,7 +247,9 @@ class DesktopPetMobileRuntimeNotifier
   String _sessionId = '';
   int _connectionGeneration = 0;
   int _outboundSequence = 0;
+  final Map<int, _PendingOutboundEnvelope> _pendingOutbound = <int, _PendingOutboundEnvelope>{};
   int _lastServerSequence = 0;
+  int _reconnectAttempts = 0;
   int _heartbeatIntervalMs = 15000;
   int _heartbeatTimeoutMs = 30000;
   int _maxMessageBytes = 1048576;
@@ -457,6 +476,7 @@ class DesktopPetMobileRuntimeNotifier
         onDone: () => unawaited(_onSocketClosed(epoch, 'socket_closed')),
         cancelOnError: false,
       );
+      _armHelloAckTimeout(epoch, socket);
       await _sendHello();
     } catch (error) {
       if (epoch == _attachEpoch && !_disposed) {
@@ -493,6 +513,9 @@ class DesktopPetMobileRuntimeNotifier
           break;
         case 'command':
           await _handleCommand(envelope);
+          break;
+        case 'event_ack':
+          await _handleEventAck(envelope);
           break;
         case 'pong':
         case 'state_snapshot':
@@ -560,11 +583,39 @@ class DesktopPetMobileRuntimeNotifier
     if (sessionId.isEmpty || envelope['runtimeSessionId']?.toString() != sessionId) {
       throw const FormatException('runtime hello session mismatch');
     }
+
+    _helloAckTimer?.cancel();
+    _helloAckTimer = null;
     _sessionId = sessionId;
     _connectionGeneration = _positiveInt(envelope['connectionGeneration']);
     _heartbeatIntervalMs = _positiveInt(payload['heartbeatIntervalMs'], 15000);
     _heartbeatTimeoutMs = _positiveInt(payload['heartbeatTimeoutMs'], 30000);
     _maxMessageBytes = _positiveInt(payload['maxMessageBytes'], 1048576);
+
+    final fullResume = payload['resumeMode']?.toString() == 'full';
+    final serverApplied = payload['serverLastAppliedDesiredRevision'] is num
+        ? _nonNegativeInt(payload['serverLastAppliedDesiredRevision'])
+        : (fullResume ? 0 : _cursor.lastAppliedDesiredRevision);
+    final serverProcessed = payload['serverLastProcessedCommandSequence'] is num
+        ? _nonNegativeInt(payload['serverLastProcessedCommandSequence'])
+        : (fullResume ? 0 : _cursor.lastProcessedCommandSequence);
+    final serverCommittedEvents = payload['lastCommittedClientEventSequence'] is num
+        ? _nonNegativeInt(payload['lastCommittedClientEventSequence'])
+        : (fullResume ? 0 : _cursor.lastEventSequence);
+    _cursor.lastAppliedDesiredRevision = serverApplied;
+    _cursor.lastProcessedCommandSequence = serverProcessed;
+    _cursor.lastEventSequence = serverCommittedEvents;
+    _outboundSequence = max(_outboundSequence, serverCommittedEvents);
+    if (fullResume) {
+      _cursor.actualStateHash = '';
+      _cursor.appliedDesiredHash = '';
+      _cursor.appliedSettingsRevision = 0;
+      _durableReplay.clear();
+    }
+    await _persistCursor();
+
+    _reconnectAttempts = 0;
+    await _replayUncommittedOutbound(serverCommittedEvents);
     state = state.copyWith(
       connected: true,
       phase: 'ready',
@@ -572,8 +623,33 @@ class DesktopPetMobileRuntimeNotifier
       updatedAt: DateTime.now(),
     );
     _startHeartbeat();
-    await refreshStatus();
-    await _sendStateSnapshot();
+
+    // A local renderer/status API failure after a valid hello_ack is not a
+    // Runtime-v2 protocol violation. Keep the healthy socket and report the
+    // local degradation so the periodic snapshot/recovery path can retry.
+    try {
+      await refreshStatus();
+      await _sendStateSnapshot();
+    } catch (error) {
+      state = state.copyWith(
+        error: 'post-handshake local sync failed: $error',
+        updatedAt: DateTime.now(),
+      );
+    }
+  }
+
+  Future<void> _handleEventAck(Map<String, dynamic> envelope) async {
+    final payload = _map(envelope['payload']);
+    final committed = _nonNegativeInt(payload['lastCommittedClientEventSequence']);
+    if (committed < _cursor.lastEventSequence) {
+      throw const FormatException('runtime committed event cursor regressed');
+    }
+    if (committed > _outboundSequence) {
+      throw const FormatException('runtime committed event cursor exceeds sent sequence');
+    }
+    _cursor.lastEventSequence = committed;
+    _pendingOutbound.removeWhere((sequence, _) => sequence <= committed);
+    await _persistCursor();
   }
 
   Future<void> _handleCommand(Map<String, dynamic> envelope) async {
@@ -1602,6 +1678,7 @@ class DesktopPetMobileRuntimeNotifier
     String messageName,
     Object? payload, {
     bool allowHandshake = false,
+    int? sequenceOverride,
   }) async {
     final socket = _socket;
     if (socket == null || socket.readyState != WebSocket.open) {
@@ -1610,7 +1687,11 @@ class DesktopPetMobileRuntimeNotifier
     if (!allowHandshake && (_sessionId.isEmpty || !state.connected)) {
       throw StateError('runtime session is not ready');
     }
-    _outboundSequence += 1;
+    final sequence = sequenceOverride ?? (_outboundSequence + 1);
+    if (sequence <= _cursor.lastEventSequence) {
+      throw StateError('runtime outbound sequence $sequence is already committed');
+    }
+    _outboundSequence = max(_outboundSequence, sequence);
     final envelope = <String, dynamic>{
       'envelopeVersion': 2,
       'protocol': _runtimeProtocol,
@@ -1622,7 +1703,7 @@ class DesktopPetMobileRuntimeNotifier
       'runtimeId': _runtimeId,
       'runtimeSessionId': _sessionId,
       'connectionGeneration': max(1, _connectionGeneration),
-      'sequence': _outboundSequence,
+      'sequence': sequence,
       'payloadSchemaVersion': 1,
       'payloadHash': _payloadHash(payload),
       'sentAt': DateTime.now().toUtc().toIso8601String(),
@@ -1632,10 +1713,46 @@ class DesktopPetMobileRuntimeNotifier
     if (utf8.encode(serialized).length > _maxMessageBytes) {
       throw StateError('runtime envelope exceeds maxMessageBytes');
     }
+    if (messageType == 'command_ack' || messageType == 'runtime_event') {
+      _pendingOutbound[sequence] = _PendingOutboundEnvelope(
+        sequence: sequence,
+        messageType: messageType,
+        messageName: messageName,
+        payload: payload,
+        // Ephemeral command/playback lifecycle is fenced on reconnect. Only
+        // durable desired-state terminal facts are safe and required to replay
+        // across a websocket generation boundary.
+        replayAcrossReconnect: messageType == 'runtime_event' &&
+            (messageName == 'runtime.state.desired_applied' ||
+                messageName == 'runtime.state.desired_rejected'),
+      );
+    }
     socket.add(serialized);
-    if (messageType == 'runtime_event' || messageType == 'command_ack') {
-      _cursor.lastEventSequence = _outboundSequence;
-      await _persistCursor();
+    // lastEventSequence is server-committed and advances only on event_ack.
+  }
+
+  Future<void> _replayUncommittedOutbound(int serverCommittedSequence) async {
+    final pending = _pendingOutbound.values.toList(growable: false)
+      ..sort((a, b) => a.sequence.compareTo(b.sequence));
+    for (final entry in pending) {
+      if (entry.sequence <= serverCommittedSequence) {
+        _pendingOutbound.remove(entry.sequence);
+        continue;
+      }
+      if (!entry.replayAcrossReconnect) {
+        _pendingOutbound.remove(entry.sequence);
+        continue;
+      }
+      // Replay the exact uncommitted sequence and keep it pending until the
+      // server confirms persistence with event_ack. If this socket dies during
+      // replay the same fact remains available to the next connection.
+      await _sendEnvelope(
+        entry.messageType,
+        entry.messageName,
+        entry.payload,
+        allowHandshake: true,
+        sequenceOverride: entry.sequence,
+      );
     }
   }
 
@@ -1845,7 +1962,14 @@ class DesktopPetMobileRuntimeNotifier
       await _sendEnvelope('ping', 'ping', <String, dynamic>{
         't': DateTime.now().millisecondsSinceEpoch,
       });
-    } catch (_) {}
+    } catch (error) {
+      if (!_disposed && state.connected) {
+        state = state.copyWith(
+          error: 'heartbeat send failed: $error',
+          updatedAt: DateTime.now(),
+        );
+      }
+    }
   }
 
   Future<Map<String, dynamic>> _loadInstallationDetail(String installationId) async {
@@ -1937,6 +2061,20 @@ class DesktopPetMobileRuntimeNotifier
   }
 
 
+  void _armHelloAckTimeout(int epoch, WebSocket socket) {
+    _helloAckTimer?.cancel();
+    _helloAckTimer = Timer(const Duration(seconds: 10), () {
+      if (_disposed || epoch != _attachEpoch || _socket != socket || state.connected) return;
+      state = state.copyWith(
+        connected: false,
+        phase: 'degraded',
+        error: 'runtime hello_ack timeout',
+        updatedAt: DateTime.now(),
+      );
+      unawaited(socket.close(4000, 'hello_ack_timeout'));
+    });
+  }
+
   Future<void> _onSocketClosed(int epoch, String reason) async {
     if (_disposed || epoch != _attachEpoch) return;
     _clearSocketOnly();
@@ -1960,7 +2098,12 @@ class DesktopPetMobileRuntimeNotifier
   void _scheduleReconnect(int epoch) {
     if (_disposed || epoch != _attachEpoch || _config == null) return;
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 3), () {
+    _reconnectAttempts += 1;
+    final exponent = min(_reconnectAttempts - 1, 5);
+    final baseMs = min(30000, 1000 * (1 << exponent));
+    final jitter = 0.8 + _random.nextDouble() * 0.4;
+    final delayMs = max(250, (baseMs * jitter).round());
+    _reconnectTimer = Timer(Duration(milliseconds: delayMs), () {
       if (!_disposed && epoch == _attachEpoch && _config != null) {
         unawaited(_connect(epoch));
       }
@@ -1968,7 +2111,10 @@ class DesktopPetMobileRuntimeNotifier
   }
 
   void _disconnect(String reason) {
+    _reconnectAttempts = 0;
     _reconnectTimer?.cancel();
+    _helloAckTimer?.cancel();
+    _helloAckTimer = null;
     _heartbeatTimer?.cancel();
     _watchdogTimer?.cancel();
     _snapshotTimer?.cancel();
@@ -2006,6 +2152,8 @@ class DesktopPetMobileRuntimeNotifier
   }
 
   void _clearSocketOnly() {
+    _helloAckTimer?.cancel();
+    _helloAckTimer = null;
     _socketSubscription?.cancel();
     _socketSubscription = null;
     final socket = _socket;
