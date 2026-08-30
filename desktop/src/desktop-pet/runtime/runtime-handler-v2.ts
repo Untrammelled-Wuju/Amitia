@@ -2,6 +2,7 @@ import type {
   RuntimeEnvelope,
   HelloAckPayload,
   CommandAckPayload,
+  EventAckPayload,
   PlaybackEventPayload,
   StateSnapshotPayload,
   CommandStatus,
@@ -63,6 +64,14 @@ export interface RuntimeCommandReplayEntry {
   errorMessage?: string;
 }
 
+export interface RuntimePendingOutboundEntry {
+  sequence: number;
+  messageType: "command_ack" | "runtime_event";
+  messageName: string;
+  payload: unknown;
+  replayAcrossReconnect: boolean;
+}
+
 export interface RuntimeHandlerConfig {
   url: string;
   bootstrapTicket: string;
@@ -81,6 +90,7 @@ export interface RuntimeHandlerConfig {
   reconnectMaxDelayMs?: number;
   resumeCursor?: Partial<RuntimeResumeCursor>;
   replayEntries?: readonly RuntimeCommandReplayEntry[];
+  pendingOutboundEntries?: readonly RuntimePendingOutboundEntry[];
 }
 
 export interface RuntimeHandlerHooks {
@@ -189,7 +199,7 @@ function sanitizeCursor(value: number | undefined): number {
 }
 
 export class DesktopRuntimeHandlerV2 {
-  private readonly config: Required<Omit<RuntimeHandlerConfig, "resumeCursor" | "replayEntries">>;
+  private readonly config: Required<Omit<RuntimeHandlerConfig, "resumeCursor" | "replayEntries" | "pendingOutboundEntries">>;
   private readonly hooks: RuntimeHandlerHooks;
 
   private ws: WebSocket | null = null;
@@ -205,10 +215,12 @@ export class DesktopRuntimeHandlerV2 {
   private readonly trackedCommandSequences = new Map<string, number>();
   private readonly commandReplayCache = new Map<string, CachedCommandExecution>();
   private readonly inFlightCommands = new Map<string, Promise<void>>();
+  private readonly pendingOutbound = new Map<number, RuntimePendingOutboundEntry>();
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private idleHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private connectTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private lastServerTime = "";
   private lastServerMessageAt = 0;
   private pendingConnectResolve: (() => void) | null = null;
@@ -271,6 +283,24 @@ export class DesktopRuntimeHandlerV2 {
           errorMessage: entry.errorMessage ?? "",
           appliedRevision: desiredRevision,
         },
+      });
+    }
+    for (const entry of config.pendingOutboundEntries ?? []) {
+      const sequence = sanitizeCursor(entry?.sequence);
+      if (
+        sequence <= this.lastEventSequence ||
+        (entry?.messageType !== "command_ack" && entry?.messageType !== "runtime_event") ||
+        typeof entry?.messageName !== "string" ||
+        entry.messageName.trim() === ""
+      ) {
+        continue;
+      }
+      this.pendingOutbound.set(sequence, {
+        sequence,
+        messageType: entry.messageType,
+        messageName: entry.messageName,
+        payload: entry.payload,
+        replayAcrossReconnect: entry.replayAcrossReconnect === true,
       });
     }
     this.hooks = hooks;
@@ -339,6 +369,13 @@ export class DesktopRuntimeHandlerV2 {
     return entries.slice(-MAX_COMMAND_REPLAY_CACHE);
   }
 
+  getPendingOutboundEntries(): RuntimePendingOutboundEntry[] {
+    return Array.from(this.pendingOutbound.values())
+      .filter((entry) => entry.replayAcrossReconnect)
+      .sort((a, b) => a.sequence - b.sequence)
+      .map((entry) => ({ ...entry }));
+  }
+
   getConnectionGeneration(): number {
     return this.connectionGeneration;
   }
@@ -360,15 +397,17 @@ export class DesktopRuntimeHandlerV2 {
         );
         this.ws = ws;
 
-        const timeoutId = setTimeout(() => {
-          if (this.state !== "handshaking") return;
-          const err = new Error("runtime connect timeout");
+        this.clearConnectTimeout();
+        this.connectTimeoutTimer = setTimeout(() => {
+          if (this.state !== "handshaking" || this.ws !== ws) return;
+          const err = new Error("runtime hello_ack timeout");
           this.rejectPendingConnect(err);
-          ws.close(4000, "connect_timeout");
+          try { ws.close(4000, "hello_ack_timeout"); } catch { void 0; }
         }, this.config.connectTimeoutMs);
 
         ws.onopen = () => {
-          clearTimeout(timeoutId);
+          // TCP/WebSocket open is not protocol readiness. Keep the handshake
+          // deadline armed until a validated hello_ack resolves connect().
           this.sendHello().catch((err) => {
             this.rejectPendingConnect(err instanceof Error ? err : new Error(String(err)));
             ws.close(4001, "hello_send_failed");
@@ -386,14 +425,12 @@ export class DesktopRuntimeHandlerV2 {
         };
 
         ws.onerror = () => {
-          clearTimeout(timeoutId);
           if (this.state === "handshaking") {
             this.rejectPendingConnect(new Error("runtime socket error"));
           }
         };
 
         ws.onclose = (event) => {
-          clearTimeout(timeoutId);
           if (this.state === "handshaking") {
             this.rejectPendingConnect(new Error(`runtime socket closed during handshake: ${event.code} ${event.reason}`));
           }
@@ -410,6 +447,7 @@ export class DesktopRuntimeHandlerV2 {
   }
 
   private resolvePendingConnect(): void {
+    this.clearConnectTimeout();
     const resolve = this.pendingConnectResolve;
     this.pendingConnectResolve = null;
     this.pendingConnectReject = null;
@@ -417,10 +455,18 @@ export class DesktopRuntimeHandlerV2 {
   }
 
   private rejectPendingConnect(err: Error): void {
+    this.clearConnectTimeout();
     const reject = this.pendingConnectReject;
     this.pendingConnectResolve = null;
     this.pendingConnectReject = null;
     reject?.(err);
+  }
+
+  private clearConnectTimeout(): void {
+    if (this.connectTimeoutTimer !== null) {
+      clearTimeout(this.connectTimeoutTimer);
+      this.connectTimeoutTimer = null;
+    }
   }
 
   disconnect(): void {
@@ -663,6 +709,7 @@ export class DesktopRuntimeHandlerV2 {
     name: string,
     payload: unknown,
     allowHandshake = false,
+    sequenceOverride?: number,
   ): Promise<void> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -671,7 +718,13 @@ export class DesktopRuntimeHandlerV2 {
     if (!allowHandshake && this.state !== "connected") {
       throw new Error("runtime session not ready");
     }
-    this.outboundSequence += 1;
+    const sequence = sequenceOverride === undefined
+      ? this.outboundSequence + 1
+      : sanitizeCursor(sequenceOverride);
+    if (sequence <= this.lastEventSequence) {
+      throw new Error(`runtime outbound sequence ${sequence} is already committed`);
+    }
+    this.outboundSequence = Math.max(this.outboundSequence, sequence);
     const envelope = buildEnvelope(
       type,
       name,
@@ -680,7 +733,7 @@ export class DesktopRuntimeHandlerV2 {
       this.config.runtimeId,
       this.sessionId,
       Math.max(1, this.connectionGeneration),
-      this.outboundSequence,
+      sequence,
       payload,
     );
     const serialized = JSON.stringify(envelope);
@@ -690,10 +743,22 @@ export class DesktopRuntimeHandlerV2 {
         `runtime envelope exceeds maxMessageBytes: ${messageBytes} > ${this.config.maxMessageBytes}`,
       );
     }
-    ws.send(serialized);
-    if (type === "runtime_event" || type === "command_ack") {
-      this.lastEventSequence = this.outboundSequence;
+    if (type === "command_ack" || type === "runtime_event") {
+      this.pendingOutbound.set(sequence, {
+        sequence,
+        messageType: type,
+        messageName: name,
+        payload,
+        // Ephemeral playback/command ACKs are fenced by the backend when a
+        // websocket generation is replaced. Desired-state terminal events are
+        // durable client facts and must survive ACK loss across reconnect.
+        replayAcrossReconnect: type === "runtime_event" &&
+          (name === "runtime.state.desired_applied" || name === "runtime.state.desired_rejected"),
+      });
     }
+    ws.send(serialized);
+    // lastEventSequence is the server-committed cursor. It advances only on
+    // event_ack, never merely because WebSocket.send accepted a frame locally.
   }
 
   async sendRuntimeEvent(name: string, payload: unknown): Promise<void> {
@@ -725,6 +790,9 @@ export class DesktopRuntimeHandlerV2 {
         break;
       case "command_ack":
         await this.handleCommandAck(envelope.payload as CommandAckPayload);
+        break;
+      case "event_ack":
+        this.handleEventAck(envelope.payload as EventAckPayload);
         break;
       case "state_snapshot":
         this.handleStateSnapshot(envelope.payload as StateSnapshotPayload);
@@ -779,6 +847,20 @@ export class DesktopRuntimeHandlerV2 {
     }
   }
 
+  private handleEventAck(ack: EventAckPayload): void {
+    const committed = sanitizeCursor(ack?.lastCommittedClientEventSequence);
+    if (committed < this.lastEventSequence) {
+      throw new Error("runtime committed event cursor regressed");
+    }
+    if (committed > this.outboundSequence) {
+      throw new Error("runtime committed event cursor exceeds locally sent sequence");
+    }
+    this.lastEventSequence = committed;
+    for (const sequence of Array.from(this.pendingOutbound.keys())) {
+      if (sequence <= committed) this.pendingOutbound.delete(sequence);
+    }
+  }
+
   private async handleHelloAck(ack: HelloAckPayload): Promise<void> {
     if (!ack.accepted) {
       const err = new Error(`hello rejected: ${ack.errorCode} ${ack.errorMessage}`);
@@ -790,6 +872,32 @@ export class DesktopRuntimeHandlerV2 {
 
     this.sessionId = ack.sessionId ?? "";
     this.lastServerTime = ack.serverTime ?? "";
+
+    const fullResume = ack.resumeMode === "full";
+    const serverApplied = Number.isFinite(ack.serverLastAppliedDesiredRevision)
+      ? sanitizeCursor(ack.serverLastAppliedDesiredRevision)
+      : fullResume ? 0 : this.lastAppliedDesiredRevision;
+    const serverProcessed = Number.isFinite(ack.serverLastProcessedCommandSequence)
+      ? sanitizeCursor(ack.serverLastProcessedCommandSequence)
+      : fullResume ? 0 : this.lastProcessedCommandSequence;
+    const serverCommittedEvents = Number.isFinite(ack.lastCommittedClientEventSequence)
+      ? sanitizeCursor(ack.lastCommittedClientEventSequence)
+      : fullResume ? 0 : this.lastEventSequence;
+    if (serverCommittedEvents > this.outboundSequence) {
+      this.outboundSequence = serverCommittedEvents;
+    }
+    // The hello acknowledgement is the authoritative persisted resume point.
+    // This is especially important for resumeMode=full after a client cursor
+    // was ahead of what the server actually committed.
+    this.lastAppliedDesiredRevision = serverApplied;
+    this.lastProcessedCommandSequence = serverProcessed;
+    this.lastEventSequence = serverCommittedEvents;
+    if (fullResume) {
+      this.actualStateHash = "";
+      this.commandReplayCache.clear();
+      this.trackedCommandSequences.clear();
+      this.pendingCommands.clear();
+    }
     if (typeof ack.heartbeatIntervalMs === "number" && Number.isFinite(ack.heartbeatIntervalMs) && ack.heartbeatIntervalMs > 0) {
       this.config.heartbeatIntervalMs = Math.floor(ack.heartbeatIntervalMs);
     }
@@ -802,11 +910,35 @@ export class DesktopRuntimeHandlerV2 {
     }
     this.lastServerMessageAt = Date.now();
     this.reconnectAttempts = 0;
+    // Keep connect() in handshaking until ACK-loss durable facts have been
+    // replayed. If replay fails, onclose can still reject the pending connect
+    // instead of leaving a Promise stranded in a false connected state.
+    await this.replayUncommittedOutbound(serverCommittedEvents);
     this.setState("connected");
     this.startHeartbeat();
     this.resolvePendingConnect();
 
     this.hooks.onHelloAck(ack);
+  }
+
+  private async replayUncommittedOutbound(serverCommittedSequence: number): Promise<void> {
+    const pending = Array.from(this.pendingOutbound.values())
+      .sort((a, b) => a.sequence - b.sequence);
+    for (const entry of pending) {
+      // hello_ack is authoritative. A missing per-event ACK does not mean the
+      // event was uncommitted if the server cursor has already crossed it.
+      if (entry.sequence <= serverCommittedSequence) {
+        this.pendingOutbound.delete(entry.sequence);
+        continue;
+      }
+      if (!entry.replayAcrossReconnect) {
+        this.pendingOutbound.delete(entry.sequence);
+        continue;
+      }
+      // Replay the exact uncommitted sequence. Keeping the same pending entry
+      // until event_ack makes a replay-side transport failure lossless too.
+      await this.sendEnvelope(entry.messageType, entry.messageName, entry.payload, true, entry.sequence);
+    }
   }
 
   private async handleCommand(envelope: RuntimeEnvelope): Promise<void> {
@@ -1262,10 +1394,11 @@ export class DesktopRuntimeHandlerV2 {
     this.setState("reconnecting");
     this.reconnectAttempts += 1;
 
-    const delay = Math.min(
+    const exponential = Math.min(
       this.config.reconnectBaseDelayMs * Math.pow(2, this.reconnectAttempts - 1),
       this.config.reconnectMaxDelayMs,
     );
+    const delay = Math.max(250, Math.floor(exponential * (0.8 + Math.random() * 0.4)));
 
     await new Promise<void>((resolve) => {
       this.reconnectTimer = setTimeout(() => {
@@ -1356,15 +1489,25 @@ export class DesktopRuntimeHandlerV2 {
   }
 
   private cleanupSocket(): void {
-    if (this.ws) {
-      this.ws.onopen = null;
-      this.ws.onclose = null;
-      this.ws.onerror = null;
-      this.ws.onmessage = null;
-      if (this.ws.readyState === WebSocket.OPEN) {
-        this.ws.close(1000, "cleanup");
-      }
-      this.ws = null;
+    this.clearConnectTimeout();
+    const ws = this.ws;
+    if (!ws) return;
+    this.ws = null;
+    ws.onmessage = null;
+    ws.onerror = null;
+    ws.onclose = null;
+    if (ws.readyState === WebSocket.CONNECTING) {
+      // Some implementations reject close() while CONNECTING. Fence the old
+      // socket and close it immediately if it eventually opens.
+      ws.onopen = () => {
+        try { ws.close(1000, "cleanup"); } catch { void 0; }
+      };
+      try { ws.close(1000, "cleanup"); } catch { void 0; }
+      return;
+    }
+    ws.onopen = null;
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CLOSING) {
+      try { ws.close(1000, "cleanup"); } catch { void 0; }
     }
   }
 }

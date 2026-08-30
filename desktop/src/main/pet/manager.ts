@@ -56,6 +56,7 @@ import {
   type RuntimeHandlerHooks,
   type RuntimeResumeCursor,
   type RuntimeCommandReplayEntry,
+  type RuntimePendingOutboundEntry,
 } from "../../desktop-pet/runtime/runtime-handler-v2";
 import type {
   RuntimeEnvelope,
@@ -114,7 +115,8 @@ const RECOVERY_REASON_POWER_RESUME = "power-resume";
 const RECOVERY_REASON_DISPLAY_CHANGED = "display-changed";
 
 const RUNTIME_BRIDGE_WS_PATH = "/internal/desktop-pet/runtime/ws";
-const BRIDGE_RECONNECT_DELAY_MS = 2000;
+const BRIDGE_RECONNECT_BASE_DELAY_MS = 1000;
+const BRIDGE_RECONNECT_MAX_DELAY_MS = 30000;
 
 
 export type PetManagerState =
@@ -262,7 +264,7 @@ interface RuntimeSettingsApiPayload {
   installationId: string;
   settingsRevision: number;
   alwaysOnTop: number;
-  restoreOnAppStart?: number;
+  restoreOnAppStart: number;
   scale: number;
   positionX: number;
   positionY: number;
@@ -371,23 +373,40 @@ function mapInstallationPayload(payload: InstallationApiPayload): InstallationIn
   };
 }
 
+function requireRuntimeSettingsFlag(value: unknown, field: string): boolean {
+  if (value !== 0 && value !== 1) {
+    throw new Error(`RUNTIME_SETTINGS_INVALID: ${field} must be 0 or 1`);
+  }
+  return value === 1;
+}
+
 function mapRuntimeSettingsPayload(payload: RuntimeSettingsApiPayload): RuntimeSettingsInfo {
+  if (!payload.installationId?.trim()) {
+    throw new Error("RUNTIME_SETTINGS_INVALID: installationId missing");
+  }
+  if (!Number.isInteger(payload.settingsRevision) || payload.settingsRevision < 0) {
+    throw new Error("RUNTIME_SETTINGS_INVALID: settingsRevision must be a non-negative integer");
+  }
+  if (!Number.isFinite(payload.scale)) {
+    throw new Error("RUNTIME_SETTINGS_INVALID: scale must be finite");
+  }
   return {
     installationId: payload.installationId,
-    settingsRevision: payload.settingsRevision ?? 0,
-    alwaysOnTop: payload.alwaysOnTop !== 0,
-    restoreOnAppStart: payload.restoreOnAppStart == null
-      ? true
-      : payload.restoreOnAppStart !== 0,
+    settingsRevision: payload.settingsRevision,
+    alwaysOnTop: requireRuntimeSettingsFlag(payload.alwaysOnTop, "alwaysOnTop"),
+    restoreOnAppStart: requireRuntimeSettingsFlag(
+      payload.restoreOnAppStart,
+      "restoreOnAppStart",
+    ),
     scale: payload.scale,
     positionX: payload.positionX,
     positionY: payload.positionY,
     screenId: payload.screenId,
-    idleEnabled: payload.idleEnabled !== 0,
+    idleEnabled: requireRuntimeSettingsFlag(payload.idleEnabled, "idleEnabled"),
     idleIntervalMinSeconds: payload.idleIntervalMinSeconds,
     idleIntervalMaxSeconds: payload.idleIntervalMaxSeconds,
     clickThroughMode: normalizeClickThroughMode(payload.clickThroughMode),
-    soundEnabled: payload.soundEnabled !== 0,
+    soundEnabled: requireRuntimeSettingsFlag(payload.soundEnabled, "soundEnabled"),
     positionMode: normalizePositionMode(payload.positionMode),
     displayFingerprint: payload.displayFingerprint ?? "",
     relativeX: Number.isFinite(payload.relativeX) ? Number(payload.relativeX) : 0,
@@ -433,6 +452,7 @@ export class DesktopPetManager {
 
   private runtimeHandler: DesktopRuntimeHandlerV2 | null = null;
   private bridgeReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private bridgeReconnectAttempts = 0;
   private bridgeStarted = false;
   private bridgeConnecting = false;
   private currentActionKey: string | null = null;
@@ -458,6 +478,7 @@ export class DesktopPetManager {
     lastEventSequence: 0,
   };
   private runtimeCommandReplayEntries: RuntimeCommandReplayEntry[] = [];
+  private runtimePendingOutboundEntries: RuntimePendingOutboundEntry[] = [];
   private runtimeStateSync: Promise<void> = Promise.resolve();
   private lifecycleMutationQueue: Promise<void> = Promise.resolve();
   private petInstances: PetInstanceSummary[] = [];
@@ -1426,7 +1447,14 @@ export class DesktopPetManager {
     if (!installationId) return null;
     const path = `${API_BASE_PATH}/installations/${encodeURIComponent(installationId)}/settings`;
     const payload = await this.request<RuntimeSettingsApiPayload>("GET", path);
-    return payload ? mapRuntimeSettingsPayload(payload) : null;
+    if (!payload) return null;
+    const settings = mapRuntimeSettingsPayload(payload);
+    if (settings.installationId !== installationId) {
+      throw new Error(
+        `RUNTIME_SETTINGS_ID_MISMATCH: requested=${installationId} returned=${settings.installationId}`,
+      );
+    }
+    return settings;
   }
 
   private async ensureInitializedWithinMutation(
@@ -2670,16 +2698,15 @@ export class DesktopPetManager {
 
   private async fetchRuntimeSettings(
     installationId: string,
-  ): Promise<RuntimeSettingsInfo | null> {
-    try {
-      return await this.getRuntimeSettings(installationId);
-    } catch (err) {
-      console.warn(
-        "[DesktopPetManager] 查询运行时设置失败, 使用默认设置:",
-        this.errorMessage(err),
-      );
-      return null;
+  ): Promise<RuntimeSettingsInfo> {
+    // Runtime settings are authoritative user intent. A transport/database
+    // failure must not silently substitute defaults such as restore-on-start,
+    // always-on-top or click-through. Let the caller fail closed/retry.
+    const settings = await this.getRuntimeSettings(installationId);
+    if (!settings) {
+      throw new Error(`RUNTIME_SETTINGS_NOT_FOUND: ${installationId}`);
     }
+    return settings;
   }
 
   private async callEnableApi(installationId: string): Promise<void> {
@@ -3428,6 +3455,7 @@ export class DesktopPetManager {
 
   private stopBridge(): void {
     this.bridgeStarted = false;
+    this.bridgeReconnectAttempts = 0;
     if (this.bridgeReconnectTimer) {
       clearTimeout(this.bridgeReconnectTimer);
       this.bridgeReconnectTimer = null;
@@ -3492,6 +3520,7 @@ export class DesktopPetManager {
         maxReconnectAttempts: 0,
         resumeCursor,
         replayEntries: this.runtimeCommandReplayEntries,
+        pendingOutboundEntries: this.runtimePendingOutboundEntries,
       };
 
       const hooks = this.buildRuntimeHooks();
@@ -3526,10 +3555,16 @@ export class DesktopPetManager {
     if (this.bridgeReconnectTimer) {
       clearTimeout(this.bridgeReconnectTimer);
     }
+    this.bridgeReconnectAttempts += 1;
+    const exponential = Math.min(
+      BRIDGE_RECONNECT_BASE_DELAY_MS * Math.pow(2, Math.max(0, this.bridgeReconnectAttempts - 1)),
+      BRIDGE_RECONNECT_MAX_DELAY_MS,
+    );
+    const jitteredDelay = Math.max(250, Math.floor(exponential * (0.8 + Math.random() * 0.4)));
     this.bridgeReconnectTimer = setTimeout(() => {
       this.bridgeReconnectTimer = null;
       void this.connectBridge();
-    }, BRIDGE_RECONNECT_DELAY_MS);
+    }, jitteredDelay);
     if (typeof this.bridgeReconnectTimer.unref === "function") {
       this.bridgeReconnectTimer.unref();
     }
@@ -3568,6 +3603,22 @@ export class DesktopPetManager {
           ? Math.max(0, Math.floor(ack.currentDesiredRevision))
           : 0;
         this.lastServerDesiredRevision = serverDesiredRevision;
+        this.bridgeReconnectAttempts = 0;
+        if (ack.resumeMode === "full") {
+          // Server persistence is authoritative after a cursor-ahead/full-resume
+          // decision. Drop local bookkeeping that could otherwise make a stale
+          // revision/replay entry suppress the server's reconciliation command.
+          this.lastAppliedDesiredRevision = Math.max(0, Math.floor(ack.serverLastAppliedDesiredRevision ?? 0));
+          this.lastAppliedDesiredHash = "";
+          this.lastAppliedSettingsRevision = 0;
+          this.runtimeResumeCursor = {
+            lastAppliedDesiredRevision: this.lastAppliedDesiredRevision,
+            lastProcessedCommandSequence: Math.max(0, Math.floor(ack.serverLastProcessedCommandSequence ?? 0)),
+            lastEventSequence: Math.max(0, Math.floor(ack.lastCommittedClientEventSequence ?? 0)),
+          };
+          this.runtimeCommandReplayEntries = [];
+          this.activeSettings = null;
+        }
         // A new Runtime-v2 session never inherits an ephemeral playback attempt.
         // Stop any locally in-flight Runtime command so Backend and Renderer share
         // the same reconnect boundary.
@@ -4083,17 +4134,15 @@ export class DesktopPetManager {
         cursor.lastAppliedDesiredRevision,
         this.lastAppliedDesiredRevision,
       ),
-      lastProcessedCommandSequence: Math.max(
-        cursor.lastProcessedCommandSequence,
-        this.runtimeResumeCursor.lastProcessedCommandSequence,
-      ),
-      lastEventSequence: Math.max(
-        cursor.lastEventSequence,
-        this.runtimeResumeCursor.lastEventSequence,
-      ),
-      actualStateHash: cursor.actualStateHash ?? this.runtimeResumeCursor.actualStateHash,
+      // These two values are transport/server-persistence cursors. Never merge
+      // them with an older local maximum: full resume is allowed to move the
+      // client back to the server's last committed point.
+      lastProcessedCommandSequence: cursor.lastProcessedCommandSequence,
+      lastEventSequence: cursor.lastEventSequence,
+      actualStateHash: cursor.actualStateHash,
     };
     this.runtimeCommandReplayEntries = handler.getReplayEntries();
+    this.runtimePendingOutboundEntries = handler.getPendingOutboundEntries();
   }
 
   private buildRuntimeStateSnapshot(

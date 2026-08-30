@@ -172,7 +172,7 @@ describe("playerReducer", () => {
         snapshot: makePackageSnapshot(),
         generation: 1,
       });
-      expect(next.phase).toBe("loading_default");
+      expect(next.phase).toBe("recovering");
       expect(next.packageId).toBe("test-pkg");
       expect(next.packageRevision).toBe(1);
       expect(next.defaultActionKey).toBe("idle");
@@ -442,9 +442,21 @@ describe("playerReducer", () => {
       expect(next.frameIndex).toBe(2);
       expect(next.cycleIndex).toBe(1);
       expect(next.localElapsedMs).toBe(500);
-      expect(next.presentedFrames).toBe(1);
-      expect(next.lastPresentedFrameIndex).toBe(2);
+      expect(next.presentedFrames).toBe(0);
+      expect(next.lastPresentedFrameIndex).toBeNull();
       expect(next.stateVersion).toBe(playing.stateVersion + 1);
+    });
+
+    it("advances presentation counters only after FRAME_PRESENTED", () => {
+      const playing = buildPlayingState();
+      const ticked = playerReducer(playing, {
+        type: "TICK",
+        now: 1000,
+        position: { frameIndex: 2, cycleIndex: 1, localMs: 500, completed: false },
+      });
+      const presented = playerReducer(ticked, { type: "FRAME_PRESENTED", frameIndex: 2 });
+      expect(presented.presentedFrames).toBe(1);
+      expect(presented.lastPresentedFrameIndex).toBe(2);
     });
 
     it("is ignored from non-playing state", () => {
@@ -605,6 +617,7 @@ describe("playerReducer", () => {
       const playing = buildPlayingState();
       const next = playerReducer(playing, { type: "WINDOW_HIDDEN", now: 3000 });
       expect(next.pauseStartMonotonicMs).toBe(3000);
+      expect(next.windowHidden).toBe(true);
       expect(next.phase).toBe("playing");
       expect(next.stateVersion).toBe(playing.stateVersion + 1);
     });
@@ -623,8 +636,30 @@ describe("playerReducer", () => {
       state = playerReducer(state, { type: "WINDOW_SHOWN", now: 5000 });
       expect(state.pauseStartMonotonicMs).toBeNull();
       expect(state.pausedDurationMs).toBe(2000);
+      expect(state.windowHidden).toBe(false);
       expect(state.phase).toBe("playing");
       expect(state.lastTransitionAtMonotonicMs).toBe(5000);
+    });
+
+    it("does not auto-resume a manually paused action after hide/show", () => {
+      let state = playerReducer(buildPlayingState(), { type: "PAUSE", now: 2000 });
+      state = playerReducer(state, { type: "WINDOW_HIDDEN", now: 3000 });
+      state = playerReducer(state, { type: "WINDOW_SHOWN", now: 5000 });
+      expect(state.phase).toBe("paused");
+      expect(state.windowHidden).toBe(false);
+      expect(state.pauseStartMonotonicMs).toBe(2000);
+    });
+  });
+
+  describe("SUSPENDED / RESUMED_SYSTEM", () => {
+    it("preserves manual pause across system suspend/resume", () => {
+      let state = playerReducer(buildPlayingState(), { type: "PAUSE", now: 2000 });
+      state = playerReducer(state, { type: "SUSPENDED", now: 2500 });
+      expect(state.systemSuspended).toBe(true);
+      state = playerReducer(state, { type: "RESUMED_SYSTEM", now: 4500 });
+      expect(state.systemSuspended).toBe(false);
+      expect(state.phase).toBe("paused");
+      expect(state.pauseStartMonotonicMs).toBe(2000);
     });
   });
 
@@ -676,7 +711,7 @@ describe("playerReducer", () => {
   });
 
   describe("RECOVER", () => {
-    it("transitions to loading_default with recovery snapshot", () => {
+    it("transitions to recovering with recovery snapshot", () => {
       const playing = buildPlayingState();
       const recovery: PlaybackRecoverySnapshot = {
         packageId: "test-pkg",

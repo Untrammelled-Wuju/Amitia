@@ -81,6 +81,60 @@ function settings(overrides: Partial<RuntimeSettingsInfo> = {}): RuntimeSettings
 }
 
 describe("DesktopPetManager runtime settings", () => {
+
+  it("fails closed when authoritative settings flags are missing or malformed", async () => {
+    const manager = makeManager();
+    const internal = manager as never as {
+      request: ReturnType<typeof vi.fn>;
+    };
+    internal.request = vi.fn(async () => ({
+      installationId: "install-1",
+      settingsRevision: 1,
+      alwaysOnTop: 1,
+      // restoreOnAppStart intentionally missing: undefined must never mean true.
+      scale: 1,
+      positionX: 0,
+      positionY: 0,
+      screenId: "1",
+      idleEnabled: 1,
+      idleIntervalMinSeconds: 30,
+      idleIntervalMaxSeconds: 120,
+      clickThroughMode: "off",
+      soundEnabled: 0,
+      positionMode: "absolute",
+    }));
+
+    await expect(manager.getRuntimeSettings("install-1")).rejects.toThrow(
+      "RUNTIME_SETTINGS_INVALID: restoreOnAppStart must be 0 or 1",
+    );
+  });
+
+  it("rejects runtime settings returned for a different installation", async () => {
+    const manager = makeManager();
+    const internal = manager as never as {
+      request: ReturnType<typeof vi.fn>;
+    };
+    internal.request = vi.fn(async () => ({
+      installationId: "install-other",
+      settingsRevision: 1,
+      alwaysOnTop: 1,
+      restoreOnAppStart: 1,
+      scale: 1,
+      positionX: 0,
+      positionY: 0,
+      screenId: "1",
+      idleEnabled: 1,
+      idleIntervalMinSeconds: 30,
+      idleIntervalMaxSeconds: 120,
+      clickThroughMode: "off",
+      soundEnabled: 0,
+      positionMode: "absolute",
+    }));
+
+    await expect(manager.getRuntimeSettings("install-1")).rejects.toThrow(
+      "RUNTIME_SETTINGS_ID_MISMATCH",
+    );
+  });
   it("applies every runtime-backed setting before committing the revision", async () => {
     const manager = makeManager();
     const internal = manager as never as {
