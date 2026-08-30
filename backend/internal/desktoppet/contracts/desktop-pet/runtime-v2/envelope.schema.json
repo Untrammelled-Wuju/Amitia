@@ -36,6 +36,7 @@
         "hello_ack",
         "command",
         "command_ack",
+        "event_ack",
         "runtime_event",
         "state_snapshot",
         "error",

@@ -314,6 +314,58 @@ func TestHelloReconciliationUsesAuthoritativeDesiredStateAndRequeuesInflight(t *
 	}
 }
 
+func TestHelloReconciliationRequeuesInflightEvenWhenClientClaimsDesiredApplied(t *testing.T) {
+	db := newCommandServiceTestDB(t)
+	svc := NewCommandService(db)
+	if err := db.Exec(`CREATE TABLE desktop_pet_runtime_desired_states (
+		user_id TEXT, device_id TEXT, runtime_id TEXT, installation_id TEXT, pet_id TEXT, release_id TEXT,
+		desired_enabled INTEGER, desired_visible INTEGER, desired_action_key TEXT,
+		settings_snapshot_json TEXT, settings_revision INTEGER, desired_revision INTEGER, desired_hash TEXT
+	)`).Error; err != nil {
+		t.Fatalf("create desired table: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO desktop_pet_runtime_desired_states
+		(user_id, device_id, runtime_id, installation_id, pet_id, release_id, desired_enabled, desired_visible, desired_action_key, settings_snapshot_json, settings_revision, desired_revision, desired_hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"u", "d", "runtime-1", "inst-1", "pet-1", "release-1", 1, 1, "idle", `{}`, 1, 9, "hash-9").Error; err != nil {
+		t.Fatalf("insert desired state: %v", err)
+	}
+
+	payload := SyncDesiredStatePayload{DesiredRevision: 9, DesiredHash: "hash-9", InstallationID: "inst-1", PetID: "pet-1", ReleaseID: "release-1"}
+	cmd, err := svc.CreateDurableCommand("u", "d", string(CommandTypeSyncDesiredState), "desired:d:9", "desired:d", 1, payload)
+	if err != nil {
+		t.Fatalf("create durable: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := svc.MarkDispatching(cmd.ID, "runtime-1", "old-session", now); err != nil {
+		t.Fatalf("mark dispatching: %v", err)
+	}
+	if err := svc.MarkRuntimeReceived(cmd.ID, "runtime-1", "old-session", now); err != nil {
+		t.Fatalf("mark received: %v", err)
+	}
+	if err := svc.MarkRuntimeAccepted(cmd.ID, "runtime-1", "old-session", now); err != nil {
+		t.Fatalf("mark accepted: %v", err)
+	}
+
+	// The client may have applied revision 9 locally while desired_applied was
+	// lost before server persistence. The non-terminal command must still be
+	// requeued on the new session before the revision short-circuit is allowed.
+	revision, err := svc.ReconcileDesiredStateOnHello("u", "d", "runtime-1", 9, 2)
+	if err != nil {
+		t.Fatalf("reconcile hello: %v", err)
+	}
+	if revision != 9 {
+		t.Fatalf("authoritative revision=%d want=9", revision)
+	}
+	got, err := svc.GetCommand(cmd.ID)
+	if err != nil {
+		t.Fatalf("get command: %v", err)
+	}
+	if got.Status != string(CommandStatusQueued) || got.RuntimeSessionID != "" {
+		t.Fatalf("in-flight command not recovered from lost terminal event: status=%s session=%q", got.Status, got.RuntimeSessionID)
+	}
+}
+
 func TestExpiredOlderDesiredCommandDoesNotReviveAfterNewerRevisionExists(t *testing.T) {
 	db := newCommandServiceTestDB(t)
 	svc := NewCommandService(db)

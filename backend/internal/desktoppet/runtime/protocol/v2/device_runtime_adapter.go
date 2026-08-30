@@ -45,11 +45,14 @@ func SessionResultToHelloAck(
 	desiredRevision int64,
 ) *HelloAckPayload {
 	return &HelloAckPayload{
-		Accepted:        true,
-		SessionID:       result.Session.ID,
-		ServerTime:      result.Session.CreatedAt,
-		DesiredRevision: desiredRevision,
-		ResumeMode:      string(result.Resume.Mode),
+		Accepted:                           true,
+		SessionID:                          result.Session.ID,
+		ServerTime:                         result.Session.CreatedAt,
+		DesiredRevision:                    desiredRevision,
+		ResumeMode:                         string(result.Resume.Mode),
+		ServerLastAppliedDesiredRevision:   result.Session.LastAppliedStateRevision,
+		ServerLastProcessedCommandSequence: result.Session.LastProcessedCommandSequence,
+		LastCommittedClientEventSequence:   result.Session.LastEventSequence,
 	}
 }
 

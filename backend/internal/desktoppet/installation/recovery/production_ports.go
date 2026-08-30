@@ -442,6 +442,37 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 	return err
 }
 
+func (p *ProductionRuntimeRepo) ResolveDesiredRevision(ctx context.Context, opID, userID, deviceID string) (int64, error) {
+	if p == nil || p.db == nil {
+		return 0, errors.New("production runtime recovery: database unavailable")
+	}
+	var outbox desired.DesiredStateOutboxEvent
+	err := p.db.WithContext(ctx).
+		Where("operation_id = ? AND user_id = ? AND device_id = ? AND desired_revision > 0", opID, userID, deviceID).
+		Order("created_at DESC").
+		First(&outbox).Error
+	if err == nil && outbox.DesiredRevision > 0 {
+		return outbox.DesiredRevision, nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, err
+	}
+
+	// Older recovery records may predate the outbox row but still preserve the
+	// operation identity on the authoritative desired-state snapshot.
+	var state desired.RuntimeDesiredState
+	err = p.db.WithContext(ctx).
+		Where("operation_id = ? AND user_id = ? AND device_id = ? AND desired_revision > 0", opID, userID, deviceID).
+		First(&state).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, errors.New("production runtime recovery: authoritative desired revision not found for operation")
+		}
+		return 0, err
+	}
+	return state.DesiredRevision, nil
+}
+
 func (p *ProductionRuntimeRepo) CancelDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID string) error {
 	if p == nil || p.db == nil || p.facade == nil || p.facade.Commands() == nil {
 		return errors.New("production runtime recovery: runtime v2 unavailable")
@@ -535,6 +566,13 @@ type ProductionSwitchRepo struct {
 
 func NewProductionSwitchRepo(runtime *ProductionRuntimeRepo) *ProductionSwitchRepo {
 	return &ProductionSwitchRepo{runtime: runtime}
+}
+
+func (p *ProductionSwitchRepo) ResolveDesiredRevision(ctx context.Context, opID, userID, deviceID string) (int64, error) {
+	if p == nil || p.runtime == nil {
+		return 0, errors.New("production switch recovery: runtime repository is not configured")
+	}
+	return p.runtime.ResolveDesiredRevision(ctx, opID, userID, deviceID)
 }
 
 func (p *ProductionSwitchRepo) PublishSwitchDesired(ctx context.Context, opID, userID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error {

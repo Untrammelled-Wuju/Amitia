@@ -52,6 +52,24 @@ func (r *testRecoveryRepo) ClaimOperationLease(operationID, owner string, ttl ti
 	return op, nil
 }
 
+func (r *testRecoveryRepo) SetOperationDesiredRevisionIfMissing(operationID string, desiredRevision int64, executionID string) (*operation.InstallationOperation, error) {
+	op, ok := r.ops[operationID]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	if desiredRevision <= 0 {
+		return nil, errors.New("invalid desired revision")
+	}
+	if op.DesiredRevision > 0 && op.DesiredRevision != desiredRevision {
+		return nil, ErrCASConflict
+	}
+	if op.DesiredRevision == 0 {
+		op.DesiredRevision = desiredRevision
+	}
+	r.ops[operationID] = op
+	return op, nil
+}
+
 func (r *testRecoveryRepo) UpdateOperationStatus(operationID, oldStatus, newStatus, executionID string) (*operation.InstallationOperation, error) {
 	op, ok := r.ops[operationID]
 	if !ok {
@@ -105,6 +123,24 @@ func (r *testRecoveryRepo) GetSwitchJournal(operationID string) (*RecoverySwitch
 	return journal, nil
 }
 
+func (r *testRecoveryRepo) SetSwitchJournalDesiredRevisionIfMissing(operationID string, desiredRevision int64, executionID string) (*RecoverySwitchJournal, error) {
+	journal, ok := r.switchJournals[operationID]
+	if !ok {
+		return nil, ErrJournalNotFound
+	}
+	if desiredRevision <= 0 {
+		return nil, errors.New("invalid desired revision")
+	}
+	if journal.NewDesiredRevision > 0 && journal.NewDesiredRevision != desiredRevision {
+		return nil, ErrCASConflict
+	}
+	if journal.NewDesiredRevision == 0 {
+		journal.NewDesiredRevision = desiredRevision
+	}
+	r.switchJournals[operationID] = journal
+	return journal, nil
+}
+
 func (r *testRecoveryRepo) CASUpdateCommitJournalStage(operationID, expectedStage, newStage, executionID string) (*RecoveryCommitJournal, error) {
 	journal, ok := r.commitJournals[operationID]
 	if !ok {
@@ -132,8 +168,9 @@ func (r *testRecoveryRepo) CASUpdateSwitchJournalStage(operationID, expectedStag
 }
 
 type testRuntimeRepo struct {
-	forceNoTerminal bool
-	queriedKeys     *[]string
+	forceNoTerminal         bool
+	queriedKeys             *[]string
+	resolvedDesiredRevision int64
 }
 
 func (testRuntimeRepo) SendDesiredCommand(context.Context, string, string, string, string, string, int64) error {
@@ -141,6 +178,12 @@ func (testRuntimeRepo) SendDesiredCommand(context.Context, string, string, strin
 }
 func (testRuntimeRepo) CancelDesiredCommand(context.Context, string, string, string, string) error {
 	return nil
+}
+func (r testRuntimeRepo) ResolveDesiredRevision(context.Context, string, string, string) (int64, error) {
+	if r.resolvedDesiredRevision > 0 {
+		return r.resolvedDesiredRevision, nil
+	}
+	return 1, nil
 }
 func (testRuntimeRepo) QueryRuntimeAppliedState(context.Context, string, string, string) (int64, string, error) {
 	return 1, "", nil
@@ -155,7 +198,16 @@ func (r testRuntimeRepo) QueryCommandTerminalStatusByIdempotencyKey(ctx context.
 	return "completed", true, nil
 }
 
-type testSwitchRepo struct{}
+type testSwitchRepo struct {
+	resolvedDesiredRevision int64
+}
+
+func (r testSwitchRepo) ResolveDesiredRevision(context.Context, string, string, string) (int64, error) {
+	if r.resolvedDesiredRevision > 0 {
+		return r.resolvedDesiredRevision, nil
+	}
+	return 1, nil
+}
 
 func (testSwitchRepo) PublishSwitchDesired(context.Context, string, string, string, string, string, int64) error {
 	return nil
@@ -279,6 +331,41 @@ func TestRecoveryWorker_SwitchOperation_UsesSwitchRecovery(t *testing.T) {
 	}
 }
 
+func TestRecoveryWorker_SwitchBindingCommitted_RecoversMissingDesiredRevision(t *testing.T) {
+	repo := newTestRepo()
+	worker := NewRecoveryWorker(repo)
+	worker.switchRecovery = NewSwitchRecovery(worker, repo, testSwitchRepo{resolvedDesiredRevision: 42})
+
+	op := &operation.InstallationOperation{
+		ID:            "switch-op-missing-revision",
+		OperationType: operation.TypeSwitch,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageWaitingRuntimeACK,
+		UserID:        "user-1",
+		DeviceID:      "device-1",
+		RuntimeID:     "runtime-1",
+	}
+	repo.ops[op.ID] = op
+	repo.switchJournals[op.ID] = &RecoverySwitchJournal{
+		OperationID:       op.ID,
+		Stage:             SwitchStageBindingCommitted,
+		NewInstallationID: "installation-new",
+	}
+
+	if err := worker.recoverOperation(context.Background(), op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := repo.ops[op.ID].DesiredRevision; got != 42 {
+		t.Fatalf("expected operation desired revision 42, got %d", got)
+	}
+	if got := repo.switchJournals[op.ID].NewDesiredRevision; got != 42 {
+		t.Fatalf("expected switch journal desired revision 42, got %d", got)
+	}
+	if got := repo.switchJournals[op.ID].Stage; got != SwitchStageRuntimeApplied {
+		t.Fatalf("expected switch journal to advance to %s, got %s", SwitchStageRuntimeApplied, got)
+	}
+}
+
 func TestRecoveryWorker_InactiveOperation_IsSkipped(t *testing.T) {
 	repo := newTestRepo()
 
@@ -343,6 +430,9 @@ func TestRecoveryWorker_DesiredStateCommitted_RecoversAndEnqueuesCommand(t *test
 	got := repo.ops[op.ID]
 	if got.Stage != operation.OpStageWaitingRuntimeACK || got.Status != operation.OpStatusWaitingRuntimeACK {
 		t.Fatalf("expected operation to advance to waiting_runtime_ack, got stage=%s status=%s", got.Stage, got.Status)
+	}
+	if got.DesiredRevision != 1 {
+		t.Fatalf("expected authoritative desired revision to be recovered and persisted, got %d", got.DesiredRevision)
 	}
 }
 
@@ -586,5 +676,181 @@ func TestRecoveryWorker_CancelInFlightWithoutRuntimeRecoveryFailsClosed(t *testi
 	repo.ops[op.ID] = op
 	if err := worker.recoverOperation(context.Background(), op); err == nil {
 		t.Fatal("expected in-flight cancel without runtime recovery to fail closed")
+	}
+}
+
+func TestRecoveryWorker_WaitingRuntimeACK_RecoversMissingDesiredRevision(t *testing.T) {
+	repo := newTestRepo()
+	worker := NewRecoveryWorker(repo)
+	worker.runtimeRecovery = NewRuntimeRecovery(worker, repo, testRuntimeRepo{resolvedDesiredRevision: 42})
+
+	op := &operation.InstallationOperation{
+		ID:            "waiting-ack-missing-revision",
+		OperationType: operation.TypeEnable,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageWaitingRuntimeACK,
+		UserID:        "user-1",
+		DeviceID:      "device-1",
+		RuntimeID:     "runtime-1",
+	}
+	repo.ops[op.ID] = op
+
+	if err := worker.recoverOperation(context.Background(), op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := repo.ops[op.ID].DesiredRevision; got != 42 {
+		t.Fatalf("expected authoritative desired revision 42, got %d", got)
+	}
+	if repo.ops[op.ID].Status == operation.OpStatusCompleted {
+		t.Fatal("operation must not complete until runtime reports revision 42 applied")
+	}
+}
+
+func TestRecoveryWorker_RuntimeApplied_RecoversMissingRevisionBeforeFinalizer(t *testing.T) {
+	repo := newTestRepo()
+	worker := NewRecoveryWorker(repo)
+	worker.runtimeRecovery = NewRuntimeRecovery(worker, repo, testRuntimeRepo{resolvedDesiredRevision: 42})
+	worker.desiredStateFinalizer = &mockDesiredStateFinalizer{
+		onFinalize: func(ctx context.Context, op *operation.InstallationOperation) error {
+			if op.DesiredRevision != 42 {
+				t.Fatalf("finalizer must see authoritative desired revision 42, got %d", op.DesiredRevision)
+			}
+			return nil
+		},
+	}
+
+	op := &operation.InstallationOperation{
+		ID:            "runtime-applied-missing-revision",
+		OperationType: operation.TypeUninstall,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageRuntimeApplied,
+		UserID:        "user-1",
+		DeviceID:      "device-1",
+		RuntimeID:     "runtime-1",
+	}
+	repo.ops[op.ID] = op
+
+	if err := worker.recoverOperation(context.Background(), op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := repo.ops[op.ID].DesiredRevision; got != 42 {
+		t.Fatalf("expected recovered desired revision 42, got %d", got)
+	}
+}
+
+func TestRecoveryWorker_CleanupCompletedJournal_CompletesOperationAfterCrash(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+
+	op := &operation.InstallationOperation{
+		ID:              "cleanup-completed-crash-window",
+		OperationType:   operation.TypeInstall,
+		Status:          operation.OpStatusWaitingRuntimeACK,
+		Stage:           operation.OpStageRuntimeApplied,
+		DesiredRevision: 9,
+	}
+	repo.ops[op.ID] = op
+	repo.commitJournals[op.ID] = &RecoveryCommitJournal{
+		OperationID: op.ID,
+		Stage:       operation.OpStageCleanupCompleted,
+	}
+
+	if err := worker.recoverOperation(context.Background(), op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := repo.ops[op.ID]
+	if got.Stage != operation.OpStageCompleted || got.Status != operation.OpStatusCompleted {
+		t.Fatalf("expected cleanup-completed crash recovery to complete operation, got stage=%s status=%s", got.Stage, got.Status)
+	}
+}
+
+func TestRecoveryWorker_SwitchDesiredCommitted_RecoversMissingDesiredRevision(t *testing.T) {
+	repo := newTestRepo()
+	worker := NewRecoveryWorker(repo)
+	worker.switchRecovery = NewSwitchRecovery(worker, repo, testSwitchRepo{resolvedDesiredRevision: 42})
+
+	op := &operation.InstallationOperation{
+		ID:            "switch-desired-committed-missing-revision",
+		OperationType: operation.TypeSwitch,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageWaitingRuntimeACK,
+		UserID:        "user-1",
+		DeviceID:      "device-1",
+		RuntimeID:     "runtime-1",
+	}
+	repo.ops[op.ID] = op
+	repo.switchJournals[op.ID] = &RecoverySwitchJournal{
+		OperationID:       op.ID,
+		Stage:             SwitchStageDesiredCommitted,
+		NewInstallationID: "installation-new",
+	}
+
+	if err := worker.recoverOperation(context.Background(), op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := repo.ops[op.ID].DesiredRevision; got != 42 {
+		t.Fatalf("expected operation desired revision 42, got %d", got)
+	}
+	if got := repo.switchJournals[op.ID].NewDesiredRevision; got != 42 {
+		t.Fatalf("expected switch journal desired revision 42, got %d", got)
+	}
+	if got := repo.switchJournals[op.ID].Stage; got != SwitchStageRuntimeApplied {
+		t.Fatalf("expected switch journal to advance to %s, got %s", SwitchStageRuntimeApplied, got)
+	}
+}
+
+func TestRecoveryWorker_SwitchCompletedJournal_CompletesOperationAfterCrash(t *testing.T) {
+	repo := newTestRepo()
+	worker := NewRecoveryWorker(repo)
+	worker.switchRecovery = NewSwitchRecovery(worker, repo, testSwitchRepo{})
+
+	op := &operation.InstallationOperation{
+		ID:              "switch-completed-crash-window",
+		OperationType:   operation.TypeSwitch,
+		Status:          operation.OpStatusWaitingRuntimeACK,
+		Stage:           operation.OpStageWaitingRuntimeACK,
+		DesiredRevision: 7,
+	}
+	repo.ops[op.ID] = op
+	repo.switchJournals[op.ID] = &RecoverySwitchJournal{
+		OperationID:        op.ID,
+		Stage:              SwitchStageSwitchCompleted,
+		NewInstallationID:  "installation-new",
+		NewDesiredRevision: 7,
+	}
+
+	if err := worker.recoverOperation(context.Background(), op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := repo.ops[op.ID]
+	if got.Status != operation.OpStatusCompleted || got.Stage != operation.OpStageCompleted {
+		t.Fatalf("expected switch-completed crash recovery to converge to terminal stage/status, got stage=%s status=%s", got.Stage, got.Status)
+	}
+}
+
+func TestRecoveryWorker_CancelInFlight_RecoversMissingDesiredRevisionBeforeCancel(t *testing.T) {
+	repo := newTestRepo()
+	worker := NewRecoveryWorker(repo)
+	worker.runtimeRecovery = NewRuntimeRecovery(worker, repo, testRuntimeRepo{resolvedDesiredRevision: 42})
+
+	op := &operation.InstallationOperation{
+		ID:            "cancel-missing-revision",
+		OperationType: operation.TypeEnable,
+		Status:        operation.OpStatusCancelRequested,
+		Stage:         operation.OpStageWaitingRuntimeACK,
+		UserID:        "user-1",
+		DeviceID:      "device-1",
+		RuntimeID:     "runtime-1",
+	}
+	repo.ops[op.ID] = op
+
+	if err := worker.recoverOperation(context.Background(), op); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := repo.ops[op.ID].DesiredRevision; got != 42 {
+		t.Fatalf("expected authoritative desired revision 42 before cancel, got %d", got)
+	}
+	if got := repo.ops[op.ID].Status; got != operation.OpStatusCancelled {
+		t.Fatalf("expected cancelled status, got %s", got)
 	}
 }

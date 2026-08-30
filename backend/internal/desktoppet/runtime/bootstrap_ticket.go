@@ -65,12 +65,12 @@ func (r *BootstrapTicketRepository) ReadinessCheck(ctx context.Context) error {
 	return nil
 }
 
-func generateTicketID() string {
+func generateTicketID() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("ticket ID generation failed: %v", err))
+		return "", fmt.Errorf("ticket ID generation failed: %w", err)
 	}
-	return "rbt_" + hex.EncodeToString(b)
+	return "rbt_" + hex.EncodeToString(b), nil
 }
 
 func hashTicket(ticket string) string {
@@ -83,9 +83,13 @@ func (r *BootstrapTicketRepository) Create(ctx context.Context, userID, deviceID
 	if err != nil {
 		return "", nil, err
 	}
+	ticketID, err := generateTicketID()
+	if err != nil {
+		return "", nil, err
+	}
 	now := time.Now()
 	ticket = &BootstrapTicket{
-		ID:         generateTicketID(),
+		ID:         ticketID,
 		TicketHash: hashTicket(rawTicket),
 		UserID:     userID,
 		DeviceID:   deviceID,

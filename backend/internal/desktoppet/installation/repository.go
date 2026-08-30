@@ -566,8 +566,22 @@ func (r *repository) DeleteInstallationTx(tx *gorm.DB, id string) error {
 }
 
 func (r *repository) GetRuntimeSettingsForUserDevice(userID, deviceID, installationID string) (*RuntimeSettings, error) {
+	// Scope the settings lookup through the owning installation. Runtime settings
+	// do not carry user/device columns themselves, so installation_id alone is
+	// not an ownership boundary. Legacy device-less installations remain valid
+	// for their owner and are narrowed by user_id.
+	var installation Installation
+	if err := r.db.Where("id = ? AND user_id = ?", installationID, userID).
+		Where("device_id = ? OR device_id = ''", deviceID).
+		First(&installation).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInstallationNotFound
+		}
+		return nil, err
+	}
+
 	var settings RuntimeSettings
-	err := r.db.Where("installation_id = ?", installationID).First(&settings).Error
+	err := r.db.Where("installation_id = ?", installation.ID).First(&settings).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInstallationNotFound
@@ -582,8 +596,19 @@ func (r *repository) CreateRuntimeSettingsTx(tx *gorm.DB, settings *RuntimeSetti
 }
 
 func (r *repository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, userID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
+	var installation Installation
+	if err := tx.Where("id = ? AND user_id = ?", installationID, userID).
+		Where("device_id = ? OR device_id = ''", deviceID).
+		Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&installation).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrInstallationNotFound
+		}
+		return nil, err
+	}
+
 	var settings RuntimeSettings
-	err := tx.Where("installation_id = ? AND settings_revision = ?", installationID, expectedRevision).
+	err := tx.Where("installation_id = ? AND settings_revision = ?", installation.ID, expectedRevision).
 		Clauses(clause.Locking{Strength: "UPDATE"}).
 		First(&settings).Error
 	if err != nil {
@@ -595,7 +620,7 @@ func (r *repository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, userI
 	updates["settings_revision"] = expectedRevision + 1
 	updates["updated_at"] = time.Now().Format(installationTimeFormat)
 	result := tx.Model(&RuntimeSettings{}).
-		Where("installation_id = ? AND settings_revision = ?", installationID, expectedRevision).
+		Where("installation_id = ? AND settings_revision = ?", installation.ID, expectedRevision).
 		Updates(updates)
 	if result.Error != nil {
 		return nil, result.Error
@@ -604,7 +629,7 @@ func (r *repository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, userI
 		return nil, ErrSettingsRevisionConflict
 	}
 	var updated RuntimeSettings
-	if err := tx.Where("installation_id = ?", installationID).First(&updated).Error; err != nil {
+	if err := tx.Where("installation_id = ?", installation.ID).First(&updated).Error; err != nil {
 		return nil, err
 	}
 	return &updated, nil

@@ -91,7 +91,25 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
 			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "认证失败"}})
 			return
 		}
-		conn := facade.GetConnection(userID, "", runtimeID)
+		deviceID := strings.TrimSpace(c.Query("deviceId"))
+		var conn *Connection
+		if deviceID != "" {
+			conn = facade.GetConnection(userID, deviceID, runtimeID)
+		} else {
+			for _, candidate := range facade.ListConnections(userID) {
+				if candidate == nil || string(candidate.RuntimeID) != runtimeID {
+					continue
+				}
+				if conn != nil {
+					c.JSON(http.StatusConflict, gin.H{"success": false, "error": gin.H{
+						"code":    "RUNTIME_ID_AMBIGUOUS",
+						"message": "runtimeId matches multiple devices; provide deviceId",
+					}})
+					return
+				}
+				conn = candidate
+			}
+		}
 		if conn == nil {
 			c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{
 				"runtimeId": runtimeID,
@@ -208,17 +226,24 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := h.consumeTicket(r.Context(), rawTicket, runtimeID, deviceID)
-	if err != nil || userID == "" {
-		http.Error(w, "runtime bootstrap ticket rejected", http.StatusUnauthorized)
-		return
-	}
-
 	upgrader := h.upgrader
 	upgrader.Subprotocols = []string{selectedProtocol}
 	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		// The one-time credential has deliberately not been consumed yet. A
+		// transient/proxy upgrade failure must not burn a valid bootstrap ticket.
 		log.Warn("[v2-ws] upgrade failed: ", err)
+		return
+	}
+
+	userID, err := h.consumeTicket(r.Context(), rawTicket, runtimeID, deviceID)
+	if err != nil || userID == "" {
+		_ = wsConn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "runtime bootstrap ticket rejected"),
+			time.Now().Add(time.Second),
+		)
+		_ = wsConn.Close()
 		return
 	}
 
@@ -385,7 +410,15 @@ func (ctx *wsConnContext) readLoop() {
 
 		var env Envelope
 		if err := json.Unmarshal(data, &env); err != nil {
-			continue
+			// Malformed frames are a protocol violation. Close explicitly with the
+			// RFC 6455 protocol-error code instead of silently keeping the peer alive
+			// or making the disconnect look like an unexplained transport failure.
+			_ = ctx.wsConn.WriteControl(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseProtocolError, "malformed runtime envelope"),
+				time.Now().Add(time.Second),
+			)
+			return
 		}
 
 		if env.MessageType == MessageTypeHello {
@@ -457,6 +490,9 @@ func (ctx *wsConnContext) readLoop() {
 			if err := ctx.handler.HandleCommandAck(ctx.conn, &env, &ackPayload); err != nil {
 				return
 			}
+			if err := ctx.sendCommittedEventAck(); err != nil {
+				return
+			}
 		case MessageTypePing:
 			if err := ctx.handler.HandleHeartbeat(ctx.conn); err != nil {
 				return
@@ -472,8 +508,31 @@ func (ctx *wsConnContext) readLoop() {
 			if _, err := ctx.handler.HandleEvent(ctx.conn, &env); err != nil {
 				return
 			}
+			if err := ctx.sendCommittedEventAck(); err != nil {
+				return
+			}
 		}
 	}
+}
+
+func (ctx *wsConnContext) sendCommittedEventAck() error {
+	payload := EventAckPayload{LastCommittedClientEventSequence: ctx.conn.LastInboundSequence()}
+	env, err := ctx.handler.CreateEnvelope(
+		MessageTypeEventAck,
+		"event_ack",
+		ctx.conn.RuntimeID,
+		runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()),
+		payload,
+		ctx.conn.UserID,
+		ctx.conn.DeviceID,
+	)
+	if err != nil || env == nil {
+		if err != nil {
+			return err
+		}
+		return errors.New("failed to create runtime event acknowledgement")
+	}
+	return ctx.SendEnvelope(env, time.Now().Format("2006-01-02 15:04:05"))
 }
 
 func (ctx *wsConnContext) writeLoop() {

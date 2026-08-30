@@ -39,6 +39,7 @@ const (
 	MessageTypeHelloAck      = protocol.MessageTypeHelloAck
 	MessageTypeCommand       = protocol.MessageTypeCommand
 	MessageTypeCommandAck    = protocol.MessageTypeCommandAck
+	MessageTypeEventAck      = protocol.MessageTypeEventAck
 	MessageTypeRuntimeEvent  = protocol.MessageTypeRuntimeEvent
 	MessageTypeStateSnapshot = protocol.MessageTypeStateSnapshot
 	MessageTypeError         = protocol.MessageTypeError
