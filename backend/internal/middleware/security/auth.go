@@ -103,10 +103,17 @@ func validateLocalOrigin(c *gin.Context, allowedOrigins []string) error {
 	if err := validateOrigin(c, allowedOrigins); err == nil {
 		return nil
 	}
-	if isDesktopDevelopmentOrigin(c.GetHeader("Origin")) {
+	if isTrustedDesktopOrigin(c.GetHeader("Origin")) {
 		return nil
 	}
 	return errors.New("origin not allowed")
+}
+
+func isTrustedDesktopOrigin(origin string) bool {
+	if strings.EqualFold(strings.TrimSpace(origin), "app://amitia") {
+		return true
+	}
+	return isDesktopDevelopmentOrigin(origin)
 }
 
 func isDesktopDevelopmentOrigin(origin string) bool {
