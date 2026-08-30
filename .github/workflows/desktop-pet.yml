@@ -5,29 +5,41 @@ on:
     paths:
       - 'backend/internal/desktoppet/**'
       - 'backend/internal/migration/desktop_pet_*.go'
+      - 'backend/internal/middleware/**'
+      - 'backend/internal/runtimeprofile/**'
+      - 'backend/internal/devicemesh/**'
+      - 'backend/internal/chat/**'
+      - 'backend/internal/realtime/**'
+      - 'backend/internal/extension/**'
       - 'backend/cmd/**'
       - 'desktop/**'
       - 'front/**'
+      - 'mobile_app/**'
       - 'contracts/desktop-pet/**'
       - 'scripts/test/run-desktop-pet-*.ps1'
       - 'scripts/audit/desktop_pet_*.ps1'
       - 'scripts/audit/verify-desktop-pet-runtime-singletrack.mjs'
-      - '.github/workflows/desktop-pet.yml'
-      - 'scripts/test/run-desktop-pet-*.ps1'
-      - 'scripts/audit/desktop_pet_*.ps1'
       - '.github/workflows/desktop-pet.yml'
   pull_request:
     paths:
       - 'backend/internal/desktoppet/**'
       - 'backend/internal/migration/desktop_pet_*.go'
+      - 'backend/internal/middleware/**'
+      - 'backend/internal/runtimeprofile/**'
+      - 'backend/internal/devicemesh/**'
+      - 'backend/internal/chat/**'
+      - 'backend/internal/realtime/**'
+      - 'backend/internal/extension/**'
       - 'backend/cmd/**'
       - 'desktop/**'
       - 'front/**'
+      - 'mobile_app/**'
       - 'contracts/desktop-pet/**'
       - 'scripts/test/run-desktop-pet-*.ps1'
       - 'scripts/audit/desktop_pet_*.ps1'
       - 'scripts/audit/verify-desktop-pet-runtime-singletrack.mjs'
       - '.github/workflows/desktop-pet.yml'
+
 
 jobs:
   toolchain:
@@ -53,7 +65,11 @@ jobs:
           go-version-file: 'backend/go.mod'
       - name: Run gofmt
         run: |
-          OUTPUT=$(gofmt -l backend/internal/desktoppet backend/cmd/server)
+          OUTPUT=$(gofmt -l \
+            backend/internal/desktoppet \
+            backend/internal/middleware/security \
+            backend/internal/runtimeprofile \
+            backend/cmd/server)
           if [ -n "$OUTPUT" ]; then
             echo "Unformatted files:"
             echo "$OUTPUT"
@@ -73,7 +89,10 @@ jobs:
         run: cd backend && go build ./...
         working-directory: .
       - name: Run go vet
-        run: cd backend && go vet ./internal/desktoppet/... ./internal/migration/... ./cmd/...
+        run: cd backend && go vet ./internal/desktoppet/... ./internal/middleware/security ./internal/runtimeprofile/... ./internal/migration/... ./cmd/...
+        working-directory: .
+      - name: Run desktop-pet CORS integration tests
+        run: cd backend && go test ./internal/middleware/security -run 'TestCorsMiddleware_' -count=1
         working-directory: .
 
   desktop-pet-unit:
@@ -149,6 +168,16 @@ jobs:
           & "${{ github.workspace }}/scripts/audit/desktop_pet_forbidden_patterns.ps1" -Paths @("backend/internal/desktoppet", "backend/cmd/server")
       - name: Verify Runtime V2 single-track cutover
         run: node scripts/audit/verify-desktop-pet-runtime-singletrack.mjs
+      - name: Verify pet player singleton
+        run: node desktop/scripts/verify-pet-player-singleton.mjs
+      - name: Verify Runtime V2 lifecycle semantics
+        run: node desktop/scripts/verify-desktop-pet-runtime-lifecycle-semantics.mjs
+      - name: Verify desktop-pet finalization
+        run: node desktop/scripts/verify-desktop-pet-finalization.mjs
+      - name: Verify cloud-to-device execution boundary
+        run: node desktop/scripts/verify-cloud-device-execution-finalization.mjs
+      - name: Verify Device Agent desktop-pet freeze gate
+        run: node desktop/scripts/verify-desktop-pet-device-agent-freeze-gate.mjs
 
   frontend:
     name: Frontend Build & Test
@@ -177,6 +206,31 @@ jobs:
         run: pnpm --dir ${{ matrix.workspace }} test
       - name: Build
         run: pnpm --dir ${{ matrix.workspace }} build
+
+  mobile:
+    name: Mobile Desktop Pet Gate
+    runs-on: ubuntu-latest
+    needs: toolchain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Verify Dart SDK floor
+        run: dart --version
+      - name: Install mobile dependencies
+        working-directory: mobile_app
+        run: flutter pub get
+      - name: Analyze mobile source
+        working-directory: mobile_app
+        run: flutter analyze --no-fatal-infos
+      - name: Run mobile tests
+        working-directory: mobile_app
+        run: flutter test
+      - name: Compile Android desktop-pet host
+        working-directory: mobile_app
+        run: flutter build apk --debug
 
   desktop-package:
     name: Desktop Package Gate
@@ -211,6 +265,7 @@ jobs:
       - desktop-pet-migration
       - desktop-pet-security
       - frontend
+      - mobile
       - desktop-package
     steps:
       - name: Verify all required jobs passed
