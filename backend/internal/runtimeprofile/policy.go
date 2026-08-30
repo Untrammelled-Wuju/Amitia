@@ -97,7 +97,7 @@ func PolicyFor(profile Profile) Policy {
 			FullHTTPAPI:          false,
 
 			ExtensionKernel: true,
-			TaskRuntime:     false,
+			TaskRuntime:     true,
 
 			VectorStore:     false,
 			GraphStore:      false,
@@ -113,7 +113,7 @@ func PolicyFor(profile Profile) Policy {
 
 			LocalUIEndpoints: true,
 
-			DurableEvents: false,
+			DurableEvents: true,
 		}
 	default:
 		return Policy{Profile: profile}
