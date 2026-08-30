@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -28,6 +29,7 @@ import '../../../../core/ui_runtime/mobile_dynamic_runtime.dart';
 import '../../runtime/conversation_runtime_controller.dart';
 import '../../../../shared/models/models.dart';
 import 'realtime_voice_call_sheet.dart';
+import 'call_placeholder_page.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key, this.initialConversationId, this.initialCharacterId});
@@ -278,15 +280,118 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   bool _shouldShowAvatar(int index) {
-    final current = _runtime.messages[index];
-    if (current.role != MessageRole.assistant) return false;
-    if (current.type == MessageType.agentTask ||
-        current.type == MessageType.toolCall)
-      return false;
-    if (index == 0) return true;
-    final previous = _runtime.messages[index - 1];
-    if (previous.role != MessageRole.assistant) return true;
-    return false;
+    if (index < 0 || index >= _runtime.messages.length) return false;
+    return _runtime.messages[index].type != MessageType.systemNotice;
+  }
+
+  AmitiaAgentActivity? _toolActivityForEvent(MobileConversationEvent event) {
+    if (event.eventType != 'tool.invocation_completed') return null;
+    final toolName = (event.payload['toolName'] ?? '').toString().trim();
+    if (toolName.isEmpty) return null;
+    return AmitiaAgentActivity(
+      id: event.id,
+      title: toolName,
+      status: (event.payload['status'] ?? 'completed').toString(),
+      errorCode: (event.payload['errorCode'] ?? '').toString().trim().isEmpty
+          ? null
+          : event.payload['errorCode'].toString().trim(),
+      time: event.timestamp,
+    );
+  }
+
+  ({Map<String, List<AmitiaAgentActivity>> byMessageId, List<AmitiaAgentActivity> unpaired})
+      _projectAgentActivities(
+    List<ChatMessage> messages,
+    List<MobileConversationEvent> events,
+  ) {
+    final byMessageId = <String, List<AmitiaAgentActivity>>{};
+    final unpaired = <AmitiaAgentActivity>[];
+    for (final event in events) {
+      final activity = _toolActivityForEvent(event);
+      if (activity == null) continue;
+
+      var latestUserIndex = -1;
+      for (var i = 0; i < messages.length; i++) {
+        final message = messages[i];
+        if (message.role == MessageRole.user &&
+            !message.time.isAfter(event.timestamp.add(const Duration(seconds: 2)))) {
+          latestUserIndex = i;
+        }
+      }
+
+      var nextUserIndex = messages.length;
+      for (var i = latestUserIndex + 1; i < messages.length; i++) {
+        if (messages[i].role == MessageRole.user) {
+          nextUserIndex = i;
+          break;
+        }
+      }
+
+      ChatMessage? target;
+      for (var i = latestUserIndex + 1; i < nextUserIndex; i++) {
+        final message = messages[i];
+        if (message.role != MessageRole.assistant ||
+            message.type == MessageType.systemNotice) {
+          continue;
+        }
+        if (!message.time.isBefore(event.timestamp.subtract(const Duration(seconds: 2)))) {
+          target = message;
+          break;
+        }
+      }
+
+      if (target == null) {
+        unpaired.add(activity);
+      } else {
+        byMessageId.putIfAbsent(target.id, () => <AmitiaAgentActivity>[]).add(activity);
+      }
+    }
+    for (final activities in byMessageId.values) {
+      activities.sort((a, b) => a.time.compareTo(b.time));
+    }
+    unpaired.sort((a, b) => a.time.compareTo(b.time));
+    return (byMessageId: byMessageId, unpaired: unpaired);
+  }
+
+  Future<void> _showCallOptions(String characterId, String characterName) async {
+    final mode = await showAmitiaActionSheet<String>(
+      context,
+      title: '发起通话',
+      actions: const [
+        AmitiaActionSheetItem(
+          icon: Icons.videocam_outlined,
+          label: '视频通话',
+          value: 'video',
+        ),
+        AmitiaActionSheetItem(
+          icon: Icons.call_outlined,
+          label: '语音通话',
+          value: 'voice',
+        ),
+        AmitiaActionSheetItem(
+          icon: Icons.screen_share_outlined,
+          label: '屏幕通话',
+          value: 'screen',
+        ),
+      ],
+    );
+    if (!mounted || mode == null) return;
+    switch (mode) {
+      case 'voice':
+        await _startRealtimeCall(characterId, characterName);
+      case 'video':
+        await showPlaceholderCallPage(
+          context,
+          mode: PlaceholderCallMode.video,
+          characterName: characterName,
+        );
+      case 'screen':
+        await showPlaceholderCallPage(
+          context,
+          mode: PlaceholderCallMode.screen,
+          characterName: characterName,
+        );
+    }
   }
 
   Future<void> _startRealtimeCall(String characterId, String characterName) async {
@@ -340,10 +445,70 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
+  Future<void> _clearCurrentConversation() async {
+    final conversationId = _runtime.conversationId?.trim() ?? '';
+    if (conversationId.isEmpty) {
+      amitiaSnackBar(context, '当前还没有可清空的会话');
+      return;
+    }
+    try {
+      await ref.read(chatServiceProvider).deleteMessages(conversationId);
+      _runtime.clear();
+      ref.invalidate(conversationListProvider);
+      if (mounted) amitiaSnackBar(context, '聊天记录已清空');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '清空失败：$error');
+    }
+  }
+
+  Future<void> _exportCurrentConversation(String format) async {
+    final conversationId = _runtime.conversationId?.trim() ?? '';
+    if (conversationId.isEmpty) {
+      amitiaSnackBar(context, '当前还没有可导出的会话');
+      return;
+    }
+    try {
+      final url = await ref.read(chatServiceProvider).exportConversation(
+            conversationId,
+            format: format,
+          );
+      if (url.isNotEmpty) {
+        await Clipboard.setData(ClipboardData(text: url));
+        if (mounted) amitiaSnackBar(context, '导出完成，资源地址已复制');
+      } else if (mounted) {
+        amitiaSnackBar(context, '导出完成');
+      }
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '导出失败：$error');
+    }
+  }
+
+  void _showExportSheet(BuildContext context) {
+    showAmitiaActionSheet<String>(
+      context,
+      title: '导出聊天记录',
+      actions: const [
+        AmitiaActionSheetItem(
+          icon: Icons.description_outlined,
+          label: 'Markdown',
+          value: 'markdown',
+        ),
+        AmitiaActionSheetItem(
+          icon: Icons.data_object_outlined,
+          label: 'JSON',
+          value: 'json',
+        ),
+      ],
+    ).then((format) {
+      if (format == null || !mounted) return;
+      _exportCurrentConversation(format);
+    });
+  }
+
   void _showChatActionsSheet(BuildContext context) {
     showAmitiaActionSheet<int>(
       context,
-      title: '聊天操作',
+      title: '当前对话',
       actions: const [
         AmitiaActionSheetItem(
           icon: Icons.person_outline,
@@ -351,10 +516,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           value: 0,
         ),
         AmitiaActionSheetItem(
-          icon: Icons.cleaning_services_outlined,
-          label: '清空聊天记录',
+          icon: Icons.search,
+          label: '搜索当前会话',
           value: 1,
-          isDestructive: true,
         ),
         AmitiaActionSheetItem(
           icon: Icons.file_download_outlined,
@@ -362,20 +526,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           value: 2,
         ),
         AmitiaActionSheetItem(
-          icon: Icons.share_outlined,
-          label: '分享对话',
+          icon: Icons.cleaning_services_outlined,
+          label: '清空聊天记录',
           value: 3,
+          isDestructive: true,
         ),
-        AmitiaActionSheetItem(icon: Icons.search, label: '搜索当前会话', value: 4),
       ],
     ).then((result) {
       if (result == null || !mounted) return;
       switch (result) {
         case 0:
-          context.push(
-            AppRoutes.character(ref.read(currentCharacterIdProvider)),
-          );
+          context.push(AppRoutes.character(ref.read(currentCharacterIdProvider)));
         case 1:
+          _showMessageSearch(context);
+        case 2:
+          _showExportSheet(context);
+        case 3:
           showAmitiaConfirmDialog(
             context,
             title: '清空聊天记录',
@@ -384,16 +550,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             isDestructive: true,
           ).then((confirmed) {
             if (confirmed == true && mounted) {
-              _runtime.clear(addSystemNotice: true);
-              amitiaSnackBar(context, '聊天记录已清空');
+              _clearCurrentConversation();
             }
           });
-        case 2:
-          amitiaSnackBar(context, '聊天记录已导出到本地');
-        case 3:
-          amitiaSnackBar(context, '对话链接已复制');
-        case 4:
-          _showMessageSearch(context);
       }
     });
   }
@@ -474,12 +633,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       },
     );
 
-    final avatarInitial = character?.name.isNotEmpty == true ? character!.name[0] : '?';
-    final avatarColor =
-        '#${(((character?.name.hashCode ?? 0) & 0xFFFFFF) | 0xFF000000).toRadixString(16).padLeft(8, '0')}';
-    final characterName = character?.name ?? '';
+    final characterName = (character?.name ?? '').trim();
+    final avatarInitial = characterName.isNotEmpty ? characterName.characters.first : 'A';
+    const avatarColor = '#8A5728';
+    final currentUser = ref.watch(currentUserProvider).valueOrNull;
+    final userName = (currentUser?.username ?? '').trim().isEmpty
+        ? '我'
+        : currentUser!.username.trim();
+    final userInitial = userName.characters.first;
+    const userAvatarColor = '#5F6872';
 
     final providerContext = _buildProviderContext(characterId, characterName, avatarInitial, avatarColor);
+    providerContext['user'] = {
+      'name': userName,
+      'avatarInitial': userInitial,
+      'avatarColor': userAvatarColor,
+    };
     providerContext['agentMode'] = isAgentMode;
     providerContext['conversationState'] = _runtime.state;
     providerContext['sending'] = _runtime.sending;
@@ -500,6 +669,29 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             .watch(conversationUIEventWindowProvider(conversationId))
             .valueOrNull ??
         const <Map<String, dynamic>>[];
+    final durableEvents = MobileConversationProjection.durableEvents(
+      conversationId: conversationId,
+      records: durableConversationRecords,
+    );
+    final agentActivityProjection = _projectAgentActivities(
+      _runtime.messages,
+      durableEvents,
+    );
+    DateTime? lastUserTime;
+    for (final message in _runtime.messages) {
+      if (message.role == MessageRole.user) lastUserTime = message.time;
+    }
+    final liveAgentActivities = lastUserTime == null
+        ? const <AmitiaAgentActivity>[]
+        : agentActivityProjection.unpaired
+            .where((activity) => !activity.time.isBefore(lastUserTime!.subtract(const Duration(seconds: 2))))
+            .toList(growable: false);
+    final hasAssistantAfterLastUser = lastUserTime != null && _runtime.messages.any(
+      (message) => message.role == MessageRole.assistant &&
+          !message.time.isBefore(lastUserTime!),
+    );
+    final showLiveAgentProcess = _runtime.sending && !hasAssistantAfterLastUser;
+
     final runtimeSessionState = conversationId.isEmpty
         ? null
         : ref.watch(clientRuntimeSessionStateProvider(conversationId)).valueOrNull;
@@ -518,10 +710,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           conversationId: conversationId,
           messages: serializedMessages,
         ),
-        MobileConversationProjection.durableEvents(
-          conversationId: conversationId,
-          records: durableConversationRecords,
-        ),
+        durableEvents,
       ]),
       contributions: projectionContributions,
     );
@@ -563,8 +752,30 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.symmetric(vertical: 32),
-                          itemCount: flowItems.length,
+                          itemCount: flowItems.length + (showLiveAgentProcess ? 1 : 0),
                           itemBuilder: (context, flowIndex) {
+                            if (flowIndex >= flowItems.length) {
+                              return RepaintBoundary(
+                                child: AmitiaMessageBubble(
+                                  message: ChatMessage(
+                                    id: '__live_agent_process__',
+                                    role: MessageRole.assistant,
+                                    type: MessageType.text,
+                                    content: '',
+                                    time: DateTime.now(),
+                                  ),
+                                  showAvatar: true,
+                                  avatarInitial: avatarInitial,
+                                  avatarColor: avatarColor,
+                                  characterName: characterName,
+                                  userInitial: userInitial,
+                                  userAvatarColor: userAvatarColor,
+                                  userName: userName,
+                                  agentActivities: liveAgentActivities,
+                                  showThinking: true,
+                                ),
+                              );
+                            }
                             final item = flowItems[flowIndex];
                             if (!item.isMessage) {
                               final node = item.node!;
@@ -590,6 +801,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 avatarInitial: avatarInitial,
                                 avatarColor: avatarColor,
                                 characterName: characterName,
+                                userInitial: userInitial,
+                                userAvatarColor: userAvatarColor,
+                                userName: userName,
+                                agentActivities: agentActivityProjection.byMessageId[message.id] ??
+                                    const <AmitiaAgentActivity>[],
                                 onRetry: message.status == MessageStatus.error
                                     ? () => _retryMessage(index)
                                     : null,
@@ -647,6 +863,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     actions: providerActions,
                     fallback: AmitiaChatInput(
                     onSend: _onSend,
+                    recipientName: characterName,
                     isAgentMode: isAgentMode,
                     onAgentModeChanged: (value) {
                       ref.read(isAgentModeProvider.notifier).state = value;
@@ -673,12 +890,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               context: providerContext,
               actions: providerActions,
               fallback: _ChatTopBar(
-              onOpenDrawer: () => _openDrawer(context),
-              onNewConversation: () {
-                _runtime.createConversation(characterId);
-              },
-              onCall: () => _startRealtimeCall(characterId, characterName),
-              onMore: () => _showChatActionsSheet(context),
+                onOpenDrawer: () => _openDrawer(context),
+                onCall: () => _showCallOptions(characterId, characterName),
+                onMore: () => _showChatActionsSheet(context),
               ),
             ),
           ),
@@ -761,13 +975,11 @@ class _ChatScrollFade extends StatelessWidget {
 
 class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenDrawer;
-  final VoidCallback onNewConversation;
   final VoidCallback onCall;
   final VoidCallback onMore;
 
   const _ChatTopBar({
     required this.onOpenDrawer,
-    required this.onNewConversation,
     required this.onCall,
     required this.onMore,
   });
@@ -779,8 +991,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final platform = Theme.of(context).platform;
     final isApplePlatform =
-        platform == TargetPlatform.iOS ||
-        platform == TargetPlatform.macOS;
+        platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
 
     return SafeArea(
       bottom: false,
@@ -788,74 +999,60 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Row(
           children: [
-            ConduitStyleToolbarButton(
+            _ChatTopBarButton(
               icon: isApplePlatform
                   ? CupertinoIcons.line_horizontal_3
                   : Icons.menu_rounded,
-              iconSize: 20,
               tooltip: '打开侧边栏',
-              onPressed: onOpenDrawer,
+              onTap: onOpenDrawer,
             ),
             const Spacer(),
-            Material(
-              color: context.surfaceSecondary,
-              shape: RoundedRectangleBorder(
-                side: BorderSide(color: context.borderPrimary),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: SizedBox(
-                height: 36,
-                child: Row(
-                  children: [
-                    Tooltip(
-                      message: '实时语音通话',
-                      child: InkWell(
-                        borderRadius: const BorderRadius.horizontal(
-                          left: Radius.circular(20),
-                        ),
-                        onTap: onCall,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(10, 0, 7, 0),
-                          child: Icon(
-                            Icons.call_outlined,
-                            size: 19,
-                            color: context.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Container(width: 1, height: 18, color: context.borderPrimary),
-                    Tooltip(
-                      message: '新建聊天',
-                      child: InkWell(
-                        borderRadius: const BorderRadius.horizontal(
-                          right: Radius.circular(20),
-                        ),
-                        onTap: onNewConversation,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(7, 0, 10, 0),
-                          child: Icon(
-                            Icons.edit_square,
-                            size: 20,
-                            color: context.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            _ChatTopBarButton(
+              icon: Icons.call_outlined,
+              tooltip: '发起通话',
+              onTap: onCall,
             ),
             const SizedBox(width: 8),
-            ConduitStyleToolbarButton(
-              icon: isApplePlatform
-                  ? CupertinoIcons.ellipsis
-                  : Icons.more_vert,
-              iconSize: 22,
-              tooltip: '更多',
-              onPressed: onMore,
+            _ChatTopBarButton(
+              icon: isApplePlatform ? CupertinoIcons.ellipsis : Icons.more_horiz,
+              tooltip: '当前对话详情',
+              onTap: onMore,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatTopBarButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _ChatTopBarButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: context.surfacePrimary,
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: context.borderPrimary),
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon, size: 19, color: context.textPrimary),
         ),
       ),
     );

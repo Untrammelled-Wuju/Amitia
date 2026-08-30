@@ -122,7 +122,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                         status: character.status,
                         identity: character.identity,
                         avatarInitial: character.name.isNotEmpty ? character.name[0] : '?',
-                        avatarColor: '#7668EE',
+                        avatarColor: '#8A5728',
                         mood: '',
                         lastActive: _getLastActive(character.isActive == 1),
                         onTap: () => context.push(AppRoutes.character(character.id)),

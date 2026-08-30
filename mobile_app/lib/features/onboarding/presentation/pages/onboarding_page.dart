@@ -64,7 +64,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   int _selectedAvatarColor = 0;
   final List<bool> _selectedTraits = List.filled(8, false);
 
-  static const _avatarColors = ['#7668EE', '#52B788', '#6C8FEA', '#E9A23B', '#E66767', '#9C91F5'];
+  static const _avatarColors = ['#8A5728', '#52B788', '#6C8FEA', '#E9A23B', '#E66767', '#9C91F5'];
   static const _personalityTraits = ['温柔', '理性', '活泼', '冷静', '幽默', '严谨', '热情', '内敛'];
 
   @override

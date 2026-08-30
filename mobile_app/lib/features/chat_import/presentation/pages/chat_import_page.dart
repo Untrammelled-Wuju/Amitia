@@ -41,7 +41,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
     ('微信聊天记录', Icons.chat, '#52B788'),
     ('QQ 聊天记录', Icons.message, '#6C8FEA'),
     ('Telegram', Icons.send, '#E9A23B'),
-    ('手动输入', Icons.edit_note, '#7668EE'),
+    ('手动输入', Icons.edit_note, '#8A5728'),
   ];
 
   @override
