@@ -135,6 +135,7 @@ internal class DefaultRuntimeEnvironmentBuilder(
 
         env["HOME"] = GuestLayoutContract.HOME
         env["TMPDIR"] = GuestLayoutContract.TEMP_ROOT
+        env["GODEBUG"] = "disablethp=1"
         env["LANG"] = GuestLayoutContract.LANG
         env["LC_ALL"] = GuestLayoutContract.LC_ALL
         env["TZ"] = GuestLayoutContract.TZ

@@ -977,11 +977,73 @@ class DesktopPetMobileRuntimeNotifier
 
     final prefs = await SharedPreferences.getInstance();
     final alpha = (prefs.getDouble(_prefsAlpha) ?? state.alpha).clamp(0.2, 1.0).toDouble();
-    final scale = _double(settings['scale'], 1.0).clamp(0.25, 4.0);
+
+    // Runtime V2 desiredHash covers the complete canonical RuntimeSettings
+    // object. Android must never silently project unsupported desktop-only
+    // values and still acknowledge that canonical hash as applied.
+    final alwaysOnTop = _int(settings['alwaysOnTop'], 1);
+    final clickThroughMode =
+        settings['clickThroughMode']?.toString().trim().toLowerCase() ?? 'off';
+    final soundEnabled = _int(settings['soundEnabled'], 0);
+    final positionMode =
+        settings['positionMode']?.toString().trim().toLowerCase() ?? 'absolute';
+    final screenId = settings['screenId']?.toString().trim() ?? '';
+    final displayFingerprint =
+        settings['displayFingerprint']?.toString().trim() ?? '';
+    if (alwaysOnTop != 1) {
+      throw const _RuntimeCommandFailure(
+        'DESIRED_SETTINGS_UNSUPPORTED',
+        'Android desktop pet overlays are always-on-top; alwaysOnTop=false cannot be applied exactly',
+      );
+    }
+    if (clickThroughMode != 'off') {
+      throw _RuntimeCommandFailure(
+        'DESIRED_SETTINGS_UNSUPPORTED',
+        'Android desktop pet renderer does not support clickThroughMode=$clickThroughMode',
+      );
+    }
+    if (soundEnabled != 0) {
+      throw const _RuntimeCommandFailure(
+        'DESIRED_SETTINGS_UNSUPPORTED',
+        'Android desktop pet renderer does not support package sound playback',
+      );
+    }
+    if (positionMode != 'absolute') {
+      throw _RuntimeCommandFailure(
+        'DESIRED_SETTINGS_UNSUPPORTED',
+        'Android desktop pet renderer requires positionMode=absolute; requested=$positionMode',
+      );
+    }
+    if (screenId.isNotEmpty && screenId != 'android-primary') {
+      throw _RuntimeCommandFailure(
+        'DESIRED_SETTINGS_UNSUPPORTED',
+        'Android desktop pet renderer exposes only android-primary; requested screenId=$screenId',
+      );
+    }
+    if (displayFingerprint.isNotEmpty) {
+      throw const _RuntimeCommandFailure(
+        'DESIRED_SETTINGS_UNSUPPORTED',
+        'Android desktop pet renderer cannot apply desktop displayFingerprint affinity exactly',
+      );
+    }
+
+    final scale = _double(settings['scale'], 1.0);
+    if (!scale.isFinite || scale < 0.1 || scale > 5.0) {
+      throw const _RuntimeCommandFailure(
+        'DESIRED_SCALE_INVALID',
+        'desktop pet scale must be between 0.1 and 5.0',
+      );
+    }
     final canvasWidth = _positiveInt(installation['canvasWidth'], 180);
     final canvasHeight = _positiveInt(installation['canvasHeight'], 180);
-    final width = (canvasWidth * scale).round().clamp(64, 420);
-    final height = (canvasHeight * scale).round().clamp(64, 420);
+    final width = (canvasWidth * scale).round();
+    final height = (canvasHeight * scale).round();
+    if (width < 64 || width > 420 || height < 64 || height > 420) {
+      throw _RuntimeCommandFailure(
+        'DESIRED_SETTINGS_UNSUPPORTED',
+        'Android desktop pet window ${width}x${height}dp is outside the supported 64..420dp range; desired state was not applied',
+      );
+    }
     final x = _int(settings['positionX'], 16);
     final y = _int(settings['positionY'], 120);
     final defaultAction =
@@ -1007,6 +1069,25 @@ class DesktopPetMobileRuntimeNotifier
       'x': x,
       'y': y,
     });
+    final appliedWidth = _positiveInt(loaded['width'], -1);
+    final appliedHeight = _positiveInt(loaded['height'], -1);
+    final appliedX = _int(loaded['x'], x - 1);
+    final appliedY = _int(loaded['y'], y - 1);
+    final appliedScale = _double(loaded['scale'], double.nan);
+    final scaleTolerance = 0.500001 / canvasWidth.toDouble();
+    final scaleMatches =
+        appliedScale.isFinite && (appliedScale - scale).abs() <= scaleTolerance;
+    if (appliedWidth != width ||
+        appliedHeight != height ||
+        appliedX != x ||
+        appliedY != y ||
+        !scaleMatches) {
+      await _native('desktop.pet.renderer.unload');
+      throw _RuntimeCommandFailure(
+        'DESIRED_SETTINGS_NOT_APPLIED',
+        'Android renderer applied ${appliedWidth}x${appliedHeight}dp at ($appliedX,$appliedY) scale=$appliedScale instead of requested ${width}x${height}dp at ($x,$y) scale=$scale',
+      );
+    }
     await _native('desktop.pet.renderer.show');
     state = state.copyWith(
       permissionGranted: true,
@@ -1106,9 +1187,11 @@ class DesktopPetMobileRuntimeNotifier
     }
 
     await _interruptPlayback('replaced_by_command', replacedByCommandId: commandId);
+    final commandInterruptible = inner['interruptible'] != false;
     final playResult = await _native('desktop.pet.renderer.play', <String, dynamic>{
       'actionKey': actionKey,
       'playbackRate': _double(inner['playbackRate'], 1.0).clamp(0.25, 4.0),
+      'interruptible': commandInterruptible,
     });
     final playbackId = playResult['playbackId']?.toString().trim() ?? '';
     if (playbackId.isEmpty) {
@@ -1147,7 +1230,7 @@ class DesktopPetMobileRuntimeNotifier
       interruptAfterMs: interruptAfterMs,
       minimumPlayMs: minimumPlayMs,
       maximumPlayMs: maximumPlayMs,
-      interruptible: playResult['interruptible'] != false,
+      interruptible: commandInterruptible && playResult['interruptible'] != false,
     );
     _playback = tracked;
     await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
@@ -1430,6 +1513,8 @@ class DesktopPetMobileRuntimeNotifier
       'positionX': _int(native['x'], 0),
       'positionY': _int(native['y'], 0),
       'screenId': 'android-primary',
+      'windowWidth': _nonNegativeInt(native['width']),
+      'windowHeight': _nonNegativeInt(native['height']),
       'scale': _double(native['scale'], 1.0),
       'appliedDesiredRevision': _cursor.lastAppliedDesiredRevision,
       'appliedDesiredHash': _cursor.appliedDesiredHash,
@@ -1452,6 +1537,13 @@ class DesktopPetMobileRuntimeNotifier
       'installationId': actualFacts['installationId'],
       'petId': actualFacts['petId'],
       'releaseId': actualFacts['releaseId'],
+      'visible': actualFacts['visible'],
+      'positionX': actualFacts['positionX'],
+      'positionY': actualFacts['positionY'],
+      'screenId': actualFacts['screenId'],
+      'windowWidth': actualFacts['windowWidth'],
+      'windowHeight': actualFacts['windowHeight'],
+      'scale': actualFacts['scale'],
       'stableActionKey': actualFacts['stableActionKey'],
       'currentActionKey': actualFacts['currentActionKey'],
       if (playbackId.isNotEmpty) 'playbackInstanceId': playbackId,
