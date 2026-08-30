@@ -49,6 +49,8 @@ const backendPackageManifest = await read("backend/internal/desktoppet/packagefo
 const backendReleaseService = await read("backend/internal/desktoppet/release/service.go");
 const backendModel = await read("backend/internal/desktoppet/installation/model.go");
 const backendDto = await read("backend/internal/desktoppet/installation/dto.go");
+const backendInstallationCoordinator = await read("backend/internal/desktoppet/installation/coordinator/coordinator.go");
+const backendInstallationHandler = await read("backend/internal/desktoppet/installation/handler.go");
 const configStore = await read("desktop/src/main/config-store.ts");
 const desktopIndex = await read("desktop/src/main/index.ts");
 const ipcHandlers = await read("desktop/src/main/ipc-handlers.ts");
@@ -100,6 +102,7 @@ const androidOverlay = await read("mobile_app/android/app/src/main/kotlin/com/am
 const androidPetRenderer = await read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/desktoppet/DesktopPetRendererNativeHandler.kt");
 const androidCompositionRoot = await read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/AndroidNativeCompositionRoot.kt");
 const desktopPetWorkflow = await read(".github/workflows/desktop-pet.yml");
+const sourceGitignore = await read(".gitignore");
 
 assert(
   runtimeDispatcher.includes("ListCommandsToDispatchForConnection(") &&
@@ -431,8 +434,7 @@ assert(
     desktopPetWorkflow.includes("Mobile Desktop Pet Gate") &&
     desktopPetWorkflow.includes("flutter analyze") &&
     desktopPetWorkflow.includes("flutter build apk --debug") &&
-    desktopPetWorkflow.includes("backend/internal/middleware/**") &&
-    desktopPetWorkflow.includes("backend/internal/runtimeprofile/**") &&
+    desktopPetWorkflow.includes("- 'backend/**'") &&
     desktopPetWorkflow.includes("Run desktop-pet CORS integration tests") &&
     desktopPetWorkflow.includes("verify-pet-player-singleton.mjs") &&
     desktopPetWorkflow.includes("verify-desktop-pet-runtime-singletrack.mjs") &&
@@ -573,6 +575,76 @@ for (const file of await collectFiles("desktop/src", [".ts", ".tsx"])) {
     `unexpected OS auto-launch authority: ${relative}`,
   );
 }
+
+
+const updateSettingsStart = manager.indexOf("async updateSettings(");
+const applyRuntimeSettingsStart = manager.indexOf("private async applyRuntimeSettingsLocal(", updateSettingsStart);
+const publicUpdateSettings = manager.slice(updateSettingsStart, applyRuntimeSettingsStart);
+assert(
+  updateSettingsStart >= 0 &&
+    applyRuntimeSettingsStart > updateSettingsStart &&
+    publicUpdateSettings.includes("return this.callUpdateSettingsApi") &&
+    !publicUpdateSettings.includes("applyRuntimeSettingsLocal") &&
+    !publicUpdateSettings.includes("markSettingsRevisionApplied"),
+  "public settings mutations must submit desired state only; Runtime V2 is the sole runtime/apply authority",
+);
+
+const updateDefaultStart = manager.indexOf("async updateDefaultAction(");
+const applyDefaultStart = manager.indexOf("private async applyDefaultActionLocal(", updateDefaultStart);
+const publicUpdateDefault = manager.slice(updateDefaultStart, applyDefaultStart);
+assert(
+  updateDefaultStart >= 0 &&
+    applyDefaultStart > updateDefaultStart &&
+    publicUpdateDefault.includes("return this.callUpdateDefaultActionApi") &&
+    !publicUpdateDefault.includes("applyDefaultActionLocal"),
+  "public default-action mutations must not bypass Runtime V2 desired-state convergence",
+);
+
+const persistPositionStart = manager.indexOf("private async persistRuntimePosition()");
+const persistPositionEnd = manager.indexOf("private registerChatStateIpc()", persistPositionStart);
+const persistPositionBody = manager.slice(persistPositionStart, persistPositionEnd);
+assert(
+  persistPositionStart >= 0 &&
+    persistPositionEnd > persistPositionStart &&
+    persistPositionBody.includes("await this.callUpdateSettingsApi") &&
+    !persistPositionBody.includes("markSettingsRevisionApplied") &&
+    !persistPositionBody.includes("this.activeSettings ="),
+  "physical drag persistence must not claim a backend settings revision is locally applied before Runtime V2 ACK",
+);
+
+assert(
+  manager.includes("PET_MUTATION_RESPONSE_INVALID") &&
+    manager.includes("PET_MUTATION_NOT_ACCEPTED") &&
+    manager.includes("desiredRevision") &&
+    manager.includes("operationId"),
+  "desktop mutation APIs must preserve operation metadata and fail closed on invalid/failed coordinator responses",
+);
+
+assert(
+  backendInstallationCoordinator.includes("Stage: operation.OpStageWaitingRuntimeACK") &&
+    backendInstallationCoordinator.includes("Stage: existing.Stage") &&
+    backendInstallationHandler.includes('"desiredRevision": result.DesiredRevision') &&
+    backendInstallationHandler.includes('"settingsRevision": updatedSettings.SettingsRevision'),
+  "coordinator mutation responses must preserve waiting-runtime-ACK stage and desired/settings revision metadata",
+);
+
+assert(
+  desktopPetWorkflow.includes("- 'backend/**'") &&
+    desktopPetWorkflow.includes("name: Backend Full Test Gate") &&
+    desktopPetWorkflow.includes("go test ./... -count=1") &&
+    desktopPetWorkflow.includes("sha256sum -c DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt") &&
+    desktopPetWorkflow.split("- name: Verify Dart SDK floor").length - 1 === 1 &&
+    desktopPetWorkflow.includes("run: dart --version"),
+  "Desktop Pet CI must trigger on all backend dependencies, run the complete backend suite, verify the frozen hash baseline, and contain no empty Flutter steps",
+);
+
+assert(
+  sourceGitignore.includes("temp_apk_extract/") &&
+    sourceGitignore.includes(".gradle-proot-build/") &&
+    sourceGitignore.includes("trace.atrace") &&
+    sourceGitignore.includes(".meituan-catpaw/"),
+  "final source-package hygiene must ignore local APK extraction, Gradle audit, trace, and AI workspace artifacts",
+);
 
 for (const file of await collectFiles("backend/internal/desktoppet", [".go"])) {
   const source = await fs.readFile(file, "utf8");
