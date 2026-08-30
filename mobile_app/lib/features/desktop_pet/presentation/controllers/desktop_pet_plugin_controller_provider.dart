@@ -88,7 +88,7 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
     try {
       final ok = await _fetchCanonical(gen, initial: true);
       if (!mounted) return;
-      if (ok) {
+      if (ok && gen == state.generation) {
         state = state.copyWith(loading: false);
       }
     } catch (e) {
@@ -104,7 +104,7 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
     try {
       final ok = await _fetchCanonical(gen, initial: false);
       if (!mounted) return;
-      if (ok) {
+      if (ok && gen == state.generation) {
         state = state.copyWith(refreshing: false);
       }
     } catch (e) {

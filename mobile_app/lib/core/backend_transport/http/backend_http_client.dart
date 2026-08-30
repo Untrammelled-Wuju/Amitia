@@ -96,7 +96,7 @@ class BackendHttpClient implements BackendHttpTransport {
         options: Options(
           method: request.method.value,
           headers: headers,
-          validateStatus: (status) => true,
+          validateStatus: (status) => status != null && status >= 200 && status < 300,
           receiveTimeout: request.timeout,
         ),
       );
@@ -106,16 +106,6 @@ class BackendHttpClient implements BackendHttpTransport {
       response.headers.forEach((name, values) {
         if (values.isNotEmpty) responseHeaders[name] = values.first;
       });
-
-      if (statusCode == 401 || statusCode == 403) {
-        throw BackendTransportError(
-          code: BackendTransportErrorCode.authenticationFailed,
-          method: request.method.value,
-          path: request.path,
-          statusCode: statusCode,
-          generation: _config.generation,
-        );
-      }
 
       return BackendHttpResponse(
         statusCode: statusCode,
@@ -197,6 +187,9 @@ class BackendHttpClient implements BackendHttpTransport {
     switch (statusCode) {
       case 400:
         return BackendTransportErrorCode.badRequest;
+      case 401:
+      case 403:
+        return BackendTransportErrorCode.authenticationFailed;
       case 404:
         return BackendTransportErrorCode.notFound;
       case 409:
