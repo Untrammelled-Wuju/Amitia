@@ -62,6 +62,10 @@ internal class RuntimeBridgeHandler(
 
     private fun handleSnapshot(result: MethodChannel.Result) {
         val snapshot = controller.snapshot()
+        android.util.Log.d(
+            BRIDGE_LOG_TAG,
+            "snapshot: state=${snapshot.state.name} gen=${snapshot.generation} activeProfile=${snapshot.activeProfile} lastError=${snapshot.lastError?.code?.name}:${snapshot.lastError?.message}"
+        )
         val manifest = manifestStore?.read()
         val runtimeInstalled = manifest is RuntimeManifestResult.Success
         val runtimeAvailable = snapshot.state == RuntimeState.READY ||
@@ -291,9 +295,18 @@ internal class RuntimeBridgeHandler(
     }
 
     private fun emitRuntimeLog(level: String, message: String) {
+        when (level) {
+            "ERROR" -> android.util.Log.e(BRIDGE_LOG_TAG, message)
+            "WARN" -> android.util.Log.w(BRIDGE_LOG_TAG, message)
+            else -> android.util.Log.i(BRIDGE_LOG_TAG, message)
+        }
         try {
             RuntimeLogCallback.instance?.onLog(level, message)
         } catch (_: Throwable) {
         }
+    }
+
+    private companion object {
+        const val BRIDGE_LOG_TAG = "AmitiaRuntime"
     }
 }

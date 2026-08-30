@@ -20,14 +20,25 @@ internal class DefaultProotProcessLauncher(
             }
             val fullCommand = ArrayList<String>(command.arguments.size + 1)
             fullCommand.add(command.binaryPath); fullCommand.addAll(command.arguments)
-            val pb = ProcessBuilder(fullCommand); pb.directory(File("/"))
             Log.d("AmitiaRuntime", "proot-cmd: ${fullCommand.joinToString(" ")}")
+            Log.d("AmitiaRuntime", "proot-env: ${command.environment.entries.joinToString(" ")}")
+
+            val logFile = File(runRootOf(command.environment), "proot-launch.log")
+            val shellCommand = ArrayList<String>()
+            shellCommand.add("/system/bin/sh")
+            shellCommand.add("-c")
+            shellCommand.add("\"\$@\" >> \"\$0\" 2>&1")
+            shellCommand.add(logFile.absolutePath)
+            shellCommand.addAll(fullCommand)
+
+            val pb = ProcessBuilder(shellCommand); pb.directory(File("/"))
             if (command.environment.isNotEmpty()) {
                 pb.environment().remove("LD_LIBRARY_PATH")
                 pb.environment().remove("LD_PRELOAD")
                 pb.environment().putAll(command.environment)
             }
             val process = pb.start()
+            Log.i("AmitiaRuntime", "proot-launched: alive=${runCatching { process.isAlive }.getOrElse { false }} log=${logFile.absolutePath}")
             val session = DefaultProotSession(
                 sessionId = sessionId,
                 process = process,
@@ -38,6 +49,18 @@ internal class DefaultProotProcessLauncher(
         } catch (e: SecurityException) { throw ProotLaunchException(ProotErrorCode.PROCESS_START_FAILED, "security: ${e.message}", e) }
         catch (e: java.io.IOException) { throw ProotLaunchException(ProotErrorCode.PROCESS_START_FAILED, "io: ${e.message}", e) }
         catch (e: Exception) { throw ProotLaunchException(ProotErrorCode.PROCESS_START_FAILED, "failed: ${e.message}", e) }
+    }
+
+    private fun runRootOf(environment: Map<String, String>): File {
+        val tmpDir = environment["PROOT_TMP_DIR"]
+        if (!tmpDir.isNullOrBlank()) {
+            val parent = File(tmpDir).parentFile
+            if (parent != null) {
+                parent.mkdirs()
+                return parent
+            }
+        }
+        return File("/")
     }
 
     private fun launchNative(

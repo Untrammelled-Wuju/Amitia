@@ -627,6 +627,7 @@ class RuntimeService : Service() {
         if (currentSid != null && event.sessionId != currentSid) return
         when (event) {
             is ProotEvent.Started -> {
+                Log.i(RUNTIME_LOG_TAG, "proot-event: started sid=${event.sessionId}")
                 if (startupFailureCleanupContextRef.get() != null) return
                 if (currentGenerationRef.get() == generation) {
                     notifyHostEvent(
@@ -639,11 +640,16 @@ class RuntimeService : Service() {
             }
             is ProotEvent.Exited -> {
                 val exit = event.exit
+                Log.w(
+                    RUNTIME_LOG_TAG,
+                    "proot-event: exited sid=${exit.sessionId} code=${exit.exitCode} stopRequested=${exit.stopRequested}"
+                )
                 if (exit.generation != currentGen) return
                 if (currentSid != null && exit.sessionId != currentSid) return
                 handleSessionExited(exit)
             }
             is ProotEvent.ExitWatcherFailed -> {
+                Log.e(RUNTIME_LOG_TAG, "proot-event: watcher-failed sid=${event.sessionId} msg=${event.message}")
                 if (exitWatcherFailureAlreadyHandled()) return
                 handleExitWatcherFailed(event)
             }
