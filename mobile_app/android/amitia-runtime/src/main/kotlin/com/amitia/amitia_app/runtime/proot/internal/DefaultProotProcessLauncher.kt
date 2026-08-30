@@ -5,6 +5,7 @@ import com.amitia.amitia_app.runtime.proot.ProotErrorCode
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotProcessLauncher
 import com.amitia.amitia_app.runtime.proot.ProotSession
+import android.util.Log
 import java.io.File
 
 internal class DefaultProotProcessLauncher(
@@ -19,12 +20,8 @@ internal class DefaultProotProcessLauncher(
             }
             val fullCommand = ArrayList<String>(command.arguments.size + 1)
             fullCommand.add(command.binaryPath); fullCommand.addAll(command.arguments)
-            val shellCommand = ArrayList<String>(fullCommand.size + 3)
-            shellCommand.add("/system/bin/sh")
-            shellCommand.add("-c")
-            shellCommand.add("exec \"\$@\"")
-            shellCommand.addAll(fullCommand)
-            val pb = ProcessBuilder(shellCommand); pb.directory(File("/"))
+            val pb = ProcessBuilder(fullCommand); pb.directory(File("/"))
+            Log.d("AmitiaRuntime", "proot-cmd: ${fullCommand.joinToString(" ")}")
             if (command.environment.isNotEmpty()) {
                 pb.environment().remove("LD_LIBRARY_PATH")
                 pb.environment().remove("LD_PRELOAD")
