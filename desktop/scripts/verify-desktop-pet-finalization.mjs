@@ -654,6 +654,80 @@ for (const file of await collectFiles("backend/internal/desktoppet", [".go"])) {
   );
 }
 
+const forbiddenArtifacts = [
+  { paths: [".gradle-proot-build", ".gradle-proot-build/"], description: ".gradle-proot-build" },
+  { paths: ["trace.atrace"], description: "trace.atrace" },
+  { paths: [".meituan-catpaw", ".meituan-catpaw/"], description: ".meituan-catpaw" },
+  { paths: [".workbuddy-ai", ".workbuddy-ai/"], description: ".workbuddy-ai" },
+  { paths: [".dart_tool", ".dart_tool/"], description: ".dart_tool" },
+  { paths: ["coverage", "coverage/"], description: "coverage" },
+  { paths: [".qdrant-initialized"], description: ".qdrant-initialized" },
+  { paths: ["storage/", "storage"], description: "storage/" },
+  { paths: ["surrealdb/", "surrealdb"], description: "surrealdb/" },
+  { paths: ["qdrant/", "qdrant"], description: "qdrant/" },
+];
+const gitignoreEntries = sourceGitignore.split("\n").map((l) => l.trim()).filter(Boolean);
+for (const forbidden of forbiddenArtifacts) {
+  assert(
+    gitignoreEntries.some((entry) => forbidden.paths.includes(entry)),
+    `.gitignore must contain rule for forbidden artifact: ${forbidden.description}`,
+  );
+}
+
+function isPathGitignored(relPath, gitignoreEntries) {
+  const normalized = relPath.replace(/\\/g, "/");
+  const parts = normalized.split("/");
+  for (const entry of gitignoreEntries) {
+    const cleanEntry = entry.replace(/\/$/, "");
+    if (parts.includes(cleanEntry)) return true;
+    if (normalized.endsWith(cleanEntry) || normalized.includes(`/${cleanEntry}/`)) return true;
+  }
+  return false;
+}
+
+async function scanForForbiddenArtifacts(directory, forbiddenList, gitignoreEntries) {
+  const violations = [];
+  const visit = async (currentDir) => {
+    let entries;
+    try {
+      entries = await fs.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      const fullPath = path.join(currentDir, entry.name);
+      const relPath = path.relative(repoRoot, fullPath);
+      const nameOfEntry = entry.name;
+      if (entry.isDirectory()) {
+        const isForbidden = forbiddenList.some(
+          (f) => nameOfEntry === f,
+        );
+        if (isForbidden && !isPathGitignored(relPath, gitignoreEntries)) {
+          violations.push(relPath);
+          continue;
+        }
+        if (!isForbidden) {
+          await visit(fullPath);
+        }
+      } else if (entry.isFile()) {
+        if (nameOfEntry === "trace.atrace" && !isPathGitignored(relPath, gitignoreEntries)) {
+          violations.push(relPath);
+        }
+      }
+    }
+  };
+  await visit(directory);
+  return violations;
+}
+
+const forbiddenDirNames = forbiddenArtifacts.map((f) => f.description.replace("/", ""));
+const workspaceViolations = await scanForForbiddenArtifacts(repoRoot, forbiddenDirNames, gitignoreEntries);
+assert(
+  workspaceViolations.length === 0,
+  `workspace must not contain forbidden build/runtime artifacts: ${workspaceViolations.join(", ")}`,
+);
+
 console.log(
   "[verify-desktop-pet-finalization] PASSED: Runtime V2 behavior, cloud-local pet authority, character reconciliation, rollback, and startup authority are frozen",
 );

@@ -305,7 +305,10 @@ build_out.txt
 # Final source-package hygiene (local audit/build artifacts)
 temp_apk_extract/
 .gradle-proot-build/
+.gradle/
 trace.atrace
 .meituan-catpaw/
+.dart_tool/
+coverage/
 C*/
 
