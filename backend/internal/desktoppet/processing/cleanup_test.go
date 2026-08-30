@@ -309,3 +309,68 @@ func TestCleanupDoesNotTouchHistoryPackages(t *testing.T) {
 		t.Errorf("pkg2 dir should not be removed, got err=%v", err)
 	}
 }
+
+func TestCleanupRejectsUnsafeStorageComponents(t *testing.T) {
+	dir := t.TempDir()
+	c := NewCleanupManager(dir)
+
+	for _, taskID := range []string{"../escape", "task/escape", `task\\escape`, ".", ".."} {
+		if err := c.CleanupTempDir(taskID); err == nil {
+			t.Fatalf("expected unsafe taskID %q to be rejected", taskID)
+		}
+	}
+	for _, actionKey := range []string{"../escape", "action/escape", `action\\escape`, ".", ".."} {
+		if err := c.CleanupActionResources("task-1", 1, actionKey); err == nil {
+			t.Fatalf("expected unsafe actionKey %q to be rejected", actionKey)
+		}
+	}
+}
+
+func TestCleanupDoesNotFollowTargetSymlink(t *testing.T) {
+	dir := t.TempDir()
+	outside := t.TempDir()
+	outsideFile := filepath.Join(outside, "keep.txt")
+	if err := os.WriteFile(outsideFile, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	root := filepath.Join(dir, "desktop-pets", "generation-tasks", "task-1", "processed")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, ".tmp")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+
+	c := NewCleanupManager(dir)
+	if err := c.CleanupTempDir("task-1"); err == nil {
+		t.Fatal("expected cleanup target symlink to be rejected")
+	}
+	if _, err := os.Stat(outsideFile); err != nil {
+		t.Fatalf("outside file must remain untouched: %v", err)
+	}
+}
+
+func TestEnsureVersionDirRejectsSymlinkGenerationRoot(t *testing.T) {
+	dir := t.TempDir()
+	outside := t.TempDir()
+	parent := filepath.Join(dir, "desktop-pets")
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rootLink := filepath.Join(parent, "generation-tasks")
+	if err := os.Symlink(outside, rootLink); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+
+	c := NewCleanupManager(dir)
+	if _, err := c.EnsureVersionDir("task-1", 1); err == nil {
+		t.Fatal("expected symlink generation root to be rejected")
+	}
+	if entries, err := os.ReadDir(outside); err != nil {
+		t.Fatal(err)
+	} else if len(entries) != 0 {
+		t.Fatalf("outside directory must remain untouched, got %d entries", len(entries))
+	}
+}

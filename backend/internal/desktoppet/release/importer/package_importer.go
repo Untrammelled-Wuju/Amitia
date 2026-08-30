@@ -779,11 +779,17 @@ func (pi *PackageImporter) hashWorkspaceFiles(workspaceDir, releaseID string, ma
 	var fileCount int
 	now := formatImportTimestamp(time.Now())
 
-	err := filepath.Walk(workspaceDir, func(filePath string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(workspaceDir, func(filePath string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
+		if filePath == workspaceDir {
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("workspace symlink is not allowed: %s", filePath)
+		}
+		if entry.IsDir() {
 			return nil
 		}
 
@@ -791,21 +797,27 @@ func (pi *PackageImporter) hashWorkspaceFiles(workspaceDir, releaseID string, ma
 		if relErr != nil {
 			return relErr
 		}
-		clean := path.Clean(strings.ReplaceAll(relPath, `\`, "/"))
-		if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
-			return fmt.Errorf("workspace path escape: %s", relPath)
+		clean, pathErr := packageformat.NormalizePackagePath(filepath.ToSlash(relPath))
+		if pathErr != nil {
+			return fmt.Errorf("workspace path is not Package V2 canonical: %s: %w", relPath, pathErr)
+		}
+		verifiedPath, resolveErr := packageformat.SecureResolveExistingUnderRoot(workspaceDir, clean)
+		if resolveErr != nil {
+			return resolveErr
 		}
 
-		file, openErr := os.Open(filePath)
+		file, openErr := os.Open(verifiedPath)
 		if openErr != nil {
 			return openErr
 		}
-		defer file.Close()
-
 		hash := sha256.New()
 		written, copyErr := io.Copy(hash, file)
+		closeErr := file.Close()
 		if copyErr != nil {
 			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 
 		fileHash := hex.EncodeToString(hash.Sum(nil))

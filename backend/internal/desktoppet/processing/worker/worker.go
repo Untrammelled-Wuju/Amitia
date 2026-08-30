@@ -523,13 +523,8 @@ func (w *Worker) cleanupDerivedActionResources(task *processing.ProcessingTask, 
 	if task == nil || action == nil || task.GenerationTaskID == "" || action.ActionKey == "" {
 		return
 	}
-	actionDir := filepath.Join(
-		w.dataDir,
-		"desktop-pets", "generation-tasks", task.GenerationTaskID,
-		"processed", fmt.Sprintf("version-%d", task.ProcessingVersion),
-		"actions", action.ActionKey,
-	)
-	if err := os.RemoveAll(actionDir); err != nil {
+	cleanupManager := processing.NewCleanupManager(w.dataDir)
+	if err := cleanupManager.CleanupActionResources(task.GenerationTaskID, task.ProcessingVersion, action.ActionKey); err != nil {
 		log.Logger.Errorf("cleanup derived processing action resources %s failed: %v", action.ID, err)
 	}
 }

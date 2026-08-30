@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/processing/contracts"
 	"github.com/u-ai/backend/internal/desktoppet/processing/source"
@@ -17,6 +17,10 @@ type ProcessingRepo interface {
 	CreateProcessingTask(tx *gorm.DB, task *processing.ProcessingTask) error
 	CreateProcessingAction(tx *gorm.DB, action *processing.ProcessingAction) error
 	DB() *gorm.DB
+}
+
+type transactionalManifestStore interface {
+	CreateInTx(ctx context.Context, tx *gorm.DB, record *source.ProcessingSourceManifestRecord) error
 }
 
 type TaskBuilder struct {
@@ -188,7 +192,11 @@ func (b *TaskBuilder) Build(ctx context.Context, req *CreateTaskRequest) (*proce
 				return fmt.Errorf("taskbuilder: build manifest for action %s: %w", ai.ActionKey, mErr)
 			}
 
-			if err := b.manifestStore.Create(ctx, manifestRecord); err != nil {
+			txStore, ok := b.manifestStore.(transactionalManifestStore)
+			if !ok {
+				return fmt.Errorf("taskbuilder: manifest store does not support transactional writes")
+			}
+			if err := txStore.CreateInTx(ctx, tx, manifestRecord); err != nil {
 				return fmt.Errorf("taskbuilder: store manifest for action %s: %w", ai.ActionKey, err)
 			}
 		}

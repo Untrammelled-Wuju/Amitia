@@ -49,7 +49,7 @@ func NewDirectoryPackageFS(root string) *DirectoryPackageFS {
 }
 
 func (fs *DirectoryPackageFS) Open(path string) (io.ReadCloser, error) {
-	abs, err := SecureJoinUnderRoot(fs.root, path)
+	abs, err := SecureResolveExistingUnderRoot(fs.root, path)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (fs *DirectoryPackageFS) Stat(path string) (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return os.Stat(abs)
+	return os.Lstat(abs)
 }
 
 func (fs *DirectoryPackageFS) List() ([]string, error) {
@@ -94,7 +94,10 @@ func NewArchivePackageFS(reader *zip.Reader) *ArchivePackageFS {
 		if f.FileInfo().IsDir() {
 			continue
 		}
-		normalized := filepath.ToSlash(filepath.Clean(f.Name))
+		normalized, err := NormalizePackagePath(f.Name)
+		if err != nil {
+			continue
+		}
 		files[normalized] = f
 	}
 	return &ArchivePackageFS{reader: reader, files: files}
