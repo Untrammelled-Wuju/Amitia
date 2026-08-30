@@ -5920,3 +5920,60 @@ CREATE TABLE IF NOT EXISTS desktop_pet_bridge_request_snapshots (
   request_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL DEFAULT ''
 );
+
+--- 来源: desktop_pet_runtime_behavior_finalization.go ---
+ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN position_x INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN position_y INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN screen_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN window_width INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN window_height INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN scale REAL NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS desktop_pet_owner_mappings (
+  cloud_user_id TEXT NOT NULL DEFAULT '',
+  device_id TEXT NOT NULL DEFAULT '',
+  local_owner_id TEXT NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY(cloud_user_id, device_id)
+);
+CREATE INDEX IF NOT EXISTS idx_dpom_local_owner ON desktop_pet_owner_mappings(local_owner_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_affinities (
+  cloud_user_id TEXT NOT NULL DEFAULT '',
+  character_id TEXT NOT NULL DEFAULT '',
+  device_id TEXT NOT NULL DEFAULT '',
+  installation_id TEXT NOT NULL DEFAULT '',
+  binding_revision INTEGER NOT NULL DEFAULT 0,
+  verified_at DATETIME NOT NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY(cloud_user_id, character_id)
+);
+CREATE INDEX IF NOT EXISTS idx_dpbma_device ON desktop_pet_behavior_mesh_affinities(cloud_user_id, device_id);
+
+CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_outbox (
+  event_id TEXT NOT NULL DEFAULT '',
+  cloud_user_id TEXT NOT NULL DEFAULT '',
+  character_id TEXT NOT NULL DEFAULT '',
+  target_device_id TEXT NOT NULL DEFAULT '',
+  target_installation_id TEXT NOT NULL DEFAULT '',
+  reliability TEXT NOT NULL DEFAULT '',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  payload_hash TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  available_at DATETIME NOT NULL,
+  claim_expires_at DATETIME,
+  expires_at DATETIME,
+  last_error TEXT NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  delivered_at DATETIME,
+  PRIMARY KEY(cloud_user_id, event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_dpbmo_due ON desktop_pet_behavior_mesh_outbox(status, available_at);
+CREATE INDEX IF NOT EXISTS idx_dpbmo_claim ON desktop_pet_behavior_mesh_outbox(status, claim_expires_at);
+CREATE INDEX IF NOT EXISTS idx_dpbmo_expiry ON desktop_pet_behavior_mesh_outbox(status, expires_at);
+CREATE INDEX IF NOT EXISTS idx_dpbmo_character ON desktop_pet_behavior_mesh_outbox(cloud_user_id, character_id, status);
+CREATE INDEX IF NOT EXISTS idx_dpbmo_device ON desktop_pet_behavior_mesh_outbox(cloud_user_id, target_device_id, status);

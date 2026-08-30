@@ -147,6 +147,13 @@ func TestPersistActualStateSnapshotProjectsAuthoritativeRuntimeState(t *testing.
 		InstallationID:               "installation-1",
 		PetID:                        "pet-1",
 		ReleaseID:                    "release-1",
+		Visible:                      true,
+		PositionX:                    120,
+		PositionY:                    240,
+		ScreenID:                     "display-1",
+		WindowWidth:                  180,
+		WindowHeight:                 200,
+		Scale:                        1.0,
 		StableActionKey:              "idle",
 		CurrentActionKey:             "wave",
 		PlaybackInstanceID:           "playback-1",
@@ -176,6 +183,10 @@ func TestPersistActualStateSnapshotProjectsAuthoritativeRuntimeState(t *testing.
 	}
 	if state.ActualStateHash != "sha256:state" || state.CurrentActionKey != "wave" || !state.Visible {
 		t.Fatalf("actual state projection incomplete: %#v", state)
+	}
+	if state.PositionX != 120 || state.PositionY != 240 || state.ScreenID != "display-1" ||
+		state.WindowWidth != 180 || state.WindowHeight != 200 || state.Scale != 1.0 {
+		t.Fatalf("actual window geometry projection incomplete: %#v", state)
 	}
 }
 

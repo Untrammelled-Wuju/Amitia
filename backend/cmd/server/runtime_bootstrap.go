@@ -173,6 +173,9 @@ func (b *runtimeBootstrap) RegisterApplication(services *AppServices) error {
 	if err := b.orchestrator.Register(newTaskRuntimeComponent(services)); err != nil {
 		return fmt.Errorf("register task runtime: %w", err)
 	}
+	if err := b.orchestrator.Register(newDesktopPetBehaviorMeshComponent(services)); err != nil {
+		return fmt.Errorf("register desktop pet behavior mesh: %w", err)
+	}
 	if err := b.orchestrator.Register(newDesktopPetComponent(services)); err != nil {
 		return fmt.Errorf("register desktop pet: %w", err)
 	}

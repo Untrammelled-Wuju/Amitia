@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -1024,6 +1025,9 @@ func (h *Handler) runtimeActualStateFromSnapshot(conn *Connection, env *Envelope
 	if snapshot.AppliedDesiredRevision < 0 || snapshot.AppliedSettingsRevision < 0 || snapshot.LastProcessedCommandSequence < 0 {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "state snapshot revisions and command cursor must be non-negative")
 	}
+	if snapshot.WindowWidth < 0 || snapshot.WindowHeight < 0 || math.IsNaN(snapshot.Scale) || math.IsInf(snapshot.Scale, 0) || snapshot.Scale < 0 {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "state snapshot contains invalid window geometry")
+	}
 	if snapshot.AppliedDesiredRevision > 0 && strings.TrimSpace(snapshot.AppliedDesiredHash) == "" {
 		return nil, NewProtocolError(ErrCodeDesiredHashMismatch, "state snapshot appliedDesiredHash is required when appliedDesiredRevision > 0")
 	}
@@ -1036,6 +1040,9 @@ func (h *Handler) runtimeActualStateFromSnapshot(conn *Connection, env *Envelope
 	windowStatus := strings.TrimSpace(snapshot.WindowStatus)
 	rendererStatus := strings.TrimSpace(snapshot.RendererStatus)
 	playbackStatus := strings.TrimSpace(snapshot.PlaybackStatus)
+	if snapshot.Visible != (windowStatus == WindowStatusVisible) {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "state snapshot visible flag does not match windowStatus")
+	}
 	state := &RuntimeActualState{
 		UserID:                  string(conn.UserID),
 		DeviceID:                string(conn.DeviceID),
@@ -1053,7 +1060,13 @@ func (h *Handler) runtimeActualStateFromSnapshot(conn *Connection, env *Envelope
 		WindowStatus:            windowStatus,
 		RendererStatus:          rendererStatus,
 		PlaybackStatus:          playbackStatus,
-		Visible:                 windowStatus == WindowStatusVisible,
+		Visible:                 snapshot.Visible,
+		PositionX:               snapshot.PositionX,
+		PositionY:               snapshot.PositionY,
+		ScreenID:                strings.TrimSpace(snapshot.ScreenID),
+		WindowWidth:             snapshot.WindowWidth,
+		WindowHeight:            snapshot.WindowHeight,
+		Scale:                   snapshot.Scale,
 		StableActionKey:         strings.TrimSpace(snapshot.StableActionKey),
 		CurrentActionKey:        strings.TrimSpace(snapshot.CurrentActionKey),
 		PlaybackInstanceID:      strings.TrimSpace(snapshot.PlaybackInstanceID),
