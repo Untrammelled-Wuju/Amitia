@@ -8,7 +8,7 @@ const List<String> _deviceLocalApiPrefixes = <String>[
 ];
 
 bool isDeviceLocalApiPath(String path) {
-  final normalized = path.split('?', 1).first;
+  final normalized = path.split('?').first;
   return _deviceLocalApiPrefixes.any(
     (prefix) => normalized == prefix || normalized.startsWith('$prefix/'),
   );

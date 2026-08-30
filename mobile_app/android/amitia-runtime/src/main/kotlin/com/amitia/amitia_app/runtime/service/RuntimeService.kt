@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
-import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.amitia.amitia_app.runtime.AndroidRuntimeModule

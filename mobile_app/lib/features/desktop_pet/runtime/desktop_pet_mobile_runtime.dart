@@ -243,6 +243,9 @@ class DesktopPetMobileRuntimeNotifier
   bool _persistingPosition = false;
   _PendingPosition? _pendingPosition;
   Future<void> _localPlaybackQuiesce = Future<void>.value();
+  Map<String, dynamic> _lastConfirmedNativeStatus = <String, dynamic>{};
+  bool _nativeStatusAvailable = false;
+  String _nativeStatusLastError = '';
 
   void attach(BackendConnectionConfig? config) {
     if (_disposed) return;
@@ -275,22 +278,43 @@ class DesktopPetMobileRuntimeNotifier
 
   Future<void> refreshStatus() async {
     if (!Platform.isAndroid) return;
-    final result = await _native('desktop.pet.renderer.status');
+    Map<String, dynamic> result = <String, dynamic>{};
+    try {
+      result = await _native('desktop.pet.renderer.status');
+      _lastConfirmedNativeStatus = Map<String, dynamic>.from(result);
+      _nativeStatusAvailable = true;
+      _nativeStatusLastError = '';
+    } catch (e) {
+      _nativeStatusAvailable = false;
+      _nativeStatusLastError = e.toString();
+      state = state.copyWith(
+        error: 'native_status_unavailable: ${e.toString()}',
+        updatedAt: DateTime.now(),
+      );
+      return;
+    }
     final overlay = await _native('system.overlay.status');
     final permission = overlay['permissionGranted'] == true ||
         result['permissionGranted'] == true;
+    final loaded = result['loaded'] == true;
     await _loadActiveInstallationName();
     state = state.copyWith(
       permissionGranted: permission,
-      rendererLoaded: result['loaded'] == true,
-      visible: result['visible'] == true,
-      paused: result['paused'] == true,
-      installationId: result['installationId']?.toString() ?? state.installationId,
-      currentActionKey:
-          result['currentActionKey']?.toString() ?? state.currentActionKey,
-      playbackId: result['playbackId']?.toString() ?? state.playbackId,
+      rendererLoaded: loaded,
+      visible: loaded ? (result['visible'] == true) : false,
+      paused: loaded ? (result['paused'] == true) : false,
+      installationId: loaded
+          ? (result['installationId']?.toString() ?? '')
+          : '',
+      currentActionKey: loaded
+          ? (result['currentActionKey']?.toString() ?? '')
+          : '',
+      playbackId: loaded
+          ? (result['playbackId']?.toString() ?? '')
+          : '',
       alpha: _double(result['alpha'], state.alpha).clamp(0.2, 1.0).toDouble(),
       updatedAt: DateTime.now(),
+      error: _nativeStatusLastError.isEmpty ? '' : state.error,
     );
   }
 
@@ -1260,6 +1284,9 @@ class DesktopPetMobileRuntimeNotifier
     }
     try {
       final native = await _native('desktop.pet.renderer.status');
+      _lastConfirmedNativeStatus = Map<String, dynamic>.from(native);
+      _nativeStatusAvailable = true;
+      _nativeStatusLastError = '';
       if (_playback != tracked) return;
       final nativeCycle = _nonNegativeInt(native['cycleIndex']);
       final completedPlaybackId = native['lastCompletedPlaybackId']?.toString() ?? '';
@@ -1479,9 +1506,20 @@ class DesktopPetMobileRuntimeNotifier
   Future<void> _sendStateSnapshot({String currentCommandId = ''}) async {
     if (!state.connected || _sessionId.isEmpty || _socket == null) return;
     Map<String, dynamic> native = <String, dynamic>{};
+    bool nativeSuccess = false;
     try {
       native = await _native('desktop.pet.renderer.status');
-    } catch (_) {}
+      _lastConfirmedNativeStatus = Map<String, dynamic>.from(native);
+      _nativeStatusAvailable = true;
+      _nativeStatusLastError = '';
+      nativeSuccess = true;
+    } catch (e) {
+      _nativeStatusAvailable = false;
+      _nativeStatusLastError = e.toString();
+    }
+    if (!nativeSuccess) {
+      return;
+    }
     final loaded = native['loaded'] == true;
     final visible = native['visible'] == true;
     final paused = native['paused'] == true;
@@ -1635,7 +1673,17 @@ class DesktopPetMobileRuntimeNotifier
       final drained = await _native('desktop.pet.renderer.events.drain');
       final rawEvents = drained['events'];
       if (rawEvents is! List || rawEvents.isEmpty) return;
-      final native = await _native('desktop.pet.renderer.status');
+      Map<String, dynamic> native = <String, dynamic>{};
+      try {
+        native = await _native('desktop.pet.renderer.status');
+        _lastConfirmedNativeStatus = Map<String, dynamic>.from(native);
+        _nativeStatusAvailable = true;
+        _nativeStatusLastError = '';
+      } catch (e) {
+        _nativeStatusAvailable = false;
+        _nativeStatusLastError = e.toString();
+        native = Map<String, dynamic>.from(_lastConfirmedNativeStatus);
+      }
       final installationId = native['installationId']?.toString() ?? state.installationId;
       final releaseId = native['releaseId']?.toString() ?? '';
       final actionKey = native['currentActionKey']?.toString() ?? state.currentActionKey;
