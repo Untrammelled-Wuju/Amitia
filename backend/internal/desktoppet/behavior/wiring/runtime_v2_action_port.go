@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
@@ -58,17 +59,6 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		payload.ExpiresAt = cmd.ExpiresAt.UTC().Format(time.RFC3339Nano)
 	}
 
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return &behavior.CommandReceipt{
-			CommandID:  "",
-			Accepted:   false,
-			Status:     behavior.CmdRejected,
-			Error:      "marshal payload failed",
-			ReceivedAt: time.Now(),
-		}, nil
-	}
-
 	idempotencyKey := cmd.IdempotencyKey
 	if idempotencyKey == "" {
 		idempotencyKey = "behavior_" + cmd.DecisionID
@@ -84,6 +74,12 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "runtime route identity is incomplete")
 	}
 
+	expectedRuntimeID := strings.TrimSpace(cmd.RuntimeID)
+	expectedPetInstanceID := strings.TrimSpace(cmd.PetInstanceID)
+	if expectedRuntimeID != "" && expectedPetInstanceID != "" && expectedRuntimeID != expectedPetInstanceID {
+		return rejectedRuntimeReceipt("", behavior.ErrCodeRuntimeCommandFailed, "runtimeId and petInstanceId target different runtime instances"), nil
+	}
+
 	var targetConn *runtimev2.Connection
 	targetSessionID := ""
 	targetGeneration := int64(0)
@@ -94,7 +90,10 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		if string(conn.DeviceID) != cmd.DeviceID {
 			continue
 		}
-		if cmd.RuntimeID != "" && string(conn.RuntimeID) != cmd.RuntimeID {
+		if expectedRuntimeID != "" && string(conn.RuntimeID) != expectedRuntimeID {
+			continue
+		}
+		if expectedPetInstanceID != "" && string(conn.RuntimeID) != expectedPetInstanceID {
 			continue
 		}
 		sessionID, generation := conn.SessionSnapshot()
@@ -114,6 +113,23 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 			Error:      "target desktop pet runtime is offline",
 			ReceivedAt: time.Now(),
 		}, behavior.NewBehaviorError(behavior.ErrCodeRuntimeOffline, "target desktop pet runtime is offline")
+	}
+
+	// Runtime identity is a physical execution fence. Resolve it from the live
+	// connection before serializing the payload so an upstream command that only
+	// carries user/device affinity cannot produce an empty or stale runtimeId.
+	targetRuntimeID := string(targetConn.RuntimeID)
+	payload.RuntimeID = targetRuntimeID
+	payload.PetInstanceID = targetRuntimeID
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return &behavior.CommandReceipt{
+			CommandID:  "",
+			Accepted:   false,
+			Status:     behavior.CmdRejected,
+			Error:      "marshal payload failed",
+			ReceivedAt: time.Now(),
+		}, nil
 	}
 
 	v2Cmd, err := a.facade.Commands().CreateEphemeralCommandForSession(
@@ -167,7 +183,7 @@ func (a *V2RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 			// An in-flight ephemeral command is owned by one exact RuntimeSession.
 			// Never treat a duplicate from another session as accepted.
 			if v2Cmd.RuntimeSessionID != targetSessionID ||
-				(cmd.RuntimeID != "" && v2Cmd.RuntimeID != "" && v2Cmd.RuntimeID != cmd.RuntimeID) {
+				(v2Cmd.RuntimeID != "" && v2Cmd.RuntimeID != targetRuntimeID) {
 				return &behavior.CommandReceipt{
 					CommandID:     v2Cmd.ID,
 					Accepted:      false,

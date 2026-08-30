@@ -70,7 +70,13 @@ type RuntimeActualState struct {
 	RendererStatus string `gorm:"column:renderer_status;type:text" json:"rendererStatus"`
 	PlaybackStatus string `gorm:"column:playback_status;type:text" json:"playbackStatus"`
 
-	Visible bool `gorm:"column:visible;type:integer" json:"visible"`
+	Visible      bool    `gorm:"column:visible;type:integer" json:"visible"`
+	PositionX    int     `gorm:"column:position_x;type:integer" json:"positionX"`
+	PositionY    int     `gorm:"column:position_y;type:integer" json:"positionY"`
+	ScreenID     string  `gorm:"column:screen_id;type:text" json:"screenId"`
+	WindowWidth  int     `gorm:"column:window_width;type:integer" json:"windowWidth"`
+	WindowHeight int     `gorm:"column:window_height;type:integer" json:"windowHeight"`
+	Scale        float64 `gorm:"column:scale;type:real" json:"scale"`
 
 	StableActionKey    string `gorm:"column:stable_action_key;type:text" json:"stableActionKey"`
 	CurrentActionKey   string `gorm:"column:current_action_key;type:text" json:"currentActionKey"`

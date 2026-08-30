@@ -133,25 +133,32 @@ type DesiredAppliedPayload struct {
 }
 
 type StateSnapshotPayload struct {
-	ConnectionGeneration         int64  `json:"connectionGeneration"`
-	EventSequence                int64  `json:"eventSequence"`
-	ActualStateHash              string `json:"actualStateHash"`
-	InstanceStatus               string `json:"instanceStatus"`
-	WindowStatus                 string `json:"windowStatus"`
-	RendererStatus               string `json:"rendererStatus"`
-	PlaybackStatus               string `json:"playbackStatus"`
-	AppliedDesiredRevision       int64  `json:"appliedDesiredRevision"`
-	AppliedDesiredHash           string `json:"appliedDesiredHash,omitempty"`
-	AppliedSettingsRevision      int64  `json:"appliedSettingsRevision"`
-	InstallationID               string `json:"installationId"`
-	PetID                        string `json:"petId"`
-	ReleaseID                    string `json:"releaseId"`
-	StableActionKey              string `json:"stableActionKey"`
-	CurrentActionKey             string `json:"currentActionKey"`
-	PlaybackInstanceID           string `json:"playbackInstanceId,omitempty"`
-	CurrentCommandID             string `json:"currentCommandId,omitempty"`
-	LastProcessedCommandSequence int64  `json:"lastProcessedCommandSequence"`
-	CapturedAt                   string `json:"capturedAt"`
+	ConnectionGeneration         int64   `json:"connectionGeneration"`
+	EventSequence                int64   `json:"eventSequence"`
+	ActualStateHash              string  `json:"actualStateHash"`
+	InstanceStatus               string  `json:"instanceStatus"`
+	WindowStatus                 string  `json:"windowStatus"`
+	RendererStatus               string  `json:"rendererStatus"`
+	PlaybackStatus               string  `json:"playbackStatus"`
+	AppliedDesiredRevision       int64   `json:"appliedDesiredRevision"`
+	AppliedDesiredHash           string  `json:"appliedDesiredHash,omitempty"`
+	AppliedSettingsRevision      int64   `json:"appliedSettingsRevision"`
+	InstallationID               string  `json:"installationId"`
+	PetID                        string  `json:"petId"`
+	ReleaseID                    string  `json:"releaseId"`
+	Visible                      bool    `json:"visible"`
+	PositionX                    int     `json:"positionX"`
+	PositionY                    int     `json:"positionY"`
+	ScreenID                     string  `json:"screenId"`
+	WindowWidth                  int     `json:"windowWidth"`
+	WindowHeight                 int     `json:"windowHeight"`
+	Scale                        float64 `json:"scale"`
+	StableActionKey              string  `json:"stableActionKey"`
+	CurrentActionKey             string  `json:"currentActionKey"`
+	PlaybackInstanceID           string  `json:"playbackInstanceId,omitempty"`
+	CurrentCommandID             string  `json:"currentCommandId,omitempty"`
+	LastProcessedCommandSequence int64   `json:"lastProcessedCommandSequence"`
+	CapturedAt                   string  `json:"capturedAt"`
 }
 
 type HealthChangedPayload struct {

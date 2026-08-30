@@ -75,6 +75,13 @@ Runtime 重连后主动发送的完整状态快照。后端用它重建 ActualSt
     "installationId": "install_xxx",
     "petId": "pet_xxx",
     "releaseId": "release_xxx",
+    "visible": true,
+    "positionX": 120,
+    "positionY": 240,
+    "screenId": "display-primary",
+    "windowWidth": 180,
+    "windowHeight": 200,
+    "scale": 1.0,
     "stableActionKey": "idle",
     "currentActionKey": "wave",
     "playbackInstanceId": "pb_xxx",
@@ -90,3 +97,4 @@ Runtime 重连后主动发送的完整状态快照。后端用它重建 ActualSt
 - `desired_applied` 必须包含 `desiredHash` 和 `desiredRevision` 用于后端验证
 - `desired_rejected` 必须携带结构化 `errorCode`
 - Snapshot 必须有 `connectionGeneration` 和 `eventSequence` 用于乱序保护
+- Snapshot 的 `visible` 必须与 `windowStatus` 一致；窗口几何必须报告实际物理值，禁止用 Desired 值伪造 Actual State

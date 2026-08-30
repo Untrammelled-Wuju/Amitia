@@ -161,6 +161,7 @@ type AppServices struct {
 	BridgeRecoveryWorker         *revisioncommit.RecoveryWorker
 	BehaviorService              *behavior.BehaviorService
 	AdapterManager               *adapters.AdapterManager
+	DesktopPetBehaviorMesh       *desktopPetBehaviorMeshPublisher
 	DesktopPetOwnerMapper        *desktopPetOwnerMapper
 	Reconciliation               *mindruntime.ReconciliationEngine
 	CircuitBreakers              *mindruntime.CircuitBreakerRegistry
@@ -918,7 +919,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if behaviorAssembled != nil && behaviorAssembled.Engine != nil {
 		var behaviorPublisher behavior.BehaviorEventPublisher = adapters.NewEnginePublisher(behaviorAssembled.Engine)
 		if runtimeProfile == runtimeprofile.ProfileCloudCore {
-			behaviorMeshPublisher = newDesktopPetBehaviorMeshPublisher()
+			behaviorMeshPublisher, err = newDesktopPetBehaviorMeshPublisher(ctx.DB)
+			if err != nil {
+				return nil, fmt.Errorf("initialize desktop pet behavior mesh: %w", err)
+			}
 			behaviorPublisher = behaviorMeshPublisher
 		}
 		adapterManager = adapters.NewAdapterManager(
@@ -1059,6 +1063,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 		BehaviorService:              behaviorSvc,
 		AdapterManager:               adapterManager,
+		DesktopPetBehaviorMesh:       behaviorMeshPublisher,
 		DesktopPetOwnerMapper:        desktopPetOwnerMapper,
 		Reconciliation:               reconciliationEngine,
 		CircuitBreakers:              cbRegistry,
@@ -1107,6 +1112,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("device-agent task runtime service is required")
 		}
 		localRuntimeDispatcher := devicemeshagent.NewRuntimeDispatcher()
+		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshResolveHandler, newDesktopPetBehaviorMeshResolveHandler(services))
 		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshHandler, newDesktopPetBehaviorMeshInvokeHandler(services))
 		if kernelContainer.GameHost != nil {
 			localRuntimeDispatcher.RegisterCancellable(gameHostManagementInvokeHandler, newGameHostManagementInvokeHandler(services))

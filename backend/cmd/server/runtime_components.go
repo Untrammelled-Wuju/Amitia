@@ -27,6 +27,9 @@ var (
 		runtimeprofile.ProfileLocal,
 		runtimeprofile.ProfileCloudCore,
 	}
+	profilesCloudCore = []runtimeprofile.Profile{
+		runtimeprofile.ProfileCloudCore,
+	}
 	profilesLocalOnly = []runtimeprofile.Profile{
 		runtimeprofile.ProfileLocal,
 	}
@@ -337,6 +340,66 @@ func (c *taskRuntimeComponent) Stop(ctx context.Context) error {
 		return nil
 	}
 	svc.KernelContainer.TaskRuntimeService.Shutdown(ctx)
+	return nil
+}
+
+type desktopPetBehaviorMeshComponent struct {
+	services *AppServices
+	mu       sync.Mutex
+	started  bool
+}
+
+func newDesktopPetBehaviorMeshComponent(services *AppServices) *desktopPetBehaviorMeshComponent {
+	return &desktopPetBehaviorMeshComponent{services: services}
+}
+
+func (c *desktopPetBehaviorMeshComponent) Descriptor() runtimeorchestrator.ComponentDescriptor {
+	enabled := c.services != nil &&
+		c.services.RuntimeProfile == runtimeprofile.ProfileCloudCore &&
+		c.services.DesktopPetBehaviorMesh != nil
+	return runtimeorchestrator.ComponentDescriptor{
+		ID:           runtimeorchestrator.ComponentDesktopPetMesh,
+		Phase:        runtimeorchestrator.PhaseApplication,
+		Enabled:      enabled,
+		Required:     enabled,
+		Dependencies: []runtimeorchestrator.ComponentID{runtimeorchestrator.ComponentExtensionKernel},
+		Capabilities: []string{"desktop-pet.behavior-mesh"},
+		Profiles:     profilesCloudCore,
+	}
+}
+
+func (c *desktopPetBehaviorMeshComponent) Start(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started {
+		return nil
+	}
+	if c.services == nil || c.services.DesktopPetBehaviorMesh == nil {
+		return fmt.Errorf("desktop pet behavior mesh not initialized")
+	}
+	if err := c.services.DesktopPetBehaviorMesh.Start(ctx); err != nil {
+		return err
+	}
+	c.started = true
+	return nil
+}
+
+func (c *desktopPetBehaviorMeshComponent) Ready(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.started || c.services == nil || c.services.DesktopPetBehaviorMesh == nil || !c.services.DesktopPetBehaviorMesh.IsRunning() {
+		return fmt.Errorf("desktop pet behavior mesh not ready")
+	}
+	return nil
+}
+
+func (c *desktopPetBehaviorMeshComponent) Stop(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.services != nil && c.services.DesktopPetBehaviorMesh != nil {
+		c.services.DesktopPetBehaviorMesh.Stop()
+	}
+	c.started = false
 	return nil
 }
 

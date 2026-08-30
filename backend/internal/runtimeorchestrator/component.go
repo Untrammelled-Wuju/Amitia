@@ -16,6 +16,7 @@ const (
 	ComponentExtensionKernel ComponentID = "component.extension-kernel"
 	ComponentTaskRuntime     ComponentID = "component.task-runtime"
 	ComponentDesktopPet      ComponentID = "component.desktop-pet"
+	ComponentDesktopPetMesh  ComponentID = "component.desktop-pet-behavior-mesh"
 	ComponentBrowser         ComponentID = "component.browser"
 )
 

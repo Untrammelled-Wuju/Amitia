@@ -42,6 +42,7 @@ created → queued → transport_dispatched → runtime_received
 - `runtime_received`: Runtime 解包并验证身份/Envelop/Sequence/Dedup 后返回
 - `runtime_accepted`: Runtime 校验 Capability/Release/Installation/PayloadHash 后返回
 - `completed`: Runtime 应用完成后返回 `runtime.state.desired_applied` 事件
+- Runtime 只能在完整、精确应用 canonical Desired 后发送 `desired_applied`；平台无法表达的设置必须 `desired_rejected`，禁止静默 clamp/project 后仍 ACK 原 `desiredHash`
 
 ## 错误处理
 
