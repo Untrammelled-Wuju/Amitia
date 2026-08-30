@@ -4,6 +4,7 @@ package recovery
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/installation/journal"
@@ -90,6 +91,53 @@ func (a *installRepoAdapter) ClaimOperationLease(operationID, owner string, ttl 
 		op.LeaseOwner = owner
 		op.LeaseExpiresAt = now.Add(ttl).Format("2006-01-02 15:04:05")
 		op.HeartbeatAt = now.Format("2006-01-02 15:04:05")
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &op, nil
+}
+
+func (a *installRepoAdapter) SetOperationDesiredRevisionIfMissing(operationID string, desiredRevision int64, executionID string) (*operation.InstallationOperation, error) {
+	if desiredRevision <= 0 {
+		return nil, errors.New("recovery: desired revision must be positive")
+	}
+	var op operation.InstallationOperation
+	err := a.db.Transaction(func(tx *gorm.DB) error {
+		lookup := tx.Where("id = ?", operationID)
+		if executionID != "" {
+			lookup = lookup.Where("lease_owner = ?", executionID)
+		}
+		if err := lookup.Take(&op).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrRecoveryLeaseLost
+			}
+			return err
+		}
+		if op.DesiredRevision > 0 {
+			if op.DesiredRevision != desiredRevision {
+				return fmt.Errorf("recovery: operation desired revision conflict: stored=%d authoritative=%d", op.DesiredRevision, desiredRevision)
+			}
+			return nil
+		}
+
+		update := tx.Model(&operation.InstallationOperation{}).
+			Where("id = ? AND desired_revision = 0", operationID)
+		if executionID != "" {
+			update = update.Where("lease_owner = ?", executionID)
+		}
+		result := update.Updates(map[string]interface{}{
+			"desired_revision": desiredRevision,
+			"updated_at":       time.Now().UTC().Format(time.RFC3339),
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrCASConflict
+		}
+		op.DesiredRevision = desiredRevision
 		return nil
 	})
 	if err != nil {
@@ -248,6 +296,64 @@ func (a *installRepoAdapter) GetSwitchJournal(operationID string) (*RecoverySwit
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrJournalNotFound
 		}
+		return nil, err
+	}
+	return &RecoverySwitchJournal{
+		ID:                 j.ID,
+		OperationID:        j.OperationID,
+		Stage:              j.Stage,
+		Status:             j.Status,
+		NewInstallationID:  j.NewInstallationID,
+		NewBindingRevision: j.NewBindingRevision,
+		NewDesiredRevision: j.NewDesiredRevision,
+	}, nil
+}
+
+func (a *installRepoAdapter) SetSwitchJournalDesiredRevisionIfMissing(operationID string, desiredRevision int64, executionID string) (*RecoverySwitchJournal, error) {
+	if desiredRevision <= 0 {
+		return nil, errors.New("recovery: switch desired revision must be positive")
+	}
+	var j journal.InstallationSwitchJournal
+	err := a.db.Transaction(func(tx *gorm.DB) error {
+		if executionID != "" {
+			var count int64
+			if err := tx.Model(&operation.InstallationOperation{}).
+				Where("id = ? AND lease_owner = ?", operationID, executionID).
+				Count(&count).Error; err != nil {
+				return err
+			}
+			if count != 1 {
+				return ErrRecoveryLeaseLost
+			}
+		}
+		if err := tx.Where("operation_id = ?", operationID).Take(&j).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrJournalNotFound
+			}
+			return err
+		}
+		if j.NewDesiredRevision > 0 {
+			if j.NewDesiredRevision != desiredRevision {
+				return fmt.Errorf("recovery: switch desired revision conflict: stored=%d authoritative=%d", j.NewDesiredRevision, desiredRevision)
+			}
+			return nil
+		}
+		result := tx.Model(&journal.InstallationSwitchJournal{}).
+			Where("operation_id = ? AND new_desired_revision = 0", operationID).
+			Updates(map[string]interface{}{
+				"new_desired_revision": desiredRevision,
+				"updated_at":           time.Now().UTC().Format(time.RFC3339),
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrCASConflict
+		}
+		j.NewDesiredRevision = desiredRevision
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return &RecoverySwitchJournal{

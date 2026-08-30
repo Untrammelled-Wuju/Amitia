@@ -394,11 +394,14 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 	}
 
 	return &HelloAckPayload{
-		Accepted:        true,
-		SessionID:       runtimeidentity.ParseRuntimeSessionID(newSession.ID),
-		ServerTime:      time.Now(),
-		DesiredRevision: authoritativeRevision,
-		ResumeMode:      string(resumeMode),
+		Accepted:                           true,
+		SessionID:                          runtimeidentity.ParseRuntimeSessionID(newSession.ID),
+		ServerTime:                         time.Now(),
+		DesiredRevision:                    authoritativeRevision,
+		ResumeMode:                         string(resumeMode),
+		ServerLastAppliedDesiredRevision:   newSession.LastAppliedDesiredRevision,
+		ServerLastProcessedCommandSequence: newSession.LastProcessedCommandSequence,
+		LastCommittedClientEventSequence:   newSession.LastEventSequence,
 	}, nil
 }
 

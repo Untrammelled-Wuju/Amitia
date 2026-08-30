@@ -55,6 +55,10 @@ func IsEventType(t string) bool {
 	return false
 }
 
+type EventAckPayload struct {
+	LastCommittedClientEventSequence int64 `json:"lastCommittedClientEventSequence"`
+}
+
 type TriggerSource string
 
 const (

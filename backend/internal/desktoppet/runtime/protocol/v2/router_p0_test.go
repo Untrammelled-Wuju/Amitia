@@ -291,20 +291,20 @@ func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 		t.Fatalf("valid ping did not refresh heartbeat: before=%s after=%s", beforeHeartbeat, runtimeConn.LastHeartbeat())
 	}
 
-	// A consumed ticket must not create a second websocket session.
-	second, resp2, err := dialer.Dial(wsURL, nil)
-	if second != nil {
+	// Ticket consumption happens only after a successful WebSocket upgrade so a
+	// transport/proxy handshake failure cannot burn a one-time credential. A
+	// replay can therefore complete the HTTP 101 handshake, but it must be
+	// rejected immediately with a policy close before any Runtime session exists.
+	second, _, err := dialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("replayed ticket should reach post-upgrade validation: %v", err)
+	}
+	_ = second.SetReadDeadline(time.Now().Add(time.Second))
+	if _, _, err := second.ReadMessage(); err == nil {
 		_ = second.Close()
+		t.Fatal("consumed ticket replay must be closed before Runtime registration")
 	}
-	if err == nil || resp2 == nil || resp2.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("consumed ticket must return 401, err=%v status=%v", err, func() any {
-			if resp2 == nil {
-				return nil
-			}
-			return resp2.StatusCode
-		}())
-	}
-	_ = resp2.Body.Close()
+	_ = second.Close()
 
 	// Identity is hard-bound to the consumed ticket/connection; envelope identity
 	// cannot replace it after the websocket has been established.

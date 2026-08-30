@@ -35,11 +35,13 @@ type RecoveryRepo interface {
 	RenewOperationLease(operationID, executionID string) error
 	ReleaseOperationLease(operationID, executionID string) error
 	ClaimOperationLease(operationID, owner string, ttl time.Duration, expectedStatuses []string) (*operation.InstallationOperation, error)
+	SetOperationDesiredRevisionIfMissing(operationID string, desiredRevision int64, executionID string) (*operation.InstallationOperation, error)
 	UpdateOperationStatus(operationID, oldStatus, newStatus, executionID string) (*operation.InstallationOperation, error)
 	CASUpdateOperationStage(operationID, expectedStage, newStage, executionID string) (*operation.InstallationOperation, error)
 	CompleteOperation(operationID, expectedStage, expectedStatus, executionID string) (*operation.InstallationOperation, error)
 	GetCommitJournal(operationID string) (*RecoveryCommitJournal, error)
 	GetSwitchJournal(operationID string) (*RecoverySwitchJournal, error)
+	SetSwitchJournalDesiredRevisionIfMissing(operationID string, desiredRevision int64, executionID string) (*RecoverySwitchJournal, error)
 	CASUpdateCommitJournalStage(operationID, expectedStage, newStage, executionID string) (*RecoveryCommitJournal, error)
 	CASUpdateSwitchJournalStage(operationID, expectedStage, newStage, executionID string) (*RecoverySwitchJournal, error)
 }
@@ -372,6 +374,14 @@ func (w *RecoveryWorker) recoverDesiredStateOperationFromCommitted(ctx context.C
 }
 
 func (w *RecoveryWorker) recoverDesiredStateOperationFromRuntimeApplied(ctx context.Context, op *operation.InstallationOperation, lease *operation.Lease) error {
+	if op.OperationType != operation.TypeRecenter && op.DesiredRevision <= 0 {
+		if w.runtimeRecovery == nil {
+			return errors.New("installation recovery: runtime recovery is required to restore a missing desired revision")
+		}
+		if err := w.runtimeRecovery.ensureAuthoritativeDesiredRevision(ctx, op); err != nil {
+			return err
+		}
+	}
 	if w.desiredStateFinalizer == nil {
 		return errors.New("installation recovery: desired-state finalizer is not configured")
 	}

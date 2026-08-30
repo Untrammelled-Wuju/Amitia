@@ -977,10 +977,6 @@ func (s *commandService) ReconcileDesiredStateOnHello(userID, deviceID, runtimeI
 	// on the same authenticated device must still converge to the device's
 	// persisted desired state. The command below is retargeted to the current
 	// connected runtime.
-	if clientAppliedRevision >= state.DesiredRevision {
-		return state.DesiredRevision, nil
-	}
-
 	coalesceKey := fmt.Sprintf("desired:%s", deviceID)
 	var existing RuntimeCommand
 	err := s.db.Where(
@@ -1010,6 +1006,14 @@ func (s *commandService) ReconcileDesiredStateOnHello(userID, deviceID, runtimeI
 		}
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, err
+	}
+
+	// A client reporting the desired revision does not prove that the server
+	// received the durable desired_applied event. If a same-revision command was
+	// still non-terminal above, it has already been requeued onto this fresh
+	// session. Only short-circuit after that recovery check.
+	if clientAppliedRevision >= state.DesiredRevision {
+		return state.DesiredRevision, nil
 	}
 
 	var settingsSnapshot json.RawMessage

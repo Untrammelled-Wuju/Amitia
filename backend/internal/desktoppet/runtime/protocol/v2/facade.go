@@ -263,21 +263,19 @@ func NewV2RuntimeNotifier(states ActualStateService, events EventService) *V2Run
 
 func (n *V2RuntimeNotifier) NotifyInstallationEnabled(userId, installationId string, settings *installation.RuntimeSettings) error {
 	payload := map[string]interface{}{
-		"type":            "installation.enabled",
-		"userId":          userId,
-		"installationId":  installationId,
-		"settings":        settings,
-		"desiredRevision": time.Now().UnixNano(), // audit:ok: desiredRevision is an int64 desired-state generation clock, not an identifier
+		"type":           "installation.enabled",
+		"userId":         userId,
+		"installationId": installationId,
+		"settings":       settings,
 	}
 	return n.emit("installation.enabled", installationId, payload)
 }
 
 func (n *V2RuntimeNotifier) NotifyInstallationDisabled(userId, installationId string) error {
 	payload := map[string]interface{}{
-		"type":            "installation.disabled",
-		"userId":          userId,
-		"installationId":  installationId,
-		"desiredRevision": time.Now().UnixNano(), // audit:ok: desiredRevision is an int64 desired-state generation clock, not an identifier
+		"type":           "installation.disabled",
+		"userId":         userId,
+		"installationId": installationId,
 	}
 	return n.emit("installation.disabled", installationId, payload)
 }

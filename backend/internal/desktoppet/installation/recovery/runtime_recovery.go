@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 )
@@ -25,6 +24,7 @@ type RuntimeAppliedFinalizer interface {
 type RuntimeRepo interface {
 	SendDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID, installationID string, desiredRevision int64) error
 	CancelDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID string) error
+	ResolveDesiredRevision(ctx context.Context, opID, userID, deviceID string) (int64, error)
 	QueryRuntimeAppliedState(ctx context.Context, userID, deviceID, runtimeID string) (appliedRevision int64, actualReleaseID string, err error)
 	QueryCommandTerminalStatusByIdempotencyKey(ctx context.Context, idempotencyKey string) (status string, found bool, err error)
 }
@@ -45,6 +45,14 @@ func (r *RuntimeRecovery) Recover(ctx context.Context, op *operation.Installatio
 	if r.runtimeRepo == nil {
 		return errors.New("runtimeRecovery: runtimeRepo not configured")
 	}
+	if op == nil || j == nil {
+		return errors.New("runtimeRecovery: operation and journal are required")
+	}
+	if op.OperationType != operation.TypeRecenter && isRuntimeRecoveryStage(j.Stage) {
+		if err := r.ensureAuthoritativeDesiredRevision(ctx, op); err != nil {
+			return err
+		}
+	}
 	switch j.Stage {
 	case operation.OpStageDesiredStateCommitted, operation.OpStageRuntimeCommandEnqueued:
 		return r.recoverFromDesiredStateCommitted(ctx, op, j)
@@ -52,24 +60,61 @@ func (r *RuntimeRecovery) Recover(ctx context.Context, op *operation.Installatio
 		return r.recoverFromWaitingRuntimeAck(ctx, op, j)
 	case operation.OpStageRuntimeApplied:
 		return r.recoverFromRuntimeApplied(ctx, op, j)
+	case operation.OpStageCleanupCompleted:
+		return r.recoverFromCleanupCompleted(op)
 	default:
 		return fmt.Errorf("%w: %s", ErrInvalidStage, j.Stage)
 	}
+}
+
+func isRuntimeRecoveryStage(stage string) bool {
+	switch stage {
+	case operation.OpStageDesiredStateCommitted, operation.OpStageRuntimeCommandEnqueued, operation.OpStageWaitingRuntimeACK, operation.OpStageRuntimeApplied:
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *RuntimeRecovery) ensureAuthoritativeDesiredRevision(ctx context.Context, op *operation.InstallationOperation) error {
+	if op.DesiredRevision > 0 {
+		return nil
+	}
+	resolved, err := r.runtimeRepo.ResolveDesiredRevision(ctx, op.ID, op.UserID, op.DeviceID)
+	if err != nil {
+		return fmt.Errorf("runtimeRecovery: resolve desired revision failed op=%s: %w", op.ID, err)
+	}
+	if resolved <= 0 {
+		return fmt.Errorf("runtimeRecovery: committed operation %s has no authoritative desired revision", op.ID)
+	}
+	persisted, err := r.repo.SetOperationDesiredRevisionIfMissing(op.ID, resolved, r.worker.executionID)
+	if err != nil {
+		return fmt.Errorf("runtimeRecovery: persist recovered desired revision failed op=%s: %w", op.ID, err)
+	}
+	if persisted == nil || persisted.DesiredRevision <= 0 {
+		return fmt.Errorf("runtimeRecovery: persisted desired revision is invalid op=%s", op.ID)
+	}
+	op.DesiredRevision = persisted.DesiredRevision
+	return nil
 }
 
 func (r *RuntimeRecovery) CancelOperation(ctx context.Context, op *operation.InstallationOperation) error {
 	if r == nil || r.runtimeRepo == nil {
 		return errors.New("runtimeRecovery: runtimeRepo not configured")
 	}
+	if op == nil {
+		return errors.New("runtimeRecovery: operation is required")
+	}
+	if op.OperationType != operation.TypeRecenter && op.DesiredRevision <= 0 && isRuntimeRecoveryStage(op.Stage) {
+		if err := r.ensureAuthoritativeDesiredRevision(ctx, op); err != nil {
+			return fmt.Errorf("runtimeRecovery: recover desired revision before cancel failed op=%s: %w", op.ID, err)
+		}
+	}
 	return r.runtimeRepo.CancelDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID)
 }
 
 func (r *RuntimeRecovery) recoverFromDesiredStateCommitted(ctx context.Context, op *operation.InstallationOperation, j *RecoveryCommitJournal) error {
 	desiredRevision := op.DesiredRevision
-	if op.OperationType != operation.TypeRecenter && desiredRevision == 0 {
-		desiredRevision = time.Now().UnixNano() // audit:ok: desiredRevision is an int64 desired-state generation clock, not an identifier
-		op.DesiredRevision = desiredRevision
-	}
 	if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, desiredRevision); err != nil {
 		return fmt.Errorf("runtimeRecovery: send command failed op=%s: %w", op.ID, err)
 	}
@@ -159,6 +204,21 @@ func (r *RuntimeRecovery) recoverFromRuntimeApplied(ctx context.Context, op *ope
 	}
 	if _, err := r.repo.CompleteOperation(op.ID, operation.OpStageRuntimeApplied, op.Status, r.worker.executionID); err != nil {
 		return fmt.Errorf("runtimeRecovery: complete operation op=%s: %w", op.ID, err)
+	}
+	op.Stage = operation.OpStageCompleted
+	op.Status = operation.OpStatusCompleted
+	return nil
+}
+
+func (r *RuntimeRecovery) recoverFromCleanupCompleted(op *operation.InstallationOperation) error {
+	if op.Stage == operation.OpStageCompleted || op.Status == operation.OpStatusCompleted {
+		return nil
+	}
+	if op.Stage != operation.OpStageRuntimeApplied {
+		return fmt.Errorf("runtimeRecovery: cleanup-completed journal has incompatible operation stage op=%s stage=%s", op.ID, op.Stage)
+	}
+	if _, err := r.repo.CompleteOperation(op.ID, operation.OpStageRuntimeApplied, op.Status, r.worker.executionID); err != nil {
+		return fmt.Errorf("runtimeRecovery: complete cleanup-committed operation op=%s: %w", op.ID, err)
 	}
 	op.Stage = operation.OpStageCompleted
 	op.Status = operation.OpStatusCompleted
