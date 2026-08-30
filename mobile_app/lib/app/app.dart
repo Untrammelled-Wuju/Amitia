@@ -15,6 +15,7 @@ import '../core/debug/debug_runtime_bridge.dart';
 import '../core/ui_runtime/ui_provider.dart';
 import '../core/ui_runtime/ui_runtime_controller.dart';
 import '../core/ui_runtime/ui_theme.dart';
+import '../features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart';
 import 'theme/app_theme.dart';
 import 'router.dart';
 
@@ -305,6 +306,7 @@ class AmitiaApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(nativeBridgeRelayBootstrapProvider);
+    ref.watch(desktopPetMobileRuntimeBootstrapProvider);
     final themeMode = ref.watch(themeModeProvider);
     final runtimeSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
     if (runtimeSnapshot == null) {
