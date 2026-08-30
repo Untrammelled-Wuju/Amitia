@@ -77,7 +77,8 @@ desktop/dist-types/
 desktop/resources/core/
 # Root-level runtime data (not to be committed)
 AmitiaData/
-storage/
+/data/storage/
+/runtime/storage/
 .qdrant-initialized
 backend/qdrant/
 wechat-chat-extractor/weFlow.zip
@@ -236,7 +237,7 @@ backend/C:Code*.exe
 backend/D:*.txt
 front/*.err
 U-Ai-source.zip
-artifacts/
+/desktop/runtime-artifacts/
 mobile_app/android/.kotlin/
 
 # SDK plugin-sdk build outputs and dependencies

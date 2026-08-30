@@ -153,7 +153,6 @@ $excludes = @(
     "--exclude=*.tar"
     "--exclude=*.tar.gz"
     "--exclude=*.tar.xz"
-    "--exclude=artifacts"
     "--exclude=.dart_tool"
     "--exclude=temp_extract_integration"
     "--exclude=AmitiaData"
@@ -167,7 +166,6 @@ $excludes = @(
     "--exclude=temp_apk_extract"
     "--exclude=backend/build"
     "--exclude=*.map"
-    "--exclude=*.d.ts"
     "--exclude=sdk/plugin-cli/dist"
     "--exclude=runtime/task-host/dist"
     "--exclude=runtime/plugin-host/dist"
@@ -178,17 +176,16 @@ $excludes = @(
     "--exclude=*.so"
     "--exclude=*.dll"
     "--exclude=*.dylib"
-    # P0-07: Runtime pollution exclusion rules
+    # P0-07: Runtime pollution exclusion rules (precise paths only)
     "--exclude=trace.atrace"
     "--exclude=*.atrace"
     "--exclude=.qdrant-initialized"
     "--exclude=*/.qdrant-initialized"
-    "--exclude=storage"
-    "--exclude=*/storage"
-    "--exclude=surrealdb"
-    "--exclude=backend/surrealdb"
-    "--exclude=backend/qdrant"
-    "--exclude=backend/storage"
+    "--exclude=$folderName/backend/surrealdb/surreal.exe"
+    "--exclude=$folderName/backend/surrealdb/data"
+    "--exclude=$folderName/backend/surrealdb/data.sdb"
+    "--exclude=$folderName/backend/qdrant/storage"
+    "--exclude=$folderName/backend/qdrant/qdrant_linux_*"
     "--exclude=raft_state.json"
     "--exclude=*.wal"
     "--exclude=.gradle-proot-build"
@@ -208,7 +205,7 @@ $startTime = Get-Date
 Write-Host "Step 1: Creating uncompressed tar..."
 & tar -cf $tempTar @excludes $folderName
 
-if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) {
+if ($LASTEXITCODE -ne 0) {
     Write-Host "tar failed with exit code: $LASTEXITCODE"
     if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
     exit 1
@@ -254,6 +251,42 @@ Move-Item $tempGz $outputFile -Force
 if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
 
 # ============================================================
+# P0-01: Required Source check
+# ============================================================
+Write-Host "=== P0-01: Required Source check ==="
+$requiredSourceFiles = @(
+    "backend/internal/desktoppet/storage/pathguard.go",
+    "backend/internal/desktoppet/storage/roots.go",
+    "backend/internal/desktoppet/release/storage/filesystem.go",
+    "backend/internal/desktoppet/release/storage/filesystem_test.go",
+    "backend/internal/gamehost/storage/paths.go",
+    "backend/internal/gamehost/storage/directory_manager.go",
+    "backend/pkg/database/surrealdb/manager.go",
+    "backend/pkg/database/surrealdb/spec.go",
+    "backend/pkg/database/qdrant/client.go",
+    "backend/pkg/database/qdrant/manager.go",
+    "backend/pkg/database/qdrant/spec.go",
+    "desktop/src/main/artifacts/artifact-client.ts",
+    "desktop/src/renderer/pet-animation-globals.d.ts"
+)
+
+$missingFiles = @()
+foreach ($relPath in $requiredSourceFiles) {
+    $entries = & tar -tzf $outputFile 2>&1 | Select-String -Pattern $relPath
+    if (-not $entries) {
+        $missingFiles += $relPath
+    }
+}
+
+if ($missingFiles.Count -gt 0) {
+    Write-Host "FAIL: Required source files missing from archive:"
+    foreach ($f in $missingFiles) { Write-Host "  - $f" }
+    Remove-Item $outputFile -Force -ErrorAction SilentlyContinue
+    exit 1
+}
+Write-Host "Required Source check: PASS ($($requiredSourceFiles.Count) files verified)"
+
+# ============================================================
 # P0-08: Archive revalidation (extract and re-audit)
 # ============================================================
 Write-Host "=== P0-08: Archive Revalidation ==="
@@ -278,18 +311,13 @@ Write-Host "Running source hygiene audit on extracted archive..."
 $archiveRoot = $extractedFolder
 
 # Check for forbidden runtime artifacts in archive
-$forbiddenPatterns = @(
+# Only check file-level patterns; directory-level exclusion is handled by tar --exclude rules
+$forbiddenFiles = @(
     "trace.atrace",
     "*.atrace",
     ".qdrant-initialized",
-    "storage",
-    "surrealdb",
     "raft_state.json",
     "*.wal",
-    "node_modules",
-    "dist",
-    "build",
-    "coverage",
     ".DS_Store",
     "Thumbs.db"
 )
@@ -297,13 +325,10 @@ $forbiddenPatterns = @(
 $archiveEntries = & tar -tzf $outputFile 2>&1
 $violations = @()
 foreach ($entry in $archiveEntries) {
-    foreach ($pattern in $forbiddenPatterns) {
-        if ($entry -like "*$pattern*") {
-            # Check if it's a source file (not a directory name in a path)
-            $name = Split-Path $entry -Leaf
-            if ($name -like "*$pattern*" -or $entry -like "*/$pattern/*" -or $entry -like "*/$pattern") {
-                $violations += "$entry (matched: $pattern)"
-            }
+    $name = Split-Path $entry -Leaf
+    foreach ($pattern in $forbiddenFiles) {
+        if ($name -like $pattern) {
+            $violations += "$entry (matched: $pattern)"
         }
     }
 }
@@ -319,6 +344,7 @@ Write-Host "Source hygiene audit: PASS (no forbidden artifacts in archive)"
 # Run verify-desktop-pet-finalization.mjs against extracted archive
 Write-Host "Running verify-desktop-pet-finalization.mjs against extracted archive..."
 $env:DESKTOP_PET_ARCHIVE_ROOT = $archiveRoot
+Set-Location $workspace
 & node desktop/scripts/verify-desktop-pet-finalization.mjs
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FAIL: verify-desktop-pet-finalization.mjs did not pass on archive contents"
