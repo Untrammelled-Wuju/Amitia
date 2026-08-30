@@ -147,7 +147,8 @@ func (h *Handler) GetFrameImage(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, revisionID); err != nil {
+	scope, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, revisionID)
+	if err != nil {
 		writeEditOwnershipError(c, err)
 		return
 	}
@@ -156,7 +157,7 @@ func (h *Handler) GetFrameImage(c *gin.Context) {
 		writeEditError(c, err)
 		return
 	}
-	serveImageFile(h.safeResponder, c, actor, security.RootEditingAssets, path, mimeType, revisionID, frameID)
+	serveImageFile(h.safeResponder, c, actor, security.RootEditingAssets, path, mimeType, frameID, scope.UserID)
 }
 
 func (h *Handler) GetFrameThumbnail(c *gin.Context) {
@@ -167,7 +168,8 @@ func (h *Handler) GetFrameThumbnail(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	if _, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, revisionID); err != nil {
+	scope, err := h.ownershipGuard.RequireActionRevision(c.Request.Context(), actor, revisionID)
+	if err != nil {
 		writeEditOwnershipError(c, err)
 		return
 	}
@@ -176,7 +178,7 @@ func (h *Handler) GetFrameThumbnail(c *gin.Context) {
 		writeEditError(c, err)
 		return
 	}
-	serveImageFile(h.safeResponder, c, actor, security.RootEditingAssets, path, mimeType, revisionID, frameID+"-thumb")
+	serveImageFile(h.safeResponder, c, actor, security.RootEditingAssets, path, mimeType, frameID+"-thumb", scope.UserID)
 }
 
 func (h *Handler) GetActionEditSummary(c *gin.Context) {
@@ -801,7 +803,7 @@ func (h *Handler) GetLatestQualityEvaluation(c *gin.Context) {
 	util.SuccessResponse(c, info)
 }
 
-func serveImageFile(responder *security.SafeArtifactResponder, c *gin.Context, actor *desktoppetAuth.ActorContext, rootKind security.StorageRootKind, path, mimeType, artifactID, entityID string) {
+func serveImageFile(responder *security.SafeArtifactResponder, c *gin.Context, actor *desktoppetAuth.ActorContext, rootKind security.StorageRootKind, path, mimeType, artifactID, ownerUserID string) {
 	if path == "" || actor == nil {
 		c.Status(http.StatusNotFound)
 		return
@@ -820,7 +822,7 @@ func serveImageFile(responder *security.SafeArtifactResponder, c *gin.Context, a
 	c.Header("Cache-Control", "private, max-age=300")
 	responder.ServeArtifact(c, actor, security.ArtifactReference{
 		ArtifactID:  artifactID,
-		OwnerUserID: entityID,
+		OwnerUserID: ownerUserID,
 		RootKind:    rootKind,
 		StorageKey:  storageKey,
 		ContentHash: hash,
