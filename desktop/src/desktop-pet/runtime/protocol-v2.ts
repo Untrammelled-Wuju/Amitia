@@ -183,6 +183,13 @@ export interface StateSnapshotPayload {
   installationId: string;
   petId: string;
   releaseId: string;
+  visible: boolean;
+  positionX: number;
+  positionY: number;
+  screenId: string;
+  windowWidth: number;
+  windowHeight: number;
+  scale: number;
   stableActionKey: string;
   currentActionKey: string;
   playbackInstanceId?: string;

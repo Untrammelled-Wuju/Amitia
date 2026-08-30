@@ -33,7 +33,14 @@ const [
   playerStateMachine,
   doctor,
   legacyPlaybackBridge,
+  runtimeActionPort,
   runtimeHandler,
+  runtimeProtocolEvent,
+  runtimeActualState,
+  mobileRuntime,
+  androidRenderer,
+  runtimeBehaviorMigration,
+  migrationBaseline,
 ] = await Promise.all([
   read("backend/cmd/server/runtime_components.go"),
   read("backend/cmd/server/main.go"),
@@ -55,7 +62,14 @@ const [
   read("desktop/src/desktop-pet/animation/player-state-machine.ts"),
   read("backend/internal/desktoppet/doctor/doctor.go"),
   read("desktop/src/desktop-pet/runtime/playback-event-bridge.ts"),
+  read("backend/internal/desktoppet/behavior/wiring/runtime_v2_action_port.go"),
   read("backend/internal/desktoppet/runtime/protocol/v2/handler.go"),
+  read("backend/internal/desktoppet/runtime/protocol/v2/event.go"),
+  read("backend/internal/desktoppet/runtime/protocol/v2/actual_state.go"),
+  read("mobile_app/lib/features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart"),
+  read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/desktoppet/DesktopPetRendererNativeHandler.kt"),
+  read("backend/internal/migration/desktop_pet_runtime_behavior_finalization.go"),
+  read("backend/internal/migration/baseline.sql"),
 ]);
 
 // Device Agent must host the complete desktop-pet runtime body and fail closed.
@@ -105,7 +119,8 @@ assert(
 
 // Cloud lifecycle events must cross Device Mesh and resolve canonical local ownership.
 assert(
-  behaviorMesh.includes('desktopPetBehaviorMeshHandler = "desktop_pet.behavior.submit_event"') &&
+  behaviorMesh.includes('desktopPetBehaviorMeshHandler') &&
+    behaviorMesh.includes('"desktop_pet.behavior.submit_event"') &&
     behaviorMesh.includes("desktopPetOwnerMapper") &&
     behaviorMesh.includes("Resolve(") &&
     behaviorMesh.includes("InvokeDeviceHandlerWithRuntimeType") &&
@@ -115,9 +130,50 @@ assert(
 );
 assert(
   meshRuntime.includes("InvokeDeviceHandlerWithRuntimeType") &&
-    meshHub.includes("GetPreferredByUser") &&
-    localHandler.includes("SetCredentialObserver"),
-  "Device Mesh behavior routing must use deterministic device selection and credential-bound owner mapping",
+    meshHub.includes("ListByUser") &&
+    localHandler.includes("SetCredentialObserver") &&
+    !behaviorMesh.includes("GetPreferredByUser"),
+  "Desktop Pet behavior routing must enumerate authenticated user devices and must never select by freshest heartbeat",
+);
+assert(
+  runtimeBehaviorMigration.includes('"target_installation_id"') ||
+    runtimeBehaviorMigration.includes("target_installation_id TEXT NOT NULL DEFAULT ''"),
+  "Cloud behavior outbox migration must persist target_installation_id execution fence",
+);
+assert(
+  migrationBaseline.includes("target_installation_id TEXT NOT NULL DEFAULT ''") &&
+    migrationBaseline.includes("position_x INTEGER NOT NULL DEFAULT 0") &&
+    migrationBaseline.includes("window_width INTEGER NOT NULL DEFAULT 0") &&
+    migrationBaseline.includes("scale REAL NOT NULL DEFAULT 0"),
+  "baseline schema must include behavior target fencing and Runtime V2 physical-state columns",
+);
+
+assert(
+  behaviorMesh.includes("desktopPetBehaviorMeshAffinity") &&
+    behaviorMesh.includes("desktopPetBehaviorMeshOutbox") &&
+    behaviorMesh.includes("processOutboxRow") &&
+    behaviorMesh.includes("claim_expires_at") &&
+    !behaviorMesh.includes('claim_expires_at;index') &&
+    !behaviorMesh.includes('available_at;not null;index') &&
+    behaviorMesh.includes('"processing"') &&
+    behaviorMesh.includes("RowsAffected == 0") &&
+    behaviorMesh.includes("pin.RowsAffected != 1") &&
+    behaviorMesh.includes('"target_installation_id"') &&
+    behaviorMesh.includes("outbox claim lost before target fence persistence") &&
+    behaviorMesh.includes("resolveOnDevice") &&
+    behaviorMesh.includes("desktopPetBehaviorMeshResolveHandler") &&
+    behaviorMesh.includes("GetActiveBindingForUserDeviceTx") &&
+    behaviorMesh.includes("target device %s is offline") &&
+    behaviorMesh.includes("concrete outbox target is an execution fence") &&
+    behaviorMesh.includes("pinned target device %s no longer owns the active installation"),
+  "Cloud behavior delivery must persist recoverable/durable events, preserve verified character/device affinity, and never reroute an already-targeted event",
+);
+assert(
+  services.includes("DesktopPetBehaviorMesh") &&
+    services.includes("localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshResolveHandler") &&
+    runtimeComponents.includes("desktopPetBehaviorMeshComponent") &&
+    runtimeComponents.includes("DesktopPetBehaviorMesh.Start(ctx)"),
+  "Cloud behavior outbox worker and device affinity resolver must be part of managed runtime topology",
 );
 
 // Device-local authority and authentication must be explicit.
@@ -132,6 +188,53 @@ assert(
   router.includes("if services.RuntimePolicy.DesktopPet") &&
     router.includes("behavior.RegisterRoutes(desktopPetWriteGroup"),
   "Cloud Core must not mount Device-local desktop-pet mutation routes",
+);
+
+// Runtime V2 desired state must fail closed on Android when the canonical
+// window cannot be represented. Silent platform clamping creates false
+// desiredHash convergence and is forbidden.
+assert(
+  mobileRuntime.includes("DESIRED_SETTINGS_UNSUPPORTED") &&
+    mobileRuntime.includes("DESIRED_SETTINGS_NOT_APPLIED") &&
+    mobileRuntime.includes("appliedWidth != width ||") &&
+    mobileRuntime.includes("appliedX != x ||") &&
+    mobileRuntime.includes("alwaysOnTop != 1") &&
+    mobileRuntime.includes("clickThroughMode != 'off'") &&
+    mobileRuntime.includes("soundEnabled != 0") &&
+    mobileRuntime.includes("positionMode != 'absolute'") &&
+    !mobileRuntime.includes("_double(settings['scale'], 1.0).clamp(0.25, 4.0)") &&
+    !mobileRuntime.includes("(canvasWidth * scale).round().clamp(64, 420)"),
+  "Android Runtime V2 must reject unsupported canonical desired settings instead of silently projecting/clamping and ACKing them",
+);
+assert(
+  androidRenderer.includes("DESKTOP_PET_SIZE_UNSUPPORTED") &&
+    androidRenderer.includes("requestedWidth !in MIN_PET_DP..MAX_PET_DP") &&
+    androidRenderer.includes("requestedHeight !in MIN_PET_DP..MAX_PET_DP") &&
+    !androidRenderer.includes('intOrNull("width")?.let { params.width = dp(it.coerceIn(MIN_PET_DP, MAX_PET_DP)) }'),
+  "Android native renderer must fail closed for unsupported Runtime V2 window dimensions",
+);
+assert(
+  runtimeProtocolEvent.includes('json:"positionX"') &&
+    runtimeProtocolEvent.includes('json:"windowWidth"') &&
+    runtimeProtocolEvent.includes('json:"scale"') &&
+    runtimeActualState.includes('gorm:"column:position_x') &&
+    runtimeActualState.includes('gorm:"column:window_width') &&
+    runtimeHandler.includes("snapshot.Visible != (windowStatus == WindowStatusVisible)"),
+  "Runtime V2 actual-state persistence must include physical window geometry and reject contradictory visibility facts",
+);
+assert(
+  manager.includes("incomingRuntimeId") &&
+    manager.includes('errorCode: "MISSING_RUNTIME_ID"') &&
+    manager.includes('errorCode: "RUNTIME_MISMATCH"') &&
+    runtimeActionPort.includes("targetRuntimeID := string(targetConn.RuntimeID)") &&
+    runtimeActionPort.includes("payload.RuntimeID = targetRuntimeID") &&
+    runtimeActionPort.includes("payload.PetInstanceID = targetRuntimeID") &&
+    runtimeActionPort.indexOf("payload.RuntimeID = targetRuntimeID") < runtimeActionPort.indexOf("json.Marshal(payload)") &&
+    scheduler.includes("runtimeInterruptible") &&
+    scheduler.includes("effectiveAction") &&
+    mobileRuntime.includes("commandInterruptible") &&
+    androidRenderer.includes("requestedInterruptible"),
+  "play_action runtime identity and command-level interruptibility must be enforced consistently from backend routing through Electron and Android",
 );
 
 // Local mode has exactly one production behavior authority. The chat-state
@@ -267,5 +370,5 @@ assert(
 );
 
 console.log(
-  "[verify-desktop-pet-device-agent-freeze-gate] PASSED: device-agent topology, cloud behavior mesh, owner/auth authority, durable release events, and playback terminal invariants are frozen",
+  "[verify-desktop-pet-device-agent-freeze-gate] PASSED: device-agent topology, affinity-routed durable cloud behavior delivery, Android desired-state truth, owner/auth authority, durable release events, and playback terminal invariants are frozen",
 );
