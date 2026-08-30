@@ -3,6 +3,8 @@ import 'package:amitia_app/core/backend_connection/backend_connection_config.dar
 import 'package:amitia_app/core/backend_connection/backend_connection_credential.dart';
 import 'package:amitia_app/core/backend_connection/backend_connection_endpoint.dart';
 import 'package:amitia_app/core/backend_transport/auth/backend_auth_header.dart';
+import 'package:amitia_app/core/backend_transport/errors/backend_transport_error.dart';
+import 'package:amitia_app/core/backend_transport/errors/backend_transport_error_code.dart';
 import 'package:amitia_app/core/backend_transport/http/backend_http_client.dart';
 import 'package:amitia_app/core/backend_transport/http/backend_http_method.dart';
 import 'package:amitia_app/core/backend_transport/http/backend_http_request.dart';
@@ -156,12 +158,25 @@ void main() {
       expect(server.authFailures, 1);
     });
 
-    test('404 does not throw but returns status', () async {
-      final resp = await client.send(BackendHttpRequest(
-        method: BackendHttpMethod.get,
-        path: '/nonexistent',
-      ));
-      expect(resp.statusCode, 404);
+    test('404 throws BackendTransportError with notFound code', () async {
+      server.requireToken = false;
+      await expectLater(
+        client.send(BackendHttpRequest(
+          method: BackendHttpMethod.get,
+          path: '/nonexistent',
+        )),
+        throwsA(isA<BackendTransportError>()),
+      );
+      try {
+        await client.send(BackendHttpRequest(
+          method: BackendHttpMethod.get,
+          path: '/nonexistent',
+        ));
+      } catch (e) {
+        expect(e, isA<BackendTransportError>());
+        expect((e as BackendTransportError).code, BackendTransportErrorCode.notFound);
+        expect((e as BackendTransportError).statusCode, 404);
+      }
     });
 
     test('close makes transport state closed', () async {
