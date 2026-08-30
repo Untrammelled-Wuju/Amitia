@@ -182,7 +182,6 @@ func (e *GenerationExecutor) Execute(
 			}); err != nil {
 				return fmt.Errorf("%w: persist unknown_submission after receipt failure: %v", errGenerationPersistence, err)
 			}
-			errMsg := fmt.Sprintf("Provider Receipt 持久化失败，进入 unknown_submission 状态等待恢复: %v", receiptWriteErr)
 			if err := e.updateActionProgress(task, action, string(generation.AttemptStatusUnknownSubmission)); err != nil {
 				return fmt.Errorf("%w: persist unknown_submission action progress after receipt failure: %v", errGenerationPersistence, err)
 			}
