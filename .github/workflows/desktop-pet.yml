@@ -10,10 +10,12 @@ on:
       - 'contracts/desktop-pet/**'
       - 'scripts/test/run-desktop-pet-*.ps1'
       - 'scripts/audit/desktop_pet_*.ps1'
-      - 'scripts/audit/verify-desktop-pet-runtime-singletrack.mjs'
+      - 'scripts/audit/verify-*.mjs'
+      - 'scripts/audit/verify-source-hygiene.mjs'
+      - 'scripts/pack-source.ps1'
       - 'desktop/scripts/verify-*.mjs'
-      - 'DESKTOP_PET_FINALIZATION_20260830_MANIFEST.txt'
-      - 'DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt'
+      - 'desktop/scripts/release-integrity.mjs'
+      - 'DESKTOP_PET_FINALIZATION_SHA256SUMS.txt'
       - '.gitignore'
       - '.github/workflows/desktop-pet.yml'
   pull_request:
@@ -25,10 +27,12 @@ on:
       - 'contracts/desktop-pet/**'
       - 'scripts/test/run-desktop-pet-*.ps1'
       - 'scripts/audit/desktop_pet_*.ps1'
-      - 'scripts/audit/verify-desktop-pet-runtime-singletrack.mjs'
+      - 'scripts/audit/verify-*.mjs'
+      - 'scripts/audit/verify-source-hygiene.mjs'
+      - 'scripts/pack-source.ps1'
       - 'desktop/scripts/verify-*.mjs'
-      - 'DESKTOP_PET_FINALIZATION_20260830_MANIFEST.txt'
-      - 'DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt'
+      - 'desktop/scripts/release-integrity.mjs'
+      - 'DESKTOP_PET_FINALIZATION_SHA256SUMS.txt'
       - '.gitignore'
       - '.github/workflows/desktop-pet.yml'
 
@@ -170,6 +174,8 @@ jobs:
         shell: pwsh
         run: |
           & "${{ github.workspace }}/scripts/audit/desktop_pet_forbidden_patterns.ps1" -Paths @("backend/internal/desktoppet", "backend/cmd/server")
+      - name: Verify source hygiene gate
+        run: node scripts/audit/verify-source-hygiene.mjs
       - name: Verify Runtime V2 single-track cutover
         run: node scripts/audit/verify-desktop-pet-runtime-singletrack.mjs
       - name: Verify pet player singleton
@@ -179,7 +185,9 @@ jobs:
       - name: Verify desktop-pet finalization
         run: node desktop/scripts/verify-desktop-pet-finalization.mjs
       - name: Verify frozen finalization hashes
-        run: sha256sum -c DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt
+        run: sha256sum -c DESKTOP_PET_FINALIZATION_SHA256SUMS.txt
+      - name: Verify release integrity pre-build gate
+        run: node desktop/scripts/release-integrity.mjs --pre-build
       - name: Verify cloud-to-device execution boundary
         run: node desktop/scripts/verify-cloud-device-execution-finalization.mjs
       - name: Verify Device Agent desktop-pet freeze gate
