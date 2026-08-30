@@ -3,7 +3,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(scriptDir, "../..");
+const repoRoot = process.env.DESKTOP_PET_ARCHIVE_ROOT
+  ? path.resolve(process.env.DESKTOP_PET_ARCHIVE_ROOT)
+  : path.resolve(scriptDir, "../..");
+const mode = process.env.DESKTOP_PET_ARCHIVE_ROOT ? "archive" : "workspace";
+
+console.log(`Finalization root: ${repoRoot}`);
+console.log(`Mode: ${mode}`);
+
+if (mode === "archive") {
+  const workspaceRoot = path.resolve(scriptDir, "../..");
+  if (repoRoot === workspaceRoot) {
+    throw new Error("[verify-desktop-pet-finalization] ARCHIVE root must differ from workspace root. Refusing to run archive gate against workspace.");
+  }
+}
 
 async function read(relativePath) {
   return fs.readFile(path.join(repoRoot, relativePath), "utf8");
@@ -111,7 +124,7 @@ const androidPetRenderer = await read("mobile_app/android/app/src/main/kotlin/co
 const androidCompositionRoot = await read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/AndroidNativeCompositionRoot.kt");
 const desktopPetWorkflow = await read(".github/workflows/desktop-pet.yml");
 const sourceGitignore = await read(".gitignore");
-const freezeShaBaseline = await read("DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt");
+const freezeShaBaseline = await read("DESKTOP_PET_FINALIZATION_SHA256SUMS.txt");
 
 assert(
   runtimeDispatcher.includes("ListCommandsToDispatchForConnection(") &&
@@ -729,7 +742,7 @@ assert(
   desktopPetWorkflow.includes("- 'backend/**'") &&
     desktopPetWorkflow.includes("name: Backend Full Test Gate") &&
     desktopPetWorkflow.includes("go test ./... -count=1") &&
-    desktopPetWorkflow.includes("sha256sum -c DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt") &&
+    desktopPetWorkflow.includes("sha256sum -c DESKTOP_PET_FINALIZATION_SHA256SUMS.txt") &&
     desktopPetWorkflow.split("- name: Verify Dart SDK floor").length - 1 === 1 &&
     desktopPetWorkflow.includes("run: dart --version"),
   "Desktop Pet CI must trigger on all backend dependencies, run the complete backend suite, verify the frozen hash baseline, and contain no empty Flutter steps",
@@ -787,7 +800,6 @@ const requiredFreezeCoverage = [
   path.join(repoRoot, "desktop/scripts/release-integrity.mjs"),
   path.join(repoRoot, "scripts/audit/verify-source-hygiene.mjs"),
   path.join(repoRoot, "scripts/pack-source.ps1"),
-  path.join(repoRoot, "DESKTOP_PET_FINALIZATION_SHA256SUMS.txt"),
 ];
 for (const file of requiredFreezeCoverage) {
   const relative = path.relative(repoRoot, file).replaceAll("\\", "/");
@@ -836,10 +848,15 @@ const forbiddenWorkspacePaths = [
   "storage",
   "surrealdb",
   "qdrant",
+  "snapshots",
   "backend/.qdrant-initialized",
   "backend/storage",
-  "backend/surrealdb",
-  "backend/qdrant",
+  "backend/snapshots",
+];
+
+const protectedBackendRuntimeDirs = [
+  { path: "backend/qdrant", allowedFiles: ["config", "qdrant.zip", "start_qdrant.bat"] },
+  { path: "backend/surrealdb", allowedFiles: ["surreal.zip"] },
 ];
 
 const workspaceViolations = [];
@@ -851,6 +868,23 @@ for (const relPath of forbiddenWorkspacePaths) {
     if (error?.code !== "ENOENT") throw error;
   }
 }
+
+for (const protectedDir of protectedBackendRuntimeDirs) {
+  const protectedPath = path.join(repoRoot, protectedDir.path);
+  try {
+    const stat = await fs.lstat(protectedPath);
+    if (stat.isDirectory()) {
+      const entries = await fs.readdir(protectedPath);
+      const illegalEntries = entries.filter((name) => !protectedDir.allowedFiles.includes(name));
+      if (illegalEntries.length > 0) {
+        workspaceViolations.push(`${protectedDir.path} (contains: ${illegalEntries.join(", ")})`);
+      }
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+}
+
 assert(
   workspaceViolations.length === 0,
   `workspace must not contain forbidden build/runtime artifacts, regardless of .gitignore: ${workspaceViolations.join(", ")}`,
