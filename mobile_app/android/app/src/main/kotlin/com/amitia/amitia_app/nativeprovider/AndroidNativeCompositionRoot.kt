@@ -7,6 +7,7 @@ import com.amitia.amitia_app.nativeprovider.camera.CameraNativeHandler
 import com.amitia.amitia_app.nativeprovider.clipboard.ClipboardNativeHandler
 import com.amitia.amitia_app.nativeprovider.clipboard.ClipboardNativeHandlerAdapter
 import com.amitia.amitia_app.nativeprovider.display.DisplayNativeHandler
+import com.amitia.amitia_app.nativeprovider.desktoppet.DesktopPetRendererNativeHandler
 import com.amitia.amitia_app.nativeprovider.externalautomation.ExternalAutomationNativeHandler
 import com.amitia.amitia_app.nativeprovider.interaction.InteractionNativeHandler
 import com.amitia.amitia_app.nativeprovider.notification.NotificationNativeHandler
@@ -57,6 +58,7 @@ internal object AndroidNativeCompositionRoot {
             VirtualDisplayNativeHandler(context),
             CameraNativeHandler(context),
             OverlayNativeHandler(context),
+            DesktopPetRendererNativeHandler(context),
             ExternalAutomationNativeHandler(context),
         )
     }
