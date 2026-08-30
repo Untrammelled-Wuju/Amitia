@@ -1,9 +1,10 @@
 import { fileURLToPath } from "node:url";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { app, BrowserWindow, nativeTheme, shell } from "electron";
 import { getInitialBrandImage } from "./branding";
 import { isDevMode } from "./path-manager";
 import { get as httpGet } from "node:http";
+import { APP_PROTOCOL_ORIGIN } from "./app-protocol";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
@@ -100,9 +101,7 @@ export function createMainWindow(): BrowserWindow {
       }
     });
   } else {
-    void win.loadFile(resolve(currentDir, "../renderer/index.html"), {
-      hash: "/",
-    });
+    void win.loadURL(`${APP_PROTOCOL_ORIGIN}/#/`);
   }
 
   return win;
@@ -114,7 +113,7 @@ function isAllowedNavigation(url: string): boolean {
       url.startsWith(DEV_SERVER_URL.replace("127.0.0.1", "localhost"))
     : false;
   return (
-    url.startsWith("file://") ||
+    url.startsWith(`${APP_PROTOCOL_ORIGIN}/`) ||
     url.startsWith("amitia-extension://") ||
     devServerAllowed
   );

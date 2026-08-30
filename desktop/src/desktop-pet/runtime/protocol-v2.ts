@@ -197,23 +197,49 @@ export interface RuntimeErrorPayload {
   commandId?: string;
 }
 
-function canonicalize(value: unknown): unknown {
+function goJSONScalar(value: unknown): string {
+  if (typeof value === "number" && Object.is(value, -0)) {
+    return "-0";
+  }
+  const encoded = JSON.stringify(value);
+  if (encoded === undefined) {
+    throw new TypeError("runtime payload contains a non-JSON value");
+  }
+  if (typeof value !== "string") {
+    return encoded;
+  }
+  // Go encoding/json uses HTML escaping by default and always escapes the two
+  // JavaScript line-separator code points. Runtime V2 payload hashes are
+  // authored by the Go server, so Electron must reproduce those bytes exactly.
+  return encoded.replace(/[<>&\u2028\u2029]/g, (char) => {
+    switch (char) {
+      case "<": return "\\u003c";
+      case ">": return "\\u003e";
+      case "&": return "\\u0026";
+      case "\u2028": return "\\u2028";
+      case "\u2029": return "\\u2029";
+      default: return char;
+    }
+  });
+}
+
+function backendCanonicalJSON(value: unknown): string {
   if (Array.isArray(value)) {
-    return value.map(canonicalize);
+    return `[${value.map(backendCanonicalJSON).join(",")}]`;
   }
   if (value !== null && typeof value === "object") {
     const input = value as Record<string, unknown>;
-    const output: Record<string, unknown> = {};
-    for (const key of Object.keys(input).sort()) {
-      output[key] = canonicalize(input[key]);
-    }
-    return output;
+    return `{${Object.keys(input).sort().map((key) =>
+      // deviceruntime/protocol.marshalCanonical writes protocol field names
+      // directly. Runtime payload keys are schema-owned ASCII identifiers.
+      `"${key}":${backendCanonicalJSON(input[key])}`
+    ).join(",")}}`;
   }
-  return value;
+  return goJSONScalar(value);
 }
 
 export function computePayloadHash(payload: unknown): string {
-  const canonical = JSON.stringify(canonicalize(payload));
+  const canonical = backendCanonicalJSON(payload);
   return "sha256:" + createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 

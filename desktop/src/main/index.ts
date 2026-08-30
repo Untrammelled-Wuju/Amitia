@@ -11,9 +11,10 @@ import type { RuntimeStatus } from "../shared/types";
 import {
   ensureDataAndConfig,
 } from "./core-manager";
-import { ensureAmitiaDataDir, getAmitiaDataDir } from "./path-manager";
+import { ensureAmitiaDataDir, getAmitiaDataDir, isDevMode } from "./path-manager";
 import { ensureDesktopInstanceID } from "./desktop-identity";
 import { registerExtensionProtocol } from "./protocol";
+import { registerAppProtocol } from "./app-protocol";
 import { registerUpdateManager, waitForStartupCheck } from "./update-manager";
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc";
@@ -31,6 +32,10 @@ let coreStopped = false;
 let shutdownInProgress = false;
 let clipboardBridge: ClipboardBridge | null = null;
 let deploymentLifecycle: DesktopDeploymentLifecycle | null = null;
+
+function isDevModeForProtocol(): boolean {
+  return isDevMode();
+}
 
 function syncSystemBrandTheme() {
   applyBrandTheme(
@@ -127,6 +132,10 @@ async function enterMainApp(): Promise<void> {
     );
     app.quit();
     return;
+  }
+
+  if (!isDevModeForProtocol()) {
+    registerAppProtocol(join(app.getAppPath(), "dist", "renderer"));
   }
 
   mainWindow = createMainWindow();
