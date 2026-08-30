@@ -59,6 +59,7 @@ const runtimeRouter = await read("backend/internal/desktoppet/runtime/protocol/v
 const runtimeReconciler = await read("backend/internal/desktoppet/runtime/protocol/v2/reconciler.go");
 const runtimeHandler = await read("desktop/src/desktop-pet/runtime/runtime-handler-v2.ts");
 const desiredStateForwardFix = await read("backend/internal/migration/desktop_pet_desired_state_schema_forward_fix.go");
+const runtimeBehaviorFinalizationMigration = await read("backend/internal/migration/desktop_pet_runtime_behavior_finalization.go");
 const migrations = await read("backend/internal/migration/migrations.go");
 const migrationBaseline = await read("backend/internal/migration/baseline.sql");
 const behaviorReducer = await read("backend/internal/desktoppet/behavior/reducer.go");
@@ -162,6 +163,25 @@ assert(
     migrationBaseline.includes("settings_snapshot_json TEXT NOT NULL DEFAULT ''") &&
     migrationBaseline.includes("uq_dprds_user_device"),
   "desired-state schema migration must preserve revision monotonicity, suppress stale outbox rows, and match the canonical baseline",
+);
+
+assert(
+  runtimeBehaviorFinalizationMigration.includes('Version: "202608300002"') &&
+    runtimeBehaviorFinalizationMigration.includes('"desktop_pet_runtime_actual_states_v2", "position_x"') &&
+    runtimeBehaviorFinalizationMigration.includes("desktop_pet_behavior_mesh_outbox") &&
+    runtimeBehaviorFinalizationMigration.includes("payload_hash TEXT NOT NULL DEFAULT ''") &&
+    runtimeBehaviorFinalizationMigration.includes("target_installation_id TEXT NOT NULL DEFAULT ''") &&
+    migrations.includes("DesktopPetRuntimeBehaviorFinalizationMigration()") &&
+    migrationBaseline.includes("ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN position_x") &&
+    migrationBaseline.includes("ALTER TABLE desktop_pet_runtime_actual_states_v2 ADD COLUMN scale") &&
+    migrationBaseline.includes("CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_affinities") &&
+    migrationBaseline.includes("CREATE TABLE IF NOT EXISTS desktop_pet_behavior_mesh_outbox") &&
+    migrationBaseline.includes("PRIMARY KEY(cloud_user_id, event_id)") &&
+    migrationBaseline.includes("payload_hash TEXT NOT NULL DEFAULT ''") &&
+    migrationBaseline.includes("target_installation_id TEXT NOT NULL DEFAULT ''") &&
+    migrationBaseline.includes("idx_dpbmo_claim") &&
+    migrationBaseline.includes("idx_dpbmo_expiry"),
+  "Runtime V2 geometry and behavior-mesh durability schema must be present in both upgrade migration and new-database baseline",
 );
 
 assert(

@@ -3596,6 +3596,7 @@ export class DesktopPetManager {
             reasonCode?: string;
             characterId?: string;
             petInstanceId?: string;
+            runtimeId?: string;
             installationId?: string;
           };
         };
@@ -3696,6 +3697,13 @@ export class DesktopPetManager {
                 };
               }
 
+              const incomingRuntimeId = (cmd.payload?.runtimeId ?? "").trim();
+              if (!incomingRuntimeId) {
+                return { commandId, status: "rejected", errorCode: "MISSING_RUNTIME_ID", errorMessage: "play_action must bind the active runtime", appliedRevision: desiredRevision };
+              }
+              if (incomingRuntimeId !== getRuntimeId()) {
+                return { commandId, status: "rejected", errorCode: "RUNTIME_MISMATCH", errorMessage: "play_action targets a stale runtime", appliedRevision: desiredRevision };
+              }
               const incomingInstallationId = (cmd.payload?.installationId ?? cmd.installationId ?? "").trim();
               const activeInstallationId = (this.activeInstallationId ?? this.activeInstallation?.id ?? "").trim();
               if (!incomingInstallationId) {
@@ -3754,6 +3762,7 @@ export class DesktopPetManager {
               const source = this.resolveBehaviorEventSource(semantic);
               const metadata: Record<string, string> = {
                 semantic,
+                runtimeInterruptible: cmd.payload?.interruptible === false ? "false" : "true",
                 reasonCode: cmd.payload?.reasonCode ?? "",
                 completionPolicy: cmd.payload?.completionPolicy ?? "",
                 runtimeCommandId: commandId,
@@ -3929,6 +3938,7 @@ export class DesktopPetManager {
     const options = this.windowAdapter?.getOptions();
     const win = this.windowAdapter?.getNativeWindow();
     const visible = win ? win.isVisible() : false;
+    const [windowWidth, windowHeight] = win && !win.isDestroyed() ? win.getSize() : [0, 0];
     return {
       petInstanceId: getRuntimeId(),
       installationId: this.activeInstallationId,
@@ -3937,6 +3947,8 @@ export class DesktopPetManager {
       positionX: pos?.x ?? 0,
       positionY: pos?.y ?? 0,
       screenId: pos?.screenId ?? "",
+      windowWidth,
+      windowHeight,
       scale: options?.scale ?? PET_WINDOW_SCALE_DEFAULT,
     };
   }
@@ -4088,6 +4100,8 @@ export class DesktopPetManager {
       positionX: summary?.positionX ?? 0,
       positionY: summary?.positionY ?? 0,
       screenId: summary?.screenId ?? "",
+      windowWidth: summary?.windowWidth ?? 0,
+      windowHeight: summary?.windowHeight ?? 0,
       scale: summary?.scale ?? PET_WINDOW_SCALE_DEFAULT,
       appliedDesiredRevision: this.lastAppliedDesiredRevision,
       appliedDesiredHash: this.lastAppliedDesiredHash,
@@ -4111,6 +4125,13 @@ export class DesktopPetManager {
       installationId: this.activeInstallationId ?? "",
       petId: this.activeInstallation?.petId ?? "",
       releaseId: this.activeInstallation?.currentReleaseId ?? "",
+      visible: summary?.visible ?? false,
+      positionX: summary?.positionX ?? 0,
+      positionY: summary?.positionY ?? 0,
+      screenId: summary?.screenId ?? "",
+      windowWidth: summary?.windowWidth ?? 0,
+      windowHeight: summary?.windowHeight ?? 0,
+      scale: summary?.scale ?? PET_WINDOW_SCALE_DEFAULT,
       stableActionKey,
       currentActionKey,
       playbackInstanceId: this.currentPlaybackId ?? undefined,

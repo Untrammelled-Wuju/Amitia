@@ -42,6 +42,7 @@ vi.mock("electron", () => ({
 }));
 
 import { DesktopPetManager, type RuntimeSettingsInfo } from "../manager";
+import { getRuntimeId } from "../runtime-identity";
 
 function makeManager(): DesktopPetManager {
   return new DesktopPetManager({
@@ -790,6 +791,7 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
     const submit = vi.fn(() => "played" as const);
     const internal = manager as never as {
       activeInstallationId: string;
+      activeInstallation: { characterId: string };
       loadedInstallation: { actions: Map<string, { key: string; available: boolean }> };
       scheduler: { submit: typeof submit };
       buildRuntimeHooks: () => {
@@ -800,6 +802,7 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
       };
     };
     internal.activeInstallationId = "install-1";
+    internal.activeInstallation = { characterId: "character-1" };
     internal.loadedInstallation = {
       actions: new Map([["wave", { key: "wave", available: true }]]),
     };
@@ -810,8 +813,12 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
         commandId: "cmd-1",
         commandType: "runtime.command.play_action",
         installationId: "install-1",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
         payload: {
           installationId: "install-1",
+          runtimeId: getRuntimeId(),
+          petInstanceId: getRuntimeId(),
+          characterId: "character-1",
           actionKey: "wave",
           queuePolicy: "replace",
           semantic: "manual",
@@ -830,6 +837,7 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
     const submit = vi.fn(() => "played" as const);
     const internal = manager as never as {
       activeInstallationId: string;
+      activeInstallation: { characterId: string };
       loadedInstallation: { actions: Map<string, { key: string; available: boolean }> };
       scheduler: { submit: typeof submit };
       buildRuntimeHooks: () => {
@@ -840,6 +848,7 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
       };
     };
     internal.activeInstallationId = "install-1";
+    internal.activeInstallation = { characterId: "character-1" };
     internal.loadedInstallation = {
       actions: new Map([["wave", { key: "wave", available: true }]]),
     };
@@ -850,8 +859,12 @@ describe("DesktopPetManager Runtime v2 play command validation", () => {
         commandId: "cmd-2",
         commandType: "runtime.command.play_action",
         installationId: "install-1",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
         payload: {
           installationId: "install-1",
+          runtimeId: getRuntimeId(),
+          petInstanceId: getRuntimeId(),
+          characterId: "character-1",
           actionKey: "wave",
           queuePolicy: "replace_current",
           semantic: "manual",

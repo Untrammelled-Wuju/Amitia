@@ -665,9 +665,17 @@ export class DesktopPetActionScheduler {
     this.currentPlaybackInstanceId = null;
     this.currentCommandId = effectiveRequest.metadata?.runtimeCommandId ?? null;
     this.bumpIdleRepeat(effectiveRequest);
+    // Runtime-v2 may tighten the package action's interruptibility for this
+    // concrete playback. It can never make a package-declared uninterruptible
+    // action interruptible. Pass the effective action to both Player and the
+    // renderer so subsequent interruption decisions observe the same truth.
+    const runtimeInterruptible = effectiveRequest.metadata?.runtimeInterruptible;
+    const effectiveAction = runtimeInterruptible === "false" && action.interruptible
+      ? { ...action, interruptible: false }
+      : action;
     const submission = this.player.switchAction(
-      action,
-      this.buildPlayerSwitchContext(effectiveRequest, action),
+      effectiveAction,
+      this.buildPlayerSwitchContext(effectiveRequest, effectiveAction),
     );
     if (!submission) {
       const failed = this.current;
@@ -684,15 +692,15 @@ export class DesktopPetActionScheduler {
         this.currentPlaybackInstanceId = null;
         this.currentCommandId = null;
       }
-      if (failed) this.emit("action-rejected", failed, action);
+      if (failed) this.emit("action-rejected", failed, effectiveAction);
       return false;
     }
     this.currentCommandId = submission.commandId;
     this.submittedRequests.set(submission.commandId, {
       request: effectiveRequest,
-      action,
+      action: effectiveAction,
     });
-    this.emit("action-submitted", effectiveRequest, action);
+    this.emit("action-submitted", effectiveRequest, effectiveAction);
     return true;
   }
 

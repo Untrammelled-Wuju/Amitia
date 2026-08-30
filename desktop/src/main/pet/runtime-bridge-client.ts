@@ -15,5 +15,7 @@ export interface PetInstanceSummary {
   positionX: number;
   positionY: number;
   screenId: string;
+  windowWidth: number;
+  windowHeight: number;
   scale: number;
 }
