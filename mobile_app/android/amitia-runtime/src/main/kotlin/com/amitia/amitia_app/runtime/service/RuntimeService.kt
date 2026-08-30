@@ -4,6 +4,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.amitia.amitia_app.runtime.AndroidRuntimeModule
@@ -648,10 +649,12 @@ class RuntimeService : Service() {
             }
             is ProotEvent.Stdout -> {
                 captureProotDiagnostic("stdout", event.data)
+                Log.d(RUNTIME_LOG_TAG, "proot-stdout: ${event.data}")
                 com.amitia.amitia_app.runtime.bridge.RuntimeLogCallback.instance?.onLog("INFO", event.data)
             }
             is ProotEvent.Stderr -> {
                 captureProotDiagnostic("stderr", event.data)
+                Log.w(RUNTIME_LOG_TAG, "proot-stderr: ${event.data}")
                 com.amitia.amitia_app.runtime.bridge.RuntimeLogCallback.instance?.onLog("ERROR", event.data)
             }
         }
@@ -1141,6 +1144,7 @@ class RuntimeService : Service() {
 
         const val GRACEFUL_SHUTDOWN_TIMEOUT_MS = 5000L
         const val FORCE_SHUTDOWN_TIMEOUT_MS = 3000L
+        private const val RUNTIME_LOG_TAG = "AmitiaRuntime"
         private const val MAX_DIAGNOSTIC_LINES = 40
         private const val MAX_DIAGNOSTIC_LINE_LENGTH = 240
         private const val MAX_FAILURE_MESSAGE_LENGTH = 8192
