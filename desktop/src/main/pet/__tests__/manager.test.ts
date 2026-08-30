@@ -142,6 +142,41 @@ describe("DesktopPetManager runtime settings", () => {
     expect(internal.lastAppliedSettingsRevision).toBe(7);
   });
 
+  it("does not apply public settings mutations before Runtime v2 convergence", async () => {
+    const manager = makeManager();
+    const initial = settings({ settingsRevision: 3, scale: 1 });
+    const callUpdateSettingsApi = vi.fn(async () => ({
+      operationId: "opin-settings",
+      status: "waiting_runtime_ack",
+      stage: "waiting_runtime_ack",
+      desiredRevision: 8,
+      settings: settings({ settingsRevision: 4, scale: 2 }),
+    }));
+    const applyRuntimeSettingsLocal = vi.fn(async () => undefined);
+    const internal = manager as never as {
+      activeInstallationId: string;
+      activeSettings: RuntimeSettingsInfo;
+      callUpdateSettingsApi: typeof callUpdateSettingsApi;
+      applyRuntimeSettingsLocal: typeof applyRuntimeSettingsLocal;
+    };
+    internal.activeInstallationId = "install-1";
+    internal.activeSettings = initial;
+    internal.callUpdateSettingsApi = callUpdateSettingsApi;
+    internal.applyRuntimeSettingsLocal = applyRuntimeSettingsLocal;
+
+    const result = await manager.updateSettings({ scale: 2 });
+
+    expect(result).toMatchObject({
+      operationId: "opin-settings",
+      status: "waiting_runtime_ack",
+      desiredRevision: 8,
+    });
+    expect(callUpdateSettingsApi).toHaveBeenCalledTimes(1);
+    expect(applyRuntimeSettingsLocal).not.toHaveBeenCalled();
+    expect(internal.activeSettings).toBe(initial);
+    expect(internal.activeSettings.settingsRevision).toBe(3);
+  });
+
   it("does not commit activeSettings/revision when a runtime side effect fails", async () => {
     const manager = makeManager();
     const initial = settings();
@@ -328,6 +363,35 @@ describe("DesktopPetManager desired-state convergence", () => {
     expect(internal.activeSettings.settingsRevision).toBe(7);
   });
 
+  it("does not apply a public default-action mutation before Runtime v2 convergence", async () => {
+    const manager = makeManager();
+    const callUpdateDefaultActionApi = vi.fn(async () => ({
+      operationId: "opin-default",
+      status: "waiting_runtime_ack",
+      stage: "waiting_runtime_ack",
+      desiredRevision: 9,
+    }));
+    const applyDefaultActionLocal = vi.fn(async () => undefined);
+    const internal = manager as never as {
+      activeInstallationId: string;
+      callUpdateDefaultActionApi: typeof callUpdateDefaultActionApi;
+      applyDefaultActionLocal: typeof applyDefaultActionLocal;
+    };
+    internal.activeInstallationId = "install-1";
+    internal.callUpdateDefaultActionApi = callUpdateDefaultActionApi;
+    internal.applyDefaultActionLocal = applyDefaultActionLocal;
+
+    const result = await manager.updateDefaultAction("wave");
+
+    expect(result).toMatchObject({
+      operationId: "opin-default",
+      status: "waiting_runtime_ack",
+      desiredRevision: 9,
+    });
+    expect(callUpdateDefaultActionApi).toHaveBeenCalledWith("install-1", "wave");
+    expect(applyDefaultActionLocal).not.toHaveBeenCalled();
+  });
+
   it("waits for renderer readiness before committing a queued default action", async () => {
     const manager = makeManager();
     const idleRuntime = { key: "idle", available: true };
@@ -464,6 +528,47 @@ describe("DesktopPetManager desired-state convergence", () => {
       false,
       true,
     );
+  });
+});
+
+describe("DesktopPetManager position persistence authority", () => {
+  it("persists a physical drag without claiming the returned settings revision is applied", async () => {
+    const manager = makeManager();
+    const initial = settings({ settingsRevision: 3, positionX: 10, positionY: 20 });
+    const callUpdateSettingsApi = vi.fn(async () => ({
+      operationId: "opin-position",
+      status: "waiting_runtime_ack",
+      stage: "waiting_runtime_ack",
+      desiredRevision: 10,
+      settings: settings({ settingsRevision: 4, positionX: 300, positionY: 400 }),
+    }));
+    const internal = manager as never as {
+      activeInstallationId: string;
+      activeSettings: RuntimeSettingsInfo;
+      lastAppliedSettingsRevision: number;
+      windowAdapter: { snapshotRuntimePosition: ReturnType<typeof vi.fn> };
+      callUpdateSettingsApi: typeof callUpdateSettingsApi;
+      persistRuntimePosition: () => Promise<void>;
+    };
+    internal.activeInstallationId = "install-1";
+    internal.activeSettings = initial;
+    internal.lastAppliedSettingsRevision = 3;
+    internal.windowAdapter = {
+      snapshotRuntimePosition: vi.fn(() => ({
+        x: 300,
+        y: 400,
+        screenId: "2",
+        scale: 1.25,
+      })),
+    };
+    internal.callUpdateSettingsApi = callUpdateSettingsApi;
+
+    await internal.persistRuntimePosition();
+
+    expect(callUpdateSettingsApi).toHaveBeenCalledTimes(1);
+    expect(internal.activeSettings).toBe(initial);
+    expect(internal.activeSettings.settingsRevision).toBe(3);
+    expect(internal.lastAppliedSettingsRevision).toBe(3);
   });
 });
 

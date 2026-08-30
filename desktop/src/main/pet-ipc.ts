@@ -44,16 +44,16 @@ export function registerPetIpcHandlers(manager: DesktopPetManager): void {
   ipcMain.handle(
     PET_IPC_CHANNELS.updateSettings,
     async (_event, settings: Partial<RuntimeSettingsInfo>) => {
-      await manager.updateSettings(settings);
-      return { ok: true };
+      const result = await manager.updateSettings(settings);
+      return { ok: true, ...(result ?? {}) };
     },
   );
 
   ipcMain.handle(
     PET_IPC_CHANNELS.updateDefaultAction,
     async (_event, actionKey: string) => {
-      await manager.updateDefaultAction(actionKey);
-      return { ok: true };
+      const result = await manager.updateDefaultAction(actionKey);
+      return { ok: true, ...result };
     },
   );
 
