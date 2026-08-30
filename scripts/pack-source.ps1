@@ -10,11 +10,57 @@ $folderName = Split-Path $workspace -Leaf
 $outputFile = Join-Path $workspace "$OutputName.tar.gz"
 $tempTar = "$env:TEMP\$OutputName.tar"
 $tempGz = "$env:TEMP\$OutputName.tar.gz"
+$tempExtract = "$env:TEMP\$OutputName-audit"
 
 if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
 if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
 if (Test-Path $tempGz) { Remove-Item $tempGz -Force }
+if (Test-Path $tempExtract) { Remove-Item $tempExtract -Recurse -Force }
 
+# ============================================================
+# P0-05: Source Hygiene Gate + Freeze Gate (before packing)
+# ============================================================
+Write-Host "=== P0-05: Running Source Hygiene Gate ==="
+Set-Location $workspace
+
+Write-Host "Running verify-desktop-pet-finalization.mjs..."
+& node desktop/scripts/verify-desktop-pet-finalization.mjs
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FAIL: verify-desktop-pet-finalization.mjs did not pass. Aborting source pack."
+    exit 1
+}
+
+Write-Host "Running SHA256 freeze verification..."
+$shaLines = Get-Content "DESKTOP_PET_FINALIZATION_SHA256SUMS.txt"
+$shaOk = 0
+$shaFail = 0
+foreach ($line in $shaLines) {
+    if ($line.Trim() -eq "") { continue }
+    $expectedHash = $line.Substring(0, 64)
+    $relativePath = $line.Substring(66)
+    $fullPath = Join-Path $workspace $relativePath
+    if (Test-Path $fullPath) {
+        $actualHash = (Get-FileHash $fullPath -Algorithm SHA256).Hash.ToLower()
+        if ($actualHash -eq $expectedHash) {
+            $shaOk++
+        } else {
+            $shaFail++
+            Write-Host "SHA MISMATCH: $relativePath"
+        }
+    } else {
+        $shaFail++
+        Write-Host "MISSING: $relativePath"
+    }
+}
+if ($shaFail -ne 0) {
+    Write-Host "FAIL: SHA256 freeze verification failed ($shaFail issues). Aborting source pack."
+    exit 1
+}
+Write-Host "SHA256 freeze verification: $shaOk files OK"
+
+# ============================================================
+# P0-07: tar excludes (runtime pollution exclusion)
+# ============================================================
 $excludes = @(
     "--exclude=node_modules"
     "--exclude=.git"
@@ -120,6 +166,37 @@ $excludes = @(
     "--exclude=classes*.dex.txt"
     "--exclude=temp_apk_extract"
     "--exclude=backend/build"
+    "--exclude=*.map"
+    "--exclude=*.d.ts"
+    "--exclude=sdk/plugin-cli/dist"
+    "--exclude=runtime/task-host/dist"
+    "--exclude=runtime/plugin-host/dist"
+    "--exclude=testplugins"
+    "--exclude=tests"
+    "--exclude=runtime/mobile_app"
+    "--exclude=*.zip"
+    "--exclude=*.so"
+    "--exclude=*.dll"
+    "--exclude=*.dylib"
+    # P0-07: Runtime pollution exclusion rules
+    "--exclude=trace.atrace"
+    "--exclude=*.atrace"
+    "--exclude=.qdrant-initialized"
+    "--exclude=*/.qdrant-initialized"
+    "--exclude=storage"
+    "--exclude=*/storage"
+    "--exclude=surrealdb"
+    "--exclude=backend/surrealdb"
+    "--exclude=backend/qdrant"
+    "--exclude=backend/storage"
+    "--exclude=raft_state.json"
+    "--exclude=*.wal"
+    "--exclude=.gradle-proot-build"
+    "--exclude=.meituan-catpaw"
+    "--exclude=.workbuddy-ai"
+    "--exclude=coverage"
+    "--exclude=.DS_Store"
+    "--exclude=Thumbs.db"
 )
 
 Set-Location $parentDir
@@ -176,8 +253,85 @@ if ($LASTEXITCODE -ne 0) {
 Move-Item $tempGz $outputFile -Force
 if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
 
-# Step 3: Verify
-Write-Host "Step 3: Verifying archive..."
+# ============================================================
+# P0-08: Archive revalidation (extract and re-audit)
+# ============================================================
+Write-Host "=== P0-08: Archive Revalidation ==="
+
+if (Test-Path $tempExtract) { Remove-Item $tempExtract -Recurse -Force }
+New-Item -ItemType Directory -Path $tempExtract -Force | Out-Null
+
+Write-Host "Extracting archive for audit..."
+& tar -xzf $outputFile -C $tempExtract
+if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) {
+    Write-Host "FAIL: Could not extract archive for audit"
+    exit 1
+}
+
+$extractedFolder = Join-Path $tempExtract $folderName
+if (-not (Test-Path $extractedFolder)) {
+    Write-Host "FAIL: Expected folder not found in archive: $folderName"
+    exit 1
+}
+
+Write-Host "Running source hygiene audit on extracted archive..."
+$archiveRoot = $extractedFolder
+
+# Check for forbidden runtime artifacts in archive
+$forbiddenPatterns = @(
+    "trace.atrace",
+    "*.atrace",
+    ".qdrant-initialized",
+    "storage",
+    "surrealdb",
+    "raft_state.json",
+    "*.wal",
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    ".DS_Store",
+    "Thumbs.db"
+)
+
+$archiveEntries = & tar -tzf $outputFile 2>&1
+$violations = @()
+foreach ($entry in $archiveEntries) {
+    foreach ($pattern in $forbiddenPatterns) {
+        if ($entry -like "*$pattern*") {
+            # Check if it's a source file (not a directory name in a path)
+            $name = Split-Path $entry -Leaf
+            if ($name -like "*$pattern*" -or $entry -like "*/$pattern/*" -or $entry -like "*/$pattern") {
+                $violations += "$entry (matched: $pattern)"
+            }
+        }
+    }
+}
+
+if ($violations.Count -ne 0) {
+    Write-Host "FAIL: Archive contains forbidden runtime artifacts:"
+    foreach ($v in $violations) { Write-Host "  - $v" }
+    Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+    exit 1
+}
+Write-Host "Source hygiene audit: PASS (no forbidden artifacts in archive)"
+
+# Run verify-desktop-pet-finalization.mjs against extracted archive
+Write-Host "Running verify-desktop-pet-finalization.mjs against extracted archive..."
+$env:DESKTOP_PET_ARCHIVE_ROOT = $archiveRoot
+& node desktop/scripts/verify-desktop-pet-finalization.mjs
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FAIL: verify-desktop-pet-finalization.mjs did not pass on archive contents"
+    Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+    exit 1
+}
+Write-Host "Archive finalization gate: PASS"
+
+# Cleanup
+Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+
+# Step 3: Final verification output
+Write-Host "Step 3: Final archive verification..."
 $verifyResult = & tar -tzf $outputFile 2>&1
 if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 1) {
     $entries = ($verifyResult | Measure-Object -Line).Lines
