@@ -384,7 +384,7 @@ class _ExtensionMenuItem extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Container(
-          minHeight: 48,
+          constraints: const BoxConstraints(minHeight: 48),
           margin: const EdgeInsets.symmetric(vertical: 2),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
@@ -804,7 +804,7 @@ class _GlobalSearchRow extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Container(
-          minHeight: 54,
+          constraints: const BoxConstraints(minHeight: 54),
           padding: const EdgeInsets.all(8),
           child: Row(
             children: [
@@ -979,6 +979,7 @@ class AmitiaExtensionCard extends StatelessWidget {
   final bool isInstalled;
   final bool isEnabled;
   final bool isRecommended;
+  final String? actionLabel;
   final VoidCallback? onAction;
   final ValueChanged<bool>? onToggle;
 
@@ -991,6 +992,7 @@ class AmitiaExtensionCard extends StatelessWidget {
     required this.isInstalled,
     required this.isEnabled,
     this.isRecommended = false,
+    this.actionLabel,
     this.onAction,
     this.onToggle,
   });
