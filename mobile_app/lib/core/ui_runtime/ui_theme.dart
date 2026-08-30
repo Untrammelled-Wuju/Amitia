@@ -302,12 +302,25 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
 
   return base.copyWith(
     scaffoldBackgroundColor: colors.backgroundPrimary,
+    canvasColor: colors.backgroundPrimary,
+    disabledColor: colors.textDisabled,
+    dividerColor: colors.borderSecondary,
     colorScheme: base.colorScheme.copyWith(
       primary: colors.accentPrimary,
+      primaryContainer: colors.accentSoft,
+      onPrimaryContainer: colors.accentPressed,
       secondary: colors.accentSecondary,
+      secondaryContainer: colors.accentSoft,
+      onSecondaryContainer: colors.accentPressed,
       surface: colors.surfacePrimary,
-      error: colors.error,
+      surfaceContainerHighest: colors.surfaceSecondary,
       onSurface: colors.textPrimary,
+      onSurfaceVariant: colors.textSecondary,
+      outline: colors.borderPrimary,
+      outlineVariant: colors.borderSecondary,
+      error: colors.error,
+      scrim: colors.scrim,
+      surfaceTint: Colors.transparent,
     ),
     appBarTheme: base.appBarTheme.copyWith(
       toolbarHeight: components.toolbarHeight,
