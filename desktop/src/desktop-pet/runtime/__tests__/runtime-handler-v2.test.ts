@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DesktopRuntimeHandlerV2 } from "../runtime-handler-v2";
-import type { RuntimeCommandReplayEntry } from "../runtime-handler-v2";
+import type { RuntimeCommandReplayEntry, RuntimePendingOutboundEntry } from "../runtime-handler-v2";
 import { buildEnvelope, computePayloadHash } from "../protocol-v2";
 import type { RuntimeEnvelope } from "../protocol-v2";
 import type { RuntimeCommandExecutionResult } from "../../../main/pet/runtime-v2-command-adapter";
@@ -126,6 +126,7 @@ async function connectHandler(
   },
   helloAckOverrides: Record<string, unknown> = {},
   replayEntries: readonly RuntimeCommandReplayEntry[] = [],
+  pendingOutboundEntries: readonly RuntimePendingOutboundEntry[] = [],
 ): Promise<{ handler: DesktopRuntimeHandlerV2; ws: FakeWebSocket; hello: RuntimeEnvelope }> {
   const handler = new DesktopRuntimeHandlerV2(
     {
@@ -139,6 +140,7 @@ async function connectHandler(
       connectTimeoutMs: 5_000,
       resumeCursor,
       replayEntries,
+      pendingOutboundEntries,
     },
     {
       onState: () => undefined,
@@ -162,7 +164,17 @@ async function connectHandler(
   expect(hello.deviceId).toBe("device-1");
   expect(hello.runtimeId).toBe("runtime-1");
 
-  ws.message(helloAckEnvelope(helloAckOverrides));
+  const helloPayload = (hello.payload ?? {}) as {
+    lastAppliedDesiredRevision?: number;
+    lastProcessedCommandSequence?: number;
+    lastEventSequence?: number;
+  };
+  ws.message(helloAckEnvelope({
+    serverLastAppliedDesiredRevision: helloPayload.lastAppliedDesiredRevision ?? 0,
+    serverLastProcessedCommandSequence: helloPayload.lastProcessedCommandSequence ?? 0,
+    lastCommittedClientEventSequence: helloPayload.lastEventSequence ?? 0,
+    ...helloAckOverrides,
+  }));
   await connecting;
   await flushAsync();
   return { handler, ws, hello };
@@ -206,6 +218,199 @@ describe("DesktopRuntimeHandlerV2", () => {
 
     expect(handler.getState()).toBe("connected");
     expect(handler.getSessionId()).toBe("session-1");
+    handler.disconnect();
+  });
+
+  it("keeps the handshake deadline armed until hello_ack", async () => {
+    vi.useFakeTimers();
+    try {
+      const handler = new DesktopRuntimeHandlerV2(
+        {
+          url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
+          bootstrapTicket: "ticket-1",
+          userId: "user-1",
+          deviceId: "device-1",
+          runtimeId: "runtime-1",
+          autoReconnect: false,
+          connectTimeoutMs: 1000,
+        },
+        {
+          onState: () => undefined,
+          onHelloAck: () => undefined,
+          onEvent: () => undefined,
+          onError: () => undefined,
+          onDesiredSync: () => undefined,
+          onCommand: async () => ({
+            commandId: "unused", status: "applied", errorCode: "", errorMessage: "", appliedRevision: 0,
+          }),
+        },
+      );
+      const connecting = handler.connect("initial");
+      const ws = FakeWebSocket.instances.at(-1);
+      if (!ws) throw new Error("fake websocket not created");
+      ws.open();
+      await flushAsync();
+      expect(ws.sent.length).toBe(1);
+      await vi.advanceTimersByTimeAsync(1001);
+      await expect(connecting).rejects.toThrow("hello_ack timeout");
+      expect(handler.getState()).not.toBe("connected");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("advances lastEventSequence only after server event_ack", async () => {
+    const { handler, ws } = await connectHandler(async () => ({
+      commandId: "unused", status: "applied", errorCode: "", errorMessage: "", appliedRevision: 0,
+    }));
+    const before = handler.getEventSequence();
+    await handler.sendRuntimeEvent("runtime.health.changed", { currentStatus: "healthy" });
+    const sent = JSON.parse(ws.sent.at(-1) ?? "{}") as RuntimeEnvelope;
+    expect(sent.messageType).toBe("runtime_event");
+    expect(handler.getEventSequence()).toBe(before);
+    ws.message(buildEnvelope(
+      "event_ack", "event_ack", "user-1", "device-1", "runtime-1", "session-1", 1, 2,
+      { lastCommittedClientEventSequence: sent.sequence },
+    ));
+    await flushAsync();
+    expect(handler.getEventSequence()).toBe(sent.sequence);
+    handler.disconnect();
+  });
+
+  it("replays an uncommitted desired-state terminal event after reconnect", async () => {
+    const first = await connectHandler(async () => ({
+      commandId: "unused", status: "applied", errorCode: "", errorMessage: "", appliedRevision: 0,
+    }));
+    await first.handler.sendRuntimeEvent("runtime.state.desired_applied", {
+      commandId: "cmd-durable", desiredRevision: 7, desiredHash: "sha256:desired",
+    });
+    const pending = first.handler.getPendingOutboundEntries();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
+      messageType: "runtime_event",
+      messageName: "runtime.state.desired_applied",
+      replayAcrossReconnect: true,
+    });
+    first.handler.disconnect();
+
+    const second = await connectHandler(
+      async () => ({ commandId: "unused", status: "applied", errorCode: "", errorMessage: "", appliedRevision: 0 }),
+      first.handler.getResumeCursor(),
+      { lastCommittedClientEventSequence: 0 },
+      [],
+      pending,
+    );
+    const replayed = second.ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageType === "runtime_event");
+    expect(replayed).toHaveLength(1);
+    expect(replayed[0]).toMatchObject({
+      messageName: "runtime.state.desired_applied",
+      sequence: pending[0]?.sequence,
+    });
+    second.handler.disconnect();
+  });
+
+  it("keeps the original durable pending sequence if replay transport fails", async () => {
+    const pending: RuntimePendingOutboundEntry[] = [{
+      sequence: 9,
+      messageType: "runtime_event",
+      messageName: "runtime.state.desired_applied",
+      payload: { commandId: "cmd-replay-fail", desiredRevision: 9, desiredHash: "sha256:desired" },
+      replayAcrossReconnect: true,
+    }];
+    const handler = new DesktopRuntimeHandlerV2(
+      {
+        url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
+        bootstrapTicket: "ticket-1",
+        userId: "user-1",
+        deviceId: "device-1",
+        runtimeId: "runtime-1",
+        autoReconnect: false,
+        heartbeatIntervalMs: 60_000,
+        connectTimeoutMs: 5_000,
+        pendingOutboundEntries: pending,
+      },
+      {
+        onState: () => undefined,
+        onHelloAck: () => undefined,
+        onEvent: () => undefined,
+        onError: () => undefined,
+        onDesiredSync: () => undefined,
+        onCommand: async () => ({ commandId: "unused", status: "applied", errorCode: "", errorMessage: "", appliedRevision: 0 }),
+      },
+    );
+
+    const connecting = handler.connect("transport_lost");
+    const ws = FakeWebSocket.instances.at(-1);
+    if (!ws) throw new Error("fake websocket not created");
+    ws.open();
+    await flushAsync();
+    ws.failMessageNameOnce = "runtime.state.desired_applied";
+    ws.message(helloAckEnvelope({
+      serverLastAppliedDesiredRevision: 0,
+      serverLastProcessedCommandSequence: 0,
+      lastCommittedClientEventSequence: 0,
+      resumeMode: "full",
+    }));
+    await expect(connecting).rejects.toThrow();
+    expect(handler.getPendingOutboundEntries()).toEqual(pending);
+    handler.disconnect();
+  });
+
+  it("does not replay a desired-state event already covered by the hello committed cursor", async () => {
+    const first = await connectHandler(async () => ({
+      commandId: "unused", status: "applied", errorCode: "", errorMessage: "", appliedRevision: 0,
+    }));
+    await first.handler.sendRuntimeEvent("runtime.state.desired_applied", {
+      commandId: "cmd-durable", desiredRevision: 7, desiredHash: "sha256:desired",
+    });
+    const pending = first.handler.getPendingOutboundEntries();
+    const oldSequence = pending[0]?.sequence ?? 0;
+    first.handler.disconnect();
+
+    const second = await connectHandler(
+      async () => ({ commandId: "unused", status: "applied", errorCode: "", errorMessage: "", appliedRevision: 0 }),
+      first.handler.getResumeCursor(),
+      { lastCommittedClientEventSequence: oldSequence },
+      [],
+      pending,
+    );
+    const replayed = second.ws.sent
+      .map((item) => JSON.parse(item) as RuntimeEnvelope)
+      .filter((env) => env.messageType === "runtime_event");
+    expect(replayed).toHaveLength(0);
+    expect(second.handler.getEventSequence()).toBe(oldSequence);
+    second.handler.disconnect();
+  });
+
+  it("applies full-resume authoritative cursors and clears optimistic replay", async () => {
+    const replayEntries: RuntimeCommandReplayEntry[] = [{
+      commandId: "cmd-old",
+      commandSequence: 10,
+      desiredRevision: 5,
+      commandType: "runtime.command.sync_desired_state",
+      desiredHash: "sha256:old",
+      ackStatus: "completed",
+    }];
+    const { handler } = await connectHandler(
+      async () => ({ commandId: "unused", status: "applied", errorCode: "", errorMessage: "", appliedRevision: 0 }),
+      { lastAppliedDesiredRevision: 5, lastProcessedCommandSequence: 10, lastEventSequence: 20, actualStateHash: "sha256:local" },
+      {
+        resumeMode: "full",
+        serverLastAppliedDesiredRevision: 3,
+        serverLastProcessedCommandSequence: 8,
+        lastCommittedClientEventSequence: 18,
+      },
+      replayEntries,
+    );
+    expect(handler.getResumeCursor()).toEqual({
+      lastAppliedDesiredRevision: 3,
+      lastProcessedCommandSequence: 8,
+      lastEventSequence: 18,
+      actualStateHash: undefined,
+    });
+    expect(handler.getReplayEntries()).toEqual([]);
     handler.disconnect();
   });
 

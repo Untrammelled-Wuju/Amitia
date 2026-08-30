@@ -32,6 +32,8 @@ export interface PlayerState {
   startMonotonicMs: number;
   pausedDurationMs: number;
   pauseStartMonotonicMs: number | null;
+  windowHidden: boolean;
+  systemSuspended: boolean;
   lastPresentedFrameIndex: number | null;
   presentedFrames: number;
   droppedFramesEstimate: number;
@@ -56,6 +58,7 @@ export type StateAction =
     }
   | { type: "ACTION_LOAD_FAILED"; error: PlaybackError; command: PlayActionCommand; generation: number }
   | { type: "TICK"; now: number; position: TimelinePosition }
+  | { type: "FRAME_PRESENTED"; frameIndex: number }
   | { type: "PAUSE"; now: number }
   | { type: "RESUME"; now: number }
   | { type: "HOLD_ENTERED" }
@@ -94,6 +97,8 @@ export function createInitialState(): PlayerState {
     startMonotonicMs: -1,
     pausedDurationMs: 0,
     pauseStartMonotonicMs: null,
+    windowHidden: false,
+    systemSuspended: false,
     lastPresentedFrameIndex: null,
     presentedFrames: 0,
     droppedFramesEstimate: 0,
@@ -136,7 +141,7 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
 
   switch (action.type) {
     case "INITIALIZE_STARTED": {
-      if (state.phase !== "uninitialized") {
+      if (state.phase !== "uninitialized" && state.phase !== "recovering") {
         return state;
       }
       return {
@@ -153,6 +158,9 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         frameIndex: null,
         localElapsedMs: 0,
         cycleIndex: 0,
+        lastPresentedFrameIndex: null,
+        presentedFrames: 0,
+        droppedFramesEstimate: 0,
         lastTransitionAtMonotonicMs: 0,
         stateVersion: state.stateVersion + 1,
       };
@@ -177,8 +185,10 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         startMonotonicMs: action.now,
         startedAtMonotonicMs: action.now,
         pausedDurationMs: 0,
-        pauseStartMonotonicMs: null,
+        pauseStartMonotonicMs: state.windowHidden || state.systemSuspended ? action.now : null,
         lastPresentedFrameIndex: null,
+        presentedFrames: 0,
+        droppedFramesEstimate: 0,
         lastError: undefined,
         stateVersion: state.stateVersion + 1,
       };
@@ -244,8 +254,10 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         startMonotonicMs: action.now,
         startedAtMonotonicMs: action.now,
         pausedDurationMs: 0,
-        pauseStartMonotonicMs: null,
+        pauseStartMonotonicMs: state.windowHidden || state.systemSuspended ? action.now : null,
         lastPresentedFrameIndex: null,
+        presentedFrames: 0,
+        droppedFramesEstimate: 0,
         lastError: undefined,
         stateVersion: state.stateVersion + 1,
       };
@@ -270,8 +282,10 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         startMonotonicMs: action.now,
         startedAtMonotonicMs: action.now,
         pausedDurationMs: 0,
-        pauseStartMonotonicMs: null,
+        pauseStartMonotonicMs: state.windowHidden || state.systemSuspended ? action.now : null,
         lastPresentedFrameIndex: null,
+        presentedFrames: 0,
+        droppedFramesEstimate: 0,
         lastError: undefined,
         stateVersion: state.stateVersion + 1,
       };
@@ -296,27 +310,34 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         return state;
       }
       const position = action.position;
-      let presentedFrames = state.presentedFrames;
-      let droppedFramesEstimate = state.droppedFramesEstimate;
-      let lastPresentedFrameIndex = state.lastPresentedFrameIndex;
-      if (lastPresentedFrameIndex !== null && position.frameIndex !== lastPresentedFrameIndex) {
-        const expected = lastPresentedFrameIndex + 1;
-        if (position.frameIndex > expected) {
-          droppedFramesEstimate += position.frameIndex - expected;
-        }
-        presentedFrames += 1;
-      } else if (lastPresentedFrameIndex === null) {
-        presentedFrames += 1;
-      }
-      lastPresentedFrameIndex = position.frameIndex;
       return {
         ...state,
         frameIndex: position.frameIndex,
         cycleIndex: position.cycleIndex,
         localElapsedMs: position.localMs,
-        presentedFrames,
+        stateVersion: state.stateVersion + 1,
+      };
+    }
+
+    case "FRAME_PRESENTED": {
+      if (state.phase !== "playing" && state.phase !== "holding") {
+        return state;
+      }
+      if (state.lastPresentedFrameIndex === action.frameIndex) {
+        return state;
+      }
+      let droppedFramesEstimate = state.droppedFramesEstimate;
+      if (state.lastPresentedFrameIndex !== null) {
+        const expected = state.lastPresentedFrameIndex + 1;
+        if (action.frameIndex > expected) {
+          droppedFramesEstimate += action.frameIndex - expected;
+        }
+      }
+      return {
+        ...state,
+        lastPresentedFrameIndex: action.frameIndex,
+        presentedFrames: state.presentedFrames + 1,
         droppedFramesEstimate,
-        lastPresentedFrameIndex,
         stateVersion: state.stateVersion + 1,
       };
     }
@@ -328,7 +349,7 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
       return {
         ...state,
         phase: "paused",
-        pauseStartMonotonicMs: action.now,
+        pauseStartMonotonicMs: state.pauseStartMonotonicMs ?? action.now,
         lastTransitionAtMonotonicMs: action.now,
         stateVersion: state.stateVersion + 1,
       };
@@ -338,14 +359,15 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
       if (state.phase !== "paused") {
         return state;
       }
+      const environmentFrozen = state.windowHidden || state.systemSuspended;
       let pausedDurationMs = state.pausedDurationMs;
-      if (state.pauseStartMonotonicMs !== null) {
+      if (!environmentFrozen && state.pauseStartMonotonicMs !== null) {
         pausedDurationMs += Math.max(0, action.now - state.pauseStartMonotonicMs);
       }
       return {
         ...state,
         phase: "playing",
-        pauseStartMonotonicMs: null,
+        pauseStartMonotonicMs: environmentFrozen ? state.pauseStartMonotonicMs : null,
         pausedDurationMs,
         lastTransitionAtMonotonicMs: action.now,
         stateVersion: state.stateVersion + 1,
@@ -380,6 +402,9 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         startMonotonicMs: -1,
         startedAtMonotonicMs: -1,
         cycleIndex: 0,
+        lastPresentedFrameIndex: null,
+        presentedFrames: 0,
+        droppedFramesEstimate: 0,
         previousStableActionKey: stableKey,
         lastTransitionAtMonotonicMs: action.now,
         stateVersion: state.stateVersion + 1,
@@ -403,6 +428,9 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         startMonotonicMs: -1,
         startedAtMonotonicMs: -1,
         cycleIndex: 0,
+        lastPresentedFrameIndex: null,
+        presentedFrames: 0,
+        droppedFramesEstimate: 0,
         previousStableActionKey: stableKey,
         lastTransitionAtMonotonicMs: action.now,
         stateVersion: state.stateVersion + 1,
@@ -427,6 +455,9 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         startMonotonicMs: -1,
         startedAtMonotonicMs: -1,
         cycleIndex: 0,
+        lastPresentedFrameIndex: null,
+        presentedFrames: 0,
+        droppedFramesEstimate: 0,
         previousStableActionKey: stableKey,
         lastError: action.error.toView(),
         stateVersion: state.stateVersion + 1,
@@ -450,7 +481,10 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         startMonotonicMs: -1,
         startedAtMonotonicMs: -1,
         cycleIndex: 0,
-        pauseStartMonotonicMs: null,
+        pauseStartMonotonicMs: state.pauseStartMonotonicMs,
+        presentedFrames: 0,
+        droppedFramesEstimate: 0,
+        lastPresentedFrameIndex: null,
         stateVersion: state.stateVersion + 1,
       };
     }
@@ -474,8 +508,10 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         startMonotonicMs: action.now,
         startedAtMonotonicMs: action.now,
         pausedDurationMs: 0,
-        pauseStartMonotonicMs: null,
+        pauseStartMonotonicMs: state.windowHidden || state.systemSuspended ? action.now : null,
         lastPresentedFrameIndex: null,
+        presentedFrames: 0,
+        droppedFramesEstimate: 0,
         lastError: undefined,
         stateVersion: state.stateVersion + 1,
       };
@@ -490,33 +526,30 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
     }
 
     case "WINDOW_HIDDEN": {
-      if (state.phase === "failed") {
-        return state;
-      }
-      if (state.pauseStartMonotonicMs !== null) {
+      if (state.phase === "failed" || state.windowHidden) {
         return state;
       }
       return {
         ...state,
-        pauseStartMonotonicMs: action.now,
+        windowHidden: true,
+        pauseStartMonotonicMs: state.pauseStartMonotonicMs ?? action.now,
         stateVersion: state.stateVersion + 1,
       };
     }
 
     case "WINDOW_SHOWN": {
-      if (state.phase === "failed") {
+      if (state.phase === "failed" || !state.windowHidden) {
         return state;
       }
+      const stillFrozen = state.systemSuspended || state.phase === "paused";
       let pausedDurationMs = state.pausedDurationMs;
-      if (state.pauseStartMonotonicMs !== null) {
+      if (!stillFrozen && state.pauseStartMonotonicMs !== null) {
         pausedDurationMs += Math.max(0, action.now - state.pauseStartMonotonicMs);
       }
-      const nextPhase: PlayerPhase =
-        state.phase === "paused" || state.phase === "holding" ? "playing" : state.phase;
       return {
         ...state,
-        phase: nextPhase,
-        pauseStartMonotonicMs: null,
+        windowHidden: false,
+        pauseStartMonotonicMs: stillFrozen ? state.pauseStartMonotonicMs : null,
         pausedDurationMs,
         lastTransitionAtMonotonicMs: action.now,
         stateVersion: state.stateVersion + 1,
@@ -524,33 +557,30 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
     }
 
     case "SUSPENDED": {
-      if (state.phase === "failed") {
-        return state;
-      }
-      if (state.pauseStartMonotonicMs !== null) {
+      if (state.phase === "failed" || state.systemSuspended) {
         return state;
       }
       return {
         ...state,
-        pauseStartMonotonicMs: action.now,
+        systemSuspended: true,
+        pauseStartMonotonicMs: state.pauseStartMonotonicMs ?? action.now,
         stateVersion: state.stateVersion + 1,
       };
     }
 
     case "RESUMED_SYSTEM": {
-      if (state.phase === "failed") {
+      if (state.phase === "failed" || !state.systemSuspended) {
         return state;
       }
+      const stillFrozen = state.windowHidden || state.phase === "paused";
       let pausedDurationMs = state.pausedDurationMs;
-      if (state.pauseStartMonotonicMs !== null) {
+      if (!stillFrozen && state.pauseStartMonotonicMs !== null) {
         pausedDurationMs += Math.max(0, action.now - state.pauseStartMonotonicMs);
       }
-      const nextPhase: PlayerPhase =
-        state.phase === "paused" || state.phase === "holding" ? "playing" : state.phase;
       return {
         ...state,
-        phase: nextPhase,
-        pauseStartMonotonicMs: null,
+        systemSuspended: false,
+        pauseStartMonotonicMs: stillFrozen ? state.pauseStartMonotonicMs : null,
         pausedDurationMs,
         lastTransitionAtMonotonicMs: action.now,
         stateVersion: state.stateVersion + 1,
@@ -560,7 +590,7 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
     case "RECOVER": {
       return {
         ...state,
-        phase: "loading_default",
+        phase: "recovering",
         packageId: action.snapshot.packageId,
         packageRevision: action.snapshot.packageRevision,
         defaultActionKey: action.snapshot.defaultActionKey,
@@ -576,7 +606,10 @@ export function playerReducer(state: PlayerState, action: StateAction): PlayerSt
         localElapsedMs: action.snapshot.lastStableLocalElapsedMs,
         cycleIndex: action.snapshot.lastStableCycleIndex,
         previousStableActionKey: action.snapshot.lastStableActionKey,
-        pauseStartMonotonicMs: null,
+        pauseStartMonotonicMs: state.windowHidden || state.systemSuspended ? state.pauseStartMonotonicMs : null,
+        lastPresentedFrameIndex: null,
+        presentedFrames: 0,
+        droppedFramesEstimate: 0,
         lastError: undefined,
         stateVersion: state.stateVersion + 1,
       };

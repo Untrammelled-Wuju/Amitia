@@ -107,6 +107,8 @@ export class DesktopPetAnimationEngine {
   private lastTickTime = 0;
   private lastGapMs = 0;
   private isFrozen = false;
+  private consecutivePresentFailures = 0;
+  private readonly maxConsecutivePresentFailures = 3;
   private isAtomicPackageCommit = false;
   private disposed = false;
   private listeners: Set<EventListener> = new Set();
@@ -246,6 +248,8 @@ export class DesktopPetAnimationEngine {
         generation: generation.generation,
         now: this.clock.now(),
       });
+      this.dispatch({ type: "FRAME_PRESENTED", frameIndex: 0 });
+      this.consecutivePresentFailures = 0;
 
       this.startTickLoop();
       const loadTime = this.clock.now();
@@ -499,6 +503,8 @@ export class DesktopPetAnimationEngine {
         generation: generation.generation,
         now: startedAt,
       });
+      this.dispatch({ type: "FRAME_PRESENTED", frameIndex: 0 });
+      this.consecutivePresentFailures = 0;
       this.startTickLoop();
 
       const loadMs = startedAt - loadStart;
@@ -547,7 +553,9 @@ export class DesktopPetAnimationEngine {
     this.assertNotDisposed();
     const now = this.clock.now();
     this.dispatch({ type: "RESUME", now });
-    this.startTickLoop();
+    if (!this.state.windowHidden && !this.state.systemSuspended) {
+      this.startTickLoop();
+    }
   }
 
   stop(reason: InterruptionReason = "user_disabled"): void {
@@ -678,6 +686,8 @@ export class DesktopPetAnimationEngine {
         generation: generation.generation,
         now: this.clock.now(),
       });
+      this.dispatch({ type: "FRAME_PRESENTED", frameIndex: 0 });
+      this.consecutivePresentFailures = 0;
       this.startTickLoop();
 
       this.emit({
@@ -793,8 +803,8 @@ export class DesktopPetAnimationEngine {
       })),
       cacheStats,
       {
-        visible: !this.isFrozen,
-        suspended: this.state.phase === "paused",
+        visible: !this.state.windowHidden,
+        suspended: this.state.systemSuspended,
         lastGapMs: this.lastGapMs,
       },
     );
@@ -846,10 +856,13 @@ export class DesktopPetAnimationEngine {
   private startTickLoop(): void {
     if (this.disposed) return;
     if (this.state.phase !== "playing") return;
+    if (this.state.windowHidden || this.state.systemSuspended) return;
     if (this.tickHandle !== null) return;
     this.lastTickTime = this.clock.now();
     const epoch = ++this.tickLoopEpoch;
-    this.tickHandle = this.clock.requestTick((now) => this.onTick(now, epoch));
+    this.tickHandle = this.clock.requestTick((now) => {
+      void this.onTick(now, epoch);
+    });
   }
 
   private stopTickLoop(): void {
@@ -862,7 +875,7 @@ export class DesktopPetAnimationEngine {
     }
   }
 
-  private onTick(now: number, epoch: number): void {
+  private async onTick(now: number, epoch: number): Promise<void> {
     // A stale callback belongs to an older playback loop. It must not clear or
     // reschedule the handle owned by the current generation.
     if (epoch !== this.tickLoopEpoch) return;
@@ -872,6 +885,7 @@ export class DesktopPetAnimationEngine {
     this.tickHandle = null;
     if (this.disposed) return;
     if (this.state.phase !== "playing") return;
+    if (this.state.windowHidden || this.state.systemSuspended) return;
     if (!this.currentTimeline || !this.state.currentAction) return;
 
     const delta = now - this.lastTickTime;
@@ -898,6 +912,79 @@ export class DesktopPetAnimationEngine {
       });
     }
 
+    const frameIndex = position.frameIndex;
+    if (frameIndex >= 0 && frameIndex < this.currentDecodedFrames.length) {
+      const frame = this.currentDecodedFrames[frameIndex];
+      if (frame && this.state.lastPresentedFrameIndex !== frameIndex) {
+        const actionAtPresent = this.state.currentAction;
+        const presentStart = this.clock.now();
+        try {
+          const presentResult = await this.surface.present(frame, {
+            anchor: actionAtPresent.anchor,
+            frameIndex,
+            actionKey: actionAtPresent.actionKey,
+          });
+          if (!presentResult.presented) {
+            throw new PlaybackError(
+              PLAYBACK_ERROR_CODES.SURFACE_FAILED,
+              `frame was not presented: ${presentResult.error ?? "unknown surface error"}`,
+              { actionKey: actionAtPresent.actionKey, frameIndex, resourceUrl: frame.sourceUrl },
+            );
+          }
+          if (epoch !== this.tickLoopEpoch || this.disposed || this.state.currentAction !== actionAtPresent) {
+            return;
+          }
+          this.consecutivePresentFailures = 0;
+          this.dispatch({ type: "FRAME_PRESENTED", frameIndex });
+          this.telemetry.recordFramePresent(this.clock.now() - presentStart);
+        } catch (error) {
+          const pbError = PlaybackError.fromUnknown(error);
+          this.consecutivePresentFailures += 1;
+          this.telemetry.recordError(pbError.toView());
+          if (this.consecutivePresentFailures >= this.maxConsecutivePresentFailures) {
+            this.stopTickLoop();
+            const failedPlaybackId = this.state.currentPlaybackInstanceId;
+            const failedCommandId = this.state.currentCommandId;
+            const failedAction = this.state.currentAction;
+            if (failedPlaybackId) {
+              const command = this.acceptedCommands.get(failedPlaybackId);
+              if (command) {
+                this.emitCommandFailureView(command, pbError.toView());
+              } else {
+                this.emit({
+                  type: "playback.action_failed",
+                  playbackInstanceId: failedPlaybackId,
+                  commandId: failedCommandId ?? undefined,
+                  actionKey: failedAction?.actionKey,
+                  error: pbError.toView(),
+                  timestamp: Date.now(),
+                });
+              }
+            } else {
+              this.emit({
+                type: "playback.action_failed",
+                commandId: failedCommandId ?? undefined,
+                actionKey: failedAction?.actionKey,
+                error: pbError.toView(),
+                timestamp: Date.now(),
+              });
+            }
+            this.dispatch({ type: "ACTION_FAILED", error: pbError });
+            const generation = this.generationManager.current() ?? undefined;
+            void this.tryFallback(pbError, generation);
+            return;
+          }
+          if (epoch === this.tickLoopEpoch && this.state.phase === "playing" &&
+              !this.state.windowHidden && !this.state.systemSuspended) {
+            this.tickHandle = this.clock.requestTick((t) => {
+              void this.onTick(t, epoch);
+            });
+          }
+          return;
+        }
+      }
+    }
+
     if (position.completed) {
       this.handleActionComplete(now);
       return;
@@ -908,22 +995,11 @@ export class DesktopPetAnimationEngine {
       return;
     }
 
-    const frameIndex = position.frameIndex;
-    if (frameIndex >= 0 && frameIndex < this.currentDecodedFrames.length) {
-      const frame = this.currentDecodedFrames[frameIndex];
-      if (frame && this.state.lastPresentedFrameIndex !== frameIndex) {
-        const presentStart = this.clock.now();
-        void Promise.resolve(this.surface.present(frame, {
-          anchor: this.state.currentAction.anchor,
-          frameIndex,
-          actionKey: this.state.currentAction.actionKey,
-        })).catch(() => undefined);
-        this.telemetry.recordFramePresent(this.clock.now() - presentStart);
-      }
-    }
-
     if (epoch !== this.tickLoopEpoch || this.state.phase !== "playing") return;
-    this.tickHandle = this.clock.requestTick((t) => this.onTick(t, epoch));
+    if (this.state.windowHidden || this.state.systemSuspended) return;
+    this.tickHandle = this.clock.requestTick((t) => {
+      void this.onTick(t, epoch);
+    });
   }
 
   private computeLocalElapsed(now: number): number {
@@ -1105,6 +1181,8 @@ export class DesktopPetAnimationEngine {
         generation: generation.generation,
         now: this.clock.now(),
       });
+      this.dispatch({ type: "FRAME_PRESENTED", frameIndex: 0 });
+      this.consecutivePresentFailures = 0;
       this.startTickLoop();
       this.emit({
         type: "playback.action_started",

@@ -13,6 +13,7 @@ export type RuntimeMessageType =
   | "hello_ack"
   | "command"
   | "command_ack"
+  | "event_ack"
   | "runtime_event"
   | "state_snapshot"
   | "error"
@@ -114,17 +115,26 @@ export interface HelloPayload {
   actualStateHash?: string;
 }
 
+export type ResumeMode = "fresh" | "resume" | "full" | "resume_or_full";
+
 export interface HelloAckPayload {
   accepted: boolean;
   sessionId?: string;
   serverTime: string;
   currentDesiredRevision: number;
-  resumeMode?: string;
+  resumeMode?: ResumeMode;
+  serverLastAppliedDesiredRevision?: number;
+  serverLastProcessedCommandSequence?: number;
+  lastCommittedClientEventSequence?: number;
   heartbeatIntervalMs?: number;
   heartbeatTimeoutMs?: number;
   maxMessageBytes?: number;
   errorCode?: string;
   errorMessage?: string;
+}
+
+export interface EventAckPayload {
+  lastCommittedClientEventSequence: number;
 }
 
 export interface CommandAckPayload {

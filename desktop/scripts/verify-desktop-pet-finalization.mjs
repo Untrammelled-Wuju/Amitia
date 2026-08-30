@@ -51,6 +51,7 @@ const backendModel = await read("backend/internal/desktoppet/installation/model.
 const backendDto = await read("backend/internal/desktoppet/installation/dto.go");
 const backendInstallationCoordinator = await read("backend/internal/desktoppet/installation/coordinator/coordinator.go");
 const backendInstallationHandler = await read("backend/internal/desktoppet/installation/handler.go");
+const backendInstallationRepository = await read("backend/internal/desktoppet/installation/repository.go");
 const configStore = await read("desktop/src/main/config-store.ts");
 const desktopIndex = await read("desktop/src/main/index.ts");
 const ipcHandlers = await read("desktop/src/main/ipc-handlers.ts");
@@ -58,8 +59,15 @@ const tray = await read("desktop/src/main/tray.ts");
 const runtimeCommandService = await read("backend/internal/desktoppet/runtime/protocol/v2/command_service.go");
 const runtimeDispatcher = await read("backend/internal/desktoppet/runtime/protocol/v2/command_dispatcher.go");
 const runtimeRouter = await read("backend/internal/desktoppet/runtime/protocol/v2/router.go");
+const runtimeFacade = await read("backend/internal/desktoppet/runtime/protocol/v2/facade.go");
 const runtimeReconciler = await read("backend/internal/desktoppet/runtime/protocol/v2/reconciler.go");
 const runtimeHandler = await read("desktop/src/desktop-pet/runtime/runtime-handler-v2.ts");
+const animationEngine = await read("desktop/src/desktop-pet/animation/animation-engine.ts");
+const animationPlayerState = await read("desktop/src/desktop-pet/animation/player-state-machine.ts");
+const animationPlayerStateTests = await read("desktop/src/desktop-pet/animation/__tests__/player-state-machine.test.ts");
+const runtimeSessionService = await read("backend/internal/deviceruntime/session_service.go");
+const runtimeRecovery = await read("backend/internal/desktoppet/installation/recovery/runtime_recovery.go");
+const switchRecovery = await read("backend/internal/desktoppet/installation/recovery/switch_recovery.go");
 const desiredStateForwardFix = await read("backend/internal/migration/desktop_pet_desired_state_schema_forward_fix.go");
 const runtimeBehaviorFinalizationMigration = await read("backend/internal/migration/desktop_pet_runtime_behavior_finalization.go");
 const migrations = await read("backend/internal/migration/migrations.go");
@@ -103,6 +111,7 @@ const androidPetRenderer = await read("mobile_app/android/app/src/main/kotlin/co
 const androidCompositionRoot = await read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/AndroidNativeCompositionRoot.kt");
 const desktopPetWorkflow = await read(".github/workflows/desktop-pet.yml");
 const sourceGitignore = await read(".gitignore");
+const freezeShaBaseline = await read("DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt");
 
 assert(
   runtimeDispatcher.includes("ListCommandsToDispatchForConnection(") &&
@@ -146,12 +155,100 @@ assert(
     manager.includes("handler.getReplayEntries()"),
   "Electron manager must preserve terminal command replay results across runtime handler replacement",
 );
+
+const tickReducerStart = animationPlayerState.indexOf('case "TICK"');
+const framePresentedReducerStart = animationPlayerState.indexOf('case "FRAME_PRESENTED"', tickReducerStart);
+const tickReducerBody = animationPlayerState.slice(tickReducerStart, framePresentedReducerStart);
+assert(
+  tickReducerStart >= 0 &&
+    framePresentedReducerStart > tickReducerStart &&
+    !tickReducerBody.includes("lastPresentedFrameIndex") &&
+    !tickReducerBody.includes("presentedFrames") &&
+    animationEngine.includes('this.dispatch({ type: "FRAME_PRESENTED", frameIndex })') &&
+    animationEngine.includes("const presentResult = await this.surface.present(frame") &&
+    animationPlayerStateTests.includes('type: "FRAME_PRESENTED"'),
+  "animation timeline ticks must not claim presentation before surface.present succeeds",
+);
+assert(
+  animationPlayerState.includes("windowHidden: boolean") &&
+    animationPlayerState.includes("systemSuspended: boolean") &&
+    animationEngine.includes("if (this.state.windowHidden || this.state.systemSuspended) return;") &&
+    animationPlayerStateTests.includes("does not auto-resume a manually paused action after hide/show") &&
+    animationPlayerStateTests.includes("preserves manual pause across system suspend/resume"),
+  "manual pause/holding and environmental freeze state must remain independent",
+);
+assert(
+  runtimeHandler.includes('case "event_ack"') &&
+    runtimeHandler.includes("handleEventAck") &&
+    runtimeHandler.includes("getPendingOutboundEntries") &&
+    runtimeHandler.includes("replayUncommittedOutbound") &&
+    !runtimeHandler.includes("this.lastEventSequence = this.outboundSequence") &&
+    mobileDesktopPetRuntime.includes("_handleEventAck") &&
+    mobileDesktopPetRuntime.includes("_replayUncommittedOutbound") &&
+    !mobileDesktopPetRuntime.includes("_cursor.lastEventSequence = _outboundSequence") &&
+    runtimeRouter.includes("sendCommittedEventAck") &&
+    runtimeSessionService.includes("client_cursor_ahead"),
+  "Runtime V2 client event cursors must be server-committed and durable desired terminal events must survive ACK-loss reconnects",
+);
+assert(
+  runtimeHandler.includes('const fullResume = ack.resumeMode === "full"') &&
+    runtimeHandler.includes("runtime hello_ack timeout") &&
+    runtimeHandler.includes("sequenceOverride") &&
+    runtimeProtocolV2Tests.includes("keeps the original durable pending sequence if replay transport fails") &&
+    mobileDesktopPetRuntime.includes("_armHelloAckTimeout") &&
+    mobileDesktopPetRuntime.includes("sequenceOverride: entry.sequence") &&
+    mobileDesktopPetRuntime.includes("final fullResume = payload['resumeMode']?.toString() == 'full'") &&
+    runtimeCommandService.indexOf("RequeueDurableCommand(existing.ID") < runtimeCommandService.indexOf("if clientAppliedRevision >= state.DesiredRevision"),
+  "Full Resume, lossless durable replay, and hello_ack deadlines must be implemented on both desktop and Android before revision short-circuiting",
+);
+assert(
+  !runtimeFacade.includes('"desiredRevision": time.Now().UnixNano()') &&
+    !runtimeFacade.includes('"desiredRevision": time.Now().UTC().UnixNano()'),
+  "runtime notifier must never synthesize desired revisions from wall-clock time",
+);
+assert(
+  !runtimeRecovery.includes("UnixNano()") &&
+    !switchRecovery.includes("UnixNano()") &&
+    runtimeRecovery.includes("ResolveDesiredRevision") &&
+    runtimeRecovery.includes("SetOperationDesiredRevisionIfMissing") &&
+    switchRecovery.includes("ResolveDesiredRevision") &&
+    switchRecovery.includes("SetSwitchJournalDesiredRevisionIfMissing"),
+  "recovery must resolve and persist allocator-issued desired revisions instead of synthesizing wall-clock revisions",
+);
+assert(
+  runtimeRecovery.includes("recoverFromCleanupCompleted") &&
+    runtimeRecovery.includes("recover desired revision before cancel") &&
+    switchRecovery.includes("recoverFromSwitchCompleted") &&
+    switchRecovery.includes("CompleteOperation(op.ID, op.Stage, op.Status"),
+  "recovery must close finalizer/journal crash windows and converge operation stage/status atomically",
+);
+assert(
+  runtimeRouter.includes("RUNTIME_ID_AMBIGUOUS") &&
+    runtimeRouter.includes('strings.TrimSpace(c.Query("deviceId"))') &&
+    runtimeRouter.includes("facade.ListConnections(userID)") &&
+    !runtimeRouter.includes('facade.GetConnection(userID, "", runtimeID)') &&
+    runtimeRouter.includes("websocket.CloseProtocolError") &&
+    runtimeRouter.includes("malformed runtime envelope"),
+  "runtime status lookup must honor device ownership and malformed websocket frames must fail-close with protocol error",
+);
 assert(
   runtimeCommandService.includes("desired_revision > ?") &&
     runtimeCommandService.includes("CommandStatusSuperseded") &&
     runtimeCommandService.includes('updates["runtime_id"] = runtimeID') &&
     runtimeCommandService.includes("existing.RuntimeID != runtimeID"),
   "durable recovery must not revive stale desired revisions and must retarget commands to the current runtime incarnation",
+);
+assert(
+  manager.includes("requireRuntimeSettingsFlag") &&
+    manager.includes("RUNTIME_SETTINGS_ID_MISMATCH") &&
+    !manager.includes("payload.restoreOnAppStart == null"),
+  "runtime settings must fail closed on malformed authoritative flags and installation identity mismatches",
+);
+assert(
+  backendInstallationRepository.includes('Where("id = ? AND user_id = ?", installationID, userID)') &&
+    backendInstallationRepository.includes(`Where("device_id = ? OR device_id = ''", deviceID)`) &&
+    backendInstallationRepository.includes("UpdateRuntimeSettingsCAS"),
+  "runtime settings repository must enforce installation user/device ownership before read or CAS update",
 );
 assert(
   manager.includes("ack.currentDesiredRevision") &&
@@ -654,6 +751,60 @@ for (const file of await collectFiles("backend/internal/desktoppet", [".go"])) {
   );
 }
 
+const frozenShaPaths = new Set(
+  freezeShaBaseline
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[a-f0-9]{64}\s+/, "")),
+);
+const requiredFreezeCoverage = [
+  ...(await collectFiles("backend/internal/desktoppet", [".go", ".json", ".md"])),
+  ...(await collectFiles("backend/internal/deviceruntime", [".go"])),
+  ...(await collectFiles("backend/internal/runtimeprofile", [".go"])),
+  ...(await collectFiles("backend/internal/migration", [".go"])),
+  ...(await collectFiles("backend/cmd/server", [".go"])),
+  ...(await collectFiles("desktop/src/main", [".ts", ".tsx", ".vue"])),
+  ...(await collectFiles("desktop/src/desktop-pet", [".ts", ".tsx", ".vue"])),
+  ...(await collectFiles("desktop/src/preload", [".ts", ".tsx", ".vue"])),
+  ...(await collectFiles("desktop/src/renderer", [".ts", ".tsx", ".vue"])),
+  ...(await collectFiles("desktop/src/shared", [".ts", ".tsx", ".vue"])),
+  ...(await collectFiles("front/src/runtime", [".ts", ".tsx", ".vue"])),
+  ...(await collectFiles("front/src/composables", [".ts", ".tsx", ".vue"])),
+  ...(await collectFiles("front/src/components", [".ts", ".tsx", ".vue"])),
+  ...(await collectFiles("mobile_app/lib/features/desktop_pet", [".dart"])),
+  ...(await collectFiles("mobile_app/lib/core/backend_transport", [".dart"])),
+  ...(await collectFiles(
+    "mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/desktoppet",
+    [".kt"],
+  )),
+  path.join(repoRoot, "desktop/vite.config.ts"),
+  path.join(repoRoot, "desktop/src/desktop-pet/animation/__tests__/animation-engine-readiness.test.ts"),
+  path.join(repoRoot, "desktop/src/desktop-pet/animation/__tests__/player-state-machine.test.ts"),
+  path.join(repoRoot, "desktop/src/desktop-pet/runtime/__tests__/runtime-handler-v2.test.ts"),
+  path.join(repoRoot, "desktop/src/main/pet/__tests__/manager.test.ts"),
+  path.join(repoRoot, "desktop/scripts/verify-desktop-pet-finalization.mjs"),
+  path.join(repoRoot, "desktop/scripts/release-integrity.mjs"),
+  path.join(repoRoot, "scripts/audit/verify-source-hygiene.mjs"),
+  path.join(repoRoot, "scripts/pack-source.ps1"),
+  path.join(repoRoot, "DESKTOP_PET_FINALIZATION_SHA256SUMS.txt"),
+];
+for (const file of requiredFreezeCoverage) {
+  const relative = path.relative(repoRoot, file).replaceAll("\\", "/");
+  assert(
+    frozenShaPaths.has(relative),
+    `freeze SHA baseline must cover critical desktop-pet source: ${relative}`,
+  );
+}
+
+
+try {
+  await fs.lstat(path.join(repoRoot, "desktop/src/shared/runtime-protocol.ts"));
+  assert(false, "legacy desktop/src/shared/runtime-protocol.ts contract must be removed; Runtime V2 protocol-v2.ts is canonical");
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
+
 const forbiddenArtifacts = [
   { paths: [".gradle-proot-build", ".gradle-proot-build/"], description: ".gradle-proot-build" },
   { paths: ["trace.atrace"], description: "trace.atrace" },
@@ -674,58 +825,35 @@ for (const forbidden of forbiddenArtifacts) {
   );
 }
 
-function isPathGitignored(relPath, gitignoreEntries) {
-  const normalized = relPath.replace(/\\/g, "/");
-  const parts = normalized.split("/");
-  for (const entry of gitignoreEntries) {
-    const cleanEntry = entry.replace(/\/$/, "");
-    if (parts.includes(cleanEntry)) return true;
-    if (normalized.endsWith(cleanEntry) || normalized.includes(`/${cleanEntry}/`)) return true;
+const forbiddenWorkspacePaths = [
+  ".gradle-proot-build",
+  "trace.atrace",
+  ".meituan-catpaw",
+  ".workbuddy-ai",
+  ".dart_tool",
+  "coverage",
+  ".qdrant-initialized",
+  "storage",
+  "surrealdb",
+  "qdrant",
+  "backend/.qdrant-initialized",
+  "backend/storage",
+  "backend/surrealdb",
+  "backend/qdrant",
+];
+
+const workspaceViolations = [];
+for (const relPath of forbiddenWorkspacePaths) {
+  try {
+    await fs.lstat(path.join(repoRoot, relPath));
+    workspaceViolations.push(relPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
   }
-  return false;
 }
-
-async function scanForForbiddenArtifacts(directory, forbiddenList, gitignoreEntries) {
-  const violations = [];
-  const visit = async (currentDir) => {
-    let entries;
-    try {
-      entries = await fs.readdir(currentDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name === "node_modules" || entry.name === ".git") continue;
-      const fullPath = path.join(currentDir, entry.name);
-      const relPath = path.relative(repoRoot, fullPath);
-      const nameOfEntry = entry.name;
-      if (entry.isDirectory()) {
-        const isForbidden = forbiddenList.some(
-          (f) => nameOfEntry === f,
-        );
-        if (isForbidden && !isPathGitignored(relPath, gitignoreEntries)) {
-          violations.push(relPath);
-          continue;
-        }
-        if (!isForbidden) {
-          await visit(fullPath);
-        }
-      } else if (entry.isFile()) {
-        if (nameOfEntry === "trace.atrace" && !isPathGitignored(relPath, gitignoreEntries)) {
-          violations.push(relPath);
-        }
-      }
-    }
-  };
-  await visit(directory);
-  return violations;
-}
-
-const forbiddenDirNames = forbiddenArtifacts.map((f) => f.description.replace("/", ""));
-const workspaceViolations = await scanForForbiddenArtifacts(repoRoot, forbiddenDirNames, gitignoreEntries);
 assert(
   workspaceViolations.length === 0,
-  `workspace must not contain forbidden build/runtime artifacts: ${workspaceViolations.join(", ")}`,
+  `workspace must not contain forbidden build/runtime artifacts, regardless of .gitignore: ${workspaceViolations.join(", ")}`,
 );
 
 console.log(

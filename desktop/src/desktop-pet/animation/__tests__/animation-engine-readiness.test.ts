@@ -86,6 +86,45 @@ function makeAssets(
 
 
 
+function makeMultiFrameAssets(actionKey = "idle", frameCount = 3): LoadedActionAssets {
+  const base = makeAssets(actionKey);
+  const frames = Array.from({ length: frameCount }, (_, index) => ({
+    index,
+    resourceUrl: `amitia-pet://${actionKey}/frame-${index}.png`,
+    durationMs: 100,
+    cumulativeStartMs: index * 100,
+    cumulativeEndMs: (index + 1) * 100,
+    frameId: `frame-${index}`,
+    assetId: `asset-${index}`,
+    contentHash: `hash-${index}`,
+  }));
+  const decodedFrames: DecodedFrame[] = frames.map((frame) => ({
+    frameIndex: frame.index,
+    bitmap: {} as HTMLImageElement,
+    width: 128,
+    height: 128,
+    estimatedBytes: 128 * 128 * 4,
+    sourceUrl: frame.resourceUrl,
+    decoderName: "test",
+    contentHash: frame.contentHash,
+  }));
+  return {
+    action: {
+      ...base.action,
+      frames,
+      baseDurationMs: frameCount * 100,
+      cycleDurationMs: frameCount * 100,
+    },
+    decodedFrames,
+    totalEstimatedBytes: decodedFrames.reduce((sum, frame) => sum + frame.estimatedBytes, 0),
+  };
+}
+
+async function flushTick(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 function makePlayCommand(
   overrides?: Partial<PlayActionCommand>,
 ): PlayActionCommand {
@@ -206,6 +245,31 @@ describe("DesktopPetAnimationEngine startup readiness", () => {
 
     expect(surface.present).toHaveBeenCalledTimes(1);
     expect(engine.getPhase()).toBe("playing");
+    engine.dispose();
+  });
+
+  it("presents subsequent timeline frames instead of treating TICK as presentation", async () => {
+    const clock = new FakePlaybackClock();
+    const assets = makeMultiFrameAssets("idle", 3);
+    const repository: ActionAssetRepository = {
+      loadAction: vi.fn(async () => assets),
+    };
+    const surface = makeSurface();
+    const engine = new DesktopPetAnimationEngine({ surface, assetRepository: repository, clock });
+
+    await engine.initialize(makeSnapshot());
+    expect(surface.present).toHaveBeenCalledTimes(1);
+
+    clock.advance(110);
+    await flushTick();
+    expect(surface.present).toHaveBeenCalledTimes(2);
+    expect(surface.present.mock.calls[1]?.[1]).toMatchObject({ frameIndex: 1, actionKey: "idle" });
+
+    clock.advance(100);
+    await flushTick();
+    expect(surface.present).toHaveBeenCalledTimes(3);
+    expect(surface.present.mock.calls[2]?.[1]).toMatchObject({ frameIndex: 2, actionKey: "idle" });
+
     engine.dispose();
   });
 
