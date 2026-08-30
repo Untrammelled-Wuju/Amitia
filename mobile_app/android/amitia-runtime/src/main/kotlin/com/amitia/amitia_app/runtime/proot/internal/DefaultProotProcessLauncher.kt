@@ -5,7 +5,6 @@ import com.amitia.amitia_app.runtime.proot.ProotErrorCode
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotProcessLauncher
 import com.amitia.amitia_app.runtime.proot.ProotSession
-import android.util.Log
 import java.io.File
 
 internal class DefaultProotProcessLauncher(
@@ -20,32 +19,11 @@ internal class DefaultProotProcessLauncher(
             }
             val fullCommand = ArrayList<String>(command.arguments.size + 1)
             fullCommand.add(command.binaryPath); fullCommand.addAll(command.arguments)
-            Log.d("AmitiaRuntime", "proot-cmd: ${fullCommand.joinToString(" ")}")
-            Log.d("AmitiaRuntime", "proot-env: ${command.environment.entries.joinToString(" ")}")
-
-            val logFile = File(runRootOf(command.environment), "proot-launch.log")
-            val shellCommand = ArrayList<String>()
+            val shellCommand = ArrayList<String>(fullCommand.size + 4)
             shellCommand.add("/system/bin/sh")
             shellCommand.add("-c")
-            shellCommand.add(
-                "{ " +
-                    "echo '== sh-start ==';" +
-                    "id;" +
-                    "echo -n 'ctx='; cat /proc/self/attr/current;" +
-                    "grep -E 'Seccomp|NoNewPrivs' /proc/self/status;" +
-                    "echo -n 'bin='; ls -l \"\$1\" 2>&1;" +
-                    "echo '-- version --';" +
-                    "\"\$1\" --version; echo \"vexit=\$?\";" +
-                    "echo '-- trivial --';" +
-                    "\"\$1\" -r / /system/bin/true; echo \"texit=\$?\";" +
-                    "echo '-- verbose --';" +
-                    "\"\$1\" -v 9 -r / /system/bin/true; echo \"vtexit=\$?\";" +
-                    "echo '-- run --';" +
-                    "\"\$@\";" +
-                    "echo \"exit=\$?\";" +
-                    " } > \"\$0\" 2>&1"
-            )
-            shellCommand.add(logFile.absolutePath)
+            shellCommand.add("exec \"\$@\"")
+            shellCommand.add("amitia-proot")
             shellCommand.addAll(fullCommand)
 
             val pb = ProcessBuilder(shellCommand); pb.directory(File("/"))
@@ -55,7 +33,6 @@ internal class DefaultProotProcessLauncher(
                 pb.environment().putAll(command.environment)
             }
             val process = pb.start()
-            Log.i("AmitiaRuntime", "proot-launched: alive=${runCatching { process.isAlive }.getOrElse { false }} log=${logFile.absolutePath}")
             val session = DefaultProotSession(
                 sessionId = sessionId,
                 process = process,
@@ -66,18 +43,6 @@ internal class DefaultProotProcessLauncher(
         } catch (e: SecurityException) { throw ProotLaunchException(ProotErrorCode.PROCESS_START_FAILED, "security: ${e.message}", e) }
         catch (e: java.io.IOException) { throw ProotLaunchException(ProotErrorCode.PROCESS_START_FAILED, "io: ${e.message}", e) }
         catch (e: Exception) { throw ProotLaunchException(ProotErrorCode.PROCESS_START_FAILED, "failed: ${e.message}", e) }
-    }
-
-    private fun runRootOf(environment: Map<String, String>): File {
-        val tmpDir = environment["PROOT_TMP_DIR"]
-        if (!tmpDir.isNullOrBlank()) {
-            val parent = File(tmpDir).parentFile
-            if (parent != null) {
-                parent.mkdirs()
-                return parent
-            }
-        }
-        return File("/")
     }
 
     private fun launchNative(

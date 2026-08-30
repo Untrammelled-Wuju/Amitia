@@ -212,6 +212,22 @@ internal class DesktopPetRendererNativeHandler(
         }
 
         return withContext(Dispatchers.Main.immediate) {
+            val requestedWidth = request.payload.intOrNull("width")
+            val requestedHeight = request.payload.intOrNull("height")
+            if (requestedWidth != null && requestedWidth !in MIN_PET_DP..MAX_PET_DP) {
+                return@withContext failure(
+                    request,
+                    "DESKTOP_PET_SIZE_UNSUPPORTED",
+                    "desktop pet width must be within ${MIN_PET_DP}..${MAX_PET_DP}dp; requested=$requestedWidth",
+                )
+            }
+            if (requestedHeight != null && requestedHeight !in MIN_PET_DP..MAX_PET_DP) {
+                return@withContext failure(
+                    request,
+                    "DESKTOP_PET_SIZE_UNSUPPORTED",
+                    "desktop pet height must be within ${MIN_PET_DP}..${MAX_PET_DP}dp; requested=$requestedHeight",
+                )
+            }
             stopAnimation()
             removeSurface()
             bitmapCache.evictAll()
@@ -221,12 +237,8 @@ internal class DesktopPetRendererNativeHandler(
             paused = false
             alpha = request.payload.float("alpha", 1f).coerceIn(0.2f, 1f)
 
-            val width = request.payload
-                .int("width", pet.canvasWidth.coerceIn(MIN_PET_DP, MAX_PET_DP))
-                .coerceIn(MIN_PET_DP, MAX_PET_DP)
-            val height = request.payload
-                .int("height", pet.canvasHeight.coerceIn(MIN_PET_DP, MAX_PET_DP))
-                .coerceIn(MIN_PET_DP, MAX_PET_DP)
+            val width = requestedWidth ?: pet.canvasWidth.coerceIn(MIN_PET_DP, MAX_PET_DP)
+            val height = requestedHeight ?: pet.canvasHeight.coerceIn(MIN_PET_DP, MAX_PET_DP)
             val x = request.payload.int("x", DEFAULT_X_DP)
             val y = request.payload.int("y", DEFAULT_Y_DP)
 
@@ -316,13 +328,29 @@ internal class DesktopPetRendererNativeHandler(
             ?: return failure(request, "DESKTOP_PET_RENDERER_NOT_LOADED", "desktop pet renderer is not loaded")
         val params = layoutParams
             ?: return failure(request, "DESKTOP_PET_RENDERER_NOT_LOADED", "desktop pet renderer layout is unavailable")
+        val requestedWidth = request.payload.intOrNull("width")
+        val requestedHeight = request.payload.intOrNull("height")
+        if (requestedWidth != null && requestedWidth !in MIN_PET_DP..MAX_PET_DP) {
+            return failure(
+                request,
+                "DESKTOP_PET_SIZE_UNSUPPORTED",
+                "desktop pet width must be within ${MIN_PET_DP}..${MAX_PET_DP}dp; requested=$requestedWidth",
+            )
+        }
+        if (requestedHeight != null && requestedHeight !in MIN_PET_DP..MAX_PET_DP) {
+            return failure(
+                request,
+                "DESKTOP_PET_SIZE_UNSUPPORTED",
+                "desktop pet height must be within ${MIN_PET_DP}..${MAX_PET_DP}dp; requested=$requestedHeight",
+            )
+        }
         var positionChanged = false
         request.payload.floatOrNull("alpha")?.let {
             alpha = it.coerceIn(0.2f, 1f)
             view.alpha = alpha
         }
-        request.payload.intOrNull("width")?.let { params.width = dp(it.coerceIn(MIN_PET_DP, MAX_PET_DP)) }
-        request.payload.intOrNull("height")?.let { params.height = dp(it.coerceIn(MIN_PET_DP, MAX_PET_DP)) }
+        requestedWidth?.let { params.width = dp(it) }
+        requestedHeight?.let { params.height = dp(it) }
         request.payload.intOrNull("x")?.let {
             params.gravity = Gravity.TOP or Gravity.START
             params.x = dp(it)
@@ -359,12 +387,14 @@ internal class DesktopPetRendererNativeHandler(
         val action = pet.actions[actionKey]
             ?: return failure(request, "ACTION_NOT_FOUND", "action $actionKey is unavailable")
         val requestedRate = request.payload.double("playbackRate", 1.0).coerceIn(0.25, 4.0)
+        val requestedInterruptible = request.payload.booleanOrNull("interruptible")
         val result = try {
             startAction(
                 actionKey = actionKey,
                 requestedPlaybackRate = requestedRate,
                 forceLoop = null,
                 clearTerminal = true,
+                requestedInterruptible = requestedInterruptible,
             )
         } catch (error: Exception) {
             return failure(request, "ACTION_NOT_FOUND", error.message ?: "action is unavailable")
@@ -887,6 +917,7 @@ internal class DesktopPetRendererNativeHandler(
         requestedPlaybackRate: Double,
         forceLoop: Boolean?,
         clearTerminal: Boolean,
+        requestedInterruptible: Boolean? = null,
     ): Map<String, Any?> {
         val pet = loadedPet ?: error("desktop pet renderer is not loaded")
         val action = pet.actions[actionKey] ?: error("action $actionKey is not available")
@@ -906,7 +937,7 @@ internal class DesktopPetRendererNativeHandler(
         paused = false
         playbackRate = requestedPlaybackRate.coerceIn(0.25, 4.0)
         currentPlaybackMode = action.playbackMode
-        currentInterruptible = action.interruptible
+        currentInterruptible = action.interruptible && requestedInterruptible != false
         playbackActive = true
         if (clearTerminal) {
             lastCompletedPlaybackId = ""
@@ -921,7 +952,7 @@ internal class DesktopPetRendererNativeHandler(
             "actionKey" to action.key,
             "playbackMode" to if (loop && action.playbackMode == "once") "loop" else action.playbackMode,
             "singleCycleDurationMs" to scaledCycleDuration(action),
-            "interruptible" to action.interruptible,
+            "interruptible" to currentInterruptible,
             "interruptAfterMs" to action.interruptAfterMs,
             "minimumPlayMs" to action.minimumPlayMs,
             "maximumPlayMs" to action.maximumPlayMs,
@@ -1413,6 +1444,16 @@ internal class DesktopPetRendererNativeHandler(
         is Number -> value.toDouble()
         is String -> value.toDoubleOrNull() ?: fallback
         else -> fallback
+    }
+    private fun Map<String, Any?>.booleanOrNull(key: String): Boolean? = when (val value = this[key]) {
+        is Boolean -> value
+        is Number -> value.toInt() != 0
+        is String -> when (value.trim().lowercase()) {
+            "true", "1" -> true
+            "false", "0" -> false
+            else -> null
+        }
+        else -> null
     }
 
     companion object {

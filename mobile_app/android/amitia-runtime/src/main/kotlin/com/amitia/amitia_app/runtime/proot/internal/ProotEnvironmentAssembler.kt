@@ -91,6 +91,7 @@ internal open class ProotEnvironmentAssembler(
         return mounts + listOf(
             ProotBindMount.create("/system", "/system", readOnly = true),
             ProotBindMount.create("/apex", "/apex", readOnly = true),
+            ProotBindMount.create("/dev", "/dev", readOnly = true),
         )
     }
 
