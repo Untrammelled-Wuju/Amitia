@@ -1,7 +1,8 @@
 import { nativeImage } from "electron";
-import { access } from "node:fs/promises";
-import { relative } from "node:path";
-import type { LoadedInstallation, RuntimeAction } from "./resource-loader";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import type { IntegrityFileEntry, LoadedInstallation, RuntimeAction } from "./resource-loader";
+import { normalizePackagePath, relativePackagePathFromRoot, resolvePackagePathUnderRoot } from "./package-path";
 
 const DEFAULT_MAX_ACTIONS = 5;
 const DEFAULT_MAX_FRAMES_PER_ACTION = 60;
@@ -60,27 +61,22 @@ export class ResourceCache {
     this.currentReleaseId = releaseId;
   }
 
-  private buildContentHashLookup(loaded: LoadedInstallation): Map<string, string> {
-    const lookup = new Map<string, string>();
+  private buildIntegrityLookup(loaded: LoadedInstallation): Map<string, IntegrityFileEntry> {
+    const lookup = new Map<string, IntegrityFileEntry>();
     const files = loaded.manifest.integrity?.files;
     if (!files || !Array.isArray(files)) return lookup;
     for (const entry of files) {
-      if (entry && typeof entry.path === "string" && typeof entry.sha256 === "string") {
-        const normalizedPath = entry.path.replace(/\\/g, "/").replace(/^\/+/, "");
-        lookup.set(normalizedPath, entry.sha256);
+      if (!entry || typeof entry.path !== "string" || typeof entry.sha256 !== "string") continue;
+      try {
+        const canonicalPath = normalizePackagePath(entry.path);
+        if (!lookup.has(canonicalPath)) lookup.set(canonicalPath, entry);
+      } catch {
+        // Strict Package V2 parsing rejects invalid entries before cache use.
       }
     }
     return lookup;
   }
 
-  private resolveContentHash(
-    framePath: string,
-    installPath: string,
-    contentHashLookup: Map<string, string>,
-  ): string {
-    const relPath = relative(installPath, framePath).replace(/\\/g, "/");
-    return contentHashLookup.get(relPath) ?? "";
-  }
 
   async preloadDefaultIdle(loaded: LoadedInstallation): Promise<void> {
     const action = loaded.defaultAction;
@@ -121,12 +117,13 @@ export class ResourceCache {
 
     this.preloadQueue.add(cacheKey);
     try {
-      const contentHashLookup = this.buildContentHashLookup(loaded);
+      const integrityLookup = this.buildIntegrityLookup(loaded);
       const frames = await this.loadActionFrames(
         action,
         this.maxFramesPerAction,
-        contentHashLookup,
+        integrityLookup,
         loaded.installPath,
+        loaded.manifest.schemaVersion >= 2,
       );
       if (frames.length === 0) return;
       this.ensureActionCapacity(1);
@@ -166,10 +163,15 @@ export class ResourceCache {
       return arr[frameIndex] ?? null;
     }
 
-    const contentHashLookup = this.buildContentHashLookup(loaded);
-    const framePath = action.frames[frameIndex];
-    const contentHash = this.resolveContentHash(framePath, loaded.installPath, contentHashLookup);
-    const frame = await this.loadFrame(action, actionKey, frameIndex, contentHash);
+    const integrityLookup = this.buildIntegrityLookup(loaded);
+    const frame = await this.loadFrame(
+      action,
+      actionKey,
+      frameIndex,
+      loaded.installPath,
+      integrityLookup,
+      loaded.manifest.schemaVersion >= 2,
+    );
     if (!frame) return null;
 
     if (!arr) {
@@ -231,15 +233,21 @@ export class ResourceCache {
   private async loadActionFrames(
     action: RuntimeAction,
     limit: number,
-    contentHashLookup: Map<string, string>,
+    integrityLookup: Map<string, IntegrityFileEntry>,
     installPath: string,
+    requireIntegrity: boolean,
   ): Promise<CachedFrame[]> {
     const total = Math.min(action.frames.length, limit);
     const result: CachedFrame[] = [];
     for (let i = 0; i < total; i++) {
-      const framePath = action.frames[i];
-      const contentHash = this.resolveContentHash(framePath, installPath, contentHashLookup);
-      const frame = await this.loadFrame(action, action.key, i, contentHash);
+      const frame = await this.loadFrame(
+        action,
+        action.key,
+        i,
+        installPath,
+        integrityLookup,
+        requireIntegrity,
+      );
       if (frame) result.push(frame);
     }
     return result;
@@ -249,19 +257,36 @@ export class ResourceCache {
     action: RuntimeAction,
     actionKey: string,
     frameIndex: number,
-    contentHash: string,
+    installPath: string,
+    integrityLookup: Map<string, IntegrityFileEntry>,
+    requireIntegrity: boolean,
   ): Promise<CachedFrame | null> {
     const framePath = action.frames[frameIndex];
     if (!framePath) return null;
 
+    let relativePath: string;
+    let entry: IntegrityFileEntry | undefined;
     try {
-      await access(framePath);
+      relativePath = relativePackagePathFromRoot(installPath, framePath);
+      entry = integrityLookup.get(relativePath);
     } catch {
       return null;
     }
+    if (requireIntegrity && !entry) return null;
 
     try {
-      const image = nativeImage.createFromPath(framePath);
+      const verifiedPath = resolvePackagePathUnderRoot(installPath, relativePath);
+      const content = await readFile(verifiedPath);
+      const actualHash = createHash("sha256").update(content).digest("hex");
+
+      if (entry) {
+        if (typeof entry.bytes === "number" && content.length !== entry.bytes) return null;
+        if (actualHash !== entry.sha256) return null;
+      }
+
+      // Decode the exact bytes that were read and, for Package V2, integrity-
+      // checked. createFromPath would reopen the file and create a TOCTOU gap.
+      const image = nativeImage.createFromBuffer(content);
       if (image.isEmpty()) return null;
       const size = image.getSize();
       if (size.width <= 0 || size.height <= 0) return null;
@@ -275,7 +300,7 @@ export class ResourceCache {
         width: size.width,
         height: size.height,
         alphaData,
-        contentHash,
+        contentHash: entry?.sha256 ?? actualHash,
       };
     } catch {
       return null;

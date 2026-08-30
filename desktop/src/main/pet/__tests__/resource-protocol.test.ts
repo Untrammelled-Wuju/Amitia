@@ -123,4 +123,30 @@ describe("amitia-pet resource protocol", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
     expect(response.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
   });
+
+  it("serves encoded Unicode, spaces, hash and percent package paths", async () => {
+    const installPath = await mkdtemp(join(tmpdir(), "amitia-pet-protocol-encoded-"));
+    tempDirs.push(installPath);
+    const relativePath = "actions/待机/frame #100%.txt";
+    const content = Buffer.from("encoded-ok", "utf8");
+    await import("node:fs/promises").then(({ mkdir }) => mkdir(join(installPath, "actions", "待机"), { recursive: true }));
+    await writeFile(join(installPath, "actions", "待机", "frame #100%.txt"), content);
+    const sha256 = createHash("sha256").update(content).digest("hex");
+    const manifest = { integrity: { files: [{ path: relativePath, sha256, bytes: content.byteLength, mediaType: "text/plain" }] } } as never;
+    registerPetProtocol(() => ({ installationId: "install encoded", installPath, manifest, resourceIndex: buildResourceIndex(manifest) }));
+    const encodedPath = relativePath.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+    const response = await protocolMock.handler!(new Request(`amitia-pet://installation/${encodeURIComponent("install encoded")}/${encodedPath}`));
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toBe("encoded-ok");
+  });
+
+  it("rejects encoded path separators instead of double-decoding them", async () => {
+    const installPath = await mkdtemp(join(tmpdir(), "amitia-pet-protocol-separator-"));
+    tempDirs.push(installPath);
+    const manifest = { integrity: { files: [] } } as never;
+    registerPetProtocol(() => ({ installationId: "install-1", installPath, manifest, resourceIndex: buildResourceIndex(manifest) }));
+    const response = await protocolMock.handler!(new Request("amitia-pet://installation/install-1/actions/idle/a%2Fb.png"));
+    expect(response.status).toBe(400);
+  });
+
 });

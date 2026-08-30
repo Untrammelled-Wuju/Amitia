@@ -24,6 +24,13 @@ vi.mock("electron", () => ({
       isEmpty: vi.fn(() => false),
       getSize: vi.fn(() => ({ width: 1, height: 1 })),
       toBitmap: vi.fn(() => Buffer.alloc(4)),
+      toDataURL: vi.fn(() => "data:image/png;base64,"),
+    })),
+    createFromBuffer: vi.fn(() => ({
+      isEmpty: vi.fn(() => false),
+      getSize: vi.fn(() => ({ width: 1, height: 1 })),
+      toBitmap: vi.fn(() => Buffer.alloc(4)),
+      toDataURL: vi.fn(() => "data:image/png;base64,"),
     })),
   },
   screen: {

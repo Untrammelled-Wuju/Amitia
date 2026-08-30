@@ -1,5 +1,6 @@
 import type { RuntimeIntegrityFile, RuntimeResourceIndexEntry } from "../../shared/package-schema";
 import { createPackageError } from "../../shared/package-errors";
+import { normalizePackagePath } from "./package-path";
 
 export class RuntimeResourceIndex {
   private readonly entryMap: Map<string, RuntimeResourceIndexEntry>;
@@ -62,5 +63,5 @@ export class RuntimeResourceIndex {
 }
 
 function normalizePathKey(path: string): string {
-  return path.replace(/\\/g, "/").replace(/^\.\/+/, "");
+  return normalizePackagePath(path);
 }

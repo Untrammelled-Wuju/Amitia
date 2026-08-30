@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, powerMonitor } from "electron";
-import { join, isAbsolute, normalize, relative } from "node:path";
+import { join } from "node:path";
 import { getAmitiaDataDir } from "../path-manager";
 import { resolveDesktopPetInstallationRoot } from "./installation-path";
 import { ANIMATION_IPC_CHANNELS } from "../../shared/animation-ipc";
@@ -22,6 +22,7 @@ import type {
 import type { LoadedInstallation } from "./resource-loader";
 import type { InstallationInfo } from "./manager";
 import { buildPetResourceUrl } from "./resource-resolver";
+import { normalizePackagePath } from "./package-path";
 import {
   PetResourceProtocolRegistry,
   buildResourceIndex,
@@ -86,12 +87,6 @@ interface DurableState {
   packageSnapshot: PackagePlaybackSnapshot | null;
   defaultActionKey: string | null;
   windowVisible: boolean;
-}
-
-function isPathSafe(basePath: string, targetPath: string): boolean {
-  const normalized = normalize(isAbsolute(targetPath) ? targetPath : join(basePath, targetPath));
-  const rel = relative(basePath, normalized);
-  return !rel.startsWith("..") && !isAbsolute(rel);
 }
 
 function isValidPlaybackEvent(payload: unknown): payload is PlaybackEvent {
@@ -478,10 +473,15 @@ export class AnimationIpcAdapter {
       return { url: "", mime: "application/octet-stream" };
     }
     const installRoot = resolveDesktopPetInstallationRoot(installation.installPath, getAmitiaDataDir());
-    if (!installRoot || !isPathSafe(installRoot, relativePath)) {
+    if (!installRoot) {
       return { url: "", mime: "application/octet-stream" };
     }
-    const cleanRelative = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+    let cleanRelative: string;
+    try {
+      cleanRelative = normalizePackagePath(relativePath);
+    } catch {
+      return { url: "", mime: "application/octet-stream" };
+    }
     const resourceIndex = buildResourceIndex(loaded.manifest);
     const indexEntry = resourceIndex.get(cleanRelative);
     if (!indexEntry) {

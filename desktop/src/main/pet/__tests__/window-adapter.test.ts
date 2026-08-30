@@ -26,6 +26,7 @@ const mockState = vi.hoisted(() => {
     },
     nativeImage: {
       createFromPath: vi.fn() as unknown as ReturnType<typeof vi.fn>,
+      createFromBuffer: vi.fn() as unknown as ReturnType<typeof vi.fn>,
     },
     powerMonitor: {
       on: vi.fn() as unknown as ReturnType<typeof vi.fn>,
