@@ -17,13 +17,22 @@ export const releaseGateStampPath = resolve(releaseDir, ".desktop-pet-release-ga
 
 const SOURCE_INPUTS = [
   "desktop/package.json",
+  "desktop/vite.config.ts",
   "desktop/src",
   "desktop/scripts",
   "backend/internal/desktoppet",
-  "backend/cmd/server/router.go",
-  "backend/cmd/server/services.go",
+  "backend/internal/deviceruntime",
+  "backend/internal/runtimeprofile",
+  "backend/internal/migration",
+  "backend/cmd/server",
+  "front/src/runtime",
+  "front/src/composables",
+  "front/src/components",
   "scripts/audit/verify-desktop-pet-runtime-singletrack.mjs",
+  "scripts/audit/verify-source-hygiene.mjs",
+  "scripts/pack-source.ps1",
   ".github/workflows/desktop-pet.yml",
+  "DESKTOP_PET_FINALIZATION_SHA256SUMS.txt",
 ];
 
 const EXCLUDED_SOURCE_NAMES = new Set([
@@ -43,6 +52,7 @@ function collectFiles(pathValue, result) {
   if (stats.isDirectory()) {
     for (const entry of readdirSync(pathValue, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       if (EXCLUDED_SOURCE_NAMES.has(entry.name)) continue;
+      if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "build") continue;
       collectFiles(join(pathValue, entry.name), result);
     }
     return;
@@ -97,18 +107,50 @@ export function findReleaseArtifacts(baseDir = releaseDir) {
   });
 }
 
+export function verifyPreBuildGates() {
+  const freezeShaPath = resolve(repositoryRoot, "DESKTOP_PET_FINALIZATION_SHA256SUMS.txt");
+  if (!existsSync(freezeShaPath)) {
+    throw new Error("DESKTOP_PET_FINALIZATION_SHA256SUMS.txt missing");
+  }
+
+  const freezeLines = readFileSync(freezeShaPath, "utf8").split("\n");
+  let ok = 0;
+  let fail = 0;
+  for (const line of freezeLines) {
+    if (line.trim() === "") continue;
+    const expectedHash = line.substring(0, 64);
+    const relativePath = line.substring(66);
+    const fullPath = resolve(repositoryRoot, relativePath);
+    if (!existsSync(fullPath)) {
+      throw new Error(`freeze file missing: ${relativePath}`);
+    }
+    const actualHash = sha256File(fullPath);
+    if (actualHash !== expectedHash) {
+      throw new Error(`freeze SHA mismatch: ${relativePath}`);
+    }
+    ok++;
+  }
+
+  return {
+    freezeShaVerified: ok,
+    sourceGateHash: computeSourceGateHash(),
+  };
+}
+
 export function writeReleaseGateStamp() {
   const packageJsonPath = resolve(desktopRoot, "package.json");
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
   const artifacts = findReleaseArtifacts();
+  const preBuild = verifyPreBuildGates();
   const stamp = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     createdAt: new Date().toISOString(),
     packageVersion: packageJson.version,
     desktopPetRuntimeVersion: packageJson.desktopPetRuntimeVersion,
     desktopPetRuntimeContractVersion: packageJson.desktopPetRuntimeContractVersion,
     packageJsonSha256: sha256File(packageJsonPath),
-    sourceGateSha256: computeSourceGateHash(),
+    sourceGateSha256: preBuild.sourceGateHash,
+    freezeShaVerified: preBuild.freezeShaVerified,
     artifacts: artifacts.map(({ name, bytes, sha256 }) => ({ name, bytes, sha256 })),
   };
   writeFileSync(releaseGateStampPath, `${JSON.stringify(stamp, null, 2)}\n`, "utf8");
@@ -120,7 +162,7 @@ export function verifyReleaseGateStamp() {
     throw new Error("release gate stamp missing; rebuild with pnpm dist:win");
   }
   const stamp = JSON.parse(readFileSync(releaseGateStampPath, "utf8"));
-  if (stamp.schemaVersion !== 1) {
+  if (stamp.schemaVersion !== 1 && stamp.schemaVersion !== 2) {
     throw new Error(`unsupported release gate stamp schema: ${stamp.schemaVersion}`);
   }
 
@@ -156,4 +198,24 @@ export function verifyReleaseGateStamp() {
     stamp,
     artifacts: currentArtifacts,
   };
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const args = process.argv.slice(2);
+  if (args.includes("--pre-build")) {
+    const result = verifyPreBuildGates();
+    console.log(`[release-integrity] Pre-build gates passed: freeze SHA verified (${result.freezeShaVerified} files), source gate hash computed`);
+    process.exit(0);
+  } else if (args.includes("--verify")) {
+    const result = verifyReleaseGateStamp();
+    console.log(`[release-integrity] Release gate stamp verified: ${result.stamp.packageVersion}`);
+    process.exit(0);
+  } else if (args.includes("--write-stamp")) {
+    const stamp = writeReleaseGateStamp();
+    console.log(`[release-integrity] Release gate stamp written: ${stamp.packageVersion}`);
+    process.exit(0);
+  } else {
+    console.log("Usage: node scripts/release-integrity.mjs [--pre-build|--verify|--write-stamp]");
+    process.exit(1);
+  }
 }
