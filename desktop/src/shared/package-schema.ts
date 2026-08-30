@@ -3,6 +3,7 @@ import {
   type PackageErrorCode,
   type PackageValidationError,
 } from "./package-errors";
+import { caseFoldPackagePath, normalizePackagePath } from "./package-path";
 
 export type PlaybackMode = "loop" | "once" | "hold" | "ping_pong";
 
@@ -322,6 +323,19 @@ function requireString(value: unknown, field: string, code: PackageErrorCode): s
   return value as string;
 }
 
+function requirePackagePath(value: unknown, field: string): string {
+  const raw = requireString(value, field, "PACKAGE_MANIFEST_INVALID");
+  try {
+    return normalizePackagePath(raw);
+  } catch (error) {
+    throw createPackageError(
+      "PACKAGE_PATH_INVALID" as PackageErrorCode,
+      `${field} is not a canonical Package V2 path: ${error instanceof Error ? error.message : String(error)}`,
+      { path: raw },
+    );
+  }
+}
+
 function requireNumber(value: unknown, field: string, code: PackageErrorCode): number {
   assertCondition(
     typeof value === "number" && Number.isFinite(value),
@@ -570,7 +584,7 @@ function normalizeFramesStrict(
     }
     seenFrameIds.add(frameId);
     const index = requireInteger(f.index, `frame[${i}].index`, "PACKAGE_MANIFEST_INVALID");
-    const file = requireString(f.file, `frame[${i}].file`, "PACKAGE_MANIFEST_INVALID");
+    const file = requirePackagePath(f.file, `frame[${i}].file`);
     const durationMs = requireInteger(f.durationMs, `frame[${i}].durationMs`, "PACKAGE_MANIFEST_INVALID");
     assertCondition(
       durationMs >= 8 && durationMs <= 60000,
@@ -659,10 +673,11 @@ export class Schema2PackageReader implements StrictPackageContractReader {
     if (m.license !== undefined) {
       assertCondition(m.license !== null && typeof m.license === "object", "PACKAGE_MANIFEST_INVALID", "license must be an object");
       const license = m.license as Record<string, unknown>;
-      for (const field of ["spdx", "noticePath"] as const) {
-        if (license[field] !== undefined) {
-          assertCondition(typeof license[field] === "string", "PACKAGE_MANIFEST_INVALID", `license.${field} must be a string`);
-        }
+      if (license.spdx !== undefined) {
+        assertCondition(typeof license.spdx === "string", "PACKAGE_MANIFEST_INVALID", "license.spdx must be a string");
+      }
+      if (license.noticePath !== undefined) {
+        requirePackagePath(license.noticePath, "license.noticePath");
       }
     }
 
@@ -674,7 +689,7 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       "PACKAGE_MANIFEST_INVALID",
       "preview must be a string or null",
     );
-    const preview = typeof previewRaw === "string" ? previewRaw : null;
+    const preview = typeof previewRaw === "string" ? requirePackagePath(previewRaw, "preview") : null;
 
     const canvasRaw = m.canvas;
     assertCondition(
@@ -719,7 +734,7 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       const ae = entry as Record<string, unknown>;
       const key = requireString(ae.key, `actions[${i}].key`, "PACKAGE_MANIFEST_INVALID");
       const name = requireString(ae.name, `actions[${i}].name`, "PACKAGE_MANIFEST_INVALID");
-      const config = requireString(ae.config, `actions[${i}].config`, "PACKAGE_MANIFEST_INVALID");
+      const config = requirePackagePath(ae.config, `actions[${i}].config`);
       const playbackMode = requireV2PlaybackMode(ae.playbackMode, key);
       const fps = requireInteger(ae.fps, `actions[${i}].fps`, "PACKAGE_MANIFEST_INVALID");
       assertCondition(fps >= 1 && fps <= 120, "PACKAGE_MANIFEST_INVALID", `actions[${i}].fps must be between 1 and 120`);
@@ -880,6 +895,8 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       "integrity.files is required and must be a non-empty array",
     );
     const files: RuntimeIntegrityFile[] = [];
+    const seenIntegrityPaths = new Set<string>();
+    const seenIntegrityCaseFold = new Set<string>();
     for (let i = 0; i < filesRaw.length; i++) {
       const f = filesRaw[i];
       assertCondition(
@@ -888,7 +905,12 @@ export class Schema2PackageReader implements StrictPackageContractReader {
         `integrity.files[${i}] must be an object`,
       );
       const fe = f as Record<string, unknown>;
-      const fpath = requireString(fe.path, `integrity.files[${i}].path`, "PACKAGE_MANIFEST_INVALID");
+      const fpath = requirePackagePath(fe.path, `integrity.files[${i}].path`);
+      const foldedPath = caseFoldPackagePath(fpath);
+      assertCondition(!seenIntegrityPaths.has(fpath), "PACKAGE_MANIFEST_INVALID", `duplicate integrity path: ${fpath}`, { path: fpath });
+      assertCondition(!seenIntegrityCaseFold.has(foldedPath), "PACKAGE_MANIFEST_INVALID", `case-insensitive integrity path collision: ${fpath}`, { path: fpath });
+      seenIntegrityPaths.add(fpath);
+      seenIntegrityCaseFold.add(foldedPath);
       const sha256 = fe.sha256;
       assertCondition(
         typeof sha256 === "string" && SHA256_RE.test(sha256),
@@ -1033,7 +1055,7 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       returnTo,
       anchor,
       frames,
-      configPath,
+      configPath: requirePackagePath(configPath, "action.configPath"),
       version,
       supportsDefaultIdle,
       isStableStateCandidate,

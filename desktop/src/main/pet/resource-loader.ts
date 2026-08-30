@@ -1,6 +1,5 @@
 import { DESKTOP_PET_RUNTIME_VERSION } from "../../shared/desktop-pet-runtime-version";
 import { readFile } from "node:fs/promises";
-import { join, dirname } from "node:path";
 import {
   RuntimePackageNormalizer,
   type PlaybackMode as SharedPlaybackMode,
@@ -13,6 +12,12 @@ import {
 } from "../../shared/package-schema";
 import type { PackageContractError } from "../../shared/package-errors";
 import { PackageIntegrityVerifier } from "./package-integrity-verifier";
+import {
+  normalizePackagePath,
+  relativePackagePathFromRoot,
+  resolveActionResourcePackagePath,
+  resolvePackagePathUnderRoot,
+} from "./package-path";
 
 export type { LoadInstallationRequest };
 
@@ -179,9 +184,23 @@ export class ResourceLoader {
   async loadInstallation(
     request: LoadInstallationRequest,
   ): Promise<LoadedInstallation> {
+    let manifestPath: string;
+    try {
+      const relativeManifestPath = relativePackagePathFromRoot(
+        request.installPath,
+        request.manifestPath,
+      );
+      if (relativeManifestPath !== "manifest.json") {
+        throw new Error(`manifest must be package-root manifest.json, got ${relativeManifestPath}`);
+      }
+      manifestPath = resolvePackagePathUnderRoot(request.installPath, "manifest.json");
+    } catch (err) {
+      throw new Error(`${MANIFEST_READ_FAILED_ERROR}: ${errorMessage(err)}`);
+    }
+
     let manifestRawText: string;
     try {
-      manifestRawText = await readFile(request.manifestPath, "utf8");
+      manifestRawText = await readFile(manifestPath, "utf8");
     } catch (err) {
       throw new Error(
         `${MANIFEST_READ_FAILED_ERROR}: ${errorMessage(err)}`,
@@ -253,7 +272,17 @@ export class ResourceLoader {
 
     const actionRaws = new Map<string, unknown>();
     for (const entry of manifestData.actionEntries) {
-      const actionJsonPath = join(request.installPath, entry.config);
+      let actionJsonPath: string;
+      try {
+        actionJsonPath = resolvePackagePathUnderRoot(
+          request.installPath,
+          normalizePackagePath(entry.config),
+        );
+      } catch (err) {
+        throw new Error(
+          `${ACTION_JSON_READ_FAILED}: ${entry.key}: ${errorMessage(err)}`,
+        );
+      }
       let actionRawText: string;
       try {
         actionRawText = await readFile(actionJsonPath, "utf8");
@@ -292,7 +321,7 @@ export class ResourceLoader {
         manifestRawText,
         manifest: manifestData,
         installPath: request.installPath,
-        manifestPath: request.manifestPath,
+        manifestPath,
         actions: pkg.actions,
       });
       if (!verification.valid) {
@@ -306,7 +335,7 @@ export class ResourceLoader {
     const actions = new Map<string, RuntimeAction>();
     const manifestActions: ManifestAction[] = [];
     for (const [key, sharedAction] of pkg.actions) {
-      const localAction = this.mapRuntimeAction(sharedAction, request.installPath);
+      const localAction = this.mapRuntimeAction(sharedAction, request.installPath, pkg.schemaVersion);
       actions.set(key, localAction);
       manifestActions.push(this.mapManifestAction(sharedAction));
     }
@@ -348,9 +377,17 @@ export class ResourceLoader {
       },
     };
 
-    const previewPath = pkg.preview
-      ? join(request.installPath, pkg.preview)
-      : null;
+    let previewPath: string | null = null;
+    if (pkg.preview) {
+      try {
+        previewPath = resolvePackagePathUnderRoot(
+          request.installPath,
+          normalizePackagePath(pkg.preview),
+        );
+      } catch (err) {
+        throw new Error(`PACKAGE_PATH_INVALID: preview: ${errorMessage(err)}`);
+      }
+    }
 
     return {
       installationId: request.installationId,
@@ -358,7 +395,7 @@ export class ResourceLoader {
       actions,
       defaultAction,
       installPath: request.installPath,
-      manifestPath: request.manifestPath,
+      manifestPath,
       previewPath,
     };
   }
@@ -384,9 +421,16 @@ export class ResourceLoader {
       return null;
     }
 
-    const configPath =
-      manifestAction?.config ?? join("actions", actionKey, "action.json");
-    const actionJsonPath = join(loaded.installPath, configPath);
+    let configPath: string;
+    let actionJsonPath: string;
+    try {
+      configPath = normalizePackagePath(
+        manifestAction?.config ?? `actions/${actionKey}/action.json`,
+      );
+      actionJsonPath = resolvePackagePathUnderRoot(loaded.installPath, configPath);
+    } catch (err) {
+      throw new Error(`${ACTION_JSON_READ_FAILED}: ${errorMessage(err)}`);
+    }
 
     let raw: string;
     try {
@@ -416,7 +460,7 @@ export class ResourceLoader {
       throw new Error(errorMessage(err));
     }
 
-    const localAction = this.mapRuntimeAction(result.action, loaded.installPath);
+    const localAction = this.mapRuntimeAction(result.action, loaded.installPath, loaded.manifest.schemaVersion);
     loaded.actions.set(actionKey, localAction);
 
     if (loaded.defaultAction?.key === actionKey && localAction.available) {
@@ -460,10 +504,32 @@ export class ResourceLoader {
   private mapRuntimeAction(
     action: SharedRuntimeAction,
     installPath: string,
+    schemaVersion: number,
   ): RuntimeAction {
-    const configPath = action.configPath;
-    const actionConfigDir = dirname(join(installPath, configPath));
-    const frames = action.frames.map((f) => join(actionConfigDir, f.file));
+    const configPath = normalizePackagePath(action.configPath);
+    const frames = action.frames.map((frame) => {
+      const frameFile = normalizePackagePath(frame.file);
+      const packageRelativePath = resolveActionResourcePackagePath(
+        configPath,
+        frameFile,
+      );
+      try {
+        return resolvePackagePathUnderRoot(installPath, packageRelativePath);
+      } catch (error) {
+        // Schema 1 packages in the wild used both action-relative and
+        // package-root-relative frame paths. Preserve that migration-only
+        // compatibility without weakening the frozen Schema 2 contract.
+        if (schemaVersion === 1) {
+          try {
+            return resolvePackagePathUnderRoot(installPath, frameFile);
+          } catch {
+            // Surface the original action-relative failure for deterministic
+            // diagnostics and to avoid silently accepting an unrelated file.
+          }
+        }
+        throw error;
+      }
+    });
     const frameDurationMs = action.fps > 0 ? Math.round(1000 / action.fps) : 100;
 
     const returnAction =

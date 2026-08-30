@@ -7,7 +7,7 @@ import {
   type Display,
 } from "electron";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { lstat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import http from "node:http";
 import { URL } from "node:url";
@@ -2751,7 +2751,10 @@ export class DesktopPetManager {
       };
     }
     try {
-      await stat(installPath);
+      const installInfo = await lstat(installPath);
+      if (installInfo.isSymbolicLink() || !installInfo.isDirectory()) {
+        throw new Error("installation root must be a real directory");
+      }
     } catch (err) {
       return {
         corrupted: true,
@@ -2760,7 +2763,10 @@ export class DesktopPetManager {
       };
     }
     try {
-      await readFile(manifestPath, "utf8");
+      const manifestInfo = await lstat(manifestPath);
+      if (manifestInfo.isSymbolicLink() || !manifestInfo.isFile()) {
+        throw new Error("manifest must be a regular non-symlink file");
+      }
     } catch (err) {
       return {
         corrupted: true,

@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFile, stat, readdir } from "node:fs/promises";
-import { dirname, extname, join, relative } from "node:path";
-import { realpathSync } from "node:fs";
+import { lstat, readFile, readdir } from "node:fs/promises";
+import { extname, join, relative, sep } from "node:path";
 import type {
   NormalizedManifestData,
   RuntimeAction,
@@ -11,6 +10,12 @@ import type {
   PackageValidationError,
   PackageErrorCode,
 } from "../../shared/package-errors";
+import {
+  normalizePackagePath,
+  relativePackagePathFromRoot,
+  resolveActionResourcePackagePath,
+  resolvePackagePathUnderRoot,
+} from "./package-path";
 
 export interface IntegrityVerificationResult {
   valid: boolean;
@@ -187,35 +192,36 @@ export class PackageIntegrityVerifier {
     errors: PackageValidationError[],
   ): Promise<void> {
     const { manifest, installPath } = params;
-    for (const f of manifest.integrity.files) {
-      const fullPath = join(installPath, f.path);
+    for (const file of manifest.integrity.files) {
       let content: Buffer;
       try {
+        const fullPath = resolvePackagePathUnderRoot(installPath, file.path);
         content = await readFile(fullPath);
-      } catch {
+      } catch (error) {
+        const code = classifyFilesystemError(error, "PACKAGE_FILE_MISSING");
         errors.push(this.makeError(
-          "PACKAGE_FILE_MISSING",
-          `file missing: ${f.path}`,
+          code,
+          `${code === "PACKAGE_FILE_MISSING" ? "file missing" : "unsafe package file"}: ${file.path}: ${errorMessage(error)}`,
           "error",
-          { path: f.path },
+          { path: file.path },
         ));
         continue;
       }
-      if (content.length !== f.bytes) {
+      if (content.length !== file.bytes) {
         errors.push(this.makeError(
           "PACKAGE_HASH_MISMATCH",
-          `size mismatch for ${f.path}: expected ${f.bytes}, got ${content.length}`,
+          `size mismatch for ${file.path}: expected ${file.bytes}, got ${content.length}`,
           "error",
-          { path: f.path, expected: String(f.bytes), actual: String(content.length) },
+          { path: file.path, expected: String(file.bytes), actual: String(content.length) },
         ));
       }
       const computed = sha256Hex(content);
-      if (computed !== f.sha256) {
+      if (computed !== file.sha256) {
         errors.push(this.makeError(
           "PACKAGE_HASH_MISMATCH",
-          `hash mismatch for ${f.path}: expected ${f.sha256}, got ${computed}`,
+          `hash mismatch for ${file.path}: expected ${file.sha256}, got ${computed}`,
           "error",
-          { path: f.path, expected: f.sha256, actual: computed },
+          { path: file.path, expected: file.sha256, actual: computed },
         ));
       }
     }
@@ -227,15 +233,32 @@ export class PackageIntegrityVerifier {
   ): Promise<void> {
     const { manifest, installPath } = params;
     const declared = new Set(
-      manifest.integrity.files.map((f) => normalizePathKey(f.path)),
+      manifest.integrity.files.map((file) => normalizePathKey(file.path)),
     );
+
     let allFiles: string[];
     try {
       allFiles = await listAllFiles(installPath);
-    } catch {
+    } catch (error) {
+      errors.push(this.makeError(
+        classifyFilesystemError(error, "PACKAGE_PATH_INVALID"),
+        `failed to enumerate package safely: ${errorMessage(error)}`,
+        "error",
+      ));
       return;
     }
-    const manifestRelativePath = normalizePathKey(relative(installPath, params.manifestPath));
+
+    let manifestRelativePath: string;
+    try {
+      manifestRelativePath = relativePackagePathFromRoot(installPath, params.manifestPath);
+    } catch (error) {
+      errors.push(this.makeError(
+        classifyFilesystemError(error, "PACKAGE_MANIFEST_INVALID"),
+        `manifest path is outside or unsafe: ${errorMessage(error)}`,
+        "error",
+      ));
+      return;
+    }
     if (manifestRelativePath !== "manifest.json") {
       errors.push(this.makeError(
         "PACKAGE_MANIFEST_INVALID",
@@ -244,6 +267,7 @@ export class PackageIntegrityVerifier {
         { path: manifestRelativePath },
       ));
     }
+
     for (const relPath of allFiles) {
       const key = normalizePathKey(relPath);
       if (key === "manifest.json") continue;
@@ -264,14 +288,14 @@ export class PackageIntegrityVerifier {
   ): Promise<void> {
     const { manifest, installPath } = params;
     for (const entry of manifest.actionEntries) {
-      const fullPath = join(installPath, entry.config);
       let content: Buffer;
       try {
+        const fullPath = resolvePackagePathUnderRoot(installPath, entry.config);
         content = await readFile(fullPath);
-      } catch {
+      } catch (error) {
         errors.push(this.makeError(
-          "ACTION_CONFIG_MISSING",
-          `action config missing: ${entry.config}`,
+          classifyFilesystemError(error, "ACTION_CONFIG_MISSING"),
+          `action config unavailable or unsafe: ${entry.config}: ${errorMessage(error)}`,
           "error",
           { path: entry.config, actionKey: entry.key },
         ));
@@ -279,7 +303,7 @@ export class PackageIntegrityVerifier {
       }
       const computed = sha256Hex(content);
       const declared = manifest.integrity.files.find(
-        (f) => normalizePathKey(f.path) === normalizePathKey(entry.config),
+        (file) => normalizePathKey(file.path) === normalizePathKey(entry.config),
       );
       if (declared && computed !== declared.sha256) {
         errors.push(this.makeError(
@@ -287,6 +311,14 @@ export class PackageIntegrityVerifier {
           `action config hash mismatch for ${entry.config}`,
           "error",
           { path: entry.config, actionKey: entry.key, expected: declared.sha256, actual: computed },
+        ));
+      }
+      if (!declared) {
+        errors.push(this.makeError(
+          "PACKAGE_RESOURCE_NOT_DECLARED",
+          `action config not declared in integrity files: ${entry.config}`,
+          "error",
+          { path: entry.config, actionKey: entry.key },
         ));
       }
     }
@@ -298,14 +330,15 @@ export class PackageIntegrityVerifier {
   ): Promise<void> {
     const { manifest, installPath } = params;
     if (!manifest.preview) return;
-    const fullPath = join(installPath, manifest.preview);
+
     let content: Buffer;
     try {
+      const fullPath = resolvePackagePathUnderRoot(installPath, manifest.preview);
       content = await readFile(fullPath);
-    } catch {
+    } catch (error) {
       errors.push(this.makeError(
-        "PACKAGE_FILE_MISSING",
-        `preview missing: ${manifest.preview}`,
+        classifyFilesystemError(error, "PACKAGE_FILE_MISSING"),
+        `preview unavailable or unsafe: ${manifest.preview}: ${errorMessage(error)}`,
         "error",
         { path: manifest.preview },
       ));
@@ -313,7 +346,7 @@ export class PackageIntegrityVerifier {
     }
     const computed = sha256Hex(content);
     const declared = manifest.integrity.files.find(
-      (f) => normalizePathKey(f.path) === normalizePathKey(manifest.preview!),
+      (file) => normalizePathKey(file.path) === normalizePathKey(manifest.preview!),
     );
     if (declared && computed !== declared.sha256) {
       errors.push(this.makeError(
@@ -339,22 +372,37 @@ export class PackageIntegrityVerifier {
   ): Promise<void> {
     const { manifest, installPath, actions } = params;
     for (const [actionKey, action] of actions) {
-      const actionBase = dirname(action.configPath);
       for (const frame of action.frames) {
-        const packageRelativeFramePath = normalizePathKey(join(actionBase, frame.file));
-        const fullPath = join(installPath, packageRelativeFramePath);
+        let packageRelativeFramePath: string;
+        try {
+          packageRelativeFramePath = resolveActionResourcePackagePath(
+            action.configPath,
+            frame.file,
+          );
+        } catch (error) {
+          errors.push(this.makeError(
+            "PACKAGE_PATH_INVALID",
+            `invalid frame path ${frame.file} (action: ${actionKey}): ${errorMessage(error)}`,
+            "error",
+            { path: frame.file, actionKey },
+          ));
+          continue;
+        }
+
         let content: Buffer;
         try {
+          const fullPath = resolvePackagePathUnderRoot(installPath, packageRelativeFramePath);
           content = await readFile(fullPath);
-        } catch {
+        } catch (error) {
           errors.push(this.makeError(
-            "FRAME_MISSING",
-            `frame missing: ${packageRelativeFramePath} (action: ${actionKey})`,
+            classifyFilesystemError(error, "FRAME_MISSING"),
+            `frame unavailable or unsafe: ${packageRelativeFramePath} (action: ${actionKey}): ${errorMessage(error)}`,
             "error",
             { path: packageRelativeFramePath, actionKey },
           ));
           continue;
         }
+
         const computed = sha256Hex(content);
         if (computed !== frame.contentHash) {
           errors.push(this.makeError(
@@ -365,7 +413,7 @@ export class PackageIntegrityVerifier {
           ));
         }
         const declared = manifest.integrity.files.find(
-          (f) => normalizePathKey(f.path) === packageRelativeFramePath,
+          (file) => normalizePathKey(file.path) === packageRelativeFramePath,
         );
         if (declared && computed !== declared.sha256) {
           errors.push(this.makeError(
@@ -409,35 +457,40 @@ export class PackageIntegrityVerifier {
     installPath: string,
     manifestRawText: string,
   ): Promise<string> {
-    const h = createHash("sha256");
-    h.update(sha256Hex(manifestRawText));
-    h.update("\0");
+    const hash = createHash("sha256");
+    hash.update(sha256Hex(manifestRawText));
+    hash.update("\0");
+
     let files: string[] = [];
     try {
       files = await listAllFiles(installPath);
       files.sort();
-    } catch {
-      h.update("list-failed");
-      return h.digest("hex");
+    } catch (error) {
+      hash.update(`list-failed:${errorMessage(error)}`);
+      return hash.digest("hex");
     }
+
     for (const relPath of files) {
-      const fullPath = join(installPath, relPath);
       try {
-        const s = await stat(fullPath);
-        h.update(relPath);
-        h.update("\0");
-        h.update(String(s.size));
-        h.update("\0");
-        h.update(String(s.mtimeMs));
-        h.update("\0");
-        h.update(String(s.ctimeMs));
-        h.update("\0");
-      } catch {
-        h.update(relPath);
-        h.update("\0missing\0");
+        const fullPath = resolvePackagePathUnderRoot(installPath, relPath);
+        const info = await lstat(fullPath);
+        if (info.isSymbolicLink() || !info.isFile()) {
+          throw new Error(`PACKAGE_SYMLINK_FORBIDDEN: ${relPath}`);
+        }
+        hash.update(relPath);
+        hash.update("\0");
+        hash.update(String(info.size));
+        hash.update("\0");
+        hash.update(String(info.mtimeMs));
+        hash.update("\0");
+        hash.update(String(info.ctimeMs));
+        hash.update("\0");
+      } catch (error) {
+        hash.update(relPath);
+        hash.update(`\0error:${errorMessage(error)}\0`);
       }
     }
-    return h.digest("hex");
+    return hash.digest("hex");
   }
 
   private makeError(
@@ -660,40 +713,67 @@ function asBoolean(value: unknown): boolean {
   return typeof value === "boolean" ? value : false;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function classifyFilesystemError(
+  error: unknown,
+  fallback: PackageErrorCode,
+): PackageErrorCode {
+  const message = errorMessage(error);
+  if (message.includes("PACKAGE_SYMLINK_FORBIDDEN")) return "PACKAGE_SYMLINK_FORBIDDEN";
+  if (
+    message.includes("PACKAGE_PATH_") ||
+    message.includes("PACKAGE_ROOT_") ||
+    message.includes("outside package root")
+  ) {
+    return "PACKAGE_PATH_INVALID";
+  }
+  return fallback;
+}
+
 function normalizePathKey(path: string): string {
-  return path.replace(/\\/g, "/").replace(/^\.\/+/, "");
+  return normalizePackagePath(path);
 }
 
 async function listAllFiles(root: string): Promise<string[]> {
+  const rootInfo = await lstat(root);
+  if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory()) {
+    throw new Error(`PACKAGE_ROOT_NOT_REAL_DIRECTORY: ${root}`);
+  }
+
   const results: string[] = [];
-  const realRoot = safeRealpath(root);
-  await walkDir(realRoot, realRoot, results);
+  await walkDir(root, root, results);
   return results;
 }
 
-function safeRealpath(p: string): string {
-  try {
-    return realpathSync(p);
-  } catch {
-    return p;
-  }
-}
-
-async function walkDir(root: string, current: string, results: string[]): Promise<void> {
-  let entries: import("node:fs").Dirent[];
-  try {
-    entries = await readdir(current, { withFileTypes: true });
-  } catch {
-    return;
-  }
+async function walkDir(
+  root: string,
+  current: string,
+  results: string[],
+): Promise<void> {
+  const entries = await readdir(current, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = join(current, entry.name);
+    const relRaw = relative(root, fullPath).split(sep).join("/");
+    const relPath = normalizePackagePath(relRaw);
+
+    if (entry.isSymbolicLink()) {
+      throw new Error(`PACKAGE_SYMLINK_FORBIDDEN: ${relPath}`);
+    }
     if (entry.isDirectory()) {
       await walkDir(root, fullPath, results);
-    } else if (entry.isFile()) {
-      const rel = relative(root, fullPath).replace(/\\/g, "/");
-      results.push(rel);
+      continue;
     }
+    if (!entry.isFile()) {
+      throw new Error(`PACKAGE_PATH_INVALID: non-regular package entry: ${relPath}`);
+    }
+
+    // Re-resolve through the shared component-by-component guard so a race that
+    // swaps an ancestor for a symlink is rejected before the path is trusted.
+    resolvePackagePathUnderRoot(root, relPath);
+    results.push(relPath);
   }
 }
 
