@@ -25,7 +25,7 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
   bool _reduceAnimation = false;
 
   static const _accentColors = <Color>[
-    Color(0xFF7668EE),
+    Color(0xFF8A5728),
     Color(0xFF6C8FEA),
     Color(0xFF52B788),
     Color(0xFFE9A23B),

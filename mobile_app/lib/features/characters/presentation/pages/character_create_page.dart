@@ -27,13 +27,13 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
   final _personalityController = TextEditingController();
   final _speakingStyleController = TextEditingController();
   final _promptController = TextEditingController();
-  String _selectedColor = '#7668EE';
+  String _selectedColor = '#8A5728';
   bool _isCreating = false;
 
   final _steps = ['基础形象', '名字', '身份', '性格', '说话方式', '提示词', '完成预览'];
 
   final _colors = [
-    '#7668EE',
+    '#8A5728',
     '#52B788',
     '#6C8FEA',
     '#E9A23B',

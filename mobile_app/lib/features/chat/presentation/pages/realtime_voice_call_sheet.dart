@@ -47,6 +47,7 @@ class _RealtimeVoiceCallSheetState
   String _state = 'connecting';
   String? _error;
   bool _aiSpeaking = false;
+  bool _muted = false;
   int _seconds = 0;
   String? _dialogId;
 
@@ -120,7 +121,7 @@ class _RealtimeVoiceCallSheetState
       _audioSubscription = _audio.inputPcm.listen(
         (pcm) {
           final active = _session;
-          if (_state != 'connected' || _aiSpeaking || active == null) return;
+          if (_state != 'connected' || _aiSpeaking || _muted || active == null) return;
           unawaited(
             active.send(
               WebSocketTextMessage(
@@ -228,6 +229,23 @@ class _RealtimeVoiceCallSheetState
       await client?.close();
     } catch (_) {}
     _aiSpeaking = false;
+    _muted = false;
+  }
+
+  Future<void> _toggleMute() async {
+    if (_state != 'connected') return;
+    try {
+      if (_muted) {
+        await _audio.startCapture();
+      } else {
+        await _audio.stopCapture();
+      }
+      if (mounted) setState(() => _muted = !_muted);
+    } catch (error) {
+      if (mounted) {
+        amitiaSnackBar(context, '麦克风切换失败：$error');
+      }
+    }
   }
 
   Future<void> _endCall() async {
@@ -243,113 +261,212 @@ class _RealtimeVoiceCallSheetState
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.characterName.trim().isEmpty
-        ? '实时语音'
-        : '与 ${widget.characterName} 通话';
+    final name = widget.characterName.trim().isEmpty
+        ? 'Amitia'
+        : widget.characterName.trim();
+    final initial = name.characters.first;
+    final connected = _state == 'connected';
+    final statusText = _state == 'connecting'
+        ? '正在连接实时语音…'
+        : connected
+            ? (_aiSpeaking ? '对方正在说话' : (_muted ? '麦克风已静音' : '通话中'))
+            : _state == 'error'
+                ? (_error ?? '连接失败')
+                : '通话已结束';
+
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.md,
-          AppSpacing.lg,
-          AppSpacing.lg,
+      top: false,
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.72,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: context.borderPrimary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '语音通话',
+                  style: AppTypography.bodySmall(context).copyWith(
+                    color: context.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  color: _state == 'error'
+                      ? context.error.withValues(alpha: 0.12)
+                      : context.accentPrimary,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: _aiSpeaking
+                        ? context.accentPrimary
+                        : context.borderPrimary,
+                    width: _aiSpeaking ? 4 : 1,
+                  ),
+                  boxShadow: _aiSpeaking
+                      ? [
+                          BoxShadow(
+                            color: context.accentPrimary.withValues(alpha: 0.20),
+                            blurRadius: 24,
+                            spreadRadius: 3,
+                          ),
+                        ]
+                      : null,
+                ),
+                alignment: Alignment.center,
+                child: _state == 'error'
+                    ? Icon(Icons.error_outline, size: 38, color: context.error)
+                    : Text(
+                        initial,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 18),
+              Text(name, style: AppTypography.pageTitle(context)),
+              const SizedBox(height: 7),
+              Text(
+                connected ? '$statusText · $_duration' : statusText,
+                textAlign: TextAlign.center,
+                style: AppTypography.bodySmall(context).copyWith(
+                  color: _state == 'error' ? context.error : context.textSecondary,
+                ),
+              ),
+              const Spacer(),
+              if (_state == 'error')
+                Row(
+                  children: [
+                    Expanded(
+                      child: AmitiaButton(
+                        label: '关闭',
+                        isSecondary: true,
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: AmitiaButton(
+                        label: '重新连接',
+                        onPressed: () async {
+                          await _shutdown(sendStop: false);
+                          await _connect();
+                        },
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _RealtimeCallControl(
+                      icon: _muted ? Icons.mic_off_outlined : Icons.mic_none_outlined,
+                      label: _muted ? '取消静音' : '静音',
+                      selected: _muted,
+                      enabled: connected,
+                      onTap: _toggleMute,
+                    ),
+                    const SizedBox(width: 42),
+                    _RealtimeCallControl(
+                      icon: Icons.call_end,
+                      label: '结束',
+                      destructive: true,
+                      enabled: true,
+                      onTap: _endCall,
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _RealtimeCallControl extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final bool destructive;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _RealtimeCallControl({
+    required this.icon,
+    required this.label,
+    required this.enabled,
+    required this.onTap,
+    this.selected = false,
+    this.destructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final background = destructive
+        ? context.error
+        : selected
+            ? context.accentSoft
+            : context.surfaceSecondary;
+    final foreground = destructive
+        ? Colors.white
+        : selected
+            ? context.accentPrimary
+            : enabled
+                ? context.textPrimary
+                : context.textTertiary;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: enabled ? onTap : null,
+      child: SizedBox(
+        width: 76,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 42,
-              height: 4,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
-                color: context.borderPrimary,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 28),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
+                color: background,
                 shape: BoxShape.circle,
-                color: _state == 'error'
-                    ? context.error.withValues(alpha: 0.12)
-                    : _aiSpeaking
-                        ? context.accentPrimary.withValues(alpha: 0.2)
-                        : context.surfaceSecondary,
-                border: Border.all(
-                  color: _aiSpeaking
-                      ? context.accentPrimary
-                      : context.borderPrimary,
-                ),
+                border: destructive ? null : Border.all(color: context.borderPrimary),
               ),
-              child: Icon(
-                _state == 'error'
-                    ? Icons.error_outline
-                    : _aiSpeaking
-                        ? Icons.graphic_eq
-                        : Icons.call_outlined,
-                size: 38,
-                color: _state == 'error'
-                    ? context.error
-                    : context.accentPrimary,
-              ),
+              alignment: Alignment.center,
+              child: Icon(icon, size: 24, color: foreground),
             ),
-            const SizedBox(height: 18),
-            Text(title, style: AppTypography.pageTitle(context)),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
-              _state == 'connecting'
-                  ? '正在连接实时语音…'
-                  : _state == 'connected'
-                      ? (_aiSpeaking ? '对方正在说话 · $_duration' : '通话中 · $_duration')
-                      : _state == 'error'
-                          ? (_error ?? '连接失败')
-                          : '通话已结束',
+              label,
+              style: AppTypography.label(context).copyWith(color: foreground),
               textAlign: TextAlign.center,
-              style: AppTypography.bodySmall(context).copyWith(
-                color: _state == 'error' ? context.error : context.textSecondary,
-              ),
             ),
-            const SizedBox(height: 28),
-            if (_state == 'error')
-              Row(
-                children: [
-                  Expanded(
-                    child: AmitiaButton(
-                      label: '关闭',
-                      isSecondary: true,
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AmitiaButton(
-                      label: '重新连接',
-                      onPressed: () async {
-                        await _shutdown(sendStop: false);
-                        await _connect();
-                      },
-                    ),
-                  ),
-                ],
-              )
-            else
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: _endCall,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: context.error,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  icon: const Icon(Icons.call_end),
-                  label: const Text('结束通话'),
-                ),
-              ),
           ],
         ),
       ),
     );
   }
 }
+

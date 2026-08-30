@@ -62,7 +62,7 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF7668EE),
+                    color: context.accentPrimary,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.check, size: 20, color: Colors.white),
@@ -72,8 +72,8 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('浅紫', style: AppTypography.body(context)),
-                      Text('#7668EE', style: AppTypography.label(context)),
+                      Text('Amitia 暖棕', style: AppTypography.body(context)),
+                      Text(Theme.of(context).brightness == Brightness.dark ? '#9C8068' : '#8A5728', style: AppTypography.label(context)),
                     ],
                   ),
                 ),

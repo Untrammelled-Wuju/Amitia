@@ -25,7 +25,7 @@ class DesktopPetPage extends ConsumerStatefulWidget {
 
 class _DesktopPetPageState extends ConsumerState<DesktopPetPage>
     with WidgetsBindingObserver {
-  static const _defaultPetColor = '#7668EE';
+  static const _defaultPetColor = '#8A5728';
   bool _busy = false;
 
   @override
