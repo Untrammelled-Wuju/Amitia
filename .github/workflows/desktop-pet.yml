@@ -11,8 +11,10 @@ on:
       - 'scripts/test/run-desktop-pet-*.ps1'
       - 'scripts/audit/desktop_pet_*.ps1'
       - 'scripts/audit/verify-desktop-pet-runtime-singletrack.mjs'
+      - 'desktop/scripts/verify-*.mjs'
       - 'DESKTOP_PET_FINALIZATION_20260830_MANIFEST.txt'
       - 'DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt'
+      - '.gitignore'
       - '.github/workflows/desktop-pet.yml'
   pull_request:
     paths:
@@ -24,8 +26,10 @@ on:
       - 'scripts/test/run-desktop-pet-*.ps1'
       - 'scripts/audit/desktop_pet_*.ps1'
       - 'scripts/audit/verify-desktop-pet-runtime-singletrack.mjs'
+      - 'desktop/scripts/verify-*.mjs'
       - 'DESKTOP_PET_FINALIZATION_20260830_MANIFEST.txt'
       - 'DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt'
+      - '.gitignore'
       - '.github/workflows/desktop-pet.yml'
 
 
