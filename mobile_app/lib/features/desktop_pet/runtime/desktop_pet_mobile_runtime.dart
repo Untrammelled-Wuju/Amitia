@@ -247,6 +247,10 @@ class DesktopPetMobileRuntimeNotifier
   bool _nativeStatusAvailable = false;
   String _nativeStatusLastError = '';
 
+  bool get nativeStatusAvailable => _nativeStatusAvailable;
+  Map<String, dynamic> get lastConfirmedNativeStatus => Map<String, dynamic>.from(_lastConfirmedNativeStatus);
+  String get nativeStatusLastError => _nativeStatusLastError;
+
   void attach(BackendConnectionConfig? config) {
     if (_disposed) return;
     if (config == null) {
