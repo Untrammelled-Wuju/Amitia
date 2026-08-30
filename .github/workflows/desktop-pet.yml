@@ -3,15 +3,7 @@ on:
   push:
     branches: [main, master, develop]
     paths:
-      - 'backend/internal/desktoppet/**'
-      - 'backend/internal/migration/desktop_pet_*.go'
-      - 'backend/internal/middleware/**'
-      - 'backend/internal/runtimeprofile/**'
-      - 'backend/internal/devicemesh/**'
-      - 'backend/internal/chat/**'
-      - 'backend/internal/realtime/**'
-      - 'backend/internal/extension/**'
-      - 'backend/cmd/**'
+      - 'backend/**'
       - 'desktop/**'
       - 'front/**'
       - 'mobile_app/**'
@@ -19,18 +11,12 @@ on:
       - 'scripts/test/run-desktop-pet-*.ps1'
       - 'scripts/audit/desktop_pet_*.ps1'
       - 'scripts/audit/verify-desktop-pet-runtime-singletrack.mjs'
+      - 'DESKTOP_PET_FINALIZATION_20260830_MANIFEST.txt'
+      - 'DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt'
       - '.github/workflows/desktop-pet.yml'
   pull_request:
     paths:
-      - 'backend/internal/desktoppet/**'
-      - 'backend/internal/migration/desktop_pet_*.go'
-      - 'backend/internal/middleware/**'
-      - 'backend/internal/runtimeprofile/**'
-      - 'backend/internal/devicemesh/**'
-      - 'backend/internal/chat/**'
-      - 'backend/internal/realtime/**'
-      - 'backend/internal/extension/**'
-      - 'backend/cmd/**'
+      - 'backend/**'
       - 'desktop/**'
       - 'front/**'
       - 'mobile_app/**'
@@ -38,6 +24,8 @@ on:
       - 'scripts/test/run-desktop-pet-*.ps1'
       - 'scripts/audit/desktop_pet_*.ps1'
       - 'scripts/audit/verify-desktop-pet-runtime-singletrack.mjs'
+      - 'DESKTOP_PET_FINALIZATION_20260830_MANIFEST.txt'
+      - 'DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt'
       - '.github/workflows/desktop-pet.yml'
 
 
@@ -94,6 +82,18 @@ jobs:
       - name: Run desktop-pet CORS integration tests
         run: cd backend && go test ./internal/middleware/security -run 'TestCorsMiddleware_' -count=1
         working-directory: .
+
+  backend-all-tests:
+    name: Backend Full Test Gate
+    runs-on: ubuntu-latest
+    needs: backend-build-vet
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'backend/go.mod'
+      - name: Run complete backend test suite
+        run: cd backend && go test ./... -count=1
 
   desktop-pet-unit:
     name: Desktop Pet Unit Tests
@@ -174,6 +174,8 @@ jobs:
         run: node desktop/scripts/verify-desktop-pet-runtime-lifecycle-semantics.mjs
       - name: Verify desktop-pet finalization
         run: node desktop/scripts/verify-desktop-pet-finalization.mjs
+      - name: Verify frozen finalization hashes
+        run: sha256sum -c DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt
       - name: Verify cloud-to-device execution boundary
         run: node desktop/scripts/verify-cloud-device-execution-finalization.mjs
       - name: Verify Device Agent desktop-pet freeze gate
@@ -259,6 +261,7 @@ jobs:
     needs:
       - format
       - backend-build-vet
+      - backend-all-tests
       - desktop-pet-unit
       - desktop-pet-race
       - desktop-pet-contract
