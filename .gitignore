@@ -302,3 +302,10 @@ build_out.txt
 /backend/pkg/gameplugin/sdk/game-plugin/dist/
 /temp_extract/
 /U-Ai/
+# Final source-package hygiene (local audit/build artifacts)
+temp_apk_extract/
+.gradle-proot-build/
+trace.atrace
+.meituan-catpaw/
+C*/
+

@@ -118,6 +118,8 @@ $excludes = @(
     "--exclude=.codex-temp-patches"
     "--exclude=.codex-diff-apply"
     "--exclude=classes*.dex.txt"
+    "--exclude=temp_apk_extract"
+    "--exclude=backend/build"
 )
 
 Set-Location $parentDir
