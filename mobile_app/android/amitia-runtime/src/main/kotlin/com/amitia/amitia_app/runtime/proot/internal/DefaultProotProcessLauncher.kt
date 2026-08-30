@@ -15,7 +15,7 @@ internal class DefaultProotProcessLauncher(
     override fun launch(command: ProotCommand, observer: ProotObserver, generation: Long): ProotSession {
         val sessionId = sessionIdGenerator.generate()
         try {
-            if (command.environment["AMITIA_RUNTIME_MODE"] == "android-native") {
+            if (command.environment["AMITIA_RUNTIME_MODE"] == "android-native-disabled") {
                 return launchNative(command, observer, generation, sessionId)
             }
             val fullCommand = ArrayList<String>(command.arguments.size + 1)
@@ -27,7 +27,24 @@ internal class DefaultProotProcessLauncher(
             val shellCommand = ArrayList<String>()
             shellCommand.add("/system/bin/sh")
             shellCommand.add("-c")
-            shellCommand.add("\"\$@\" >> \"\$0\" 2>&1")
+            shellCommand.add(
+                "{ " +
+                    "echo '== sh-start ==';" +
+                    "id;" +
+                    "echo -n 'ctx='; cat /proc/self/attr/current;" +
+                    "grep -E 'Seccomp|NoNewPrivs' /proc/self/status;" +
+                    "echo -n 'bin='; ls -l \"\$1\" 2>&1;" +
+                    "echo '-- version --';" +
+                    "\"\$1\" --version; echo \"vexit=\$?\";" +
+                    "echo '-- trivial --';" +
+                    "\"\$1\" -r / /system/bin/true; echo \"texit=\$?\";" +
+                    "echo '-- verbose --';" +
+                    "\"\$1\" -v 9 -r / /system/bin/true; echo \"vtexit=\$?\";" +
+                    "echo '-- run --';" +
+                    "\"\$@\";" +
+                    "echo \"exit=\$?\";" +
+                    " } > \"\$0\" 2>&1"
+            )
             shellCommand.add(logFile.absolutePath)
             shellCommand.addAll(fullCommand)
 
