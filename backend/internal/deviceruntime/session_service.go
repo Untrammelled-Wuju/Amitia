@@ -173,41 +173,29 @@ func (s *Service) reconnectExisting(
 
 	clientCursor := req.Cursor
 	mergedCursor := existing.ResumeCursor()
+	forceFullResume := false
 
-	if clientCursor.LastAppliedStateRevision > 0 && clientCursor.LastAppliedStateRevision <= existing.LastAppliedStateRevision {
+	// The persisted server cursor is authoritative. A client can legitimately
+	// be ahead when it wrote its local cursor after socket.send but the frame was
+	// lost before server persistence. Do not return the old session/generation:
+	// replace the transport session as usual, keep authoritative server cursors,
+	// and explicitly request a full resume.
+	if clientCursor.LastAppliedStateRevision > existing.LastAppliedStateRevision {
+		forceFullResume = true
+	} else if clientCursor.LastAppliedStateRevision > 0 {
 		mergedCursor.LastAppliedStateRevision = max64(mergedCursor.LastAppliedStateRevision, clientCursor.LastAppliedStateRevision)
-	} else if clientCursor.LastAppliedStateRevision > existing.LastAppliedStateRevision {
-		return AcquireResult{
-			Session: existing,
-			Resume: protocol.ResumeDecision{
-				Mode:   protocol.ResumeModeFull,
-				Reason: "client_cursor_ahead",
-			},
-		}, nil
 	}
-	if clientCursor.LastProcessedCommandSequence > 0 && clientCursor.LastProcessedCommandSequence <= existing.LastProcessedCommandSequence {
+	if clientCursor.LastProcessedCommandSequence > existing.LastProcessedCommandSequence {
+		forceFullResume = true
+	} else if clientCursor.LastProcessedCommandSequence > 0 {
 		mergedCursor.LastProcessedCommandSequence = max64(mergedCursor.LastProcessedCommandSequence, clientCursor.LastProcessedCommandSequence)
-	} else if clientCursor.LastProcessedCommandSequence > existing.LastProcessedCommandSequence {
-		return AcquireResult{
-			Session: existing,
-			Resume: protocol.ResumeDecision{
-				Mode:   protocol.ResumeModeFull,
-				Reason: "client_cursor_ahead",
-			},
-		}, nil
 	}
-	if clientCursor.LastEventSequence > 0 && clientCursor.LastEventSequence <= existing.LastEventSequence {
+	if clientCursor.LastEventSequence > existing.LastEventSequence {
+		forceFullResume = true
+	} else if clientCursor.LastEventSequence > 0 {
 		mergedCursor.LastEventSequence = max64(mergedCursor.LastEventSequence, clientCursor.LastEventSequence)
-	} else if clientCursor.LastEventSequence > existing.LastEventSequence {
-		return AcquireResult{
-			Session: existing,
-			Resume: protocol.ResumeDecision{
-				Mode:   protocol.ResumeModeFull,
-				Reason: "client_cursor_ahead",
-			},
-		}, nil
 	}
-	if clientCursor.ActualStateHash != "" {
+	if !forceFullResume && clientCursor.ActualStateHash != "" {
 		mergedCursor.ActualStateHash = clientCursor.ActualStateHash
 	}
 
@@ -253,11 +241,13 @@ func (s *Service) reconnectExisting(
 		}
 	}
 
+	resume := protocol.ResumeDecision{Mode: protocol.ResumeModeResumeOrFull}
+	if forceFullResume {
+		resume = protocol.ResumeDecision{Mode: protocol.ResumeModeFull, Reason: "client_cursor_ahead"}
+	}
 	return AcquireResult{
 		Session: updated,
-		Resume: protocol.ResumeDecision{
-			Mode: protocol.ResumeModeResumeOrFull,
-		},
+		Resume:  resume,
 	}, nil
 }
 
