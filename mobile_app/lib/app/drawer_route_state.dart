@@ -5,11 +5,11 @@ enum DrawerPanel {
 
 enum MainDrawerItem {
   chat,
-  tasks,
   characters,
   memory,
   devices,
-  more,
+  extensions,
+  workshop,
   none,
 }
 
@@ -48,77 +48,38 @@ bool isRouteFamily(String location, String root) {
 
 DrawerRouteState resolveDrawerRouteState(String location) {
   var mainItem = MainDrawerItem.none;
-  var moreItem = MoreDrawerItem.none;
   var settingsSelected = false;
-  var initialPanel = DrawerPanel.main;
 
   if (isRouteFamily(location, '/chat') ||
       isRouteFamily(location, '/conversations')) {
     mainItem = MainDrawerItem.chat;
-  } else if (isRouteFamily(location, '/agent')) {
-    mainItem = MainDrawerItem.tasks;
   } else if (isRouteFamily(location, '/characters')) {
     mainItem = MainDrawerItem.characters;
   } else if (isRouteFamily(location, '/memory')) {
     mainItem = MainDrawerItem.memory;
   } else if (isRouteFamily(location, '/settings/devices')) {
     mainItem = MainDrawerItem.devices;
+  } else if (isRouteFamily(location, '/extensions') ||
+      isRouteFamily(location, '/extension')) {
+    mainItem = MainDrawerItem.extensions;
+  } else if (isRouteFamily(location, '/workshop')) {
+    mainItem = MainDrawerItem.workshop;
+  } else if (isRouteFamily(location, '/settings') ||
+      isRouteFamily(location, '/channels') ||
+      isRouteFamily(location, '/reminders') ||
+      isRouteFamily(location, '/dashboard') ||
+      isRouteFamily(location, '/chat-logs') ||
+      isRouteFamily(location, '/chat-import') ||
+      isRouteFamily(location, '/emotes')) {
+    // These pages are reached from Settings in the mobile information
+    // architecture, so the account/settings entry remains highlighted.
     settingsSelected = true;
-  } else if (isRouteFamily(location, '/settings')) {
-    settingsSelected = true;
-  } else {
-    if (isRouteFamily(location, '/extensions') ||
-        isRouteFamily(location, '/extension')) {
-      moreItem = MoreDrawerItem.extensions;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    } else if (isRouteFamily(location, '/workshop')) {
-      moreItem = MoreDrawerItem.workshop;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    } else if (isRouteFamily(location, '/game-center')) {
-      moreItem = MoreDrawerItem.gameCenter;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    } else if (isRouteFamily(location, '/channels')) {
-      moreItem = MoreDrawerItem.channels;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    } else if (isRouteFamily(location, '/desktop-pet')) {
-      moreItem = MoreDrawerItem.desktopPet;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    } else if (isRouteFamily(location, '/reminders')) {
-      moreItem = MoreDrawerItem.reminders;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    } else if (isRouteFamily(location, '/dashboard')) {
-      moreItem = MoreDrawerItem.dashboard;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    } else if (isRouteFamily(location, '/chat-logs')) {
-      moreItem = MoreDrawerItem.chatLogs;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    } else if (isRouteFamily(location, '/chat-import')) {
-      moreItem = MoreDrawerItem.chatImport;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    } else if (isRouteFamily(location, '/emotes')) {
-      moreItem = MoreDrawerItem.emotes;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    } else if (isRouteFamily(location, '/developer')) {
-      moreItem = MoreDrawerItem.developer;
-      initialPanel = DrawerPanel.more;
-      mainItem = MainDrawerItem.more;
-    }
   }
 
   return DrawerRouteState(
-    initialPanel: initialPanel,
+    initialPanel: DrawerPanel.main,
     mainItem: mainItem,
-    moreItem: moreItem,
+    moreItem: MoreDrawerItem.none,
     settingsSelected: settingsSelected,
   );
 }
