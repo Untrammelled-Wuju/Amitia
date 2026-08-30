@@ -618,7 +618,7 @@ func (h *CoordinatorHandler) EnableInstallation(c *gin.Context) {
 		writeCoordinatorError(c, err)
 		return
 	}
-	util.SuccessMsgResponse(c, "桌宠已启用", gin.H{"operationId": result.OperationID, "status": result.Status})
+	util.SuccessMsgResponse(c, "桌宠已启用", gin.H{"operationId": result.OperationID, "status": result.Status, "stage": result.Stage, "desiredRevision": result.DesiredRevision})
 }
 
 func (h *CoordinatorHandler) DisableInstallation(c *gin.Context) {
@@ -652,7 +652,7 @@ func (h *CoordinatorHandler) DisableInstallation(c *gin.Context) {
 		writeCoordinatorError(c, err)
 		return
 	}
-	util.SuccessMsgResponse(c, "桌宠已停用", gin.H{"operationId": result.OperationID, "status": result.Status})
+	util.SuccessMsgResponse(c, "桌宠已停用", gin.H{"operationId": result.OperationID, "status": result.Status, "stage": result.Stage, "desiredRevision": result.DesiredRevision})
 }
 
 func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
@@ -697,7 +697,7 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 		writeCoordinatorError(c, err)
 		return
 	}
-	util.SuccessMsgResponse(c, "默认动作已更新", gin.H{"operationId": result.OperationID, "status": result.Status})
+	util.SuccessMsgResponse(c, "默认动作已更新", gin.H{"operationId": result.OperationID, "status": result.Status, "stage": result.Stage, "desiredRevision": result.DesiredRevision})
 }
 
 func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
@@ -758,7 +758,7 @@ func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
 		writeInstallationError(c, readErr)
 		return
 	}
-	util.SuccessMsgResponse(c, "运行配置已更新", gin.H{"operationId": result.OperationID, "status": result.Status, "stage": result.Stage, "settings": updatedSettings})
+	util.SuccessMsgResponse(c, "运行配置已更新", gin.H{"operationId": result.OperationID, "status": result.Status, "stage": result.Stage, "desiredRevision": result.DesiredRevision, "settingsRevision": updatedSettings.SettingsRevision, "settings": updatedSettings})
 }
 
 func (h *CoordinatorHandler) Recenter(c *gin.Context) {
@@ -792,7 +792,7 @@ func (h *CoordinatorHandler) Recenter(c *gin.Context) {
 		writeCoordinatorError(c, err)
 		return
 	}
-	util.SuccessMsgResponse(c, "桌宠已重置位置", gin.H{"operationId": result.OperationID, "status": result.Status})
+	util.SuccessMsgResponse(c, "桌宠已重置位置", gin.H{"operationId": result.OperationID, "status": result.Status, "stage": result.Stage, "desiredRevision": result.DesiredRevision})
 }
 
 func (h *CoordinatorHandler) PlayAction(c *gin.Context) {

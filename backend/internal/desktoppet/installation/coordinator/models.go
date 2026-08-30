@@ -57,6 +57,7 @@ type EnableDisableResult struct {
 	OperationID     string
 	DesiredRevision int64
 	Status          string
+	Stage           string
 	ErrorCode       string
 }
 

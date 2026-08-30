@@ -583,7 +583,7 @@ func (c *Coordinator) executeEnableDisable(ctx context.Context, req EnableDisabl
 	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict}, err
 	} else if existing != nil {
-		return &EnableDisableResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, ErrorCode: existing.ErrorCode}, nil
+		return &EnableDisableResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, Stage: existing.Stage, ErrorCode: existing.ErrorCode}, nil
 	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
@@ -619,7 +619,7 @@ func (c *Coordinator) executeEnableDisable(ctx context.Context, req EnableDisabl
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	return &EnableDisableResult{OperationID: op.ID, DesiredRevision: desiredRev, Status: operation.OpStatusWaitingRuntimeACK}, nil
+	return &EnableDisableResult{OperationID: op.ID, DesiredRevision: desiredRev, Status: operation.OpStatusWaitingRuntimeACK, Stage: operation.OpStageWaitingRuntimeACK}, nil
 }
 
 func (c *Coordinator) executeSwitch(ctx context.Context, req SwitchRequest, idempotencyKey, operationType string) (*SwitchResult, error) {
@@ -874,7 +874,7 @@ func (c *Coordinator) executeSettings(ctx context.Context, req SettingsRequest, 
 	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
 		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict, ErrorMessage: err.Error()}, err
 	} else if existing != nil {
-		return &SettingsResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, ErrorCode: existing.ErrorCode, ErrorMessage: existing.ErrorMessage}, nil
+		return &SettingsResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, Stage: existing.Stage, ErrorCode: existing.ErrorCode, ErrorMessage: existing.ErrorMessage}, nil
 	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
@@ -910,7 +910,7 @@ func (c *Coordinator) executeSettings(ctx context.Context, req SettingsRequest, 
 		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	return &SettingsResult{OperationID: op.ID, SettingsRevision: settingsRev, DesiredRevision: desiredRev, Status: operation.OpStatusWaitingRuntimeACK}, nil
+	return &SettingsResult{OperationID: op.ID, SettingsRevision: settingsRev, DesiredRevision: desiredRev, Status: operation.OpStatusWaitingRuntimeACK, Stage: operation.OpStageWaitingRuntimeACK}, nil
 }
 
 func (c *Coordinator) executeDefaultAction(ctx context.Context, req DefaultActionRequest, idempotencyKey string) (*EnableDisableResult, error) {
@@ -931,7 +931,7 @@ func (c *Coordinator) executeDefaultAction(ctx context.Context, req DefaultActio
 	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict}, err
 	} else if existing != nil {
-		return &EnableDisableResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, ErrorCode: existing.ErrorCode}, nil
+		return &EnableDisableResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, Stage: existing.Stage, ErrorCode: existing.ErrorCode}, nil
 	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
@@ -967,7 +967,7 @@ func (c *Coordinator) executeDefaultAction(ctx context.Context, req DefaultActio
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	return &EnableDisableResult{OperationID: op.ID, DesiredRevision: desiredRev, Status: operation.OpStatusWaitingRuntimeACK}, nil
+	return &EnableDisableResult{OperationID: op.ID, DesiredRevision: desiredRev, Status: operation.OpStatusWaitingRuntimeACK, Stage: operation.OpStageWaitingRuntimeACK}, nil
 }
 
 func (c *Coordinator) executeRecenter(ctx context.Context, req RecenterRequest, idempotencyKey string) (*EnableDisableResult, error) {
@@ -988,7 +988,7 @@ func (c *Coordinator) executeRecenter(ctx context.Context, req RecenterRequest, 
 	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict}, err
 	} else if existing != nil {
-		return &EnableDisableResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, ErrorCode: existing.ErrorCode}, nil
+		return &EnableDisableResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, Stage: existing.Stage, ErrorCode: existing.ErrorCode}, nil
 	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
@@ -1010,7 +1010,7 @@ func (c *Coordinator) executeRecenter(ctx context.Context, req RecenterRequest, 
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusWaitingRuntimeACK}, nil
+	return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusWaitingRuntimeACK, Stage: operation.OpStageWaitingRuntimeACK}, nil
 }
 
 func (c *Coordinator) failInstall(ctx context.Context, op *operation.InstallationOperation, stage string, cause error) (*InstallResult, error) {
