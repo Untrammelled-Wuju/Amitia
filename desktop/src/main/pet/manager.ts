@@ -280,11 +280,23 @@ interface RuntimeSettingsApiPayload {
   lastWindowHeight?: number;
 }
 
-interface RuntimeSettingsMutationApiPayload {
+interface RuntimeMutationApiPayload {
   operationId?: string;
   status?: string;
   stage?: string;
+  desiredRevision?: number;
+}
+
+interface RuntimeSettingsMutationApiPayload extends RuntimeMutationApiPayload {
   settings?: RuntimeSettingsApiPayload;
+}
+
+export interface RuntimeMutationResult {
+  operationId: string;
+  status: string;
+  stage: string;
+  desiredRevision: number;
+  settings?: RuntimeSettingsInfo;
 }
 
 interface DesiredStateRuntimeCommand {
@@ -985,16 +997,21 @@ export class DesktopPetManager {
     );
   }
 
-  async updateSettings(settings: Partial<RuntimeSettingsInfo>): Promise<void> {
+  async updateSettings(
+    settings: Partial<RuntimeSettingsInfo>,
+  ): Promise<RuntimeMutationResult | null> {
     if (!this.activeInstallationId) {
       throw new Error("PET_NOT_ENABLED");
     }
     const patch = this.buildSettingsPatch(settings);
     if (Object.keys(patch).length === 0) {
-      return;
+      return null;
     }
-    const updated = await this.callUpdateSettingsApi(this.activeInstallationId, patch);
-    await this.applyRuntimeSettingsLocal(updated ?? settings, updated?.settingsRevision ?? 0);
+
+    // Settings have one durable authority: backend desired state -> Runtime v2.
+    // Never apply the API echo locally before Runtime v2 ACKs the revision; doing
+    // so would make activeSettings/appliedRevision claim convergence too early.
+    return this.callUpdateSettingsApi(this.activeInstallationId, patch);
   }
 
   private async applyRuntimeSettingsLocal(
@@ -1093,15 +1110,17 @@ export class DesktopPetManager {
     this.markSettingsRevisionApplied(merged.settingsRevision);
   }
 
-  async updateDefaultAction(actionKey: string): Promise<void> {
+  async updateDefaultAction(actionKey: string): Promise<RuntimeMutationResult> {
     if (!actionKey) {
       throw new Error("ACTION_KEY_REQUIRED");
     }
     if (!this.activeInstallationId) {
       throw new Error("PET_NOT_ENABLED");
     }
-    await this.callUpdateDefaultActionApi(this.activeInstallationId, actionKey);
-    await this.applyDefaultActionLocal(actionKey);
+
+    // Default-action changes converge only through backend desired state ->
+    // Runtime v2. Applying here as well races the authoritative command.
+    return this.callUpdateDefaultActionApi(this.activeInstallationId, actionKey);
   }
 
   private async applyDefaultActionLocal(actionKey: string): Promise<void> {
@@ -2556,14 +2575,13 @@ export class DesktopPetManager {
       scale: snapshot.scale,
     };
     try {
-      const updated = await this.callUpdateSettingsApi(
+      // The drag already changed the physical window position. Persist that fact
+      // to backend, but do not advance activeSettings/settingsRevision here. The
+      // authoritative Runtime v2 desired-state command owns revision convergence.
+      await this.callUpdateSettingsApi(
         this.activeInstallationId,
         this.buildSettingsPatch(patch),
       );
-      if (updated) {
-        this.activeSettings = updated;
-        this.markSettingsRevisionApplied(updated.settingsRevision);
-      }
     } catch (err) {
       console.warn(
         "[DesktopPetManager] 持久化运行时位置失败:",
@@ -2688,22 +2706,65 @@ export class DesktopPetManager {
   private async callUpdateDefaultActionApi(
     installationId: string,
     actionKey: string,
-  ): Promise<void> {
+  ): Promise<RuntimeMutationResult> {
     const path = `${API_BASE_PATH}/installations/${encodeURIComponent(installationId)}/default-action`;
-    await this.request("PATCH", path, { actionKey });
+    const response = await this.request<RuntimeMutationApiPayload>(
+      "PATCH",
+      path,
+      { actionKey },
+    );
+    return this.requireAcceptedRuntimeMutation(response, "update_default_action");
   }
 
   private async callUpdateSettingsApi(
     installationId: string,
     patch: Record<string, unknown>,
-  ): Promise<RuntimeSettingsInfo | null> {
+  ): Promise<RuntimeMutationResult> {
     const path = `${API_BASE_PATH}/installations/${encodeURIComponent(installationId)}/settings`;
     const response = await this.request<RuntimeSettingsMutationApiPayload>(
       "PATCH",
       path,
       patch,
     );
-    return response?.settings ? mapRuntimeSettingsPayload(response.settings) : null;
+    return this.requireAcceptedRuntimeMutation(
+      response,
+      "update_settings",
+      response?.settings ? mapRuntimeSettingsPayload(response.settings) : undefined,
+    );
+  }
+
+  private requireAcceptedRuntimeMutation(
+    response: RuntimeMutationApiPayload | null | undefined,
+    operationName: string,
+    settings?: RuntimeSettingsInfo,
+  ): RuntimeMutationResult {
+    const operationId = response?.operationId?.trim() ?? "";
+    const status = response?.status?.trim() ?? "";
+    if (!operationId || !status) {
+      throw new Error(
+        `PET_MUTATION_RESPONSE_INVALID: ${operationName} operationId/status missing`,
+      );
+    }
+
+    const accepted =
+      status === "created" ||
+      status === "queued" ||
+      status === "running" ||
+      status === "waiting_runtime_ack" ||
+      status === "completed";
+    if (!accepted) {
+      throw new Error(`PET_MUTATION_NOT_ACCEPTED: ${operationName} status=${status}`);
+    }
+
+    return {
+      operationId,
+      status,
+      stage: response?.stage?.trim() ?? "",
+      desiredRevision: typeof response?.desiredRevision === "number"
+        ? Math.max(0, Math.floor(response.desiredRevision))
+        : 0,
+      ...(settings ? { settings } : {}),
+    };
   }
 
   private async markInstallationInvalid(
