@@ -84,6 +84,21 @@ const processingTask = await read("front/src/composables/useProcessingTask.ts");
 const realtimeCallWidget = await read("front/src/components/RealtimeCallWidget.vue");
 const frontendPetChatState = await read("front/src/runtime/desktop-pet-chat-state.ts");
 const desktopPreload = await read("desktop/src/preload/index.ts");
+const runtimeProtocolV2 = await read("desktop/src/desktop-pet/runtime/protocol-v2.ts");
+const runtimeProtocolV2Tests = await read("desktop/src/desktop-pet/runtime/__tests__/runtime-handler-v2.test.ts");
+const appProtocol = await read("desktop/src/main/app-protocol.ts");
+const desktopWindow = await read("desktop/src/main/window.ts");
+const desktopConfigTemplate = await read("desktop/resources/config-template/config.yaml");
+const mobileBackendRouting = await read("mobile_app/lib/core/backend_transport/routed_backend_service_api.dart");
+const mobileBackendProviders = await read("mobile_app/lib/core/backend_transport/providers/backend_transport_providers.dart");
+const mobileDesktopPetRuntime = await read("mobile_app/lib/features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart");
+const mobileDesktopPetPage = await read("mobile_app/lib/features/desktop_pet/presentation/pages/desktop_pet_page.dart");
+const mobileAppRoot = await read("mobile_app/lib/app/app.dart");
+const androidManifest = await read("mobile_app/android/app/src/main/AndroidManifest.xml");
+const androidOverlay = await read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/overlay/OverlayNativeHandler.kt");
+const androidPetRenderer = await read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/desktoppet/DesktopPetRendererNativeHandler.kt");
+const androidCompositionRoot = await read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/AndroidNativeCompositionRoot.kt");
+const desktopPetWorkflow = await read(".github/workflows/desktop-pet.yml");
 
 assert(
   runtimeDispatcher.includes("ListCommandsToDispatchForConnection(") &&
@@ -307,8 +322,105 @@ assert(
 assert(
   securityCors.includes('"X-Amitia-Device-ID"') &&
     securityCors.includes('"X-Amitia-Client-Type"') &&
-    securityCorsTests.includes("AllowsDesktopDeviceHeadersForLoopbackPetRequests"),
-  "cloud-to-loopback desktop-pet requests must pass CORS preflight with desktop device headers",
+    securityCors.includes('"Idempotency-Key"') &&
+    securityCorsTests.includes("AllowsDesktopDeviceHeadersForLoopbackPetRequests") &&
+    securityCorsTests.includes('"idempotency-key"') &&
+    securityCorsTests.includes("AllowsPackagedAppOrigin"),
+  "cloud-to-loopback desktop-pet requests must pass CORS preflight with device and idempotency headers",
+);
+
+assert(
+  appProtocol.includes("protocol.registerSchemesAsPrivileged") &&
+    appProtocol.includes('standard: true') &&
+    appProtocol.includes('secure: true') &&
+    appProtocol.includes('supportFetchAPI: true') &&
+    desktopIndex.includes("registerAppProtocol(") &&
+    desktopWindow.includes('win.loadURL(`${APP_PROTOCOL_ORIGIN}/#/`)') &&
+    !desktopWindow.includes("win.loadFile(") &&
+    desktopConfigTemplate.includes('- "app://amitia"'),
+  "packaged Electron renderer must use the privileged app://amitia origin instead of file:// opaque origin",
+);
+
+assert(
+  mobileBackendRouting.includes("'/api/desktop-pets'") &&
+    mobileBackendRouting.includes("'/api/desktop-pet'") &&
+    mobileBackendRouting.includes("Idempotency-Key") &&
+    mobileBackendRouting.includes("X-Amitia-Client-Type") &&
+    mobileBackendProviders.includes("deviceLocalBackendConnectionProvider") &&
+    mobileBackendProviders.includes("rawDeviceLocalBackendServiceApiProvider") &&
+    mobileBackendProviders.includes("RoutedBackendServiceApiProxy"),
+  "mobile desktop-pet API traffic must route to the embedded Device Agent and use fresh mutation idempotency keys",
+);
+
+assert(
+  androidManifest.includes("android.permission.SYSTEM_ALERT_WINDOW") &&
+    androidOverlay.includes("WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY") &&
+    androidOverlay.includes("windowManager.addView") &&
+    androidOverlay.includes("Settings.ACTION_MANAGE_OVERLAY_PERMISSION") &&
+    androidPetRenderer.includes("PACKAGE_SCHEMA_VERSION = 2") &&
+    androidPetRenderer.includes('PACKAGE_MANIFEST_FORMAT = "amitia-desktop-pet"') &&
+    androidPetRenderer.includes("windowManager.addView") &&
+    androidPetRenderer.includes("lastCompletedPlaybackId") &&
+    androidPetRenderer.includes("actualFiles == seen") &&
+    androidPetRenderer.includes("canonicalManifestData(manifest)") &&
+    androidPetRenderer.includes("computeContentRootHash(") &&
+    androidCompositionRoot.includes("DesktopPetRendererNativeHandler(context)"),
+  "Android desktop-pet host must provide a real WindowManager overlay and Package V2 renderer",
+);
+
+assert(
+  mobileDesktopPetRuntime.includes("_runtimeWsSubprotocol = 'amitia.runtime.v2'") &&
+    mobileDesktopPetRuntime.includes("desktopPetMobileRuntimeBootstrapProvider") &&
+    mobileDesktopPetRuntime.includes("CHARACTER_MISMATCH") &&
+    mobileDesktopPetRuntime.includes("lastCompletedPlaybackId") &&
+    mobileDesktopPetRuntime.includes("Runtime identity and cursor are incarnation-scoped") &&
+    mobileDesktopPetRuntime.includes("runtime envelope sequence is stale or duplicated") &&
+    mobileDesktopPetRuntime.includes("final playedMs = _nonNegativeInt(native['lastCompletedPlayedMs'])") &&
+    mobileDesktopPetRuntime.includes("final playedMs = _nonNegativeInt(rendererStop['stoppedPlayedMs'])") &&
+    mobileDesktopPetRuntime.includes("preservePositionMode: true") &&
+    mobileDesktopPetRuntime.includes("_persistRuntimePosition(") &&
+    mobileDesktopPetRuntime.includes("final settings = _map(updated['settings'])") &&
+    mobileDesktopPetRuntime.includes("桌宠居中位置保存失败") &&
+    !mobileDesktopPetRuntime.includes("difference(tracked.startedAt)") &&
+    !mobileDesktopPetRuntime.includes("_prefsRuntimeId") &&
+    mobileAppRoot.includes("ref.watch(desktopPetMobileRuntimeBootstrapProvider)") &&
+    mobileDesktopPetPage.includes("desktopPetMobileRuntimeProvider") &&
+    !mobileDesktopPetPage.includes("companionStateProvider") &&
+    !mobileDesktopPetPage.includes("心情很好"),
+  "mobile desktop-pet center and Runtime V2 transport must use real renderer facts with strict per-connection sequencing",
+);
+
+assert(
+  runtimeProtocolV2.includes("function backendCanonicalJSON(value: unknown): string") &&
+    runtimeProtocolV2.includes("Object.is(value, -0)") &&
+    runtimeProtocolV2.includes('case "<": return "\\\\u003c"') &&
+    runtimeProtocolV2Tests.includes("b7e059caca7f51b074a58adda59aaa8943450b4d78e80b4cb5aed992a5fe6e0a"),
+  "Electron Runtime V2 payload hashing must match the Go canonical JSON golden vector",
+);
+
+assert(
+  mobileDesktopPetRuntime.includes("String _backendCanonicalJson(Object? value)") &&
+    mobileDesktopPetRuntime.includes("value == 0 && value.isNegative") &&
+    mobileDesktopPetRuntime.includes("replaceAll('<', r'\\u003c')") &&
+    mobileDesktopPetRuntime.includes("replaceAll('&', r'\\u0026')"),
+  "mobile Runtime V2 payload hashing must reproduce the Go server canonical JSON escaping and number semantics",
+);
+
+assert(
+  desktopPetWorkflow.includes("- 'mobile_app/**'") &&
+    desktopPetWorkflow.includes("Mobile Desktop Pet Gate") &&
+    desktopPetWorkflow.includes("flutter analyze") &&
+    desktopPetWorkflow.includes("flutter build apk --debug") &&
+    desktopPetWorkflow.includes("backend/internal/middleware/**") &&
+    desktopPetWorkflow.includes("backend/internal/runtimeprofile/**") &&
+    desktopPetWorkflow.includes("Run desktop-pet CORS integration tests") &&
+    desktopPetWorkflow.includes("verify-pet-player-singleton.mjs") &&
+    desktopPetWorkflow.includes("verify-desktop-pet-runtime-singletrack.mjs") &&
+    desktopPetWorkflow.includes("verify-desktop-pet-runtime-lifecycle-semantics.mjs") &&
+    desktopPetWorkflow.includes("verify-desktop-pet-finalization.mjs") &&
+    desktopPetWorkflow.includes("verify-cloud-device-execution-finalization.mjs") &&
+    desktopPetWorkflow.includes("verify-desktop-pet-device-agent-freeze-gate.mjs"),
+  "desktop-pet CI must cover mobile/Android compilation and every production freeze gate",
 );
 
 assert(

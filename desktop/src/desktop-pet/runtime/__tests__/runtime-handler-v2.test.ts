@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DesktopRuntimeHandlerV2 } from "../runtime-handler-v2";
 import type { RuntimeCommandReplayEntry } from "../runtime-handler-v2";
-import { buildEnvelope } from "../protocol-v2";
+import { buildEnvelope, computePayloadHash } from "../protocol-v2";
 import type { RuntimeEnvelope } from "../protocol-v2";
 import type { RuntimeCommandExecutionResult } from "../../../main/pet/runtime-v2-command-adapter";
 
@@ -82,6 +82,19 @@ function futureExpiry(offsetMs = 60_000): string {
 function pastExpiry(offsetMs = 1_000): string {
   return new Date(Date.now() - offsetMs).toISOString();
 }
+
+// Cross-language golden vector from backend/internal/deviceruntime/protocol.
+// It covers Go HTML escaping, U+2028/U+2029 and negative-zero formatting.
+describe("Runtime V2 payload hashing", () => {
+  it("matches the Go canonical payload hash for escaped scalar values", () => {
+    expect(computePayloadHash({
+      text: "A<&>\u2028\u2029",
+      number: 1.0,
+      negzero: -0.0,
+      nested: { b: 2, a: "x" },
+    })).toBe("sha256:b7e059caca7f51b074a58adda59aaa8943450b4d78e80b4cb5aed992a5fe6e0a");
+  });
+});
 
 function helloAckEnvelope(overrides: Record<string, unknown> = {}): RuntimeEnvelope {
   return buildEnvelope(
