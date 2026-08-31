@@ -1631,74 +1631,85 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(
-                controller: _controller,
-                focusNode: _inputFocusNode,
-                minLines: 1,
-                maxLines: 4,
-                textCapitalization: TextCapitalization.sentences,
-                onChanged: (value) => setState(() => _hasText = value.trim().isNotEmpty),
-                onSubmitted: (_) => _send(),
-                style: AppTypography.bodySmall(context).copyWith(fontSize: 14, height: 1.45),
-                decoration: InputDecoration(
-                  hintText: recipient.isEmpty ? '发消息…' : '给 $recipient 发消息…',
-                  hintStyle: TextStyle(color: context.textTertiary, fontSize: 14),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.fromLTRB(14, 13, 14, 9),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  disabledBorder: InputBorder.none,
-                  errorBorder: InputBorder.none,
-                  focusedErrorBorder: InputBorder.none,
-                  fillColor: Colors.transparent,
-                  focusColor: Colors.transparent,
-                  hoverColor: Colors.transparent,
+              TapRegion(
+                onTapOutside: (_) => _inputFocusNode.unfocus(),
+                child: TextField(
+                  controller: _controller,
+                  focusNode: _inputFocusNode,
+                  minLines: 1,
+                  maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (value) => setState(() => _hasText = value.trim().isNotEmpty),
+                  onSubmitted: (_) => _send(),
+                  style: AppTypography.bodySmall(context).copyWith(fontSize: 16),
+                  decoration: InputDecoration(
+                    hintText: recipient.isEmpty ? '发消息…' : '给 $recipient 发消息…',
+                    hintStyle: TextStyle(color: context.textTertiary, fontSize: 16),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                    fillColor: Colors.transparent,
+                    focusColor: Colors.transparent,
+                    hoverColor: Colors.transparent,
+                  ),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(9, 0, 9, 8),
-                child: Row(
-                  children: [
-                    _ComposerRoundButton(
-                      icon: Icons.add_rounded,
-                      tooltip: '添加内容',
-                      onTap: _showComposerTools,
-                    ),
-                    const SizedBox(width: 6),
-                    _ClaudeStyleAgentChip(
-                      isEnabled: widget.isAgentMode,
-                      onTap: () => widget.onAgentModeChanged?.call(!widget.isAgentMode),
-                    ),
-                    const Spacer(),
-                    _ComposerRoundButton(
-                      icon: Icons.mic_none_outlined,
-                      tooltip: '选择音频作为语音消息',
-                      onTap: _showVoiceSheet,
-                    ),
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _hasText ? _send : null,
-                      child: Tooltip(
-                        message: '发送消息',
-                        child: Container(
-                          width: 31,
-                          height: 31,
-                          decoration: BoxDecoration(
-                            color: _hasText ? context.accentPrimary : context.borderPrimary,
-                            shape: BoxShape.circle,
-                          ),
-                          alignment: Alignment.center,
-                          child: Icon(
-                            Icons.arrow_upward_rounded,
-                            size: 18,
-                            color: _hasText ? context.surfacePrimary : context.textTertiary,
+                child: SizedBox(
+                  height: 48,
+                  child: Row(
+                    children: [
+                      _ComposerRoundButton(
+                        icon: Icons.add_rounded,
+                        tooltip: '添加内容',
+                        onTap: _showComposerTools,
+                      ),
+                      const SizedBox(width: 6),
+                      _ClaudeStyleAgentChip(
+                        isEnabled: widget.isAgentMode,
+                        onTap: () =>
+                            widget.onAgentModeChanged?.call(!widget.isAgentMode),
+                      ),
+                      const Spacer(),
+                      _ComposerRoundButton(
+                        icon: Icons.mic_none_outlined,
+                        tooltip: '选择音频作为语音消息',
+                        onTap: _showVoiceSheet,
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _hasText ? _send : null,
+                        child: Tooltip(
+                          message: '发送消息',
+                          child: Container(
+                            width: 31,
+                            height: 31,
+                            decoration: BoxDecoration(
+                              color: _hasText
+                                  ? context.accentPrimary
+                                  : context.borderPrimary,
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              Icons.arrow_upward_rounded,
+                              size: 18,
+                              color: _hasText
+                                  ? context.surfacePrimary
+                                  : context.textTertiary,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],

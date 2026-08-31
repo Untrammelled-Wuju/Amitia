@@ -623,7 +623,7 @@ class AmitiaCharacterCard extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: _parseColor(avatarColor),
+                color: _parseColor(avatarColor, context),
                 shape: BoxShape.circle,
               ),
               child: Center(
@@ -684,7 +684,7 @@ class AmitiaCharacterCard extends StatelessWidget {
     );
   }
 
-  Color _parseColor(String hex) {
+  Color _parseColor(String hex, BuildContext context) {
     try {
       var value = hex.trim().replaceFirst('#', '');
       if (value.length == 6) value = 'FF$value';

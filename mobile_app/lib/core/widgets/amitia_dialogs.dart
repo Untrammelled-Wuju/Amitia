@@ -105,18 +105,6 @@ Future<T?> showAmitiaActionSheet<T>(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 8),
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: context.borderPrimary,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
               Text(title, style: AppTypography.pageTitle(context)),
               const SizedBox(height: 16),
               ...actions.map((item) {

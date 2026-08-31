@@ -1003,18 +1003,24 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               icon: isApplePlatform
                   ? CupertinoIcons.line_horizontal_3
                   : Icons.menu_rounded,
+              size: 44,
+              iconSize: 20,
               tooltip: '打开侧边栏',
               onTap: onOpenDrawer,
             ),
             const Spacer(),
             _ChatTopBarButton(
               icon: Icons.call_outlined,
+              size: 44,
+              iconSize: 22,
               tooltip: '发起通话',
               onTap: onCall,
             ),
             const SizedBox(width: 8),
             _ChatTopBarButton(
               icon: isApplePlatform ? CupertinoIcons.ellipsis : Icons.more_horiz,
+              size: 44,
+              iconSize: 22,
               tooltip: '当前对话详情',
               onTap: onMore,
             ),
@@ -1027,11 +1033,15 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
 
 class _ChatTopBarButton extends StatelessWidget {
   final IconData icon;
+  final double size;
+  final double iconSize;
   final String tooltip;
   final VoidCallback onTap;
 
   const _ChatTopBarButton({
     required this.icon,
+    required this.size,
+    required this.iconSize,
     required this.tooltip,
     required this.onTap,
   });
@@ -1044,15 +1054,15 @@ class _ChatTopBarButton extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Container(
-          width: 36,
-          height: 36,
+          width: size,
+          height: size,
           decoration: BoxDecoration(
             color: context.surfacePrimary,
             borderRadius: BorderRadius.circular(13),
             border: Border.all(color: context.borderPrimary),
           ),
           alignment: Alignment.center,
-          child: Icon(icon, size: 19, color: context.textPrimary),
+          child: Icon(icon, size: iconSize, color: context.textPrimary),
         ),
       ),
     );
