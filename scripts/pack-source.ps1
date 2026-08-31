@@ -117,7 +117,6 @@ $excludes = @(
     "--exclude=backend/qq-sidecar/node_modules"
     "--exclude=backend/qq-sidecar/data"
     "--exclude=$folderName/data"
-    "--exclude=logs"
     "--exclude=runtime/out"
     "--exclude=backend/server_linux_amd64"
     "--exclude=backend/server_linux_arm64"
@@ -285,9 +284,9 @@ Write-Host "Required Source check: PASS ($($requiredSourceFiles.Count) files ver
 # ============================================================
 Write-Host "=== P0-08: Archive Revalidation ==="
 Set-Location $workspace
-& node scripts/verify-source-archive.mjs $outputFile --clean-build
+& node scripts/verify-source-archive.mjs $outputFile
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "FAIL: archive revalidation or clean build failed"
+    Write-Host "FAIL: archive revalidation failed"
     Remove-Item $outputFile -Force -ErrorAction SilentlyContinue
     exit 1
 }

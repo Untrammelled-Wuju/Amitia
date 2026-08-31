@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-import '../../app/app_routes.dart';
-import '../../app/drawer_route_state.dart';
 import '../../app/theme/app_colors.dart';
-import '../../app/theme/app_radius.dart';
+import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_spacing.dart';
+import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../app/theme/design_tokens.dart';
-import '../services/providers.dart';
+import '../../app/app_routes.dart';
+import '../../app/drawer_route_state.dart';
 import '../ui_runtime/ui_navigation_registry.dart';
 import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_misc.dart';
@@ -19,423 +18,400 @@ final currentCharacterIdProvider = StateProvider<String>((ref) => 'c1');
 final isAgentModeProvider = StateProvider<bool>((ref) => false);
 final isDeveloperModeProvider = StateProvider<bool>((ref) => false);
 
-const _placeholderCharacterName = 'Amitia';
-const _placeholderCharacterStatus = '在线 · 当前角色';
-const _placeholderCharacterInitial = 'A';
+class _CharInfo {
+  final String name, status, description, avatarInitial, avatarColor;
+  _CharInfo(
+    this.name,
+    this.status,
+    this.description,
+    this.avatarInitial,
+    this.avatarColor,
+  );
+}
 
-class AmitiaDrawer extends ConsumerWidget {
+class AmitiaDrawer extends ConsumerStatefulWidget {
   final String currentRoute;
 
   const AmitiaDrawer({super.key, required this.currentRoute});
 
-  void _navigateTo(BuildContext context, String route) {
-    final router = GoRouter.of(context);
-    final current = router.routerDelegate.currentConfiguration.fullPath;
-    Navigator.of(context).pop();
-    if (current == route) return;
-    router.push(route);
+  @override
+  ConsumerState<AmitiaDrawer> createState() => _AmitiaDrawerState();
+}
+
+class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
+  late PageController _pageController;
+  late DrawerRouteState _routeState;
+  DrawerPanel _currentPanel = DrawerPanel.main;
+  bool _pageInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _routeState = resolveDrawerRouteState(widget.currentRoute);
+    _currentPanel = _routeState.initialPanel;
+    _pageController = PageController(
+      initialPage: _routeState.initialPanel == DrawerPanel.more ? 1 : 0,
+    );
+    _pageInitialized = true;
   }
 
-  void _openGlobalSearch(BuildContext context) {
-    final router = GoRouter.of(context);
-    Navigator.of(context).pop();
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (_) => _DrawerGlobalSearchPage(router: router),
-      ),
+  @override
+  void didUpdateWidget(AmitiaDrawer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentRoute != widget.currentRoute) {
+      _routeState = resolveDrawerRouteState(widget.currentRoute);
+      final targetPanel = _routeState.initialPanel;
+      if (_currentPanel != targetPanel) {
+        _currentPanel = targetPanel;
+      }
+      if (_pageInitialized) {
+        final targetPage = targetPanel == DrawerPanel.more ? 1 : 0;
+        if (_pageController.hasClients &&
+            (_pageController.page?.round() ?? 0) != targetPage) {
+          _pageController.jumpToPage(targetPage);
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _goToMorePanel() {
+    if (_currentPanel == DrawerPanel.more) return;
+    _currentPanel = DrawerPanel.more;
+    _pageController.animateToPage(
+      1,
+      duration: AppMotion.panel,
+      curve: AppMotion.panelCurve,
     );
   }
 
-  List<UINavigationItem> _extensionEntries(List<UINavigationItem> items) {
-    final deduped = <String, UINavigationItem>{};
-    for (final item in items) {
-      final extensionId = item.extensionId?.trim() ?? '';
-      if (item.builtin || extensionId.isEmpty) continue;
-      deduped.putIfAbsent(extensionId, () => item);
-    }
-    return deduped.values.toList(growable: false);
+  void _backToMainPanel() {
+    if (_currentPanel == DrawerPanel.main) return;
+    _currentPanel = DrawerPanel.main;
+    _pageController.animateToPage(
+      0,
+      duration: AppMotion.panel,
+      curve: AppMotion.panelCurve,
+    );
   }
 
-  bool _isBuiltinSelected(DrawerRouteState state, UINavigationItem item) {
+  void _navigateTo(String route) {
+    final router = GoRouter.of(context);
+    final currentRoute = router.routerDelegate.currentConfiguration.fullPath;
+    Navigator.of(context).pop();
+    if (currentRoute == route) return;
+    router.push(route);
+  }
+
+  _CharInfo _getCharacter(String id) {
+    const chars = {
+      'c1': ('Amitia', '在线 · 空闲中', '温柔、细心，喜欢帮助你解决问题', '阿', '#7668EE'),
+      'c2': ('小雨', '在线 · 专注中', '理性、高效，擅长分析和规划', '雨', '#52B788'),
+      'c3': ('Epsilon', '离线', '冷静、专业，精通技术问题', 'E', '#6C8FEA'),
+      'c4': ('Karin', '在线 · 活力满满', '活泼、充满创意，喜欢头脑风暴', 'K', '#E9A23B'),
+    };
+    final c = chars[id] ?? chars['c1']!;
+    return _CharInfo(c.$1, c.$2, c.$3, c.$4, c.$5);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = themeMode == ThemeMode.dark;
+    final characterId = ref.watch(currentCharacterIdProvider);
+    final character = _getCharacter(characterId);
+    final navigationItems = UINavigationRegistry.resolve(
+      ref.watch(uiRuntimeProvider).valueOrNull,
+    );
+
+    return PopScope(
+      canPop: _currentPanel == DrawerPanel.main,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _currentPanel == DrawerPanel.more) {
+          _backToMainPanel();
+        }
+      },
+      child: Material(
+        color: context.surfacePrimary,
+        child: SafeArea(
+          child: SizedBox(
+            width: MediaQuery.sizeOf(context).width * 0.82 > context.uiComponents.drawerMaxWidth
+                ? context.uiComponents.drawerMaxWidth
+                : MediaQuery.sizeOf(context).width * 0.82,
+            child: Column(
+              children: [
+                Expanded(
+                  child: PageView(
+                    controller: _pageController,
+                    physics: const NeverScrollableScrollPhysics(),
+                    onPageChanged: (index) {
+                      final nextPanel = index == 0
+                          ? DrawerPanel.main
+                          : DrawerPanel.more;
+                      if (_currentPanel != nextPanel) {
+                        setState(() {
+                          _currentPanel = nextPanel;
+                        });
+                      }
+                    },
+                    children: [
+                      _DrawerMainPanel(
+                        character: character,
+                        routeState: _routeState,
+                        isDark: isDark,
+                        onToggleTheme: () {
+                          ref.read(themeModeProvider.notifier).state = isDark
+                              ? ThemeMode.light
+                              : ThemeMode.dark;
+                        },
+                        onSearchTap: () => _navigateTo(AppRoutes.conversations),
+                        onMoreTap: _goToMorePanel,
+                        onNavigate: _navigateTo,
+                        onSettingsTap: () => _navigateTo(AppRoutes.settings),
+                        navigationItems: navigationItems,
+                        currentRoute: widget.currentRoute,
+                      ),
+                      _DrawerMorePanel(
+                        routeState: _routeState,
+                        currentRoute: widget.currentRoute,
+                        onNavigate: _navigateTo,
+                        onBack: _backToMainPanel,
+                        navigationItems: navigationItems,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerMainPanel extends StatelessWidget {
+  final _CharInfo character;
+  final DrawerRouteState routeState;
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+  final VoidCallback onSearchTap;
+  final VoidCallback onMoreTap;
+  final ValueChanged<String> onNavigate;
+  final VoidCallback onSettingsTap;
+  final List<UINavigationItem> navigationItems;
+  final String currentRoute;
+
+  const _DrawerMainPanel({
+    required this.character,
+    required this.routeState,
+    required this.isDark,
+    required this.onToggleTheme,
+    required this.onSearchTap,
+    required this.onMoreTap,
+    required this.onNavigate,
+    required this.onSettingsTap,
+    required this.navigationItems,
+    required this.currentRoute,
+  });
+
+  bool _isMainItemSelected(DrawerRouteState state, UINavigationItem item) {
     return switch (item.id) {
       'builtin.chat' => state.mainItem == MainDrawerItem.chat,
+      'builtin.tasks' => state.mainItem == MainDrawerItem.tasks,
       'builtin.characters' => state.mainItem == MainDrawerItem.characters,
       'builtin.memory' => state.mainItem == MainDrawerItem.memory,
       'builtin.devices' => state.mainItem == MainDrawerItem.devices,
-      'builtin.extensions' => state.mainItem == MainDrawerItem.extensions,
-      'builtin.workshop' => state.mainItem == MainDrawerItem.workshop,
       _ => item.matches(currentRoute),
     };
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final routeState = resolveDrawerRouteState(currentRoute);
-    final themeMode = ref.watch(themeModeProvider);
-    final isDark = themeMode == ThemeMode.dark;
-    final navigationItems = UINavigationRegistry.resolve(
-      ref.watch(uiRuntimeProvider).valueOrNull,
-    );
-    final builtins = navigationItems
-        .where((item) => item.builtin && item.panel == UINavigationPanel.main)
-        .toList(growable: false);
-    final extensionItems = _extensionEntries(navigationItems);
-    final user = ref.watch(currentUserProvider).valueOrNull;
-    final userName = (user?.username.trim().isNotEmpty ?? false)
-        ? user!.username.trim()
-        : '用户';
-    final userInitial = userName.isNotEmpty ? userName.substring(0, 1) : '用';
-
-    final width = MediaQuery.sizeOf(context).width * 0.84;
-    final drawerWidth = width > context.uiComponents.drawerMaxWidth
-        ? context.uiComponents.drawerMaxWidth
-        : width;
-
-    return Material(
-      color: Colors.transparent,
-      child: SafeArea(
-        right: false,
-        child: SizedBox(
-          width: drawerWidth,
-          child: Material(
-            color: context.surfacePrimary,
-            clipBehavior: Clip.antiAlias,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.only(
-                topRight: Radius.circular(29),
-                bottomRight: Radius.circular(29),
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              _DrawerHeader(
+                name: character.name,
+                isDark: isDark,
+                onToggleTheme: onToggleTheme,
+                onSearchTap: onSearchTap,
               ),
-            ),
-            child: Column(
-              children: [
-                _DrawerHeader(
-                  isDark: isDark,
-                  onToggleTheme: () {
-                    ref.read(themeModeProvider.notifier).state =
-                        isDark ? ThemeMode.light : ThemeMode.dark;
-                  },
-                  onSearchTap: () => _openGlobalSearch(context),
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(11, 0, 11, 12),
-                    children: [
-                      const SizedBox(height: 4),
-                      ...builtins.map(
-                        (item) => _MainMenuItem(
-                          icon: item.icon,
-                          label: item.label,
-                          isSelected: _isBuiltinSelected(routeState, item),
-                          onTap: () => _navigateTo(context, item.route),
-                        ),
-                      ),
-                      if (extensionItems.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        const _DrawerSectionLabel('已启用扩展'),
-                        const SizedBox(height: 5),
-                        ...extensionItems.map(
-                          (item) => _ExtensionMenuItem(
-                            item: item,
-                            isSelected: item.matches(currentRoute),
-                            onTap: () => _navigateTo(context, item.route),
-                          ),
-                        ),
-                      ],
-                    ],
+              SizedBox(height: AppSpacing.sm),
+              ...navigationItems
+                  .where((item) => item.panel == UINavigationPanel.main)
+                  .map(
+                    (item) => _MainMenuItem(
+                      icon: item.icon,
+                      label: item.label,
+                      isSelected: _isMainItemSelected(routeState, item),
+                      onTap: () => onNavigate(item.route),
+                    ),
                   ),
-                ),
-                _DrawerBottomArea(
-                  onSettingsTap: () => _navigateTo(context, AppRoutes.settings),
-                  settingsSelected: routeState.settingsSelected,
-                  userName: userName,
-                  userInitial: userInitial,
-                ),
-              ],
-            ),
+              _MainMenuItem(
+                icon: Icons.apps_outlined,
+                label: '更多',
+                isSelected: routeState.mainItem == MainDrawerItem.more,
+                showArrow: true,
+                onTap: onMoreTap,
+              ),
+            ],
           ),
         ),
-      ),
+        _DrawerBottomArea(
+          onSettingsTap: onSettingsTap,
+          settingsSelected: routeState.settingsSelected,
+          userName: character.name,
+          userInitial: character.avatarInitial,
+        ),
+      ],
     );
   }
 }
 
-class _DrawerHeader extends StatelessWidget {
-  final bool isDark;
-  final VoidCallback onToggleTheme;
-  final VoidCallback onSearchTap;
+class _DrawerMorePanel extends StatelessWidget {
+  final DrawerRouteState routeState;
+  final ValueChanged<String> onNavigate;
+  final VoidCallback onBack;
+  final List<UINavigationItem> navigationItems;
+  final String currentRoute;
 
-  const _DrawerHeader({
-    required this.isDark,
-    required this.onToggleTheme,
-    required this.onSearchTap,
+  const _DrawerMorePanel({
+    required this.routeState,
+    required this.onNavigate,
+    required this.onBack,
+    required this.navigationItems,
+    required this.currentRoute,
+  });
+
+  List<Widget> _buildGroups() {
+    final grouped = <String, List<UINavigationItem>>{};
+    for (final item in navigationItems.where((e) => e.panel == UINavigationPanel.more)) {
+      grouped.putIfAbsent(item.group.isEmpty ? '扩展' : item.group, () => <UINavigationItem>[]).add(item);
+    }
+    return grouped.entries
+        .map(
+          (entry) => _MoreGroup(
+            label: entry.key,
+            onNavigate: onNavigate,
+            selectedItem: routeState.moreItem,
+            currentRoute: currentRoute,
+            items: entry.value
+                .map(
+                  (item) => _MoreItemData(
+                    icon: item.icon,
+                    label: item.label,
+                    route: item.route,
+                    item: _legacyMoreItem(item.id),
+                  ),
+                )
+                .toList(),
+          ),
+        )
+        .toList();
+  }
+
+  MoreDrawerItem _legacyMoreItem(String id) {
+    return switch (id) {
+      'builtin.extensions' => MoreDrawerItem.extensions,
+      'builtin.workshop' => MoreDrawerItem.workshop,
+      'builtin.game-center' => MoreDrawerItem.gameCenter,
+      'builtin.channels' => MoreDrawerItem.channels,
+      'builtin.desktop-pet' => MoreDrawerItem.desktopPet,
+      'builtin.reminders' => MoreDrawerItem.reminders,
+      'builtin.dashboard' => MoreDrawerItem.dashboard,
+      'builtin.chat-logs' => MoreDrawerItem.chatLogs,
+      'builtin.chat-import' => MoreDrawerItem.chatImport,
+      'builtin.emotes' => MoreDrawerItem.emotes,
+      'builtin.developer' => MoreDrawerItem.developer,
+      _ => MoreDrawerItem.none,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            children: [Text('更多', style: AppTypography.pageTitle(context))],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            children: [
+              ..._buildGroups(),
+            ],
+          ),
+        ),
+        _DrawerBackBottomArea(onBack: onBack),
+      ],
+    );
+  }
+}
+
+class _MoreGroup extends StatelessWidget {
+  final String label;
+  final List<_MoreItemData> items;
+  final ValueChanged<String> onNavigate;
+  final MoreDrawerItem selectedItem;
+  final String currentRoute;
+
+  const _MoreGroup({
+    required this.label,
+    required this.items,
+    required this.onNavigate,
+    required this.selectedItem,
+    required this.currentRoute,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 12, 15),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [context.accentPrimary, context.accentSecondary],
-              ),
-            ),
-            alignment: Alignment.center,
-            child: const Text(
-              _placeholderCharacterInitial,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _placeholderCharacterName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: context.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _placeholderCharacterStatus,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: context.textTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-          _DrawerIconButton(
-            icon: Icons.search,
-            tooltip: '全局搜索',
-            onTap: onSearchTap,
-          ),
-          const SizedBox(width: 6),
-          _DrawerIconButton(
-            icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-            tooltip: '切换深浅色模式',
-            onTap: onToggleTheme,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DrawerIconButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  const _DrawerIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: tooltip,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          width: 31,
-          height: 31,
-          decoration: BoxDecoration(
-            color: context.surfaceSecondary,
-            borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: context.borderPrimary),
-          ),
-          alignment: Alignment.center,
-          child: Icon(icon, size: 16, color: context.textSecondary),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 20, top: 12, bottom: 4),
+          child: Text(label, style: AppTypography.label(context)),
         ),
-      ),
-    );
-  }
-}
-
-class _DrawerSectionLabel extends StatelessWidget {
-  final String text;
-
-  const _DrawerSectionLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 9.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.7,
-          color: context.textTertiary,
+        ...items.map(
+          (item) => _MainMenuItem(
+            icon: item.icon,
+            label: item.label,
+            isSelected: item.item == selectedItem ||
+                (item.item == MoreDrawerItem.none &&
+                    (currentRoute == item.route || currentRoute.startsWith('${item.route}/'))),
+            onTap: () => onNavigate(item.route),
+          ),
         ),
-      ),
+      ],
     );
   }
 }
 
-class _MainMenuItem extends StatelessWidget {
+class _MoreItemData {
   final IconData icon;
   final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
+  final String route;
+  final MoreDrawerItem item;
 
-  const _MainMenuItem({
+  const _MoreItemData({
     required this.icon,
     required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: isSelected,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          height: 43,
-          margin: const EdgeInsets.symmetric(vertical: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? context.accentSoft : Colors.transparent,
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(
-              color: isSelected
-                  ? context.accentPrimary.withValues(alpha: 0.18)
-                  : Colors.transparent,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: isSelected ? context.accentPrimary : context.textSecondary,
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: isSelected ? context.accentPrimary : context.textSecondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ExtensionMenuItem extends StatelessWidget {
-  final UINavigationItem item;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _ExtensionMenuItem({
+    required this.route,
     required this.item,
-    required this.isSelected,
-    required this.onTap,
   });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: isSelected,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 48),
-          margin: const EdgeInsets.symmetric(vertical: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: isSelected ? context.accentSoft : Colors.transparent,
-            borderRadius: BorderRadius.circular(13),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: context.surfaceSecondary,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                alignment: Alignment.center,
-                child: Icon(item.icon, size: 16, color: context.accentPrimary),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      item.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: context.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.extensionId ?? '扩展',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 8.8, color: context.textTertiary),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 15, color: context.textTertiary),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _DrawerBottomArea extends StatelessWidget {
@@ -447,79 +423,117 @@ class _DrawerBottomArea extends StatelessWidget {
   const _DrawerBottomArea({
     required this.onSettingsTap,
     required this.settingsSelected,
-    required this.userName,
-    required this.userInitial,
+    this.userName = '无拘',
+    this.userInitial = '无',
   });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Divider(height: 1, color: context.borderSecondary),
+        Divider(height: 1, color: context.borderPrimary),
         Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-          child: Semantics(
-            button: true,
-            selected: settingsSelected,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onSettingsTap,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: settingsSelected ? context.accentSoft : Colors.transparent,
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [context.accentPrimary, context.accentSecondary],
-                        ),
+          padding: const EdgeInsets.fromLTRB(11, 8, 11, 12),
+          child: GestureDetector(
+            onTap: onSettingsTap,
+            child: Container(
+              padding: const EdgeInsets.all(11),
+              decoration: BoxDecoration(
+                color: context.surfacePrimary,
+                borderRadius: BorderRadius.circular(19),
+                border: Border.all(color: context.borderPrimary, width: 1),
+                boxShadow: [
+                  BoxShadow(
+                    color: context.scrim.withValues(alpha: 0.05),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(15),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          context.accentPrimary,
+                          context.accentSecondary,
+                        ],
                       ),
-                      alignment: Alignment.center,
+                    ),
+                    child: Center(
                       child: Text(
                         userInitial,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            userName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: context.textPrimary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          userName,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4F9B6B),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFF4F9B6B,
+                                    ).withValues(alpha: 0.2),
+                                    blurRadius: 4,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '设置与账号',
-                            style: TextStyle(fontSize: 9.5, color: context.textTertiary),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '本地运行',
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: context.textTertiary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    Icon(Icons.settings_outlined, size: 17, color: context.textTertiary),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.settings_outlined,
+                    size: 17,
+                    color: context.textTertiary,
+                  ),
+                ],
               ),
             ),
           ),
@@ -529,326 +543,167 @@ class _DrawerBottomArea extends StatelessWidget {
   }
 }
 
-class _SearchPageTarget {
-  final String label;
-  final String description;
-  final String route;
-  final IconData icon;
+class _DrawerBackBottomArea extends StatelessWidget {
+  final VoidCallback onBack;
 
-  const _SearchPageTarget({
-    required this.label,
-    required this.description,
-    required this.route,
-    required this.icon,
-  });
-}
-
-const _builtinSearchTargets = <_SearchPageTarget>[
-  _SearchPageTarget(label: '对话', description: 'AI 对话', route: AppRoutes.chat, icon: Icons.chat_bubble_outline),
-  _SearchPageTarget(label: '角色管理', description: 'AI 角色编辑', route: AppRoutes.characters, icon: Icons.people_outline),
-  _SearchPageTarget(label: '记忆总览', description: '长期记忆与关系数据', route: AppRoutes.memory, icon: Icons.memory_outlined),
-  _SearchPageTarget(label: '设备', description: '设备能力与连接状态', route: AppRoutes.settingsDevices, icon: Icons.devices_outlined),
-  _SearchPageTarget(label: '扩展中心', description: '扩展包与能力管理', route: AppRoutes.extensions, icon: Icons.extension_outlined),
-  _SearchPageTarget(label: '创意工坊', description: 'Skill 与桌宠制作', route: AppRoutes.workshop, icon: Icons.brush_outlined),
-  _SearchPageTarget(label: '渠道中心', description: '微信与 QQ 接入', route: AppRoutes.channels, icon: Icons.sync_alt),
-  _SearchPageTarget(label: '日程提醒', description: '主动陪伴与提醒', route: AppRoutes.reminders, icon: Icons.notifications_active_outlined),
-  _SearchPageTarget(label: '数据概览', description: '使用数据统计', route: AppRoutes.dashboard, icon: Icons.dashboard_outlined),
-  _SearchPageTarget(label: '聊天记录', description: '历史对话', route: AppRoutes.chatLogs, icon: Icons.history_edu_outlined),
-  _SearchPageTarget(label: '表情包', description: '聊天表情管理', route: AppRoutes.emotes, icon: Icons.emoji_emotions_outlined),
-  _SearchPageTarget(label: '设置', description: '账号、AI、数据与系统', route: AppRoutes.settings, icon: Icons.settings_outlined),
-];
-
-class _DrawerGlobalSearchPage extends ConsumerStatefulWidget {
-  final GoRouter router;
-
-  const _DrawerGlobalSearchPage({required this.router});
-
-  @override
-  ConsumerState<_DrawerGlobalSearchPage> createState() => _DrawerGlobalSearchPageState();
-}
-
-class _DrawerGlobalSearchPageState extends ConsumerState<_DrawerGlobalSearchPage> {
-  final _controller = TextEditingController();
-  final _focusNode = FocusNode();
-  String _query = '';
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _focusNode.requestFocus());
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  bool _matches(String label, String description) {
-    final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return false;
-    return label.toLowerCase().contains(q) || description.toLowerCase().contains(q);
-  }
-
-  void _openRoute(String route) {
-    Navigator.of(context).pop();
-    widget.router.push(route);
-  }
+  const _DrawerBackBottomArea({required this.onBack});
 
   @override
   Widget build(BuildContext context) {
-    final characters = ref.watch(characterListProvider).valueOrNull ?? const [];
-    final runtimeItems = UINavigationRegistry.resolve(ref.watch(uiRuntimeProvider).valueOrNull);
-    final extensionTargets = runtimeItems
-        .where((item) => !item.builtin && (item.extensionId?.isNotEmpty ?? false))
-        .map(
-          (item) => _SearchPageTarget(
-            label: item.label,
-            description: '扩展 · ${item.extensionId}',
-            route: item.route,
-            icon: item.icon,
-          ),
-        )
-        .toList(growable: false);
-    final pages = <_SearchPageTarget>[..._builtinSearchTargets, ...extensionTargets]
-        .where((item) => _matches(item.label, item.description))
-        .toList(growable: false);
-    final matchedCharacters = characters
-        .where((character) => _matches(character.name, '${character.identity} ${character.description}'))
-        .toList(growable: false);
-    final hasQuery = _query.trim().isNotEmpty;
-
-    return Material(
-      color: context.backgroundPrimary,
-      child: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              height: 58,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+    return Column(
+      children: [
+        Divider(height: 1, color: context.borderPrimary),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(11, 8, 11, 12),
+          child: GestureDetector(
+            onTap: onBack,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: context.backgroundPrimary,
-                border: Border(bottom: BorderSide(color: context.borderSecondary)),
+                color: context.surfacePrimary,
+                borderRadius: BorderRadius.circular(19),
+                border: Border.all(color: context.borderPrimary, width: 1),
               ),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => Navigator.of(context).pop(),
-                    child: SizedBox(
-                      width: 38,
-                      height: 38,
-                      child: Icon(Icons.arrow_back_ios_new, size: 18, color: context.textSecondary),
-                    ),
+                  Icon(
+                    Icons.arrow_back_ios_new,
+                    size: 17,
+                    color: context.textSecondary,
                   ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Container(
-                      height: 40,
-                      padding: const EdgeInsets.symmetric(horizontal: 11),
-                      decoration: BoxDecoration(
-                        color: context.surfacePrimary,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: context.borderPrimary),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.search, size: 17, color: context.textTertiary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: _controller,
-                              focusNode: _focusNode,
-                              onChanged: (value) => setState(() => _query = value),
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                isDense: true,
-                                hintText: '搜索功能、角色...',
-                              ),
-                              style: TextStyle(fontSize: 13, color: context.textPrimary),
-                            ),
-                          ),
-                          if (_controller.text.isNotEmpty)
-                            GestureDetector(
-                              onTap: () {
-                                _controller.clear();
-                                setState(() => _query = '');
-                                _focusNode.requestFocus();
-                              },
-                              child: SizedBox(
-                                width: 28,
-                                height: 28,
-                                child: Icon(Icons.close, size: 16, color: context.textTertiary),
-                              ),
-                            ),
-                        ],
-                      ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '返回主菜单',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: context.textSecondary,
                     ),
                   ),
                 ],
               ),
             ),
-            Expanded(
-              child: !hasQuery
-                  ? _SearchEmptyHint(
-                      icon: Icons.search,
-                      text: '输入关键词搜索页面或角色',
-                    )
-                  : pages.isEmpty && matchedCharacters.isEmpty
-                      ? _SearchEmptyHint(
-                          icon: Icons.search_off_outlined,
-                          text: '未找到匹配结果',
-                        )
-                      : ListView(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                          children: [
-                            if (pages.isNotEmpty) ...[
-                              const _SearchSectionTitle('页面'),
-                              ...pages.map(
-                                (item) => _GlobalSearchRow(
-                                  icon: item.icon,
-                                  title: item.label,
-                                  subtitle: item.description,
-                                  onTap: () => _openRoute(item.route),
-                                ),
-                              ),
-                            ],
-                            if (matchedCharacters.isNotEmpty) ...[
-                              const _SearchSectionTitle('角色'),
-                              ...matchedCharacters.map(
-                                (character) => _GlobalSearchRow(
-                                  icon: Icons.person_outline,
-                                  title: character.name,
-                                  subtitle: character.identity.isNotEmpty
-                                      ? character.identity
-                                      : '角色',
-                                  onTap: () => _openRoute(AppRoutes.character(character.id)),
-                                  accent: true,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
 
-class _SearchEmptyHint extends StatelessWidget {
-  final IconData icon;
-  final String text;
+class _DrawerHeader extends StatelessWidget {
+  final String name;
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+  final VoidCallback onSearchTap;
 
-  const _SearchEmptyHint({required this.icon, required this.text});
+  const _DrawerHeader({
+    required this.name,
+    required this.isDark,
+    required this.onToggleTheme,
+    required this.onSearchTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+      child: Row(
         children: [
-          Icon(icon, size: 28, color: context.textTertiary),
-          const SizedBox(height: 10),
-          Text(text, style: TextStyle(fontSize: 11.5, color: context.textTertiary)),
+          Expanded(
+            child: Text(
+              name,
+              style: AppTypography.pageTitle(context).copyWith(fontSize: 17),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.search, size: 22),
+            onPressed: onSearchTap,
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            icon: Icon(
+              isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              size: 22,
+            ),
+            onPressed: onToggleTheme,
+            visualDensity: VisualDensity.compact,
+          ),
         ],
       ),
     );
   }
 }
 
-class _SearchSectionTitle extends StatelessWidget {
-  final String text;
-
-  const _SearchSectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 10, 8, 5),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 9.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
-          color: context.textTertiary,
-        ),
-      ),
-    );
-  }
-}
-
-class _GlobalSearchRow extends StatelessWidget {
+class _MainMenuItem extends StatelessWidget {
   final IconData icon;
-  final String title;
-  final String subtitle;
+  final String label;
+  final bool isSelected;
+  final bool showArrow;
   final VoidCallback onTap;
-  final bool accent;
 
-  const _GlobalSearchRow({
+  const _MainMenuItem({
     required this.icon,
-    required this.title,
-    required this.subtitle,
+    required this.label,
+    required this.isSelected,
+    this.showArrow = false,
     required this.onTap,
-    this.accent = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 54),
-          padding: const EdgeInsets.all(8),
+    final variant = context.uiComponentVariant('navigationItem');
+    double number(String key, double fallback) =>
+        variant[key] is num ? (variant[key] as num).toDouble() : fallback;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: number('outerPaddingX', 12),
+          vertical: number('outerPaddingY', 2),
+        ),
+        child: AnimatedContainer(
+          duration: AppMotion.standard,
+          curve: AppMotion.standardCurve,
+          constraints: BoxConstraints(minHeight: number('minHeight', 44)),
+          padding: EdgeInsets.symmetric(
+            horizontal: number('paddingX', 12),
+            vertical: number('paddingY', 11),
+          ),
+          decoration: BoxDecoration(
+            color: isSelected ? context.accentSoft : Colors.transparent,
+            borderRadius: BorderRadius.circular(number('radius', AppRadius.small)),
+          ),
           child: Row(
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: accent ? context.accentSoft : context.surfaceSecondary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  icon,
-                  size: 17,
-                  color: accent ? context.accentPrimary : context.textSecondary,
+              Icon(
+                icon,
+                size: number('iconSize', 20),
+                color: isSelected
+                    ? context.accentPrimary
+                    : context.textSecondary,
+              ),
+              const SizedBox(width: 14),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
+                  color: isSelected
+                      ? context.accentPrimary
+                      : context.textPrimary,
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: context.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 9.5, color: context.textTertiary),
-                    ),
-                  ],
+              const Spacer(),
+              if (showArrow)
+                Icon(
+                  Icons.chevron_right,
+                  color: context.textTertiary,
+                  size: 22,
                 ),
-              ),
-              Icon(Icons.chevron_right, size: 16, color: context.textTertiary),
             ],
           ),
         ),
