@@ -652,6 +652,72 @@ class ExtensionService {
         <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> exportWorkflow(String id) async {
+    return await _api.get<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}/export',
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> importWorkflow(Map<String, dynamic> payload) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/import',
+          data: payload,
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<List<Map<String, dynamic>>> workflowTemplates() async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/workflows/templates');
+    final items = resp?['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);
+  }
+
+  Future<void> saveWorkflowTemplate(String id, {String name = '', String description = ''}) async {
+    await _api.post(
+      '/api/extensions/workflows/${Uri.encodeComponent(id)}/templates',
+      data: {'name': name, 'description': description},
+    );
+  }
+
+  Future<Map<String, dynamic>> instantiateWorkflowTemplate(String templateId, {String name = ''}) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/templates/${Uri.encodeComponent(templateId)}/instantiate',
+          data: {'name': name},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<void> deleteWorkflowTemplate(String templateId) async {
+    await _api.delete('/api/extensions/workflows/templates/${Uri.encodeComponent(templateId)}');
+  }
+
+  Future<List<Map<String, dynamic>>> workflowRevisions(String id, {int limit = 50}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/workflows/${Uri.encodeComponent(id)}/revisions',
+      queryParameters: {'limit': limit.clamp(1, 100)},
+    );
+    final items = resp?['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> createWorkflowRevision(String id, {String note = ''}) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}/revisions',
+          data: {'note': note},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> rollbackWorkflowRevision(String id, String revisionId) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}/revisions/${Uri.encodeComponent(revisionId)}/rollback',
+        ) ??
+        <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> duplicateWorkflow(String id) async {
     return await _api.post<Map<String, dynamic>>(
           '/api/extensions/workflows/${Uri.encodeComponent(id)}/duplicate',
