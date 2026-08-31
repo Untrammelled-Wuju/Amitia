@@ -92,6 +92,10 @@ const runtimeBehaviorFinalizationMigration = await read("backend/internal/migrat
 const migrations = await read("backend/internal/migration/migrations.go");
 const migrationBaseline = await read("backend/internal/migration/baseline.sql");
 const behaviorReducer = await read("backend/internal/desktoppet/behavior/reducer.go");
+const behaviorModel = await read("backend/internal/desktoppet/behavior/model.go");
+const behaviorPersistenceModels = await read("backend/internal/desktoppet/behavior/persistence/models.go");
+const behaviorPersistenceRepository = await read("backend/internal/desktoppet/behavior/persistence/repository.go");
+const behaviorSystemMigration = await read("backend/internal/migration/desktop_pet_behavior_system.go");
 const behaviorSchema = await read("backend/internal/desktoppet/behavior/schema.go");
 const behaviorPlaybackAdapter = await read("backend/internal/desktoppet/behavior/adapters/playback.go");
 const behaviorEnvelope = await read("backend/internal/desktoppet/behavior/events/envelope.go");
@@ -513,11 +517,22 @@ assert(
     mobileDesktopPetRuntime.includes("lastCompletedPlaybackId") &&
     mobileDesktopPetRuntime.includes("Runtime identity and cursor are incarnation-scoped") &&
     mobileDesktopPetRuntime.includes("runtime envelope sequence is stale or duplicated") &&
+    mobileDesktopPetRuntime.includes("runtime hello_ack connection generation regressed") &&
+    mobileDesktopPetRuntime.includes("runtime command replay payload mismatch") &&
+    mobileDesktopPetRuntime.includes("runtime command replay type mismatch") &&
+    mobileDesktopPetRuntime.includes("runtime command replay desired-state mismatch") &&
+    mobileDesktopPetRuntime.includes("durable command post-execution acknowledgement failed") &&
     mobileDesktopPetRuntime.includes("final playedMs = _nonNegativeInt(native['lastCompletedPlayedMs'])") &&
     mobileDesktopPetRuntime.includes("final playedMs = _nonNegativeInt(rendererStop['stoppedPlayedMs'])") &&
+    mobileDesktopPetRuntime.includes("tracked.pollInFlight") &&
+    mobileDesktopPetRuntime.includes("playback lifecycle delivery failed") &&
+    mobileDesktopPetRuntime.includes("_playback == tracked && tracked.pollTimer == null") &&
+    mobileDesktopPetRuntime.includes("_positionFlushSerial.then<void>") &&
+    mobileDesktopPetRuntime.includes("_sendPeriodicSnapshotSafely") &&
+    mobileDesktopPetRuntime.includes("_flushPendingRendererInteractions") &&
     mobileDesktopPetRuntime.includes("preservePositionMode: true") &&
     mobileDesktopPetRuntime.includes("_persistRuntimePosition(") &&
-    mobileDesktopPetRuntime.includes("final settings = _map(updated['settings'])") &&
+    mobileDesktopPetRuntime.includes("must not advance appliedSettingsRevision here") &&
     mobileDesktopPetRuntime.includes("桌宠居中位置保存失败") &&
     !mobileDesktopPetRuntime.includes("difference(tracked.startedAt)") &&
     !mobileDesktopPetRuntime.includes("_prefsRuntimeId") &&
@@ -596,8 +611,24 @@ assert(
 );
 
 assert(
+  behaviorReducer.includes("behaviorEventIdentity") &&
+    behaviorReducer.includes("ctx.RecentEventKeys") &&
+    behaviorReducer.includes("appendRecentEventKey(&next, event)") &&
+    behaviorModel.includes("RecentEventKeys") &&
+    behaviorModel.includes("MaxRecentEventKeys = 128") &&
+    behaviorPersistenceModels.includes('gorm:"column:recent_event_keys_json"') &&
+    behaviorPersistenceRepository.includes('"recent_event_keys_json"') &&
+    behaviorSystemMigration.includes("DesktopPetBehaviorReducerDedupMigration") &&
+    behaviorSystemMigration.includes('recent_event_keys_json') &&
+    migrations.includes("DesktopPetBehaviorReducerDedupMigration()") &&
+    migrationBaseline.includes("recent_event_keys_json TEXT NOT NULL DEFAULT '[]'"),
+  "behavior reducer dedup must be real, bounded, persisted, and forward-migrated for ephemeral events",
+);
+
+assert(
   behaviorReducer.includes('case "runtime.pointer.clicked":') &&
-    behaviorReducer.includes('case "runtime.drag.completed", "runtime.drag.cancelled":') &&
+    behaviorReducer.includes('case "runtime.drag.completed":') &&
+    behaviorReducer.includes('case "runtime.drag.cancelled":') &&
     behaviorReducer.includes('case "runtime.playback.action_started":') &&
     !behaviorReducer.includes('case "desktop.pet.clicked":') &&
     !behaviorReducer.includes('case "playback.action.started":') &&

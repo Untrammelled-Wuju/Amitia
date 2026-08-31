@@ -141,6 +141,17 @@ assert(
   "desktop reconnect must drain admitted work and stop old-session physical playback",
 );
 assert(
+  manager.includes("bridgeGeneration += 1") &&
+    manager.includes("isBridgeGenerationCurrent(generation)") &&
+    manager.includes("bridgeConnectRequested") &&
+    manager.includes("generation !== this.bridgeGeneration") &&
+    manager.includes('errorCode: "RUNTIME_SESSION_SUPERSEDED"') &&
+    runtimeHandler.includes("reconnectGeneration += 1") &&
+    runtimeHandler.includes("reconnectDelayResolve") &&
+    runtimeHandler.includes("generation !== this.reconnectGeneration"),
+  "desktop bridge and Runtime auto-reconnect must be generation-fenced and cancellable across stop/restart",
+);
+assert(
   !runtimeCommandAckWindow.includes("desiredRevision <= this.lastAppliedDesiredRevision") &&
     manager.includes("validateDesiredCommandRevision") &&
     manager.includes('errorCode: "STALE_DESIRED_REVISION"') &&
