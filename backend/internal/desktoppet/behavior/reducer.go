@@ -53,6 +53,7 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 	}
 
 	changed := false
+	contextOnlyChanged := false
 	layersChanged := []string{}
 
 	switch event.EventType {
@@ -114,7 +115,10 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		}
 
 	case "agent.tool.progress":
-		changed = r.reduceToolProgress(&next, event)
+		contextOnlyChanged = r.reduceToolProgress(&next, event)
+		if contextOnlyChanged {
+			layersChanged = append(layersChanged, "activeTools")
+		}
 
 	case "agent.tool.completed":
 		changed = r.reduceToolCompleted(&next, event)
@@ -147,7 +151,10 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		}
 
 	case "voice.listening.activity":
-		changed = r.reduceVoiceListeningActivity(&next, event)
+		contextOnlyChanged = r.reduceVoiceListeningActivity(&next, event)
+		if contextOnlyChanged {
+			layersChanged = append(layersChanged, "voice")
+		}
 
 	case "voice.listening.ended":
 		changed = r.reduceVoiceListeningEnded(&next, event)
@@ -234,8 +241,18 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		}
 
 	case "runtime.pointer.hovered":
-		changed = r.reduceDesktopHovered(&next, event)
-		if changed {
+		hoverWasActive := next.DesktopGesture.CurrentGesture == "hovered" &&
+			!next.DesktopGesture.ExpiresAt.IsZero() &&
+			now.Before(next.DesktopGesture.ExpiresAt)
+		hoverUpdated := r.reduceDesktopHovered(&next, event)
+		if hoverUpdated {
+			if hoverWasActive {
+				// Pointer movement while already hovered is a lease refresh. Re-running
+				// behavior arbitration for every mousemove creates a decision/write storm.
+				contextOnlyChanged = true
+			} else {
+				changed = true
+			}
 			layersChanged = append(layersChanged, "desktopGesture")
 		}
 
@@ -246,10 +263,19 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		}
 
 	case "runtime.drag.moved":
-		changed = r.reduceDesktopDragMoved(&next, event)
+		contextOnlyChanged = r.reduceDesktopDragMoved(&next, event)
+		if contextOnlyChanged {
+			layersChanged = append(layersChanged, "desktopGesture")
+		}
 
-	case "runtime.drag.completed", "runtime.drag.cancelled":
+	case "runtime.drag.completed":
 		changed = r.reduceDesktopDragEnded(&next, event)
+		if changed {
+			layersChanged = append(layersChanged, "desktopGesture")
+		}
+
+	case "runtime.drag.cancelled":
+		changed = r.reduceDesktopDragCancelled(&next, event)
 		if changed {
 			layersChanged = append(layersChanged, "desktopGesture")
 		}
@@ -273,9 +299,13 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		}
 
 	case "runtime.playback.action_started":
-		changed = r.reducePlaybackStarted(&next, event)
-		if changed {
+		previousGesture := next.DesktopGesture.CurrentGesture
+		contextOnlyChanged = r.reducePlaybackStarted(&next, event)
+		if contextOnlyChanged {
 			layersChanged = append(layersChanged, "foreground")
+			if previousGesture != next.DesktopGesture.CurrentGesture {
+				layersChanged = append(layersChanged, "desktopGesture")
+			}
 		}
 
 	case "runtime.playback.action_completed":
@@ -323,7 +353,13 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		return next, result, nil
 	}
 
-	r.checkLeases(&next, now)
+	leaseLayers := r.checkLeases(&next, now)
+	if len(leaseLayers) > 0 {
+		changed = true
+		for _, layer := range leaseLayers {
+			layersChanged = appendLayerOnce(layersChanged, layer)
+		}
+	}
 
 	sequenceAdvanced := false
 	if sequenceKey != "" {
@@ -336,7 +372,7 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		}
 	}
 
-	contextChanged := changed || sequenceAdvanced
+	contextChanged := changed || contextOnlyChanged || sequenceAdvanced
 	result.ContextChanged = contextChanged
 	result.LayersChanged = layersChanged
 	// Advancing only the source sequence is persistence metadata, not a reason
@@ -397,36 +433,36 @@ func (r *Reducer) isDuplicateEvent(ctx BehaviorContextSnapshot, event BehaviorEv
 	return false
 }
 
-func (r *Reducer) checkLeases(ctx *BehaviorContextSnapshot, now time.Time) {
-	if ctx.Transient.InteractionPhase != "" {
-		hasActiveLease := false
-		for _, tool := range ctx.ActiveTools {
-			if now.Before(tool.LeaseExpiresAt) {
-				hasActiveLease = true
-				break
-			}
+func appendLayerOnce(layers []string, layer string) []string {
+	for _, existing := range layers {
+		if existing == layer {
+			return layers
 		}
-		_ = hasActiveLease
 	}
+	return append(layers, layer)
+}
 
-	expired := []string{}
+func (r *Reducer) checkLeases(ctx *BehaviorContextSnapshot, now time.Time) []string {
+	layersChanged := []string{}
+
 	for opID, tool := range ctx.ActiveTools {
-		if now.After(tool.LeaseExpiresAt) {
-			expired = append(expired, opID)
-		}
-	}
-	for _, opID := range expired {
-		delete(ctx.ActiveTools, opID)
-	}
-
-	if ctx.Voice.State != "" && ctx.Voice.LeaseExpiresAt.After(time.Time{}) {
-		if now.After(ctx.Voice.LeaseExpiresAt) {
-			ctx.Voice = VoiceBehaviorState{}
+		if !tool.LeaseExpiresAt.IsZero() && !now.Before(tool.LeaseExpiresAt) {
+			delete(ctx.ActiveTools, opID)
+			layersChanged = appendLayerOnce(layersChanged, "activeTools")
 		}
 	}
 
-	if ctx.DesktopGesture.CurrentGesture == "drag" {
+	if ctx.Voice.State != "" && !ctx.Voice.LeaseExpiresAt.IsZero() && !now.Before(ctx.Voice.LeaseExpiresAt) {
+		ctx.Voice = VoiceBehaviorState{}
+		layersChanged = appendLayerOnce(layersChanged, "voice")
 	}
+
+	if ctx.DesktopGesture.CurrentGesture != "" && !ctx.DesktopGesture.ExpiresAt.IsZero() && !now.Before(ctx.DesktopGesture.ExpiresAt) {
+		ctx.DesktopGesture = DesktopGestureState{}
+		layersChanged = appendLayerOnce(layersChanged, "desktopGesture")
+	}
+
+	return layersChanged
 }
 
 func phaseRank(phase string) int {
@@ -616,7 +652,7 @@ func (r *Reducer) reduceToolProgress(ctx *BehaviorContextSnapshot, event Behavio
 		existing.LastActivityAt = r.clock.Now()
 		existing.LeaseExpiresAt = r.clock.Now().Add(5 * time.Minute)
 		ctx.ActiveTools[opID] = existing
-		return false
+		return true
 	}
 	return false
 }
@@ -643,12 +679,17 @@ func (r *Reducer) reduceToolCancelled(ctx *BehaviorContextSnapshot, event Behavi
 }
 
 func (r *Reducer) reduceVoiceSessionStarted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
-	if ctx.Voice.SessionID == event.SessionID {
+	now := r.clock.Now()
+	if ctx.Voice.SessionID == event.SessionID &&
+		ctx.Voice.State != "" &&
+		!ctx.Voice.LeaseExpiresAt.IsZero() &&
+		now.Before(ctx.Voice.LeaseExpiresAt) {
 		return false
 	}
 	ctx.Voice = VoiceBehaviorState{
-		SessionID: event.SessionID,
-		State:     "listening",
+		SessionID:      event.SessionID,
+		State:          "listening",
+		LeaseExpiresAt: now.Add(15 * time.Second),
 	}
 	return true
 }
@@ -679,7 +720,7 @@ func (r *Reducer) reduceVoiceListeningActivity(ctx *BehaviorContextSnapshot, eve
 		return false
 	}
 	ctx.Voice.LeaseExpiresAt = r.clock.Now().Add(15 * time.Second)
-	return false
+	return true
 }
 
 func (r *Reducer) reduceVoiceListeningEnded(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
@@ -784,15 +825,20 @@ func (r *Reducer) reduceActivityChanged(ctx *BehaviorContextSnapshot, event Beha
 	confidence, _ := payload["confidence"].(float64)
 	version, _ := payload["version"].(string)
 
-	if ctx.Stable.ActivityKey == activityKey && ctx.Stable.ActivitySource == source {
+	if version != "" && ctx.Stable.ActivityVersion == version {
+		return false
+	}
+	if version == "" &&
+		ctx.Stable.ActivityKey == activityKey &&
+		ctx.Stable.ActivitySource == source &&
+		ctx.Stable.ActivityConfidence == confidence {
 		return false
 	}
 
 	ctx.Stable.ActivityKey = activityKey
 	ctx.Stable.ActivitySource = source
 	ctx.Stable.ActivityConfidence = confidence
-	if version != "" {
-	}
+	ctx.Stable.ActivityVersion = version
 	return true
 }
 
@@ -844,86 +890,142 @@ func desktopEventSequence(event BehaviorEventEnvelope, payload map[string]interf
 	return int64(getInt(payload, "sequence"))
 }
 
-func (r *Reducer) reduceDesktopClicked(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
+func (r *Reducer) desktopGestureExpiry(_ BehaviorEventEnvelope, minimumLease time.Duration) time.Time {
+	// Lease arithmetic must stay in the backend clock domain. Runtime events can
+	// originate on another device whose wall clock is skewed relative to the
+	// cloud/core process; using occurredAt here can pin or instantly expire a
+	// gesture even though the event itself was accepted now.
+	return r.clock.Now().Add(minimumLease)
+}
+
+func (r *Reducer) setDesktopGesture(
+	ctx *BehaviorContextSnapshot,
+	event BehaviorEventEnvelope,
+	gesture string,
+	minimumLease time.Duration,
+) bool {
 	payload := parsePayload(event.Payload)
 	seq := desktopEventSequence(event, payload)
 	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
 		return false
 	}
-	ctx.DesktopGesture.CurrentGesture = "clicked"
-	ctx.DesktopGesture.Sequence = seq
-	ctx.DesktopGesture.PendingClickWin = false
+	gestureID, _ := payload["gestureId"].(string)
+	ctx.DesktopGesture = DesktopGestureState{
+		CurrentGesture:  gesture,
+		GestureID:       gestureID,
+		Sequence:        seq,
+		ExpiresAt:       r.desktopGestureExpiry(event, minimumLease),
+		PendingClickWin: false,
+	}
 	return true
+}
+
+func (r *Reducer) reduceDesktopClicked(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
+	return r.setDesktopGesture(ctx, event, "clicked", 2*time.Second)
 }
 
 func (r *Reducer) reduceDesktopDoubleClicked(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
-	payload := parsePayload(event.Payload)
-	seq := desktopEventSequence(event, payload)
-	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
-		return false
-	}
-	ctx.DesktopGesture.CurrentGesture = "double_clicked"
-	ctx.DesktopGesture.Sequence = seq
-	ctx.DesktopGesture.PendingClickWin = false
-	return true
+	return r.setDesktopGesture(ctx, event, "double_clicked", 2*time.Second)
 }
 
 func (r *Reducer) reduceDesktopHovered(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
-	ctx.DesktopGesture.CurrentGesture = "hovered"
-	return true
+	return r.setDesktopGesture(ctx, event, "hovered", time.Second)
 }
 
 func (r *Reducer) reduceDesktopDragStarted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
-	payload := parsePayload(event.Payload)
-	seq := desktopEventSequence(event, payload)
-	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
-		return false
-	}
-	ctx.DesktopGesture.CurrentGesture = "drag"
-	ctx.DesktopGesture.Sequence = seq
-	ctx.DesktopGesture.PendingClickWin = false
-	return true
+	return r.setDesktopGesture(ctx, event, "drag", 2*time.Second)
 }
 
 func (r *Reducer) reduceDesktopDragMoved(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
-	return false
+	// Drag movement is a lease refresh, not a new semantic decision. The manager
+	// sends these events at a bounded cadence so a stalled/disconnected drag can
+	// still expire instead of pinning the character in gesture_drag forever.
+	return r.setDesktopGesture(ctx, event, "drag", 2*time.Second)
 }
 
 func (r *Reducer) reduceDesktopDragEnded(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
+	return r.setDesktopGesture(ctx, event, "dropped", 3*time.Second)
+}
+
+func (r *Reducer) reduceDesktopDragCancelled(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
+	// Cancellation means the drag gesture ceased without a successful drop. It
+	// must never be converted into `dropped`, otherwise the resolver schedules a
+	// gesture_drop/land animation for pointer-capture loss, Escape/cancel paths,
+	// or renderer teardown. Clear only an active drag and let normal stable
+	// recovery arbitration choose what should play next.
+	if ctx.DesktopGesture.CurrentGesture != "drag" {
+		return false
+	}
+
 	payload := parsePayload(event.Payload)
 	seq := desktopEventSequence(event, payload)
 	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
 		return false
 	}
-	ctx.DesktopGesture.CurrentGesture = "dropped"
-	ctx.DesktopGesture.Sequence = seq
+	if gestureID, _ := payload["gestureId"].(string); gestureID != "" && ctx.DesktopGesture.GestureID != "" && gestureID != ctx.DesktopGesture.GestureID {
+		return false
+	}
+
+	ctx.DesktopGesture = DesktopGestureState{}
 	return true
 }
 
 func (r *Reducer) reduceDesktopFallStarted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
-	ctx.DesktopGesture.CurrentGesture = "fall"
-	return true
+	return r.setDesktopGesture(ctx, event, "fall", 3*time.Second)
 }
 
 func (r *Reducer) reduceDesktopEdgeReached(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
-	ctx.DesktopGesture.CurrentGesture = "edge"
-	return true
+	return r.setDesktopGesture(ctx, event, "edge", 3*time.Second)
 }
 
 func (r *Reducer) reduceDesktopInteracted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
-	seq := desktopEventSequence(event, payload)
-	if seq > 0 && seq <= ctx.DesktopGesture.Sequence {
-		return false
-	}
 	interactionType, _ := payload["interactionType"].(string)
 	if interactionType == "" {
 		interactionType = "interacted"
 	}
-	ctx.DesktopGesture.CurrentGesture = interactionType
-	ctx.DesktopGesture.Sequence = seq
-	ctx.DesktopGesture.PendingClickWin = false
-	return true
+	return r.setDesktopGesture(ctx, event, interactionType, 5*time.Second)
+}
+
+func playbackStartedAt(_ BehaviorEventEnvelope, backendNow time.Time) time.Time {
+	// Foreground timing participates in backend arbitration. Keep minimum/maximum
+	// play windows in the same clock domain as the arbiter instead of trusting a
+	// device wall clock that can be skewed.
+	return backendNow
+}
+
+func foregroundMatchesPlayback(ctx *BehaviorContextSnapshot, payload map[string]interface{}) bool {
+	if ctx.Foreground.DecisionID == "" && ctx.Foreground.CommandID == "" {
+		return false
+	}
+	decisionID, _ := payload["decisionId"].(string)
+	if decisionID != "" {
+		return ctx.Foreground.DecisionID == decisionID
+	}
+	commandID, _ := payload["commandId"].(string)
+	if commandID != "" {
+		return ctx.Foreground.CommandID == commandID
+	}
+	return false
+}
+
+func consumeGestureForSemantic(ctx *BehaviorContextSnapshot, semantic string) {
+	matches := false
+	switch semantic {
+	case "gesture_click":
+		matches = ctx.DesktopGesture.CurrentGesture == "clicked"
+	case "gesture_double_click":
+		matches = ctx.DesktopGesture.CurrentGesture == "double_clicked"
+	case "gesture_hover":
+		matches = ctx.DesktopGesture.CurrentGesture == "hovered"
+	case "gesture_drop":
+		matches = ctx.DesktopGesture.CurrentGesture == "dropped" || ctx.DesktopGesture.CurrentGesture == "fall"
+	case "physics_edge_sit":
+		matches = ctx.DesktopGesture.CurrentGesture == "edge"
+	}
+	if matches {
+		ctx.DesktopGesture = DesktopGestureState{}
+	}
 }
 
 func (r *Reducer) reducePlaybackStarted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
@@ -931,23 +1033,43 @@ func (r *Reducer) reducePlaybackStarted(ctx *BehaviorContextSnapshot, event Beha
 	decisionID, _ := payload["decisionId"].(string)
 	commandID, _ := payload["commandId"].(string)
 	actionKey, _ := payload["actionKey"].(string)
+	semantic, _ := payload["semantic"].(string)
 
-	if ctx.Foreground.DecisionID != "" && decisionID != "" && ctx.Foreground.DecisionID != decisionID {
-		return false
+	startedAt := playbackStartedAt(event, r.clock.Now())
+	interruptible := true
+	if value, ok := payload["interruptible"].(bool); ok {
+		interruptible = value
 	}
 
-	now := r.clock.Now()
-	ctx.Foreground.DecisionID = decisionID
-	ctx.Foreground.CommandID = commandID
-	ctx.Foreground.ActionKey = actionKey
-	ctx.Foreground.StartedAt = &now
+	foreground := ForegroundActionState{
+		DecisionID:      decisionID,
+		CommandID:       commandID,
+		Semantic:        semantic,
+		ActionKey:       actionKey,
+		StartedAt:       &startedAt,
+		Interruptible:   interruptible,
+		InstallationRev: int64(getInt(payload, "installationRevision")),
+	}
+	if minimumPlayMS := getInt(payload, "minimumPlayMs"); minimumPlayMS > 0 {
+		until := startedAt.Add(time.Duration(minimumPlayMS) * time.Millisecond)
+		foreground.MinPlayUntil = &until
+	}
+	if maximumPlayMS := getInt(payload, "maximumPlayMs"); maximumPlayMS > 0 {
+		until := startedAt.Add(time.Duration(maximumPlayMS) * time.Millisecond)
+		foreground.MaxPlayUntil = &until
+	}
+
+	// action_started is physical truth. A replacement may legitimately start
+	// before the interrupted terminal event for the old playback arrives, so the
+	// new foreground must supersede the old one rather than being rejected.
+	ctx.Foreground = foreground
+	consumeGestureForSemantic(ctx, semantic)
 	return true
 }
 
 func (r *Reducer) reducePlaybackCompleted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
-	decisionID, _ := payload["decisionId"].(string)
-	if decisionID != "" && ctx.Foreground.DecisionID != decisionID {
+	if !foregroundMatchesPlayback(ctx, payload) {
 		return false
 	}
 	ctx.Foreground = ForegroundActionState{}
@@ -956,8 +1078,7 @@ func (r *Reducer) reducePlaybackCompleted(ctx *BehaviorContextSnapshot, event Be
 
 func (r *Reducer) reducePlaybackInterrupted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
-	decisionID, _ := payload["decisionId"].(string)
-	if decisionID != "" && ctx.Foreground.DecisionID != decisionID {
+	if !foregroundMatchesPlayback(ctx, payload) {
 		return false
 	}
 	ctx.Foreground = ForegroundActionState{}
@@ -966,8 +1087,7 @@ func (r *Reducer) reducePlaybackInterrupted(ctx *BehaviorContextSnapshot, event 
 
 func (r *Reducer) reducePlaybackFailed(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
-	decisionID, _ := payload["decisionId"].(string)
-	if decisionID != "" && ctx.Foreground.DecisionID != decisionID {
+	if !foregroundMatchesPlayback(ctx, payload) {
 		return false
 	}
 	ctx.Foreground = ForegroundActionState{}

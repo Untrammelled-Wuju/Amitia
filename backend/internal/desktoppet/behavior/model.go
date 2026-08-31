@@ -59,6 +59,7 @@ type StableBehaviorState struct {
 	ActivityKey        string  `json:"activityKey,omitempty"`
 	ActivitySource     string  `json:"activitySource,omitempty"`
 	ActivityConfidence float64 `json:"activityConfidence,omitempty"`
+	ActivityVersion    string  `json:"activityVersion,omitempty"`
 	AffectLabel        string  `json:"affectLabel,omitempty"`
 	AffectVersion      string  `json:"affectVersion,omitempty"`
 	TimePeriod         string  `json:"timePeriod,omitempty"`
@@ -94,10 +95,11 @@ type VoiceBehaviorState struct {
 }
 
 type DesktopGestureState struct {
-	CurrentGesture  string `json:"currentGesture,omitempty"`
-	GestureID       string `json:"gestureId,omitempty"`
-	Sequence        int64  `json:"sequence,omitempty"`
-	PendingClickWin bool   `json:"pendingClickWin,omitempty"`
+	CurrentGesture  string    `json:"currentGesture,omitempty"`
+	GestureID       string    `json:"gestureId,omitempty"`
+	Sequence        int64     `json:"sequence,omitempty"`
+	ExpiresAt       time.Time `json:"expiresAt,omitempty"`
+	PendingClickWin bool      `json:"pendingClickWin,omitempty"`
 }
 
 type ForegroundActionState struct {

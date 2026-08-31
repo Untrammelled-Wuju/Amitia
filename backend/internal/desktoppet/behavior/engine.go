@@ -436,6 +436,64 @@ func (e *BehaviorEngine) runtimeExecutionConfig() (shadowMode, runtimeCommandEna
 	return e.config.ShadowMode, e.config.RuntimeCommandEnabled
 }
 
+func (e *BehaviorEngine) preparePlaybackEvent(ctx context.Context, event BehaviorEventEnvelope) (BehaviorEventEnvelope, error) {
+	switch event.EventType {
+	case "runtime.playback.action_started",
+		"runtime.playback.action_completed",
+		"runtime.playback.action_interrupted",
+		"runtime.playback.action_failed":
+	default:
+		return event, nil
+	}
+
+	payload := parsePayload(event.Payload)
+	decisionID, _ := payload["decisionId"].(string)
+	if decisionID == "" {
+		return event, nil
+	}
+
+	decision, err := e.repo.FindDecisionByID(ctx, decisionID)
+	if err != nil {
+		return event, fmt.Errorf("load playback decision: %w", err)
+	}
+	if decision == nil {
+		return event, NewBehaviorError(ErrCodeEventSchemaInvalid, "playback event references an unknown decision")
+	}
+	if event.UserID != "" && decision.UserID != "" && event.UserID != decision.UserID {
+		return event, NewBehaviorError(ErrCodeEventSchemaInvalid, "playback decision user mismatch")
+	}
+	if event.CharacterID != "" && decision.CharacterID != "" && event.CharacterID != decision.CharacterID {
+		return event, NewBehaviorError(ErrCodeEventSchemaInvalid, "playback decision character mismatch")
+	}
+	if event.InstallationID != "" && decision.InstallationID != "" && event.InstallationID != decision.InstallationID {
+		return event, NewBehaviorError(ErrCodeEventSchemaInvalid, "playback decision installation mismatch")
+	}
+	commandID, _ := payload["commandId"].(string)
+	if commandID != "" && decision.RuntimeCommandID != "" && commandID != decision.RuntimeCommandID {
+		return event, NewBehaviorError(ErrCodeEventSchemaInvalid, "playback runtime command mismatch")
+	}
+
+	if event.EventType != "runtime.playback.action_started" {
+		return event, nil
+	}
+
+	// Runtime playback feedback intentionally stays compact. Rehydrate the
+	// arbitration metadata from the committed decision so ForegroundActionState
+	// accurately reflects the action that is physically playing. Without this,
+	// the zero-value Interruptible=false made normal actions effectively
+	// uninterruptible after action_started.
+	payload["semantic"] = decision.Semantic
+	payload["interruptible"] = decision.InterruptPolicy != "uninterruptible"
+	payload["minimumPlayMs"] = decision.MinimumPlayMS
+	payload["maximumPlayMs"] = decision.MaximumPlayMS
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return event, fmt.Errorf("encode enriched playback payload: %w", err)
+	}
+	event.Payload = encoded
+	return event, nil
+}
+
 func (e *BehaviorEngine) processEvent(ctx context.Context, event BehaviorEventEnvelope) {
 	status, err := e.processEventOnce(ctx, event, "")
 	if err != nil {
@@ -450,6 +508,11 @@ func (e *BehaviorEngine) processEvent(ctx context.Context, event BehaviorEventEn
 }
 
 func (e *BehaviorEngine) processEventOnce(ctx context.Context, event BehaviorEventEnvelope, leaseToken string) (InboxStatus, error) {
+	preparedEvent, err := e.preparePlaybackEvent(ctx, event)
+	if err != nil {
+		return InboxRetry, err
+	}
+	event = preparedEvent
 	// Reliable inbox events use the decision row as their durable processing
 	// checkpoint. Ephemeral mailbox events deliberately skip this database lookup.
 	if leaseToken != "" {
