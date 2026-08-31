@@ -15,7 +15,6 @@ function getTestDataDir(): string {
 function createTestFiles(dataDir: string, corePath: string): void {
   const dirs = [
     path.join(dataDir, "config"),
-    path.join(dataDir, "data"),
     path.join(dataDir, "qdrant"),
     path.join(dataDir, "surrealdb"),
     path.dirname(corePath),
@@ -28,7 +27,6 @@ function createTestFiles(dataDir: string, corePath: string): void {
     "# test",
     "utf-8",
   );
-  fs.writeFileSync(path.join(dataDir, "data", "sql.sql"), "-- test", "utf-8");
   fs.writeFileSync(path.join(dataDir, "qdrant", "qdrant.zip"), "test", "utf-8");
   fs.writeFileSync(
     path.join(dataDir, "surrealdb", "surreal.zip"),
@@ -96,7 +94,7 @@ describe("validateCorePrerequisites", () => {
     const corePath = getTestCorePath();
     createTestFiles(dataDir, corePath);
     fs.rmSync(path.join(dataDir, "config", "config.yml"));
-    fs.rmSync(path.join(dataDir, "data", "sql.sql"));
+    fs.rmSync(path.join(dataDir, "qdrant", "qdrant.zip"));
 
     const result = validateCorePrerequisites(dataDir, corePath);
 
@@ -111,6 +109,6 @@ describe("validateCorePrerequisites", () => {
     const result = validateCorePrerequisites(dataDir, corePath);
 
     expect(result.ok).toBe(false);
-    expect(result.missing.length).toBe(5);
+    expect(result.missing.length).toBe(4);
   });
 });
