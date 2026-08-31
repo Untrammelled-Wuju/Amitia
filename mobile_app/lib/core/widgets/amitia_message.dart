@@ -1609,7 +1609,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
         child: Container(
           key: const ValueKey('chat-composer-surface'),
-          constraints: const BoxConstraints(minHeight: 86, maxHeight: 166),
+          constraints: const BoxConstraints(minHeight: 98, maxHeight: 170),
           decoration: BoxDecoration(
             color: context.surfacePrimary,
             borderRadius: BorderRadius.circular(23),
