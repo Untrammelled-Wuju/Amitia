@@ -5,6 +5,7 @@ package writeback
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -115,6 +116,9 @@ func (c *Committer) CommitEvaluation(ctx context.Context, req quality.CommitEval
 	if ev == nil {
 		return nil, quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "evaluation is nil", nil)
 	}
+	if req.ExecutionID == "" {
+		return nil, quality.NewQualityError(quality.ErrCodeExecutionOwnershipLost, "execution owner is empty", quality.ErrExecutionOwnershipLost)
+	}
 	evaluationID := ev.ID
 	now := time.Now().UTC().Format(time.RFC3339)
 
@@ -134,8 +138,12 @@ func (c *Committer) CommitEvaluation(ctx context.Context, req quality.CommitEval
 	err := c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txRepo := quality.NewRepository(tx)
 
-		if err := txRepo.UpdateEvaluation(ctx, ev); err != nil {
+		owned, err := txRepo.UpdateEvaluationOwned(ctx, ev, req.ExecutionID)
+		if err != nil {
 			return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to update evaluation", err)
+		}
+		if !owned {
+			return quality.NewQualityError(quality.ErrCodeExecutionOwnershipLost, "evaluation execution owner changed before commit", quality.ErrExecutionOwnershipLost)
 		}
 
 		findingRecords := quality.FindingsToRecords(req.Findings, evaluationID)
@@ -148,12 +156,6 @@ func (c *Committer) CommitEvaluation(ctx context.Context, req quality.CommitEval
 			return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to create dimension scores", err)
 		}
 
-		if req.ProcessingTaskID != "" && req.ActionKey != "" {
-			if err := txRepo.SetActiveEvaluation(ctx, req.ProcessingTaskID, req.ActionKey, evaluationID); err != nil {
-				return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to set active evaluation", err)
-			}
-		}
-
 		writebackReq := quality.QualityWritebackRequest{
 			ActionRevisionID:  ev.ActionRevisionID,
 			ContentHash:       ev.ActionContentHash,
@@ -164,17 +166,33 @@ func (c *Committer) CommitEvaluation(ctx context.Context, req quality.CommitEval
 			Score:             &req.OverallScore,
 			SourceContentHash: ev.ActionContentHash,
 		}
-		if err := c.writeback.WritebackQualitySnapshot(ctx, writebackReq); err != nil {
-			log.Logger.Warnf("committer: writeback failed for evaluation %s: %v", evaluationID, err)
+		// Use a tx-bound writeback service so the quality row, source revision
+		// projection, bindings, journal and outbox are one atomic commit.
+		txWriteback := NewQualityWritebackService(tx)
+		if err := txWriteback.WritebackQualitySnapshot(ctx, writebackReq); err != nil {
+			if errors.Is(err, quality.ErrWritebackStaleRevision) {
+				// The evaluation remains a valid historical result, but a stale
+				// source revision must never become the active quality result.
+				log.Logger.Warnf("committer: stale source revision skipped activation for evaluation %s", evaluationID)
+			} else {
+				return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to write back quality snapshot", err)
+			}
 		} else {
 			writebackApplied = true
-		}
 
-		if ev.ActionRevisionID != "" && ev.ProfileID != "" {
-			if err := c.activeBinding.BindActiveEvaluation(ctx, ev.ActionRevisionID, ev.ProfileID, evaluationID); err != nil {
-				return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to bind active evaluation", err)
+			if req.ProcessingTaskID != "" && req.ActionKey != "" {
+				if err := txRepo.SetActiveEvaluation(ctx, req.ProcessingTaskID, req.ActionKey, evaluationID); err != nil {
+					return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to set active evaluation", err)
+				}
 			}
-			activeBindingSet = true
+
+			if ev.ActionRevisionID != "" && ev.ProfileID != "" {
+				txBinding := NewActiveBindingService(txRepo)
+				if err := txBinding.BindActiveEvaluation(ctx, ev.ActionRevisionID, ev.ProfileID, evaluationID); err != nil {
+					return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to bind active evaluation", err)
+				}
+				activeBindingSet = true
+			}
 		}
 
 		stepsCompleted := "evaluation_updated,findings_persisted,scores_persisted"
@@ -188,36 +206,45 @@ func (c *Committer) CommitEvaluation(ctx context.Context, req quality.CommitEval
 			EvaluationID:   evaluationID,
 			CommitHash:     uuid.NewString(),
 			Status:         string(quality.EvalSucceeded),
-			StepsCompleted: stepsCompleted,
+			StepsCompleted: stepsCompleted + ",outbox_persisted",
 			CreatedAt:      now,
 			CompletedAt:    now,
 		}
-		return txRepo.CreateCommitJournal(ctx, journal)
+		if err := txRepo.CreateCommitJournal(ctx, journal); err != nil {
+			return err
+		}
+
+		outboxEvent := quality.QualityOutboxEvent{
+			EventType:        quality.OutboxEventEvaluationCompleted,
+			ExecutionID:      req.ExecutionID,
+			UserID:           ev.UserID,
+			CharacterID:      ev.CharacterID,
+			ProcessingTaskID: ev.ProcessingTaskID,
+			ActionKey:        ev.ActionKey,
+			ActionRevisionID: ev.ActionRevisionID,
+			EvaluationID:     evaluationID,
+			Status:           string(quality.EvalSucceeded),
+			Verdict:          string(req.Verdict),
+			OccurredAt:       now,
+		}
+		payloadJSON, err := json.Marshal(outboxEvent)
+		if err != nil {
+			return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to marshal outbox event", err)
+		}
+		outboxRecord := &quality.QualityOutboxEventRecord{
+			EventType:   quality.OutboxEventEvaluationCompleted,
+			PayloadJSON: string(payloadJSON),
+			Status:      "pending",
+		}
+		if err := txRepo.CreateOutboxEvent(ctx, outboxRecord); err != nil {
+			return quality.NewQualityError(quality.ErrCodeDatabaseCommitFailed, "failed to create outbox event", err)
+		}
+
+		return nil
 	})
 
 	if err != nil {
 		return nil, err
-	}
-
-	outboxEvent := quality.QualityOutboxEvent{
-		EventType:        quality.OutboxEventEvaluationCompleted,
-		UserID:           ev.UserID,
-		CharacterID:      ev.CharacterID,
-		ProcessingTaskID: ev.ProcessingTaskID,
-		ActionKey:        ev.ActionKey,
-		ActionRevisionID: ev.ActionRevisionID,
-		EvaluationID:     evaluationID,
-		Status:           string(quality.EvalSucceeded),
-		Verdict:          string(req.Verdict),
-		OccurredAt:       now,
-	}
-	payloadJSON, _ := json.Marshal(outboxEvent)
-	outboxRecord := &quality.QualityOutboxEventRecord{
-		EventType:   quality.OutboxEventEvaluationCompleted,
-		PayloadJSON: string(payloadJSON),
-	}
-	if err := c.repo.CreateOutboxEvent(ctx, outboxRecord); err != nil {
-		log.Logger.Errorf("committer: failed to create outbox event for %s: %v", evaluationID, err)
 	}
 
 	return &quality.CommitEvaluationResult{

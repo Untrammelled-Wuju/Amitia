@@ -4,6 +4,7 @@ package quality
 
 import (
 	"errors"
+	"io"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -136,7 +137,10 @@ func (h *Handler) Reevaluate(c *gin.Context) {
 	var payload struct {
 		QualityMode string `json:"qualityMode"`
 	}
-	_ = c.ShouldBindJSON(&payload)
+	if err := c.ShouldBindJSON(&payload); err != nil && !errors.Is(err, io.EOF) {
+		util.ErrorResponse(c, response.InvalidParams, "请求体 JSON 无效", gin.H{"errorCode": "INVALID_JSON"})
+		return
+	}
 
 	req := ReevaluateRequest{
 		EvaluationID: evaluationID,

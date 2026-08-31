@@ -5,6 +5,7 @@ package recovery
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/quality"
@@ -14,38 +15,81 @@ import (
 type RecoveryWorker struct {
 	repo         quality.QualityRepository
 	pollInterval time.Duration
-	stopCh       chan struct{}
+
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	running bool
+	runID   uint64
 }
 
 func NewRecoveryWorker(repo quality.QualityRepository) *RecoveryWorker {
 	return &RecoveryWorker{
 		repo:         repo,
 		pollInterval: 30 * time.Second,
-		stopCh:       make(chan struct{}),
 	}
 }
 
 func (w *RecoveryWorker) Start(ctx context.Context) {
-	go func() {
+	w.mu.Lock()
+	if w.running {
+		w.mu.Unlock()
+		return
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	w.cancel = cancel
+	w.running = true
+	w.runID++
+	runID := w.runID
+	w.wg.Add(1)
+	w.mu.Unlock()
+
+	go func(id uint64) {
+		defer w.wg.Done()
+		defer func() {
+			w.mu.Lock()
+			if w.runID == id {
+				w.cancel = nil
+				w.running = false
+			}
+			w.mu.Unlock()
+		}()
 		ticker := time.NewTicker(w.pollInterval)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-w.stopCh:
-				return
-			case <-ctx.Done():
+			case <-runCtx.Done():
 				return
 			case <-ticker.C:
-				if _, err := w.RecoverStuckEvaluations(ctx); err != nil {
+				if _, err := w.RecoverStuckEvaluations(runCtx); err != nil && runCtx.Err() == nil {
 					log.Logger.Errorf("recover stuck evaluations failed: %v", err)
 				}
 			}
 		}
-	}()
+	}(runID)
 }
 
 func (w *RecoveryWorker) Stop() {
-	close(w.stopCh)
+	w.mu.Lock()
+	if !w.running {
+		w.mu.Unlock()
+		return
+	}
+	cancel := w.cancel
+	runID := w.runID
+	w.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	w.wg.Wait()
+
+	w.mu.Lock()
+	if w.runID == runID {
+		w.cancel = nil
+		w.running = false
+	}
+	w.mu.Unlock()
 }
 
 func (w *RecoveryWorker) RecoverStuckEvaluations(ctx context.Context) (int, error) {
@@ -67,13 +111,18 @@ func (w *RecoveryWorker) RecoverStuckEvaluations(ctx context.Context) (int, erro
 				leaseExpires = t
 			}
 		}
-
 		if !leaseExpires.IsZero() && now.Before(leaseExpires) {
 			continue
 		}
 
-		if err := w.repo.UpdateEvaluationStatus(ctx, eval.ID, quality.EvalPending, "", ""); err != nil {
-			log.Logger.Errorf("recover stuck evaluation %s failed: %v", eval.ID, err)
+		ok, recoverErr := w.repo.RecoverExpiredEvaluation(ctx, eval.ID, eval.ExecutionID, now)
+		if recoverErr != nil {
+			log.Logger.Errorf("recover stuck evaluation %s failed: %v", eval.ID, recoverErr)
+			continue
+		}
+		if !ok {
+			// The execution owner or lease changed after the snapshot was read.
+			// Another worker/heartbeat won the race, so this recovery is stale.
 			continue
 		}
 		recovered++
@@ -86,6 +135,7 @@ func (w *RecoveryWorker) RecoverStuckEvaluations(ctx context.Context) (int, erro
 type OutboxPublisher struct {
 	repo           quality.QualityRepository
 	eventPublisher quality.EventPublisher
+	flushMu        sync.Mutex
 }
 
 func NewOutboxPublisher(repo quality.QualityRepository, eventPublisher quality.EventPublisher) *OutboxPublisher {
@@ -110,27 +160,71 @@ func (p *OutboxPublisher) PublishEvent(ctx context.Context, event quality.Qualit
 }
 
 func (p *OutboxPublisher) Flush(ctx context.Context) error {
+	// processEvaluation completions and the periodic retry ticker can flush at
+	// the same time. Serialize the local dispatcher so one pending record is not
+	// published twice by this process before MarkOutboxEventPublished lands.
+	p.flushMu.Lock()
+	defer p.flushMu.Unlock()
+
 	events, err := p.repo.ListPendingOutboxEvents(ctx, 100)
 	if err != nil {
 		return err
 	}
 
-	for _, event := range events {
-		var qualityEvent quality.QualityEvent
-		if err := json.Unmarshal([]byte(event.PayloadJSON), &qualityEvent); err != nil {
-			log.Logger.Errorf("unmarshal outbox event %s payload failed: %v", event.ID, err)
-			continue
+	for _, record := range events {
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 
+		var event quality.QualityOutboxEvent
+		if err := json.Unmarshal([]byte(record.PayloadJSON), &event); err != nil {
+			log.Logger.Errorf("unmarshal quality outbox event %s payload failed: %v", record.ID, err)
+			continue
+		}
+		if event.EventType == "" {
+			event.EventType = record.EventType
+		}
+
+		qualityEvent := qualityEventFromOutbox(event)
 		if err := p.eventPublisher.PublishQualityEvent(ctx, qualityEvent); err != nil {
-			log.Logger.Errorf("publish outbox event %s failed: %v", event.ID, err)
+			log.Logger.Errorf("publish quality outbox event %s failed: %v", record.ID, err)
 			continue
 		}
 
-		if err := p.repo.MarkOutboxEventPublished(ctx, event.ID); err != nil {
-			log.Logger.Errorf("mark outbox event %s published failed: %v", event.ID, err)
+		if err := p.repo.MarkOutboxEventPublished(ctx, record.ID); err != nil {
+			log.Logger.Errorf("mark quality outbox event %s published failed: %v", record.ID, err)
 		}
 	}
 
 	return nil
+}
+
+func qualityEventFromOutbox(event quality.QualityOutboxEvent) quality.QualityEvent {
+	stage := "quality_event"
+	progress := 0
+	switch event.EventType {
+	case quality.OutboxEventEvaluationCreated:
+		stage = "evaluation_created"
+	case quality.OutboxEventEvaluationStarted:
+		stage = "evaluation_started"
+	case quality.OutboxEventEvaluationCompleted:
+		stage = "evaluation_completed"
+		progress = 100
+	case quality.OutboxEventEvaluationFailed:
+		stage = "evaluation_failed"
+	case quality.OutboxEventGateUpdated:
+		stage = "gate_updated"
+	case quality.OutboxEventGateStale:
+		stage = "gate_stale"
+	}
+	return quality.QualityEvent{
+		JobID:            event.ExecutionID,
+		ProcessingTaskID: event.ProcessingTaskID,
+		ActionKey:        event.ActionKey,
+		EvaluationID:     event.EvaluationID,
+		Stage:            stage,
+		Progress:         progress,
+		Status:           event.Status,
+		Message:          event.Verdict,
+	}
 }

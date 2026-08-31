@@ -4,7 +4,9 @@ package quality
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -147,6 +149,7 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 		Findings:     findings,
 		Scores:       scores,
 		Verdict:      verdict,
+		Profile:      profile,
 		DurationMS:   duration.Milliseconds(),
 	}, nil
 }
@@ -194,11 +197,28 @@ func (ex *EngineExecutor) SetCommitter(committer QualityCommitter) {
 	ex.committer = committer
 }
 
+func (ex *EngineExecutor) updateEvaluationOwned(ctx context.Context, eval *QualityEvaluation, executionID, operation string) error {
+	updated, err := ex.repo.UpdateEvaluationOwned(ctx, eval, executionID)
+	if err != nil {
+		return NewQualityError(ErrCodeDatabaseCommitFailed, operation, err)
+	}
+	if !updated {
+		return NewQualityError(ErrCodeExecutionOwnershipLost, operation, ErrExecutionOwnershipLost)
+	}
+	return nil
+}
+
 func (ex *EngineExecutor) ExecuteEvaluation(ctx context.Context, eval *QualityEvaluation, req EvaluateRequest) (*EvaluateResult, error) {
+	if eval == nil || req.ExecutionID == "" {
+		return nil, NewQualityError(ErrCodeExecutionOwnershipLost, "missing evaluation execution owner", ErrExecutionOwnershipLost)
+	}
+
+	eval.ExecutionID = req.ExecutionID
+	eval.WorkerID = req.WorkerID
 	eval.ExecutionStatus = EvalRunning
 	eval.StartedAt = time.Now().UTC().Format(time.RFC3339)
-	if err := ex.repo.UpdateEvaluation(ctx, eval); err != nil {
-		return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to mark evaluation running", err)
+	if err := ex.updateEvaluationOwned(ctx, eval, req.ExecutionID, "failed to mark evaluation running"); err != nil {
+		return nil, err
 	}
 
 	_ = ex.events.PublishQualityEvent(ctx, QualityEvent{
@@ -212,12 +232,18 @@ func (ex *EngineExecutor) ExecuteEvaluation(ctx context.Context, eval *QualityEv
 
 	result, err := ex.engine.Evaluate(ctx, req)
 	if err != nil {
+		// Cancellation is a lifecycle/lease signal, not a terminal quality result.
+		// Leave the row running until the owner releases or recovery requeues it.
+		if ctx.Err() != nil {
+			return nil, NewQualityError(ErrCodeCancelled, "evaluation cancelled", ctx.Err())
+		}
+
 		eval.ExecutionStatus = EvalFailed
 		eval.ErrorCode = ErrorCode(err)
 		eval.ErrorMessage = err.Error()
 		eval.CompletedAt = time.Now().UTC().Format(time.RFC3339)
-		if persistErr := ex.repo.UpdateEvaluation(ctx, eval); persistErr != nil {
-			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to persist failed evaluation", errors.Join(err, persistErr))
+		if persistErr := ex.updateEvaluationOwned(ctx, eval, req.ExecutionID, "failed to persist failed evaluation"); persistErr != nil {
+			return nil, errors.Join(err, persistErr)
 		}
 		_ = ex.events.PublishQualityEvent(ctx, QualityEvent{
 			JobID:            req.ExecutionID,
@@ -236,6 +262,18 @@ func (ex *EngineExecutor) ExecuteEvaluation(ctx context.Context, eval *QualityEv
 	eval.OverallConfidence = result.Result.OverallConfidence
 	eval.ExecutionStatus = EvalSucceeded
 	eval.CompletedAt = time.Now().UTC().Format(time.RFC3339)
+	eval.ErrorCode = ""
+	eval.ErrorMessage = ""
+	eval.ProfileHash = result.Profile.Hash
+	if eval.ProfileID == "" {
+		eval.ProfileID = result.Profile.ProfileID
+	}
+	if result.Profile.ProfileVersion > 0 {
+		eval.ProfileVersion = strconv.Itoa(result.Profile.ProfileVersion)
+	}
+	if profileJSON, marshalErr := json.Marshal(result.Profile); marshalErr == nil {
+		eval.ProfileSnapshotJSON = string(profileJSON)
+	}
 
 	reportPath, reportHash, reportErr := ex.report.GenerateReport(eval, result.Result, result.Findings, result.Scores, result.Observations)
 	if reportErr != nil {
@@ -249,6 +287,7 @@ func (ex *EngineExecutor) ExecuteEvaluation(ctx context.Context, eval *QualityEv
 	if ex.committer != nil {
 		commitReq := CommitEvaluationRequest{
 			Evaluation:          eval,
+			ExecutionID:         req.ExecutionID,
 			Findings:            result.Findings,
 			Scores:              result.Scores,
 			Verdict:             result.Verdict,
@@ -266,8 +305,8 @@ func (ex *EngineExecutor) ExecuteEvaluation(ctx context.Context, eval *QualityEv
 			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "committer failed", commitErr)
 		}
 	} else {
-		if err := ex.repo.UpdateEvaluation(ctx, eval); err != nil {
-			return nil, NewQualityError(ErrCodeDatabaseCommitFailed, "failed to update evaluation result", err)
+		if err := ex.updateEvaluationOwned(ctx, eval, req.ExecutionID, "failed to update evaluation result"); err != nil {
+			return nil, err
 		}
 		findingRecords := FindingsToRecords(result.Findings, eval.ID)
 		if err := ex.repo.CreateFindings(ctx, findingRecords); err != nil {
@@ -282,15 +321,21 @@ func (ex *EngineExecutor) ExecuteEvaluation(ctx context.Context, eval *QualityEv
 		}
 	}
 
-	_ = ex.events.PublishQualityEvent(ctx, QualityEvent{
-		JobID:            req.ExecutionID,
-		ProcessingTaskID: req.ProcessingTaskID,
-		ActionKey:        req.ActionKey,
-		EvaluationID:     eval.ID,
-		Stage:            "evaluation_completed",
-		Status:           string(EvalSucceeded),
-		Progress:         100,
-	})
+	// A configured committer persists evaluation_completed into the
+	// transactional outbox. Publishing it here as well would duplicate the same
+	// terminal event once the outbox dispatcher flushes. The fallback path has
+	// no durable outbox, so it still publishes directly.
+	if ex.committer == nil {
+		_ = ex.events.PublishQualityEvent(ctx, QualityEvent{
+			JobID:            req.ExecutionID,
+			ProcessingTaskID: req.ProcessingTaskID,
+			ActionKey:        req.ActionKey,
+			EvaluationID:     eval.ID,
+			Stage:            "evaluation_completed",
+			Status:           string(EvalSucceeded),
+			Progress:         100,
+		})
+	}
 
 	return result, nil
 }

@@ -37,6 +37,47 @@ func (r *GormRepository) UpdateEvaluation(ctx context.Context, ev *QualityEvalua
 	return r.db.WithContext(ctx).Save(ev).Error
 }
 
+// UpdateEvaluationOwned persists evaluation result state without ever writing
+// lease ownership columns. The execution fence prevents an expired/stale worker
+// from publishing terminal state after another worker has acquired the lease.
+func (r *GormRepository) UpdateEvaluationOwned(ctx context.Context, ev *QualityEvaluation, executionID string) (bool, error) {
+	if ev == nil || ev.ID == "" || executionID == "" {
+		return false, nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	ev.UpdatedAt = now
+	updates := map[string]interface{}{
+		"measurement_set_id":    ev.MeasurementSetID,
+		"execution_status":      string(ev.ExecutionStatus),
+		"verdict":               ev.Verdict,
+		"overall_score":         ev.OverallScore,
+		"overall_confidence":    ev.OverallConfidence,
+		"profile_snapshot_json": ev.ProfileSnapshotJSON,
+		"profile_hash":          ev.ProfileHash,
+		"profile_id":            ev.ProfileID,
+		"profile_version":       ev.ProfileVersion,
+		"rule_set_version":      ev.RuleSetVersion,
+		"ruleset_content_hash":  ev.RulesetContentHash,
+		"measurement_version":   ev.MeasurementVersion,
+		"report_path":           ev.ReportPath,
+		"report_hash":           ev.ReportHash,
+		"error_code":            ev.ErrorCode,
+		"error_message":         ev.ErrorMessage,
+		"is_active":             ev.IsActive,
+		"started_at":            ev.StartedAt,
+		"completed_at":          ev.CompletedAt,
+		"updated_at":            now,
+	}
+	result := r.db.WithContext(ctx).
+		Model(&QualityEvaluation{}).
+		Where("id = ? AND execution_id = ?", ev.ID, executionID).
+		Updates(updates)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
 func (r *GormRepository) GetEvaluation(ctx context.Context, evaluationID string) (*QualityEvaluation, error) {
 	var ev QualityEvaluation
 	if err := r.db.WithContext(ctx).Where("id = ?", evaluationID).First(&ev).Error; err != nil {
@@ -61,7 +102,7 @@ func (r *GormRepository) GetActiveEvaluation(ctx context.Context, processingTask
 	var evaluations []*QualityEvaluation
 	err := r.db.WithContext(ctx).
 		Where("processing_task_id = ? AND action_key = ?", processingTaskID, actionKey).
-		Where("execution_status = ?", string(EvalSucceeded)).
+		Where("execution_status = ? AND is_active = ?", string(EvalSucceeded), true).
 		Order("created_at DESC").
 		Find(&evaluations).Error
 	if err != nil {
@@ -114,21 +155,32 @@ func (r *GormRepository) ListEvaluationsByStatus(ctx context.Context, status str
 }
 
 func (r *GormRepository) AcquireLease(ctx context.Context, evaluationID, executionID, workerID string, leaseDuration string) (bool, error) {
-	now := time.Now().UTC()
-	expiresAt := now
-	if d, err := time.ParseDuration(leaseDuration); err == nil {
-		expiresAt = now.Add(d)
-	} else {
-		expiresAt = now.Add(5 * time.Minute)
+	if evaluationID == "" || executionID == "" || workerID == "" {
+		return false, nil
 	}
+	now := time.Now().UTC()
+	expiresAt := now.Add(5 * time.Minute)
+	if d, err := time.ParseDuration(leaseDuration); err == nil && d > 0 {
+		expiresAt = now.Add(d)
+	}
+	nowText := now.Format(time.RFC3339)
 	result := r.db.WithContext(ctx).
 		Model(&QualityEvaluation{}).
-		Where("id = ? AND (execution_id = ? OR execution_id = '' OR lease_expires_at < ?)", evaluationID, executionID, now.Format(time.RFC3339)).
+		Where("id = ?", evaluationID).
+		Where(`(
+			(execution_status = ? AND (execution_id = '' OR execution_id = ?))
+			OR
+			(execution_status = ? AND (execution_id = ? OR lease_expires_at = '' OR lease_expires_at <= ?))
+		)`, string(EvalPending), executionID, string(EvalRunning), executionID, nowText).
 		Updates(map[string]interface{}{
 			"execution_id":     executionID,
 			"worker_id":        workerID,
+			"lease_owner":      workerID,
 			"lease_expires_at": expiresAt.Format(time.RFC3339),
+			"heartbeat_at":     nowText,
+			"attempt_count":    gorm.Expr("attempt_count + ?", 1),
 			"execution_status": string(EvalRunning),
+			"updated_at":       nowText,
 		})
 	if result.Error != nil {
 		return false, result.Error
@@ -137,32 +189,77 @@ func (r *GormRepository) AcquireLease(ctx context.Context, evaluationID, executi
 }
 
 func (r *GormRepository) RenewLease(ctx context.Context, evaluationID, executionID string, leaseDuration string) (bool, error) {
+	if evaluationID == "" || executionID == "" {
+		return false, nil
+	}
 	now := time.Now().UTC()
-	expiresAt := now
-	if d, err := time.ParseDuration(leaseDuration); err == nil {
+	expiresAt := now.Add(5 * time.Minute)
+	if d, err := time.ParseDuration(leaseDuration); err == nil && d > 0 {
 		expiresAt = now.Add(d)
-	} else {
-		expiresAt = now.Add(5 * time.Minute)
 	}
 	result := r.db.WithContext(ctx).
 		Model(&QualityEvaluation{}).
-		Where("id = ? AND execution_id = ?", evaluationID, executionID).
-		Update("lease_expires_at", expiresAt.Format(time.RFC3339))
+		Where("id = ? AND execution_id = ? AND execution_status = ?", evaluationID, executionID, string(EvalRunning)).
+		Updates(map[string]interface{}{
+			"lease_expires_at": expiresAt.Format(time.RFC3339),
+			"heartbeat_at":     now.Format(time.RFC3339),
+			"updated_at":       now.Format(time.RFC3339),
+		})
 	if result.Error != nil {
 		return false, result.Error
 	}
 	return result.RowsAffected > 0, nil
 }
 
-func (r *GormRepository) ReleaseLease(ctx context.Context, evaluationID string) error {
-	return r.db.WithContext(ctx).
+func (r *GormRepository) ReleaseLease(ctx context.Context, evaluationID, executionID string) (bool, error) {
+	if evaluationID == "" || executionID == "" {
+		return false, nil
+	}
+	result := r.db.WithContext(ctx).
 		Model(&QualityEvaluation{}).
-		Where("id = ?", evaluationID).
+		Where("id = ? AND execution_id = ?", evaluationID, executionID).
 		Updates(map[string]interface{}{
 			"execution_id":     "",
 			"worker_id":        "",
+			"lease_owner":      "",
 			"lease_expires_at": "",
-		}).Error
+			"updated_at":       time.Now().UTC().Format(time.RFC3339),
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// RecoverExpiredEvaluation is a compare-and-swap recovery operation. A heartbeat
+// renewal or a new execution owner that races with recovery makes the predicate
+// false, so recovery cannot clear another worker's lease or state.
+func (r *GormRepository) RecoverExpiredEvaluation(ctx context.Context, evaluationID, executionID string, now time.Time) (bool, error) {
+	if evaluationID == "" {
+		return false, nil
+	}
+	now = now.UTC()
+	result := r.db.WithContext(ctx).
+		Model(&QualityEvaluation{}).
+		Where("id = ? AND execution_status = ? AND execution_id = ?", evaluationID, string(EvalRunning), executionID).
+		Where("lease_expires_at = '' OR lease_expires_at <= ?", now.Format(time.RFC3339)).
+		Updates(map[string]interface{}{
+			"execution_status": string(EvalPending),
+			"execution_id":     "",
+			"worker_id":        "",
+			"lease_owner":      "",
+			"lease_expires_at": "",
+			"heartbeat_at":     "",
+			"error_code":       "",
+			"error_message":    "",
+			"started_at":       "",
+			"completed_at":     "",
+			"updated_at":       now.Format(time.RFC3339),
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
 }
 
 func (r *GormRepository) SetActiveEvaluation(ctx context.Context, processingTaskID, actionKey, evaluationID string) error {
