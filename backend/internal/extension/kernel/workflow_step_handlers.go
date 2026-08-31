@@ -69,22 +69,39 @@ func (h workflowRuntimeStepHandler) Execute(ctx context.Context, node workflow.W
 }
 
 func workflowInvocation(execCtx workflow.ExecutionContext, invocationID string) capability.ToolInvocationContext {
+	source := capability.InvocationSourceWorkflow
+	background := false
+	if execCtx.ScheduleID != "" {
+		source = capability.InvocationSourceScheduledTask
+		background = true
+	}
+	rootID := execCtx.RootID
+	if rootID == "" {
+		rootID = execCtx.InvocationID
+	}
+	operationID := execCtx.OperationID
+	if operationID == "" {
+		operationID = execCtx.InvocationID
+	}
 	return capability.ToolInvocationContext{
 		InvocationID:         invocationID,
 		ParentID:             execCtx.InvocationID,
+		RootID:               rootID,
+		UserID:               execCtx.UserID,
 		CharacterID:          execCtx.CharacterID,
 		ConversationID:       execCtx.ConversationID,
 		ExtensionID:          execCtx.ExtensionID,
 		ModuleID:             execCtx.ModuleID,
 		Generation:           execCtx.Generation,
-		Source:               capability.InvocationSourceWorkflow,
+		Source:               source,
 		IdempotencyKey:       fmt.Sprintf("%s/%s", execCtx.IdempotencyKey, invocationID),
 		TraceID:              execCtx.TraceID,
 		ScheduleID:           execCtx.ScheduleID,
 		TriggerID:            execCtx.TriggerID,
-		OperationID:          execCtx.OperationID,
+		OperationID:          operationID,
 		ScopeSnapshotID:      execCtx.ScopeSnapshotID,
 		PermissionSnapshotID: execCtx.PermissionSnapID,
+		IsBackground:         background,
 	}
 }
 

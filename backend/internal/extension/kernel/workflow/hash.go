@@ -17,6 +17,8 @@ func ComputeDefinitionHash(def WorkflowDefinition) string {
 		"inputSchema":     def.InputSchema,
 		"outputSchema":    def.OutputSchema,
 		"nodes":           def.Nodes,
+		"edges":           def.Edges,
+		"triggers":        def.Triggers,
 		"permissions":     def.Permissions,
 		"scope":           def.Scope,
 		"callableByAgent": def.CallableByAgent,

@@ -74,16 +74,43 @@ func (r *WorkflowRegistry) Register(definition WorkflowDefinition) error {
 	return nil
 }
 
+func (r *WorkflowRegistry) Upsert(definition WorkflowDefinition) error {
+	normalized, err := NormalizeDefinition(definition)
+	if err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	previous, existed := r.items[normalized.ID]
+	r.items[normalized.ID] = normalized
+	if r.store != nil {
+		ctx := context.Background()
+		if err := r.store.Save(ctx, normalized); err != nil {
+			if existed {
+				r.items[normalized.ID] = previous
+			} else {
+				delete(r.items, normalized.ID)
+			}
+			return fmt.Errorf("persist workflow definition: %w", err)
+		}
+	}
+	return nil
+}
+
 func (r *WorkflowRegistry) Unregister(id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.items[id]; !ok {
+	item, ok := r.items[id]
+	if !ok {
 		return fmt.Errorf("workflow %s not found", id)
 	}
 	delete(r.items, id)
 	if r.store != nil {
 		ctx := context.Background()
-		_ = r.store.Delete(ctx, id)
+		if err := r.store.Delete(ctx, id); err != nil {
+			r.items[id] = item
+			return fmt.Errorf("persist workflow unregister: %w", err)
+		}
 	}
 	return nil
 }

@@ -39,36 +39,36 @@ func (s RunStatus) IsActive() bool {
 }
 
 type WorkflowRun struct {
-	ExecutionID         string
-	WorkflowID          string
-	Status              RunStatus
-	Input               json.RawMessage
-	Output              json.RawMessage
-	Error               string
-	Context             ExecutionContext
-	Steps               []StepResult
-	CompensationResults []CompensationResult
-	Attempt             int
-	Generation          int64
-	PauseReason         string
-	PauseRequestedAt    *time.Time
-	PausedAt            *time.Time
-	StartedAt           time.Time
-	FinishedAt          *time.Time
-	UpdatedAt           time.Time
+	ExecutionID         string               `json:"executionId"`
+	WorkflowID          string               `json:"workflowId"`
+	Status              RunStatus            `json:"status"`
+	Input               json.RawMessage      `json:"input,omitempty"`
+	Output              json.RawMessage      `json:"output,omitempty"`
+	Error               string               `json:"error,omitempty"`
+	Context             ExecutionContext     `json:"context"`
+	Steps               []StepResult         `json:"steps,omitempty"`
+	CompensationResults []CompensationResult `json:"compensationResults,omitempty"`
+	Attempt             int                  `json:"attempt"`
+	Generation          int64                `json:"generation"`
+	PauseReason         string               `json:"pauseReason,omitempty"`
+	PauseRequestedAt    *time.Time           `json:"pauseRequestedAt,omitempty"`
+	PausedAt            *time.Time           `json:"pausedAt,omitempty"`
+	StartedAt           time.Time            `json:"startedAt"`
+	FinishedAt          *time.Time           `json:"finishedAt,omitempty"`
+	UpdatedAt           time.Time            `json:"updatedAt"`
 }
 
 type StepRun struct {
-	ExecutionID string
-	WorkflowID  string
-	NodeID      string
-	Status      string
-	Input       json.RawMessage
-	Output      json.RawMessage
-	Error       string
-	Attempt     int
-	StartedAt   time.Time
-	FinishedAt  *time.Time
+	ExecutionID string          `json:"executionId"`
+	WorkflowID  string          `json:"workflowId"`
+	NodeID      string          `json:"nodeId"`
+	Status      string          `json:"status"`
+	Input       json.RawMessage `json:"input,omitempty"`
+	Output      json.RawMessage `json:"output,omitempty"`
+	Error       string          `json:"error,omitempty"`
+	Attempt     int             `json:"attempt"`
+	StartedAt   time.Time       `json:"startedAt"`
+	FinishedAt  *time.Time      `json:"finishedAt,omitempty"`
 }
 
 type RunStore interface {
