@@ -636,6 +636,14 @@ class ExtensionService {
     return await _api.get<Map<String, dynamic>>('/api/extensions/workflows/${Uri.encodeComponent(id)}') ?? <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> workflowAnalysis(String id) async {
+    return await _api.get<Map<String, dynamic>>('/api/extensions/workflows/${Uri.encodeComponent(id)}/analysis') ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> workflowStats(String id) async {
+    return await _api.get<Map<String, dynamic>>('/api/extensions/workflows/${Uri.encodeComponent(id)}/stats') ?? <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> updateWorkflow(String id, Map<String, dynamic> definition) async {
     return await _api.put<Map<String, dynamic>>(
           '/api/extensions/workflows/${Uri.encodeComponent(id)}',
@@ -774,6 +782,21 @@ class ExtensionService {
 
   Future<void> resumeWorkflowRun(String runId) async {
     await _api.post('/api/extensions/workflow-runs/${Uri.encodeComponent(runId)}/resume');
+  }
+
+  Future<Map<String, dynamic>> rerunWorkflowRun(String runId, {bool wait = false}) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflow-runs/${Uri.encodeComponent(runId)}/rerun',
+          data: <String, dynamic>{'wait': wait},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> recoverWorkflowRun(String runId) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflow-runs/${Uri.encodeComponent(runId)}/recover',
+        ) ??
+        <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> dispatchWorkflowEvent(

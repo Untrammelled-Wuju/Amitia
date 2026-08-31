@@ -32,6 +32,18 @@ type WorkflowStepInput struct {
 	OnError WorkflowOnError  `json:"onError,omitempty"`
 }
 
+// WorkflowNodeRetryPolicy is the editor-facing retry policy. Durations are
+// expressed in milliseconds so JSON definitions stay readable and stable
+// across Go/TypeScript/Dart clients. The compiler converts it to the runtime
+// WorkflowRetryPolicy which uses time.Duration internally.
+type WorkflowNodeRetryPolicy struct {
+	MaxAttempts      int     `json:"maxAttempts,omitempty"`
+	InitialBackoffMS int64   `json:"initialBackoffMs,omitempty"`
+	MaxBackoffMS     int64   `json:"maxBackoffMs,omitempty"`
+	Multiplier       float64 `json:"multiplier,omitempty"`
+	Jitter           float64 `json:"jitter,omitempty"`
+}
+
 type WorkflowOnError struct {
 	Mode    string          `json:"mode"`
 	Default json.RawMessage `json:"default,omitempty"`
@@ -80,6 +92,8 @@ type WorkflowNode struct {
 	Scope       string                    `json:"scope,omitempty"`
 	Position    WorkflowPosition          `json:"position,omitempty"`
 	Label       string                    `json:"label,omitempty"`
+	TimeoutMS   int64                     `json:"timeoutMs,omitempty"`
+	Retry       *WorkflowNodeRetryPolicy  `json:"retry,omitempty"`
 	Step        WorkflowStepInput         `json:"step"`
 }
 

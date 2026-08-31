@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -82,6 +83,21 @@ func (h NestedWorkflowHandler) Execute(ctx context.Context, node WorkflowNode, i
 	}
 	if targetID == "" {
 		return nil, fmt.Errorf("nested workflow target missing")
+	}
+	target, exists := h.Executor.registry.Get(targetID)
+	if !exists {
+		return nil, ErrWorkflowNotFound
+	}
+	if target.Source == "user" {
+		owner := ""
+		if target.Metadata != nil {
+			if value, exists := target.Metadata["ownerUserId"]; exists && value != nil {
+				owner = strings.TrimSpace(fmt.Sprint(value))
+			}
+		}
+		if execution.UserID == "" || owner == "" || owner != execution.UserID {
+			return nil, fmt.Errorf("%w: nested user workflow owner mismatch", ErrScopeDenied)
+		}
 	}
 	execution.Depth++
 	execution.InvocationID = fmt.Sprintf("%s/%s", execution.InvocationID, node.ID)

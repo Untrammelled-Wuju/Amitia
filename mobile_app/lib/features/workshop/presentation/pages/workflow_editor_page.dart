@@ -33,7 +33,11 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   List<Map<String, dynamic>> _edges = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _triggers = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _catalog = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _ownedWorkflows = <Map<String, dynamic>>[];
   Map<String, Map<String, dynamic>> _stepRuns = <String, Map<String, dynamic>>{};
+  List<Map<String, dynamic>> _stepAttempts = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _checkpoints = <Map<String, dynamic>>[];
+  Map<String, dynamic> _workflowStats = <String, dynamic>{};
   List<Map<String, dynamic>> _runHistory = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _revisions = <Map<String, dynamic>>[];
   bool _revisionBusy = false;
@@ -72,7 +76,12 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       } catch (_) {
         _catalog = <Map<String, dynamic>>[];
       }
-      await Future.wait(<Future<void>>[_loadRuns(), _loadRevisions()]);
+      try {
+        _ownedWorkflows = (await service.workflows(limit: 200)).where((item) => (item['id'] ?? '').toString() != widget.workflowId).toList(growable: false);
+      } catch (_) {
+        _ownedWorkflows = <Map<String, dynamic>>[];
+      }
+      await Future.wait(<Future<void>>[_loadRuns(), _loadRevisions(), _loadStats()]);
       if (!mounted) return;
       setState(() => _loading = false);
       WidgetsBinding.instance.addPostFrameCallback((_) => _fitView());
@@ -210,6 +219,8 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         _activeRunId = id;
         _activeRunStatus = (result['status'] ?? 'running').toString();
         _stepRuns = <String, Map<String, dynamic>>{};
+        _stepAttempts = <Map<String, dynamic>>[];
+        _checkpoints = <Map<String, dynamic>>[];
       });
       _startPolling();
       _show('工作流已开始运行');
@@ -231,6 +242,8 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       final detail = await ref.read(extensionServiceProvider).getWorkflowRun(id);
       final run = _asMap(detail['run']);
       final steps = _asMapList(detail['stepRuns']);
+      final attempts = _asMapList(detail['attempts']);
+      final checkpoints = _asMapList(detail['checkpoints']);
       final status = (run['status'] ?? '').toString();
       if (!mounted) return;
       setState(() {
@@ -238,10 +251,12 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         _stepRuns = <String, Map<String, dynamic>>{
           for (final step in steps) (step['nodeId'] ?? '').toString(): step,
         };
+        _stepAttempts = attempts;
+        _checkpoints = checkpoints;
       });
       if (_terminal(status)) {
         _pollTimer?.cancel();
-        await _loadRuns();
+        await Future.wait(<Future<void>>[_loadRuns(), _loadStats()]);
       }
     } catch (_) {
       // Keep the editor usable if one polling request is interrupted.
@@ -259,6 +274,13 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     } catch (_) {}
   }
 
+  Future<void> _loadStats() async {
+    try {
+      final stats = await ref.read(extensionServiceProvider).workflowStats(widget.workflowId);
+      if (mounted) setState(() => _workflowStats = stats);
+    } catch (_) {}
+  }
+
   Future<void> _pauseRun() async {
     final id = _activeRunId;
     if (id == null) return;
@@ -271,6 +293,54 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     if (id == null) return;
     await ref.read(extensionServiceProvider).resumeWorkflowRun(id);
     await _pollRun();
+  }
+
+  Future<void> _rerunActiveRun() async {
+    final id = _activeRunId;
+    if (id == null || !_terminal(_activeRunStatus) || _workflow?['enabled'] == false) return;
+    try {
+      final result = await ref.read(extensionServiceProvider).rerunWorkflowRun(id);
+      final newId = (result['executionId'] ?? '').toString();
+      if (newId.isEmpty) throw StateError('后端没有返回 executionId');
+      if (!mounted) return;
+      setState(() {
+        _activeRunId = newId;
+        _activeRunStatus = (result['status'] ?? 'running').toString();
+        _stepRuns = <String, Map<String, dynamic>>{};
+        _stepAttempts = <Map<String, dynamic>>[];
+        _checkpoints = <Map<String, dynamic>>[];
+      });
+      _startPolling();
+      _show('已使用原运行输入重新执行当前已保存工作流');
+    } catch (error) {
+      _show('重新运行失败：${_message(error)}');
+    }
+  }
+
+  Future<void> _recoverActiveRun() async {
+    final id = _activeRunId;
+    if (id == null || !<String>{'failed', 'cancelled'}.contains(_activeRunStatus.toLowerCase()) || _checkpoints.isEmpty || _workflow?['enabled'] == false) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('从 Checkpoint 恢复'),
+        content: Text('将复用当前运行的 ${_checkpoints.length} 个 Checkpoint，并按当前已保存工作流继续执行。不会绕过 DAG 单独执行某个节点。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('恢复')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final result = await ref.read(extensionServiceProvider).recoverWorkflowRun(id);
+      if (!mounted) return;
+      setState(() => _activeRunStatus = (result['status'] ?? 'running').toString());
+      _startPolling();
+      _show('已从 ${result['checkpointCount'] ?? _checkpoints.length} 个 Checkpoint 恢复执行');
+    } catch (error) {
+      _show('Checkpoint 恢复失败：${_message(error)}');
+    }
   }
 
   Future<void> _cancelRun() async {
@@ -1001,6 +1071,14 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     final onErrorConfig = _asMap(step['onError']);
     var onError = (onErrorConfig['mode'] ?? 'fail').toString();
     final onErrorDefault = TextEditingController(text: onErrorConfig['default'] == null ? '' : _pretty(onErrorConfig['default']));
+    final retryConfig = _asMap(node['retry']);
+    var retryEnabled = node['retry'] is Map;
+    final timeoutMs = TextEditingController(text: _number(node['timeoutMs']).round().toString());
+    final retryMaxAttempts = TextEditingController(text: _number(retryConfig['maxAttempts'], 3).round().toString());
+    final retryInitialBackoffMs = TextEditingController(text: _number(retryConfig['initialBackoffMs'], 200).round().toString());
+    final retryMaxBackoffMs = TextEditingController(text: _number(retryConfig['maxBackoffMs'], 30000).round().toString());
+    final retryMultiplier = TextEditingController(text: _number(retryConfig['multiplier'], 2).toString());
+    final retryJitter = TextEditingController(text: _number(retryConfig['jitter'], 0.2).toString());
     final runtimeConfigurable = _needsRuntime((node['type'] ?? '').toString());
     var delete = false;
     final applied = await showModalBottomSheet<bool>(
@@ -1033,7 +1111,18 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                       children: [
                         TextField(controller: label, decoration: const InputDecoration(labelText: '显示名称')),
                         const SizedBox(height: 10),
-                        TextField(controller: target, decoration: const InputDecoration(labelText: 'Target ID')),
+                        if ((node['type'] ?? '').toString() == 'nested_workflow')
+                          DropdownButtonFormField<String>(
+                            initialValue: _ownedWorkflows.any((item) => (item['id'] ?? '').toString() == target.text) ? target.text : null,
+                            decoration: const InputDecoration(labelText: '子工作流'),
+                            hint: const Text('选择我的另一个工作流'),
+                            items: _ownedWorkflows
+                                .map((item) => DropdownMenuItem<String>(value: (item['id'] ?? '').toString(), child: Text((item['name'] ?? item['id'] ?? '').toString(), overflow: TextOverflow.ellipsis)))
+                                .toList(growable: false),
+                            onChanged: (value) => setSheetState(() => target.text = value ?? ''),
+                          )
+                        else
+                          TextField(controller: target, decoration: const InputDecoration(labelText: 'Target ID')),
                         const SizedBox(height: 10),
                         if (runtimeConfigurable) ...[
                           TextField(controller: runtimeType, decoration: const InputDecoration(labelText: 'Runtime Type')),
@@ -1049,6 +1138,33 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                             style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
                             decoration: const InputDecoration(labelText: 'Runtime Metadata JSON', alignLabelWithHint: true),
                           ),
+                          const SizedBox(height: 10),
+                        ],
+                        Text('执行可靠性', style: Theme.of(context).textTheme.titleSmall),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: timeoutMs,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: '节点超时（毫秒，0=继承工作流上限）'),
+                        ),
+                        const SizedBox(height: 6),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('自定义重试'),
+                          subtitle: const Text('未启用时节点默认只尝试 1 次'),
+                          value: retryEnabled,
+                          onChanged: (value) => setSheetState(() => retryEnabled = value),
+                        ),
+                        if (retryEnabled) ...[
+                          TextField(controller: retryMaxAttempts, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最大尝试次数（1~10）')),
+                          const SizedBox(height: 8),
+                          TextField(controller: retryInitialBackoffMs, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '首次退避（毫秒，0=默认 200）')),
+                          const SizedBox(height: 8),
+                          TextField(controller: retryMaxBackoffMs, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最大退避（毫秒，0=默认 30000）')),
+                          const SizedBox(height: 8),
+                          TextField(controller: retryMultiplier, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: '退避倍率（>1，≤10）')),
+                          const SizedBox(height: 8),
+                          TextField(controller: retryJitter, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: '随机抖动（0~1）')),
                           const SizedBox(height: 10),
                         ],
                         DropdownButtonFormField<String>(
@@ -1094,7 +1210,11 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                           decoration: const InputDecoration(labelText: 'When / Condition JSON（可空）', alignLabelWithHint: true),
                         ),
                         const SizedBox(height: 16),
-                        _NodeTraceCard(stepRun: _stepRuns[(node['id'] ?? '').toString()]),
+                        _NodeTraceCard(
+                          stepRun: _stepRuns[(node['id'] ?? '').toString()],
+                          attempts: _stepAttempts.where((item) => (item['nodeId'] ?? '').toString() == (node['id'] ?? '').toString()).toList(growable: false),
+                          checkpoint: _checkpoints.any((item) => (item['nodeId'] ?? '').toString() == (node['id'] ?? '').toString()),
+                        ),
                       ],
                     ),
                   ),
@@ -1124,6 +1244,32 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
             throw const FormatException('Runtime Metadata 必须是 JSON object');
           }
           final parsedDefault = onErrorDefault.text.trim().isEmpty ? null : _decodeJson(onErrorDefault.text);
+          final parsedTimeoutMs = int.tryParse(timeoutMs.text.trim()) ?? -1;
+          if (parsedTimeoutMs < 0) throw const FormatException('节点超时必须是大于等于 0 的毫秒数');
+          Map<String, dynamic>? parsedRetry;
+          if (retryEnabled) {
+            final attempts = int.tryParse(retryMaxAttempts.text.trim()) ?? 0;
+            final initialBackoff = int.tryParse(retryInitialBackoffMs.text.trim()) ?? -1;
+            final maxBackoff = int.tryParse(retryMaxBackoffMs.text.trim()) ?? -1;
+            final multiplier = double.tryParse(retryMultiplier.text.trim()) ?? 0;
+            final jitter = double.tryParse(retryJitter.text.trim()) ?? -1;
+            if (attempts < 1 || attempts > 10) throw const FormatException('最大尝试次数必须在 1~10 之间');
+            if (initialBackoff < 0 || maxBackoff < 0 || initialBackoff > 600000 || maxBackoff > 600000) {
+              throw const FormatException('重试退避必须在 0~600000 毫秒之间');
+            }
+            if (initialBackoff > 0 && maxBackoff > 0 && maxBackoff < initialBackoff) {
+              throw const FormatException('最大退避不能小于首次退避');
+            }
+            if (multiplier <= 1 || multiplier > 10) throw const FormatException('退避倍率必须大于 1 且不超过 10');
+            if (jitter < 0 || jitter > 1) throw const FormatException('随机抖动必须在 0~1 之间');
+            parsedRetry = <String, dynamic>{
+              'maxAttempts': attempts,
+              'initialBackoffMs': initialBackoff,
+              'maxBackoffMs': maxBackoff,
+              'multiplier': multiplier,
+              'jitter': jitter,
+            };
+          }
           setState(() {
             node['label'] = label.text.trim().isEmpty ? (node['type'] ?? 'Node').toString() : label.text.trim();
             node['targetId'] = target.text.trim();
@@ -1135,6 +1281,16 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
               'metadata': Map<String, dynamic>.from(parsedRuntimeMetadata),
             };
             node['permissions'] = permissions.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+            if (parsedTimeoutMs > 0) {
+              node['timeoutMs'] = parsedTimeoutMs;
+            } else {
+              node.remove('timeoutMs');
+            }
+            if (parsedRetry != null) {
+              node['retry'] = parsedRetry;
+            } else {
+              node.remove('retry');
+            }
             node['step'] = <String, dynamic>{
               ...step,
               'input': parsedInput,
@@ -1148,7 +1304,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         }
       }
     }
-    for (final controller in <TextEditingController>[label, target, runtimeType, runtimeId, handlerName, runtimeMetadata, onErrorDefault, input, when, permissions]) {
+    for (final controller in <TextEditingController>[label, target, runtimeType, runtimeId, handlerName, runtimeMetadata, onErrorDefault, timeoutMs, retryMaxAttempts, retryInitialBackoffMs, retryMaxBackoffMs, retryMultiplier, retryJitter, input, when, permissions]) {
       controller.dispose();
     }
   }
@@ -1474,7 +1630,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       };
 
   Future<void> _showRuns() async {
-    await _loadRuns();
+    await Future.wait(<Future<void>>[_loadRuns(), _loadStats()]);
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
@@ -1494,15 +1650,40 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                   ],
                 ),
               ),
+              if (_workflowStats.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: Row(
+                    children: [
+                      Expanded(child: _WorkflowStatTile(label: '运行', value: '${_workflowStats['runCount'] ?? 0}')),
+                      const SizedBox(width: 6),
+                      Expanded(child: _WorkflowStatTile(label: '成功率', value: '${((_number(_workflowStats['successRate']) * 100).round())}%')),
+                      const SizedBox(width: 6),
+                      Expanded(child: _WorkflowStatTile(label: '平均耗时', value: _formatDuration(_number(_workflowStats['averageRunMs'])))),
+                      const SizedBox(width: 6),
+                      Expanded(child: _WorkflowStatTile(label: '失败', value: '${_workflowStats['failed'] ?? 0}')),
+                    ],
+                  ),
+                ),
               if (_activeRunId != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       OutlinedButton.icon(onPressed: _activeRunStatus == 'paused' ? null : _pauseRun, icon: const Icon(Icons.pause), label: const Text('暂停')),
-                      const SizedBox(width: 8),
                       OutlinedButton.icon(onPressed: _activeRunStatus == 'paused' ? _resumeRun : null, icon: const Icon(Icons.play_arrow), label: const Text('恢复')),
-                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: <String>{'failed', 'cancelled'}.contains(_activeRunStatus.toLowerCase()) && _checkpoints.isNotEmpty && _workflow?['enabled'] != false ? _recoverActiveRun : null,
+                        icon: const Icon(Icons.restore_page_outlined),
+                        label: const Text('Checkpoint 恢复'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _terminal(_activeRunStatus) && _workflow?['enabled'] != false ? _rerunActiveRun : null,
+                        icon: const Icon(Icons.replay),
+                        label: const Text('原输入重跑'),
+                      ),
                       OutlinedButton.icon(onPressed: _terminal(_activeRunStatus) ? null : _cancelRun, icon: const Icon(Icons.stop), label: const Text('取消')),
                     ],
                   ),
@@ -1540,6 +1721,56 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _showSafetyAnalysis() async {
+    try {
+      final analysis = await ref.read(extensionServiceProvider).workflowAnalysis(widget.workflowId);
+      if (!mounted) return;
+      final permissions = ((analysis['declaredPermissions'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList(growable: false);
+      final secrets = ((analysis['secretReferences'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList(growable: false);
+      final dependencies = _asMapList(analysis['nestedDependencies']);
+      final risks = _asMapList(analysis['risks']);
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.72,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                Row(children: [Expanded(child: Text('权限与风险摘要', style: Theme.of(context).textTheme.titleMedium)), _RiskBadge(level: (analysis['riskLevel'] ?? 'low').toString())]),
+                const SizedBox(height: 8),
+                Text('这是静态摘要，不代表相关权限已经授予；真实执行仍由 Kernel Capability / Scope 策略决定。', style: AppTypography.caption(context)),
+                const SizedBox(height: 16),
+                _SafetySection(title: '声明权限', emptyText: '无显式权限声明', items: permissions),
+                const SizedBox(height: 12),
+                _SafetySection(title: 'Secret / Credential 引用', emptyText: '未发现引用', items: secrets),
+                const SizedBox(height: 12),
+                Text('子工作流依赖', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 6),
+                if (dependencies.isEmpty) Text('无', style: AppTypography.caption(context)) else ...dependencies.map((dep) => ListTile(contentPadding: EdgeInsets.zero, dense: true, title: Text((dep['name'] ?? dep['workflowId'] ?? '').toString()), subtitle: Text((dep['workflowId'] ?? '').toString()), trailing: _RiskBadge(level: (dep['status'] ?? 'missing').toString()))),
+                const SizedBox(height: 12),
+                Text('风险提示', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 6),
+                if (risks.isEmpty) Text('未发现需要特别提示的静态风险', style: AppTypography.caption(context)) else ...risks.map((risk) => ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: _RiskBadge(level: (risk['level'] ?? 'low').toString()), title: Text((risk['message'] ?? '').toString()), subtitle: (risk['nodeId'] ?? '').toString().isEmpty ? null : Text('节点：${risk['nodeId']}'))),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (error) {
+      _show('安全摘要加载失败：${_message(error)}');
+    }
+  }
+
+  String _formatDuration(double ms) {
+    if (ms <= 0) return '0ms';
+    if (ms < 1000) return '${ms.round()}ms';
+    if (ms < 60000) return '${(ms / 1000).toStringAsFixed(1)}s';
+    return '${(ms / 60000).toStringAsFixed(1)}m';
   }
 
   @override
@@ -1591,6 +1822,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                 case 'versions':
                   _showRevisions();
                   break;
+                case 'security':
+                  _showSafetyAnalysis();
+                  break;
                 case 'layout':
                   _autoLayout();
                   break;
@@ -1605,6 +1839,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
               PopupMenuItem(value: 'edges', child: ListTile(leading: Icon(Icons.route_outlined), title: Text('连线配置'))),
               PopupMenuItem(value: 'runs', child: ListTile(leading: Icon(Icons.timeline_outlined), title: Text('Execution Trace'))),
               PopupMenuItem(value: 'versions', child: ListTile(leading: Icon(Icons.history_outlined), title: Text('版本历史'))),
+              PopupMenuItem(value: 'security', child: ListTile(leading: Icon(Icons.security_outlined), title: Text('权限与风险摘要'))),
               PopupMenuItem(value: 'layout', child: ListTile(leading: Icon(Icons.auto_fix_high_outlined), title: Text('自动布局'))),
             ],
           ),
@@ -1902,7 +2137,9 @@ class _WorkflowGraphPainter extends CustomPainter {
 
 class _NodeTraceCard extends StatelessWidget {
   final Map<String, dynamic>? stepRun;
-  const _NodeTraceCard({required this.stepRun});
+  final List<Map<String, dynamic>> attempts;
+  final bool checkpoint;
+  const _NodeTraceCard({required this.stepRun, this.attempts = const <Map<String, dynamic>>[], this.checkpoint = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1919,16 +2156,60 @@ class _NodeTraceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [const Text('Execution Trace', style: TextStyle(fontWeight: FontWeight.w600)), const Spacer(), _RunStatusBadge(status: (stepRun!['status'] ?? '').toString())]),
+          Row(children: [const Text('Execution Trace', style: TextStyle(fontWeight: FontWeight.w600)), if (checkpoint) ...[const SizedBox(width: 6), const Chip(label: Text('checkpoint'), visualDensity: VisualDensity.compact)], const Spacer(), _RunStatusBadge(status: (stepRun!['status'] ?? '').toString())]),
           const SizedBox(height: 8),
-          Text('Attempt: ${stepRun!['attempt'] ?? 0}', style: AppTypography.caption(context)),
+          Text('最终 Attempt: ${stepRun!['attempt'] ?? 0}', style: AppTypography.caption(context)),
           if ((stepRun!['error'] ?? '').toString().isNotEmpty) Text('Error: ${stepRun!['error']}', style: TextStyle(color: context.error, fontSize: 12)),
+          if (attempts.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('Retry Attempts', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+            const SizedBox(height: 4),
+            ...attempts.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text(
+                    'G${item['generation'] ?? 0} / #${item['attempt'] ?? 0} · ${item['status'] ?? ''}${(item['nextBackoffMs'] ?? 0) == 0 ? '' : ' · ${item['nextBackoffMs']}ms 后重试'}',
+                    style: TextStyle(fontSize: 11, color: <String>{'failed', 'timed_out'}.contains((item['status'] ?? '').toString()) ? context.error : context.textSecondary),
+                  ),
+                )),
+          ],
           if (stepRun!.containsKey('input')) SelectableText('Input: ${stepRun!['input']}', style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
           if (stepRun!.containsKey('output')) SelectableText('Output: ${stepRun!['output']}', style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
         ],
       ),
     );
   }
+}
+
+class _WorkflowStatTile extends StatelessWidget {
+  final String label;
+  final String value;
+  const _WorkflowStatTile({required this.label, required this.value});
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brSmall),
+        child: Column(children: [Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)), Text(label, style: AppTypography.caption(context), maxLines: 1)]),
+      );
+}
+
+class _RiskBadge extends StatelessWidget {
+  final String level;
+  const _RiskBadge({required this.level});
+  @override
+  Widget build(BuildContext context) {
+    final normalized = level.toLowerCase();
+    final color = normalized == 'high' || normalized == 'forbidden' || normalized == 'missing' ? context.error : normalized == 'medium' ? context.warning : context.success;
+    return Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3), decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: AppRadius.brSmall), child: Text(level, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)));
+  }
+}
+
+class _SafetySection extends StatelessWidget {
+  final String title;
+  final String emptyText;
+  final List<String> items;
+  const _SafetySection({required this.title, required this.emptyText, required this.items});
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: Theme.of(context).textTheme.titleSmall), const SizedBox(height: 6), if (items.isEmpty) Text(emptyText, style: AppTypography.caption(context)) else ...items.map((item) => Padding(padding: const EdgeInsets.only(bottom: 4), child: SelectableText(item, style: const TextStyle(fontFamily: 'monospace', fontSize: 11))))]);
 }
 
 class _RunStatusIcon extends StatelessWidget {

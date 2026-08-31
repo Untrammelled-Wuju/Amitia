@@ -2233,6 +2233,24 @@ var schemaMigrations = []string{
 		updated_at DATETIME NOT NULL
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_templates_owner ON extension_workflow_templates(owner_user_id, updated_at DESC)`,
+	`CREATE TABLE IF NOT EXISTS extension_workflow_step_attempts (
+		execution_id TEXT NOT NULL,
+		workflow_id TEXT NOT NULL,
+		node_id TEXT NOT NULL,
+		attempt INTEGER NOT NULL,
+		generation INTEGER NOT NULL DEFAULT 0,
+		status TEXT NOT NULL,
+		input_json TEXT,
+		output_json TEXT,
+		error_message TEXT NOT NULL DEFAULT '',
+		next_backoff_ms INTEGER NOT NULL DEFAULT 0,
+		started_at DATETIME NOT NULL,
+		finished_at DATETIME NOT NULL,
+		created_at DATETIME NOT NULL,
+		PRIMARY KEY(execution_id, node_id, generation, attempt)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_attempts_execution ON extension_workflow_step_attempts(execution_id, node_id, generation, attempt)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_attempts_workflow ON extension_workflow_step_attempts(workflow_id, started_at DESC)`,
 }
 
 type dbExecutor interface {

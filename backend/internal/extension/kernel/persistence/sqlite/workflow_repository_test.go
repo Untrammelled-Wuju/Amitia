@@ -219,6 +219,12 @@ func TestWorkflowDefinitionDeleteCleansHistoryAndRuns(t *testing.T) {
 	}); err != nil || !created {
 		t.Fatalf("create workflow run: created=%v err=%v", created, err)
 	}
+	if err := execRepo.SaveAttempt(ctx, workflow.StepAttemptRun{
+		ExecutionID: "run-delete", WorkflowID: def.ID, NodeID: "one", Attempt: 1, Generation: 0,
+		Status: "failed", Error: "boom", StartedAt: now, FinishedAt: now.Add(10 * time.Millisecond),
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := defRepo.Delete(ctx, def.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -233,6 +239,75 @@ func TestWorkflowDefinitionDeleteCleansHistoryAndRuns(t *testing.T) {
 	}
 	if _, err := execRepo.Get(ctx, "run-delete"); err == nil {
 		t.Fatal("workflow execution should be deleted")
+	}
+	attempts, err := execRepo.ListStepAttempts(ctx, "run-delete")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(attempts) != 0 {
+		t.Fatalf("workflow attempts should be deleted: %+v", attempts)
+	}
+}
+
+func TestWorkflowExecutionRepositoryAttemptsAndStats(t *testing.T) {
+	db := openWorkflowTestDB(t)
+	ctx := context.Background()
+	repo := NewWorkflowExecutionRepository(db)
+	now := time.Now().UTC()
+	run := workflow.WorkflowRun{
+		ExecutionID: "run-stats", WorkflowID: "wf-stats", Status: workflow.RunStatusRunning,
+		Input: json.RawMessage(`{"value":1}`), Context: workflow.ExecutionContext{InvocationID: "run-stats"},
+		Attempt: 1, StartedAt: now, UpdatedAt: now,
+	}
+	if _, created, err := repo.Start(ctx, run); err != nil || !created {
+		t.Fatalf("start stats run: created=%v err=%v", created, err)
+	}
+	firstFinished := now.Add(20 * time.Millisecond)
+	secondStarted := now.Add(30 * time.Millisecond)
+	secondFinished := now.Add(50 * time.Millisecond)
+	if err := repo.SaveAttempt(ctx, workflow.StepAttemptRun{
+		ExecutionID: run.ExecutionID, WorkflowID: run.WorkflowID, NodeID: "node-a", Attempt: 1, Generation: 0,
+		Status: "timed_out", Error: "timeout", NextBackoffMS: 100, StartedAt: now, FinishedAt: firstFinished,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SaveAttempt(ctx, workflow.StepAttemptRun{
+		ExecutionID: run.ExecutionID, WorkflowID: run.WorkflowID, NodeID: "node-a", Attempt: 2, Generation: 0,
+		Status: "succeeded", Output: json.RawMessage(`{"ok":true}`), StartedAt: secondStarted, FinishedAt: secondFinished,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stepFinished := secondFinished
+	if err := repo.SaveStep(ctx, workflow.StepRun{
+		ExecutionID: run.ExecutionID, WorkflowID: run.WorkflowID, NodeID: "node-a", Status: "succeeded",
+		Output: json.RawMessage(`{"ok":true}`), Attempt: 2, StartedAt: now, FinishedAt: &stepFinished,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	run.Status = workflow.RunStatusSucceeded
+	run.Output = json.RawMessage(`{"ok":true}`)
+	run.Steps = []workflow.StepResult{{NodeID: "node-a", Status: "succeeded", Attempt: 2}}
+	run.FinishedAt = &stepFinished
+	run.UpdatedAt = stepFinished
+	if err := repo.Finish(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	attempts, err := repo.ListStepAttempts(ctx, run.ExecutionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(attempts) != 2 || attempts[0].Status != "timed_out" || attempts[1].Attempt != 2 {
+		t.Fatalf("unexpected attempts: %+v", attempts)
+	}
+	stats, err := repo.GetStats(ctx, run.WorkflowID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.RunCount != 1 || stats.Succeeded != 1 || stats.SuccessRate != 1 {
+		t.Fatalf("unexpected run stats: %+v", stats)
+	}
+	if len(stats.NodeStatistics) != 1 || stats.NodeStatistics[0].TimedOut != 1 || stats.NodeStatistics[0].AverageAttempts != 2 {
+		t.Fatalf("unexpected node stats: %+v", stats.NodeStatistics)
 	}
 }
 
@@ -261,5 +336,52 @@ func TestWorkflowDefinitionDeletePreservesExtensionRunHistory(t *testing.T) {
 	}
 	if _, err := execRepo.Get(ctx, "run-extension-delete"); err != nil {
 		t.Fatalf("extension workflow history should be preserved: %v", err)
+	}
+}
+
+func TestWorkflowExecutionRepositoryRecoveryRefreshesContext(t *testing.T) {
+	db := openWorkflowTestDB(t)
+	repo := NewWorkflowExecutionRepository(db)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	run := workflow.WorkflowRun{
+		ExecutionID: "recover-context", WorkflowID: "wf-recover", Status: workflow.RunStatusRunning,
+		Input:   json.RawMessage(`{"value":1}`),
+		Context: workflow.ExecutionContext{InvocationID: "recover-context", Generation: 0, DefinitionHash: "hash-a", OperationID: "op-a", TraceID: "trace-a"},
+		Attempt: 1, StartedAt: now, UpdatedAt: now,
+	}
+	if _, created, err := repo.Start(ctx, run); err != nil || !created {
+		t.Fatalf("start: created=%v err=%v", created, err)
+	}
+	finished := now.Add(time.Second)
+	run.Status = workflow.RunStatusFailed
+	run.Error = "boom"
+	run.FinishedAt = &finished
+	run.UpdatedAt = finished
+	if err := repo.Finish(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := run
+	restarted.Status = workflow.RunStatusRunning
+	restarted.Context.Recovery = true
+	restarted.Context.Generation = 1
+	restarted.Context.DefinitionHash = "hash-b"
+	restarted.Context.OperationID = "op-b"
+	restarted.Context.TraceID = "trace-b"
+	restarted.FinishedAt = nil
+	restarted.UpdatedAt = time.Now().UTC()
+	if _, created, err := repo.Start(ctx, restarted); err != nil || created {
+		t.Fatalf("restart: created=%v err=%v", created, err)
+	}
+	loaded, err := repo.Get(ctx, run.ExecutionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Status != workflow.RunStatusRunning || loaded.Generation != 1 || loaded.Context.Generation != 1 || loaded.Context.DefinitionHash != "hash-b" || loaded.Context.OperationID != "op-b" || loaded.Context.TraceID != "trace-b" {
+		t.Fatalf("recovery context not refreshed: %+v", loaded)
+	}
+	if loaded.FinishedAt != nil || loaded.Error != "" {
+		t.Fatalf("recovery should clear terminal fields: %+v", loaded)
 	}
 }
