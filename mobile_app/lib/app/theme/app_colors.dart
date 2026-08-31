@@ -17,28 +17,28 @@ class AppColors {
 class _LightColors {
   const _LightColors();
 
-  final Color backgroundPrimary = const Color(0xFFF8F6F2);
-  final Color backgroundSecondary = const Color(0xFFF7F4EF);
-  final Color surfacePrimary = const Color(0xFFFFFDF9);
-  final Color surfaceSecondary = const Color(0xFFF2EEE8);
+  final Color backgroundPrimary = const Color(0xFFF7F8FA);
+  final Color backgroundSecondary = const Color(0xFFF3F5F7);
+  final Color surfacePrimary = const Color(0xFFFFFFFF);
+  final Color surfaceSecondary = const Color(0xFFF4F6F8);
 
   final Color accentPrimary = const Color(0xFF8A5728);
   final Color accentSecondary = const Color(0xFF6E421F);
   final Color accentSoft = const Color(0xFFEFE1D2);
   final Color accentPressed = const Color(0xFF6E421F);
 
-  final Color textPrimary = const Color(0xFF24221F);
-  final Color textSecondary = const Color(0xFF67615A);
-  final Color textTertiary = const Color(0xFF9B938A);
-  final Color textDisabled = const Color(0xFFB9B2AA);
+  final Color textPrimary = const Color(0xFF1F2329);
+  final Color textSecondary = const Color(0xFF646A73);
+  final Color textTertiary = const Color(0xFF9096A0);
+  final Color textDisabled = const Color(0xFFBCC1C9);
 
-  final Color borderPrimary = const Color(0xFFE5DED5);
-  final Color borderSecondary = const Color(0xFFEFEAE4);
+  final Color borderPrimary = const Color(0xFFE2E6EB);
+  final Color borderSecondary = const Color(0xFFEFF1F4);
 
-  final Color success = const Color(0xFF4D715D);
-  final Color warning = const Color(0xFF9A6A31);
-  final Color error = const Color(0xFFA34F49);
-  final Color info = const Color(0xFF4E6C82);
+  final Color success = const Color(0xFF2E8B57);
+  final Color warning = const Color(0xFFC9851B);
+  final Color error = const Color(0xFFD64545);
+  final Color info = const Color(0xFF4776E6);
 
   final Color scrim = const Color(0x66000000);
   final Color overlay = const Color(0x1A000000);
