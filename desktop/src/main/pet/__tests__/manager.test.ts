@@ -1053,13 +1053,25 @@ describe("DesktopPetManager Runtime report rejection safety", () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const internal = manager as never as {
       runtimeHandler: { sendRuntimeEvent: ReturnType<typeof vi.fn> };
-      handleClick: (x: number, y: number) => void;
+      handleClick: (payload: {
+        canvasX: number;
+        canvasY: number;
+        screenX: number;
+        screenY: number;
+        occurredAt: number;
+      }) => void;
     };
     internal.runtimeHandler = {
       sendRuntimeEvent: vi.fn(() => Promise.reject(new Error("runtime socket not open"))),
     };
 
-    internal.handleClick(10, 20);
+    internal.handleClick({
+      canvasX: 10,
+      canvasY: 20,
+      screenX: 110,
+      screenY: 120,
+      occurredAt: Date.now(),
+    });
     await Promise.resolve();
     await Promise.resolve();
 
