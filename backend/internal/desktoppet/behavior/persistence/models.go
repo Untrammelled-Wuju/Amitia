@@ -12,6 +12,7 @@ type BehaviorContextModel struct {
 	ForegroundJSON          string `gorm:"column:foreground_json"`
 	CooldownsJSON           string `gorm:"column:cooldowns_json"`
 	RecentSemanticsJSON     string `gorm:"column:recent_semantics_json"`
+	RecentEventKeysJSON     string `gorm:"column:recent_event_keys_json"`
 	DesiredStateJSON        string `gorm:"column:desired_state_json"`
 	LastSourceRevisionsJSON string `gorm:"column:last_source_revisions_json"`
 	UpdatedAt               string `gorm:"column:updated_at"`
@@ -23,11 +24,11 @@ func (BehaviorContextModel) TableName() string {
 
 type BehaviorInboxModel struct {
 	EventID           string `gorm:"column:event_id;primaryKey"`
-	DedupKey          string `gorm:"column:dedup_key;uniqueIndex:ux_desktop_pet_behavior_inbox_dedup"`
+	DedupKey          string `gorm:"column:dedup_key;uniqueIndex:ux_desktop_pet_behavior_inbox_dedup,priority:3"`
 	EventType         string `gorm:"column:event_type"`
 	SchemaVersion     int    `gorm:"column:schema_version"`
-	UserID            string `gorm:"column:user_id"`
-	CharacterID       string `gorm:"column:character_id"`
+	UserID            string `gorm:"column:user_id;uniqueIndex:ux_desktop_pet_behavior_inbox_dedup,priority:1"`
+	CharacterID       string `gorm:"column:character_id;uniqueIndex:ux_desktop_pet_behavior_inbox_dedup,priority:2"`
 	ConversationID    string `gorm:"column:conversation_id"`
 	InteractionID     string `gorm:"column:interaction_id"`
 	SessionID         string `gorm:"column:session_id"`

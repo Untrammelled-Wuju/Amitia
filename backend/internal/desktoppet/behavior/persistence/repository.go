@@ -146,6 +146,7 @@ func saveContextCASTx(tx *gorm.DB, currentRevision int64, next behavior.Behavior
 	foregroundJSON := contextJSONOrEmpty(next.Foreground)
 	cooldownsJSON := contextJSONOrEmpty(next.Cooldowns)
 	recentSemanticsJSON := contextJSONOrEmpty(next.RecentSemantics)
+	recentEventKeysJSON := contextJSONOrEmpty(next.RecentEventKeys)
 	desiredJSON := contextJSONOrEmpty(next.Desired)
 	lastSourceRevisionsJSON := contextJSONOrEmpty(next.LastSourceRevisions)
 	updatedAt := next.UpdatedAt
@@ -165,6 +166,7 @@ func saveContextCASTx(tx *gorm.DB, currentRevision int64, next behavior.Behavior
 			"foreground_json":            foregroundJSON,
 			"cooldowns_json":             cooldownsJSON,
 			"recent_semantics_json":      recentSemanticsJSON,
+			"recent_event_keys_json":     recentEventKeysJSON,
 			"desired_state_json":         desiredJSON,
 			"last_source_revisions_json": lastSourceRevisionsJSON,
 			"updated_at":                 updatedAt.Format(time.RFC3339),
@@ -198,6 +200,7 @@ func saveContextCASTx(tx *gorm.DB, currentRevision int64, next behavior.Behavior
 		ForegroundJSON:          foregroundJSON,
 		CooldownsJSON:           cooldownsJSON,
 		RecentSemanticsJSON:     recentSemanticsJSON,
+		RecentEventKeysJSON:     recentEventKeysJSON,
 		DesiredStateJSON:        desiredJSON,
 		LastSourceRevisionsJSON: lastSourceRevisionsJSON,
 		UpdatedAt:               updatedAt.Format(time.RFC3339),
@@ -894,6 +897,7 @@ func contextModelToSnapshot(m *BehaviorContextModel) (*behavior.BehaviorContextS
 		ActiveTools:         make(map[string]behavior.ToolOperationState),
 		Cooldowns:           make(map[string]time.Time),
 		RecentSemantics:     make([]behavior.RecentSemanticRecord, 0),
+		RecentEventKeys:     make([]string, 0),
 		Desired:             behavior.DesiredBehaviorState{Semantic: "fallback_idle", SourceLayer: "stable"},
 		LastSourceRevisions: make(map[string]int64),
 	}
@@ -935,6 +939,11 @@ func contextModelToSnapshot(m *BehaviorContextModel) (*behavior.BehaviorContextS
 	if m.RecentSemanticsJSON != "" && m.RecentSemanticsJSON != "{}" && m.RecentSemanticsJSON != "null" {
 		if err := json.Unmarshal([]byte(m.RecentSemanticsJSON), &snap.RecentSemantics); err != nil {
 			return nil, fmt.Errorf("unmarshal recent semantics: %w", err)
+		}
+	}
+	if m.RecentEventKeysJSON != "" && m.RecentEventKeysJSON != "{}" && m.RecentEventKeysJSON != "null" {
+		if err := json.Unmarshal([]byte(m.RecentEventKeysJSON), &snap.RecentEventKeys); err != nil {
+			return nil, fmt.Errorf("unmarshal recent event keys: %w", err)
 		}
 	}
 	if m.DesiredStateJSON != "" && m.DesiredStateJSON != "{}" && m.DesiredStateJSON != "null" {
