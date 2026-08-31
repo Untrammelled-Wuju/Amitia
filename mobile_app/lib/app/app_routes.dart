@@ -29,6 +29,7 @@ abstract final class AppRoutes {
   static const extensionsRuns = '/extensions/runs';
   static const workshop = '/workshop';
   static const workshopSkills = '/workshop/skills';
+  static const workshopWorkflows = '/workshop/workflows';
   static const workshopPet = '/workshop/pet';
   static const workshopPetCreate = '/workshop/pet/create';
   static const workshopPetTasks = '/workshop/pet/tasks';
@@ -98,6 +99,7 @@ abstract final class AppRoutes {
   static String petProcessing(String taskId) => '/workshop/pet/processing/$taskId';
   static String petActionEditor(String taskId, String actionKey) => '/workshop/pet/processing/$taskId/actions/$actionKey/editor';
   static String skillDraftEditor(String id) => '/workshop/skills/$id/editor';
+  static String workflowEditor(String id) => '/workshop/workflows/$id';
   static String modelConfig(String type) => '/settings/models/$type';
   static String kernelPage(String page) => '/developer/kernel/$page';
 }

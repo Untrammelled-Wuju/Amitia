@@ -42,6 +42,8 @@ import '../../../features/extensions/presentation/pages/plugin_detail_page.dart'
 import '../../../features/game_center/presentation/pages/game_center_page.dart';
 import '../../../features/desktop_pet/presentation/pages/desktop_pet_page.dart';
 import '../../../features/workshop/presentation/pages/workshop_home_page.dart';
+import '../../../features/workshop/presentation/pages/workflow_list_page.dart';
+import '../../../features/workshop/presentation/pages/workflow_editor_page.dart';
 import '../../../features/workshop/presentation/pages/skill_workshop_page.dart';
 import '../../../features/workshop/presentation/pages/skill_draft_editor_page.dart';
 import '../../../features/workshop/presentation/pages/pet_center_page.dart';
@@ -471,6 +473,22 @@ GoRoute(
   pageBuilder: (context, state) => drawerSlideFadePage(
     state: state,
     child: const WorkshopHomePage(),
+  ),
+),
+GoRoute(
+  path: '/workshop/workflows',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const WorkflowListPage(),
+  ),
+),
+GoRoute(
+  path: '/workshop/workflows/:id',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: WorkflowEditorPage(workflowId: state.pathParameters['id']!),
   ),
 ),
 GoRoute(
