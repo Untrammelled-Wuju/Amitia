@@ -109,3 +109,13 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 - 新数据库：IsNewDatabase 检测空库 → ApplyBaseline 一次性建全部表 → MarkAllMigrationsApplied 标记所有迁移已应用 → 跳过历史迁移执行
 - 已有数据库：CreatePreMigrationBackup 预迁移备份 → ApplyBaseline 幂等补全 → Apply 依次执行未应用的版本化迁移
 - 内核 SQLite（extension/kernel/persistence/sqlite）有独立迁移系统，不纳入统一注册
+
+Android 构建与真机安装规则：
+
+- 仅允许构建、安装和验证 Release 版本 APK，禁止执行、安装或保留任何 Debug 版本 APK。
+- 真机安装前必须确认包名为 com.amitia.amitia_app；发现 com.amitia.amitia_app.debug 时必须先卸载，并在安装后复核该 Debug 包不存在。
+
+源码副本规则：
+
+- 禁止使用临时复制的源码目录构建、打包、安装或验证正式版本。
+- 如因排查临时复制源码到项目根目录以外的位置，使用完成后必须立即删除该复制目录，并在删除后确认项目根目录仍为唯一构建来源。
