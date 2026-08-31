@@ -1484,6 +1484,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_contexts (
     foreground_json TEXT NOT NULL DEFAULT '{}',
     cooldowns_json TEXT NOT NULL DEFAULT '{}',
     recent_semantics_json TEXT NOT NULL DEFAULT '[]',
+    recent_event_keys_json TEXT NOT NULL DEFAULT '[]',
     desired_state_json TEXT NOT NULL DEFAULT '{}',
     last_source_revisions_json TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL DEFAULT '',

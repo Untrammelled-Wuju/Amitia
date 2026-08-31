@@ -17,6 +17,10 @@ type Migration struct {
 	Name              string
 	AcceptedChecksums []string
 	Up                func(*Step) error
+	// ChecksumUp may be provided by legacy data migrations whose Up function
+	// performs direct DB reads/writes through Step.DB(). Checksum calculation
+	// must be side-effect free; when nil, Up is used as before.
+	ChecksumUp func(*Step) error
 }
 
 type Record struct {
@@ -44,6 +48,7 @@ type Step struct {
 	db         *gorm.DB
 	commands   []string
 	operations []string
+	err        error
 }
 
 func (s *Step) DB() *gorm.DB {
@@ -192,8 +197,12 @@ func (r Runner) applyOne(migration Migration) error {
 		step.db = tx
 		step.commands = nil
 		step.operations = nil
+		step.err = nil
 		if err := migration.Up(step); err != nil {
 			return err
+		}
+		if step.err != nil {
+			return step.err
 		}
 		checksum := checksumFor(step.operations)
 		startedAt := now().Format(time.RFC3339)
@@ -229,6 +238,13 @@ func (r Runner) applyOne(migration Migration) error {
 	return nil
 }
 
+func (s *Step) recordError(err error) error {
+	if err != nil && s.err == nil {
+		s.err = err
+	}
+	return err
+}
+
 func (s *Step) CreateTable(sql string) {
 	s.commands = append(s.commands, sql)
 	s.operations = append(s.operations, sql)
@@ -241,17 +257,17 @@ func (s *Step) Execute(sql string) {
 
 func (s *Step) AddColumn(table, column, definition string) error {
 	if !safeIdentifier(table) || !safeIdentifier(column) {
-		return fmt.Errorf("unsafe table or column name: %s.%s", table, column)
+		return s.recordError(fmt.Errorf("unsafe table or column name: %s.%s", table, column))
 	}
 	exists, err := s.ColumnExists(table, column)
 	if err != nil {
-		return err
+		return s.recordError(err)
 	}
 	operation := "add_column:" + table + "." + column + ":" + definition
 	s.operations = append(s.operations, operation)
 	tableExists, err := s.TableExists(table)
 	if err != nil {
-		return err
+		return s.recordError(err)
 	}
 	if exists || !tableExists {
 		return nil
@@ -262,16 +278,16 @@ func (s *Step) AddColumn(table, column, definition string) error {
 
 func (s *Step) CreateIndex(name, table string, columns []string, unique bool) error {
 	if !safeIdentifier(name) || !safeIdentifier(table) {
-		return fmt.Errorf("unsafe index or table name: %s %s", name, table)
+		return s.recordError(fmt.Errorf("unsafe index or table name: %s %s", name, table))
 	}
 	for _, column := range columns {
 		if !safeIdentifier(column) {
-			return fmt.Errorf("unsafe index column: %s", column)
+			return s.recordError(fmt.Errorf("unsafe index column: %s", column))
 		}
 	}
 	exists, err := s.IndexExists(name)
 	if err != nil {
-		return err
+		return s.recordError(err)
 	}
 	operation := "create_index:" + name + ":" + table + ":" + strings.Join(columns, ",")
 	s.operations = append(s.operations, operation)
@@ -347,8 +363,18 @@ func checksumFor(parts []string) string {
 func (r Runner) computeMigrationChecksum(migration Migration) (string, error) {
 	step := &Step{}
 	step.db = r.DB
-	if err := migration.Up(step); err != nil {
+	checksumUp := migration.ChecksumUp
+	if checksumUp == nil {
+		checksumUp = migration.Up
+	}
+	if checksumUp == nil {
+		return "", fmt.Errorf("migration %s missing checksum/up function", migration.Version)
+	}
+	if err := checksumUp(step); err != nil {
 		return "", err
+	}
+	if step.err != nil {
+		return "", step.err
 	}
 	return checksumFor(step.operations), nil
 }
