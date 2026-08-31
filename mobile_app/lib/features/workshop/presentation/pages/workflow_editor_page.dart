@@ -35,6 +35,8 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   List<Map<String, dynamic>> _catalog = <Map<String, dynamic>>[];
   Map<String, Map<String, dynamic>> _stepRuns = <String, Map<String, dynamic>>{};
   List<Map<String, dynamic>> _runHistory = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _revisions = <Map<String, dynamic>>[];
+  bool _revisionBusy = false;
   String? _connectFrom;
   String? _activeRunId;
   String _activeRunStatus = '';
@@ -70,7 +72,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       } catch (_) {
         _catalog = <Map<String, dynamic>>[];
       }
-      await _loadRuns();
+      await Future.wait(<Future<void>>[_loadRuns(), _loadRevisions()]);
       if (!mounted) return;
       setState(() => _loading = false);
       WidgetsBinding.instance.addPostFrameCallback((_) => _fitView());
@@ -173,6 +175,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         _saving = false;
         _dirty = false;
       });
+      await _loadRevisions();
       if (notify) _show('已保存并通过 DAG 校验');
       return true;
     } catch (error) {
@@ -766,6 +769,149 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     } finally {
       if (mounted) setState(() => _aiWorking = false);
     }
+  }
+
+  Future<void> _loadRevisions() async {
+    try {
+      final items = await ref.read(extensionServiceProvider).workflowRevisions(widget.workflowId, limit: 50);
+      if (mounted) setState(() => _revisions = items);
+    } catch (_) {
+      if (mounted) setState(() => _revisions = <Map<String, dynamic>>[]);
+    }
+  }
+
+  Future<void> _createRevisionSnapshot() async {
+    if (_revisionBusy) return;
+    if (_dirty && !await _save(notify: false)) return;
+    final controller = TextEditingController();
+    final note = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('保存版本快照'),
+        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: '备注（可选）', hintText: '例如：调整天气分支前')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text.trim()), child: const Text('保存')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (note == null || !mounted) return;
+    setState(() => _revisionBusy = true);
+    try {
+      await ref.read(extensionServiceProvider).createWorkflowRevision(widget.workflowId, note: note);
+      await _loadRevisions();
+      _show('版本快照已保存');
+    } catch (error) {
+      _show('保存版本失败：${_message(error)}');
+    } finally {
+      if (mounted) setState(() => _revisionBusy = false);
+    }
+  }
+
+  Future<void> _rollbackRevision(Map<String, dynamic> item) async {
+    if (_revisionBusy) return;
+    final revisionNo = (item['revisionNo'] ?? '').toString();
+    final revisionId = (item['revisionId'] ?? '').toString();
+    if (revisionId.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('版本回滚'),
+            content: Text('回滚到版本 #$revisionNo？当前状态会先自动保存，随后恢复当时的 DAG、触发器和设置。'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+              FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('回滚')),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+    setState(() => _revisionBusy = true);
+    try {
+      final restored = await ref.read(extensionServiceProvider).rollbackWorkflowRevision(widget.workflowId, revisionId);
+      _normalize(restored);
+      await Future.wait(<Future<void>>[_loadRevisions(), _loadRuns()]);
+      if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => _fitView());
+      _show('已回滚到版本 #$revisionNo');
+    } catch (error) {
+      _show('版本回滚失败：${_message(error)}');
+    } finally {
+      if (mounted) setState(() => _revisionBusy = false);
+    }
+  }
+
+  Future<void> _showRevisions() async {
+    await _loadRevisions();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.72,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text('版本历史', style: Theme.of(context).textTheme.titleMedium)),
+                      IconButton(
+                        tooltip: '保存快照',
+                        onPressed: _revisionBusy
+                            ? null
+                            : () async {
+                                Navigator.pop(sheetContext);
+                                await _createRevisionSnapshot();
+                              },
+                        icon: const Icon(Icons.add_circle_outline),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text('保存修改前会自动记录旧版本，最多保留最近 50 个版本快照；回滚前也会先保存当前状态。', style: AppTypography.caption(context)),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: _revisions.isEmpty
+                      ? const Center(child: Text('暂无版本快照'))
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _revisions.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final item = _revisions[index];
+                            final note = (item['note'] ?? '').toString();
+                            final hash = (item['definitionHash'] ?? '').toString();
+                            final createdAt = (item['createdAt'] ?? '').toString();
+                            return ListTile(
+                              title: Text('#${item['revisionNo']} · ${note.isEmpty ? '自动快照' : note}'),
+                              subtitle: Text('${createdAt.isEmpty ? '' : createdAt}\n${hash.length > 12 ? hash.substring(0, 12) : hash}'),
+                              isThreeLine: true,
+                              trailing: TextButton(
+                                onPressed: _revisionBusy
+                                    ? null
+                                    : () async {
+                                        Navigator.pop(sheetContext);
+                                        await _rollbackRevision(item);
+                                      },
+                                child: const Text('回滚'),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _editMetadata() async {
@@ -1442,6 +1588,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                 case 'runs':
                   _showRuns();
                   break;
+                case 'versions':
+                  _showRevisions();
+                  break;
                 case 'layout':
                   _autoLayout();
                   break;
@@ -1455,6 +1604,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
               PopupMenuItem(value: 'triggers', child: ListTile(leading: Icon(Icons.bolt_outlined), title: Text('Trigger Center'))),
               PopupMenuItem(value: 'edges', child: ListTile(leading: Icon(Icons.route_outlined), title: Text('连线配置'))),
               PopupMenuItem(value: 'runs', child: ListTile(leading: Icon(Icons.timeline_outlined), title: Text('Execution Trace'))),
+              PopupMenuItem(value: 'versions', child: ListTile(leading: Icon(Icons.history_outlined), title: Text('版本历史'))),
               PopupMenuItem(value: 'layout', child: ListTile(leading: Icon(Icons.auto_fix_high_outlined), title: Text('自动布局'))),
             ],
           ),
