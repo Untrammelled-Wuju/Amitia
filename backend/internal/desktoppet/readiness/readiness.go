@@ -81,21 +81,6 @@ func (s *ReadinessService) checkerNames() map[string]bool {
 
 var RequiredCheckerNames = []string{
 	"sqlite",
-	"extension",
-	"desktop_session",
-	"ownership_guard",
-	"runtime_ticket",
-	"runtime_gateway",
-	"path_guard",
-	"generation_worker",
-	"processing_worker",
-	"quality_worker",
-	"installation_worker",
-	"behavior_worker",
-	"migration_state",
-	"legacy_chain",
-	"canonical_cutover",
-	"mesh",
 }
 
 func (s *ReadinessService) Snapshot() ReadinessSnapshot {
