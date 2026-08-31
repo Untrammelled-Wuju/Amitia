@@ -32,6 +32,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   List<Map<String, dynamic>> _nodes = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _edges = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _triggers = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _catalog = <Map<String, dynamic>>[];
   Map<String, Map<String, dynamic>> _stepRuns = <String, Map<String, dynamic>>{};
   List<Map<String, dynamic>> _runHistory = <Map<String, dynamic>>[];
   String? _connectFrom;
@@ -39,6 +40,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   String _activeRunStatus = '';
   bool _loading = true;
   bool _saving = false;
+  bool _aiWorking = false;
   bool _dirty = false;
   bool _disposed = false;
   Timer? _pollTimer;
@@ -60,8 +62,14 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final workflow = await ref.read(extensionServiceProvider).getWorkflow(widget.workflowId);
+      final service = ref.read(extensionServiceProvider);
+      final workflow = await service.getWorkflow(widget.workflowId);
       _normalize(workflow);
+      try {
+        _catalog = await service.workflowCatalog();
+      } catch (_) {
+        _catalog = <Map<String, dynamic>>[];
+      }
       await _loadRuns();
       if (!mounted) return;
       setState(() => _loading = false);
@@ -82,6 +90,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     _workflow!['outputSchema'] = _asMap(_workflow!['outputSchema'], fallback: <String, dynamic>{'type': 'object'});
     _workflow!['metadata'] = _asMap(_workflow!['metadata']);
     _workflow!['callableByAgent'] = _workflow!['callableByAgent'] == true;
+    _workflow!['agentTool'] = _asMap(_workflow!['agentTool']);
     _workflow!['enabled'] = _workflow!['enabled'] != false;
     _nodes = _asMapList(_workflow!['nodes']);
     _edges = _asMapList(_workflow!['edges']);
@@ -427,10 +436,346 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     });
   }
 
+  List<String> _schemaLeafPaths(dynamic schema, [String prefix = '']) {
+    final map = _asMap(schema);
+    final properties = map['properties'];
+    if (properties is! Map) return prefix.isEmpty ? const <String>[] : <String>[prefix];
+    final result = <String>[];
+    for (final entry in properties.entries) {
+      final path = prefix.isEmpty ? entry.key.toString() : '$prefix.${entry.key}';
+      final nested = _schemaLeafPaths(entry.value, path);
+      result.addAll(nested.isEmpty ? <String>[path] : nested);
+    }
+    return result;
+  }
+
+  Map<String, dynamic>? _catalogForNode(Map<String, dynamic> node) {
+    final targetId = (node['targetId'] ?? '').toString();
+    final runtimeId = (_asMap(node['runtime'])['runtimeId'] ?? '').toString();
+    for (final item in _catalog) {
+      final itemRuntime = _asMap(item['runtime']);
+      if ((item['id'] ?? '').toString() == targetId ||
+          (item['modelName'] ?? '').toString() == targetId ||
+          (runtimeId.isNotEmpty && (itemRuntime['runtimeId'] ?? '').toString() == runtimeId)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  List<Map<String, String>> _mappingSources(Map<String, dynamic> targetNode) {
+    final sources = <Map<String, String>>[];
+    for (final path in _schemaLeafPaths(_workflow?['inputSchema'])) {
+      sources.add(<String, String>{'label': '工作流输入 · $path', 'ref': 'input.$path'});
+    }
+    sources.addAll(const <Map<String, String>>[
+      <String, String>{'label': 'Runtime · userId', 'ref': 'runtime.userId'},
+      <String, String>{'label': 'Runtime · conversationId', 'ref': 'runtime.conversationId'},
+      <String, String>{'label': 'Runtime · characterId', 'ref': 'runtime.characterId'},
+      <String, String>{'label': 'Runtime · traceId', 'ref': 'runtime.traceId'},
+    ]);
+    final targetId = (targetNode['id'] ?? '').toString();
+    for (final node in _nodes) {
+      final nodeId = (node['id'] ?? '').toString();
+      if (nodeId.isEmpty || nodeId == targetId || _hasPath(targetId, nodeId)) continue;
+      var paths = _schemaLeafPaths(_catalogForNode(node)?['outputSchema']);
+      if (paths.isEmpty) {
+        paths = _valueLeafPaths(_stepRuns[nodeId]?['output']);
+      }
+      for (final path in paths) {
+        sources.add(<String, String>{
+          'label': '${node['label'] ?? nodeId} · $path',
+          'ref': 'steps.$nodeId.$path',
+        });
+      }
+    }
+    return sources;
+  }
+
+  List<String> _valueLeafPaths(dynamic value, [String prefix = '']) {
+    if (value is Map) {
+      final result = <String>[];
+      for (final entry in value.entries) {
+        final path = prefix.isEmpty ? entry.key.toString() : '$prefix.${entry.key}';
+        final nested = _valueLeafPaths(entry.value, path);
+        result.addAll(nested.isEmpty ? <String>[path] : nested);
+      }
+      return result;
+    }
+    return prefix.isEmpty ? const <String>[] : <String>[prefix];
+  }
+
+  void _setMapPath(Map<String, dynamic> root, String path, dynamic value) {
+    final parts = path.split('.').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    if (parts.isEmpty) return;
+    var current = root;
+    for (var i = 0; i < parts.length - 1; i++) {
+      final key = parts[i];
+      final child = current[key];
+      if (child is Map<String, dynamic>) {
+        current = child;
+      } else if (child is Map) {
+        final mapped = child.map((k, v) => MapEntry(k.toString(), v));
+        current[key] = mapped;
+        current = mapped;
+      } else {
+        final mapped = <String, dynamic>{};
+        current[key] = mapped;
+        current = mapped;
+      }
+    }
+    current[parts.last] = value;
+  }
+
+  Future<void> _showDataMappingDialog(
+    BuildContext dialogParentContext,
+    Map<String, dynamic> node,
+    TextEditingController inputController,
+  ) async {
+    final targetFields = _schemaLeafPaths(_catalogForNode(node)?['inputSchema']);
+    final sources = _mappingSources(node);
+    final targetController = TextEditingController(text: targetFields.isNotEmpty ? targetFields.first : '');
+    String? sourceRef = sources.isNotEmpty ? sources.first['ref'] : null;
+    final applied = await showDialog<bool>(
+      context: dialogParentContext,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('可视化数据映射'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(controller: targetController, decoration: const InputDecoration(labelText: '目标输入字段路径')),
+                  if (targetFields.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: targetFields.take(16).map((path) => ActionChip(label: Text(path), onPressed: () => targetController.text = path)).toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  if (sources.isEmpty)
+                    const Text('当前没有可映射的数据源。请先配置 Workflow Input Schema、节点输出 Schema，或运行一次上游节点。')
+                  else
+                    DropdownButtonFormField<String>(
+                      initialValue: sourceRef,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: '数据来源'),
+                      items: sources.map((item) => DropdownMenuItem(value: item['ref'], child: Text(item['label'] ?? item['ref'] ?? '', overflow: TextOverflow.ellipsis))).toList(),
+                      onChanged: (value) => setDialogState(() => sourceRef = value),
+                    ),
+                  const SizedBox(height: 8),
+                  const Text('跨节点绑定会自动添加依赖边；如果会形成循环则拒绝绑定。'),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+            FilledButton(onPressed: sources.isEmpty ? null : () => Navigator.pop(context, true), child: const Text('绑定')),
+          ],
+        ),
+      ),
+    );
+    if (applied == true) {
+      try {
+        final targetPath = targetController.text.trim();
+        final refValue = (sourceRef ?? '').trim();
+        if (targetPath.isEmpty || refValue.isEmpty) throw const FormatException('字段和数据来源不能为空');
+        final decoded = inputController.text.trim().isEmpty ? <String, dynamic>{} : jsonDecode(inputController.text);
+        if (decoded is! Map) throw const FormatException('Input JSON 必须是 object 才能使用可视化映射');
+        final mappedInput = decoded.map((k, v) => MapEntry(k.toString(), v));
+        _setMapPath(mappedInput, targetPath, refValue);
+        final match = RegExp(r'^steps\.([^.]+)\.').firstMatch(refValue);
+        final sourceId = match?.group(1);
+        final targetId = (node['id'] ?? '').toString();
+        if (sourceId != null && sourceId.isNotEmpty && !_hasPath(sourceId, targetId)) {
+          if (_hasPath(targetId, sourceId)) throw const FormatException('该数据映射会形成 DAG 循环');
+          setState(() {
+            _edges.add(<String, dynamic>{
+              'id': 'edge-map-${DateTime.now().microsecondsSinceEpoch}',
+              'source': sourceId,
+              'target': targetId,
+              'sourceHandle': 'output',
+              'targetHandle': 'input',
+              'label': 'data',
+            });
+            _dirty = true;
+          });
+        }
+        inputController.text = _pretty(mappedInput);
+        setState(() {
+          final step = _asMap(node['step']);
+          step['input'] = mappedInput;
+          node['step'] = step;
+          _dirty = true;
+        });
+        _show('数据映射已绑定');
+      } catch (error) {
+        _show('数据映射失败：${_message(error)}');
+      }
+    }
+    targetController.dispose();
+  }
+
+  Future<String?> _promptAI(String title, String hint, {bool allowEmpty = false}) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 4,
+          maxLines: 8,
+          decoration: InputDecoration(hintText: hint),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+          FilledButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (allowEmpty || text.isNotEmpty) Navigator.pop(dialogContext, text);
+            },
+            child: const Text('继续'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return value;
+  }
+
+  Future<bool> _ensureSavedForAI() async {
+    if (!_dirty) return true;
+    return _save(notify: false);
+  }
+
+  void _applyAIProposal(Map<String, dynamic> proposal) {
+    final raw = proposal['definition'];
+    if (raw is! Map) throw StateError('AI 没有返回 workflow-v2 definition');
+    final definition = raw.map((k, v) => MapEntry(k.toString(), v));
+    definition['id'] = widget.workflowId;
+    setState(() {
+      _normalize(definition);
+      _dirty = true;
+    });
+    _autoLayout();
+  }
+
+  Future<void> _showAIProposalResult(Map<String, dynamic> result, String title) async {
+    if (!mounted) return;
+    final summary = (result['summary'] ?? '').toString();
+    final changes = ((result['changes'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList();
+    final warnings = ((result['warnings'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
+                if (summary.isNotEmpty) ...[const SizedBox(height: 8), Text(summary)],
+                for (final item in changes) Padding(padding: const EdgeInsets.only(top: 8), child: Text('• $item')),
+                for (final item in warnings) Padding(padding: const EdgeInsets.only(top: 8), child: Text('⚠ $item')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _aiEdit() async {
+    if (_aiWorking || _workflow == null) return;
+    final instruction = await _promptAI('AI 修改工作流', '例如：在天气节点后增加条件，只有下雨才通知；失败重试三次。');
+    if (instruction == null || instruction.isEmpty || !await _ensureSavedForAI()) return;
+    setState(() => _aiWorking = true);
+    try {
+      final result = await ref.read(extensionServiceProvider).editWorkflowWithAI(widget.workflowId, instruction);
+      _applyAIProposal(result);
+      await _showAIProposalResult(result, 'AI 修改已应用到草稿');
+    } catch (error) {
+      _show('AI 修改失败：${_message(error)}');
+    } finally {
+      if (mounted) setState(() => _aiWorking = false);
+    }
+  }
+
+  Future<void> _aiRepair() async {
+    if (_aiWorking || _workflow == null) return;
+    final instruction = await _promptAI('AI 修复工作流', '可选：描述当前问题；留空则自动检查并修复 DAG。', allowEmpty: true);
+    if (instruction == null || !await _ensureSavedForAI()) return;
+    setState(() => _aiWorking = true);
+    try {
+      final result = await ref.read(extensionServiceProvider).repairWorkflowWithAI(widget.workflowId, instruction: instruction);
+      _applyAIProposal(result);
+      await _showAIProposalResult(result, 'AI 修复已应用到草稿');
+    } catch (error) {
+      _show('AI 修复失败：${_message(error)}');
+    } finally {
+      if (mounted) setState(() => _aiWorking = false);
+    }
+  }
+
+  Future<void> _aiExplain() async {
+    if (_aiWorking || _workflow == null) return;
+    final instruction = await _promptAI('AI 解释工作流', '可选：例如“重点解释失败路径和权限风险”。', allowEmpty: true);
+    if (instruction == null || !await _ensureSavedForAI()) return;
+    setState(() => _aiWorking = true);
+    try {
+      final result = await ref.read(extensionServiceProvider).explainWorkflowWithAI(widget.workflowId, instruction: instruction);
+      if (!mounted) return;
+      final flow = ((result['flow'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList();
+      final issues = ((result['issues'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList();
+      final suggestions = ((result['suggestions'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList();
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('AI 工作流解释', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 10),
+                  Text((result['summary'] ?? '').toString()),
+                  if (flow.isNotEmpty) ...[const SizedBox(height: 16), const Text('流程'), ...flow.map((e) => Padding(padding: const EdgeInsets.only(top: 6), child: Text('• $e')))],
+                  if (issues.isNotEmpty) ...[const SizedBox(height: 16), const Text('问题'), ...issues.map((e) => Padding(padding: const EdgeInsets.only(top: 6), child: Text('• $e')))],
+                  if (suggestions.isNotEmpty) ...[const SizedBox(height: 16), const Text('建议'), ...suggestions.map((e) => Padding(padding: const EdgeInsets.only(top: 6), child: Text('• $e')))],
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } catch (error) {
+      _show('AI 解释失败：${_message(error)}');
+    } finally {
+      if (mounted) setState(() => _aiWorking = false);
+    }
+  }
+
   Future<void> _editMetadata() async {
     if (_workflow == null) return;
     final name = TextEditingController(text: (_workflow!['name'] ?? '').toString());
     final desc = TextEditingController(text: (_workflow!['description'] ?? '').toString());
+    final agentTool = _asMap(_workflow!['agentTool']);
+    final agentToolName = TextEditingController(text: (agentTool['name'] ?? '').toString());
+    final agentToolDescription = TextEditingController(text: (agentTool['description'] ?? '').toString());
+    var callableByAgent = _workflow!['callableByAgent'] == true;
     var enabled = _workflow!['enabled'] != false;
     final result = await showModalBottomSheet<bool>(
       context: context,
@@ -439,10 +784,11 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Text('工作流设置', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 16),
               TextField(controller: name, decoration: const InputDecoration(labelText: '名称')),
@@ -454,9 +800,23 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                 value: enabled,
                 onChanged: (v) => setSheetState(() => enabled = v),
               ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('允许 AI 调用'),
+                subtitle: const Text('保存后按当前用户隔离注册为 Agent Tool'),
+                value: callableByAgent,
+                onChanged: (v) => setSheetState(() => callableByAgent = v),
+              ),
+              if (callableByAgent) ...[
+                TextField(controller: agentToolName, decoration: const InputDecoration(labelText: 'Agent Tool 名称（可空）')),
+                const SizedBox(height: 10),
+                TextField(controller: agentToolDescription, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Agent Tool 描述')),
+                const SizedBox(height: 10),
+              ],
               const SizedBox(height: 10),
               SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('应用'))),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -465,12 +825,19 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       setState(() {
         _workflow!['name'] = name.text.trim().isEmpty ? '未命名工作流' : name.text.trim();
         _workflow!['description'] = desc.text.trim();
+        _workflow!['callableByAgent'] = callableByAgent;
+        _workflow!['agentTool'] = <String, dynamic>{
+          'name': agentToolName.text.trim(),
+          'description': agentToolDescription.text.trim(),
+        };
         _workflow!['enabled'] = enabled;
         _dirty = true;
       });
     }
     name.dispose();
     desc.dispose();
+    agentToolName.dispose();
+    agentToolDescription.dispose();
   }
 
   Future<void> _editNode(Map<String, dynamic> node) async {
@@ -565,6 +932,12 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                           maxLines: 8,
                           style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
                           decoration: const InputDecoration(labelText: 'Input JSON', alignLabelWithHint: true),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () => _showDataMappingDialog(context, node, input),
+                          icon: const Icon(Icons.data_object_outlined),
+                          label: const Text('可视化数据映射'),
                         ),
                         const SizedBox(height: 10),
                         TextField(
@@ -1041,6 +1414,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         showBackButton: true,
         fallbackRoute: AppRoutes.workshopWorkflows,
         actions: [
+          if (_aiWorking) const Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
           IconButton(tooltip: '校验', onPressed: _workflow == null ? null : _validate, icon: const Icon(Icons.fact_check_outlined)),
           IconButton(tooltip: '保存', onPressed: _workflow == null || _saving ? null : _save, icon: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined)),
           IconButton(tooltip: '运行', onPressed: _workflow == null ? null : _run, icon: const Icon(Icons.play_arrow)),
@@ -1049,6 +1423,15 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
               switch (value) {
                 case 'settings':
                   _editMetadata();
+                  break;
+                case 'ai_edit':
+                  _aiEdit();
+                  break;
+                case 'ai_repair':
+                  _aiRepair();
+                  break;
+                case 'ai_explain':
+                  _aiExplain();
                   break;
                 case 'triggers':
                   _editTriggers();
@@ -1065,6 +1448,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
               }
             },
             itemBuilder: (context) => const [
+              PopupMenuItem(value: 'ai_edit', child: ListTile(leading: Icon(Icons.auto_awesome_outlined), title: Text('AI 修改工作流'))),
+              PopupMenuItem(value: 'ai_repair', child: ListTile(leading: Icon(Icons.build_circle_outlined), title: Text('AI 修复工作流'))),
+              PopupMenuItem(value: 'ai_explain', child: ListTile(leading: Icon(Icons.psychology_alt_outlined), title: Text('AI 解释工作流'))),
               PopupMenuItem(value: 'settings', child: ListTile(leading: Icon(Icons.settings_outlined), title: Text('工作流设置'))),
               PopupMenuItem(value: 'triggers', child: ListTile(leading: Icon(Icons.bolt_outlined), title: Text('Trigger Center'))),
               PopupMenuItem(value: 'edges', child: ListTile(leading: Icon(Icons.route_outlined), title: Text('连线配置'))),
