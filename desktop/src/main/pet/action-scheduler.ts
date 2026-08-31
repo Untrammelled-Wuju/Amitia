@@ -163,7 +163,8 @@ export class DesktopPetActionScheduler {
   }>();
   private lastTriggeredAt: Map<string, number> = new Map();
   private sustainedState: string | null = null;
-  private idleRepeatCount: Map<string, number> = new Map();
+  private lastIdlePlaybackKey: string | null = null;
+  private consecutiveIdlePlaybackCount = 0;
   private resourceLoader: ResourceLoader;
 
   constructor(player: DesktopPetPlayerPort & PlayerLifecyclePort, callbacks?: SchedulerCallbacks) {
@@ -347,6 +348,7 @@ export class DesktopPetActionScheduler {
           commandId,
         };
         this.submittedRequests.delete(commandId);
+        this.recordPlaybackStarted(submitted.request);
         this.emit("action-started", submitted.request, submitted.action);
       }
       return;
@@ -362,6 +364,7 @@ export class DesktopPetActionScheduler {
     // playback will report its own interrupted event; it is no longer a restore
     // candidate from this point onward.
     this.replacementPrevious = null;
+    this.recordPlaybackStarted(current);
     this.emit("action-started", current, this.player.getCurrentAction());
   }
 
@@ -520,17 +523,27 @@ export class DesktopPetActionScheduler {
     if (request.priority > IDLE_PRIORITY_THRESHOLD) return true;
     if (request.source !== "idle") return true;
     const key = request.dedupeKey ?? request.actionKey;
-    const count = this.idleRepeatCount.get(key) ?? 0;
-    if (count >= MAX_IDLE_REPEAT_COUNT) return false;
-    return true;
+    if (key !== this.lastIdlePlaybackKey) return true;
+    return this.consecutiveIdlePlaybackCount < MAX_IDLE_REPEAT_COUNT;
   }
 
-  private bumpIdleRepeat(request: DesktopPetActionRequest): void {
-    if (request.priority > IDLE_PRIORITY_THRESHOLD) return;
-    if (request.source !== "idle") return;
+  private recordPlaybackStarted(request: DesktopPetActionRequest): void {
+    if (request.priority > IDLE_PRIORITY_THRESHOLD || request.source !== "idle") {
+      // Any actually-presented non-random-idle playback breaks the consecutive
+      // streak. Default idle therefore lets the same random idle be selected
+      // again later without accumulating a process-lifetime ban.
+      this.lastIdlePlaybackKey = null;
+      this.consecutiveIdlePlaybackCount = 0;
+      return;
+    }
+
     const key = request.dedupeKey ?? request.actionKey;
-    const count = this.idleRepeatCount.get(key) ?? 0;
-    this.idleRepeatCount.set(key, count + 1);
+    if (key === this.lastIdlePlaybackKey) {
+      this.consecutiveIdlePlaybackCount += 1;
+    } else {
+      this.lastIdlePlaybackKey = key;
+      this.consecutiveIdlePlaybackCount = 1;
+    }
   }
 
   private resolveAction(request: DesktopPetActionRequest): RuntimeAction | null {
@@ -632,13 +645,6 @@ export class DesktopPetActionScheduler {
           },
         };
     const previousRequest = this.current;
-    if (
-      previousRequest &&
-      previousRequest.actionKey !== effectiveRequest.actionKey
-    ) {
-      const prevIdleKey = previousRequest.dedupeKey ?? previousRequest.actionKey;
-      this.idleRepeatCount.delete(prevIdleKey);
-    }
 
     if (previousRequest && this.currentActionStartedAt > 0) {
       this.replacementPrevious = {
@@ -664,7 +670,6 @@ export class DesktopPetActionScheduler {
     this.currentActionStartedAt = 0;
     this.currentPlaybackInstanceId = null;
     this.currentCommandId = effectiveRequest.metadata?.runtimeCommandId ?? null;
-    this.bumpIdleRepeat(effectiveRequest);
     // Runtime-v2 may tighten the package action's interruptibility for this
     // concrete playback. It can never make a package-declared uninterruptible
     // action interruptible. Pass the effective action to both Player and the
@@ -776,7 +781,8 @@ export class DesktopPetActionScheduler {
     this.replacementPrevious = null;
     this.submittedRequests.clear();
     this.lastTriggeredAt.clear();
-    this.idleRepeatCount.clear();
+    this.lastIdlePlaybackKey = null;
+    this.consecutiveIdlePlaybackCount = 0;
     this.sustainedState = null;
   }
 

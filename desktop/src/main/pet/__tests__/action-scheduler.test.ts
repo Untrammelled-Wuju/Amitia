@@ -914,26 +914,88 @@ describe("DesktopPetActionScheduler", () => {
     expect(result).toBe("rejected");
   });
 
-  it("idle 同一动作连续播放次数受限", () => {
-    const loaded = attachAndAdvance();
+  it("idle 同一动作连续实际播放次数受限", () => {
+    const identityPlayer = new IdentitySchedulerTestPlayer();
+    const localScheduler = new DesktopPetActionScheduler(identityPlayer);
+    const loaded = makeLoadedInstallation();
+    loaded.actions.set(
+      "idle_variant",
+      makeRuntimeAction({ key: "idle_variant", loopType: "once", interruptible: true }),
+    );
+    localScheduler.attachLoaded(loaded);
 
-    const results: Array<string> = [];
-    for (let i = 0; i < 5; i++) {
-      results.push(
-        scheduler.submit(
-          makeRequest({
-            actionKey: "idle",
-            source: EventSources.IDLE,
-            priority: ActionPriorities.DEFAULT_IDLE,
-            interrupt: false,
-            dedupeKey: "idle-cycle",
-          }),
-        ),
-      );
+    for (let i = 1; i <= 2; i++) {
+      const commandId = `idle-repeat-${i}`;
+      expect(localScheduler.submit(makeRequest({
+        actionKey: "idle_variant",
+        source: EventSources.IDLE,
+        priority: ActionPriorities.RANDOM_IDLE,
+        interrupt: true,
+        dedupeKey: "idle-repeat",
+        metadata: { runtimeCommandId: commandId },
+      }))).toBe("played");
+      localScheduler.notifyActionStarted("idle_variant", `pb-repeat-${i}`, commandId);
+      localScheduler.notifyActionCompleted("idle_variant", `pb-repeat-${i}`, commandId);
     }
 
-    const rejectedCount = results.filter((r) => r === "rejected").length;
-    expect(rejectedCount).toBeGreaterThan(0);
+    expect(localScheduler.submit(makeRequest({
+      actionKey: "idle_variant",
+      source: EventSources.IDLE,
+      priority: ActionPriorities.RANDOM_IDLE,
+      interrupt: true,
+      dedupeKey: "idle-repeat",
+      metadata: { runtimeCommandId: "idle-repeat-3" },
+    }))).toBe("rejected");
+
+    localScheduler.dispose();
+  });
+
+  it("随机 idle 被其他真实播放打断后不会按进程生命周期永久耗尽", () => {
+    const identityPlayer = new IdentitySchedulerTestPlayer();
+    const localScheduler = new DesktopPetActionScheduler(identityPlayer);
+    const loaded = makeLoadedInstallation();
+    loaded.actions.set(
+      "idle_variant",
+      makeRuntimeAction({ key: "idle_variant", loopType: "once", interruptible: true }),
+    );
+    loaded.actions.set(
+      "reset_action",
+      makeRuntimeAction({
+        key: "reset_action",
+        loopType: "once",
+        interruptible: true,
+        minimumPlayMs: 0,
+        interruptAfterMs: 0,
+      }),
+    );
+    localScheduler.attachLoaded(loaded);
+
+    for (let i = 1; i <= 3; i++) {
+      const randomCommand = `idle-random-${i}`;
+      expect(localScheduler.submit(makeRequest({
+        actionKey: "idle_variant",
+        source: EventSources.IDLE,
+        priority: ActionPriorities.RANDOM_IDLE,
+        interrupt: true,
+        dedupeKey: "idle-variant-cycle",
+        metadata: { runtimeCommandId: randomCommand },
+      }))).toBe("played");
+      localScheduler.notifyActionStarted("idle_variant", `pb-idle-${i}`, randomCommand);
+      localScheduler.notifyActionCompleted("idle_variant", `pb-idle-${i}`, randomCommand);
+
+      const resetCommand = `idle-reset-${i}`;
+      expect(localScheduler.submit(makeRequest({
+        actionKey: "reset_action",
+        source: EventSources.MANUAL,
+        priority: ActionPriorities.EMOTION,
+        interrupt: true,
+        metadata: { runtimeCommandId: resetCommand, minimumPlayMs: "0", interruptAfterMs: "0" },
+      }))).toBe("played");
+      localScheduler.notifyActionStarted("reset_action", `pb-reset-${i}`, resetCommand);
+      localScheduler.notifyActionCompleted("reset_action", `pb-reset-${i}`, resetCommand);
+    }
+
+    localScheduler.dispose();
   });
 
   it("metadata.cooldownMs 覆盖默认冷却", () => {
