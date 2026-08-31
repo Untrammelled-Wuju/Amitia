@@ -81,6 +81,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       },
       child: ShellDrawerScope(
         openDrawer: () {
+          FocusManager.instance.primaryFocus?.unfocus();
           _scaffoldKey.currentState?.openDrawer();
         },
         child: Scaffold(
@@ -120,9 +121,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       if (location == '/toolbox') return '/settings/toolbox';
 
       switch (stage) {
-        case 'needsLogin':
-          if (location != '/login') return '/login';
-          break;
         case 'ready':
           if (location == '/onboarding' ||
               location == '/login' ||

@@ -154,6 +154,13 @@ class _PendingPosition {
   const _PendingPosition(this.installationId, this.x, this.y);
 }
 
+class _PendingRendererInteraction {
+  final String type;
+  final Map<String, dynamic> payload;
+
+  const _PendingRendererInteraction(this.type, this.payload);
+}
+
 class _TrackedPlayback {
   final String commandId;
   final int commandSequence;
@@ -168,6 +175,7 @@ class _TrackedPlayback {
   final int? maximumPlayMs;
   final bool interruptible;
   bool firstCycleSent = false;
+  bool pollInFlight = false;
   Timer? pollTimer;
 
   _TrackedPlayback({
@@ -259,8 +267,10 @@ class DesktopPetMobileRuntimeNotifier
       <String, Map<String, dynamic>>{};
   _TrackedPlayback? _playback;
   bool _drainingInteractions = false;
-  bool _persistingPosition = false;
   _PendingPosition? _pendingPosition;
+  Future<void> _positionFlushSerial = Future<void>.value();
+  final List<_PendingRendererInteraction> _pendingRendererInteractions =
+      <_PendingRendererInteraction>[];
   Future<void> _localPlaybackQuiesce = Future<void>.value();
   Map<String, dynamic> _lastConfirmedNativeStatus = <String, dynamic>{};
   bool _nativeStatusAvailable = false;
@@ -397,6 +407,13 @@ class DesktopPetMobileRuntimeNotifier
     state = state.copyWith(phase: 'connecting', error: '', updatedAt: DateTime.now());
     try {
       await _localPlaybackQuiesce;
+      try {
+        await _inboundSerial;
+      } catch (_) {
+        // A prior connection's handler must never poison the serial queue for a
+        // fresh websocket generation. The concrete socket fence below prevents
+        // stale work from being applied to this connection.
+      }
       if (_disposed || epoch != _attachEpoch || _config?.generation != config.generation) {
         return;
       }
@@ -408,6 +425,8 @@ class DesktopPetMobileRuntimeNotifier
       // applied after process restart and suppress the backend reconcile.
       if (_runtimeId.isEmpty) {
         _runtimeId = 'rt_mobile_${_randomToken(24)}';
+        _sessionId = '';
+        _connectionGeneration = 0;
         _cursor = _RuntimeCursor();
         _durableReplay.clear();
         _outboundSequence = 0;
@@ -467,19 +486,28 @@ class DesktopPetMobileRuntimeNotifier
       _lastServerMessageAt = DateTime.now();
       _socketSubscription = socket.listen(
         (dynamic data) {
-          _inboundSerial = _inboundSerial.then<void>((_) async {
-            await _handleSocketMessage(data, epoch);
-          });
+          Future<void> processMessage() async {
+            if (_disposed || epoch != _attachEpoch || _socket != socket) return;
+            await _handleSocketMessage(data, epoch, socket);
+          }
+
+          _inboundSerial = _inboundSerial.then<void>(
+            (_) => processMessage(),
+            onError: (Object _, StackTrace __) => processMessage(),
+          );
         },
         onError: (Object error, StackTrace stack) =>
-            unawaited(_onSocketClosed(epoch, error.toString())),
-        onDone: () => unawaited(_onSocketClosed(epoch, 'socket_closed')),
+            unawaited(_onSocketClosed(epoch, socket, error.toString())),
+        onDone: () => unawaited(_onSocketClosed(epoch, socket, 'socket_closed')),
         cancelOnError: false,
       );
       _armHelloAckTimeout(epoch, socket);
       await _sendHello();
     } catch (error) {
       if (epoch == _attachEpoch && !_disposed) {
+        _clearSocketOnly();
+        _sessionId = '';
+        _lastServerSequence = 0;
         state = state.copyWith(
           connected: false,
           phase: 'degraded',
@@ -493,8 +521,12 @@ class DesktopPetMobileRuntimeNotifier
     }
   }
 
-  Future<void> _handleSocketMessage(dynamic raw, int epoch) async {
-    if (_disposed || epoch != _attachEpoch) return;
+  Future<void> _handleSocketMessage(
+    dynamic raw,
+    int epoch,
+    WebSocket socket,
+  ) async {
+    if (_disposed || epoch != _attachEpoch || _socket != socket) return;
     try {
       if (raw is! String) throw const FormatException('runtime envelope must be text');
       if (utf8.encode(raw).length > _maxMessageBytes) {
@@ -504,6 +536,7 @@ class DesktopPetMobileRuntimeNotifier
       if (decoded is! Map) throw const FormatException('runtime envelope must be an object');
       final envelope = Map<String, dynamic>.from(decoded);
       _validateServerEnvelope(envelope);
+      if (_disposed || epoch != _attachEpoch || _socket != socket) return;
       _lastServerSequence = _positiveInt(envelope['sequence']);
       _lastServerMessageAt = DateTime.now();
       final type = envelope['messageType']?.toString() ?? '';
@@ -529,10 +562,14 @@ class DesktopPetMobileRuntimeNotifier
           break;
       }
     } catch (error) {
+      if (_disposed || epoch != _attachEpoch || _socket != socket) return;
       state = state.copyWith(error: error.toString(), updatedAt: DateTime.now());
-      final socket = _socket;
-      if (socket != null) {
+      try {
         await socket.close(4003, 'protocol_violation');
+      } catch (_) {
+        // Socket teardown is best-effort after a protocol violation. The
+        // concrete socket fence prevents a failed close from contaminating the
+        // next websocket generation.
       }
     }
   }
@@ -561,6 +598,9 @@ class DesktopPetMobileRuntimeNotifier
     if (envelope['messageType']?.toString() == 'hello_ack') {
       if (_lastServerSequence != 0) {
         throw const FormatException('runtime hello_ack must be the first server envelope');
+      }
+      if (_connectionGeneration > 0 && generation < _connectionGeneration) {
+        throw const FormatException('runtime hello_ack connection generation regressed');
       }
       return;
     }
@@ -628,6 +668,7 @@ class DesktopPetMobileRuntimeNotifier
     // Runtime-v2 protocol violation. Keep the healthy socket and report the
     // local degradation so the periodic snapshot/recovery path can retry.
     try {
+      await _flushPendingPosition();
       await refreshStatus();
       await _sendStateSnapshot();
     } catch (error) {
@@ -660,12 +701,26 @@ class DesktopPetMobileRuntimeNotifier
     final desiredRevision = _nonNegativeInt(outer['desiredRevision']);
     final inner = _map(outer['payload']);
     final desiredHash = inner['desiredHash']?.toString().trim() ?? '';
+    final commandPayloadHash = envelope['payloadHash']?.toString().trim() ?? '';
     if (commandId.isEmpty || commandType.isEmpty || commandSequence <= 0) {
       throw const FormatException('runtime command identity is invalid');
+    }
+    if (_isDurable(commandType) && (desiredRevision <= 0 || desiredHash.isEmpty)) {
+      throw FormatException(
+        'invalid durable desired command $commandId: desiredRevision and desiredHash are required',
+      );
     }
 
     final cached = _durableReplay[commandId];
     if (cached != null && _isDurable(commandType)) {
+      _validateDurableReplay(
+        commandId: commandId,
+        commandType: commandType,
+        commandPayloadHash: commandPayloadHash,
+        desiredRevision: desiredRevision,
+        desiredHash: desiredHash,
+        cached: cached,
+      );
       if (cached['ok'] == true) {
         // Mirror the canonical Electron Runtime V2 replay sequence. Successful
         // durable replays may repeat received/accepted before desired_applied.
@@ -722,6 +777,8 @@ class DesktopPetMobileRuntimeNotifier
       }
     }
 
+    var durableExecutionSettled = false;
+    var ephemeralExecutionSettled = false;
     try {
       switch (commandType) {
         case 'runtime.command.sync_desired_state':
@@ -747,7 +804,6 @@ class DesktopPetMobileRuntimeNotifier
             );
           }
           await _applyDesired(outer, inner);
-          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
           _cursor.lastAppliedDesiredRevision =
               max(_cursor.lastAppliedDesiredRevision, desiredRevision);
           _cursor.appliedDesiredHash = desiredHash;
@@ -757,9 +813,17 @@ class DesktopPetMobileRuntimeNotifier
           );
           _cursor.lastProcessedCommandSequence =
               max(_cursor.lastProcessedCommandSequence, commandSequence);
-          _durableReplay[commandId] = <String, dynamic>{'ok': true};
-          _trimReplay();
+          _cacheDurableReplay(
+            commandId: commandId,
+            commandType: commandType,
+            commandPayloadHash: commandPayloadHash,
+            desiredRevision: desiredRevision,
+            desiredHash: desiredHash,
+            ok: true,
+          );
+          durableExecutionSettled = true;
           await _persistCursor();
+          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
           await _sendDesiredApplied(commandId, desiredRevision, desiredHash);
           await _sendStateSnapshot(currentCommandId: commandId);
           break;
@@ -784,7 +848,7 @@ class DesktopPetMobileRuntimeNotifier
               'equal desired revision carries a different desired hash',
             );
           }
-          await _interruptPlayback('user_disable');
+          await _interruptPlayback('user_disable', transportBestEffort: true);
           await _native('desktop.pet.renderer.unload');
           state = state.copyWith(
             rendererLoaded: false,
@@ -795,7 +859,6 @@ class DesktopPetMobileRuntimeNotifier
             playbackId: '',
             updatedAt: DateTime.now(),
           );
-          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
           _cursor.lastAppliedDesiredRevision =
               max(_cursor.lastAppliedDesiredRevision, desiredRevision);
           _cursor.appliedDesiredHash = desiredHash;
@@ -805,42 +868,68 @@ class DesktopPetMobileRuntimeNotifier
           );
           _cursor.lastProcessedCommandSequence =
               max(_cursor.lastProcessedCommandSequence, commandSequence);
-          _durableReplay[commandId] = <String, dynamic>{'ok': true};
-          _trimReplay();
+          _cacheDurableReplay(
+            commandId: commandId,
+            commandType: commandType,
+            commandPayloadHash: commandPayloadHash,
+            desiredRevision: desiredRevision,
+            desiredHash: desiredHash,
+            ok: true,
+          );
+          durableExecutionSettled = true;
           await _persistCursor();
+          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
           await _sendDesiredApplied(commandId, desiredRevision, desiredHash);
           await _sendStateSnapshot(currentCommandId: commandId);
           break;
         case 'runtime.command.play_action':
-          await _playAction(commandId, commandSequence, outer, inner);
+          final tracked = await _playAction(commandId, commandSequence, outer, inner);
+          ephemeralExecutionSettled = true;
+          try {
+            await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
+            await _sendPlaybackEvent('runtime.playback.command_accepted', tracked);
+            await _sendPlaybackEvent('runtime.playback.action_started', tracked);
+          } finally {
+            // The renderer has already started the physical playback. Keep
+            // polling it even when transport acknowledgement fails so local
+            // lifecycle/cursor truth cannot become orphaned until reconnect
+            // quiescence stops the old-generation playback.
+            if (_playback == tracked && tracked.pollTimer == null) {
+              _startPlaybackPoll(tracked);
+            }
+          }
+          await _sendStateSnapshot(currentCommandId: commandId);
           break;
         case 'runtime.command.stop_action':
-          await _interruptPlayback('runtime_stop');
-          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
-          await _sendCommandAck(commandId, commandSequence, 'completed');
+          await _interruptPlayback('runtime_stop', transportBestEffort: true);
           _cursor.lastProcessedCommandSequence =
               max(_cursor.lastProcessedCommandSequence, commandSequence);
           await _persistCursor();
+          ephemeralExecutionSettled = true;
+          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
+          await _sendCommandAck(commandId, commandSequence, 'completed');
           await refreshStatus();
           await _sendStateSnapshot();
           break;
         case 'runtime.command.pause_action':
           await _native('desktop.pet.renderer.pause');
-          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
-          await _sendCommandAck(commandId, commandSequence, 'completed');
           _cursor.lastProcessedCommandSequence =
               max(_cursor.lastProcessedCommandSequence, commandSequence);
           await _persistCursor();
+          ephemeralExecutionSettled = true;
+          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
+          await _sendCommandAck(commandId, commandSequence, 'completed');
           await refreshStatus();
           await _sendStateSnapshot();
           break;
         case 'runtime.command.resume_action':
           await _native('desktop.pet.renderer.resume');
-          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
-          await _sendCommandAck(commandId, commandSequence, 'completed');
           _cursor.lastProcessedCommandSequence =
               max(_cursor.lastProcessedCommandSequence, commandSequence);
           await _persistCursor();
+          ephemeralExecutionSettled = true;
+          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
+          await _sendCommandAck(commandId, commandSequence, 'completed');
           await refreshStatus();
           await _sendStateSnapshot();
           break;
@@ -863,11 +952,12 @@ class DesktopPetMobileRuntimeNotifier
               updatedAt: DateTime.now(),
             );
           }
-          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
-          await _sendCommandAck(commandId, commandSequence, 'completed');
           _cursor.lastProcessedCommandSequence =
               max(_cursor.lastProcessedCommandSequence, commandSequence);
           await _persistCursor();
+          ephemeralExecutionSettled = true;
+          await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
+          await _sendCommandAck(commandId, commandSequence, 'completed');
           await refreshStatus();
           await _sendStateSnapshot();
           break;
@@ -885,13 +975,31 @@ class DesktopPetMobileRuntimeNotifier
           await _sendStateSnapshot();
       }
     } on _RuntimeCommandFailure catch (error) {
+      if (_isDurable(commandType) && durableExecutionSettled) {
+        state = state.copyWith(
+          error: 'durable command post-execution acknowledgement failed: $error',
+          updatedAt: DateTime.now(),
+        );
+        rethrow;
+      }
+      if (_isEphemeral(commandType) && ephemeralExecutionSettled) {
+        state = state.copyWith(
+          error: 'ephemeral command post-execution acknowledgement failed: $error',
+          updatedAt: DateTime.now(),
+        );
+        rethrow;
+      }
       if (_isDurable(commandType)) {
-        _durableReplay[commandId] = <String, dynamic>{
-          'ok': false,
-          'errorCode': error.code,
-          'errorMessage': error.message,
-        };
-        _trimReplay();
+        _cacheDurableReplay(
+          commandId: commandId,
+          commandType: commandType,
+          commandPayloadHash: commandPayloadHash,
+          desiredRevision: desiredRevision,
+          desiredHash: desiredHash,
+          ok: false,
+          errorCode: error.code,
+          errorMessage: error.message,
+        );
         _cursor.lastProcessedCommandSequence =
             max(_cursor.lastProcessedCommandSequence, commandSequence);
         await _persistCursor();
@@ -918,13 +1026,31 @@ class DesktopPetMobileRuntimeNotifier
       await _sendStateSnapshot();
     } catch (error) {
       final message = error.toString();
+      if (_isDurable(commandType) && durableExecutionSettled) {
+        state = state.copyWith(
+          error: 'durable command post-execution acknowledgement failed: $message',
+          updatedAt: DateTime.now(),
+        );
+        rethrow;
+      }
+      if (_isEphemeral(commandType) && ephemeralExecutionSettled) {
+        state = state.copyWith(
+          error: 'ephemeral command post-execution acknowledgement failed: $message',
+          updatedAt: DateTime.now(),
+        );
+        rethrow;
+      }
       if (_isDurable(commandType)) {
-        _durableReplay[commandId] = <String, dynamic>{
-          'ok': false,
-          'errorCode': 'COMMAND_EXECUTION_FAILED',
-          'errorMessage': message,
-        };
-        _trimReplay();
+        _cacheDurableReplay(
+          commandId: commandId,
+          commandType: commandType,
+          commandPayloadHash: commandPayloadHash,
+          desiredRevision: desiredRevision,
+          desiredHash: desiredHash,
+          ok: false,
+          errorCode: 'COMMAND_EXECUTION_FAILED',
+          errorMessage: message,
+        );
         _cursor.lastProcessedCommandSequence =
             max(_cursor.lastProcessedCommandSequence, commandSequence);
         await _persistCursor();
@@ -957,7 +1083,7 @@ class DesktopPetMobileRuntimeNotifier
     Map<String, dynamic> inner,
   ) async {
     if (inner['ensureAbsent'] == true) {
-      await _interruptPlayback('user_disable');
+      await _interruptPlayback('user_disable', transportBestEffort: true);
       await _native('desktop.pet.renderer.unload');
       state = state.copyWith(
         rendererLoaded: false,
@@ -1153,7 +1279,7 @@ class DesktopPetMobileRuntimeNotifier
     final defaultAction =
         (inner['defaultActionKey'] ?? installation['defaultActionKey'])?.toString().trim() ?? '';
 
-    await _interruptPlayback('package_switch');
+    await _interruptPlayback('package_switch', transportBestEffort: true);
     await _native('desktop.pet.renderer.unload');
     final loaded = await _native('desktop.pet.renderer.load', <String, dynamic>{
       'installationId': installationId,
@@ -1209,7 +1335,7 @@ class DesktopPetMobileRuntimeNotifier
     );
   }
 
-  Future<void> _playAction(
+  Future<_TrackedPlayback> _playAction(
     String commandId,
     int commandSequence,
     Map<String, dynamic> outer,
@@ -1290,7 +1416,11 @@ class DesktopPetMobileRuntimeNotifier
       }
     }
 
-    await _interruptPlayback('replaced_by_command', replacedByCommandId: commandId);
+    await _interruptPlayback(
+      'replaced_by_command',
+      replacedByCommandId: commandId,
+      transportBestEffort: true,
+    );
     final commandInterruptible = inner['interruptible'] != false;
     final playResult = await _native('desktop.pet.renderer.play', <String, dynamic>{
       'actionKey': actionKey,
@@ -1337,24 +1467,41 @@ class DesktopPetMobileRuntimeNotifier
       interruptible: commandInterruptible && playResult['interruptible'] != false,
     );
     _playback = tracked;
-    await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
-    await _sendPlaybackEvent('runtime.playback.command_accepted', tracked);
-    await _sendPlaybackEvent('runtime.playback.action_started', tracked);
     state = state.copyWith(
       currentActionKey: actionKey,
       playbackId: playbackId,
       paused: false,
       updatedAt: DateTime.now(),
     );
-    _startPlaybackPoll(tracked);
-    await _sendStateSnapshot(currentCommandId: commandId);
+    return tracked;
   }
 
   void _startPlaybackPoll(_TrackedPlayback tracked) {
     tracked.pollTimer?.cancel();
     tracked.pollTimer = Timer.periodic(const Duration(milliseconds: 120), (_) {
-      unawaited(_pollPlayback(tracked));
+      if (tracked.pollInFlight) return;
+      tracked.pollInFlight = true;
+      unawaited(_pollPlaybackGuarded(tracked));
     });
+  }
+
+  Future<void> _pollPlaybackGuarded(_TrackedPlayback tracked) async {
+    try {
+      await _pollPlayback(tracked);
+    } catch (error) {
+      if (!_disposed) {
+        // Do not manufacture a renderer failure when local execution already
+        // settled and only lifecycle/snapshot delivery failed. Runtime V2
+        // fences ephemeral lifecycle across reconnects; the next authoritative
+        // snapshot/cursor reconciliation is responsible for convergence.
+        state = state.copyWith(
+          error: 'playback lifecycle delivery failed: $error',
+          updatedAt: DateTime.now(),
+        );
+      }
+    } finally {
+      tracked.pollInFlight = false;
+    }
   }
 
   Future<void> _pollPlayback(_TrackedPlayback tracked) async {
@@ -1362,75 +1509,101 @@ class DesktopPetMobileRuntimeNotifier
       tracked.cancel();
       return;
     }
+
+    Map<String, dynamic> native;
     try {
-      final native = await _native('desktop.pet.renderer.status');
+      native = await _native('desktop.pet.renderer.status');
       _lastConfirmedNativeStatus = Map<String, dynamic>.from(native);
       _nativeStatusAvailable = true;
       _nativeStatusLastError = '';
-      if (_playback != tracked) return;
-      final nativeCycle = _nonNegativeInt(native['cycleIndex']);
-      final completedPlaybackId = native['lastCompletedPlaybackId']?.toString() ?? '';
-      final completedCycle = _nonNegativeInt(native['lastCompletedCycleIndex']);
-      if ((nativeCycle >= 1 || completedCycle >= 1) && !tracked.firstCycleSent) {
-        tracked.firstCycleSent = true;
-        await _sendPlaybackEvent(
-          'runtime.playback.action_first_cycle',
-          tracked,
-          extra: <String, dynamic>{'cycleIndex': max(1, max(nativeCycle, completedCycle))},
-        );
-      }
-      final nativePlayedMs = _nonNegativeInt(native['playedMs']);
-      if (completedPlaybackId != tracked.playbackId &&
-          tracked.maximumPlayMs != null &&
-          nativePlayedMs >= tracked.maximumPlayMs!) {
-        await _interruptPlayback('max_duration_reached');
-        await refreshStatus();
-        await _sendStateSnapshot();
-        return;
-      }
-      if (completedPlaybackId == tracked.playbackId) {
-        tracked.cancel();
-        final playedMs = _nonNegativeInt(native['lastCompletedPlayedMs']);
-        await _sendPlaybackEvent(
-          'runtime.playback.action_completed',
-          tracked,
-          extra: <String, dynamic>{
-            'playedMs': playedMs,
-            'completionReason': native['lastCompletionReason']?.toString().trim().isNotEmpty == true
-                ? native['lastCompletionReason'].toString()
-                : 'natural_end',
-          },
-        );
-        _cursor.lastProcessedCommandSequence =
-            max(_cursor.lastProcessedCommandSequence, tracked.commandSequence);
-        _playback = null;
-        await _persistCursor();
-        await refreshStatus();
-        await _sendStateSnapshot();
-      }
     } catch (error) {
+      _nativeStatusAvailable = false;
+      _nativeStatusLastError = error.toString();
       if (_playback != tracked) return;
+
+      // This is an actual renderer-status failure. Settle the local command
+      // before attempting transport delivery so an ACK-loss cannot cause the
+      // same physical playback to be terminalized twice by a later poll.
       tracked.cancel();
-      await _sendPlaybackEvent(
-        'runtime.playback.action_failed',
-        tracked,
-        extra: <String, dynamic>{
-          'errorCode': 'RENDERER_STATUS_FAILED',
-          'errorMessage': error.toString(),
-          'recoverable': true,
-        },
-      );
+      _playback = null;
       _cursor.lastProcessedCommandSequence =
           max(_cursor.lastProcessedCommandSequence, tracked.commandSequence);
-      _playback = null;
       await _persistCursor();
-      await _sendStateSnapshot();
+      if (state.connected) {
+        await _sendPlaybackEvent(
+          'runtime.playback.action_failed',
+          tracked,
+          extra: <String, dynamic>{
+            'errorCode': 'RENDERER_STATUS_FAILED',
+            'errorMessage': error.toString(),
+            'recoverable': true,
+          },
+        );
+        await _sendStateSnapshot();
+      }
+      return;
     }
+
+    if (_playback != tracked) return;
+    final nativeCycle = _nonNegativeInt(native['cycleIndex']);
+    final completedPlaybackId = native['lastCompletedPlaybackId']?.toString() ?? '';
+    final completedCycle = _nonNegativeInt(native['lastCompletedCycleIndex']);
+    if ((nativeCycle >= 1 || completedCycle >= 1) && !tracked.firstCycleSent) {
+      await _sendPlaybackEvent(
+        'runtime.playback.action_first_cycle',
+        tracked,
+        extra: <String, dynamic>{'cycleIndex': max(1, max(nativeCycle, completedCycle))},
+      );
+      tracked.firstCycleSent = true;
+    }
+
+    final nativePlayedMs = _nonNegativeInt(native['playedMs']);
+    if (completedPlaybackId != tracked.playbackId &&
+        tracked.maximumPlayMs != null &&
+        nativePlayedMs >= tracked.maximumPlayMs!) {
+      await _interruptPlayback('max_duration_reached', transportBestEffort: true);
+      try {
+        await refreshStatus();
+        await _sendStateSnapshot();
+      } catch (error) {
+        state = state.copyWith(
+          error: 'max-duration state synchronization failed: $error',
+          updatedAt: DateTime.now(),
+        );
+      }
+      return;
+    }
+
+    if (completedPlaybackId != tracked.playbackId) return;
+
+    // Natural completion is already a renderer-owned physical fact. Commit the
+    // local terminal cursor before network delivery so a slow/failing socket
+    // cannot trigger a duplicate completion from another poll iteration.
+    tracked.cancel();
+    _playback = null;
+    _cursor.lastProcessedCommandSequence =
+        max(_cursor.lastProcessedCommandSequence, tracked.commandSequence);
+    await _persistCursor();
+
+    final playedMs = _nonNegativeInt(native['lastCompletedPlayedMs']);
+    await _sendPlaybackEvent(
+      'runtime.playback.action_completed',
+      tracked,
+      extra: <String, dynamic>{
+        'playedMs': playedMs,
+        'completionReason': native['lastCompletionReason']?.toString().trim().isNotEmpty == true
+            ? native['lastCompletionReason'].toString()
+            : 'natural_end',
+      },
+    );
+    await refreshStatus();
+    await _sendStateSnapshot();
   }
 
   Future<void> _interruptPlayback(
     String reason, {
     String replacedByCommandId = '',
+    bool transportBestEffort = false,
   }) async {
     final tracked = _playback;
     tracked?.cancel();
@@ -1452,19 +1625,27 @@ class DesktopPetMobileRuntimeNotifier
 
     final stoppedPlaybackId = rendererStop['stoppedPlaybackId']?.toString().trim() ?? '';
     if (stoppedPlaybackId != tracked.playbackId) {
+      _cursor.lastProcessedCommandSequence =
+          max(_cursor.lastProcessedCommandSequence, tracked.commandSequence);
+      await _persistCursor();
       if (state.connected) {
-        await _sendPlaybackEvent(
-          'runtime.playback.action_failed',
-          tracked,
-          extra: <String, dynamic>{
-            'errorCode': 'RENDERER_PLAYBACK_ID_MISMATCH',
-            'errorMessage': 'renderer stopped a different playback instance',
-            'recoverable': false,
-          },
-        );
-        _cursor.lastProcessedCommandSequence =
-            max(_cursor.lastProcessedCommandSequence, tracked.commandSequence);
-        await _persistCursor();
+        try {
+          await _sendPlaybackEvent(
+            'runtime.playback.action_failed',
+            tracked,
+            extra: <String, dynamic>{
+              'errorCode': 'RENDERER_PLAYBACK_ID_MISMATCH',
+              'errorMessage': 'renderer stopped a different playback instance',
+              'recoverable': false,
+            },
+          );
+        } catch (error) {
+          if (!transportBestEffort) rethrow;
+          state = state.copyWith(
+            error: 'playback lifecycle acknowledgement failed: $error',
+            updatedAt: DateTime.now(),
+          );
+        }
       }
       throw const _RuntimeCommandFailure(
         'RENDERER_PLAYBACK_ID_MISMATCH',
@@ -1473,20 +1654,28 @@ class DesktopPetMobileRuntimeNotifier
     }
 
     final playedMs = _nonNegativeInt(rendererStop['stoppedPlayedMs']);
+    _cursor.lastProcessedCommandSequence =
+        max(_cursor.lastProcessedCommandSequence, tracked.commandSequence);
+    await _persistCursor();
     if (state.connected) {
-      await _sendPlaybackEvent(
-        'runtime.playback.action_interrupted',
-        tracked,
-        extra: <String, dynamic>{
-          'playedMs': playedMs,
-          'interruptReason': reason,
-          if (replacedByCommandId.isNotEmpty)
-            'replacedByCommandId': replacedByCommandId,
-        },
-      );
-      _cursor.lastProcessedCommandSequence =
-          max(_cursor.lastProcessedCommandSequence, tracked.commandSequence);
-      await _persistCursor();
+      try {
+        await _sendPlaybackEvent(
+          'runtime.playback.action_interrupted',
+          tracked,
+          extra: <String, dynamic>{
+            'playedMs': playedMs,
+            'interruptReason': reason,
+            if (replacedByCommandId.isNotEmpty)
+              'replacedByCommandId': replacedByCommandId,
+          },
+        );
+      } catch (error) {
+        if (!transportBestEffort) rethrow;
+        state = state.copyWith(
+          error: 'playback lifecycle acknowledgement failed: $error',
+          updatedAt: DateTime.now(),
+        );
+      }
     }
   }
 
@@ -1774,11 +1963,11 @@ class DesktopPetMobileRuntimeNotifier
       }
       final socket = _socket;
       if (socket != null) {
-        unawaited(socket.close(4002, 'heartbeat_timeout'));
+        unawaited(_closeSocketBestEffort(socket, 4002, 'heartbeat_timeout'));
       }
     });
     _snapshotTimer = Timer.periodic(const Duration(seconds: 20), (_) {
-      unawaited(_sendStateSnapshot());
+      unawaited(_sendPeriodicSnapshotSafely());
     });
     _interactionTimer = Timer.periodic(const Duration(milliseconds: 120), (_) {
       if (state.connected && state.rendererLoaded) {
@@ -1791,103 +1980,133 @@ class DesktopPetMobileRuntimeNotifier
     if (_drainingInteractions || !state.connected || !state.rendererLoaded) return;
     _drainingInteractions = true;
     try {
+      var sentAny = await _flushPendingRendererInteractions();
+      if (!state.connected || !state.rendererLoaded) return;
+
       final drained = await _native('desktop.pet.renderer.events.drain');
       final rawEvents = drained['events'];
-      if (rawEvents is! List || rawEvents.isEmpty) return;
-      Map<String, dynamic> native = <String, dynamic>{};
-      try {
-        native = await _native('desktop.pet.renderer.status');
-        _lastConfirmedNativeStatus = Map<String, dynamic>.from(native);
-        _nativeStatusAvailable = true;
-        _nativeStatusLastError = '';
-      } catch (e) {
-        _nativeStatusAvailable = false;
-        _nativeStatusLastError = e.toString();
-        native = Map<String, dynamic>.from(_lastConfirmedNativeStatus);
-      }
-      final installationId = native['installationId']?.toString() ?? state.installationId;
-      final releaseId = native['releaseId']?.toString() ?? '';
-      final actionKey = native['currentActionKey']?.toString() ?? state.currentActionKey;
-      final playbackId = native['playbackId']?.toString() ?? state.playbackId;
-      final frameIndex = _nonNegativeInt(native['frameIndex']);
+      if (rawEvents is List && rawEvents.isNotEmpty) {
+        Map<String, dynamic> native = <String, dynamic>{};
+        try {
+          native = await _native('desktop.pet.renderer.status');
+          _lastConfirmedNativeStatus = Map<String, dynamic>.from(native);
+          _nativeStatusAvailable = true;
+          _nativeStatusLastError = '';
+        } catch (e) {
+          _nativeStatusAvailable = false;
+          _nativeStatusLastError = e.toString();
+          native = Map<String, dynamic>.from(_lastConfirmedNativeStatus);
+        }
+        final installationId = native['installationId']?.toString() ?? state.installationId;
+        final releaseId = native['releaseId']?.toString() ?? '';
+        final actionKey = native['currentActionKey']?.toString() ?? state.currentActionKey;
+        final playbackId = native['playbackId']?.toString() ?? state.playbackId;
+        final frameIndex = _nonNegativeInt(native['frameIndex']);
 
-      for (final raw in rawEvents) {
-        if (raw is! Map) continue;
-        final event = Map<String, dynamic>.from(raw);
-        final type = event['type']?.toString().trim() ?? '';
-        final payload = _map(event['payload']);
-        if (type.isEmpty) continue;
-        final occurredMs = _positiveInt(payload['occurredAtMs']);
-        final occurredAt = occurredMs > 0
-            ? DateTime.fromMillisecondsSinceEpoch(occurredMs, isUtc: true)
-            : DateTime.now().toUtc();
-        final base = <String, dynamic>{
-          'installationId': installationId,
-          'releaseId': releaseId,
-          'actionKey': actionKey,
-          if (playbackId.isNotEmpty) 'playbackInstanceId': playbackId,
-          'gestureId': payload['dragId']?.toString().trim().isNotEmpty == true
-              ? payload['dragId'].toString()
-              : 'gesture_${_randomToken(18)}',
-          'sequence': occurredAt.millisecondsSinceEpoch,
-          'occurredAt': occurredAt.toIso8601String(),
-        };
-        switch (type) {
-          case 'runtime.pointer.clicked':
-            await _sendEnvelope('runtime_event', type, <String, dynamic>{
-              ...base,
-              'button': 'left',
-              'clickCount': 1,
-              'canvasX': _nonNegativeInt(payload['canvasX']),
-              'canvasY': _nonNegativeInt(payload['canvasY']),
-              'screenX': _nonNegativeInt(payload['screenX']),
-              'screenY': _nonNegativeInt(payload['screenY']),
-              'frameIndex': frameIndex,
-            });
-            break;
-          case 'runtime.drag.started':
-            await _sendEnvelope('runtime_event', type, <String, dynamic>{
-              ...base,
-              'dragId': payload['dragId']?.toString() ?? '',
-              'startX': _nonNegativeInt(payload['startX']),
-              'startY': _nonNegativeInt(payload['startY']),
-              'currentX': _nonNegativeInt(payload['currentX']),
-              'currentY': _nonNegativeInt(payload['currentY']),
-              'displayId': 'android-primary',
-            });
-            break;
-          case 'runtime.drag.completed':
-            await _sendEnvelope('runtime_event', type, <String, dynamic>{
-              ...base,
-              'dragId': payload['dragId']?.toString() ?? '',
-              'startX': _nonNegativeInt(payload['startX']),
-              'startY': _nonNegativeInt(payload['startY']),
-              'currentX': _nonNegativeInt(payload['currentX']),
-              'currentY': _nonNegativeInt(payload['currentY']),
-              'displayId': 'android-primary',
-            });
-            unawaited(_persistDraggedPosition(
-              installationId,
-              _nonNegativeInt(payload['currentX']),
-              _nonNegativeInt(payload['currentY']),
-            ));
-            break;
-          case 'runtime.drag.cancelled':
-            await _sendEnvelope('runtime_event', type, <String, dynamic>{
-              ...base,
-              'dragId': payload['dragId']?.toString() ?? '',
-              'displayId': 'android-primary',
-            });
-            break;
+        for (final raw in rawEvents) {
+          if (raw is! Map) continue;
+          final event = Map<String, dynamic>.from(raw);
+          final type = event['type']?.toString().trim() ?? '';
+          final payload = _map(event['payload']);
+          if (type.isEmpty) continue;
+          final occurredMs = _positiveInt(payload['occurredAtMs']);
+          final occurredAt = occurredMs > 0
+              ? DateTime.fromMillisecondsSinceEpoch(occurredMs, isUtc: true)
+              : DateTime.now().toUtc();
+          final base = <String, dynamic>{
+            'installationId': installationId,
+            'releaseId': releaseId,
+            'actionKey': actionKey,
+            if (playbackId.isNotEmpty) 'playbackInstanceId': playbackId,
+            'gestureId': payload['dragId']?.toString().trim().isNotEmpty == true
+                ? payload['dragId'].toString()
+                : 'gesture_${_randomToken(18)}',
+            'sequence': occurredAt.millisecondsSinceEpoch,
+            'occurredAt': occurredAt.toIso8601String(),
+          };
+          Map<String, dynamic>? runtimePayload;
+          switch (type) {
+            case 'runtime.pointer.clicked':
+              runtimePayload = <String, dynamic>{
+                ...base,
+                'button': 'left',
+                'clickCount': 1,
+                'canvasX': _nonNegativeInt(payload['canvasX']),
+                'canvasY': _nonNegativeInt(payload['canvasY']),
+                'screenX': _nonNegativeInt(payload['screenX']),
+                'screenY': _nonNegativeInt(payload['screenY']),
+                'frameIndex': frameIndex,
+              };
+              break;
+            case 'runtime.drag.started':
+              runtimePayload = <String, dynamic>{
+                ...base,
+                'dragId': payload['dragId']?.toString() ?? '',
+                'startX': _nonNegativeInt(payload['startX']),
+                'startY': _nonNegativeInt(payload['startY']),
+                'currentX': _nonNegativeInt(payload['currentX']),
+                'currentY': _nonNegativeInt(payload['currentY']),
+                'displayId': 'android-primary',
+              };
+              break;
+            case 'runtime.drag.completed':
+              runtimePayload = <String, dynamic>{
+                ...base,
+                'dragId': payload['dragId']?.toString() ?? '',
+                'startX': _nonNegativeInt(payload['startX']),
+                'startY': _nonNegativeInt(payload['startY']),
+                'currentX': _nonNegativeInt(payload['currentX']),
+                'currentY': _nonNegativeInt(payload['currentY']),
+                'displayId': 'android-primary',
+              };
+              break;
+            case 'runtime.drag.cancelled':
+              runtimePayload = <String, dynamic>{
+                ...base,
+                'dragId': payload['dragId']?.toString() ?? '',
+                'displayId': 'android-primary',
+              };
+              break;
+          }
+          if (runtimePayload != null) {
+            _pendingRendererInteractions.add(
+              _PendingRendererInteraction(type, runtimePayload),
+            );
+          }
         }
       }
-      await refreshStatus();
-      await _sendStateSnapshot();
+
+      sentAny = await _flushPendingRendererInteractions() || sentAny;
+      if (sentAny) {
+        await refreshStatus();
+        await _sendStateSnapshot();
+      }
     } catch (error) {
       state = state.copyWith(error: error.toString(), updatedAt: DateTime.now());
     } finally {
       _drainingInteractions = false;
     }
+  }
+
+  Future<bool> _flushPendingRendererInteractions() async {
+    var sentAny = false;
+    while (_pendingRendererInteractions.isNotEmpty &&
+        !_disposed &&
+        state.connected &&
+        state.rendererLoaded) {
+      final pending = _pendingRendererInteractions.first;
+      if (pending.type == 'runtime.drag.completed') {
+        await _persistDraggedPosition(
+          pending.payload['installationId']?.toString() ?? state.installationId,
+          _nonNegativeInt(pending.payload['currentX']),
+          _nonNegativeInt(pending.payload['currentY']),
+        );
+      }
+      await _sendEnvelope('runtime_event', pending.type, pending.payload);
+      _pendingRendererInteractions.removeAt(0);
+      sentAny = true;
+    }
+    return sentAny;
   }
 
   Future<void> _persistDraggedPosition(
@@ -1897,29 +2116,46 @@ class DesktopPetMobileRuntimeNotifier
   ) async {
     if (installationId.isEmpty || _deviceId.isEmpty) return;
     _pendingPosition = _PendingPosition(installationId, x, y);
-    if (_persistingPosition) return;
+    await _flushPendingPosition();
+  }
 
-    _persistingPosition = true;
-    try {
-      while (_pendingPosition != null && !_disposed) {
-        final pending = _pendingPosition!;
-        _pendingPosition = null;
-        try {
-          await _persistRuntimePosition(
-            pending.installationId,
-            pending.x,
-            pending.y,
-            preservePositionMode: false,
-          );
-        } catch (error) {
-          state = state.copyWith(
-            error: '桌宠位置保存失败: $error',
-            updatedAt: DateTime.now(),
-          );
+  Future<void> _flushPendingPosition() async {
+    if (_disposed || _pendingPosition == null) return;
+
+    // Serialize every waiter behind the active save instead of returning early.
+    // The recovery branch also makes a prior failed save non-poisoning: the
+    // preserved _pendingPosition is retried by the next caller.
+    final next = _positionFlushSerial.then<void>(
+      (_) => _runPositionFlush(),
+      onError: (Object _, StackTrace __) => _runPositionFlush(),
+    );
+    _positionFlushSerial = next;
+    await next;
+  }
+
+  Future<void> _runPositionFlush() async {
+    while (_pendingPosition != null && !_disposed) {
+      final pending = _pendingPosition!;
+      _pendingPosition = null;
+      try {
+        await _persistRuntimePosition(
+          pending.installationId,
+          pending.x,
+          pending.y,
+          preservePositionMode: false,
+        );
+      } catch (error) {
+        // Never discard the last physical drag position. A later interaction,
+        // reconnect sync or periodic state task will retry this exact value.
+        if (_pendingPosition == null) {
+          _pendingPosition = pending;
         }
+        state = state.copyWith(
+          error: '桌宠位置保存失败: $error',
+          updatedAt: DateTime.now(),
+        );
+        rethrow;
       }
-    } finally {
-      _persistingPosition = false;
     }
   }
 
@@ -1931,7 +2167,7 @@ class DesktopPetMobileRuntimeNotifier
   }) async {
     if (installationId.isEmpty || _deviceId.isEmpty) return;
     final api = _localApiRequired();
-    final updated = await api.patch<Map<String, dynamic>>(
+    await api.patch<Map<String, dynamic>>(
       '/api/desktop-pets/installations/${Uri.encodeComponent(installationId)}/settings',
       data: <String, dynamic>{
         'positionX': x,
@@ -1946,13 +2182,33 @@ class DesktopPetMobileRuntimeNotifier
       },
       fromJson: (dynamic value) => Map<String, dynamic>.from(value as Map),
     );
-    if (updated != null) {
-      final settings = _map(updated['settings']);
-      _cursor.appliedSettingsRevision = max(
-        _cursor.appliedSettingsRevision,
-        _nonNegativeInt(settings['settingsRevision'] ?? updated['settingsRevision']),
-      );
-      await _persistCursor();
+    // This PATCH only mutates backend desired settings. The returned revision is
+    // not physical truth and must not advance appliedSettingsRevision here. The
+    // cursor advances only after the resulting desired command is applied and
+    // recorded by _handleCommand.
+  }
+
+  Future<void> _sendPeriodicSnapshotSafely() async {
+    try {
+      await _flushPendingPosition();
+    } catch (error) {
+      if (!_disposed && state.connected) {
+        state = state.copyWith(
+          error: 'periodic position synchronization failed: $error',
+          updatedAt: DateTime.now(),
+        );
+      }
+    }
+
+    try {
+      await _sendStateSnapshot();
+    } catch (error) {
+      if (!_disposed && state.connected) {
+        state = state.copyWith(
+          error: 'periodic state snapshot failed: $error',
+          updatedAt: DateTime.now(),
+        );
+      }
     }
   }
 
@@ -2061,6 +2317,20 @@ class DesktopPetMobileRuntimeNotifier
   }
 
 
+  Future<void> _closeSocketBestEffort(
+    WebSocket socket,
+    int code,
+    String reason,
+  ) async {
+    try {
+      await socket.close(code, reason);
+    } catch (_) {
+      // Socket teardown must never surface as an unhandled asynchronous error.
+      // Connection identity is fenced separately, so close failure cannot make
+      // the stale socket authoritative again.
+    }
+  }
+
   void _armHelloAckTimeout(int epoch, WebSocket socket) {
     _helloAckTimer?.cancel();
     _helloAckTimer = Timer(const Duration(seconds: 10), () {
@@ -2071,16 +2341,16 @@ class DesktopPetMobileRuntimeNotifier
         error: 'runtime hello_ack timeout',
         updatedAt: DateTime.now(),
       );
-      unawaited(socket.close(4000, 'hello_ack_timeout'));
+      unawaited(_closeSocketBestEffort(socket, 4000, 'hello_ack_timeout'));
     });
   }
 
-  Future<void> _onSocketClosed(int epoch, String reason) async {
-    if (_disposed || epoch != _attachEpoch) return;
+  Future<void> _onSocketClosed(int epoch, WebSocket socket, String reason) async {
+    if (_disposed || epoch != _attachEpoch || _socket != socket) return;
     _clearSocketOnly();
     _sessionId = '';
-    _connectionGeneration = 0;
     _lastServerSequence = 0;
+    _pendingRendererInteractions.clear();
     _localPlaybackQuiesce = _localPlaybackQuiesce.then<void>((_) => _stopPlaybackLocally());
     await _localPlaybackQuiesce;
     if (_disposed || epoch != _attachEpoch) return;
@@ -2121,8 +2391,8 @@ class DesktopPetMobileRuntimeNotifier
     _interactionTimer?.cancel();
     _clearSocketOnly();
     _sessionId = '';
-    _connectionGeneration = 0;
     _lastServerSequence = 0;
+    _pendingRendererInteractions.clear();
     _localPlaybackQuiesce = _localPlaybackQuiesce.then<void>((_) => _stopPlaybackLocally());
     state = state.copyWith(
       connected: false,
@@ -2159,7 +2429,7 @@ class DesktopPetMobileRuntimeNotifier
     final socket = _socket;
     _socket = null;
     if (socket != null) {
-      unawaited(socket.close(1000, 'runtime_reset'));
+      unawaited(_closeSocketBestEffort(socket, 1000, 'runtime_reset'));
     }
     _heartbeatTimer?.cancel();
     _watchdogTimer?.cancel();
@@ -2170,6 +2440,49 @@ class DesktopPetMobileRuntimeNotifier
   Future<void> _persistCursor() async {
     // Intentionally in-memory only. The runtime cursor describes renderer state
     // owned by this Android process incarnation and must never survive it.
+  }
+
+  void _validateDurableReplay({
+    required String commandId,
+    required String commandType,
+    required String commandPayloadHash,
+    required int desiredRevision,
+    required String desiredHash,
+    required Map<String, dynamic> cached,
+  }) {
+    if (cached['commandPayloadHash']?.toString() != commandPayloadHash) {
+      throw FormatException('runtime command replay payload mismatch for $commandId');
+    }
+    if (cached['commandType']?.toString() != commandType) {
+      throw FormatException('runtime command replay type mismatch for $commandId');
+    }
+    if (_nonNegativeInt(cached['desiredRevision']) != desiredRevision ||
+        cached['desiredHash']?.toString() != desiredHash) {
+      throw FormatException('runtime command replay desired-state mismatch for $commandId');
+    }
+  }
+
+  void _cacheDurableReplay({
+    required String commandId,
+    required String commandType,
+    required String commandPayloadHash,
+    required int desiredRevision,
+    required String desiredHash,
+    required bool ok,
+    String errorCode = '',
+    String errorMessage = '',
+  }) {
+    _durableReplay.remove(commandId);
+    _durableReplay[commandId] = <String, dynamic>{
+      'ok': ok,
+      'commandType': commandType,
+      'commandPayloadHash': commandPayloadHash,
+      'desiredRevision': desiredRevision,
+      'desiredHash': desiredHash,
+      if (errorCode.isNotEmpty) 'errorCode': errorCode,
+      if (errorMessage.isNotEmpty) 'errorMessage': errorMessage,
+    };
+    _trimReplay();
   }
 
   void _trimReplay() {

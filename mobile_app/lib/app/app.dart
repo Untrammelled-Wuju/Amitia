@@ -338,6 +338,7 @@ class AmitiaApp extends ConsumerWidget {
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: themeMode,
+      themeAnimationDuration: const Duration(milliseconds: 200),
       routerConfig: router,
       builder: (context, child) {
         return Stack(
