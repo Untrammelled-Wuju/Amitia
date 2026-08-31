@@ -8,9 +8,10 @@ $workspace = Split-Path -Parent $scriptDir
 $parentDir = Split-Path $workspace -Parent
 $folderName = Split-Path $workspace -Leaf
 $outputFile = Join-Path $workspace "$OutputName.tar.gz"
-$tempTar = "$env:TEMP\$OutputName.tar"
-$tempGz = "$env:TEMP\$OutputName.tar.gz"
-$tempExtract = "$env:TEMP\$OutputName-audit"
+$tempRoot = [System.IO.Path]::GetTempPath()
+$tempTar = Join-Path $tempRoot "$OutputName.tar"
+$tempGz = Join-Path $tempRoot "$OutputName.tar.gz"
+$tempExtract = Join-Path $tempRoot "$OutputName-audit"
 
 if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
 if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
@@ -18,45 +19,35 @@ if (Test-Path $tempGz) { Remove-Item $tempGz -Force }
 if (Test-Path $tempExtract) { Remove-Item $tempExtract -Recurse -Force }
 
 # ============================================================
-# P0-05: Source Hygiene Gate + Freeze Gate (before packing)
+# P0-05: Source Hygiene + canonical Freeze Gate (before packing)
 # ============================================================
-Write-Host "=== P0-05: Running Source Hygiene Gate ==="
+Write-Host "=== P0-05: Running Source Hygiene / Freeze Gates ==="
 Set-Location $workspace
 
-Write-Host "Running verify-desktop-pet-finalization.mjs..."
-& node desktop/scripts/verify-desktop-pet-finalization.mjs
+& node scripts/audit/verify-source-hygiene.mjs
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "FAIL: verify-desktop-pet-finalization.mjs did not pass. Aborting source pack."
+    Write-Host "FAIL: source hygiene gate did not pass. Aborting source pack."
     exit 1
 }
 
-Write-Host "Running SHA256 freeze verification..."
-$shaLines = Get-Content "DESKTOP_PET_FINALIZATION_SHA256SUMS.txt"
-$shaOk = 0
-$shaFail = 0
-foreach ($line in $shaLines) {
-    if ($line.Trim() -eq "") { continue }
-    $expectedHash = $line.Substring(0, 64)
-    $relativePath = $line.Substring(66)
-    $fullPath = Join-Path $workspace $relativePath
-    if (Test-Path $fullPath) {
-        $actualHash = (Get-FileHash $fullPath -Algorithm SHA256).Hash.ToLower()
-        if ($actualHash -eq $expectedHash) {
-            $shaOk++
-        } else {
-            $shaFail++
-            Write-Host "SHA MISMATCH: $relativePath"
-        }
-    } else {
-        $shaFail++
-        Write-Host "MISSING: $relativePath"
-    }
-}
-if ($shaFail -ne 0) {
-    Write-Host "FAIL: SHA256 freeze verification failed ($shaFail issues). Aborting source pack."
+& node desktop/scripts/verify-desktop-pet-finalization.mjs
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FAIL: desktop-pet finalization gate did not pass. Aborting source pack."
     exit 1
 }
-Write-Host "SHA256 freeze verification: $shaOk files OK"
+
+& node scripts/build-freeze-scope.mjs --verify
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FAIL: canonical freeze manifest is stale or invalid. Run: node scripts/build-freeze-scope.mjs --write"
+    exit 1
+}
+
+& node desktop/scripts/release-integrity.mjs --pre-build
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FAIL: release integrity pre-build gate did not pass. Aborting source pack."
+    exit 1
+}
+Write-Host "Source Hygiene / Freeze Gates: PASS"
 
 # ============================================================
 # P0-07: tar excludes (runtime pollution exclusion)
@@ -169,10 +160,7 @@ $excludes = @(
     "--exclude=sdk/plugin-cli/dist"
     "--exclude=runtime/task-host/dist"
     "--exclude=runtime/plugin-host/dist"
-    "--exclude=testplugins"
-    "--exclude=tests"
     "--exclude=runtime/mobile_app"
-    "--exclude=*.zip"
     "--exclude=*.so"
     "--exclude=*.dll"
     "--exclude=*.dylib"
@@ -221,7 +209,13 @@ Write-Host "Tar created: $([math]::Round($tarSize / 1MB, 2)) MB"
 
 # Step 2: Compress with Python (avoids Windows tar gzip truncation)
 Write-Host "Step 2: Compressing with Python..."
-python -c @"
+$pythonCommand = if (Get-Command python -ErrorAction SilentlyContinue) { "python" } elseif (Get-Command python3 -ErrorAction SilentlyContinue) { "python3" } else { $null }
+if (-not $pythonCommand) {
+    Write-Host "FAIL: Python is required for deterministic gzip compression"
+    if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
+    exit 1
+}
+& $pythonCommand -c @"
 import gzip
 import shutil
 import sys
@@ -287,97 +281,41 @@ if ($missingFiles.Count -gt 0) {
 Write-Host "Required Source check: PASS ($($requiredSourceFiles.Count) files verified)"
 
 # ============================================================
-# P0-08: Archive revalidation (extract and re-audit)
+# P0-08: Archive revalidation (archive-local self verification + clean build)
 # ============================================================
 Write-Host "=== P0-08: Archive Revalidation ==="
-
-if (Test-Path $tempExtract) { Remove-Item $tempExtract -Recurse -Force }
-New-Item -ItemType Directory -Path $tempExtract -Force | Out-Null
-
-Write-Host "Extracting archive for audit..."
-& tar -xzf $outputFile -C $tempExtract
-if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) {
-    Write-Host "FAIL: Could not extract archive for audit"
-    exit 1
-}
-
-$extractedFolder = Join-Path $tempExtract $folderName
-if (-not (Test-Path $extractedFolder)) {
-    Write-Host "FAIL: Expected folder not found in archive: $folderName"
-    exit 1
-}
-
-Write-Host "Running source hygiene audit on extracted archive..."
-$archiveRoot = $extractedFolder
-
-# Check for forbidden runtime artifacts in archive
-# Only check file-level patterns; directory-level exclusion is handled by tar --exclude rules
-$forbiddenFiles = @(
-    "trace.atrace",
-    "*.atrace",
-    ".qdrant-initialized",
-    "raft_state.json",
-    "*.wal",
-    ".DS_Store",
-    "Thumbs.db"
-)
-
-$archiveEntries = & tar -tzf $outputFile 2>&1
-$violations = @()
-foreach ($entry in $archiveEntries) {
-    $name = Split-Path $entry -Leaf
-    foreach ($pattern in $forbiddenFiles) {
-        if ($name -like $pattern) {
-            $violations += "$entry (matched: $pattern)"
-        }
-    }
-}
-
-if ($violations.Count -ne 0) {
-    Write-Host "FAIL: Archive contains forbidden runtime artifacts:"
-    foreach ($v in $violations) { Write-Host "  - $v" }
-    Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
-    exit 1
-}
-Write-Host "Source hygiene audit: PASS (no forbidden artifacts in archive)"
-
-# Run verify-desktop-pet-finalization.mjs against extracted archive
-Write-Host "Running verify-desktop-pet-finalization.mjs against extracted archive..."
-$env:DESKTOP_PET_ARCHIVE_ROOT = $archiveRoot
 Set-Location $workspace
-& node desktop/scripts/verify-desktop-pet-finalization.mjs
+& node scripts/verify-source-archive.mjs $outputFile --clean-build
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "FAIL: verify-desktop-pet-finalization.mjs did not pass on archive contents"
-    Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "FAIL: archive revalidation or clean build failed"
+    Remove-Item $outputFile -Force -ErrorAction SilentlyContinue
     exit 1
 }
-Write-Host "Archive finalization gate: PASS"
-
-# Cleanup
-Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+Write-Host "Archive revalidation: PASS"
 
 # Step 3: Final verification output
 Write-Host "Step 3: Final archive verification..."
 $verifyResult = & tar -tzf $outputFile 2>&1
-if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 1) {
-    $entries = ($verifyResult | Measure-Object -Line).Lines
-    Write-Host "Verified: $entries entries"
-    
-    $gcFound = $verifyResult | Select-String "game_center_api.dart"
-    if ($gcFound) {
-        Write-Host "game_center_api.dart: FOUND"
-    } else {
-        Write-Host "game_center_api.dart: MISSING!"
-    }
-    
-    $goFiles = ($verifyResult | Select-String "\.go$" | Measure-Object).Count
-    Write-Host ".go files: $goFiles"
-    
-    $dartFiles = ($verifyResult | Select-String "\.dart$" | Measure-Object).Count
-    Write-Host ".dart files: $dartFiles"
-} else {
-    Write-Host "Verification failed"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FAIL: final tar listing failed with exit code $LASTEXITCODE"
+    Remove-Item $outputFile -Force -ErrorAction SilentlyContinue
+    exit 1
 }
+$entries = ($verifyResult | Measure-Object -Line).Lines
+Write-Host "Verified: $entries entries"
+
+$gcFound = $verifyResult | Select-String "game_center_api.dart"
+if ($gcFound) {
+    Write-Host "game_center_api.dart: FOUND"
+} else {
+    Write-Host "game_center_api.dart: MISSING!"
+}
+
+$goFiles = ($verifyResult | Select-String "\.go$" | Measure-Object).Count
+Write-Host ".go files: $goFiles"
+
+$dartFiles = ($verifyResult | Select-String "\.dart$" | Measure-Object).Count
+Write-Host ".dart files: $dartFiles"
 
 $elapsed = (Get-Date) - $startTime
 $size = (Get-Item $outputFile).Length
@@ -386,5 +324,7 @@ Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
 Write-Host "Output: $outputFile"
 Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"
 
-Start-Process "explorer.exe" -ArgumentList $workspace
-Start-Process "explorer.exe" -ArgumentList "/select,$outputFile"
+if ($env:CI -ne "true" -and $env:OS -eq "Windows_NT") {
+    Start-Process "explorer.exe" -ArgumentList $workspace
+    Start-Process "explorer.exe" -ArgumentList "/select,$outputFile"
+}
