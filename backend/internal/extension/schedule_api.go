@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
@@ -46,8 +47,18 @@ func parseExpectedGeneration(c *gin.Context, svc *schedule.ScheduleService, sche
 	return state.Generation, nil
 }
 
+func (api *ScheduleAPI) protectUserWorkflowSchedules(c *gin.Context) {
+	scheduleID := strings.TrimSpace(c.Param("scheduleId"))
+	if scheduleID != "" && strings.HasPrefix(scheduleID, userWorkflowSchedulePrefix) {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "schedule not found"})
+		return
+	}
+	c.Next()
+}
+
 func (api *ScheduleAPI) RegisterRoutes(group *gin.RouterGroup) {
 	schedules := group.Group("/schedules")
+	schedules.Use(api.protectUserWorkflowSchedules)
 	schedules.GET("", api.listSchedules)
 	schedules.POST("", api.installSchedule)
 	schedules.GET("/quarantines", api.listQuarantines)
@@ -94,6 +105,9 @@ func (api *ScheduleAPI) listSchedules(c *gin.Context) {
 	}
 	items := make([]scheduleListItem, 0, len(defs))
 	for _, def := range defs {
+		if def == nil || strings.HasPrefix(def.ScheduleID, userWorkflowSchedulePrefix) {
+			continue
+		}
 		state, stateErr := svc.GetScheduleState(c.Request.Context(), def.ScheduleID)
 		if stateErr != nil || state == nil {
 			state = &schedule.ScheduleState{
@@ -130,6 +144,10 @@ func (api *ScheduleAPI) installSchedule(c *gin.Context) {
 	var def schedule.ScheduleContributionDefinition
 	if err := c.ShouldBindJSON(&def); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
+		return
+	}
+	if strings.HasPrefix(strings.TrimSpace(def.ScheduleID), userWorkflowSchedulePrefix) || strings.HasPrefix(strings.TrimSpace(def.ContributionID), userWorkflowSchedulePrefix) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "reserved schedule id"})
 		return
 	}
 	if def.Name == "" {
@@ -429,10 +447,14 @@ func (api *ScheduleAPI) listQuarantines(c *gin.Context) {
 		writeScheduleError(c, err)
 		return
 	}
-	if items == nil {
-		items = []*schedule.ScheduleQuarantineRecord{}
+	filtered := make([]*schedule.ScheduleQuarantineRecord, 0, len(items))
+	for _, item := range items {
+		if item == nil || strings.HasPrefix(item.ScheduleID, userWorkflowSchedulePrefix) {
+			continue
+		}
+		filtered = append(filtered, item)
 	}
-	c.JSON(http.StatusOK, gin.H{"items": items, "total": len(items)})
+	c.JSON(http.StatusOK, gin.H{"items": filtered, "total": len(filtered)})
 }
 
 func parseScheduleLimit(c *gin.Context) int {
