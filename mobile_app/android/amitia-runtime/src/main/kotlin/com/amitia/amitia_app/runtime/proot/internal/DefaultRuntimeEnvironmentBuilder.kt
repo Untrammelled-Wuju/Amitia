@@ -87,7 +87,6 @@ internal class DefaultRuntimeEnvironmentBuilder(
         if (prootLoaderPath.isNotBlank()) env["PROOT_LOADER"] = prootLoaderPath
         env["PROOT_TMP_DIR"] = File(layout.runRoot, "proot-tmp").absolutePath
 
-        env["PROOT_NO_SECCOMP"] = "1"
         env["ANDROID_ROOT"] = "/system"
         env["ANDROID_DATA"] = "/data"
 
