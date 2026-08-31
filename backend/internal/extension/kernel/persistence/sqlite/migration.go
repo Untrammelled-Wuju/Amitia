@@ -2207,6 +2207,32 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_status ON kernel_device_runtime_credentials(status)`,
 	`DROP INDEX IF EXISTS idx_ext_event_outbox_idempotency`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_event_outbox_idempotency ON extension_event_outbox(idempotency_key)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_workflow_revisions (
+		revision_id TEXT PRIMARY KEY,
+		workflow_id TEXT NOT NULL,
+		owner_user_id TEXT NOT NULL,
+		revision_no INTEGER NOT NULL,
+		name TEXT NOT NULL,
+		description TEXT NOT NULL DEFAULT '',
+		definition_json TEXT NOT NULL,
+		definition_hash TEXT NOT NULL DEFAULT '',
+		note TEXT NOT NULL DEFAULT '',
+		created_at DATETIME NOT NULL,
+		UNIQUE(workflow_id, revision_no)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_revisions_owner ON extension_workflow_revisions(owner_user_id, workflow_id, revision_no DESC)`,
+	`CREATE TABLE IF NOT EXISTS extension_workflow_templates (
+		template_id TEXT PRIMARY KEY,
+		owner_user_id TEXT NOT NULL,
+		name TEXT NOT NULL,
+		description TEXT NOT NULL DEFAULT '',
+		definition_json TEXT NOT NULL,
+		definition_hash TEXT NOT NULL DEFAULT '',
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_templates_owner ON extension_workflow_templates(owner_user_id, updated_at DESC)`,
 }
 
 type dbExecutor interface {

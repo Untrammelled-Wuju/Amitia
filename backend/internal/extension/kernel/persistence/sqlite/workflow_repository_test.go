@@ -106,3 +106,160 @@ func TestWorkflowTriggerBindingPersistence(t *testing.T) {
 		t.Fatalf("unexpected trigger bindings: %+v", bindings)
 	}
 }
+
+func TestWorkflowLocalRevisionAndTemplatePersistence(t *testing.T) {
+	db := openWorkflowTestDB(t)
+	repo := NewWorkflowDefinitionRepository(db)
+	ctx := context.Background()
+	def := workflow.WorkflowDefinition{
+		SchemaVersion: workflow.UserWorkflowSchemaVersion,
+		ID:            "wf-local",
+		Name:          "Local workflow",
+		Description:   "first",
+		InputSchema:   json.RawMessage(`{"type":"object"}`),
+		OutputSchema:  json.RawMessage(`{"type":"object"}`),
+		Nodes:         []workflow.WorkflowNode{{ID: "one", Type: "wait", Step: workflow.WorkflowStepInput{Input: json.RawMessage(`{}`)}}},
+		Enabled:       true,
+		Source:        "user",
+	}
+	firstRevision, err := repo.SaveRevision(ctx, "user-a", def, "initial")
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicateRevision, err := repo.SaveRevision(ctx, "user-a", def, "duplicate state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if duplicateRevision.RevisionID != firstRevision.RevisionID {
+		t.Fatalf("identical consecutive revision should be deduplicated: first=%s duplicate=%s", firstRevision.RevisionID, duplicateRevision.RevisionID)
+	}
+	def.Description = "second"
+	if _, err := repo.SaveRevision(ctx, "user-a", def, "changed"); err != nil {
+		t.Fatal(err)
+	}
+	revisions, err := repo.ListRevisions(ctx, "user-a", def.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(revisions) != 2 || revisions[0].RevisionNo != 2 || revisions[1].RevisionNo != 1 {
+		t.Fatalf("unexpected revisions: %+v", revisions)
+	}
+	loadedRevision, err := repo.GetRevision(ctx, "user-a", def.ID, revisions[1].RevisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loadedRevision.Definition.Description != "first" {
+		t.Fatalf("unexpected revision definition: %+v", loadedRevision.Definition)
+	}
+	if _, err := repo.GetRevision(ctx, "user-b", def.ID, revisions[0].RevisionID); err == nil {
+		t.Fatal("revision should be isolated by owner")
+	}
+
+	template, err := repo.SaveTemplate(ctx, "user-a", "Reusable", "local only", def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	templates, err := repo.ListTemplates(ctx, "user-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(templates) != 1 || templates[0].TemplateID != template.TemplateID || templates[0].NodeCount != 1 {
+		t.Fatalf("unexpected templates: %+v", templates)
+	}
+	if other, err := repo.ListTemplates(ctx, "user-b"); err != nil || len(other) != 0 {
+		t.Fatalf("template owner isolation failed: items=%+v err=%v", other, err)
+	}
+	loadedTemplate, err := repo.GetTemplate(ctx, "user-a", template.TemplateID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loadedTemplate.Definition.Description != "second" {
+		t.Fatalf("unexpected template definition: %+v", loadedTemplate.Definition)
+	}
+	if err := repo.DeleteTemplate(ctx, "user-a", template.TemplateID); err != nil {
+		t.Fatal(err)
+	}
+	if templates, err := repo.ListTemplates(ctx, "user-a"); err != nil || len(templates) != 0 {
+		t.Fatalf("template delete failed: items=%+v err=%v", templates, err)
+	}
+}
+
+func TestWorkflowDefinitionDeleteCleansHistoryAndRuns(t *testing.T) {
+	db := openWorkflowTestDB(t)
+	ctx := context.Background()
+	defRepo := NewWorkflowDefinitionRepository(db)
+	execRepo := NewWorkflowExecutionRepository(db)
+	def := workflow.WorkflowDefinition{
+		SchemaVersion: workflow.UserWorkflowSchemaVersion,
+		ID:            "wf-delete-local",
+		Name:          "Delete me",
+		InputSchema:   json.RawMessage(`{"type":"object"}`),
+		OutputSchema:  json.RawMessage(`{"type":"object"}`),
+		Nodes:         []workflow.WorkflowNode{{ID: "one", Type: "wait", Step: workflow.WorkflowStepInput{Input: json.RawMessage(`{}`)}}},
+		Enabled:       true,
+		Source:        "user",
+	}
+	if err := defRepo.Save(ctx, def); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := defRepo.SaveRevision(ctx, "user-a", def, "snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	if err := defRepo.SaveTrigger(ctx, workflow.TriggerBinding{
+		BindingID: "binding-delete", Type: workflow.TriggerTypeEvent, EventType: "user:user-a:test",
+		WorkflowID: def.ID, Input: json.RawMessage(`{}`), Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, created, err := execRepo.Start(ctx, workflow.WorkflowRun{
+		ExecutionID: "run-delete", WorkflowID: def.ID, Status: workflow.RunStatusRunning,
+		Input: json.RawMessage(`{}`), Context: workflow.ExecutionContext{InvocationID: "run-delete"},
+		Attempt: 1, StartedAt: now, UpdatedAt: now,
+	}); err != nil || !created {
+		t.Fatalf("create workflow run: created=%v err=%v", created, err)
+	}
+	if err := defRepo.Delete(ctx, def.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := defRepo.Get(ctx, def.ID); err == nil {
+		t.Fatal("workflow definition should be deleted")
+	}
+	if revisions, err := defRepo.ListRevisions(ctx, "user-a", def.ID, 10); err != nil || len(revisions) != 0 {
+		t.Fatalf("workflow revisions should be deleted: items=%+v err=%v", revisions, err)
+	}
+	if bindings, err := defRepo.ListTriggers(ctx, workflow.TriggerTypeEvent, "user:user-a:test", ""); err != nil || len(bindings) != 0 {
+		t.Fatalf("workflow trigger bindings should be deleted: items=%+v err=%v", bindings, err)
+	}
+	if _, err := execRepo.Get(ctx, "run-delete"); err == nil {
+		t.Fatal("workflow execution should be deleted")
+	}
+}
+
+func TestWorkflowDefinitionDeletePreservesExtensionRunHistory(t *testing.T) {
+	db := openWorkflowTestDB(t)
+	ctx := context.Background()
+	defRepo := NewWorkflowDefinitionRepository(db)
+	execRepo := NewWorkflowExecutionRepository(db)
+	def := workflow.WorkflowDefinition{
+		ID: "wf-extension-delete", Name: "Extension workflow", Enabled: true, Source: "extension",
+		Nodes: []workflow.WorkflowNode{{ID: "one", Type: "wait", Step: workflow.WorkflowStepInput{Input: json.RawMessage(`{}`)}}},
+	}
+	if err := defRepo.Save(ctx, def); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if _, created, err := execRepo.Start(ctx, workflow.WorkflowRun{
+		ExecutionID: "run-extension-delete", WorkflowID: def.ID, Status: workflow.RunStatusRunning,
+		Input: json.RawMessage(`{}`), Context: workflow.ExecutionContext{InvocationID: "run-extension-delete"},
+		Attempt: 1, StartedAt: now, UpdatedAt: now,
+	}); err != nil || !created {
+		t.Fatalf("create extension workflow run: created=%v err=%v", created, err)
+	}
+	if err := defRepo.Delete(ctx, def.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execRepo.Get(ctx, "run-extension-delete"); err != nil {
+		t.Fatalf("extension workflow history should be preserved: %v", err)
+	}
+}

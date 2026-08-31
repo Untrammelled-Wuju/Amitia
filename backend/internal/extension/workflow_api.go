@@ -35,10 +35,19 @@ func (api *WorkflowAPI) RegisterRoutes(group *gin.RouterGroup) {
 	g.GET("", api.list)
 	g.POST("", api.create)
 	g.GET("/catalog", api.catalog)
+	g.GET("/templates", api.listTemplates)
+	g.POST("/templates/:templateId/instantiate", api.instantiateTemplate)
+	g.DELETE("/templates/:templateId", api.deleteTemplate)
+	g.POST("/import", api.importWorkflow)
 	g.POST("/validate", api.validate)
 	g.POST("/ai/generate", api.aiGenerate)
 	g.POST("/events/:eventType", api.dispatchEvent)
 	g.GET("/:id", api.get)
+	g.GET("/:id/export", api.exportWorkflow)
+	g.POST("/:id/templates", api.saveTemplate)
+	g.GET("/:id/revisions", api.listRevisions)
+	g.POST("/:id/revisions", api.createRevision)
+	g.POST("/:id/revisions/:revisionId/rollback", api.rollbackRevision)
 	g.POST("/:id/ai/edit", api.aiEdit)
 	g.POST("/:id/ai/repair", api.aiRepair)
 	g.POST("/:id/ai/explain", api.aiExplain)
@@ -197,7 +206,7 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 		return items[i].Name < items[j].Name
 	})
 	total := len(items)
-	limit, offset := parsePagination(c)
+	limit, offset := parsePagination(c, 50)
 	if offset >= total {
 		items = []workflow.WorkflowDefinition{}
 	} else {
@@ -267,13 +276,7 @@ func (api *WorkflowAPI) create(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "workflow id already exists"})
 		return
 	}
-	if err := registry.Upsert(def); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err := api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, def, workflowUserID(c)); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), def, workflow.WorkflowDefinition{}, workflowUserID(c))
-		_ = registry.Unregister(def.ID)
+	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, workflowUserID(c), "初始版本"); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -344,6 +347,12 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if old.DefinitionHash != def.DefinitionHash {
+		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), workflowUserID(c), old, "保存前自动快照"); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
 	if err := registry.Upsert(def); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -402,6 +411,12 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if old.DefinitionHash != def.DefinitionHash {
+		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), workflowUserID(c), old, "保存前自动快照"); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 	if err := registry.Upsert(def); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -481,17 +496,298 @@ func (api *WorkflowAPI) duplicate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := registry.Upsert(clone); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if err := api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, clone, workflowUserID(c)); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), clone, workflow.WorkflowDefinition{}, workflowUserID(c))
-		_ = registry.Unregister(clone.ID)
+	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, clone, workflowUserID(c), "复制创建"); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, clone)
+}
+
+func (api *WorkflowAPI) registerNewUserWorkflow(ctx context.Context, registry *workflow.WorkflowRegistry, def workflow.WorkflowDefinition, userID, revisionNote string) error {
+	if err := registry.Upsert(def); err != nil {
+		return err
+	}
+	if err := api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, userID); err != nil {
+		_ = api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, userID)
+		_ = registry.Unregister(def.ID)
+		return err
+	}
+	if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(ctx, userID, def, revisionNote); err != nil {
+		_ = api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, userID)
+		_ = registry.Unregister(def.ID)
+		return err
+	}
+	return nil
+}
+
+func portableWorkflowDefinition(def workflow.WorkflowDefinition) (workflow.WorkflowDefinition, error) {
+	clone, err := workflow.CloneDefinition(def)
+	if err != nil {
+		return workflow.WorkflowDefinition{}, err
+	}
+	clone.ID = ""
+	clone.ExtensionID = ""
+	clone.ModuleID = ""
+	clone.Source = ""
+	clone.DefinitionHash = ""
+	if clone.Metadata != nil {
+		delete(clone.Metadata, "ownerUserId")
+		delete(clone.Metadata, "editor")
+	}
+	return clone, nil
+}
+
+func (api *WorkflowAPI) exportWorkflow(c *gin.Context) {
+	def, ok := api.owned(c)
+	if !ok {
+		return
+	}
+	portable, err := portableWorkflowDefinition(def)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	name := strings.TrimSpace(def.Name)
+	if name == "" {
+		name = "workflow"
+	}
+	name = strings.NewReplacer("/", "-", "\\", "-", "\"", "", "\r", "", "\n", "").Replace(name)
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.workflow.json"`, name))
+	c.JSON(http.StatusOK, workflow.WorkflowExportEnvelope{Format: "amitia-workflow", FormatVersion: 1, ExportedAt: time.Now().UTC(), Workflow: portable})
+}
+
+func (api *WorkflowAPI) importWorkflow(c *gin.Context) {
+	registry, _, err := api.kernelContainer()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	raw, err := c.GetRawData()
+	if err != nil || len(raw) == 0 || !json.Valid(raw) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "workflow import must be valid JSON"})
+		return
+	}
+	var header struct {
+		Format        string `json:"format"`
+		FormatVersion int    `json:"formatVersion"`
+	}
+	_ = json.Unmarshal(raw, &header)
+	var def workflow.WorkflowDefinition
+	if strings.TrimSpace(header.Format) != "" {
+		if header.Format != "amitia-workflow" || header.FormatVersion != 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported workflow export format"})
+			return
+		}
+		var envelope workflow.WorkflowExportEnvelope
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow import: " + err.Error()})
+			return
+		}
+		def = envelope.Workflow
+	} else if err := json.Unmarshal(raw, &def); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow import: " + err.Error()})
+		return
+	}
+	def.ID = ""
+	def.ExtensionID = ""
+	def.ModuleID = ""
+	def.Source = ""
+	def.DefinitionHash = ""
+	def.Enabled = false
+	def.CallableByAgent = false
+	if def.Metadata != nil {
+		delete(def.Metadata, "ownerUserId")
+		delete(def.Metadata, "editor")
+	}
+	for i := range def.Triggers {
+		def.Triggers[i].Enabled = false
+	}
+	def, err = prepareUserWorkflow(def, workflowUserID(c), "")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, workflowUserID(c), "导入创建"); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, def)
+}
+
+func (api *WorkflowAPI) saveTemplate(c *gin.Context) {
+	def, ok := api.owned(c)
+	if !ok {
+		return
+	}
+	var body struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		name = def.Name
+	}
+	description := strings.TrimSpace(body.Description)
+	if description == "" {
+		description = def.Description
+	}
+	portable, err := portableWorkflowDefinition(def)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveTemplate(c.Request.Context(), workflowUserID(c), name, description, portable)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, item)
+}
+
+func (api *WorkflowAPI) listTemplates(c *gin.Context) {
+	if _, _, err := api.kernelContainer(); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListTemplates(c.Request.Context(), workflowUserID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func (api *WorkflowAPI) instantiateTemplate(c *gin.Context) {
+	registry, _, err := api.kernelContainer()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetTemplate(c.Request.Context(), workflowUserID(c), c.Param("templateId"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow template not found"})
+		return
+	}
+	var body struct {
+		Name string `json:"name"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	def, err := workflow.CloneDefinition(item.Definition)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	def.ID = ""
+	def.DefinitionHash = ""
+	def.Enabled = false
+	def.CallableByAgent = false
+	if strings.TrimSpace(body.Name) != "" {
+		def.Name = strings.TrimSpace(body.Name)
+	} else {
+		def.Name = item.Name
+	}
+	for i := range def.Triggers {
+		def.Triggers[i].Enabled = false
+	}
+	def, err = prepareUserWorkflow(def, workflowUserID(c), "")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, workflowUserID(c), "从本地模板创建"); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, def)
+}
+
+func (api *WorkflowAPI) deleteTemplate(c *gin.Context) {
+	if _, _, err := api.kernelContainer(); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	if err := api.runtime.Kernel.Container().WorkflowDefRepo.DeleteTemplate(c.Request.Context(), workflowUserID(c), c.Param("templateId")); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow template not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
+func (api *WorkflowAPI) listRevisions(c *gin.Context) {
+	if _, ok := api.owned(c); !ok {
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListRevisions(c.Request.Context(), workflowUserID(c), c.Param("id"), limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func (api *WorkflowAPI) createRevision(c *gin.Context) {
+	def, ok := api.owned(c)
+	if !ok {
+		return
+	}
+	var body struct {
+		Note string `json:"note"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), workflowUserID(c), def, body.Note)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, item)
+}
+
+func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
+	registry, _, err := api.kernelContainer()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	current, ok := api.owned(c)
+	if !ok {
+		return
+	}
+	revision, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetRevision(c.Request.Context(), workflowUserID(c), current.ID, c.Param("revisionId"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow revision not found"})
+		return
+	}
+	target, err := workflow.CloneDefinition(revision.Definition)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	target, err = prepareUserWorkflow(target, workflowUserID(c), current.ID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if current.DefinitionHash == target.DefinitionHash {
+		c.JSON(http.StatusOK, target)
+		return
+	}
+	if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), workflowUserID(c), current, "回滚前自动快照"); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := registry.Upsert(target); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := api.syncTriggers(c.Request.Context(), current, target, workflowUserID(c)); err != nil {
+		_ = api.syncTriggers(c.Request.Context(), target, current, workflowUserID(c))
+		_ = registry.Upsert(current)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, target)
 }
 
 func (api *WorkflowAPI) delete(c *gin.Context) {
@@ -509,12 +805,6 @@ func (api *WorkflowAPI) delete(c *gin.Context) {
 		return
 	}
 	if err := registry.Unregister(old.ID); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, old, workflowUserID(c))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	if err := api.runtime.Kernel.Container().WorkflowExecRepo.DeleteByWorkflow(c.Request.Context(), old.ID); err != nil {
-		_ = registry.Upsert(old)
 		_ = api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, old, workflowUserID(c))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -591,24 +881,12 @@ func (api *WorkflowAPI) run(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "executionId": executionID, "workflowId": def.ID, "status": workflow.RunStatusRunning})
 }
 
-func parsePagination(c *gin.Context) (int, int) {
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	return limit, offset
-}
-
 func (api *WorkflowAPI) listRuns(c *gin.Context) {
 	if _, ok := api.owned(c); !ok {
 		return
 	}
 	kc := api.runtime.Kernel.Container()
-	limit, offset := parsePagination(c)
+	limit, offset := parsePagination(c, 50)
 	items, total, err := kc.WorkflowExecRepo.ListRuns(c.Request.Context(), c.Param("id"), workflow.RunStatus(c.Query("status")), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
