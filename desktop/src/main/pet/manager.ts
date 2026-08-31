@@ -3703,9 +3703,11 @@ export class DesktopPetManager {
 
   private scheduleBridgeReconnect(generation = this.bridgeGeneration): void {
     if (!this.isBridgeGenerationCurrent(generation)) return;
-    if (this.bridgeReconnectTimer) {
-      clearTimeout(this.bridgeReconnectTimer);
-    }
+    // A single physical connection failure can surface through both the
+    // RuntimeHandler `disconnected` hook and connectBridge's catch path. Once a
+    // retry is scheduled, coalesce all duplicate signals instead of consuming
+    // another retry attempt and exponentially inflating the backoff.
+    if (this.bridgeReconnectTimer) return;
     this.bridgeReconnectAttempts += 1;
     const exponential = Math.min(
       BRIDGE_RECONNECT_BASE_DELAY_MS * Math.pow(2, Math.max(0, this.bridgeReconnectAttempts - 1)),
