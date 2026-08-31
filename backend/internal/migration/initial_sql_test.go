@@ -1,7 +1,6 @@
 package migration
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -226,27 +225,19 @@ CREATE INDEX IF NOT EXISTS idx_retrieval_logs_missing ON retrieval_logs(missing_
 	}
 }
 
-func TestApplyInitialSQLAcceptsCurrentDataScript(t *testing.T) {
+func TestApplyInitialSQLAcceptsEmbeddedBaseline(t *testing.T) {
 	db := openInitialSQLTestDB(t)
-	data, err := os.ReadFile(filepath.Join("..", "..", "data", "sql.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ApplyInitialSQL(db, string(data)); err != nil {
+	if err := ApplyInitialSQL(db, baselineSQL); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestApplyInitialSQLCurrentDataScriptRepeatedNoError(t *testing.T) {
+func TestApplyInitialSQLEmbeddedBaselineRepeatedNoError(t *testing.T) {
 	db := openInitialSQLTestDB(t)
-	data, err := os.ReadFile(filepath.Join("..", "..", "data", "sql.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ApplyInitialSQL(db, string(data)); err != nil {
+	if err := ApplyInitialSQL(db, baselineSQL); err != nil {
 		t.Fatalf("first apply failed: %v", err)
 	}
-	if err := ApplyInitialSQL(db, string(data)); err != nil {
+	if err := ApplyInitialSQL(db, baselineSQL); err != nil {
 		t.Fatalf("second apply should be idempotent without error, got: %v", err)
 	}
 }
@@ -265,17 +256,13 @@ func TestApplyBaselineOnEmptyDatabase(t *testing.T) {
 	}
 }
 
-func TestApplyBaselineAfterLegacyScript(t *testing.T) {
+func TestApplyBaselineAfterEmbeddedBaseline(t *testing.T) {
 	db := openInitialSQLTestDB(t)
-	data, err := os.ReadFile(filepath.Join("..", "..", "data", "sql.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ApplyInitialSQL(db, string(data)); err != nil {
-		t.Fatalf("apply legacy sql.sql failed: %v", err)
+	if err := ApplyInitialSQL(db, baselineSQL); err != nil {
+		t.Fatalf("apply embedded baseline through generic initial SQL path failed: %v", err)
 	}
 	if err := ApplyBaseline(db); err != nil {
-		t.Fatalf("apply baseline after legacy script failed: %v", err)
+		t.Fatalf("apply baseline after generic initial SQL path failed: %v", err)
 	}
 	var colCount int64
 	if err := db.Raw("SELECT COUNT(*) FROM pragma_table_info('messages') WHERE name = 'sequence'").Scan(&colCount).Error; err != nil {
