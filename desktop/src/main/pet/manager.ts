@@ -456,6 +456,8 @@ export class DesktopPetManager {
   private bridgeReconnectAttempts = 0;
   private bridgeStarted = false;
   private bridgeConnecting = false;
+  private bridgeConnectRequested = false;
+  private bridgeGeneration = 0;
   private currentActionKey: string | null = null;
   private currentDragId: string | null = null;
   private runtimeInputSequence = 0;
@@ -3541,11 +3543,18 @@ export class DesktopPetManager {
   private startBridge(): void {
     if (this.bridgeStarted) return;
     this.bridgeStarted = true;
-    void this.connectBridge();
+    this.bridgeGeneration += 1;
+    this.bridgeConnectRequested = true;
+    void this.connectBridge(this.bridgeGeneration);
   }
 
   private stopBridge(): void {
     this.bridgeStarted = false;
+    // Invalidates every async connect attempt before tearing down the active
+    // transport. Any bootstrap-ticket/drain/connect continuation from an older
+    // generation must fail its fence before it can publish a new handler.
+    this.bridgeGeneration += 1;
+    this.bridgeConnectRequested = false;
     this.bridgeReconnectAttempts = 0;
     if (this.bridgeReconnectTimer) {
       clearTimeout(this.bridgeReconnectTimer);
@@ -3562,12 +3571,25 @@ export class DesktopPetManager {
     }
   }
 
-  private async connectBridge(): Promise<void> {
-    if (!this.bridgeStarted || this.bridgeConnecting) return;
+  private isBridgeGenerationCurrent(generation: number): boolean {
+    return this.bridgeStarted && generation === this.bridgeGeneration;
+  }
+
+  private async connectBridge(generation = this.bridgeGeneration): Promise<void> {
+    if (!this.isBridgeGenerationCurrent(generation)) return;
+    if (this.bridgeConnecting) {
+      // A stop -> start may occur while the previous generation is waiting on
+      // an async drain/bootstrap operation. Remember the newer request so the
+      // old attempt's finally block cannot swallow the restart.
+      this.bridgeConnectRequested = true;
+      return;
+    }
     this.bridgeConnecting = true;
+    this.bridgeConnectRequested = false;
 
     const runtimeId = getRuntimeId();
     const deviceId = getDeviceId();
+    let candidateHandler: DesktopRuntimeHandlerV2 | null = null;
 
     try {
       if (this.runtimeHandler) {
@@ -3588,9 +3610,12 @@ export class DesktopPetManager {
         } finally {
           this.captureRuntimeCursor(previousHandler);
         }
+        if (!this.isBridgeGenerationCurrent(generation)) return;
       }
 
       const issued = await createRuntimeBootstrapTicket(deviceId, runtimeId);
+      if (!this.isBridgeGenerationCurrent(generation)) return;
+
       const wsUrl = this.buildRuntimeV2URL(runtimeId, deviceId);
       const resumeCursor: RuntimeResumeCursor = {
         ...this.runtimeResumeCursor,
@@ -3614,22 +3639,57 @@ export class DesktopPetManager {
         pendingOutboundEntries: this.runtimePendingOutboundEntries,
       };
 
-      const hooks = this.buildRuntimeHooks();
-      const handler = new DesktopRuntimeHandlerV2(handlerConfig, hooks);
+      let handler: DesktopRuntimeHandlerV2 | null = null;
+      const hooks = this.buildRuntimeHooks(
+        generation,
+        () => handler !== null && this.runtimeHandler === handler,
+      );
+      handler = new DesktopRuntimeHandlerV2(handlerConfig, hooks);
+      candidateHandler = handler;
+      if (!this.isBridgeGenerationCurrent(generation)) return;
       this.runtimeHandler = handler;
       const reconnectReason = resumeCursor.lastEventSequence > 0
         ? "transport_lost"
         : "initial";
       await handler.connect(reconnectReason);
+      if (!this.isBridgeGenerationCurrent(generation) || this.runtimeHandler !== handler) {
+        try {
+          handler.disconnect();
+        } catch {
+          void 0;
+        }
+        if (this.runtimeHandler === handler) this.runtimeHandler = null;
+        return;
+      }
       this.captureRuntimeCursor(handler);
+      candidateHandler = null;
     } catch (error) {
+      if (!this.isBridgeGenerationCurrent(generation)) return;
       console.warn(
         "[DesktopPetManager] runtime ticket/连接失败:",
         this.errorMessage(error),
       );
-      this.scheduleBridgeReconnect();
+      this.scheduleBridgeReconnect(generation);
     } finally {
+      if (candidateHandler) {
+        // candidateHandler is cleared only after a fully successful, current
+        // connection. Every failed/stale candidate is therefore fenced and
+        // released here before another generation/attempt can start.
+        try {
+          candidateHandler.disconnect();
+        } catch {
+          void 0;
+        }
+        if (this.runtimeHandler === candidateHandler) this.runtimeHandler = null;
+      }
       this.bridgeConnecting = false;
+      if (
+        this.bridgeStarted &&
+        (this.bridgeConnectRequested || generation !== this.bridgeGeneration)
+      ) {
+        this.bridgeConnectRequested = false;
+        void this.connectBridge(this.bridgeGeneration);
+      }
     }
   }
 
@@ -3641,8 +3701,8 @@ export class DesktopPetManager {
     return url.toString();
   }
 
-  private scheduleBridgeReconnect(): void {
-    if (!this.bridgeStarted) return;
+  private scheduleBridgeReconnect(generation = this.bridgeGeneration): void {
+    if (!this.isBridgeGenerationCurrent(generation)) return;
     if (this.bridgeReconnectTimer) {
       clearTimeout(this.bridgeReconnectTimer);
     }
@@ -3654,7 +3714,8 @@ export class DesktopPetManager {
     const jitteredDelay = Math.max(250, Math.floor(exponential * (0.8 + Math.random() * 0.4)));
     this.bridgeReconnectTimer = setTimeout(() => {
       this.bridgeReconnectTimer = null;
-      void this.connectBridge();
+      if (!this.isBridgeGenerationCurrent(generation)) return;
+      void this.connectBridge(generation);
     }, jitteredDelay);
     if (typeof this.bridgeReconnectTimer.unref === "function") {
       this.bridgeReconnectTimer.unref();
@@ -3670,9 +3731,15 @@ export class DesktopPetManager {
     });
   }
 
-  private buildRuntimeHooks(): RuntimeHandlerHooks {
+  private buildRuntimeHooks(
+    generation: number,
+    isCurrentHandler: () => boolean,
+  ): RuntimeHandlerHooks {
+    const isCurrent = () =>
+      this.isBridgeGenerationCurrent(generation) && isCurrentHandler();
     return {
       onState: (state) => {
+        if (!isCurrent()) return;
         if (state === "disconnected") {
           console.warn("[DesktopPetManager] runtime disconnected");
           const activeHandler = this.runtimeHandler;
@@ -3681,11 +3748,12 @@ export class DesktopPetManager {
             activeHandler &&
             activeHandler.getState() === "disconnected"
           ) {
-            this.scheduleBridgeReconnect();
+            this.scheduleBridgeReconnect(generation);
           }
         }
       },
       onHelloAck: (ack: HelloAckPayload) => {
+        if (!isCurrent()) return;
         console.log(
           "[DesktopPetManager] runtime connected session=",
           ack.sessionId,
@@ -3746,15 +3814,18 @@ export class DesktopPetManager {
         this.syncRuntimeState();
       },
       onError: (err: Error) => {
+        if (!isCurrent()) return;
         console.warn("[DesktopPetManager] runtime error:", err.message);
       },
       onEvent: (_envelope: RuntimeEnvelope) => {
       },
       onDesiredSync: (revision: number) => {
+        if (!isCurrent()) return;
         this.markDesiredRevisionApplied(revision);
         this.lastServerDesiredRevision = Math.max(this.lastServerDesiredRevision, revision);
       },
       onCommandSettled: (_result, _envelope) => {
+        if (!isCurrent()) return;
         // Settings revision is advanced only by applyRuntimeSettingsLocal()
         // (or a runtime start that fetched and applied that exact snapshot).
         // Never infer settings application from a transport-level duplicate:
@@ -3767,6 +3838,16 @@ export class DesktopPetManager {
         command: unknown,
         _envelope: RuntimeEnvelope,
       ): Promise<RuntimeCommandExecutionResult> => {
+        if (!isCurrent()) {
+          const stale = command as { commandId?: string };
+          return {
+            commandId: stale?.commandId ?? "",
+            status: "rejected",
+            errorCode: "RUNTIME_SESSION_SUPERSEDED",
+            errorMessage: "runtime bridge generation is no longer active",
+            appliedRevision: this.lastAppliedDesiredRevision,
+          };
+        }
         const cmd = command as {
           commandId?: string;
           commandType?: string;

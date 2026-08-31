@@ -240,15 +240,25 @@ export class DesktopPetWorldController {
       }
 
       const [currentX, currentY] = currentWin.getPosition();
+      const [currentWidth, currentHeight] = currentWin.getSize();
+      // Display topology/work-area can change while the pet is falling (monitor
+      // unplug, taskbar/dock relocation, DPI transition). Re-resolve the active
+      // display every tick instead of pinning the fall to stale startup bounds.
+      const currentDisplay = screen.getDisplayNearestPoint({
+        x: currentX + Math.floor(currentWidth / 2),
+        y: currentY + Math.floor(currentHeight / 2),
+      });
+      const currentWork = currentDisplay.workArea;
+      const currentFloorY = currentWork.y + currentWork.height - currentHeight - EDGE_PADDING_PX;
       velocity = Math.min(MAX_FALL_SPEED_PX_PER_TICK, velocity + GRAVITY_PX_PER_TICK);
-      const nextY = Math.min(floorY, currentY + velocity);
+      const nextY = Math.min(currentFloorY, currentY + velocity);
       const nextX = Math.max(
-        work.x + EDGE_PADDING_PX,
-        Math.min(work.x + work.width - width - EDGE_PADDING_PX, currentX),
+        currentWork.x + EDGE_PADDING_PX,
+        Math.min(currentWork.x + currentWork.width - currentWidth - EDGE_PADDING_PX, currentX),
       );
       currentWin.setPosition(Math.round(nextX), Math.round(nextY), false);
 
-      if (nextY >= floorY) {
+      if (nextY >= currentFloorY) {
         this.falling = false;
         this.stopMovement();
         this.scheduler.submit({
