@@ -47,6 +47,59 @@ class WorkflowListPage extends ConsumerWidget {
     }
   }
 
+  Future<void> _createWithAI(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final instruction = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('AI 创建工作流'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 4,
+          maxLines: 8,
+          decoration: const InputDecoration(
+            hintText: '描述你想自动化的流程，例如：每天早上获取天气，如果下雨就通知我带伞。',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: const Text('生成'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (instruction == null || instruction.trim().isEmpty || !context.mounted) return;
+    try {
+      final service = ref.read(extensionServiceProvider);
+      final proposal = await service.generateWorkflowWithAI(instruction.trim());
+      final rawDefinition = proposal['definition'];
+      if (rawDefinition is! Map) throw StateError('AI 未返回有效工作流定义');
+      final definition = Map<String, dynamic>.from(rawDefinition);
+      definition.remove('definitionHash');
+      final created = await service.createWorkflow(definition);
+      final id = (created['id'] ?? '').toString();
+      ref.invalidate(_workflowListProvider);
+      if (context.mounted && id.isNotEmpty) {
+        final summary = (proposal['summary'] ?? '').toString().trim();
+        if (summary.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(summary)));
+        }
+        context.push(AppRoutes.workflowEditor(id));
+      }
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('AI 创建失败：$error')));
+      }
+    }
+  }
+
   Future<void> _duplicate(BuildContext context, WidgetRef ref, Map<String, dynamic> item) async {
     final id = (item['id'] ?? '').toString();
     if (id.isEmpty) return;
@@ -103,6 +156,11 @@ class WorkflowListPage extends ConsumerWidget {
         fallbackRoute: AppRoutes.workshop,
         actions: [
           IconButton(
+            tooltip: 'AI 创建',
+            onPressed: () => _createWithAI(context, ref),
+            icon: const Icon(Icons.auto_awesome_outlined),
+          ),
+          IconButton(
             tooltip: '刷新',
             onPressed: () => ref.invalidate(_workflowListProvider),
             icon: const Icon(Icons.refresh),
@@ -122,7 +180,7 @@ class WorkflowListPage extends ConsumerWidget {
             child: ListView(
               padding: EdgeInsets.all(AppSpacing.pagePadding),
               children: [
-                _IntroCard(onCreate: () => _create(context, ref)),
+                _IntroCard(onCreate: () => _create(context, ref), onCreateAI: () => _createWithAI(context, ref)),
                 SizedBox(height: AppSpacing.sectionGap),
                 Row(
                   children: [
@@ -132,7 +190,7 @@ class WorkflowListPage extends ConsumerWidget {
                 ),
                 SizedBox(height: AppSpacing.sm),
                 if (items.isEmpty)
-                  _EmptyState(onCreate: () => _create(context, ref))
+                  _EmptyState(onCreate: () => _create(context, ref), onCreateAI: () => _createWithAI(context, ref))
                 else
                   ...items.map(
                     (item) => Padding(
@@ -166,7 +224,8 @@ class WorkflowListPage extends ConsumerWidget {
 
 class _IntroCard extends StatelessWidget {
   final VoidCallback onCreate;
-  const _IntroCard({required this.onCreate});
+  final VoidCallback onCreateAI;
+  const _IntroCard({required this.onCreate, required this.onCreateAI});
 
   @override
   Widget build(BuildContext context) {
@@ -193,7 +252,14 @@ class _IntroCard extends StatelessWidget {
             style: AppTypography.caption(context),
           ),
           const SizedBox(height: 14),
-          FilledButton.icon(onPressed: onCreate, icon: const Icon(Icons.add), label: const Text('创建工作流')),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(onPressed: onCreateAI, icon: const Icon(Icons.auto_awesome_outlined), label: const Text('AI 创建')),
+              OutlinedButton.icon(onPressed: onCreate, icon: const Icon(Icons.add), label: const Text('手动创建')),
+            ],
+          ),
         ],
       ),
     );
@@ -298,7 +364,8 @@ class _Pill extends StatelessWidget {
 
 class _EmptyState extends StatelessWidget {
   final VoidCallback onCreate;
-  const _EmptyState({required this.onCreate});
+  final VoidCallback onCreateAI;
+  const _EmptyState({required this.onCreate, required this.onCreateAI});
 
   @override
   Widget build(BuildContext context) {
@@ -313,7 +380,13 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 6),
           Text('创建第一条可视化 DAG 工作流。', style: AppTypography.caption(context)),
           const SizedBox(height: 16),
-          OutlinedButton(onPressed: onCreate, child: const Text('新建')),
+          Wrap(
+            spacing: 10,
+            children: [
+              FilledButton.icon(onPressed: onCreateAI, icon: const Icon(Icons.auto_awesome_outlined), label: const Text('AI 创建')),
+              OutlinedButton(onPressed: onCreate, child: const Text('手动新建')),
+            ],
+          ),
         ],
       ),
     );

@@ -589,6 +589,45 @@ class ExtensionService {
     return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);
   }
 
+  Future<List<Map<String, dynamic>>> workflowCatalog() async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/workflows/catalog');
+    final items = resp?['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> generateWorkflowWithAI(String instruction) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/ai/generate',
+          data: {'instruction': instruction},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> editWorkflowWithAI(String id, String instruction) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}/ai/edit',
+          data: {'instruction': instruction},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> repairWorkflowWithAI(String id, {String instruction = ''}) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}/ai/repair',
+          data: {'instruction': instruction},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> explainWorkflowWithAI(String id, {String instruction = ''}) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}/ai/explain',
+          data: {'instruction': instruction},
+        ) ??
+        <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> createWorkflow(Map<String, dynamic> definition) async {
     return await _api.post<Map<String, dynamic>>('/api/extensions/workflows', data: definition) ?? <String, dynamic>{};
   }
