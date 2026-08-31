@@ -13,6 +13,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 )
@@ -32,9 +34,14 @@ func (api *WorkflowAPI) RegisterRoutes(group *gin.RouterGroup) {
 	g := group.Group("/workflows")
 	g.GET("", api.list)
 	g.POST("", api.create)
+	g.GET("/catalog", api.catalog)
 	g.POST("/validate", api.validate)
+	g.POST("/ai/generate", api.aiGenerate)
 	g.POST("/events/:eventType", api.dispatchEvent)
 	g.GET("/:id", api.get)
+	g.POST("/:id/ai/edit", api.aiEdit)
+	g.POST("/:id/ai/repair", api.aiRepair)
+	g.POST("/:id/ai/explain", api.aiExplain)
 	g.PUT("/:id", api.update)
 	g.PATCH("/:id", api.patch)
 	g.POST("/:id/duplicate", api.duplicate)
@@ -202,6 +209,43 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset})
 }
+
+func (api *WorkflowAPI) catalog(c *gin.Context) {
+	if _, _, err := api.kernelContainer(); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	kc := api.runtime.Kernel.Container()
+	if kc.ToolRegistry == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "tool registry unavailable"})
+		return
+	}
+	userID := workflowUserID(c)
+	items := make([]gin.H, 0)
+	for _, def := range kc.ToolRegistry.List(c.Request.Context(), capability.ToolFilter{Enabled: boolPtrWorkflow(true)}) {
+		if def.Source == capability.ToolSourceWorkflow && def.Metadata != nil {
+			if flag, ok := def.Metadata["userWorkflow"].(bool); ok && flag {
+				owner := strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"]))
+				if owner == "" || owner != userID {
+					continue
+				}
+			}
+		}
+		items = append(items, gin.H{
+			"id":           def.ID,
+			"modelName":    def.ModelName,
+			"name":         def.Name,
+			"description":  def.Description,
+			"source":       def.Source,
+			"inputSchema":  json.RawMessage(def.InputSchema),
+			"outputSchema": json.RawMessage(def.OutputSchema),
+			"runtime":      def.Runtime,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func boolPtrWorkflow(value bool) *bool { return &value }
 
 func (api *WorkflowAPI) create(c *gin.Context) {
 	registry, _, err := api.kernelContainer()
@@ -729,6 +773,18 @@ func (api *WorkflowAPI) syncTriggers(ctx context.Context, oldDef, newDef workflo
 			}
 			if err := kc.ScheduleService.InstallDefinition(ctx, def); err != nil {
 				return fmt.Errorf("install workflow schedule %s: %w", trigger.ID, err)
+			}
+		}
+	}
+	if kc.ToolRegistry != nil {
+		if oldDef.ID != "" && oldDef.ID != newDef.ID {
+			if err := kernelruntime.RemoveUserWorkflowAgentTool(ctx, kc.ToolRegistry, oldDef.ID); err != nil {
+				return fmt.Errorf("remove workflow agent tool: %w", err)
+			}
+		}
+		if newDef.ID != "" {
+			if err := kernelruntime.SyncUserWorkflowAgentTool(ctx, kc.ToolRegistry, newDef); err != nil {
+				return fmt.Errorf("sync workflow agent tool: %w", err)
 			}
 		}
 	}
