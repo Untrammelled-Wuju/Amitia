@@ -25,6 +25,10 @@ func TestDesktopPetFinalizationMigrationVersionsUseCanonicalFormat(t *testing.T)
 		"finalize_desktop_pet_behavior_decision_recovery":         "202608290006",
 		"desktop_pet_processing_ownership_backfill":               "202608300001",
 		"finalize_desktop_pet_runtime_geometry_and_behavior_mesh": "202608300002",
+		"finalize_desktop_pet_behavior_reducer_dedup":             "202608310001",
+		"finalize_desktop_pet_behavior_inbox_tenant_dedup":        "202608310002",
+		"repair_desktop_pet_behavior_v2_columns":                  "202608310003",
+		"repair_legacy_action_revision_data_to_stream":            "202608310004",
 	}
 
 	seen := make(map[string]string)

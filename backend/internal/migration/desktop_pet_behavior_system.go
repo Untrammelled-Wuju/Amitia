@@ -14,7 +14,14 @@ func DesktopPetBehaviorMigration() Migration {
 				s.CreateTable(sql)
 			}
 			for _, idx := range persistence.DesktopPetBehaviorIndexDefs {
-				if err := s.CreateIndex(idx.Name, idx.Table, idx.Columns, idx.Unique); err != nil {
+				columns := idx.Columns
+				// Preserve the historical 202607310008 operation/checksum. The
+				// final tenant-scoped dedup index is installed by the forward-only
+				// 202608310002 migration below.
+				if idx.Name == "ux_desktop_pet_behavior_inbox_dedup" {
+					columns = []string{"dedup_key"}
+				}
+				if err := s.CreateIndex(idx.Name, idx.Table, columns, idx.Unique); err != nil {
 					return err
 				}
 			}
@@ -29,31 +36,37 @@ func DesktopPetBehaviorV2ColumnsMigration() Migration {
 		Name:              "add_behavior_v2_columns",
 		AcceptedChecksums: []string{"6df3d911385f6a9424fe92d55998c005189d475e5fdb98cc3b3b7c2d427fad58"},
 		Up: func(s *Step) error {
-			_ = s.AddColumn("desktop_pet_behavior_contexts", "desktop_gesture_json", "TEXT NOT NULL DEFAULT '{}'")
-			_ = s.AddColumn("desktop_pet_behavior_contexts", "foreground_json", "TEXT NOT NULL DEFAULT '{}'")
-			_ = s.AddColumn("desktop_pet_behavior_contexts", "cooldowns_json", "TEXT NOT NULL DEFAULT '{}'")
-			_ = s.AddColumn("desktop_pet_behavior_contexts", "recent_semantics_json", "TEXT NOT NULL DEFAULT '[]'")
-			_ = s.AddColumn("desktop_pet_behavior_contexts", "last_source_revisions_json", "TEXT NOT NULL DEFAULT '{}'")
-
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "conversation_id", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "interaction_id", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "session_id", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "tool_operation_id", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "installation_id", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "pet_instance_id", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "release_id", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "event_envelope_json", "TEXT NOT NULL DEFAULT '{}'")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "payload_hash", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "lease_owner", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "lease_expires_at", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "heartbeat_at", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "available_at", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_inbox", "last_error_message", "TEXT NOT NULL DEFAULT ''")
-
-			_ = s.AddColumn("desktop_pet_behavior_decisions", "interrupt_policy", "TEXT NOT NULL DEFAULT ''")
-			_ = s.AddColumn("desktop_pet_behavior_decisions", "minimum_play_ms", "INTEGER NOT NULL DEFAULT 0")
-			_ = s.AddColumn("desktop_pet_behavior_decisions", "maximum_play_ms", "INTEGER NOT NULL DEFAULT 0")
-
+			columns := []struct {
+				table, name, definition string
+			}{
+				{"desktop_pet_behavior_contexts", "desktop_gesture_json", "TEXT NOT NULL DEFAULT '{}'"},
+				{"desktop_pet_behavior_contexts", "foreground_json", "TEXT NOT NULL DEFAULT '{}'"},
+				{"desktop_pet_behavior_contexts", "cooldowns_json", "TEXT NOT NULL DEFAULT '{}'"},
+				{"desktop_pet_behavior_contexts", "recent_semantics_json", "TEXT NOT NULL DEFAULT '[]'"},
+				{"desktop_pet_behavior_contexts", "last_source_revisions_json", "TEXT NOT NULL DEFAULT '{}'"},
+				{"desktop_pet_behavior_inbox", "conversation_id", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "interaction_id", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "session_id", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "tool_operation_id", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "installation_id", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "pet_instance_id", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "release_id", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "event_envelope_json", "TEXT NOT NULL DEFAULT '{}'"},
+				{"desktop_pet_behavior_inbox", "payload_hash", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "lease_owner", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "lease_expires_at", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "heartbeat_at", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "available_at", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_inbox", "last_error_message", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_decisions", "interrupt_policy", "TEXT NOT NULL DEFAULT ''"},
+				{"desktop_pet_behavior_decisions", "minimum_play_ms", "INTEGER NOT NULL DEFAULT 0"},
+				{"desktop_pet_behavior_decisions", "maximum_play_ms", "INTEGER NOT NULL DEFAULT 0"},
+			}
+			for _, column := range columns {
+				if err := s.AddColumn(column.table, column.name, column.definition); err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 	}
@@ -86,6 +99,20 @@ func DesktopPetBehaviorDecisionRecoveryMigration() Migration {
 				}
 			}
 			return nil
+		},
+	}
+}
+
+// DesktopPetBehaviorReducerDedupMigration persists a bounded reducer-level
+// event identity window. Durable/recoverable events are already protected by
+// the inbox unique key, while this context-local fence also covers ephemeral
+// events that are dispatched directly to the coordinator.
+func DesktopPetBehaviorReducerDedupMigration() Migration {
+	return Migration{
+		Version: "202608310001",
+		Name:    "finalize_desktop_pet_behavior_reducer_dedup",
+		Up: func(s *Step) error {
+			return s.AddColumn("desktop_pet_behavior_contexts", "recent_event_keys_json", "TEXT NOT NULL DEFAULT '[]'")
 		},
 	}
 }

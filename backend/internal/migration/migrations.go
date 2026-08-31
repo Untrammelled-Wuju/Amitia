@@ -187,6 +187,10 @@ func DefaultMigrations() []Migration {
 		DesktopPetBehaviorDecisionRecoveryMigration(),
 		DesktopPetProcessingOwnershipBackfillMigration(),
 		DesktopPetRuntimeBehaviorFinalizationMigration(),
+		DesktopPetBehaviorReducerDedupMigration(),
+		DesktopPetBehaviorInboxTenantDedupMigration(),
+		DesktopPetBehaviorV2ColumnsRepairMigration(),
+		DesktopPetActionRevisionDataRepairMigration(),
 	}
 }
 
