@@ -161,6 +161,10 @@ func (api *WorkflowAPI) generateWorkflowAIProposal(ctx context.Context, mode, in
 			"triggerTypes":  []string{"manual", "event", "cron", "interval", "one_shot"},
 			"valueRefs":     []string{"input.<path>", "steps.<upstreamNodeId>.<path>", "runtime.<path>", "literal:<text>"},
 			"mappingRule":   "steps.* references must point to a transitive upstream dependency; add an edge when a mapping needs a new dependency",
+			"nodeReliability": map[string]any{
+				"timeoutMs": "optional per-node timeout in milliseconds; 0/omitted inherits workflow maxStepDurationMs",
+				"retry":     map[string]any{"maxAttempts": "1..10", "initialBackoffMs": "0..600000", "maxBackoffMs": "0..600000", "multiplier": ">1..10", "jitter": "0..1"},
+			},
 		},
 	}
 	if current.ID != "" {
@@ -168,7 +172,7 @@ func (api *WorkflowAPI) generateWorkflowAIProposal(ctx context.Context, mode, in
 	}
 	payload, _ := json.Marshal(request)
 
-	system := `You are Amitia Workflow Copilot for the Extension Kernel. Return exactly one JSON object and no Markdown. The object must contain exactly: definition, summary, changes, warnings. definition must be a complete workflow-v2 WorkflowDefinition, not a patch. summary is a short string. changes and warnings are string arrays. Preserve the user's intent. Never invent plaintext secrets. Use only node types and trigger types supplied by the request. For tool/mcp/task/runtime nodes, prefer catalog IDs that actually exist. Keep the graph acyclic. Every steps.<nodeId>.<path> value reference must reference a transitive upstream node; create the needed edge. Keep constant input fields alongside mapped fields. In edit/repair mode preserve the workflow id and existing behavior unless the instruction requires a change. Do not emit definitionHash. Do not emit unknown fields.`
+	system := `You are Amitia Workflow Copilot for the Extension Kernel. Return exactly one JSON object and no Markdown. The object must contain exactly: definition, summary, changes, warnings. definition must be a complete workflow-v2 WorkflowDefinition, not a patch. summary is a short string. changes and warnings are string arrays. Preserve the user's intent. Never invent plaintext secrets. Use only node types and trigger types supplied by the request. For tool/mcp/task/runtime nodes, prefer catalog IDs that actually exist. Keep the graph acyclic. Every steps.<nodeId>.<path> value reference must reference a transitive upstream node; create the needed edge. Keep constant input fields alongside mapped fields. For retry requests use node.retry (maxAttempts counts the first attempt) and keep step.onError for the post-retry failure policy; use node.timeoutMs for a per-node timeout. In edit/repair mode preserve the workflow id and existing behavior unless the instruction requires a change. Do not emit definitionHash. Do not emit unknown fields.`
 
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
@@ -190,7 +194,7 @@ func (api *WorkflowAPI) generateWorkflowAIProposal(ctx context.Context, mode, in
 		if current.ID != "" {
 			existingID = current.ID
 		}
-		prepared, prepErr := prepareUserWorkflow(proposal.Definition, userID, existingID)
+		prepared, prepErr := api.prepareValidatedUserWorkflow(proposal.Definition, userID, existingID)
 		if prepErr != nil {
 			lastErr = prepErr
 			continue

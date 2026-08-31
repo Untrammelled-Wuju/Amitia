@@ -245,7 +245,19 @@ func (c *Compiler) Compile(def WorkflowDefinition, opts CompileOptions) (*Compil
 		}
 
 		if opts.EnableRetry {
-			cn.Retry = c.compileRetry(n)
+			retryPolicy, err := c.compileRetry(n)
+			if err != nil {
+				return nil, fmt.Errorf("workflow %s node %s retry: %w", def.ID, n.ID, err)
+			}
+			cn.Retry = retryPolicy
+		}
+
+		if opts.EnableTimeout && n.TimeoutMS > 0 {
+			if def.Limits.MaxStepDurationMS > 0 && n.TimeoutMS > def.Limits.MaxStepDurationMS {
+				return nil, fmt.Errorf("workflow %s node %s timeout %dms exceeds workflow max step duration %dms", def.ID, n.ID, n.TimeoutMS, def.Limits.MaxStepDurationMS)
+			}
+			timeout := time.Duration(n.TimeoutMS) * time.Millisecond
+			cn.Timeout = &timeout
 		}
 
 		if n.Step.OnError.Mode != "" {
@@ -303,12 +315,51 @@ func (c *Compiler) CompileFromLegacy(def WorkflowDefinition) (*CompiledWorkflowD
 	return c.Compile(def, DefaultCompileOptions())
 }
 
-func (c *Compiler) compileRetry(n WorkflowNode) *WorkflowRetryPolicy {
-	rp := DefaultRetryPolicy()
-	if n.Step.OnError.Mode == "retry" {
-		rp.MaxAttempts = 3
+func (c *Compiler) compileRetry(n WorkflowNode) (*WorkflowRetryPolicy, error) {
+	// Keep legacy workflow definitions that used onError.mode=retry working.
+	if n.Retry == nil {
+		rp := DefaultRetryPolicy()
+		if n.Step.OnError.Mode == "retry" {
+			rp.MaxAttempts = 3
+		}
+		return rp, nil
 	}
-	return rp
+
+	p := *n.Retry
+	if p.MaxAttempts < 1 || p.MaxAttempts > 10 {
+		return nil, fmt.Errorf("maxAttempts must be between 1 and 10")
+	}
+	if p.InitialBackoffMS < 0 || p.InitialBackoffMS > 10*60*1000 {
+		return nil, fmt.Errorf("initialBackoffMs must be between 0 and 600000")
+	}
+	if p.MaxBackoffMS < 0 || p.MaxBackoffMS > 10*60*1000 {
+		return nil, fmt.Errorf("maxBackoffMs must be between 0 and 600000")
+	}
+	if p.InitialBackoffMS > 0 && p.MaxBackoffMS > 0 && p.MaxBackoffMS < p.InitialBackoffMS {
+		return nil, fmt.Errorf("maxBackoffMs must be greater than or equal to initialBackoffMs")
+	}
+	if p.Multiplier != 0 && (p.Multiplier <= 1 || p.Multiplier > 10) {
+		return nil, fmt.Errorf("multiplier must be greater than 1 and at most 10")
+	}
+	if p.Jitter < 0 || p.Jitter > 1 {
+		return nil, fmt.Errorf("jitter must be between 0 and 1")
+	}
+
+	rp := DefaultRetryPolicy()
+	rp.MaxAttempts = p.MaxAttempts
+	if p.InitialBackoffMS > 0 {
+		rp.InitialBackoff = time.Duration(p.InitialBackoffMS) * time.Millisecond
+	}
+	if p.MaxBackoffMS > 0 {
+		rp.MaxBackoff = time.Duration(p.MaxBackoffMS) * time.Millisecond
+	} else if rp.MaxBackoff < rp.InitialBackoff {
+		rp.MaxBackoff = rp.InitialBackoff
+	}
+	if p.Multiplier > 0 {
+		rp.Multiplier = p.Multiplier
+	}
+	rp.Jitter = p.Jitter
+	return rp.Normalize(), nil
 }
 
 func (c *Compiler) checkDepth(nodes []WorkflowNode, topo []string) error {

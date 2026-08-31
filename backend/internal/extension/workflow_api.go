@@ -43,6 +43,8 @@ func (api *WorkflowAPI) RegisterRoutes(group *gin.RouterGroup) {
 	g.POST("/ai/generate", api.aiGenerate)
 	g.POST("/events/:eventType", api.dispatchEvent)
 	g.GET("/:id", api.get)
+	g.GET("/:id/analysis", api.analysis)
+	g.GET("/:id/stats", api.stats)
 	g.GET("/:id/export", api.exportWorkflow)
 	g.POST("/:id/templates", api.saveTemplate)
 	g.GET("/:id/revisions", api.listRevisions)
@@ -65,6 +67,8 @@ func (api *WorkflowAPI) RegisterRoutes(group *gin.RouterGroup) {
 	runs.POST("/:runId/cancel", api.cancelRun)
 	runs.POST("/:runId/pause", api.pauseRun)
 	runs.POST("/:runId/resume", api.resumeRun)
+	runs.POST("/:runId/rerun", api.rerunRun)
+	runs.POST("/:runId/recover", api.recoverRun)
 }
 
 func (api *WorkflowAPI) kernelContainer() (*workflow.WorkflowRegistry, *workflow.WorkflowExecutor, error) {
@@ -89,7 +93,8 @@ func workflowOwnedBy(def workflow.WorkflowDefinition, userID string) bool {
 	if userID == "" || def.Source != userWorkflowSource || def.Metadata == nil {
 		return false
 	}
-	return strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"])) == userID
+	owner, ok := def.Metadata["ownerUserId"]
+	return ok && owner != nil && strings.TrimSpace(fmt.Sprint(owner)) == userID
 }
 
 func prepareUserWorkflow(def workflow.WorkflowDefinition, userID string, existingID string) (workflow.WorkflowDefinition, error) {
@@ -206,7 +211,7 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 		return items[i].Name < items[j].Name
 	})
 	total := len(items)
-	limit, offset := parsePagination(c, 50)
+	limit, offset := parsePagination(c)
 	if offset >= total {
 		items = []workflow.WorkflowDefinition{}
 	} else {
@@ -267,7 +272,7 @@ func (api *WorkflowAPI) create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow: " + err.Error()})
 		return
 	}
-	def, err = prepareUserWorkflow(def, workflowUserID(c), "")
+	def, err = api.prepareValidatedUserWorkflow(def, workflowUserID(c), "")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -289,7 +294,7 @@ func (api *WorkflowAPI) validate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"valid": false, "error": err.Error()})
 		return
 	}
-	prepared, err := prepareUserWorkflow(def, workflowUserID(c), def.ID)
+	prepared, err := api.prepareValidatedUserWorkflow(def, workflowUserID(c), def.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"valid": false, "error": err.Error()})
 		return
@@ -342,7 +347,7 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow: " + err.Error()})
 		return
 	}
-	def, err = prepareUserWorkflow(def, workflowUserID(c), old.ID)
+	def, err = api.prepareValidatedUserWorkflow(def, workflowUserID(c), old.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -407,7 +412,7 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow patch: " + err.Error()})
 		return
 	}
-	def, err = prepareUserWorkflow(def, workflowUserID(c), old.ID)
+	def, err = api.prepareValidatedUserWorkflow(def, workflowUserID(c), old.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -491,7 +496,7 @@ func (api *WorkflowAPI) duplicate(c *gin.Context) {
 			clone.Metadata[key] = value
 		}
 	}
-	clone, err = prepareUserWorkflow(clone, workflowUserID(c), "")
+	clone, err = api.prepareValidatedUserWorkflow(clone, workflowUserID(c), "")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -602,7 +607,7 @@ func (api *WorkflowAPI) importWorkflow(c *gin.Context) {
 	for i := range def.Triggers {
 		def.Triggers[i].Enabled = false
 	}
-	def, err = prepareUserWorkflow(def, workflowUserID(c), "")
+	def, err = api.prepareValidatedUserWorkflow(def, workflowUserID(c), "")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -690,7 +695,7 @@ func (api *WorkflowAPI) instantiateTemplate(c *gin.Context) {
 	for i := range def.Triggers {
 		def.Triggers[i].Enabled = false
 	}
-	def, err = prepareUserWorkflow(def, workflowUserID(c), "")
+	def, err = api.prepareValidatedUserWorkflow(def, workflowUserID(c), "")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -764,7 +769,7 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	target, err = prepareUserWorkflow(target, workflowUserID(c), current.ID)
+	target, err = api.prepareValidatedUserWorkflow(target, workflowUserID(c), current.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -881,12 +886,49 @@ func (api *WorkflowAPI) run(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "executionId": executionID, "workflowId": def.ID, "status": workflow.RunStatusRunning})
 }
 
+func parsePagination(c *gin.Context) (int, int) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return limit, offset
+}
+
+func (api *WorkflowAPI) analysis(c *gin.Context) {
+	def, ok := api.owned(c)
+	if !ok {
+		return
+	}
+	registry, _, err := api.kernelContainer()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, analyzeWorkflowRisk(def, registry, workflowUserID(c)))
+}
+
+func (api *WorkflowAPI) stats(c *gin.Context) {
+	if _, ok := api.owned(c); !ok {
+		return
+	}
+	stats, err := api.runtime.Kernel.Container().WorkflowExecRepo.GetStats(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, stats)
+}
+
 func (api *WorkflowAPI) listRuns(c *gin.Context) {
 	if _, ok := api.owned(c); !ok {
 		return
 	}
 	kc := api.runtime.Kernel.Container()
-	limit, offset := parsePagination(c, 50)
+	limit, offset := parsePagination(c)
 	items, total, err := kc.WorkflowExecRepo.ListRuns(c.Request.Context(), c.Param("id"), workflow.RunStatus(c.Query("status")), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -916,7 +958,20 @@ func (api *WorkflowAPI) getRun(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"run": run, "stepRuns": steps, "workflow": def})
+	attempts, err := kc.WorkflowExecRepo.ListStepAttempts(c.Request.Context(), run.ExecutionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	checkpoints := []workflow.Checkpoint{}
+	if store := kc.WorkflowExecutor.CheckpointStore(); store != nil {
+		checkpoints, err = store.List(c.Request.Context(), run.ExecutionID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"run": run, "stepRuns": steps, "attempts": attempts, "checkpoints": checkpoints, "workflow": def})
 }
 
 func (api *WorkflowAPI) runOwned(c *gin.Context) (*workflow.WorkflowRun, *workflow.WorkflowExecutor, bool) {
@@ -978,6 +1033,133 @@ func (api *WorkflowAPI) resumeRun(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, run)
+}
+
+func (api *WorkflowAPI) recoverRun(c *gin.Context) {
+	run, executor, ok := api.runOwned(c)
+	if !ok {
+		return
+	}
+	if run.Status != workflow.RunStatusFailed && run.Status != workflow.RunStatusCancelled {
+		c.JSON(http.StatusConflict, gin.H{"error": "only failed or cancelled runs can recover from checkpoints"})
+		return
+	}
+	def, exists := api.runtime.Kernel.Container().WorkflowRegistry.Get(run.WorkflowID)
+	if !exists || !workflowOwnedBy(def, workflowUserID(c)) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow not found"})
+		return
+	}
+	if !def.Enabled {
+		c.JSON(http.StatusConflict, gin.H{"error": "workflow is disabled"})
+		return
+	}
+	currentHash := workflow.ComputeDefinitionHash(def)
+	if strings.TrimSpace(run.Context.DefinitionHash) == "" {
+		c.JSON(http.StatusConflict, gin.H{"error": "run predates safe checkpoint recovery; rerun the workflow instead"})
+		return
+	}
+	if run.Context.DefinitionHash != currentHash {
+		c.JSON(http.StatusConflict, gin.H{"error": "workflow definition changed since this run; checkpoint recovery is unsafe, rerun instead"})
+		return
+	}
+	store := executor.CheckpointStore()
+	if store == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "checkpoint store unavailable"})
+		return
+	}
+	checkpoints, err := store.List(c.Request.Context(), run.ExecutionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if len(checkpoints) == 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "this run has no checkpoint to recover from"})
+		return
+	}
+	execution := run.Context
+	execution.UserID = workflowUserID(c)
+	execution.InvocationID = run.ExecutionID
+	execution.Recovery = true
+	execution.Generation = run.Generation + 1
+	execution.OperationID = "wf-recover-" + uuid.NewString()
+	execution.TraceID = "trace-" + uuid.NewString()
+	req := workflow.ExecuteRequest{WorkflowID: run.WorkflowID, Input: run.Input, Context: execution}
+	go func() { _, _ = executor.Execute(context.Background(), req) }()
+	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "executionId": run.ExecutionID, "workflowId": run.WorkflowID, "status": workflow.RunStatusRunning, "generation": execution.Generation, "checkpointCount": len(checkpoints)})
+}
+
+func (api *WorkflowAPI) rerunRun(c *gin.Context) {
+	previous, executor, ok := api.runOwned(c)
+	if !ok {
+		return
+	}
+	if !previous.Status.IsTerminal() {
+		c.JSON(http.StatusConflict, gin.H{"error": "workflow run must be terminal before rerun"})
+		return
+	}
+	kc := api.runtime.Kernel.Container()
+	def, exists := kc.WorkflowRegistry.Get(previous.WorkflowID)
+	if !exists || !workflowOwnedBy(def, workflowUserID(c)) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow not found"})
+		return
+	}
+	if !def.Enabled {
+		c.JSON(http.StatusConflict, gin.H{"error": "workflow is disabled"})
+		return
+	}
+	var body struct {
+		Wait bool `json:"wait"`
+	}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	input := previous.Input
+	if len(input) == 0 {
+		input = json.RawMessage(`{}`)
+	}
+	executionID := "wf-run-" + uuid.NewString()
+	req := workflow.ExecuteRequest{
+		WorkflowID: def.ID,
+		Input:      input,
+		Context: workflow.ExecutionContext{
+			UserID:         workflowUserID(c),
+			RootID:         executionID,
+			InvocationID:   executionID,
+			OperationID:    "wf-op-" + uuid.NewString(),
+			TraceID:        "trace-" + uuid.NewString(),
+			IdempotencyKey: executionID,
+		},
+	}
+	if body.Wait {
+		result, err := executor.Execute(c.Request.Context(), req)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "executionId": executionID})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"executionId":       result.ExecutionID,
+			"workflowId":        result.WorkflowID,
+			"status":            result.Status,
+			"success":           result.Success,
+			"output":            result.Output,
+			"steps":             result.Steps,
+			"error":             result.Error,
+			"duration":          result.Duration,
+			"sourceExecutionId": previous.ExecutionID,
+		})
+		return
+	}
+	go func() { _, _ = executor.Execute(context.Background(), req) }()
+	c.JSON(http.StatusAccepted, gin.H{
+		"accepted":          true,
+		"executionId":       executionID,
+		"workflowId":        def.ID,
+		"status":            workflow.RunStatusRunning,
+		"sourceExecutionId": previous.ExecutionID,
+	})
 }
 
 func (api *WorkflowAPI) dispatchEvent(c *gin.Context) {

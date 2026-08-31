@@ -10,6 +10,7 @@ export interface WorkflowRuntimeBinding {
   metadata?: Record<string, unknown>;
 }
 export interface WorkflowOnError { mode?: string; default?: unknown }
+export interface WorkflowNodeRetryPolicy { maxAttempts?: number; initialBackoffMs?: number; maxBackoffMs?: number; multiplier?: number; jitter?: number }
 export interface WorkflowStepInput { input?: unknown; when?: unknown; onError: WorkflowOnError }
 export interface WorkflowNode {
   id: string;
@@ -21,6 +22,8 @@ export interface WorkflowNode {
   scope?: string;
   position?: WorkflowPosition;
   label?: string;
+  timeoutMs?: number;
+  retry?: WorkflowNodeRetryPolicy;
   step: WorkflowStepInput;
 }
 export interface WorkflowEdge {
@@ -106,6 +109,26 @@ export interface WorkflowStepRun {
   startedAt?: string;
   finishedAt?: string;
 }
+export interface WorkflowStepAttempt {
+  executionId: string;
+  workflowId: string;
+  nodeId: string;
+  attempt: number;
+  generation: number;
+  status: string;
+  input?: unknown;
+  output?: unknown;
+  error?: string;
+  nextBackoffMs?: number;
+  startedAt: string;
+  finishedAt: string;
+}
+export interface WorkflowCheckpoint { workflowId: string; executionId: string; nodeId: string; input?: unknown; output?: unknown; completedAt: string }
+export interface WorkflowNodeStat { nodeId: string; runCount: number; succeeded: number; failed: number; timedOut: number; averageStepMs: number; averageAttempts: number }
+export interface WorkflowExecutionStats { runCount: number; succeeded: number; failed: number; cancelled: number; compensated: number; successRate: number; averageRunMs: number; lastRunAt?: string; lastError?: string; nodeStatistics: WorkflowNodeStat[] }
+export interface WorkflowRiskItem { level: "low"|"medium"|"high"|string; nodeId?: string; code: string; message: string }
+export interface WorkflowNestedDependency { nodeId: string; workflowId: string; name?: string; status: "ok"|"missing"|"forbidden"|string; definitionHash?: string }
+export interface WorkflowSafetyAnalysis { riskLevel: "low"|"medium"|"high"|string; declaredPermissions: string[]; secretReferences: string[]; risks: WorkflowRiskItem[]; nestedDependencies: WorkflowNestedDependency[]; hasSideEffects: boolean }
 
 export async function listWorkflows(): Promise<WorkflowDefinition[]> {
   const res = await apiClient.get<{ items: WorkflowDefinition[] }>("/api/extensions/workflows");
@@ -161,8 +184,14 @@ export async function dispatchWorkflowEvent(eventType: string, payload: unknown 
 export async function listWorkflowRuns(id: string, limit = 50): Promise<{ items: WorkflowRun[]; total: number }> {
   return (await apiClient.get(`/api/extensions/workflows/${encodeURIComponent(id)}/runs`, { params: { limit } })).data;
 }
-export async function getWorkflowRun(runId: string): Promise<{ run: WorkflowRun; stepRuns: WorkflowStepRun[]; workflow: WorkflowDefinition }> {
+export async function getWorkflowRun(runId: string): Promise<{ run: WorkflowRun; stepRuns: WorkflowStepRun[]; attempts: WorkflowStepAttempt[]; checkpoints: WorkflowCheckpoint[]; workflow: WorkflowDefinition }> {
   return (await apiClient.get(`/api/extensions/workflow-runs/${encodeURIComponent(runId)}`)).data;
+}
+export async function getWorkflowStats(id: string): Promise<WorkflowExecutionStats> {
+  return (await apiClient.get<WorkflowExecutionStats>(`/api/extensions/workflows/${encodeURIComponent(id)}/stats`)).data;
+}
+export async function getWorkflowAnalysis(id: string): Promise<WorkflowSafetyAnalysis> {
+  return (await apiClient.get<WorkflowSafetyAnalysis>(`/api/extensions/workflows/${encodeURIComponent(id)}/analysis`)).data;
 }
 export async function cancelWorkflowRun(runId: string): Promise<void> {
   await apiClient.post(`/api/extensions/workflow-runs/${encodeURIComponent(runId)}/cancel`);
@@ -172,6 +201,12 @@ export async function pauseWorkflowRun(runId: string, reason = "Paused from Crea
 }
 export async function resumeWorkflowRun(runId: string): Promise<void> {
   await apiClient.post(`/api/extensions/workflow-runs/${encodeURIComponent(runId)}/resume`);
+}
+export async function rerunWorkflowRun(runId: string, wait = false): Promise<{ accepted?: boolean; executionId: string; workflowId?: string; status?: string; sourceExecutionId?: string }> {
+  return (await apiClient.post(`/api/extensions/workflow-runs/${encodeURIComponent(runId)}/rerun`, { wait })).data;
+}
+export async function recoverWorkflowRun(runId: string): Promise<{ accepted: boolean; executionId: string; workflowId: string; status: string; generation: number; checkpointCount: number }> {
+  return (await apiClient.post(`/api/extensions/workflow-runs/${encodeURIComponent(runId)}/recover`)).data;
 }
 export async function exportWorkflow(id: string): Promise<WorkflowExportEnvelope> {
   return (await apiClient.get<WorkflowExportEnvelope>(`/api/extensions/workflows/${encodeURIComponent(id)}/export`)).data;

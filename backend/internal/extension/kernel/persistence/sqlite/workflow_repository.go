@@ -120,6 +120,7 @@ func (r *WorkflowDefinitionRepository) Delete(ctx context.Context, workflowID st
 	if source == "user" {
 		statements = append(statements,
 			`DELETE FROM extension_workflow_compensations WHERE execution_id IN (SELECT execution_id FROM extension_workflow_executions WHERE workflow_id = ?)`,
+			`DELETE FROM extension_workflow_step_attempts WHERE workflow_id = ?`,
 			`DELETE FROM extension_workflow_step_runs WHERE workflow_id = ?`,
 			`DELETE FROM extension_workflow_checkpoints WHERE workflow_id = ?`,
 			`DELETE FROM extension_workflow_executions WHERE workflow_id = ?`,
@@ -620,6 +621,7 @@ func (r *WorkflowExecutionRepository) DeleteByWorkflow(ctx context.Context, work
 		args  []any
 	}{
 		{`DELETE FROM extension_workflow_compensations WHERE execution_id IN (SELECT execution_id FROM extension_workflow_executions WHERE workflow_id = ?)`, []any{workflowID}},
+		{`DELETE FROM extension_workflow_step_attempts WHERE workflow_id = ?`, []any{workflowID}},
 		{`DELETE FROM extension_workflow_step_runs WHERE workflow_id = ?`, []any{workflowID}},
 		{`DELETE FROM extension_workflow_checkpoints WHERE workflow_id = ?`, []any{workflowID}},
 		{`DELETE FROM extension_workflow_executions WHERE workflow_id = ?`, []any{workflowID}},
@@ -678,7 +680,17 @@ func (r *WorkflowExecutionRepository) Start(ctx context.Context, run workflow.Wo
 	existing, err := r.Get(ctx, run.ExecutionID)
 	if err == nil {
 		if existing.Status == workflow.RunStatusFailed || existing.Status == workflow.RunStatusCancelled || run.Context.Recovery {
-			_, updateErr := r.db.ExecContext(ctx, `UPDATE extension_workflow_executions SET status = ?, error_message = '', finished_at = NULL, attempt = attempt + 1, generation = ?, updated_at = ? WHERE execution_id = ?`, workflow.RunStatusRunning, run.Context.Generation, time.Now().UTC(), run.ExecutionID)
+			contextJSON, marshalErr := json.Marshal(run.Context)
+			if marshalErr != nil {
+				return nil, false, fmt.Errorf("marshal restarted workflow context: %w", marshalErr)
+			}
+			_, updateErr := r.db.ExecContext(ctx, `
+				UPDATE extension_workflow_executions
+				SET status = ?, error_message = '', output_json = NULL, finished_at = NULL,
+					attempt = attempt + 1, generation = ?, context_json = ?, operation_id = ?, trace_id = ?,
+					pause_reason = '', pause_requested_at = NULL, paused_at = NULL, updated_at = ?
+				WHERE execution_id = ?
+			`, workflow.RunStatusRunning, run.Context.Generation, contextJSON, run.Context.OperationID, run.Context.TraceID, time.Now().UTC(), run.ExecutionID)
 			if updateErr != nil {
 				return nil, false, fmt.Errorf("restart workflow execution: %w", updateErr)
 			}
@@ -882,6 +894,104 @@ func (r *WorkflowExecutionRepository) ListRuns(ctx context.Context, workflowID s
 		items = append(items, *run)
 	}
 	return items, total, rows.Err()
+}
+
+func (r *WorkflowExecutionRepository) SaveAttempt(ctx context.Context, attempt workflow.StepAttemptRun) error {
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO extension_workflow_step_attempts
+			(execution_id, workflow_id, node_id, attempt, generation, status, input_json, output_json, error_message, next_backoff_ms, started_at, finished_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(execution_id, node_id, generation, attempt) DO UPDATE SET
+			status = excluded.status, input_json = excluded.input_json, output_json = excluded.output_json,
+			error_message = excluded.error_message, next_backoff_ms = excluded.next_backoff_ms,
+			started_at = excluded.started_at, finished_at = excluded.finished_at
+	`, attempt.ExecutionID, attempt.WorkflowID, attempt.NodeID, attempt.Attempt, attempt.Generation, attempt.Status, attempt.Input, attempt.Output, attempt.Error, attempt.NextBackoffMS, attempt.StartedAt, attempt.FinishedAt, now)
+	if err != nil {
+		return fmt.Errorf("save workflow step attempt: %w", err)
+	}
+	return nil
+}
+
+func (r *WorkflowExecutionRepository) ListStepAttempts(ctx context.Context, executionID string) ([]workflow.StepAttemptRun, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT execution_id, workflow_id, node_id, attempt, generation, status, input_json, output_json,
+			error_message, next_backoff_ms, started_at, finished_at
+		FROM extension_workflow_step_attempts
+		WHERE execution_id = ? ORDER BY generation, started_at, node_id, attempt
+	`, executionID)
+	if err != nil {
+		return nil, fmt.Errorf("list workflow step attempts: %w", err)
+	}
+	defer rows.Close()
+	items := make([]workflow.StepAttemptRun, 0)
+	for rows.Next() {
+		var item workflow.StepAttemptRun
+		var inputJSON, outputJSON, errorMessage sql.NullString
+		if err := rows.Scan(&item.ExecutionID, &item.WorkflowID, &item.NodeID, &item.Attempt, &item.Generation, &item.Status, &inputJSON, &outputJSON, &errorMessage, &item.NextBackoffMS, &item.StartedAt, &item.FinishedAt); err != nil {
+			return nil, fmt.Errorf("scan workflow step attempt: %w", err)
+		}
+		if inputJSON.Valid {
+			item.Input = json.RawMessage(inputJSON.String)
+		}
+		if outputJSON.Valid {
+			item.Output = json.RawMessage(outputJSON.String)
+		}
+		if errorMessage.Valid {
+			item.Error = errorMessage.String
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *WorkflowExecutionRepository) GetStats(ctx context.Context, workflowID string) (workflow.WorkflowExecutionStats, error) {
+	stats := workflow.WorkflowExecutionStats{NodeStatistics: []workflow.NodeExecutionStat{}}
+	var lastRunAt sql.NullTime
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*),
+			COALESCE(SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'compensated' THEN 1 ELSE 0 END), 0),
+			COALESCE(AVG(NULLIF(duration_ms, 0)), 0), MAX(started_at)
+		FROM extension_workflow_executions WHERE workflow_id = ?
+	`, workflowID).Scan(&stats.RunCount, &stats.Succeeded, &stats.Failed, &stats.Cancelled, &stats.Compensated, &stats.AverageRunMS, &lastRunAt); err != nil {
+		return stats, fmt.Errorf("workflow stats: %w", err)
+	}
+	if lastRunAt.Valid {
+		t := lastRunAt.Time
+		stats.LastRunAt = &t
+	}
+	terminalRuns := stats.Succeeded + stats.Failed + stats.Cancelled + stats.Compensated
+	if terminalRuns > 0 {
+		stats.SuccessRate = float64(stats.Succeeded+stats.Compensated) / float64(terminalRuns)
+	}
+	_ = r.db.QueryRowContext(ctx, `SELECT error_message FROM extension_workflow_executions WHERE workflow_id = ? AND error_message != '' ORDER BY started_at DESC LIMIT 1`, workflowID).Scan(&stats.LastError)
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT s.node_id, COUNT(*),
+			COALESCE(SUM(CASE WHEN s.status IN ('succeeded','defaulted') THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN s.status = 'failed' THEN 1 ELSE 0 END), 0),
+			COALESCE(AVG((julianday(s.finished_at)-julianday(s.started_at))*86400000.0), 0),
+			COALESCE(AVG(s.attempt), 0),
+			COALESCE((SELECT COUNT(*) FROM extension_workflow_step_attempts a WHERE a.workflow_id = ? AND a.node_id = s.node_id AND a.status = 'timed_out'), 0)
+		FROM extension_workflow_step_runs s
+		WHERE s.workflow_id = ?
+		GROUP BY s.node_id ORDER BY s.node_id
+	`, workflowID, workflowID)
+	if err != nil {
+		return stats, fmt.Errorf("workflow node stats: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item workflow.NodeExecutionStat
+		if err := rows.Scan(&item.NodeID, &item.RunCount, &item.Succeeded, &item.Failed, &item.AverageStepMS, &item.AverageAttempts, &item.TimedOut); err != nil {
+			return stats, fmt.Errorf("scan workflow node stats: %w", err)
+		}
+		stats.NodeStatistics = append(stats.NodeStatistics, item)
+	}
+	return stats, rows.Err()
 }
 
 func (r *WorkflowExecutionRepository) ListStepRuns(ctx context.Context, executionID string) ([]workflow.StepRun, error) {

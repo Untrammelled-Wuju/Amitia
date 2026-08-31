@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -270,4 +271,75 @@ func TestWorkflowRecoveryUsesCheckpoint(t *testing.T) {
 
 func structRuntimeMetadata(duration int64) capability.RuntimeBinding {
 	return capability.RuntimeBinding{Metadata: map[string]any{"durationMs": float64(duration)}}
+}
+
+func TestNestedWorkflowRejectsCrossUserTarget(t *testing.T) {
+	registry := NewWorkflowRegistry()
+	_ = registry.Register(WorkflowDefinition{
+		ID: "parent-user-a", Name: "parent", Enabled: true, Source: "user",
+		Metadata: map[string]any{"ownerUserId": "user-a"},
+		Nodes:    []WorkflowNode{{ID: "nested", Type: "nested_workflow", TargetID: "child-user-b"}},
+	})
+	_ = registry.Register(WorkflowDefinition{
+		ID: "child-user-b", Name: "child", Enabled: true, Source: "user",
+		Metadata: map[string]any{"ownerUserId": "user-b"},
+		Nodes:    []WorkflowNode{{ID: "wait", Type: "wait", Runtime: structRuntimeMetadata(0)}},
+	})
+	executor := NewWorkflowExecutor(registry)
+	executor.RegisterHandler("nested_workflow", NestedWorkflowHandler{Executor: executor})
+	executor.RegisterHandler("wait", WaitHandler{})
+	result, err := executor.Execute(context.Background(), ExecuteRequest{
+		WorkflowID: "parent-user-a",
+		Context:    ExecutionContext{InvocationID: "cross-user-nested", UserID: "user-a"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Success || !strings.Contains(result.Error, "owner mismatch") {
+		t.Fatalf("expected cross-user nested workflow rejection, got %+v", result)
+	}
+}
+
+func TestNestedWorkflowRejectsRecursiveCycle(t *testing.T) {
+	registry := NewWorkflowRegistry()
+	_ = registry.Register(WorkflowDefinition{ID: "cycle-a", Name: "a", Enabled: true, Nodes: []WorkflowNode{{ID: "to-b", Type: "nested_workflow", TargetID: "cycle-b"}}})
+	_ = registry.Register(WorkflowDefinition{ID: "cycle-b", Name: "b", Enabled: true, Nodes: []WorkflowNode{{ID: "to-a", Type: "nested_workflow", TargetID: "cycle-a"}}})
+	executor := NewWorkflowExecutor(registry)
+	executor.RegisterHandler("nested_workflow", NestedWorkflowHandler{Executor: executor})
+	result, err := executor.Execute(context.Background(), ExecuteRequest{WorkflowID: "cycle-a", Context: ExecutionContext{InvocationID: "nested-cycle"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Success || !strings.Contains(result.Error, "nested workflow cycle detected") {
+		t.Fatalf("expected nested workflow cycle rejection, got %+v", result)
+	}
+}
+
+func TestWorkflowRunStoresSavedDefinitionHashBeforeEdgeMaterialization(t *testing.T) {
+	condition := json.RawMessage(`{"op":"eq","left":{"value":true},"right":{"value":true}}`)
+	def := WorkflowDefinition{
+		SchemaVersion: UserWorkflowSchemaVersion,
+		ID:            "hash-edge-workflow", Name: "hash edge", Enabled: true,
+		Nodes: []WorkflowNode{{ID: "first", Type: "tool"}, {ID: "second", Type: "tool"}},
+		Edges: []WorkflowEdge{{ID: "edge", Source: "first", Target: "second", Condition: condition}},
+	}
+	registry := NewWorkflowRegistry()
+	if err := registry.Register(def); err != nil {
+		t.Fatal(err)
+	}
+	executor := NewWorkflowExecutor(registry)
+	executor.RegisterHandler("tool", &countingHandler{})
+	store := newMemoryRunStore()
+	executor.SetRunStore(store)
+	result, err := executor.Execute(context.Background(), ExecuteRequest{WorkflowID: def.ID, Context: ExecutionContext{InvocationID: "hash-edge-run"}})
+	if err != nil || result == nil || !result.Success {
+		t.Fatalf("execute: result=%+v err=%v", result, err)
+	}
+	run, err := store.Get(context.Background(), "hash-edge-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := ComputeDefinitionHash(def); run.Context.DefinitionHash != want {
+		t.Fatalf("definition hash = %q, want saved definition hash %q", run.Context.DefinitionHash, want)
+	}
 }
