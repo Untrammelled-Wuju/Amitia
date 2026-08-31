@@ -20,6 +20,7 @@ var DesktopPetBehaviorTableSQL = []string{
     foreground_json TEXT NOT NULL DEFAULT '{}',
     cooldowns_json TEXT NOT NULL DEFAULT '{}',
     recent_semantics_json TEXT NOT NULL DEFAULT '[]',
+    recent_event_keys_json TEXT NOT NULL DEFAULT '[]',
     desired_state_json TEXT NOT NULL DEFAULT '{}',
     last_source_revisions_json TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL DEFAULT '',
@@ -112,7 +113,7 @@ var DesktopPetBehaviorTableSQL = []string{
 }
 
 var DesktopPetBehaviorIndexDefs = []BehaviorIndexDef{
-	{Name: "ux_desktop_pet_behavior_inbox_dedup", Table: "desktop_pet_behavior_inbox", Columns: []string{"dedup_key"}, Unique: true},
+	{Name: "ux_desktop_pet_behavior_inbox_dedup", Table: "desktop_pet_behavior_inbox", Columns: []string{"user_id", "character_id", "dedup_key"}, Unique: true},
 	{Name: "idx_behavior_inbox_char", Table: "desktop_pet_behavior_inbox", Columns: []string{"character_id", "status"}, Unique: false},
 	{Name: "idx_behavior_inbox_status_available", Table: "desktop_pet_behavior_inbox", Columns: []string{"status", "available_at", "occurred_at"}, Unique: false},
 	{Name: "idx_behavior_inbox_status_lease", Table: "desktop_pet_behavior_inbox", Columns: []string{"status", "lease_expires_at"}, Unique: false},
