@@ -191,6 +191,18 @@ func DefaultMigrations() []Migration {
 		DesktopPetBehaviorInboxTenantDedupMigration(),
 		DesktopPetBehaviorV2ColumnsRepairMigration(),
 		DesktopPetActionRevisionDataRepairMigration(),
+		DesktopPetInstallationOperationCreatedAtMigration(),
+	}
+}
+
+func DesktopPetInstallationOperationCreatedAtMigration() Migration {
+	return Migration{
+		Version: "20260901001",
+		Name:    "add_desktop_pet_installation_operations_created_at",
+		Up: func(s *Step) error {
+			s.AddColumn("desktop_pet_installation_operations", "created_at", "TEXT DEFAULT ''")
+			return nil
+		},
 	}
 }
 
