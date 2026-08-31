@@ -13,6 +13,9 @@ on:
       - 'scripts/audit/verify-*.mjs'
       - 'scripts/audit/verify-source-hygiene.mjs'
       - 'scripts/pack-source.ps1'
+      - 'scripts/build-freeze-scope.mjs'
+      - 'scripts/verify-source-archive.mjs'
+      - 'scripts/lib/**'
       - 'desktop/scripts/verify-*.mjs'
       - 'desktop/scripts/release-integrity.mjs'
       - 'DESKTOP_PET_FINALIZATION_SHA256SUMS.txt'
@@ -30,6 +33,9 @@ on:
       - 'scripts/audit/verify-*.mjs'
       - 'scripts/audit/verify-source-hygiene.mjs'
       - 'scripts/pack-source.ps1'
+      - 'scripts/build-freeze-scope.mjs'
+      - 'scripts/verify-source-archive.mjs'
+      - 'scripts/lib/**'
       - 'desktop/scripts/verify-*.mjs'
       - 'desktop/scripts/release-integrity.mjs'
       - 'DESKTOP_PET_FINALIZATION_SHA256SUMS.txt'
@@ -213,6 +219,9 @@ jobs:
       - name: Install dependencies
         run: |
           corepack enable
+          if [ "${{ matrix.workspace }}" = "desktop" ]; then
+            pnpm --dir front install --frozen-lockfile
+          fi
           pnpm --dir ${{ matrix.workspace }} install --frozen-lockfile
       - name: Typecheck
         run: pnpm --dir ${{ matrix.workspace }} typecheck
@@ -259,13 +268,49 @@ jobs:
         with:
           node-version: '22.16.0'
           cache: pnpm
-          cache-dependency-path: 'desktop/pnpm-lock.yaml'
-      - name: Install desktop dependencies
+          cache-dependency-path: |
+            front/pnpm-lock.yaml
+            desktop/pnpm-lock.yaml
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'backend/go.mod'
+      - name: Install frontend and desktop dependencies
         run: |
           corepack enable
+          pnpm --dir front install --frozen-lockfile
           pnpm --dir desktop install --frozen-lockfile
       - name: Build and verify packaged Electron desktop pet
         run: pnpm --dir desktop run package:ci
+
+  source-archive:
+    name: Source Archive Self-Verification
+    runs-on: ubuntu-latest
+    needs: toolchain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'backend/go.mod'
+      - name: Regenerate canonical freeze manifest and verify it is clean
+        shell: pwsh
+        run: |
+          node scripts/build-freeze-scope.mjs --write
+          node scripts/build-freeze-scope.mjs --verify
+          $freezeDiff = git status --porcelain -- DESKTOP_PET_FINALIZATION_SHA256SUMS.txt
+          if ($freezeDiff) {
+            Write-Host "Freeze manifest was stale. Commit the regenerated manifest."
+            git diff -- DESKTOP_PET_FINALIZATION_SHA256SUMS.txt
+            exit 1
+          }
+      - name: Pack source and run archive-local clean build
+        shell: pwsh
+        run: ./scripts/pack-source.ps1 -OutputName ci-source
 
   final-gate:
     name: Final Gate
@@ -282,6 +327,7 @@ jobs:
       - frontend
       - mobile
       - desktop-package
+      - source-archive
     steps:
       - name: Verify all required jobs passed
         run: |
