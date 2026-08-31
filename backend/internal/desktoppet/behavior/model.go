@@ -67,16 +67,18 @@ type StableBehaviorState struct {
 }
 
 type TransientBehaviorState struct {
-	InteractionID    string `json:"interactionId,omitempty"`
-	InteractionPhase string `json:"interactionPhase,omitempty"`
-	StatusVersion    int64  `json:"statusVersion,omitempty"`
-	ProactiveID      string `json:"proactiveId,omitempty"`
-	ProactiveIntent  string `json:"proactiveIntent,omitempty"`
-	TemporaryEmotion string `json:"temporaryEmotion,omitempty"`
+	InteractionID        string    `json:"interactionId,omitempty"`
+	InteractionPhase     string    `json:"interactionPhase,omitempty"`
+	InteractionStartedAt time.Time `json:"interactionStartedAt,omitempty"`
+	StatusVersion        int64     `json:"statusVersion,omitempty"`
+	ProactiveID          string    `json:"proactiveId,omitempty"`
+	ProactiveIntent      string    `json:"proactiveIntent,omitempty"`
+	TemporaryEmotion     string    `json:"temporaryEmotion,omitempty"`
 }
 
 type ToolOperationState struct {
 	OperationID    string    `json:"operationId"`
+	InteractionID  string    `json:"interactionId,omitempty"`
 	ToolCategory   string    `json:"toolCategory,omitempty"`
 	DisplayClass   string    `json:"displayClass,omitempty"`
 	Depth          int       `json:"depth,omitempty"`
@@ -138,6 +140,7 @@ type BehaviorContextSnapshot struct {
 	Foreground          ForegroundActionState         `json:"foreground"`
 	Cooldowns           map[string]time.Time          `json:"cooldowns"`
 	RecentSemantics     []RecentSemanticRecord        `json:"recentSemantics"`
+	RecentEventKeys     []string                      `json:"recentEventKeys"`
 	Desired             DesiredBehaviorState          `json:"desired"`
 	LastSourceRevisions map[string]int64              `json:"lastSourceRevisions"`
 	UpdatedAt           time.Time                     `json:"updatedAt"`
@@ -479,6 +482,7 @@ type RulesetVersion int
 const CurrentRulesetVersion RulesetVersion = 1
 
 const MaxRecentSemantics = 32
+const MaxRecentEventKeys = 128
 const MaxCASRetries = 5
 const MailboxCapacity = 256
 const DefaultDecisionRetentionDays = 30

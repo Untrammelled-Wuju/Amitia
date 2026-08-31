@@ -62,9 +62,32 @@ func (r *Resolver) Resolve(ctx *BehaviorContextSnapshot, event BehaviorEventEnve
 	return candidates, nil
 }
 
+func visualActiveTools(ctx *BehaviorContextSnapshot) []ToolOperationState {
+	if ctx == nil || len(ctx.ActiveTools) == 0 {
+		return nil
+	}
+	focusInteractionID := ctx.Transient.InteractionID
+	if focusInteractionID == "" || isTerminalInteractionPhase(ctx.Transient.InteractionPhase) {
+		tools := make([]ToolOperationState, 0, len(ctx.ActiveTools))
+		for _, tool := range ctx.ActiveTools {
+			tools = append(tools, tool)
+		}
+		return tools
+	}
+
+	tools := make([]ToolOperationState, 0, len(ctx.ActiveTools))
+	for _, tool := range ctx.ActiveTools {
+		if tool.InteractionID == focusInteractionID {
+			tools = append(tools, tool)
+		}
+	}
+	return tools
+}
+
 func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope, available map[string]bool, installationID string) []CandidateAction {
 	var candidates []CandidateAction
 	now := r.clock.Now()
+	visualTools := visualActiveTools(ctx)
 
 	if event.EventType == "manual.action.requested" {
 		payload := parsePayload(event.Payload)
@@ -110,9 +133,9 @@ func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event Behavi
 		candidates = append(candidates, makeCandidate("dialogue_thinking", []string{"thinking"}, event.EventID, "voice", 680, now))
 	}
 
-	if len(ctx.ActiveTools) > 0 {
+	if len(visualTools) > 0 {
 		hasWork := false
-		for _, tool := range ctx.ActiveTools {
+		for _, tool := range visualTools {
 			if tool.DisplayClass == "research" || tool.DisplayClass == "researching" || tool.DisplayClass == "work" || tool.DisplayClass == "working" || tool.DisplayClass == "organizing" {
 				hasWork = true
 				break
@@ -126,7 +149,7 @@ func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event Behavi
 	}
 
 	phase := ctx.Transient.InteractionPhase
-	if ctx.Voice.State == "" && len(ctx.ActiveTools) == 0 {
+	if ctx.Voice.State == "" && len(visualTools) == 0 {
 		switch phase {
 		case "received":
 			candidates = append(candidates, makeCandidate("dialogue_listening", []string{"listening"}, event.EventID, "transient", 720, now, withExpires(5*time.Second)))
@@ -136,12 +159,15 @@ func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event Behavi
 			candidates = append(candidates, makeCandidate("dialogue_thinking", []string{"thinking"}, event.EventID, "transient", 680, now, withExpires(120*time.Second)))
 		case "response_ready":
 			candidates = append(candidates, makeCandidate("dialogue_speaking", []string{"speaking"}, event.EventID, "transient", 800, now, withExpires(30*time.Second)))
-		case "completed":
+		case "completed", "cancelled":
 			if ctx.Foreground.Semantic != "dialogue_speaking" {
 				candidates = append(candidates, makeCandidate("calm_idle", []string{"idle_breathing"}, event.EventID, "transient", 250, now))
 			}
 		case "failed":
-			candidates = append(candidates, makeCandidate("emotion_confused", []string{"confused", "thinking"}, event.EventID, "transient", 610, now, withCooldown(60*time.Second)))
+			// Failure feedback should win once over stable emotion/activity, while
+			// the cooldown prevents the terminal tombstone from replaying it on
+			// every later unrelated event.
+			candidates = append(candidates, makeCandidate("emotion_confused", []string{"confused", "thinking"}, event.EventID, "transient", 700, now, withCooldown(60*time.Second)))
 		}
 	}
 
@@ -154,7 +180,7 @@ func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event Behavi
 		}
 	}
 
-	if ctx.Voice.State == "" && phase == "" && len(ctx.ActiveTools) == 0 && ctx.DesktopGesture.CurrentGesture == "" {
+	if ctx.Voice.State == "" && (phase == "" || isTerminalInteractionPhase(phase)) && len(visualTools) == 0 && ctx.DesktopGesture.CurrentGesture == "" {
 		if ctx.Stable.AffectLabel != "" {
 			if emotionCandidate := r.resolveEmotionCandidate(ctx, event, now); emotionCandidate != nil {
 				candidates = append(candidates, *emotionCandidate)
@@ -288,7 +314,7 @@ func (r *Resolver) resolveActivityCandidate(ctx *BehaviorContextSnapshot, event 
 }
 
 func (r *Resolver) resolveToolCandidate(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope, now time.Time) *CandidateAction {
-	for _, tool := range ctx.ActiveTools {
+	for _, tool := range visualActiveTools(ctx) {
 		if tool.DisplayClass == "research" || tool.DisplayClass == "researching" || tool.DisplayClass == "work" || tool.DisplayClass == "working" || tool.DisplayClass == "organizing" {
 			return &CandidateAction{
 				Semantic: "working", PreferredKeys: []string{"work", "study", "thinking"},

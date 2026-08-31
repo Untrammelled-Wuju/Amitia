@@ -549,6 +549,20 @@ func (e *BehaviorEngine) processEventOnce(ctx context.Context, event BehaviorEve
 		if err != nil {
 			return InboxRetry, fmt.Errorf("reduce event: %w", err)
 		}
+		if reduceResult.NeedsSnapshotSync && e.reconciler != nil {
+			syncedCtx, syncErr := e.reconciler.buildReconciledContext(
+				ctx, event.UserID, event.CharacterID, &nextCtx, e.clock.Now(),
+			)
+			if syncErr != nil {
+				return InboxRetry, fmt.Errorf("rebuild behavior snapshot: %w", syncErr)
+			}
+			nextCtx = syncedCtx
+			reduceResult.ContextChanged = true
+			// Snapshot synchronization exists to restore physical behavior after a
+			// reconnect. It must flow through normal resolution/arbitration instead
+			// of being persisted as metadata-only state.
+			reduceResult.NeedsDecision = true
+		}
 		if reduceResult.IsDuplicate {
 			e.metrics.IncDeduped()
 			return InboxIgnored, nil
@@ -592,6 +606,11 @@ func (e *BehaviorEngine) processEventOnce(ctx context.Context, event BehaviorEve
 		activePet, resolveErr := e.resolveActivePet(ctx, event)
 		if resolveErr != nil && !IsErrorCode(resolveErr, ErrCodeNoActiveInstallation) {
 			return InboxRetry, fmt.Errorf("resolve active pet: %w", resolveErr)
+		}
+		if reduceResult.NeedsSnapshotSync && e.reconciler != nil {
+			if syncErr := e.reconciler.alignForegroundWithRuntime(ctx, &nextCtx, activePet); syncErr != nil {
+				return InboxRetry, syncErr
+			}
 		}
 
 		var decision *BehaviorDecision
