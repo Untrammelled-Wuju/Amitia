@@ -1100,6 +1100,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		}
 	}
 
+	// Restore user workflow tools only after core/native/acquisition tools have
+	// claimed their stable model names. User-defined aliases must never rename
+	// a built-in tool merely because they were restored earlier at startup.
+	for _, definition := range workflowRegistry.List(workflow.WorkflowFilter{}) {
+		if err := SyncUserWorkflowAgentTool(ctx, toolRegistry, definition); err != nil {
+			return nil, fmt.Errorf("kernel: restore user workflow agent tool %s: %w", definition.ID, err)
+		}
+	}
+
 	toolFacade := NewToolFacade(toolRegistry, executionKernel, DefaultToolFacadeConfig())
 	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
 	toolFacade.SetCapabilityResolver(capabilityResolver)
@@ -1500,6 +1509,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		WorkflowTriggerManager: workflowTriggerManager,
 		WorkflowDefRepo:        workflowDefRepo,
 		WorkflowExecRepo:       workflowExecRepo,
+		WorkflowModelGenerator: b.workshopModelGenerator,
 		EnablementService:      enablementService,
 		EnablementResolver:     enablementResolver,
 
