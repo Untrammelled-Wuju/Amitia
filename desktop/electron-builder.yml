@@ -24,10 +24,6 @@ extraResources:
     to: bridge
   - from: resources/migrations
     to: migrations
-  - from: resources/data
-    to: data
-    filter:
-      - "sql.sql"
   - from: resources/config-template
     to: config-template
   - from: resources/qdrant
