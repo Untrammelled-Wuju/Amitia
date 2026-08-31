@@ -34,17 +34,24 @@ export class DesktopPetWorldController {
   private nextWanderAt = 0;
   private dragging = false;
   private falling = false;
+  private readonly onPositionSettled?: () => void;
 
   constructor(
     scheduler: DesktopPetActionScheduler,
     windowAdapter: DesktopPetWindowAdapter,
+    onPositionSettled?: () => void,
   ) {
     this.scheduler = scheduler;
     this.windowAdapter = windowAdapter;
+    this.onPositionSettled = onPositionSettled;
   }
 
   start(): void {
     if (this.worldTimer) return;
+    // Runtime position can be restored from a previous drag while the pet was
+    // still above the work-area floor. Re-apply gravity on startup so a stale
+    // persisted Y coordinate can never leave the pet floating indefinitely.
+    this.startFallIfNeeded(false);
     this.scheduleNextWander();
     this.worldTimer = setInterval(() => this.tick(), WORLD_TICK_MS);
     this.worldTimer.unref?.();
@@ -174,7 +181,7 @@ export class DesktopPetWorldController {
     this.movementTimer.unref?.();
   }
 
-  private startFallIfNeeded(): void {
+  private startFallIfNeeded(emitLandWhenGrounded = true): void {
     if (this.dragging || this.movementTimer) return;
     const win = this.windowAdapter.getNativeWindow();
     if (!win || win.isDestroyed()) return;
@@ -194,14 +201,17 @@ export class DesktopPetWorldController {
 
     if (y >= floorY - 2) {
       win.setPosition(Math.round(clampedX), Math.round(floorY), false);
-      this.scheduler.submit({
-        actionKey: "land",
-        source: EventSources.AUTONOMOUS,
-        priority: ActionPriorities.FALL,
-        interrupt: true,
-        dedupeKey: "desktop_world_land",
-        metadata: { worldMotion: "land" },
-      });
+      if (emitLandWhenGrounded) {
+        this.scheduler.submit({
+          actionKey: "land",
+          source: EventSources.AUTONOMOUS,
+          priority: ActionPriorities.FALL,
+          interrupt: true,
+          dedupeKey: "desktop_world_land",
+          metadata: { worldMotion: "land" },
+        });
+      }
+      this.notifyPositionSettled();
       return;
     }
 
@@ -249,9 +259,18 @@ export class DesktopPetWorldController {
           dedupeKey: "desktop_world_land",
           metadata: { worldMotion: "land" },
         });
+        this.notifyPositionSettled();
       }
     }, MOVE_TICK_MS);
     this.movementTimer.unref?.();
+  }
+
+  private notifyPositionSettled(): void {
+    try {
+      this.onPositionSettled?.();
+    } catch (err) {
+      console.warn("[DesktopPetWorldController] 落地位置回写失败:", err);
+    }
   }
 
   private stopMovement(): void {

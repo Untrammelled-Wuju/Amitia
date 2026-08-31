@@ -82,6 +82,7 @@ const API_BASE_PATH = "/api/desktop-pets";
 const HEALTH_CHECK_PATH = "/livez";
 const DEFAULT_USER_ID = "default";
 const DEFAULT_ALPHA_THRESHOLD = 10;
+const DRAG_RUNTIME_MOVE_MIN_INTERVAL_MS = 150;
 
 const PET_ACTION_SWITCH_CHANNEL = "pet:action-switch";
 const PET_LOAD_ERROR_CHANNEL = "pet:load-error";
@@ -457,6 +458,8 @@ export class DesktopPetManager {
   private bridgeConnecting = false;
   private currentActionKey: string | null = null;
   private currentDragId: string | null = null;
+  private runtimeInputSequence = 0;
+  private lastDragRuntimeMoveAt = 0;
   private currentPlaybackId: string | null = null;
   private currentCommandId: string | null = null;
   private readonly playbackCommandIds = new Map<string, string>();
@@ -1700,16 +1703,14 @@ export class DesktopPetManager {
       onClick: (payload) => {
         this.vitalityController?.notifyInteraction("click");
         this.handleClick(payload);
-        this.eventBridge?.handleClick(payload.canvasX, payload.canvasY);
       },
       onDoubleClick: (payload) => {
+        this.vitalityController?.notifyInteraction("click");
         this.handleDoubleClick(payload);
-        this.eventBridge?.handleDoubleClick(payload.canvasX, payload.canvasY);
       },
       onHover: (payload) => {
         this.vitalityController?.notifyInteraction("hover");
         this.handleHover(payload);
-        this.eventBridge?.handleHover(payload.canvasX, payload.canvasY);
       },
       onHitMask: (payload) => this.handleHitMask(payload),
       onRendererBootstrapped: () => this.handleRendererBootstrapped(),
@@ -1761,8 +1762,16 @@ export class DesktopPetManager {
     });
     idleController.attachLoaded(loaded);
 
-    const vitalityController = new DesktopPetVitalityController(scheduler, windowAdapter);
-    const worldController = new DesktopPetWorldController(scheduler, windowAdapter);
+    const vitalityController = new DesktopPetVitalityController(scheduler);
+    const worldController = new DesktopPetWorldController(
+      scheduler,
+      windowAdapter,
+      () => {
+        void this.persistRuntimePosition().catch((err) => {
+          console.warn("[DesktopPetManager] 持久化桌宠落地位置失败:", this.errorMessage(err));
+        });
+      },
+    );
 
     const clickThroughController = new ClickThroughController(
       windowAdapter,
@@ -2044,6 +2053,15 @@ export class DesktopPetManager {
     return context;
   }
 
+  private nextRuntimeInputSequence(candidate = Date.now()): number {
+    const normalized = Number.isFinite(candidate)
+      ? Math.max(1, Math.floor(candidate))
+      : Math.max(1, Date.now());
+    const next = Math.max(normalized, this.runtimeInputSequence + 1);
+    this.runtimeInputSequence = next;
+    return next;
+  }
+
   private handlePlaybackEvent(event: PlaybackEvent): void {
     if (this.actionPlayer instanceof AnimationPlayerBridge) {
       this.actionPlayer.handlePlaybackEvent(event);
@@ -2207,7 +2225,13 @@ export class DesktopPetManager {
     if (playbackId) {
       this.playbackCommandIds.delete(playbackId);
       this.playbackDecisionIds.delete(playbackId);
-      if (this.currentPlaybackId === playbackId) this.currentPlaybackId = null;
+      if (this.currentPlaybackId === playbackId) {
+        this.currentPlaybackId = null;
+        // A terminal renderer event means the physical action is no longer
+        // playing. Leaving currentActionKey behind made Runtime state report an
+        // idle/stopped player together with the previous foreground action.
+        this.currentActionKey = null;
+      }
     }
     if (commandId && this.currentCommandId === commandId) this.currentCommandId = null;
   }
@@ -2340,10 +2364,16 @@ export class DesktopPetManager {
   }
 
   private handleClick(payload: PetPointerIpcPayload): void {
-    void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.clicked", {
+    const fallback = () => this.eventBridge?.handleClick(payload.canvasX, payload.canvasY);
+    const runtime = this.runtimeHandler;
+    if (!runtime) {
+      fallback();
+      return;
+    }
+    void runtime.sendRuntimeEvent("runtime.pointer.clicked", {
       ...this.runtimeEventContext(),
       gestureId: randomUUID(),
-      sequence: payload.occurredAt,
+      sequence: this.nextRuntimeInputSequence(payload.occurredAt),
       button: "left",
       clickCount: 1,
       canvasX: payload.canvasX,
@@ -2354,15 +2384,22 @@ export class DesktopPetManager {
       actionKey: this.currentActionKey ?? "",
       occurredAt: new Date(payload.occurredAt).toISOString(),
     }).catch((err) => {
-      console.warn("[DesktopPetManager] 上报单击事件失败:", this.errorMessage(err));
+      console.warn("[DesktopPetManager] 上报单击事件失败，降级为本地反馈:", this.errorMessage(err));
+      fallback();
     });
   }
 
   private handleDoubleClick(payload: PetPointerIpcPayload): void {
-    void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.double_clicked", {
+    const fallback = () => this.eventBridge?.handleDoubleClick(payload.canvasX, payload.canvasY);
+    const runtime = this.runtimeHandler;
+    if (!runtime) {
+      fallback();
+      return;
+    }
+    void runtime.sendRuntimeEvent("runtime.pointer.double_clicked", {
       ...this.runtimeEventContext(),
       gestureId: randomUUID(),
-      sequence: payload.occurredAt,
+      sequence: this.nextRuntimeInputSequence(payload.occurredAt),
       button: "left",
       clickCount: 2,
       canvasX: payload.canvasX,
@@ -2373,15 +2410,22 @@ export class DesktopPetManager {
       actionKey: this.currentActionKey ?? "",
       occurredAt: new Date(payload.occurredAt).toISOString(),
     }).catch((err) => {
-      console.warn("[DesktopPetManager] 上报双击事件失败:", this.errorMessage(err));
+      console.warn("[DesktopPetManager] 上报双击事件失败，降级为本地反馈:", this.errorMessage(err));
+      fallback();
     });
   }
 
   private handleHover(payload: PetPointerIpcPayload): void {
-    void this.runtimeHandler?.sendRuntimeEvent("runtime.pointer.hovered", {
+    const fallback = () => this.eventBridge?.handleHover(payload.canvasX, payload.canvasY);
+    const runtime = this.runtimeHandler;
+    if (!runtime) {
+      fallback();
+      return;
+    }
+    void runtime.sendRuntimeEvent("runtime.pointer.hovered", {
       ...this.runtimeEventContext(),
       gestureId: randomUUID(),
-      sequence: payload.occurredAt,
+      sequence: this.nextRuntimeInputSequence(payload.occurredAt),
       canvasX: payload.canvasX,
       canvasY: payload.canvasY,
       screenX: payload.screenX,
@@ -2390,7 +2434,8 @@ export class DesktopPetManager {
       frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
       occurredAt: new Date(payload.occurredAt).toISOString(),
     }).catch((err) => {
-      console.warn("[DesktopPetManager] 上报悬停事件失败:", this.errorMessage(err));
+      console.warn("[DesktopPetManager] 上报悬停事件失败，降级为本地反馈:", this.errorMessage(err));
+      fallback();
     });
   }
 
@@ -2485,60 +2530,106 @@ export class DesktopPetManager {
     if (event === "drag-start") {
       this.worldController?.setDragging(true);
       this.currentDragId = randomUUID();
+      this.lastDragRuntimeMoveAt = 0;
       this.petLogger.logDragStart(this.activeInstallationId ?? undefined);
+      const occurredAt = Date.now();
       void this.runtimeHandler?.sendRuntimeEvent("runtime.drag.started", {
         ...this.runtimeEventContext(),
         gestureId: this.currentDragId,
-        sequence: Date.now(),
+        sequence: this.nextRuntimeInputSequence(occurredAt),
         dragId: this.currentDragId,
         startX: state.startX,
         startY: state.startY,
         currentX: state.currentX,
         currentY: state.currentY,
         displayId: state.startScreenId,
-        occurredAt: new Date().toISOString(),
+        occurredAt: new Date(occurredAt).toISOString(),
       }).catch((err) => {
         console.warn("[DesktopPetManager] 上报拖拽开始失败:", this.errorMessage(err));
       });
-    } else if (event === "drag-end") {
-      this.worldController?.setDragging(false);
-      this.worldController?.onDrop();
-      this.petLogger.logDragEnd(this.activeInstallationId ?? undefined);
-      void this.runtimeHandler?.sendRuntimeEvent("runtime.drag.completed", {
+      return;
+    }
+
+    if (event === "drag-move") {
+      const gestureId = this.currentDragId;
+      if (!gestureId) return;
+      const occurredAt = Date.now();
+      if (
+        this.lastDragRuntimeMoveAt > 0 &&
+        occurredAt - this.lastDragRuntimeMoveAt < DRAG_RUNTIME_MOVE_MIN_INTERVAL_MS
+      ) {
+        return;
+      }
+      this.lastDragRuntimeMoveAt = occurredAt;
+      void this.runtimeHandler?.sendRuntimeEvent("runtime.drag.moved", {
         ...this.runtimeEventContext(),
-        gestureId: this.currentDragId ?? "",
-        sequence: Date.now(),
-        dragId: this.currentDragId ?? "",
+        gestureId,
+        sequence: this.nextRuntimeInputSequence(occurredAt),
+        dragId: gestureId,
         startX: state.startX,
         startY: state.startY,
         currentX: state.currentX,
         currentY: state.currentY,
         displayId: state.currentScreenId,
-        occurredAt: new Date().toISOString(),
+        occurredAt: new Date(occurredAt).toISOString(),
+      }).catch((err) => {
+        console.warn("[DesktopPetManager] 上报拖拽移动失败:", this.errorMessage(err));
+      });
+      return;
+    }
+
+    if (event === "drag-end") {
+      this.worldController?.setDragging(false);
+      this.worldController?.onDrop();
+      this.petLogger.logDragEnd(this.activeInstallationId ?? undefined);
+      const gestureId = this.currentDragId ?? "";
+      const occurredAt = Date.now();
+      void this.runtimeHandler?.sendRuntimeEvent("runtime.drag.completed", {
+        ...this.runtimeEventContext(),
+        gestureId,
+        sequence: this.nextRuntimeInputSequence(occurredAt),
+        dragId: gestureId,
+        startX: state.startX,
+        startY: state.startY,
+        currentX: state.currentX,
+        currentY: state.currentY,
+        displayId: state.currentScreenId,
+        occurredAt: new Date(occurredAt).toISOString(),
       }).catch((err) => {
         console.warn("[DesktopPetManager] 上报拖拽完成失败:", this.errorMessage(err));
       });
       this.currentDragId = null;
-      void this.persistRuntimePosition().catch((err) => {
-        console.warn("[DesktopPetManager] 持久化桌宠位置失败:", this.errorMessage(err));
-      });
-    } else if (event === "drag-cancel") {
+      this.lastDragRuntimeMoveAt = 0;
+      // WorldController persists the final settled coordinate after gravity has
+      // completed. Persisting here would store the elevated pointer-release Y.
+      return;
+    }
+
+    if (event === "drag-cancel") {
       this.worldController?.setDragging(false);
+      // Pointer cancellation ends manual positioning but is not a semantic
+      // "drop" event. Resume world gravity locally so the window cannot remain
+      // suspended; Backend still receives runtime.drag.cancelled and will not
+      // resolve it as gesture_drop.
+      this.worldController?.onDrop();
+      const gestureId = this.currentDragId ?? "";
+      const occurredAt = Date.now();
       void this.runtimeHandler?.sendRuntimeEvent("runtime.drag.cancelled", {
         ...this.runtimeEventContext(),
-        gestureId: this.currentDragId ?? "",
-        sequence: Date.now(),
-        dragId: this.currentDragId ?? "",
+        gestureId,
+        sequence: this.nextRuntimeInputSequence(occurredAt),
+        dragId: gestureId,
         startX: state.startX,
         startY: state.startY,
         currentX: state.currentX,
         currentY: state.currentY,
         displayId: state.currentScreenId,
-        occurredAt: new Date().toISOString(),
+        occurredAt: new Date(occurredAt).toISOString(),
       }).catch((err) => {
         console.warn("[DesktopPetManager] 上报拖拽取消失败:", this.errorMessage(err));
       });
       this.currentDragId = null;
+      this.lastDragRuntimeMoveAt = 0;
     }
   }
 
