@@ -41,6 +41,13 @@ export interface WorkflowTrigger {
   input?: unknown;
   enabled: boolean;
 }
+export interface WorkflowAgentToolConfig { name?: string; description?: string }
+export interface WorkflowCatalogItem {
+  id: string; modelName?: string; name: string; description?: string; source?: string; inputSchema?: unknown; outputSchema?: unknown; runtime?: WorkflowRuntimeBinding;
+}
+export interface WorkflowAIProposal { definition: WorkflowDefinition; summary: string; changes: string[]; warnings: string[] }
+export interface WorkflowAIExplanation { summary: string; flow: string[]; issues: string[]; suggestions: string[] }
+
 export interface WorkflowDefinition {
   schemaVersion: string;
   id: string;
@@ -56,6 +63,7 @@ export interface WorkflowDefinition {
   permissions?: string[];
   scope?: string;
   callableByAgent: boolean;
+  agentTool: WorkflowAgentToolConfig;
   enabled: boolean;
   hasSideEffects?: boolean;
   idempotent?: boolean;
@@ -94,6 +102,23 @@ export async function listWorkflows(): Promise<WorkflowDefinition[]> {
   const res = await apiClient.get<{ items: WorkflowDefinition[] }>("/api/extensions/workflows");
   return res.data.items ?? [];
 }
+export async function getWorkflowCatalog(): Promise<WorkflowCatalogItem[]> {
+  const res = await apiClient.get<{ items: WorkflowCatalogItem[] }>("/api/extensions/workflows/catalog");
+  return res.data.items ?? [];
+}
+export async function generateWorkflowWithAI(instruction: string): Promise<WorkflowAIProposal> {
+  return (await apiClient.post<WorkflowAIProposal>("/api/extensions/workflows/ai/generate", { instruction })).data;
+}
+export async function editWorkflowWithAI(id: string, instruction: string): Promise<WorkflowAIProposal> {
+  return (await apiClient.post<WorkflowAIProposal>(`/api/extensions/workflows/${encodeURIComponent(id)}/ai/edit`, { instruction })).data;
+}
+export async function repairWorkflowWithAI(id: string, instruction = ""): Promise<WorkflowAIProposal> {
+  return (await apiClient.post<WorkflowAIProposal>(`/api/extensions/workflows/${encodeURIComponent(id)}/ai/repair`, { instruction })).data;
+}
+export async function explainWorkflowWithAI(id: string, instruction = ""): Promise<WorkflowAIExplanation> {
+  return (await apiClient.post<WorkflowAIExplanation>(`/api/extensions/workflows/${encodeURIComponent(id)}/ai/explain`, { instruction })).data;
+}
+
 export async function createWorkflow(def: Partial<WorkflowDefinition>): Promise<WorkflowDefinition> {
   return (await apiClient.post<WorkflowDefinition>("/api/extensions/workflows", def)).data;
 }

@@ -13,6 +13,7 @@
       <div class="header-actions">
         <el-button :disabled="historyIndex <= 0" @click="undo"><el-icon><RefreshLeft /></el-icon></el-button>
         <el-button :disabled="historyIndex >= history.length - 1" @click="redo"><el-icon><RefreshRight /></el-icon></el-button>
+        <el-button :loading="aiWorking" @click="inspectorTab = 'ai'">AI Copilot</el-button>
         <el-button @click="validateCurrent">校验</el-button>
         <el-button :loading="saving" type="primary" @click="save">保存</el-button>
         <el-button :loading="running" type="success" @click="startRun"><el-icon><VideoPlay /></el-icon>运行</el-button>
@@ -169,6 +170,52 @@
             </div>
           </el-tab-pane>
 
+          <el-tab-pane label="映射" name="mapping">
+            <div v-if="selectedNode" class="inspector-content">
+              <div class="panel-title">可视化数据映射</div>
+              <p class="panel-tip">把工作流输入或其他节点输出绑定到当前节点输入。跨节点绑定会自动补齐 DAG 依赖，并在保存前校验循环。</p>
+              <label>目标输入字段
+                <el-select v-model="mappingTargetPath" filterable allow-create default-first-option placeholder="选择或输入字段路径">
+                  <el-option v-for="path in mappingTargetFields" :key="path" :label="path" :value="path" />
+                </el-select>
+              </label>
+              <label>数据来源
+                <el-select v-model="mappingSourceRef" filterable placeholder="选择上游数据">
+                  <el-option-group v-for="group in mappingSourceGroups" :key="group.label" :label="group.label">
+                    <el-option v-for="item in group.items" :key="item.ref" :label="item.label" :value="item.ref" />
+                  </el-option-group>
+                </el-select>
+              </label>
+              <el-button type="primary" :disabled="!mappingTargetPath || !mappingSourceRef" @click="bindMapping">绑定数据</el-button>
+              <div v-if="currentMappings.length" class="mapping-list">
+                <div v-for="item in currentMappings" :key="item.path" class="mapping-row">
+                  <span><strong>{{ item.path }}</strong><small>{{ item.ref }}</small></span>
+                  <el-button text type="danger" @click="removeMapping(item.path)">移除</el-button>
+                </div>
+              </div>
+              <div v-else class="empty-inspector compact">当前节点还没有数据引用。</div>
+            </div>
+            <div v-else class="empty-inspector">先选择一个节点，再配置数据映射。</div>
+          </el-tab-pane>
+
+          <el-tab-pane label="AI" name="ai">
+            <div class="inspector-content">
+              <div class="panel-title">AI Workflow Copilot</div>
+              <p class="panel-tip">AI 直接编辑 workflow-v2 DAG。修改会先通过 Kernel 规范化和编译校验，再作为草稿应用到画布，不会绕过保存校验。</p>
+              <label>修改要求<el-input v-model="aiInstruction" type="textarea" :rows="6" placeholder="例如：在天气节点后增加条件，只有下雨才通知；HTTP 失败重试 3 次。" /></label>
+              <div class="ai-actions">
+                <el-button type="primary" :loading="aiWorking" :disabled="!aiInstruction.trim()" @click="aiEdit">AI 修改</el-button>
+                <el-button :loading="aiWorking" @click="aiRepair">自动修复</el-button>
+                <el-button :loading="aiWorking" @click="aiExplain">解释工作流</el-button>
+              </div>
+              <div v-if="aiResult" class="ai-result">
+                <strong>{{ aiResult.title }}</strong>
+                <p>{{ aiResult.summary }}</p>
+                <ul v-if="aiResult.items.length"><li v-for="(item, i) in aiResult.items" :key="i">{{ item }}</li></ul>
+              </div>
+            </div>
+          </el-tab-pane>
+
           <el-tab-pane label="运行" name="runs">
             <div class="inspector-content">
               <div class="panel-row"><div class="panel-title">Execution Trace</div><el-button size="small" @click="refreshRuns">刷新</el-button></div>
@@ -195,6 +242,12 @@
           <el-tab-pane label="设置" name="settings">
             <div class="inspector-content">
               <label>启用工作流<el-switch v-model="workflow.enabled" @change="markDirty" /></label>
+              <label>允许 AI 调用<el-switch v-model="workflow.callableByAgent" @change="markDirty" /></label>
+              <template v-if="workflow.callableByAgent">
+                <label>Agent Tool 名称<el-input v-model="workflow.agentTool.name" placeholder="留空则自动生成" maxlength="64" @change="markDirty" /></label>
+                <label>Agent Tool 描述<el-input v-model="workflow.agentTool.description" type="textarea" :rows="3" placeholder="告诉模型何时调用这个工作流" maxlength="500" @change="markDirty" /></label>
+                <p class="panel-tip">启用并保存后，此工作流会按当前用户隔离注册到 Agent Tool Registry；禁用、关闭或删除时自动撤销。</p>
+              </template>
               <label>Input Schema<el-input v-model="inputSchemaEditor" type="textarea" :rows="8" @change="applySchemaEditors" /></label>
               <label>Output Schema<el-input v-model="outputSchemaEditor" type="textarea" :rows="8" @change="applySchemaEditors" /></label>
               <div class="definition-meta">Schema {{ workflow.schemaVersion }}<br />Hash {{ workflow.definitionHash || "保存后生成" }}</div>
@@ -212,16 +265,16 @@ import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Close, RefreshLeft, RefreshRight, VideoPlay } from "@element-plus/icons-vue";
 import {
-  cancelWorkflowRun, getWorkflow, getWorkflowRun, listWorkflowRuns, pauseWorkflowRun, resumeWorkflowRun,
+  cancelWorkflowRun, editWorkflowWithAI, explainWorkflowWithAI, getWorkflow, getWorkflowCatalog, getWorkflowRun, listWorkflowRuns, pauseWorkflowRun, repairWorkflowWithAI, resumeWorkflowRun,
   runWorkflow, updateWorkflow, validateWorkflow,
-  type WorkflowDefinition, type WorkflowEdge, type WorkflowNode, type WorkflowRun, type WorkflowStepRun, type WorkflowTrigger,
+  type WorkflowAIProposal, type WorkflowCatalogItem, type WorkflowDefinition, type WorkflowEdge, type WorkflowNode, type WorkflowRun, type WorkflowStepRun, type WorkflowTrigger,
 } from "@/api/workflow";
 
 const route = useRoute();
 const workflowId = String(route.params.id || "");
 const workflow = reactive<WorkflowDefinition>({
   schemaVersion: "workflow-v2", id: workflowId, name: "工作流", description: "", inputSchema: { type: "object" }, outputSchema: {},
-  nodes: [], edges: [], triggers: [{ id: "manual", type: "manual", enabled: true, config: {} }], callableByAgent: false, enabled: true,
+  nodes: [], edges: [], triggers: [{ id: "manual", type: "manual", enabled: true, config: {} }], callableByAgent: false, agentTool: {}, enabled: true,
 });
 const nodePalette = [
   { type: "tool", label: "Tool", short: "T", description: "调用 Kernel Tool" },
@@ -243,6 +296,8 @@ const zoom = ref(1); const pan = reactive({ x: 80, y: 70 }); const pointerGraph 
 const connectingFrom = ref("");
 const nodeInputEditor = ref("{}"); const nodeWhenEditor = ref(""); const nodePermissionsEditor = ref(""); const nodeRuntimeMetadataEditor = ref("{}"); const nodeErrorDefaultEditor = ref(""); const edgeConditionEditor = ref("");
 const inputSchemaEditor = ref("{}"); const outputSchemaEditor = ref("{}");
+const catalog = ref<WorkflowCatalogItem[]>([]); const mappingTargetPath = ref(""); const mappingSourceRef = ref("");
+const aiInstruction = ref(""); const aiWorking = ref(false); const aiResult = ref<{title:string;summary:string;items:string[]}|null>(null);
 const history = ref<string[]>([]); const historyIndex = ref(-1); let restoringHistory = false;
 const runs = ref<WorkflowRun[]>([]); const currentRun = ref<WorkflowRun | null>(null); const stepRuns = ref<WorkflowStepRun[]>([]); let pollTimer: number | undefined;
 let dragState: { nodeId: string; startClientX: number; startClientY: number; startX: number; startY: number } | null = null;
@@ -258,6 +313,47 @@ const canPause = computed(() => currentRun.value?.status === "running" || curren
 const canResume = computed(() => currentRun.value?.status === "paused");
 const canCancel = computed(() => ["running","pausing","paused","resuming","compensating"].includes(currentRun.value?.status || ""));
 const previewPath = computed(() => { const n = workflow.nodes.find(x => x.id === connectingFrom.value); if (!n) return ""; const s = outputPoint(n); return bezier(s.x, s.y, pointerGraph.x, pointerGraph.y); });
+const selectedTargetCatalog = computed(() => {
+  const node = selectedNode.value; if (!node) return undefined;
+  return catalog.value.find(item => item.id === node.targetId || item.modelName === node.targetId || item.runtime?.runtimeId === node.runtime?.runtimeId);
+});
+const mappingTargetFields = computed(() => {
+  const paths = schemaLeafPaths(selectedTargetCatalog.value?.inputSchema);
+  if (paths.length) return paths;
+  const input = selectedNode.value?.step?.input;
+  return input && typeof input === "object" && !Array.isArray(input) ? Object.keys(input as Record<string, unknown>) : [];
+});
+const mappingSourceGroups = computed(() => {
+  const groups: Array<{label:string;items:Array<{label:string;ref:string}>}> = [];
+  const inputItems = schemaLeafPaths(workflow.inputSchema).map(path => ({ label: `工作流输入 · ${path}`, ref: `input.${path}` }));
+  if (inputItems.length) groups.push({ label: "工作流输入", items: inputItems });
+  groups.push({
+    label: "运行时上下文",
+    items: [
+      { label: "当前用户 · userId", ref: "runtime.userId" },
+      { label: "当前会话 · conversationId", ref: "runtime.conversationId" },
+      { label: "当前角色 · characterId", ref: "runtime.characterId" },
+      { label: "根任务 · rootId", ref: "runtime.rootId" },
+      { label: "调度任务 · scheduleId", ref: "runtime.scheduleId" },
+      { label: "执行追踪 · traceId", ref: "runtime.traceId" },
+    ],
+  });
+  const target = selectedNode.value;
+  if (!target) return groups;
+  for (const node of workflow.nodes) {
+    if (node.id === target.id || wouldCreateCycle(node.id, target.id)) continue;
+    const item = catalog.value.find(x => x.id === node.targetId || x.modelName === node.targetId || x.runtime?.runtimeId === node.runtime?.runtimeId);
+    let paths = schemaLeafPaths(item?.outputSchema);
+    if (!paths.length) {
+      const observed = stepRuns.value.find(step => step.nodeId === node.id)?.output;
+      paths = valueLeafPaths(observed);
+    }
+    if (!paths.length) continue;
+    groups.push({ label: node.label || node.id, items: paths.map(path => ({ label: `${node.label || node.id} · ${path}`, ref: `steps.${node.id}.${path}` })) });
+  }
+  return groups;
+});
+const currentMappings = computed(() => collectMappings(selectedNode.value?.step?.input));
 
 function paletteByType(type: string) { return nodePalette.find(x => x.type === type); }
 function needsTarget(type: string) { return ["tool","mcp","task","javascript","wasm","trusted_service","nested_workflow"].includes(type); }
@@ -267,11 +363,73 @@ function ensureRuntime(node: WorkflowNode) { node.runtime ||= {}; node.runtime.m
 function markDirty() { if (!restoringHistory) dirty.value = true; }
 function pretty(value: unknown) { return value == null ? "" : JSON.stringify(value, null, 2); }
 function parseEditor(text: string, fallback: unknown) { if (!text.trim()) return fallback; return JSON.parse(text); }
-function modelSnapshot() { return JSON.stringify({ name: workflow.name, description: workflow.description, inputSchema: workflow.inputSchema, outputSchema: workflow.outputSchema, nodes: workflow.nodes, edges: workflow.edges, triggers: workflow.triggers, callableByAgent: workflow.callableByAgent, enabled: workflow.enabled }); }
+function modelSnapshot() { return JSON.stringify({ name: workflow.name, description: workflow.description, inputSchema: workflow.inputSchema, outputSchema: workflow.outputSchema, nodes: workflow.nodes, edges: workflow.edges, triggers: workflow.triggers, callableByAgent: workflow.callableByAgent, agentTool: workflow.agentTool, enabled: workflow.enabled }); }
 function pushHistory() { const snap = modelSnapshot(); if (history.value[historyIndex.value] === snap) return; history.value = history.value.slice(0, historyIndex.value + 1); history.value.push(snap); if (history.value.length > 60) history.value.shift(); historyIndex.value = history.value.length - 1; }
 function restoreSnapshot(snap: string) { restoringHistory = true; const data = JSON.parse(snap); Object.assign(workflow, data); selectedNodeId.value = ""; selectedEdgeId.value = ""; restoringHistory = false; dirty.value = true; }
 function undo() { if (historyIndex.value <= 0) return; historyIndex.value--; restoreSnapshot(history.value[historyIndex.value]); }
 function redo() { if (historyIndex.value >= history.value.length - 1) return; historyIndex.value++; restoreSnapshot(history.value[historyIndex.value]); }
+
+function schemaLeafPaths(schema: unknown, prefix = ""): string[] {
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) return [];
+  const obj = schema as Record<string, any>; const props = obj.properties;
+  if (!props || typeof props !== "object") return prefix ? [prefix] : [];
+  const out: string[] = [];
+  for (const [key, child] of Object.entries(props as Record<string, unknown>)) {
+    const path = prefix ? `${prefix}.${key}` : key; const nested = schemaLeafPaths(child, path); out.push(...(nested.length ? nested : [path]));
+  }
+  return out;
+}
+function valueLeafPaths(value: unknown, prefix = "", depth = 0): string[] {
+  if (depth > 6) return prefix ? [prefix] : [];
+  if (value == null || typeof value !== "object") return prefix ? [prefix] : [];
+  if (Array.isArray(value)) {
+    if (!value.length) return prefix ? [prefix] : [];
+    return valueLeafPaths(value[0], prefix ? `${prefix}.0` : "0", depth + 1);
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (!entries.length) return prefix ? [prefix] : [];
+  const out: string[] = [];
+  for (const [key, child] of entries) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    const nested = valueLeafPaths(child, path, depth + 1);
+    out.push(...(nested.length ? nested : [path]));
+  }
+  return [...new Set(out)].slice(0, 100);
+}
+function setPath(root: Record<string, any>, path: string, value: unknown) {
+  const parts = path.split(".").map(x=>x.trim()).filter(Boolean); if (!parts.length) return; let cur=root;
+  for (let i=0;i<parts.length-1;i++){const key=parts[i];if(!cur[key]||typeof cur[key]!=="object"||Array.isArray(cur[key]))cur[key]={};cur=cur[key];}
+  cur[parts[parts.length-1]]=value;
+}
+function deletePath(root: Record<string, any>, path: string) {
+  const parts=path.split(".").filter(Boolean); if(!parts.length)return; let cur:any=root;
+  for(let i=0;i<parts.length-1;i++){cur=cur?.[parts[i]];if(!cur||typeof cur!=="object")return;} delete cur[parts[parts.length-1]];
+}
+function collectMappings(value: unknown, prefix=""): Array<{path:string;ref:string}> {
+  if (typeof value === "string" && /^(input|steps|runtime)\./.test(value)) return prefix ? [{path:prefix,ref:value}] : [];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) => collectMappings(child, prefix ? `${prefix}.${key}` : key));
+}
+function isAncestor(source:string,target:string){if(source===target)return false;const stack=[source],seen=new Set<string>();while(stack.length){const id=stack.pop()!;if(id===target)return true;if(seen.has(id))continue;seen.add(id);for(const e of workflow.edges)if(e.source===id)stack.push(e.target);}return false;}
+function bindMapping(){
+  const node=selectedNode.value,targetPath=mappingTargetPath.value.trim(),refValue=mappingSourceRef.value.trim();if(!node||!targetPath||!refValue)return;
+  const match=/^steps\.([^.]+)\./.exec(refValue); const sourceId=match?.[1];
+  if(sourceId&&!isAncestor(sourceId,node.id)){if(wouldCreateCycle(sourceId,node.id)){ElMessage.error("该数据来源会形成循环依赖");return;}workflow.edges.push({id:`edge-map-${Date.now().toString(36)}`,source:sourceId,target:node.id,label:"data"});}
+  const input=(node.step.input&&typeof node.step.input==="object"&&!Array.isArray(node.step.input)?node.step.input:{} ) as Record<string,any>; setPath(input,targetPath,refValue); node.step.input=input; nodeInputEditor.value=pretty(input); markDirty();pushHistory();ElMessage.success("数据映射已绑定");
+}
+function removeMapping(path:string){const node=selectedNode.value;if(!node||!node.step.input||typeof node.step.input!=="object"||Array.isArray(node.step.input))return;deletePath(node.step.input as Record<string,any>,path);nodeInputEditor.value=pretty(node.step.input);markDirty();pushHistory();}
+function normalizeLoadedDefinition(){
+  workflow.edges ||= []; workflow.triggers ||= [{id:"manual",type:"manual",enabled:true,config:{}}]; workflow.agentTool ||= {};
+  for(const trigger of workflow.triggers){trigger.config ||= {};} for(const n of workflow.nodes){n.position ||= {x:100,y:100};n.step ||= {input:{},onError:{mode:"fail"}};n.step.onError ||= {mode:"fail"};ensureRuntime(n);}
+  inputSchemaEditor.value=pretty(workflow.inputSchema);outputSchemaEditor.value=pretty(workflow.outputSchema);
+}
+function applyAIProposal(proposal: WorkflowAIProposal){
+  const def=JSON.parse(JSON.stringify(proposal.definition)) as WorkflowDefinition;def.id=workflow.id;Object.assign(workflow,def);normalizeLoadedDefinition();selectedNodeId.value="";selectedEdgeId.value="";dirty.value=true;pushHistory();autoLayout();aiResult.value={title:"AI 修改已应用到草稿",summary:proposal.summary||"工作流已更新",items:[...(proposal.changes||[]),...(proposal.warnings||[]).map(x=>`警告：${x}`)]};
+}
+async function ensureSavedForAI(){if(!dirty.value)return true;await save();return !dirty.value;}
+async function aiEdit(){if(!aiInstruction.value.trim()||aiWorking.value)return;if(!(await ensureSavedForAI()))return;aiWorking.value=true;try{applyAIProposal(await editWorkflowWithAI(workflow.id,aiInstruction.value.trim()));ElMessage.success("AI 修改已应用，请确认后保存");}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||"AI 修改失败");}finally{aiWorking.value=false;}}
+async function aiRepair(){if(aiWorking.value)return;if(!(await ensureSavedForAI()))return;aiWorking.value=true;try{applyAIProposal(await repairWorkflowWithAI(workflow.id,aiInstruction.value.trim()));ElMessage.success("AI 修复建议已应用，请确认后保存");}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||"AI 修复失败");}finally{aiWorking.value=false;}}
+async function aiExplain(){if(aiWorking.value)return;if(!(await ensureSavedForAI()))return;aiWorking.value=true;try{const result=await explainWorkflowWithAI(workflow.id,aiInstruction.value.trim());aiResult.value={title:"AI 工作流解释",summary:result.summary,items:[...(result.flow||[]).map(x=>`流程：${x}`),...(result.issues||[]).map(x=>`问题：${x}`),...(result.suggestions||[]).map(x=>`建议：${x}`)]};}catch(e:any){ElMessage.error(e?.response?.data?.error||e?.message||"AI 解释失败");}finally{aiWorking.value=false;}}
 
 function addNode(type: string, position?: {x:number;y:number}) {
   pushHistory(); const index = workflow.nodes.length;
@@ -333,13 +491,13 @@ function formatTime(v?:string){return v?new Date(v).toLocaleString():"";}
 function onInspectorTabChanged(name:string|number){if(String(name)==="runs")void refreshRuns();}
 
 watch(()=>workflow.name,markDirty);watch(()=>workflow.description,markDirty);
-watch(selectedNodeId,syncNodeEditors);
+watch(selectedNodeId,()=>{syncNodeEditors();mappingTargetPath.value="";mappingSourceRef.value="";});
 watch(selectedEdgeId,()=>{edgeConditionEditor.value=pretty(selectedEdge.value?.condition);});
 
-onMounted(async()=>{const loaded=await getWorkflow(workflowId);Object.assign(workflow,loaded);workflow.edges ||= [];workflow.triggers ||= [{id:"manual",type:"manual",enabled:true,config:{}}];for(const trigger of workflow.triggers){trigger.config ||= {};}for(const n of workflow.nodes){n.position ||= {x:100,y:100};n.step ||= {input:{},onError:{mode:"fail"}};n.step.onError ||= {mode:"fail"};ensureRuntime(n);}inputSchemaEditor.value=pretty(workflow.inputSchema);outputSchemaEditor.value=pretty(workflow.outputSchema);dirty.value=false;history.value=[modelSnapshot()];historyIndex.value=0;await refreshRuns();setTimeout(fitView,0);});
+onMounted(async()=>{const [loaded,items]=await Promise.all([getWorkflow(workflowId),getWorkflowCatalog().catch(()=>[] as WorkflowCatalogItem[])]);Object.assign(workflow,loaded);catalog.value=items;normalizeLoadedDefinition();dirty.value=false;history.value=[modelSnapshot()];historyIndex.value=0;await refreshRuns();setTimeout(fitView,0);});
 onBeforeUnmount(()=>{if(pollTimer)clearInterval(pollTimer);window.removeEventListener("pointermove",onGlobalPointerMove);});
 </script>
 
 <style scoped>
-.builder-page{height:100%;min-height:0;display:flex;flex-direction:column;color:var(--console-text);overflow:hidden}.builder-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:2px 2px 14px;border-bottom:1px solid var(--console-border)}.title-area{min-width:0;flex:1}.back-link{display:inline-block;margin-bottom:5px;color:var(--console-text-muted);font-size:12px;text-decoration:none}.title-row{display:flex;align-items:center;gap:10px}.name-input{max-width:420px}.name-input :deep(.el-input__wrapper),.description-input :deep(.el-input__wrapper){box-shadow:none;background:transparent;padding-left:0}.name-input :deep(.el-input__inner){font-size:20px;font-weight:650}.description-input{max-width:560px}.description-input :deep(.el-input__inner){font-size:12px;color:var(--console-text-muted)}.dirty-dot,.saved-state{font-size:11px;white-space:nowrap}.dirty-dot{color:var(--el-color-warning)}.saved-state{color:var(--console-text-muted)}.header-actions{display:flex;gap:7px;align-items:center}.builder-layout{flex:1;min-height:0;display:grid;grid-template-columns:210px minmax(0,1fr) 310px}.palette-panel,.inspector-panel{min-height:0;overflow:auto;background:var(--ac-color-surface);padding:14px}.palette-panel{border-right:1px solid var(--console-border)}.inspector-panel{border-left:1px solid var(--console-border);padding:0 12px 16px}.panel-title{font-size:13px;font-weight:650;margin-bottom:9px}.panel-title.small{font-size:12px}.panel-tip{margin:0 0 12px;color:var(--console-text-muted);font-size:11px;line-height:1.5}.palette-item{width:100%;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--console-text);padding:8px;cursor:grab}.palette-item:hover{background:var(--ac-color-surface-soft);border-color:var(--console-border)}.palette-item strong,.palette-item small{display:block}.palette-item strong{font-size:12px}.palette-item small{font-size:10px;color:var(--console-text-muted);margin-top:2px}.node-type-icon{width:32px;height:32px;border-radius:8px;background:var(--ac-color-surface-soft);display:grid;place-items:center;color:var(--el-color-primary);font-size:11px;font-weight:700}.palette-divider{height:1px;background:var(--console-border);margin:13px 0}.canvas-tools.vertical{display:grid;grid-template-columns:1fr 1fr;gap:6px}.canvas-tools :deep(.el-button){margin-left:0}.workflow-canvas{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--ac-color-page,#0f0f10);touch-action:none}.canvas-grid{position:absolute;inset:0;background-image:radial-gradient(circle,var(--console-border) 1px,transparent 1px);opacity:.55}.graph-transform{position:absolute;left:0;top:0;width:4000px;height:2600px;transform-origin:0 0}.edge-layer{position:absolute;inset:0;width:4000px;height:2600px;overflow:visible}.edge-line{fill:none;stroke:var(--console-text-muted);stroke-width:1.5;opacity:.72}.edge-line.selected{stroke:var(--el-color-primary);stroke-width:2.5;opacity:1}.edge-line.preview{stroke:var(--el-color-primary);stroke-dasharray:6 4}.edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}.edge-label{font-size:11px;fill:var(--console-text-muted);text-anchor:middle}.workflow-node{position:absolute;width:180px;height:84px;border:1px solid var(--console-border);border-radius:11px;background:var(--ac-color-surface);box-shadow:0 5px 18px rgba(0,0,0,.12);user-select:none}.workflow-node.selected{border-color:var(--el-color-primary);box-shadow:0 0 0 1px var(--el-color-primary)}.workflow-node.run-running{border-color:var(--el-color-warning)}.workflow-node.run-succeeded,.workflow-node.run-defaulted{border-color:var(--el-color-success)}.workflow-node.run-failed{border-color:var(--el-color-danger)}.workflow-node.run-skipped{opacity:.58}.node-header{height:48px;display:grid;grid-template-columns:32px 1fr 18px;gap:8px;align-items:center;padding:7px 9px;cursor:grab}.node-badge{width:30px;height:30px;border-radius:8px;background:var(--ac-color-surface-soft);display:grid;place-items:center;color:var(--el-color-primary);font-size:10px;font-weight:700}.node-title{min-width:0}.node-title strong,.node-title small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.node-title strong{font-size:12px}.node-title small{font-size:9px;color:var(--console-text-muted);margin-top:2px}.node-menu{font-size:14px;color:var(--console-text-muted);cursor:pointer}.node-body{height:35px;border-top:1px solid var(--console-border);display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 9px;font-size:9px}.target-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.muted{color:var(--console-text-muted)}.status-pill{font-size:8px;text-transform:uppercase;color:var(--el-color-primary)}.input-handle,.output-handle{position:absolute;top:34px;width:14px;height:14px;border-radius:50%;border:2px solid var(--ac-color-surface);background:var(--console-text-muted);padding:0;cursor:crosshair;z-index:3}.input-handle{left:-8px}.output-handle{right:-8px;background:var(--el-color-primary)}.zoom-indicator{position:absolute;left:12px;bottom:12px;padding:5px 8px;border:1px solid var(--console-border);border-radius:7px;background:var(--ac-color-surface);font-size:10px;color:var(--console-text-muted)}.minimap{position:absolute;right:12px;bottom:12px;width:150px;height:94px;border:1px solid var(--console-border);border-radius:8px;background:var(--ac-color-surface);overflow:hidden;opacity:.88}.minimap svg{width:100%;height:100%}.mini-node{fill:var(--console-text-muted);opacity:.55}.connect-hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);padding:7px 11px;border-radius:8px;background:var(--ac-color-surface);border:1px solid var(--el-color-primary);font-size:10px}.inspector-content{display:flex;flex-direction:column;gap:11px;padding:4px 3px}.inspector-content label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--console-text-muted)}.inspector-content :deep(.el-select),.inspector-content :deep(.el-input-number){width:100%}.empty-inspector{padding:30px 4px;text-align:center;color:var(--console-text-muted);font-size:12px}.edge-summary,.definition-meta{padding:8px;border-radius:8px;background:var(--ac-color-surface-soft);font-size:10px;color:var(--console-text-muted);word-break:break-all}.panel-row,.trigger-head,.current-run-card,.run-history{display:flex;align-items:center;justify-content:space-between;gap:8px}.trigger-card{display:flex;flex-direction:column;gap:9px;padding:10px;border:1px solid var(--console-border);border-radius:10px}.trigger-head strong{font-size:11px}.current-run-card{align-items:flex-start;padding:10px;border-radius:9px;background:var(--ac-color-surface-soft)}.current-run-card strong,.current-run-card small{display:block}.current-run-card small{font-size:9px;color:var(--console-text-muted);word-break:break-all;margin-top:3px}.run-actions{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}.trace-step{display:grid;grid-template-columns:10px 1fr;gap:8px;padding:8px;border:1px solid var(--console-border);border-radius:8px;cursor:pointer}.trace-status{width:8px;height:8px;border-radius:50%;margin-top:4px;background:var(--console-text-muted)}.trace-status.s-succeeded,.trace-status.s-defaulted{background:var(--el-color-success)}.trace-status.s-failed{background:var(--el-color-danger)}.trace-status.s-running{background:var(--el-color-warning)}.trace-step strong,.trace-step small{display:block}.trace-step strong{font-size:11px}.trace-step small{font-size:9px;color:var(--console-text-muted);margin-top:2px}.trace-step p{margin:4px 0 0;color:var(--el-color-danger);font-size:9px;word-break:break-word}.run-history-title{margin-top:8px}.run-history{padding:8px;border-bottom:1px solid var(--console-border);cursor:pointer}.run-history strong,.run-history small{display:block;font-size:10px}.run-history small,.run-history>span{color:var(--console-text-muted);font-size:9px}@media(max-width:1050px){.builder-layout{grid-template-columns:170px minmax(0,1fr) 270px}}@media(max-width:760px){.builder-header{align-items:flex-start;flex-direction:column}.header-actions{flex-wrap:wrap}.builder-layout{grid-template-columns:1fr}.palette-panel{display:none}.inspector-panel{position:absolute;right:0;top:106px;bottom:0;width:min(86vw,320px);z-index:8;box-shadow:-8px 0 24px rgba(0,0,0,.18)}.workflow-canvas{min-height:600px}}
+.builder-page{height:100%;min-height:0;display:flex;flex-direction:column;color:var(--console-text);overflow:hidden}.builder-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:2px 2px 14px;border-bottom:1px solid var(--console-border)}.title-area{min-width:0;flex:1}.back-link{display:inline-block;margin-bottom:5px;color:var(--console-text-muted);font-size:12px;text-decoration:none}.title-row{display:flex;align-items:center;gap:10px}.name-input{max-width:420px}.name-input :deep(.el-input__wrapper),.description-input :deep(.el-input__wrapper){box-shadow:none;background:transparent;padding-left:0}.name-input :deep(.el-input__inner){font-size:20px;font-weight:650}.description-input{max-width:560px}.description-input :deep(.el-input__inner){font-size:12px;color:var(--console-text-muted)}.dirty-dot,.saved-state{font-size:11px;white-space:nowrap}.dirty-dot{color:var(--el-color-warning)}.saved-state{color:var(--console-text-muted)}.header-actions{display:flex;gap:7px;align-items:center}.builder-layout{flex:1;min-height:0;display:grid;grid-template-columns:210px minmax(0,1fr) 310px}.palette-panel,.inspector-panel{min-height:0;overflow:auto;background:var(--ac-color-surface);padding:14px}.palette-panel{border-right:1px solid var(--console-border)}.inspector-panel{border-left:1px solid var(--console-border);padding:0 12px 16px}.panel-title{font-size:13px;font-weight:650;margin-bottom:9px}.panel-title.small{font-size:12px}.panel-tip{margin:0 0 12px;color:var(--console-text-muted);font-size:11px;line-height:1.5}.palette-item{width:100%;display:grid;grid-template-columns:34px 1fr;align-items:center;text-align:left;gap:9px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--console-text);padding:8px;cursor:grab}.palette-item:hover{background:var(--ac-color-surface-soft);border-color:var(--console-border)}.palette-item strong,.palette-item small{display:block}.palette-item strong{font-size:12px}.palette-item small{font-size:10px;color:var(--console-text-muted);margin-top:2px}.node-type-icon{width:32px;height:32px;border-radius:8px;background:var(--ac-color-surface-soft);display:grid;place-items:center;color:var(--el-color-primary);font-size:11px;font-weight:700}.palette-divider{height:1px;background:var(--console-border);margin:13px 0}.canvas-tools.vertical{display:grid;grid-template-columns:1fr 1fr;gap:6px}.canvas-tools :deep(.el-button){margin-left:0}.workflow-canvas{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--ac-color-page,#0f0f10);touch-action:none}.canvas-grid{position:absolute;inset:0;background-image:radial-gradient(circle,var(--console-border) 1px,transparent 1px);opacity:.55}.graph-transform{position:absolute;left:0;top:0;width:4000px;height:2600px;transform-origin:0 0}.edge-layer{position:absolute;inset:0;width:4000px;height:2600px;overflow:visible}.edge-line{fill:none;stroke:var(--console-text-muted);stroke-width:1.5;opacity:.72}.edge-line.selected{stroke:var(--el-color-primary);stroke-width:2.5;opacity:1}.edge-line.preview{stroke:var(--el-color-primary);stroke-dasharray:6 4}.edge-hit{fill:none;stroke:transparent;stroke-width:14;cursor:pointer}.edge-label{font-size:11px;fill:var(--console-text-muted);text-anchor:middle}.workflow-node{position:absolute;width:180px;height:84px;border:1px solid var(--console-border);border-radius:11px;background:var(--ac-color-surface);box-shadow:0 5px 18px rgba(0,0,0,.12);user-select:none}.workflow-node.selected{border-color:var(--el-color-primary);box-shadow:0 0 0 1px var(--el-color-primary)}.workflow-node.run-running{border-color:var(--el-color-warning)}.workflow-node.run-succeeded,.workflow-node.run-defaulted{border-color:var(--el-color-success)}.workflow-node.run-failed{border-color:var(--el-color-danger)}.workflow-node.run-skipped{opacity:.58}.node-header{height:48px;display:grid;grid-template-columns:32px 1fr 18px;gap:8px;align-items:center;padding:7px 9px;cursor:grab}.node-badge{width:30px;height:30px;border-radius:8px;background:var(--ac-color-surface-soft);display:grid;place-items:center;color:var(--el-color-primary);font-size:10px;font-weight:700}.node-title{min-width:0}.node-title strong,.node-title small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.node-title strong{font-size:12px}.node-title small{font-size:9px;color:var(--console-text-muted);margin-top:2px}.node-menu{font-size:14px;color:var(--console-text-muted);cursor:pointer}.node-body{height:35px;border-top:1px solid var(--console-border);display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 9px;font-size:9px}.target-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.muted{color:var(--console-text-muted)}.status-pill{font-size:8px;text-transform:uppercase;color:var(--el-color-primary)}.input-handle,.output-handle{position:absolute;top:34px;width:14px;height:14px;border-radius:50%;border:2px solid var(--ac-color-surface);background:var(--console-text-muted);padding:0;cursor:crosshair;z-index:3}.input-handle{left:-8px}.output-handle{right:-8px;background:var(--el-color-primary)}.zoom-indicator{position:absolute;left:12px;bottom:12px;padding:5px 8px;border:1px solid var(--console-border);border-radius:7px;background:var(--ac-color-surface);font-size:10px;color:var(--console-text-muted)}.minimap{position:absolute;right:12px;bottom:12px;width:150px;height:94px;border:1px solid var(--console-border);border-radius:8px;background:var(--ac-color-surface);overflow:hidden;opacity:.88}.minimap svg{width:100%;height:100%}.mini-node{fill:var(--console-text-muted);opacity:.55}.connect-hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);padding:7px 11px;border-radius:8px;background:var(--ac-color-surface);border:1px solid var(--el-color-primary);font-size:10px}.inspector-content{display:flex;flex-direction:column;gap:11px;padding:4px 3px}.inspector-content label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--console-text-muted)}.inspector-content :deep(.el-select),.inspector-content :deep(.el-input-number){width:100%}.empty-inspector{padding:30px 4px;text-align:center;color:var(--console-text-muted);font-size:12px}.edge-summary,.definition-meta{padding:8px;border-radius:8px;background:var(--ac-color-surface-soft);font-size:10px;color:var(--console-text-muted);word-break:break-all}.panel-row,.trigger-head,.current-run-card,.run-history{display:flex;align-items:center;justify-content:space-between;gap:8px}.trigger-card{display:flex;flex-direction:column;gap:9px;padding:10px;border:1px solid var(--console-border);border-radius:10px}.trigger-head strong{font-size:11px}.current-run-card{align-items:flex-start;padding:10px;border-radius:9px;background:var(--ac-color-surface-soft)}.current-run-card strong,.current-run-card small{display:block}.current-run-card small{font-size:9px;color:var(--console-text-muted);word-break:break-all;margin-top:3px}.run-actions{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}.trace-step{display:grid;grid-template-columns:10px 1fr;gap:8px;padding:8px;border:1px solid var(--console-border);border-radius:8px;cursor:pointer}.trace-status{width:8px;height:8px;border-radius:50%;margin-top:4px;background:var(--console-text-muted)}.trace-status.s-succeeded,.trace-status.s-defaulted{background:var(--el-color-success)}.trace-status.s-failed{background:var(--el-color-danger)}.trace-status.s-running{background:var(--el-color-warning)}.trace-step strong,.trace-step small{display:block}.trace-step strong{font-size:11px}.trace-step small{font-size:9px;color:var(--console-text-muted);margin-top:2px}.trace-step p{margin:4px 0 0;color:var(--el-color-danger);font-size:9px;word-break:break-word}.run-history-title{margin-top:8px}.run-history{padding:8px;border-bottom:1px solid var(--console-border);cursor:pointer}.run-history strong,.run-history small{display:block;font-size:10px}.run-history small,.run-history>span{color:var(--console-text-muted);font-size:9px}.mapping-list{display:flex;flex-direction:column;gap:6px}.mapping-row{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px;border:1px solid var(--console-border);border-radius:8px}.mapping-row span{min-width:0}.mapping-row strong,.mapping-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mapping-row strong{font-size:10px}.mapping-row small{font-size:9px;color:var(--console-text-muted);margin-top:2px}.empty-inspector.compact{padding:12px 4px}.ai-actions{display:flex;gap:6px;flex-wrap:wrap}.ai-result{padding:10px;border:1px solid var(--console-border);border-radius:9px;background:var(--ac-color-surface-soft);font-size:10px}.ai-result strong{font-size:11px}.ai-result p{margin:6px 0;color:var(--console-text-muted);line-height:1.5}.ai-result ul{margin:6px 0 0;padding-left:18px;line-height:1.5}@media(max-width:1050px){.builder-layout{grid-template-columns:170px minmax(0,1fr) 270px}}@media(max-width:760px){.builder-header{align-items:flex-start;flex-direction:column}.header-actions{flex-wrap:wrap}.builder-layout{grid-template-columns:1fr}.palette-panel{display:none}.inspector-panel{position:absolute;right:0;top:106px;bottom:0;width:min(86vw,320px);z-index:8;box-shadow:-8px 0 24px rgba(0,0,0,.18)}.workflow-canvas{min-height:600px}}
 </style>

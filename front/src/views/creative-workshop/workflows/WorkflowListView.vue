@@ -8,6 +8,7 @@
       </div>
       <div class="header-actions">
         <el-button :loading="loading" @click="load">刷新</el-button>
+        <el-button :loading="aiCreating" @click="createWithAI">AI 创建</el-button>
         <el-button type="primary" @click="createNew"><el-icon><Plus /></el-icon>新建工作流</el-button>
       </div>
     </header>
@@ -16,7 +17,7 @@
       <el-icon><Share /></el-icon>
       <h2>还没有工作流</h2>
       <p>创建第一个可视化工作流，节点与连线会直接保存到 Extension Kernel。</p>
-      <el-button type="primary" @click="createNew">创建工作流</el-button>
+      <div class="empty-actions"><el-button :loading="aiCreating" @click="createWithAI">AI 创建</el-button><el-button type="primary" @click="createNew">创建工作流</el-button></div>
     </section>
 
     <section v-else class="workflow-grid">
@@ -57,10 +58,11 @@ import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { MoreFilled, Plus, Share, VideoPlay } from "@element-plus/icons-vue";
-import { createWorkflow, deleteWorkflow, duplicateWorkflow, listWorkflows, runWorkflow, setWorkflowEnabled, type WorkflowDefinition } from "@/api/workflow";
+import { createWorkflow, deleteWorkflow, duplicateWorkflow, generateWorkflowWithAI, listWorkflows, runWorkflow, setWorkflowEnabled, type WorkflowDefinition } from "@/api/workflow";
 
 const router = useRouter();
 const loading = ref(false);
+const aiCreating = ref(false);
 const workflows = ref<WorkflowDefinition[]>([]);
 
 async function load() {
@@ -68,6 +70,25 @@ async function load() {
   try { workflows.value = await listWorkflows(); }
   finally { loading.value = false; }
 }
+async function createWithAI() {
+  try {
+    const { value } = await ElMessageBox.prompt("描述你想创建的工作流。AI 会直接生成可编辑的 workflow-v2 DAG。", "AI 创建工作流", {
+      inputType: "textarea", inputPlaceholder: "例如：每天早上 8 点获取天气，如果下雨就通知我带伞", confirmButtonText: "生成", cancelButtonText: "取消",
+    });
+    const instruction = String(value || "").trim();
+    if (!instruction) return;
+    aiCreating.value = true;
+    const proposal = await generateWorkflowWithAI(instruction);
+    const created = await createWorkflow({ ...proposal.definition, definitionHash: undefined });
+    if (proposal.warnings?.length) ElMessage.warning(proposal.warnings.join("；"));
+    else ElMessage.success(proposal.summary || "AI 工作流已生成");
+    await router.push(`/creative-workshop/workflows/${encodeURIComponent(created.id)}`);
+  } catch (e: any) {
+    if (e === "cancel" || e === "close") return;
+    ElMessage.error(e?.response?.data?.error || e?.message || "AI 工作流生成失败");
+  } finally { aiCreating.value = false; }
+}
+
 async function createNew() {
   const def = await createWorkflow({
     name: "未命名工作流",
@@ -105,7 +126,7 @@ onMounted(load);
 .crumb { display:flex; gap:8px; align-items:center; color:var(--console-text-muted); font-size:12px; margin-bottom:8px; }
 .crumb a { color:var(--el-color-primary); text-decoration:none; }
 h1 { margin:0; font-size:24px; } .page-header p { margin:6px 0 0; color:var(--console-text-muted); font-size:13px; }
-.header-actions { display:flex; gap:8px; }
+.header-actions { display:flex; gap:8px; }.empty-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 .workflow-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:14px; }
 .workflow-card,.empty-card { border:1px solid var(--console-border); background:var(--ac-color-surface); border-radius:14px; }
 .workflow-card { padding:18px; display:flex; flex-direction:column; gap:16px; }
