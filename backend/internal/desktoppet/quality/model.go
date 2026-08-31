@@ -586,11 +586,13 @@ type EvaluateResult struct {
 	Findings     []QualityFinding
 	Scores       []DimensionScore
 	Verdict      ContentVerdict
+	Profile      QualityProfileSnapshot
 	DurationMS   int64
 }
 
 type CommitEvaluationRequest struct {
 	Evaluation          *QualityEvaluation
+	ExecutionID         string
 	Findings            []QualityFinding
 	Scores              []DimensionScore
 	Verdict             ContentVerdict
@@ -638,6 +640,7 @@ type GetValidGateForReleaseRequest struct {
 
 type QualityOutboxEvent struct {
 	EventType        string `json:"eventType"`
+	ExecutionID      string `json:"executionId"`
 	UserID           string `json:"userId"`
 	CharacterID      string `json:"characterId"`
 	ProcessingTaskID string `json:"processingTaskId"`

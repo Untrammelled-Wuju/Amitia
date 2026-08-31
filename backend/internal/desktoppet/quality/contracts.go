@@ -5,6 +5,7 @@ package quality
 import (
 	"context"
 	"image"
+	"time"
 )
 
 type MeasurementSource interface {
@@ -49,6 +50,7 @@ type QualityService interface {
 type QualityRepository interface {
 	CreateEvaluation(ctx context.Context, ev *QualityEvaluation) error
 	UpdateEvaluation(ctx context.Context, ev *QualityEvaluation) error
+	UpdateEvaluationOwned(ctx context.Context, ev *QualityEvaluation, executionID string) (bool, error)
 	GetEvaluation(ctx context.Context, evaluationID string) (*QualityEvaluation, error)
 	GetEvaluationByInput(ctx context.Context, actionRevisionID, profileHash, engineVersion string) (*QualityEvaluation, error)
 	GetActiveEvaluation(ctx context.Context, processingTaskID, actionKey string) (*QualityEvaluation, error)
@@ -58,7 +60,8 @@ type QualityRepository interface {
 	ListEvaluationsByStatus(ctx context.Context, status string) ([]*QualityEvaluation, error)
 	AcquireLease(ctx context.Context, evaluationID, executionID, workerID string, leaseDuration string) (bool, error)
 	RenewLease(ctx context.Context, evaluationID, executionID string, leaseDuration string) (bool, error)
-	ReleaseLease(ctx context.Context, evaluationID string) error
+	ReleaseLease(ctx context.Context, evaluationID, executionID string) (bool, error)
+	RecoverExpiredEvaluation(ctx context.Context, evaluationID, executionID string, now time.Time) (bool, error)
 	SetActiveEvaluation(ctx context.Context, processingTaskID, actionKey, evaluationID string) error
 	CreateFindings(ctx context.Context, findings []QualityFindingRecord) error
 	ListFindings(ctx context.Context, evaluationID string) ([]QualityFindingRecord, error)

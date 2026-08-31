@@ -202,11 +202,21 @@ func (s *qualityService) Reevaluate(ctx context.Context, req ReevaluateRequest) 
 
 	newEval := &QualityEvaluation{
 		ID:                     uuid.NewString(),
+		UserID:                 oldEval.UserID,
+		CharacterID:            oldEval.CharacterID,
 		ProcessingTaskID:       oldEval.ProcessingTaskID,
 		ProcessingActionID:     oldEval.ProcessingActionID,
 		ActionRevisionID:       oldEval.ActionRevisionID,
+		ActionContentHash:      oldEval.ActionContentHash,
+		ProcessingRevisionID:   oldEval.ProcessingRevisionID,
+		MeasurementSetID:       oldEval.MeasurementSetID,
 		ActionKey:              oldEval.ActionKey,
 		ExecutionStatus:        EvalPending,
+		ProfileID:              oldEval.ProfileID,
+		ProfileVersion:         oldEval.ProfileVersion,
+		RuleSetVersion:         oldEval.RuleSetVersion,
+		RulesetContentHash:     oldEval.RulesetContentHash,
+		MeasurementVersion:     oldEval.MeasurementVersion,
 		EngineVersion:          EngineVersion,
 		SupersedesEvaluationID: oldEval.ID,
 		QualityMode:            qualityMode,
@@ -459,8 +469,20 @@ func (s *qualityService) RenewLease(ctx context.Context, evaluationID, execution
 	return s.repo.RenewLease(ctx, evaluationID, executionID, leaseDuration)
 }
 
-func (s *qualityService) ReleaseLease(ctx context.Context, evaluationID string) error {
-	return s.repo.ReleaseLease(ctx, evaluationID)
+func (s *qualityService) ReleaseLease(ctx context.Context, evaluationID, executionID string) (bool, error) {
+	return s.repo.ReleaseLease(ctx, evaluationID, executionID)
+}
+
+func (s *qualityService) RecoverExpiredEvaluation(ctx context.Context, evaluationID, executionID string, now time.Time) (bool, error) {
+	return s.repo.RecoverExpiredEvaluation(ctx, evaluationID, executionID, now)
+}
+
+func (s *qualityService) GetEvaluationRecord(ctx context.Context, evaluationID string) (*QualityEvaluation, error) {
+	return s.repo.GetEvaluation(ctx, evaluationID)
+}
+
+func (s *qualityService) UpdateEvaluationOwned(ctx context.Context, eval *QualityEvaluation, executionID string) (bool, error) {
+	return s.repo.UpdateEvaluationOwned(ctx, eval, executionID)
 }
 
 func (s *qualityService) ListEvaluationsByTask(ctx context.Context, processingTaskID string) ([]*QualityEvaluation, error) {
