@@ -47,6 +47,15 @@ export interface WorkflowCatalogItem {
 }
 export interface WorkflowAIProposal { definition: WorkflowDefinition; summary: string; changes: string[]; warnings: string[] }
 export interface WorkflowAIExplanation { summary: string; flow: string[]; issues: string[]; suggestions: string[] }
+export interface WorkflowRevisionSummary {
+  revisionId: string; workflowId: string; revisionNo: number; name: string; description?: string; definitionHash: string; note?: string; createdAt: string;
+}
+export interface WorkflowTemplateSummary {
+  templateId: string; name: string; description?: string; definitionHash: string; nodeCount: number; triggerCount: number; createdAt: string; updatedAt: string;
+}
+export interface WorkflowExportEnvelope {
+  format: "amitia-workflow"; formatVersion: number; exportedAt: string; workflow: WorkflowDefinition;
+}
 
 export interface WorkflowDefinition {
   schemaVersion: string;
@@ -164,3 +173,33 @@ export async function pauseWorkflowRun(runId: string, reason = "Paused from Crea
 export async function resumeWorkflowRun(runId: string): Promise<void> {
   await apiClient.post(`/api/extensions/workflow-runs/${encodeURIComponent(runId)}/resume`);
 }
+export async function exportWorkflow(id: string): Promise<WorkflowExportEnvelope> {
+  return (await apiClient.get<WorkflowExportEnvelope>(`/api/extensions/workflows/${encodeURIComponent(id)}/export`)).data;
+}
+export async function importWorkflow(payload: unknown): Promise<WorkflowDefinition> {
+  return (await apiClient.post<WorkflowDefinition>("/api/extensions/workflows/import", payload, { headers: { "Content-Type": "application/json" } })).data;
+}
+export async function listWorkflowTemplates(): Promise<WorkflowTemplateSummary[]> {
+  const res = await apiClient.get<{ items: WorkflowTemplateSummary[] }>("/api/extensions/workflows/templates");
+  return res.data.items ?? [];
+}
+export async function saveWorkflowTemplate(id: string, name = "", description = ""): Promise<void> {
+  await apiClient.post(`/api/extensions/workflows/${encodeURIComponent(id)}/templates`, { name, description });
+}
+export async function instantiateWorkflowTemplate(templateId: string, name = ""): Promise<WorkflowDefinition> {
+  return (await apiClient.post<WorkflowDefinition>(`/api/extensions/workflows/templates/${encodeURIComponent(templateId)}/instantiate`, { name })).data;
+}
+export async function deleteWorkflowTemplate(templateId: string): Promise<void> {
+  await apiClient.delete(`/api/extensions/workflows/templates/${encodeURIComponent(templateId)}`);
+}
+export async function listWorkflowRevisions(id: string, limit = 50): Promise<WorkflowRevisionSummary[]> {
+  const res = await apiClient.get<{ items: WorkflowRevisionSummary[] }>(`/api/extensions/workflows/${encodeURIComponent(id)}/revisions`, { params: { limit } });
+  return res.data.items ?? [];
+}
+export async function createWorkflowRevision(id: string, note = ""): Promise<WorkflowRevisionSummary> {
+  return (await apiClient.post<WorkflowRevisionSummary>(`/api/extensions/workflows/${encodeURIComponent(id)}/revisions`, { note })).data;
+}
+export async function rollbackWorkflowRevision(id: string, revisionId: string): Promise<WorkflowDefinition> {
+  return (await apiClient.post<WorkflowDefinition>(`/api/extensions/workflows/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/rollback`)).data;
+}
+
