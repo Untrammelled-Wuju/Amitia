@@ -6,48 +6,21 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  computeFreezeSourceGateHash,
+  verifyFreezeManifest,
+} from "../../scripts/lib/freeze-scope.mjs";
 
+const __filename = fileURLToPath(import.meta.url);
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 export const desktopRoot = resolve(__dirname, "..");
 export const repositoryRoot = resolve(desktopRoot, "..");
 export const releaseDir = resolve(desktopRoot, "release");
 export const releaseGateStampPath = resolve(releaseDir, ".desktop-pet-release-gate.json");
-
-const SOURCE_INPUTS = [
-  "backend",
-  "desktop/src",
-  "desktop/scripts",
-  "desktop/package.json",
-  "desktop/pnpm-lock.yaml",
-  "desktop/pnpm-workspace.yaml",
-  "desktop/electron-builder.yml",
-  "desktop/patches",
-  "desktop/resources/config-template",
-  "front/src",
-  "front/package.json",
-  "front/pnpm-lock.yaml",
-  "mobile_app/lib",
-  "mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider",
-  "mobile_app/pubspec.yaml",
-  "scripts",
-  ".github/workflows",
-  ".tool-versions",
-  "DESKTOP_PET_FINALIZATION_SHA256SUMS.txt",
-];
-
-const EXCLUDED_SOURCE_NAMES = new Set([
-  ".publish-config.json",
-  "node_modules",
-  "dist",
-  "build",
-  "dist-types",
-  ".dart_tool",
-  ".gradle",
-  "__pycache__",
-  ".cache",
-]);
+const coreBuildStampPath = resolve(desktopRoot, "resources/core/.amitiacore-build.json");
+const runtimeAssetsManifestPath = resolve(desktopRoot, "resources/core/.release-runtime-assets.json");
 
 export function sha256Buffer(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
@@ -57,39 +30,8 @@ export function sha256File(filePath) {
   return sha256Buffer(readFileSync(filePath));
 }
 
-function collectFiles(pathValue, result) {
-  const stats = statSync(pathValue);
-  if (stats.isDirectory()) {
-    for (const entry of readdirSync(pathValue, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (EXCLUDED_SOURCE_NAMES.has(entry.name)) continue;
-      if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "build") continue;
-      collectFiles(join(pathValue, entry.name), result);
-    }
-    return;
-  }
-  if (stats.isFile()) result.push(pathValue);
-}
-
-export function computeSourceGateHash() {
-  const files = [];
-  for (const input of SOURCE_INPUTS) {
-    const absolute = resolve(repositoryRoot, input);
-    if (!existsSync(absolute)) {
-      throw new Error(`release source input missing: ${input}`);
-    }
-    collectFiles(absolute, files);
-  }
-  files.sort((a, b) => relative(repositoryRoot, a).localeCompare(relative(repositoryRoot, b)));
-
-  const hash = createHash("sha256");
-  for (const filePath of files) {
-    const rel = relative(repositoryRoot, filePath).replace(/\\/g, "/");
-    hash.update(rel, "utf8");
-    hash.update("\0", "utf8");
-    hash.update(readFileSync(filePath));
-    hash.update("\0", "utf8");
-  }
-  return hash.digest("hex");
+export async function computeSourceGateHash() {
+  return computeFreezeSourceGateHash(repositoryRoot);
 }
 
 export function findReleaseArtifacts(baseDir = releaseDir) {
@@ -106,54 +48,68 @@ export function findReleaseArtifacts(baseDir = releaseDir) {
     );
   }
   return [exe[0], blockmap[0], yml[0]].map((name) => {
-    const path = resolve(baseDir, name);
-    const stats = statSync(path);
+    const filePath = resolve(baseDir, name);
+    const stats = statSync(filePath);
     return {
       name,
-      path,
+      path: filePath,
       bytes: stats.size,
-      sha256: sha256File(path),
+      sha256: sha256File(filePath),
     };
   });
 }
 
-export function verifyPreBuildGates() {
-  const freezeShaPath = resolve(repositoryRoot, "DESKTOP_PET_FINALIZATION_SHA256SUMS.txt");
-  if (!existsSync(freezeShaPath)) {
-    throw new Error("DESKTOP_PET_FINALIZATION_SHA256SUMS.txt missing");
-  }
-
-  const freezeLines = readFileSync(freezeShaPath, "utf8").split("\n");
-  let ok = 0;
-  let fail = 0;
-  for (const line of freezeLines) {
-    if (line.trim() === "") continue;
-    const expectedHash = line.substring(0, 64);
-    const relativePath = line.substring(66);
-    const fullPath = resolve(repositoryRoot, relativePath);
-    if (!existsSync(fullPath)) {
-      throw new Error(`freeze file missing: ${relativePath}`);
-    }
-    const actualHash = sha256File(fullPath);
-    if (actualHash !== expectedHash) {
-      throw new Error(`freeze SHA mismatch: ${relativePath}`);
-    }
-    ok++;
-  }
-
+export async function verifyPreBuildGates() {
+  const freeze = await verifyFreezeManifest(repositoryRoot);
   return {
-    freezeShaVerified: ok,
-    sourceGateHash: computeSourceGateHash(),
+    freezeShaVerified: freeze.count,
+    sourceGateHash: await computeSourceGateHash(),
   };
 }
 
-export function writeReleaseGateStamp() {
+function readCoreBuildStamp() {
+  if (!existsSync(coreBuildStampPath)) {
+    throw new Error("AmitiaCore build stamp missing; build Core from the current frozen source before packaging");
+  }
+  const stamp = JSON.parse(readFileSync(coreBuildStampPath, "utf8"));
+  if (!/^[0-9a-f]{64}$/.test(stamp.CORE_BUILD_SHA256 ?? "")) {
+    throw new Error("AmitiaCore build stamp has an invalid CORE_BUILD_SHA256");
+  }
+  return stamp;
+}
+
+function readRuntimeAssetsManifest() {
+  if (!existsSync(runtimeAssetsManifestPath)) {
+    throw new Error("release runtime assets manifest missing; stage and verify runtime assets before packaging");
+  }
+  const manifest = JSON.parse(readFileSync(runtimeAssetsManifestPath, "utf8"));
+  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.entries) || manifest.entries.length === 0) {
+    throw new Error("release runtime assets manifest is invalid");
+  }
+  for (const entry of manifest.entries) {
+    if (typeof entry.path !== "string" || !/^[0-9a-f]{64}$/.test(entry.sha256 ?? "") || !Number.isInteger(entry.bytes)) {
+      throw new Error(`invalid runtime asset manifest entry: ${entry?.path ?? "unknown"}`);
+    }
+  }
+  return manifest;
+}
+
+export async function writeReleaseGateStamp() {
   const packageJsonPath = resolve(desktopRoot, "package.json");
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
   const artifacts = findReleaseArtifacts();
-  const preBuild = verifyPreBuildGates();
+  const preBuild = await verifyPreBuildGates();
+  const coreBuild = readCoreBuildStamp();
+  const runtimeAssets = readRuntimeAssetsManifest();
+  if (coreBuild.CORE_SOURCE_GATE_SHA256 !== preBuild.sourceGateHash) {
+    throw new Error("AmitiaCore was not built from the currently frozen source; rebuild required");
+  }
+  if (runtimeAssets.sourceGateSha256 !== preBuild.sourceGateHash) {
+    throw new Error("runtime assets were not staged from the currently frozen source; restage required");
+  }
+
   const stamp = {
-    schemaVersion: 2,
+    schemaVersion: 4,
     createdAt: new Date().toISOString(),
     packageVersion: packageJson.version,
     desktopPetRuntimeVersion: packageJson.desktopPetRuntimeVersion,
@@ -161,18 +117,28 @@ export function writeReleaseGateStamp() {
     packageJsonSha256: sha256File(packageJsonPath),
     sourceGateSha256: preBuild.sourceGateHash,
     freezeShaVerified: preBuild.freezeShaVerified,
+    core: {
+      sha256: coreBuild.CORE_BUILD_SHA256,
+      goVersion: coreBuild.CORE_GO_VERSION,
+      commit: coreBuild.CORE_COMMIT,
+      sourceGateSha256: coreBuild.CORE_SOURCE_GATE_SHA256,
+    },
+    runtimeAssets: {
+      sourceGateSha256: runtimeAssets.sourceGateSha256,
+      entries: runtimeAssets.entries,
+    },
     artifacts: artifacts.map(({ name, bytes, sha256 }) => ({ name, bytes, sha256 })),
   };
   writeFileSync(releaseGateStampPath, `${JSON.stringify(stamp, null, 2)}\n`, "utf8");
   return stamp;
 }
 
-export function verifyReleaseGateStamp() {
+export async function verifyReleaseGateStamp() {
   if (!existsSync(releaseGateStampPath)) {
     throw new Error("release gate stamp missing; rebuild with pnpm dist:win");
   }
   const stamp = JSON.parse(readFileSync(releaseGateStampPath, "utf8"));
-  if (stamp.schemaVersion !== 1 && stamp.schemaVersion !== 2) {
+  if (stamp.schemaVersion !== 4) {
     throw new Error(`unsupported release gate stamp schema: ${stamp.schemaVersion}`);
   }
 
@@ -186,9 +152,17 @@ export function verifyReleaseGateStamp() {
     throw new Error("desktop package version changed after release gate; rebuild required");
   }
 
-  const currentSourceHash = computeSourceGateHash();
-  if (currentSourceHash !== stamp.sourceGateSha256) {
-    throw new Error("desktop pet release inputs changed after release gate; rebuild required");
+  const preBuild = await verifyPreBuildGates();
+  if (preBuild.sourceGateHash !== stamp.sourceGateSha256) {
+    throw new Error("release inputs changed after release gate; rebuild required");
+  }
+
+  const runtimeAssets = readRuntimeAssetsManifest();
+  if (runtimeAssets.sourceGateSha256 !== stamp.runtimeAssets?.sourceGateSha256) {
+    throw new Error("runtime asset source gate differs from release gate stamp");
+  }
+  if (JSON.stringify(runtimeAssets.entries) !== JSON.stringify(stamp.runtimeAssets?.entries ?? [])) {
+    throw new Error("runtime asset manifest changed after release gate; rebuild required");
   }
 
   const currentArtifacts = findReleaseArtifacts();
@@ -204,28 +178,29 @@ export function verifyReleaseGateStamp() {
     throw new Error("release artifact set differs from release gate stamp");
   }
 
-  return {
-    stamp,
-    artifacts: currentArtifacts,
-  };
+  return { stamp, artifacts: currentArtifacts };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && resolve(process.argv[1]) === resolve(__filename)) {
   const args = process.argv.slice(2);
-  if (args.includes("--pre-build")) {
-    const result = verifyPreBuildGates();
-    console.log(`[release-integrity] Pre-build gates passed: freeze SHA verified (${result.freezeShaVerified} files), source gate hash computed`);
-    process.exit(0);
-  } else if (args.includes("--verify")) {
-    const result = verifyReleaseGateStamp();
-    console.log(`[release-integrity] Release gate stamp verified: ${result.stamp.packageVersion}`);
-    process.exit(0);
-  } else if (args.includes("--write-stamp")) {
-    const stamp = writeReleaseGateStamp();
-    console.log(`[release-integrity] Release gate stamp written: ${stamp.packageVersion}`);
-    process.exit(0);
-  } else {
-    console.log("Usage: node scripts/release-integrity.mjs [--pre-build|--verify|--write-stamp]");
-    process.exit(1);
+  try {
+    if (args.includes("--pre-build")) {
+      const result = await verifyPreBuildGates();
+      console.log(
+        `[release-integrity] PASS: ${result.freezeShaVerified} canonical freeze entries verified; source gate ${result.sourceGateHash.slice(0, 12)}...`,
+      );
+    } else if (args.includes("--verify")) {
+      const result = await verifyReleaseGateStamp();
+      console.log(`[release-integrity] PASS: release gate stamp verified for ${result.stamp.packageVersion}`);
+    } else if (args.includes("--write-stamp")) {
+      const stamp = await writeReleaseGateStamp();
+      console.log(`[release-integrity] PASS: release gate stamp written for ${stamp.packageVersion}`);
+    } else {
+      console.log("Usage: node scripts/release-integrity.mjs [--pre-build|--verify|--write-stamp]");
+      process.exitCode = 1;
+    }
+  } catch (error) {
+    console.error(`[release-integrity] FAILED: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
   }
 }

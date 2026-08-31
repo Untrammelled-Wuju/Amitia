@@ -1,17 +1,23 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyFreezeManifest } from "../../scripts/lib/freeze-scope.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = process.env.DESKTOP_PET_ARCHIVE_ROOT
   ? path.resolve(process.env.DESKTOP_PET_ARCHIVE_ROOT)
   : path.resolve(scriptDir, "../..");
-const mode = process.env.DESKTOP_PET_ARCHIVE_ROOT ? "archive" : "workspace";
+const archiveSelfVerify = process.env.AMITIA_ARCHIVE_SELF_VERIFY === "1";
+const mode = process.env.DESKTOP_PET_ARCHIVE_ROOT
+  ? "archive-external"
+  : archiveSelfVerify
+    ? "archive-self"
+    : "workspace";
 
 console.log(`Finalization root: ${repoRoot}`);
 console.log(`Mode: ${mode}`);
 
-if (mode === "archive") {
+if (mode === "archive-external") {
   const workspaceRoot = path.resolve(scriptDir, "../..");
   if (repoRoot === workspaceRoot) {
     throw new Error("[verify-desktop-pet-finalization] ARCHIVE root must differ from workspace root. Refusing to run archive gate against workspace.");
@@ -124,7 +130,6 @@ const androidPetRenderer = await read("mobile_app/android/app/src/main/kotlin/co
 const androidCompositionRoot = await read("mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/AndroidNativeCompositionRoot.kt");
 const desktopPetWorkflow = await read(".github/workflows/desktop-pet.yml");
 const sourceGitignore = await read(".gitignore");
-const freezeShaBaseline = await read("DESKTOP_PET_FINALIZATION_SHA256SUMS.txt");
 
 assert(
   runtimeDispatcher.includes("ListCommandsToDispatchForConnection(") &&
@@ -764,51 +769,7 @@ for (const file of await collectFiles("backend/internal/desktoppet", [".go"])) {
   );
 }
 
-const frozenShaPaths = new Set(
-  freezeShaBaseline
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => line.replace(/^[a-f0-9]{64}\s+/, "")),
-);
-const requiredFreezeCoverage = [
-  ...(await collectFiles("backend/internal/desktoppet", [".go", ".json", ".md"])),
-  ...(await collectFiles("backend/internal/deviceruntime", [".go"])),
-  ...(await collectFiles("backend/internal/runtimeprofile", [".go"])),
-  ...(await collectFiles("backend/internal/migration", [".go"])),
-  ...(await collectFiles("backend/cmd/server", [".go"])),
-  ...(await collectFiles("desktop/src/main", [".ts", ".tsx", ".vue"])),
-  ...(await collectFiles("desktop/src/desktop-pet", [".ts", ".tsx", ".vue"])),
-  ...(await collectFiles("desktop/src/preload", [".ts", ".tsx", ".vue"])),
-  ...(await collectFiles("desktop/src/renderer", [".ts", ".tsx", ".vue"])),
-  ...(await collectFiles("desktop/src/shared", [".ts", ".tsx", ".vue"])),
-  ...(await collectFiles("front/src/runtime", [".ts", ".tsx", ".vue"])),
-  ...(await collectFiles("front/src/composables", [".ts", ".tsx", ".vue"])),
-  ...(await collectFiles("front/src/components", [".ts", ".tsx", ".vue"])),
-  ...(await collectFiles("mobile_app/lib/features/desktop_pet", [".dart"])),
-  ...(await collectFiles("mobile_app/lib/core/backend_transport", [".dart"])),
-  ...(await collectFiles(
-    "mobile_app/android/app/src/main/kotlin/com/amitia/amitia_app/nativeprovider/desktoppet",
-    [".kt"],
-  )),
-  path.join(repoRoot, "desktop/vite.config.ts"),
-  path.join(repoRoot, "desktop/src/desktop-pet/animation/__tests__/animation-engine-readiness.test.ts"),
-  path.join(repoRoot, "desktop/src/desktop-pet/animation/__tests__/player-state-machine.test.ts"),
-  path.join(repoRoot, "desktop/src/desktop-pet/runtime/__tests__/runtime-handler-v2.test.ts"),
-  path.join(repoRoot, "desktop/src/main/pet/__tests__/manager.test.ts"),
-  path.join(repoRoot, "desktop/scripts/verify-desktop-pet-finalization.mjs"),
-  path.join(repoRoot, "desktop/scripts/release-integrity.mjs"),
-  path.join(repoRoot, "scripts/audit/verify-source-hygiene.mjs"),
-  path.join(repoRoot, "scripts/pack-source.ps1"),
-];
-for (const file of requiredFreezeCoverage) {
-  const relative = path.relative(repoRoot, file).replaceAll("\\", "/");
-  assert(
-    frozenShaPaths.has(relative),
-    `freeze SHA baseline must cover critical desktop-pet source: ${relative}`,
-  );
-}
-
+await verifyFreezeManifest(repoRoot);
 
 try {
   await fs.lstat(path.join(repoRoot, "desktop/src/shared/runtime-protocol.ts"));
@@ -825,9 +786,10 @@ const forbiddenArtifacts = [
   { paths: [".dart_tool", ".dart_tool/"], description: ".dart_tool" },
   { paths: ["coverage", "coverage/"], description: "coverage" },
   { paths: [".qdrant-initialized"], description: ".qdrant-initialized" },
-  { paths: ["storage/", "storage"], description: "storage/" },
-  { paths: ["surrealdb/", "surrealdb"], description: "surrealdb/" },
-  { paths: ["qdrant/", "qdrant"], description: "qdrant/" },
+  { paths: ["/data/storage/"], description: "/data/storage/" },
+  { paths: ["/runtime/storage/"], description: "/runtime/storage/" },
+  { paths: ["/surrealdb/"], description: "/surrealdb/" },
+  { paths: ["/qdrant/"], description: "/qdrant/" },
 ];
 const gitignoreEntries = sourceGitignore.split("\n").map((l) => l.trim()).filter(Boolean);
 for (const forbidden of forbiddenArtifacts) {
