@@ -577,4 +577,109 @@ class ExtensionService {
     final resp = await _api.get<Map<String, dynamic>>('/api/extensions/runs/$runId');
     return resp;
   }
+
+  // ---- Extension Kernel Workflow V2 ----
+  Future<List<Map<String, dynamic>>> workflows({int limit = 100, int offset = 0}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/workflows',
+      queryParameters: {'limit': limit.clamp(1, 200), 'offset': offset < 0 ? 0 : offset},
+    );
+    final items = resp?['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> createWorkflow(Map<String, dynamic> definition) async {
+    return await _api.post<Map<String, dynamic>>('/api/extensions/workflows', data: definition) ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> getWorkflow(String id) async {
+    return await _api.get<Map<String, dynamic>>('/api/extensions/workflows/${Uri.encodeComponent(id)}') ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> updateWorkflow(String id, Map<String, dynamic> definition) async {
+    return await _api.put<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}',
+          data: definition,
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> patchWorkflow(String id, Map<String, dynamic> patch) async {
+    return await _api.patch<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}',
+          data: patch,
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> duplicateWorkflow(String id) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}/duplicate',
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<void> deleteWorkflow(String id) async {
+    await _api.delete('/api/extensions/workflows/${Uri.encodeComponent(id)}');
+  }
+
+  Future<void> setWorkflowEnabled(String id, bool enabled) async {
+    await _api.post('/api/extensions/workflows/${Uri.encodeComponent(id)}/${enabled ? 'enable' : 'disable'}');
+  }
+
+  Future<Map<String, dynamic>> validateWorkflow(Map<String, dynamic> definition) async {
+    return await _api.post<Map<String, dynamic>>('/api/extensions/workflows/validate', data: definition) ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> runWorkflow(String id, {Map<String, dynamic> input = const {}, bool wait = false}) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}/run',
+          data: {'input': input, 'wait': wait},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> workflowRuns(String id, {int limit = 50, int offset = 0, String status = ''}) async {
+    return await _api.get<Map<String, dynamic>>(
+          '/api/extensions/workflows/${Uri.encodeComponent(id)}/runs',
+          queryParameters: {
+            'limit': limit.clamp(1, 200),
+            'offset': offset < 0 ? 0 : offset,
+            if (status.isNotEmpty) 'status': status,
+          },
+        ) ??
+        <String, dynamic>{'items': <dynamic>[], 'total': 0};
+  }
+
+  Future<Map<String, dynamic>> getWorkflowRun(String runId) async {
+    return await _api.get<Map<String, dynamic>>('/api/extensions/workflow-runs/${Uri.encodeComponent(runId)}') ?? <String, dynamic>{};
+  }
+
+  Future<void> cancelWorkflowRun(String runId) async {
+    await _api.post('/api/extensions/workflow-runs/${Uri.encodeComponent(runId)}/cancel');
+  }
+
+  Future<void> pauseWorkflowRun(String runId, {String reason = 'Paused from Creative Workshop'}) async {
+    await _api.post(
+      '/api/extensions/workflow-runs/${Uri.encodeComponent(runId)}/pause',
+      data: {'reason': reason},
+    );
+  }
+
+  Future<void> resumeWorkflowRun(String runId) async {
+    await _api.post('/api/extensions/workflow-runs/${Uri.encodeComponent(runId)}/resume');
+  }
+
+  Future<Map<String, dynamic>> dispatchWorkflowEvent(
+    String eventType, {
+    Map<String, dynamic> payload = const {},
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/workflows/events/${Uri.encodeComponent(eventType)}',
+          data: payload,
+        ) ??
+        <String, dynamic>{};
+  }
+
 }

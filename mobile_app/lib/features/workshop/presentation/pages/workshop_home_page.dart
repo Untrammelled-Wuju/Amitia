@@ -30,6 +30,14 @@ class WorkshopHomePage extends ConsumerWidget {
               SizedBox(height: AppSpacing.xl),
               _buildEntryCard(
                 context,
+                icon: Icons.account_tree_outlined,
+                title: '工作流',
+                description: '可视化拖拽创建 DAG 工作流，配置触发器并查看节点运行轨迹',
+                onTap: () => context.push(AppRoutes.workshopWorkflows),
+              ),
+              SizedBox(height: AppSpacing.md),
+              _buildEntryCard(
+                context,
                 icon: Icons.psychology_outlined,
                 title: '技能制作',
                 description: '创建和管理 AI 技能，定义输入输出 Schema、测试并安装到系统',
@@ -87,7 +95,7 @@ class WorkshopHomePage extends ConsumerWidget {
           ),
           SizedBox(height: AppSpacing.xs),
           Text(
-            '在这里制作专属技能和桌宠，释放你的创造力',
+            '在这里创建工作流、专属技能和桌宠，释放你的创造力',
             style: TextStyle(
               fontSize: 14,
               color: Colors.white.withValues(alpha: 0.85),
@@ -145,6 +153,7 @@ class WorkshopHomePage extends ConsumerWidget {
 
   Widget _buildTipCard(BuildContext context) {
     final tips = [
+      (Icons.account_tree_outlined, '工作流', '拖拽节点构建 DAG，支持 Trigger、运行追踪与 Kernel 执行'),
       (Icons.lightbulb_outline, '技能制作', '通过描述自动生成结构化 Draft，支持测试和安装'),
       (Icons.animation, '桌宠制作', '上传角色图后自动生成动作帧，支持逐帧审核和编辑'),
     ];
