@@ -325,6 +325,7 @@ func (r *Reconciler) buildReconciledContext(ctx context.Context, userID, charact
 			reconciled.Stable.ActivityKey = activity.ActivityKey
 			reconciled.Stable.ActivitySource = activity.Source
 			reconciled.Stable.ActivityConfidence = activity.Confidence
+			reconciled.Stable.ActivityVersion = activity.Version
 		}
 	}
 
