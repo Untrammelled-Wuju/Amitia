@@ -260,16 +260,13 @@ function attachInteractionListeners(
     api.sendHover(payload);
   };
 
-  const onMouseLeave = (e: MouseEvent) => {
+  const onMouseLeave = () => {
     if (!isHovering) return;
+    // A hover IPC message represents an affirmative hover observation. Sending
+    // (-1, -1) here used to look like another hover to Backend Behavior and
+    // could keep the pet in gesture_hover after the pointer had already left.
+    // The backend gesture lease now expires the last observation naturally.
     isHovering = false;
-    api.sendHover({
-      canvasX: -1,
-      canvasY: -1,
-      screenX: e.screenX,
-      screenY: e.screenY,
-      occurredAt: Date.now(),
-    });
   };
 
   document.addEventListener("click", onClick);
