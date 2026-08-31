@@ -779,6 +779,53 @@ describe("DesktopRuntimeHandlerV2", () => {
     expect(handler.getState()).toBe("disconnected");
     expect(FakeWebSocket.instances).toHaveLength(countBeforeClose);
   });
+
+  it("settles a pending auto-reconnect delay when disconnect cancels it", async () => {
+    const handler = new DesktopRuntimeHandlerV2(
+      {
+        url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
+        bootstrapTicket: "ticket-1",
+        userId: "user-1",
+        deviceId: "device-1",
+        runtimeId: "runtime-1",
+        autoReconnect: true,
+        maxReconnectAttempts: 3,
+        reconnectBaseDelayMs: 60_000,
+        reconnectMaxDelayMs: 60_000,
+      },
+      {
+        onState: () => undefined,
+        onHelloAck: () => undefined,
+        onEvent: () => undefined,
+        onError: () => undefined,
+        onDesiredSync: () => undefined,
+        onCommand: async () => ({
+          commandId: "unused",
+          status: "applied",
+          errorCode: "",
+          errorMessage: "",
+          appliedRevision: 0,
+        }),
+      },
+    );
+    const internal = handler as unknown as {
+      reconnectGeneration: number;
+      reconnectDelayResolve: (() => void) | null;
+      attemptReconnect: (generation: number) => Promise<void>;
+    };
+    internal.reconnectGeneration = 1;
+
+    const reconnect = internal.attemptReconnect(1);
+    await flushAsync();
+    expect(internal.reconnectDelayResolve).not.toBeNull();
+
+    handler.disconnect();
+    await reconnect;
+
+    expect(handler.getState()).toBe("disconnected");
+    expect(internal.reconnectDelayResolve).toBeNull();
+    expect(FakeWebSocket.instances).toHaveLength(0);
+  });
   it("rejects a server envelope from a superseded generation before command execution", async () => {
     const onCommand = vi.fn(async () => ({
       commandId: "cmd-stale",
@@ -929,6 +976,63 @@ describe("DesktopRuntimeHandlerV2", () => {
       .map((env) => (env.payload as { status: string }).status);
     expect(replayStatuses).toEqual(["completed"]);
     handler.disconnect();
+  });
+
+  it("rejects a reused commandId when the command payload differs from the cached execution", async () => {
+    const onCommand = vi.fn(async () => ({
+      commandId: "cmd-replay-mismatch",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 0,
+    }));
+    const { handler, ws } = await connectHandler(onCommand);
+    const expiresAt = futureExpiry();
+
+    ws.message(buildEnvelope(
+      "command",
+      "runtime.command.recenter_once",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      12,
+      {
+        commandId: "cmd-replay-mismatch",
+        commandType: "runtime.command.recenter_once",
+        commandSequence: 46,
+        desiredRevision: 0,
+        expiresAt,
+        payload: { target: "center" },
+      },
+    ));
+    await flushAsync();
+    expect(onCommand).toHaveBeenCalledTimes(1);
+
+    ws.message(buildEnvelope(
+      "command",
+      "runtime.command.recenter_once",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      13,
+      {
+        commandId: "cmd-replay-mismatch",
+        commandType: "runtime.command.recenter_once",
+        commandSequence: 46,
+        desiredRevision: 0,
+        expiresAt,
+        payload: { target: "different" },
+      },
+    ));
+    await flushAsync();
+
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    expect(ws.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(handler.getState()).toBe("disconnected");
   });
 
   it("does not treat the command sequence high-water mark as proof that every lower command ran", async () => {
@@ -1101,6 +1205,53 @@ describe("DesktopRuntimeHandlerV2", () => {
       desiredHash: "sha256:desired-72",
     });
     second.handler.disconnect();
+  });
+
+  it("rejects legacy durable replay entries when desired revision/hash no longer match", async () => {
+    const replayEntries: RuntimeCommandReplayEntry[] = [{
+      commandId: "cmd-legacy-durable",
+      commandSequence: 73,
+      desiredRevision: 73,
+      commandType: "runtime.command.sync_desired_state",
+      desiredHash: "sha256:desired-73",
+      ackStatus: "completed",
+    }];
+    const onCommand = vi.fn(async () => ({
+      commandId: "cmd-legacy-durable",
+      status: "applied" as const,
+      errorCode: "",
+      errorMessage: "",
+      appliedRevision: 73,
+    }));
+    const { handler, ws } = await connectHandler(
+      onCommand,
+      { lastAppliedDesiredRevision: 73, lastProcessedCommandSequence: 73 },
+      {},
+      replayEntries,
+    );
+
+    ws.message(buildEnvelope(
+      "command",
+      "runtime.command.sync_desired_state",
+      "user-1",
+      "device-1",
+      "runtime-1",
+      "session-1",
+      1,
+      18,
+      {
+        commandId: "cmd-legacy-durable",
+        commandType: "runtime.command.sync_desired_state",
+        commandSequence: 73,
+        desiredRevision: 74,
+        payload: { desiredHash: "sha256:desired-74" },
+      },
+    ));
+    await flushAsync();
+
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(ws.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(handler.getState()).toBe("disconnected");
   });
 
 

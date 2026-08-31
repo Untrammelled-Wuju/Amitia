@@ -26,17 +26,18 @@ export class AlphaHitMaskAdapter {
     this.mask = EMPTY_MASK;
   }
 
-  updateHitMask(frame: DecodedFrame): void {
+  updateHitMask(frame: DecodedFrame): boolean {
     if (this.disposed) {
-      return;
+      return false;
     }
     void frame;
     const now = this.now();
     if (now - this.lastUpdateMs < this.throttleMs) {
-      return;
+      return false;
     }
     this.lastUpdateMs = now;
     this.mask = this.surface.captureHitMask();
+    return true;
   }
 
   isOpaque(x: number, y: number, threshold?: number): boolean {

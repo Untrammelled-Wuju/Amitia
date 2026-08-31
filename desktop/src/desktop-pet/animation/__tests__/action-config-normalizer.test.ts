@@ -7,7 +7,7 @@ function makePackageSnapshot(overrides?: Partial<PackagePlaybackSnapshot>): Pack
   return {
     packageId: "test-pkg",
     packageRevision: 1,
-    schemaVersion: 2,
+    schemaVersion: 1,
     canvas: { width: 256, height: 256 },
     defaultActionKey: "idle",
     actions: [
@@ -85,6 +85,30 @@ describe("normalizeActionConfig", () => {
       expect(result.frames[2].resourceUrl).toBe("frame_2.png");
       expect(result.frames[3].index).toBe(3);
       expect(result.frames[3].resourceUrl).toBe("frame_3.png");
+    });
+
+    it("schema v2 accepts fully identified frames and normalized anchor", () => {
+      const result = normalizeActionConfig({
+        raw: makeRawConfig({
+          anchor: { type: "bottom_center", x: 0.5, y: 1, coordinateSpace: "normalized_canvas" },
+          frames: [0, 1, 2, 3].map((index) => ({
+            index,
+            file: `frame_${index}.png`,
+            frameId: `idle-frame-${index}`,
+            assetId: `asset-${index}`,
+            contentHash: `sha256:frame-${index}`,
+          })),
+        }),
+        packageSnapshot: makePackageSnapshot({ schemaVersion: 2 }),
+      });
+
+      expect(result.frames).toHaveLength(4);
+      expect(result.frames[0]).toMatchObject({
+        frameId: "idle-frame-0",
+        assetId: "asset-0",
+        contentHash: "sha256:frame-0",
+      });
+      expect(result.anchor).toEqual({ type: "bottom_center", x: 0.5, y: 1 });
     });
 
     it("对象帧使用每帧独立 durationMs", () => {
