@@ -583,3 +583,115 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     );
   }
 }
+
+class AmitiaCharacterCard extends StatelessWidget {
+  final String name;
+  final String status;
+  final String identity;
+  final String avatarInitial;
+  final String avatarColor;
+  final String mood;
+  final String lastActive;
+  final VoidCallback? onTap;
+
+  const AmitiaCharacterCard({
+    super.key,
+    required this.name,
+    required this.status,
+    required this.identity,
+    required this.avatarInitial,
+    required this.avatarColor,
+    this.mood = '',
+    this.lastActive = '',
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: context.surfacePrimary,
+          borderRadius: AppRadius.brMedium,
+          border: Border.all(color: context.borderPrimary, width: 0.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: _parseColor(avatarColor),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  avatarInitial.isNotEmpty ? avatarInitial : '?',
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: AppTypography.cardTitle(context)),
+                  const SizedBox(height: 2),
+                  Text(
+                    identity,
+                    style: AppTypography.label(context),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (status.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(status, style: AppTypography.statusLabel(context)),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (lastActive.isNotEmpty)
+                  Text(lastActive, style: AppTypography.statusLabel(context)),
+                if (mood.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(mood, style: AppTypography.label(context)),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _parseColor(String hex) {
+    try {
+      var value = hex.trim().replaceFirst('#', '');
+      if (value.length == 6) value = 'FF$value';
+      final parsed = int.tryParse(value, radix: 16);
+      return parsed == null ? context.accentPrimary : Color(parsed);
+    } catch (_) {
+      return context.accentPrimary;
+    }
+  }
+}

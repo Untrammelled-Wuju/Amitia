@@ -104,10 +104,6 @@ abstract final class UINavigationRegistry {
     if (snapshot == null) return _sorted(items);
     final platform = currentUIPlatform();
 
-    // Navigation items are registry contributions: every enabled compatible
-    // provider may add items. app.navigation selection still controls the whole
-    // navigation surface through UIProviderHost; it does not suppress other
-    // providers' item contributions.
     final sources = snapshot.providers
         .where((provider) =>
             provider.enabled &&
@@ -122,8 +118,6 @@ abstract final class UINavigationRegistry {
         return priority != 0 ? priority : a.providerId.compareTo(b.providerId);
       });
 
-    final effectiveRoutes = effectiveProviderRouteKeys(snapshot);
-    final effectiveExtensionRoutes = effectiveExtensionRouteKeys(snapshot);
     final seenIds = <String>{};
     for (final provider in sources) {
       final raw = provider.metadata['navigationItems'];
@@ -138,16 +132,10 @@ abstract final class UINavigationRegistry {
         if (id.isEmpty ||
             label.isEmpty ||
             !route.startsWith('/') ||
-            route == '/') {
+            route == '/' ||
+            !seenIds.add(compositeId)) {
           continue;
         }
-        if (provider.capability == UICapability.routeRegistry) {
-          if (!effectiveRoutes.contains('${provider.providerId}\u0000$route')) continue;
-        } else if (!isProtectedProviderRoutePath(route) &&
-            !effectiveExtensionRoutes.contains('${provider.extensionId}\u0000$route')) {
-          continue;
-        }
-        if (!seenIds.add(compositeId)) continue;
         final rawOrder = row['order'];
         final rawPrefixes = row['routePrefixes'] ?? row['match'];
         final baseIcon = UIIconRegistry.iconFromName((row['icon'] ?? 'extension').toString());
