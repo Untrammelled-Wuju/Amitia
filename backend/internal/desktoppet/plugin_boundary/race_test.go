@@ -52,10 +52,19 @@ func TestRace_DisableVsAction(t *testing.T) {
 	disableWG.Wait()
 	validateWG.Wait()
 
-	if atomic.LoadInt32(&invalidDuringDisable) < 0 {
-		t.Error("saw inconsistent state")
+	observedInvalid := atomic.LoadInt32(&invalidDuringDisable)
+	if observedInvalid < 0 || observedInvalid > 50 {
+		t.Fatalf("invalid observation count out of range: %d", observedInvalid)
 	}
-	_ = invalidDuringDisable
+	for i := 0; i < 50; i++ {
+		c := makeContrib(string(ext), "c"+string(rune('a'+i%26))+string(rune('0'+i/26)), domain.ContributionKindDesktopPetPlugin, map[string]any{
+			"actionKey":   "act" + string(rune('a'+i%26)) + string(rune('0'+i/26)),
+			"displayName": "Action",
+		})
+		if bound.IsExecutable(ContributionRefFromDefinition(c)) {
+			t.Fatalf("contribution %d remained executable after disable completed", i)
+		}
+	}
 }
 
 func TestRace_UninstallVsAction(t *testing.T) {
@@ -96,7 +105,17 @@ func TestRace_UninstallVsAction(t *testing.T) {
 
 	<-done
 	wg.Wait()
-	_ = executableSeen
+	observedExecutable := atomic.LoadInt32(&executableSeen)
+	if observedExecutable < 0 || observedExecutable > 50 {
+		t.Fatalf("executable observation count out of range: %d", observedExecutable)
+	}
+	for i := 0; i < 50; i++ {
+		id := "c" + string(rune('a'+i%26)) + string(rune('0'+i/26))
+		ref := ContributionRef{ExtensionID: ext, PluginID: domain.ContributionID(id), ContributionID: id}
+		if rec.IsExecutable(ref) {
+			t.Fatalf("contribution %s remained executable after detach completed", id)
+		}
+	}
 }
 
 func TestRace_ConcurrentReconcile_NoDuplicates(t *testing.T) {
