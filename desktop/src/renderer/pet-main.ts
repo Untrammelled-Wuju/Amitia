@@ -418,9 +418,9 @@ async function main(): Promise<void> {
       sendSnapshotIfChanged(api, engine, true);
     } else if (event.type === "playback.frame_presented") {
       scheduleFrameSnapshot(api, engine);
-      hitMaskAdapter.updateHitMask(hitMaskPlaceholderFrame);
+      const hitMaskUpdated = hitMaskAdapter.updateHitMask(hitMaskPlaceholderFrame);
       const mask = hitMaskAdapter.getMask();
-      if (mask.width > 0 && mask.height > 0) {
+      if (hitMaskUpdated && mask.width > 0 && mask.height > 0) {
         maskRevision += 1;
         const hitMaskPayload: PetHitMaskPayload = {
           width: mask.width,
