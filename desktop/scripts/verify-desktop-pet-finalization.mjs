@@ -54,6 +54,14 @@ function assert(condition, message) {
 }
 
 const manager = await read("desktop/src/main/pet/manager.ts");
+const actionScheduler = await read("desktop/src/main/pet/action-scheduler.ts");
+const qualityRepository = await read("backend/internal/desktoppet/quality/repository.go");
+const qualityWorker = await read("backend/internal/desktoppet/quality/worker/worker.go");
+const qualityService = await read("backend/internal/desktoppet/quality/service.go");
+const qualityEngine = await read("backend/internal/desktoppet/quality/engine.go");
+const qualityCommitter = await read("backend/internal/desktoppet/quality/writeback/committer.go");
+const qualityRecovery = await read("backend/internal/desktoppet/quality/recovery/recovery_worker.go");
+const qualityHandler = await read("backend/internal/desktoppet/quality/handler.go");
 const deploymentLifecycle = await read("desktop/src/main/deployment-lifecycle.ts");
 const viteConfig = await read("desktop/vite.config.ts");
 const copyStaticAssets = await read("desktop/scripts/copy-static-assets.mjs");
@@ -176,6 +184,55 @@ assert(
     manager.includes("replayEntries: this.runtimeCommandReplayEntries") &&
     manager.includes("handler.getReplayEntries()"),
   "Electron manager must preserve terminal command replay results across runtime handler replacement",
+);
+
+assert(
+  manager.includes("if (this.bridgeReconnectTimer) return;") &&
+    manager.includes("this.bridgeReconnectAttempts += 1"),
+  "Runtime V2 bridge reconnect must coalesce duplicate failure signals before incrementing backoff attempts",
+);
+assert(
+  !actionScheduler.includes("idleRepeatCount") &&
+    actionScheduler.includes("lastIdlePlaybackKey") &&
+    actionScheduler.includes("consecutiveIdlePlaybackCount") &&
+    actionScheduler.includes("this.recordPlaybackStarted(current)") &&
+    actionScheduler.includes("this.recordPlaybackStarted(submitted.request)"),
+  "random idle repeat limiting must count Renderer-confirmed consecutive playback, not process-lifetime submissions",
+);
+assert(
+  qualityRepository.includes('Where("id = ? AND execution_id = ?", ev.ID, executionID)') &&
+    qualityRepository.includes('Where("id = ? AND execution_id = ?", evaluationID, executionID)') &&
+    qualityRepository.includes("RecoverExpiredEvaluation(ctx context.Context, evaluationID, executionID string") &&
+    qualityRepository.includes('Where("execution_status = ? AND is_active = ?", string(EvalSucceeded), true)'),
+  "quality evaluation writes, lease release/recovery, and active reads must be execution/active fenced",
+);
+assert(
+  qualityWorker.includes("w.executeEvaluation(evalCtx, eval, req)") &&
+    qualityWorker.includes("context.WithoutCancel(ctx)") &&
+    qualityWorker.includes("w.flushOutbox(cleanupCtx)") &&
+    qualityWorker.includes("w.recoveryWorker.Start(ctx)"),
+  "quality worker execution must inherit lifecycle cancellation and wire recovery/outbox reliability",
+);
+assert(
+  qualityService.includes("ActionContentHash:      oldEval.ActionContentHash") &&
+    qualityService.includes("ProcessingRevisionID:   oldEval.ProcessingRevisionID") &&
+    qualityService.includes("ProfileID:              oldEval.ProfileID") &&
+    qualityService.includes("RuleSetVersion:         oldEval.RuleSetVersion"),
+  "quality reevaluation must preserve immutable source/profile/ruleset identity",
+);
+assert(
+  qualityEngine.includes("if ex.committer == nil") &&
+    qualityCommitter.includes("txRepo.UpdateEvaluationOwned(ctx, ev, req.ExecutionID)") &&
+    qualityCommitter.includes("txRepo.CreateOutboxEvent(ctx, outboxRecord)") &&
+    qualityCommitter.includes("stale source revision skipped activation") &&
+    qualityRecovery.includes("var event quality.QualityOutboxEvent") &&
+    qualityRecovery.includes("event.ExecutionID"),
+  "quality terminal commit must be owner-fenced with a transactional, correctly decoded single completion outbox",
+);
+assert(
+  qualityHandler.includes("errors.Is(err, io.EOF)") &&
+    qualityHandler.includes('"INVALID_JSON"'),
+  "quality reevaluation API must reject malformed JSON while allowing an intentionally empty body",
 );
 
 const tickReducerStart = animationPlayerState.indexOf('case "TICK"');
