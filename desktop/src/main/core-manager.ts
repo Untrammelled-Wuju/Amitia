@@ -43,7 +43,6 @@ export function ensureDataAndConfig(): { ok: boolean; errors: string[] } {
   const dataDir = ensureAmitiaDataDir();
   ensureDefaultConfig(dataDir);
   ensureLocalToken(dataDir);
-  ensureInitialSQL(dataDir);
   ensureCoreBinaries(dataDir);
   const validation = validateCorePrerequisites(dataDir, getCorePath());
   return { ok: validation.ok, errors: validation.missing };
@@ -55,7 +54,6 @@ export function ensureCorePrerequisites(profile: BundledCoreProfile): { ok: bool
   ensureLocalToken(dataDir);
 
   if (profile === "local") {
-    ensureInitialSQL(dataDir);
     ensureCoreBinaries(dataDir);
     const validation = validateCorePrerequisites(dataDir, getCorePath());
     return { ok: validation.ok, errors: validation.missing };
@@ -315,23 +313,6 @@ function ensureLocalToken(dataDir: string): void {
   const token = randomBytes(32).toString("base64url");
   fs.writeFileSync(tokenFile, token, { mode: 0o600 });
   console.log("[CoreManager] 本地安全令牌已生成");
-}
-
-function ensureInitialSQL(dataDir: string): void {
-  const destSQL = path.join(dataDir, "data", "sql.sql");
-  if (fs.existsSync(destSQL)) {
-    console.log("[CoreManager] sql.sql已存在, 跳过复制:", destSQL);
-    return;
-  }
-  const resourcesPath = getCoreResourcesPath();
-  const sourceSQL = path.join(resourcesPath, "data", "sql.sql");
-  console.log("[CoreManager] sql.sql资源路径:", sourceSQL);
-  if (fs.existsSync(sourceSQL)) {
-    fs.copyFileSync(sourceSQL, destSQL);
-    console.log("[CoreManager] sql.sql已复制到:", destSQL);
-  } else {
-    console.error("[CoreManager] sql.sql资源不存在:", sourceSQL);
-  }
 }
 
 function ensureCoreBinaries(dataDir: string): void {

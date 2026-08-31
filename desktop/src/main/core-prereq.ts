@@ -13,7 +13,6 @@ export function validateCorePrerequisites(
   const required = [
     { label: "Core可执行文件", file: corePath },
     { label: "配置文件", file: path.join(dataDir, "config", "config.yml") },
-    { label: "数据库初始化脚本", file: path.join(dataDir, "data", "sql.sql") },
     {
       label: "Qdrant向量数据库",
       file: path.join(dataDir, "qdrant", "qdrant.zip"),
