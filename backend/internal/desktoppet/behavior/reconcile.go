@@ -18,6 +18,8 @@ type InteractionSnapshot struct {
 	Phase          string
 	StatusVersion  int64
 	ConversationID string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type NoopStateSourceQuery struct{}
@@ -134,12 +136,27 @@ func (r *Reconciler) ReconcileCharacter(ctx context.Context, userID, characterID
 		}, nil
 	}
 
-	decision, err := r.arbiter.ResolveStableRecovery(&reconciledCtx, activePet)
+	recoveryEvent := BehaviorEventEnvelope{
+		EventID:       "reconcile:" + UUIDNew(),
+		EventType:     "system.reconcile",
+		SchemaVersion: 1,
+		OccurredAt:    now,
+		ReceivedAt:    now,
+		UserID:        userID,
+		CharacterID:   characterID,
+		Origin:        OriginSystem,
+	}
+	recoveryEvent.DedupKey = recoveryEvent.EventID
+	candidates, err := r.resolver.Resolve(&reconciledCtx, recoveryEvent, activePet)
+	if err != nil {
+		return nil, err
+	}
+	decision, err := r.arbiter.Arbitrate(&reconciledCtx, candidates, activePet, activePet.RuntimeOnline)
 	if err != nil {
 		return nil, err
 	}
 	if decision == nil {
-		return nil, NewBehaviorError(ErrCodeRulesetInvalid, "stable recovery returned nil decision")
+		return nil, NewBehaviorError(ErrCodeRulesetInvalid, "recovery arbitration returned nil decision")
 	}
 	if decision.DecisionID == "" {
 		decision.DecisionID = UUIDNew()
@@ -153,6 +170,9 @@ func (r *Reconciler) ReconcileCharacter(ctx context.Context, userID, characterID
 	}
 	if decision.CreatedAt.IsZero() {
 		decision.CreatedAt = now
+	}
+	if decision.Status == DecisionStatusSelected && decision.ReasonCode == "selected" {
+		decision.ReasonCode = "reconcile_recovery"
 	}
 
 	if r.repo != nil {
@@ -170,7 +190,7 @@ func (r *Reconciler) ReconcileCharacter(ctx context.Context, userID, characterID
 				now := r.clock.Now()
 				decision.Status = DecisionStatusFailed
 				decision.CompletedAt = &now
-				if decision.ReasonCode == "" || decision.ReasonCode == "stable_recovery" || decision.ReasonCode == "fallback_idle" {
+				if decision.ReasonCode == "" || decision.ReasonCode == "stable_recovery" || decision.ReasonCode == "fallback_idle" || decision.ReasonCode == "reconcile_recovery" {
 					decision.ReasonCode = behaviorProcessingErrorCode(err)
 				}
 				if persistErr := r.repo.UpdateDecisionOutcome(ctx, *decision); persistErr != nil {
@@ -211,6 +231,9 @@ func (r *Reconciler) rebuildAndPersistContext(ctx context.Context, userID, chara
 		if err != nil {
 			return BehaviorContextSnapshot{}, err
 		}
+		if err := r.alignForegroundWithRuntime(ctx, &reconciled, activePet); err != nil {
+			return BehaviorContextSnapshot{}, err
+		}
 		if activePet == nil || !activePet.RuntimeOnline {
 			applyStableDesiredState(&reconciled)
 		}
@@ -229,6 +252,61 @@ func (r *Reconciler) rebuildAndPersistContext(ctx context.Context, userID, chara
 		}
 	}
 	return BehaviorContextSnapshot{}, NewBehaviorError(ErrCodeContextConflict, "reconcile context CAS retries exhausted")
+}
+
+func (r *Reconciler) alignForegroundWithRuntime(ctx context.Context, snapshot *BehaviorContextSnapshot, activePet *ActivePetSnapshot) error {
+	if snapshot == nil {
+		return nil
+	}
+
+	// Foreground is a cache of physical playback truth. If the runtime is not
+	// online, or cannot identify a concrete pet instance, the persisted value is
+	// necessarily stale and must not block recovery arbitration.
+	if activePet == nil || !activePet.RuntimeOnline || activePet.PetInstanceID == "" {
+		snapshot.Foreground = ForegroundActionState{}
+		return nil
+	}
+
+	if r.runtimePort == nil {
+		// Without a playback query there is no authoritative evidence that a
+		// persisted foreground action is still running. Prefer a fresh recovery
+		// decision over suppressing it as a duplicate.
+		snapshot.Foreground = ForegroundActionState{}
+		return nil
+	}
+
+	playback, err := r.runtimePort.QueryPlayback(ctx, activePet.PetInstanceID)
+	if err != nil {
+		return fmt.Errorf("query reconcile playback: %w", err)
+	}
+	if playback == nil || !playback.RuntimeOnline || !playback.IsPlaying || playback.CurrentActionKey == "" {
+		snapshot.Foreground = ForegroundActionState{}
+		return nil
+	}
+
+	// If the persisted foreground still describes the action the runtime says is
+	// physically playing, keep its semantic/interruptibility metadata so the
+	// arbiter can correctly avoid a duplicate restart.
+	if snapshot.Foreground.ActionKey == playback.CurrentActionKey {
+		if playback.CurrentDecisionID != "" {
+			snapshot.Foreground.DecisionID = playback.CurrentDecisionID
+		}
+		if playback.StartedAt != nil {
+			snapshot.Foreground.StartedAt = playback.StartedAt
+		}
+		return nil
+	}
+
+	// Runtime truth and persisted foreground disagree. Preserve only what can be
+	// proven from the runtime snapshot and allow recovery arbitration to replace
+	// it if a higher-priority interaction/voice/tool state requires another action.
+	snapshot.Foreground = ForegroundActionState{
+		DecisionID:    playback.CurrentDecisionID,
+		ActionKey:     playback.CurrentActionKey,
+		StartedAt:     playback.StartedAt,
+		Interruptible: true,
+	}
+	return nil
 }
 
 func applyStableDesiredState(ctx *BehaviorContextSnapshot) {
@@ -261,15 +339,25 @@ func (r *Reconciler) buildReconciledContext(ctx context.Context, userID, charact
 	}
 	if len(interactions) > 0 {
 		latest := interactions[0]
-		for _, interaction := range interactions {
-			if interaction.StatusVersion > latest.StatusVersion {
+		for _, interaction := range interactions[1:] {
+			if interaction.CreatedAt.After(latest.CreatedAt) ||
+				(interaction.CreatedAt.Equal(latest.CreatedAt) && interaction.UpdatedAt.After(latest.UpdatedAt)) ||
+				(interaction.CreatedAt.Equal(latest.CreatedAt) && interaction.UpdatedAt.Equal(latest.UpdatedAt) && interaction.StatusVersion > latest.StatusVersion) {
 				latest = interaction
 			}
 		}
+		startedAt := latest.CreatedAt
+		if startedAt.IsZero() {
+			startedAt = latest.UpdatedAt
+		}
 		reconciled.Transient = TransientBehaviorState{
-			InteractionID:    latest.InteractionID,
-			InteractionPhase: latest.Phase,
-			StatusVersion:    latest.StatusVersion,
+			InteractionID:        latest.InteractionID,
+			InteractionPhase:     latest.Phase,
+			InteractionStartedAt: startedAt,
+			StatusVersion:        latest.StatusVersion,
+			ProactiveID:          reconciled.Transient.ProactiveID,
+			ProactiveIntent:      reconciled.Transient.ProactiveIntent,
+			TemporaryEmotion:     reconciled.Transient.TemporaryEmotion,
 		}
 	} else if reconciled.Transient.InteractionPhase != "completed" && reconciled.Transient.InteractionPhase != "failed" && reconciled.Transient.InteractionPhase != "cancelled" {
 		if reconciled.Transient.InteractionPhase != "" {

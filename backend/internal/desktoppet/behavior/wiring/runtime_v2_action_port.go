@@ -278,16 +278,29 @@ func (a *V2RuntimeActionAdapter) QueryPlayback(ctx context.Context, petInstanceI
 		return snapshot, err
 	}
 
-	for _, state := range states {
-		snapshot.RuntimeOnline = true
-		if state.CurrentActionKey != "" {
-			snapshot.CurrentActionKey = state.CurrentActionKey
-			snapshot.IsPlaying = true
-			break
-		}
+	if len(states) == 0 {
+		return snapshot, nil
+	}
+
+	// ListByRuntime is ordered newest-first. Only the newest state is physical
+	// truth; scanning older rows can resurrect a stale action after reconnect.
+	state := states[0]
+	snapshot.RuntimeOnline = true
+	if runtimePlaybackStatusOccupiesForeground(state.PlaybackStatus) && state.CurrentActionKey != "" {
+		snapshot.CurrentActionKey = state.CurrentActionKey
+		snapshot.IsPlaying = true
 	}
 
 	return snapshot, nil
+}
+
+func runtimePlaybackStatusOccupiesForeground(status string) bool {
+	switch status {
+	case runtimev2.PlaybackStatusPlaying, runtimev2.PlaybackStatusHolding, runtimev2.PlaybackStatusPaused:
+		return true
+	default:
+		return false
+	}
 }
 
 var _ behavior.RuntimeActionPort = (*V2RuntimeActionAdapter)(nil)

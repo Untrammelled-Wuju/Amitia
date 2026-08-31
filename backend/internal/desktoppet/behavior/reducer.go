@@ -82,21 +82,60 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		}
 
 	case "chat.response.completed", "interaction.completed":
-		changed = r.reduceResponseCompleted(&next, event)
-		if changed {
+		phaseChanged, toolsChanged := r.reduceResponseCompleted(&next, event)
+		if phaseChanged {
+			// The single visual transient slot may have hidden an older concurrent
+			// interaction. Once the foreground interaction terminates, rebuild from
+			// authoritative interaction state so the newest still-active interaction
+			// is promoted immediately instead of remaining invisible until restart.
+			result.NeedsSnapshotSync = true
+		}
+		toolVisualChanged := toolsChanged && interactionToolsAffectVisual(&next, event.InteractionID)
+		changed = phaseChanged || toolVisualChanged
+		contextOnlyChanged = toolsChanged && !toolVisualChanged
+		if phaseChanged {
 			layersChanged = append(layersChanged, "transient", "foreground")
+		}
+		if toolsChanged {
+			layersChanged = appendLayerOnce(layersChanged, "activeTools")
 		}
 
 	case "chat.response.failed", "interaction.failed":
-		changed = r.reduceResponseFailed(&next, event)
-		if changed {
-			layersChanged = append(layersChanged, "transient", "activeTools", "foreground")
+		phaseChanged, toolsChanged := r.reduceResponseFailed(&next, event)
+		if phaseChanged {
+			// The single visual transient slot may have hidden an older concurrent
+			// interaction. Once the foreground interaction terminates, rebuild from
+			// authoritative interaction state so the newest still-active interaction
+			// is promoted immediately instead of remaining invisible until restart.
+			result.NeedsSnapshotSync = true
+		}
+		toolVisualChanged := toolsChanged && interactionToolsAffectVisual(&next, event.InteractionID)
+		changed = phaseChanged || toolVisualChanged
+		contextOnlyChanged = toolsChanged && !toolVisualChanged
+		if phaseChanged {
+			layersChanged = append(layersChanged, "transient", "foreground")
+		}
+		if toolsChanged {
+			layersChanged = appendLayerOnce(layersChanged, "activeTools")
 		}
 
 	case "chat.response.cancelled", "interaction.cancelled":
-		changed = r.reduceResponseCancelled(&next, event)
-		if changed {
-			layersChanged = append(layersChanged, "transient", "activeTools", "foreground")
+		phaseChanged, toolsChanged := r.reduceResponseCancelled(&next, event)
+		if phaseChanged {
+			// The single visual transient slot may have hidden an older concurrent
+			// interaction. Once the foreground interaction terminates, rebuild from
+			// authoritative interaction state so the newest still-active interaction
+			// is promoted immediately instead of remaining invisible until restart.
+			result.NeedsSnapshotSync = true
+		}
+		toolVisualChanged := toolsChanged && interactionToolsAffectVisual(&next, event.InteractionID)
+		changed = phaseChanged || toolVisualChanged
+		contextOnlyChanged = toolsChanged && !toolVisualChanged
+		if phaseChanged {
+			layersChanged = append(layersChanged, "transient", "foreground")
+		}
+		if toolsChanged {
+			layersChanged = appendLayerOnce(layersChanged, "activeTools")
 		}
 
 	case "delivery.started":
@@ -372,7 +411,8 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		}
 	}
 
-	contextChanged := changed || contextOnlyChanged || sequenceAdvanced
+	dedupRecorded := appendRecentEventKey(&next, event)
+	contextChanged := changed || contextOnlyChanged || sequenceAdvanced || dedupRecorded
 	result.ContextChanged = contextChanged
 	result.LayersChanged = layersChanged
 	// Advancing only the source sequence is persistence metadata, not a reason
@@ -426,11 +466,52 @@ func behaviorSourceSequenceKey(event BehaviorEventEnvelope) string {
 	return "runtime:" + streamID
 }
 
+func behaviorEventIdentity(event BehaviorEventEnvelope) string {
+	key := event.DedupKey
+	if key == "" {
+		key = event.EventID
+		// EventID is normally globally unique, but direct reducer/simulation
+		// callers may reuse an ID while still supplying an authoritative source
+		// sequence. Preserve the sequence fence instead of collapsing distinct
+		// source events into one fallback identity.
+		if key != "" && event.Sequence > 0 {
+			key += "\x00s" + intToStr(event.Sequence)
+		}
+	}
+	if key == "" || event.EventType == "" {
+		return ""
+	}
+	return event.EventType + "\x00" + key
+}
+
 func (r *Reducer) isDuplicateEvent(ctx BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
-	for _, rec := range ctx.RecentSemantics {
-		_ = rec
+	identity := behaviorEventIdentity(event)
+	if identity == "" {
+		return false
+	}
+	for _, recent := range ctx.RecentEventKeys {
+		if recent == identity {
+			return true
+		}
 	}
 	return false
+}
+
+func appendRecentEventKey(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
+	identity := behaviorEventIdentity(event)
+	if identity == "" {
+		return false
+	}
+	for _, recent := range ctx.RecentEventKeys {
+		if recent == identity {
+			return false
+		}
+	}
+	ctx.RecentEventKeys = append(ctx.RecentEventKeys, identity)
+	if len(ctx.RecentEventKeys) > MaxRecentEventKeys {
+		ctx.RecentEventKeys = append([]string(nil), ctx.RecentEventKeys[len(ctx.RecentEventKeys)-MaxRecentEventKeys:]...)
+	}
+	return true
 }
 
 func appendLayerOnce(layers []string, layer string) []string {
@@ -482,27 +563,127 @@ func phaseRank(phase string) int {
 	return rank
 }
 
+func isTerminalInteractionPhase(phase string) bool {
+	switch phase {
+	case "completed", "failed", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
+func interactionEventTime(event BehaviorEventEnvelope) time.Time {
+	if !event.OccurredAt.IsZero() {
+		return event.OccurredAt
+	}
+	return event.ReceivedAt
+}
+
+func clearInteractionState(ctx *BehaviorContextSnapshot) {
+	ctx.Transient.InteractionID = ""
+	ctx.Transient.InteractionPhase = ""
+	ctx.Transient.InteractionStartedAt = time.Time{}
+	ctx.Transient.StatusVersion = 0
+}
+
+func clearToolsForInteraction(ctx *BehaviorContextSnapshot, interactionID string) bool {
+	if interactionID == "" {
+		return false
+	}
+	changed := false
+	for opID, tool := range ctx.ActiveTools {
+		if tool.InteractionID == interactionID {
+			delete(ctx.ActiveTools, opID)
+			changed = true
+		}
+	}
+	return changed
+}
+
+func shouldAdoptReceivedInteraction(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
+	if event.InteractionID == "" {
+		return false
+	}
+	if ctx.Transient.InteractionID == "" {
+		return true
+	}
+	if ctx.Transient.InteractionID == event.InteractionID {
+		return phaseRank(ctx.Transient.InteractionPhase) <= phaseRank("received")
+	}
+
+	candidateStartedAt := interactionEventTime(event)
+	currentStartedAt := ctx.Transient.InteractionStartedAt
+	// Legacy snapshots do not carry InteractionStartedAt. A newly received
+	// interaction is the only reliable foreground authority in that case.
+	if currentStartedAt.IsZero() {
+		return true
+	}
+	if candidateStartedAt.IsZero() {
+		return false
+	}
+	return !candidateStartedAt.Before(currentStartedAt)
+}
+
+func applyInteractionPhase(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope, target string, statusVersion int64) bool {
+	if event.InteractionID == "" {
+		return false
+	}
+	if ctx.Transient.InteractionID == "" {
+		ctx.Transient.InteractionID = event.InteractionID
+		ctx.Transient.InteractionStartedAt = interactionEventTime(event)
+	} else if ctx.Transient.InteractionID != event.InteractionID {
+		// Only a received event is allowed to select a new foreground interaction.
+		// Later lifecycle events from an older concurrent conversation must never
+		// steal the single visual transient slot.
+		return false
+	}
+
+	currentRank := phaseRank(ctx.Transient.InteractionPhase)
+	targetRank := phaseRank(target)
+	if isTerminalInteractionPhase(ctx.Transient.InteractionPhase) {
+		return false
+	}
+	if statusVersion > 0 && ctx.Transient.StatusVersion > 0 && statusVersion <= ctx.Transient.StatusVersion {
+		return false
+	}
+	if currentRank > targetRank {
+		return false
+	}
+	if currentRank == targetRank && ctx.Transient.InteractionPhase == target {
+		if statusVersion <= 0 || statusVersion <= ctx.Transient.StatusVersion {
+			return false
+		}
+	}
+
+	ctx.Transient.InteractionPhase = target
+	if ctx.Transient.InteractionStartedAt.IsZero() {
+		ctx.Transient.InteractionStartedAt = interactionEventTime(event)
+	}
+	if statusVersion > 0 {
+		ctx.Transient.StatusVersion = statusVersion
+	}
+	return true
+}
+
 func (r *Reducer) reduceChatMessageReceived(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
 	statusVersion, _ := payload["interactionStatusVersion"].(float64)
 	sv := int64(statusVersion)
 
-	if ctx.Transient.InteractionID != "" && ctx.Transient.InteractionID != event.InteractionID {
-		if phaseRank(ctx.Transient.InteractionPhase) >= phaseRank("completed") {
-			ctx.Transient = TransientBehaviorState{}
-		}
-	}
-
-	if phaseRank(ctx.Transient.InteractionPhase) > phaseRank("received") {
+	if !shouldAdoptReceivedInteraction(ctx, event) {
 		return false
 	}
 
+	if ctx.Transient.InteractionID != event.InteractionID {
+		clearInteractionState(ctx)
+	}
 	ctx.Transient.InteractionID = event.InteractionID
 	ctx.Transient.InteractionPhase = "received"
+	ctx.Transient.InteractionStartedAt = interactionEventTime(event)
 	if sv > 0 {
 		ctx.Transient.StatusVersion = sv
-	}
-	if event.ConversationID != "" {
+	} else {
+		ctx.Transient.StatusVersion = 0
 	}
 	return true
 }
@@ -510,93 +691,61 @@ func (r *Reducer) reduceChatMessageReceived(ctx *BehaviorContextSnapshot, event 
 func (r *Reducer) reduceContextLoading(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
 	statusVersion, _ := payload["statusVersion"].(float64)
-	sv := int64(statusVersion)
-
-	if ctx.Transient.InteractionID == event.InteractionID && phaseRank(ctx.Transient.InteractionPhase) > phaseRank("context_loading") {
-		if sv <= ctx.Transient.StatusVersion {
-			return false
-		}
-	}
-
-	ctx.Transient.InteractionID = event.InteractionID
-	ctx.Transient.InteractionPhase = "context_loading"
-	if sv > 0 {
-		ctx.Transient.StatusVersion = sv
-	}
-	return true
+	return applyInteractionPhase(ctx, event, "context_loading", int64(statusVersion))
 }
 
 func (r *Reducer) reduceResponseStarted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
 	statusVersion, _ := payload["statusVersion"].(float64)
-	sv := int64(statusVersion)
-
-	if ctx.Transient.InteractionID == event.InteractionID && phaseRank(ctx.Transient.InteractionPhase) > phaseRank("response_started") {
-		if sv <= ctx.Transient.StatusVersion {
-			return false
-		}
-	}
-
-	ctx.Transient.InteractionID = event.InteractionID
-	ctx.Transient.InteractionPhase = "response_started"
-	if sv > 0 {
-		ctx.Transient.StatusVersion = sv
-	}
-	return true
+	return applyInteractionPhase(ctx, event, "response_started", int64(statusVersion))
 }
 
 func (r *Reducer) reduceResponseReady(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
 	payload := parsePayload(event.Payload)
 	statusVersion, _ := payload["statusVersion"].(float64)
-	sv := int64(statusVersion)
-
-	if ctx.Transient.InteractionID == event.InteractionID && phaseRank(ctx.Transient.InteractionPhase) > phaseRank("response_ready") {
-		if sv <= ctx.Transient.StatusVersion {
-			return false
-		}
-	}
-
-	ctx.Transient.InteractionID = event.InteractionID
-	ctx.Transient.InteractionPhase = "response_ready"
-	if sv > 0 {
-		ctx.Transient.StatusVersion = sv
-	}
-	return true
+	return applyInteractionPhase(ctx, event, "response_ready", int64(statusVersion))
 }
 
-func (r *Reducer) reduceResponseCompleted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
+func interactionToolsAffectVisual(ctx *BehaviorContextSnapshot, interactionID string) bool {
+	if ctx == nil || interactionID == "" {
+		return false
+	}
+	if ctx.Transient.InteractionID == "" || isTerminalInteractionPhase(ctx.Transient.InteractionPhase) {
+		return true
+	}
+	return ctx.Transient.InteractionID == interactionID
+}
+
+func reduceInteractionTerminal(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope, target string) (bool, bool) {
+	if event.InteractionID == "" {
+		return false, false
+	}
+
+	// Tool operations are owned by their interaction even when that interaction
+	// is no longer the visual foreground. A terminal event for a background
+	// conversation must retire only its own tools without stealing or mutating
+	// the foreground transient slot.
+	toolsChanged := clearToolsForInteraction(ctx, event.InteractionID)
 	if ctx.Transient.InteractionID != event.InteractionID {
-		return false
+		return false, toolsChanged
 	}
-	ctx.Transient.InteractionPhase = "completed"
-	ctx.Transient.InteractionID = ""
-	return true
+
+	payload := parsePayload(event.Payload)
+	statusVersion, _ := payload["statusVersion"].(float64)
+	phaseChanged := applyInteractionPhase(ctx, event, target, int64(statusVersion))
+	return phaseChanged, toolsChanged
 }
 
-func (r *Reducer) reduceResponseFailed(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
-	if ctx.Transient.InteractionID != event.InteractionID && ctx.Transient.InteractionID != "" {
-		return false
-	}
-	ctx.Transient = TransientBehaviorState{}
-	for opID := range ctx.ActiveTools {
-		if opID != "" {
-			delete(ctx.ActiveTools, opID)
-		}
-	}
-	return true
+func (r *Reducer) reduceResponseCompleted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) (bool, bool) {
+	return reduceInteractionTerminal(ctx, event, "completed")
 }
 
-func (r *Reducer) reduceResponseCancelled(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
-	if ctx.Transient.InteractionID != event.InteractionID && ctx.Transient.InteractionID != "" {
-		return false
-	}
-	ctx.Transient = TransientBehaviorState{}
-	for opID := range ctx.ActiveTools {
-		delete(ctx.ActiveTools, opID)
-	}
-	ctx.Transient.ProactiveID = ""
-	ctx.Transient.ProactiveIntent = ""
-	return true
+func (r *Reducer) reduceResponseFailed(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) (bool, bool) {
+	return reduceInteractionTerminal(ctx, event, "failed")
+}
+
+func (r *Reducer) reduceResponseCancelled(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) (bool, bool) {
+	return reduceInteractionTerminal(ctx, event, "cancelled")
 }
 
 func (r *Reducer) reduceDeliveryStarted(ctx *BehaviorContextSnapshot, event BehaviorEventEnvelope) bool {
@@ -623,6 +772,12 @@ func (r *Reducer) reduceToolStarted(ctx *BehaviorContextSnapshot, event Behavior
 	leaseExpires := now.Add(leaseDuration)
 
 	if existing, ok := ctx.ActiveTools[opID]; ok {
+		if existing.InteractionID != "" && event.InteractionID != "" && existing.InteractionID != event.InteractionID {
+			return false
+		}
+		if existing.InteractionID == "" {
+			existing.InteractionID = event.InteractionID
+		}
 		existing.LastActivityAt = now
 		existing.LeaseExpiresAt = leaseExpires
 		ctx.ActiveTools[opID] = existing
@@ -631,6 +786,7 @@ func (r *Reducer) reduceToolStarted(ctx *BehaviorContextSnapshot, event Behavior
 
 	ctx.ActiveTools[opID] = ToolOperationState{
 		OperationID:    opID,
+		InteractionID:  event.InteractionID,
 		ToolCategory:   getString(payload, "toolCategory"),
 		DisplayClass:   getString(payload, "displayClass"),
 		Depth:          getInt(payload, "depth"),
@@ -649,8 +805,12 @@ func (r *Reducer) reduceToolProgress(ctx *BehaviorContextSnapshot, event Behavio
 		return false
 	}
 	if existing, ok := ctx.ActiveTools[opID]; ok {
-		existing.LastActivityAt = r.clock.Now()
-		existing.LeaseExpiresAt = r.clock.Now().Add(5 * time.Minute)
+		if existing.InteractionID != "" && event.InteractionID != "" && existing.InteractionID != event.InteractionID {
+			return false
+		}
+		now := r.clock.Now()
+		existing.LastActivityAt = now
+		existing.LeaseExpiresAt = now.Add(5 * time.Minute)
 		ctx.ActiveTools[opID] = existing
 		return true
 	}
@@ -663,7 +823,11 @@ func (r *Reducer) reduceToolCompleted(ctx *BehaviorContextSnapshot, event Behavi
 	if opID == "" {
 		return false
 	}
-	if _, ok := ctx.ActiveTools[opID]; !ok {
+	existing, ok := ctx.ActiveTools[opID]
+	if !ok {
+		return false
+	}
+	if existing.InteractionID != "" && event.InteractionID != "" && existing.InteractionID != event.InteractionID {
 		return false
 	}
 	delete(ctx.ActiveTools, opID)
@@ -1146,6 +1310,9 @@ func (s BehaviorContextSnapshot) Copy() BehaviorContextSnapshot {
 		c.RecentSemantics = make([]RecentSemanticRecord, len(s.RecentSemantics))
 		copy(c.RecentSemantics, s.RecentSemantics)
 	}
+	if s.RecentEventKeys != nil {
+		c.RecentEventKeys = append([]string(nil), s.RecentEventKeys...)
+	}
 	if s.LastSourceRevisions != nil {
 		c.LastSourceRevisions = make(map[string]int64, len(s.LastSourceRevisions))
 		for k, v := range s.LastSourceRevisions {
@@ -1162,6 +1329,7 @@ func NewDefaultContext(userID, characterID string) BehaviorContextSnapshot {
 		Revision:            1,
 		ActiveTools:         make(map[string]ToolOperationState),
 		Cooldowns:           make(map[string]time.Time),
+		RecentEventKeys:     make([]string, 0),
 		LastSourceRevisions: make(map[string]int64),
 		Desired:             DesiredBehaviorState{Semantic: "fallback_idle", SourceLayer: "stable"},
 	}

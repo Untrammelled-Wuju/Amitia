@@ -33,21 +33,38 @@ var voiceActiveStatuses = []string{
 
 var toolActiveStatuses = []string{"PENDING", "RUNNING"}
 
+func interactionStatusToBehaviorPhase(status string) string {
+	switch status {
+	case "received", "normalized", "queued":
+		return "received"
+	case "processing":
+		return "context_loading"
+	case "context_ready", "decided":
+		return "response_started"
+	case "generated", "committed", "delivery_pending", "delivered":
+		return "response_ready"
+	default:
+		return ""
+	}
+}
+
 func (q *AmitiaStateSourceQuery) QueryActiveInteractions(ctx context.Context, userID, characterID string) ([]behavior.InteractionSnapshot, error) {
 	if q.db == nil {
 		return nil, nil
 	}
 	type interactionRow struct {
-		ID             string `gorm:"column:id"`
-		Status         string `gorm:"column:status"`
-		StatusVersion  int64  `gorm:"column:status_version"`
-		ConversationID string `gorm:"column:conversation_id"`
+		ID             string    `gorm:"column:id"`
+		Status         string    `gorm:"column:status"`
+		StatusVersion  int64     `gorm:"column:status_version"`
+		ConversationID string    `gorm:"column:conversation_id"`
+		CreatedAt      time.Time `gorm:"column:created_at"`
+		UpdatedAt      time.Time `gorm:"column:updated_at"`
 	}
 	var rows []interactionRow
 	err := q.db.WithContext(ctx).Table("interaction_records").
-		Select("id, status, status_version, conversation_id").
+		Select("id, status, status_version, conversation_id, created_at, updated_at").
 		Where("user_id = ? AND character_id = ? AND status IN ?", userID, characterID, interactionActiveStatuses).
-		Order("updated_at DESC").
+		Order("created_at DESC, updated_at DESC, status_version DESC").
 		Limit(10).
 		Find(&rows).Error
 	if err != nil {
@@ -56,11 +73,17 @@ func (q *AmitiaStateSourceQuery) QueryActiveInteractions(ctx context.Context, us
 	}
 	snapshots := make([]behavior.InteractionSnapshot, 0, len(rows))
 	for _, r := range rows {
+		phase := interactionStatusToBehaviorPhase(r.Status)
+		if phase == "" {
+			continue
+		}
 		snapshots = append(snapshots, behavior.InteractionSnapshot{
 			InteractionID:  r.ID,
-			Phase:          r.Status,
+			Phase:          phase,
 			StatusVersion:  r.StatusVersion,
 			ConversationID: r.ConversationID,
+			CreatedAt:      r.CreatedAt,
+			UpdatedAt:      r.UpdatedAt,
 		})
 	}
 	return snapshots, nil
@@ -111,23 +134,65 @@ func (q *AmitiaStateSourceQuery) QueryActiveTools(ctx context.Context, userID, c
 		return nil, nil
 	}
 	type toolRow struct {
-		ID        string `gorm:"column:id"`
-		ToolName  string `gorm:"column:tool_name"`
-		Status    string `gorm:"column:status"`
-		CreatedAt string `gorm:"column:created_at"`
-		UpdatedAt string `gorm:"column:updated_at"`
+		ID            string `gorm:"column:id"`
+		InteractionID string `gorm:"column:interaction_id"`
+		ToolName      string `gorm:"column:tool_name"`
+		Status        string `gorm:"column:status"`
+		CreatedAt     string `gorm:"column:created_at"`
+		UpdatedAt     string `gorm:"column:updated_at"`
 	}
 	var rows []toolRow
 	err := q.db.WithContext(ctx).Table("tool_call_intents").
-		Select("id, tool_name, status, created_at, updated_at").
+		Select(`tool_call_intents.id, tool_call_intents.tool_name, tool_call_intents.status, tool_call_intents.created_at, tool_call_intents.updated_at,
+			COALESCE((
+				SELECT ir.id FROM interaction_records AS ir
+				WHERE ir.user_id = ?
+				  AND ir.character_id = tool_call_intents.character_id
+				  AND (
+					(tool_call_intents.request_id <> ''
+					 AND ir.request_id = tool_call_intents.request_id
+					 AND (tool_call_intents.conversation_id = '' OR ir.conversation_id = tool_call_intents.conversation_id)
+					 AND (tool_call_intents.channel = '' OR ir.channel = tool_call_intents.channel))
+					OR
+					(tool_call_intents.request_id = ''
+					 AND tool_call_intents.conversation_id <> ''
+					 AND ir.conversation_id = tool_call_intents.conversation_id
+					 AND (tool_call_intents.channel = '' OR ir.channel = tool_call_intents.channel))
+				  )
+				ORDER BY ir.created_at DESC, ir.updated_at DESC
+				LIMIT 1
+			), '') AS interaction_id`, userID).
 		Where("character_id = ? AND status IN ?", characterID, toolActiveStatuses).
 		Where(`EXISTS (
 			SELECT 1 FROM interaction_records AS ir
 			WHERE ir.user_id = ?
 			  AND ir.character_id = tool_call_intents.character_id
 			  AND (
-				(tool_call_intents.request_id <> '' AND ir.request_id = tool_call_intents.request_id)
-				OR (tool_call_intents.conversation_id <> '' AND ir.conversation_id = tool_call_intents.conversation_id)
+				(tool_call_intents.request_id <> ''
+				 AND ir.request_id = tool_call_intents.request_id
+				 AND (tool_call_intents.conversation_id = '' OR ir.conversation_id = tool_call_intents.conversation_id)
+				 AND (tool_call_intents.channel = '' OR ir.channel = tool_call_intents.channel))
+				OR
+				(tool_call_intents.request_id = ''
+				 AND tool_call_intents.conversation_id <> ''
+				 AND ir.conversation_id = tool_call_intents.conversation_id
+				 AND (tool_call_intents.channel = '' OR ir.channel = tool_call_intents.channel))
+			  )
+		)`, userID).
+		Where(`NOT EXISTS (
+			SELECT 1 FROM interaction_records AS other
+			WHERE other.user_id <> ?
+			  AND other.character_id = tool_call_intents.character_id
+			  AND (
+				(tool_call_intents.request_id <> ''
+				 AND other.request_id = tool_call_intents.request_id
+				 AND (tool_call_intents.conversation_id = '' OR other.conversation_id = tool_call_intents.conversation_id)
+				 AND (tool_call_intents.channel = '' OR other.channel = tool_call_intents.channel))
+				OR
+				(tool_call_intents.request_id = ''
+				 AND tool_call_intents.conversation_id <> ''
+				 AND other.conversation_id = tool_call_intents.conversation_id
+				 AND (tool_call_intents.channel = '' OR other.channel = tool_call_intents.channel))
 			  )
 		)`, userID).
 		Order("updated_at DESC").
@@ -149,6 +214,7 @@ func (q *AmitiaStateSourceQuery) QueryActiveTools(ctx context.Context, userID, c
 		}
 		tools[r.ID] = behavior.ToolOperationState{
 			OperationID:    r.ID,
+			InteractionID:  r.InteractionID,
 			ToolCategory:   r.ToolName,
 			StartedAt:      startedAt,
 			LastActivityAt: lastActivityAt,
