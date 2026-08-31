@@ -169,10 +169,17 @@ backend/server
 backend/.zip
 backend/dev/
 /data/
-backend/qdrant/
-backend/surrealdb/
-qdrant/
-surrealdb/
+# Backend database runtime data/binaries only; keep source/config/scripts trackable
+backend/qdrant/storage/
+backend/qdrant/qdrant.zip
+backend/qdrant/qdrant.exe
+backend/qdrant/qdrant_linux_*
+backend/surrealdb/data/
+backend/surrealdb/data.sdb
+backend/surrealdb/surreal.zip
+backend/surrealdb/surreal.exe
+/qdrant/
+/surrealdb/
 # Runtime build qdrant/surrealdb component scripts (not backend/qdrant runtime)
 !runtime/build/qdrant/
 !runtime/build/surrealdb/
@@ -309,6 +316,5 @@ trace.atrace
 .meituan-catpaw/
 .dart_tool/
 coverage/
-storage/
 C*/
 
