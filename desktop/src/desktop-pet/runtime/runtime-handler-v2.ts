@@ -59,6 +59,7 @@ export interface RuntimeCommandReplayEntry {
   desiredRevision: number;
   commandType?: string;
   desiredHash?: string;
+  commandPayloadHash?: string;
   ackStatus: "completed" | "failed_terminal";
   errorCode?: string;
   errorMessage?: string;
@@ -115,6 +116,7 @@ interface CachedCommandExecution {
   desiredRevision: number;
   commandType: string;
   desiredHash: string;
+  commandPayloadHash: string;
   result: RuntimeCommandExecutionResult;
   ackStatus: CommandStatus;
 }
@@ -218,6 +220,8 @@ export class DesktopRuntimeHandlerV2 {
   private readonly pendingOutbound = new Map<number, RuntimePendingOutboundEntry>();
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectDelayResolve: (() => void) | null = null;
+  private reconnectGeneration = 0;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private idleHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private connectTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
@@ -275,6 +279,7 @@ export class DesktopRuntimeHandlerV2 {
         desiredRevision,
         commandType: entry.commandType ?? "",
         desiredHash: entry.desiredHash ?? "",
+        commandPayloadHash: entry.commandPayloadHash ?? "",
         ackStatus: entry.ackStatus,
         result: {
           commandId: entry.commandId,
@@ -361,6 +366,7 @@ export class DesktopRuntimeHandlerV2 {
         desiredRevision: cached.desiredRevision,
         commandType: cached.commandType || undefined,
         desiredHash: cached.desiredHash || undefined,
+        commandPayloadHash: cached.commandPayloadHash || undefined,
         ackStatus: cached.ackStatus === "failed_terminal" ? "failed_terminal" : "completed",
         errorCode: cached.result.errorCode || undefined,
         errorMessage: cached.result.errorMessage || undefined,
@@ -470,6 +476,7 @@ export class DesktopRuntimeHandlerV2 {
   }
 
   disconnect(): void {
+    this.reconnectGeneration += 1;
     this.rejectPendingConnect(new Error("runtime disconnected"));
     this.stopHeartbeat();
     this.cleanupSocket();
@@ -971,6 +978,16 @@ export class DesktopRuntimeHandlerV2 {
 
     const cached = this.commandReplayCache.get(commandId);
     if (cached) {
+      if (cached.commandPayloadHash && cached.commandPayloadHash !== envelope.payloadHash) {
+        throw new Error(`runtime command replay payload mismatch for ${commandId}`);
+      }
+      if (cached.commandType && cached.commandType !== command.commandType) {
+        throw new Error(`runtime command replay type mismatch for ${commandId}`);
+      }
+      if (isRevisionedDurableCommand(command.commandType) &&
+          (cached.desiredRevision !== desiredRevision || cached.desiredHash !== desiredHash)) {
+        throw new Error(`runtime command replay desired-state mismatch for ${commandId}`);
+      }
       await this.replayCachedCommand(commandId, commandSequence, cached);
       return;
     }
@@ -980,6 +997,16 @@ export class DesktopRuntimeHandlerV2 {
       await inFlight;
       const settled = this.commandReplayCache.get(commandId);
       if (settled) {
+        if (settled.commandPayloadHash && settled.commandPayloadHash !== envelope.payloadHash) {
+          throw new Error(`runtime command replay payload mismatch for ${commandId}`);
+        }
+        if (settled.commandType && settled.commandType !== command.commandType) {
+          throw new Error(`runtime command replay type mismatch for ${commandId}`);
+        }
+        if (isRevisionedDurableCommand(command.commandType) &&
+            (settled.desiredRevision !== desiredRevision || settled.desiredHash !== desiredHash)) {
+          throw new Error(`runtime command replay desired-state mismatch for ${commandId}`);
+        }
         await this.replayCachedCommand(commandId, commandSequence, settled);
       }
       return;
@@ -1074,6 +1101,7 @@ export class DesktopRuntimeHandlerV2 {
       desiredRevision,
       commandType: command.commandType ?? "",
       desiredHash: command.desiredHash ?? "",
+      commandPayloadHash: envelope.payloadHash,
       result,
       ackStatus,
     });
@@ -1378,13 +1406,15 @@ export class DesktopRuntimeHandlerV2 {
     this.setState("disconnected");
 
     if (this.config.autoReconnect) {
-      void this.attemptReconnect().catch((err) => {
+      const generation = ++this.reconnectGeneration;
+      void this.attemptReconnect(generation).catch((err) => {
         this.hooks.onError(err instanceof Error ? err : new Error(String(err)));
       });
     }
   }
 
-  private async attemptReconnect(): Promise<void> {
+  private async attemptReconnect(generation: number): Promise<void> {
+    if (generation !== this.reconnectGeneration) return;
     if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
       this.setState("disconnected");
       this.hooks.onError(new Error("max reconnect attempts exceeded"));
@@ -1401,15 +1431,21 @@ export class DesktopRuntimeHandlerV2 {
     const delay = Math.max(250, Math.floor(exponential * (0.8 + Math.random() * 0.4)));
 
     await new Promise<void>((resolve) => {
+      this.reconnectDelayResolve = resolve;
       this.reconnectTimer = setTimeout(() => {
         this.reconnectTimer = null;
-        resolve();
+        const settle = this.reconnectDelayResolve;
+        this.reconnectDelayResolve = null;
+        settle?.();
       }, delay);
     });
+
+    if (generation !== this.reconnectGeneration) return;
 
     try {
       await this.connect("transport_lost");
     } catch (err) {
+      if (generation !== this.reconnectGeneration) return;
       this.hooks.onError(err instanceof Error ? err : new Error(String(err)));
     }
   }
@@ -1486,6 +1522,9 @@ export class DesktopRuntimeHandlerV2 {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    const settleReconnectDelay = this.reconnectDelayResolve;
+    this.reconnectDelayResolve = null;
+    settleReconnectDelay?.();
   }
 
   private cleanupSocket(): void {
