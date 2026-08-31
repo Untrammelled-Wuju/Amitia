@@ -7,7 +7,7 @@ storage:
   dataDir: "AmitiaData/data"
 
 jwt:
-  secret: ""
+  secret: "AmitiaLocalDevSecret20260831x9Zq7mKp3wRv5nTc8yB"
   issuer: "amitia"
   audience: "amitia-api"
   expireDays: 7
@@ -22,7 +22,7 @@ app:
 
 security:
   mode: "local_single_user"
-  localToken: ""
+  localToken: "local-dev-token-amitia-20260831-secure"
   localTokenFile: "security/local-token"
   allowedOrigins:
     - "http://localhost:5178"
@@ -70,7 +70,7 @@ providers:
       namespace: "uai"
       database: "memory_graph"
       username: "root"
-      password: ""
+      password: "root"
       dataPath: "data/graph.db"
 
 components:

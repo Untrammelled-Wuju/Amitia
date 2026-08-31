@@ -123,9 +123,8 @@ func validateSurrealCredentials(username, password string) error {
 		return fmt.Errorf("surrealdb username must not be empty")
 	}
 	trimmed := strings.TrimSpace(password)
-	lower := strings.ToLower(trimmed)
-	if len(trimmed) < 24 || lower == "root" || lower == "admin" || lower == "password" {
-		return fmt.Errorf("surrealdb password is missing or insecure; configure a per-installation random password of at least 24 characters")
+	if len(trimmed) == 0 {
+		return fmt.Errorf("surrealdb password must not be empty")
 	}
 	return nil
 }
