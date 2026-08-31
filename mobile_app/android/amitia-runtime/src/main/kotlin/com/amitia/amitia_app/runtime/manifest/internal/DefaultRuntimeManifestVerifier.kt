@@ -59,10 +59,10 @@ internal class DefaultRuntimeManifestVerifier(
 
         for (component in manifest.components) {
             if (component.id == RuntimeManifestComponent.ID_PROOT) {
-                if (component.source != RuntimeManifestComponent.SOURCE_ANDROID_NATIVE) {
+                if (component.source != RuntimeManifestComponent.SOURCE_PROOT) {
                     return RuntimeManifestError(
                         RuntimeManifestErrorCode.PROOT_COMPONENT_MISSING,
-                        "proot component source must be android-native"
+                        "proot component source must be android-proot"
                     )
                 }
                 continue
@@ -92,7 +92,7 @@ internal class DefaultRuntimeManifestVerifier(
 
     private fun verifyComponentHashes(manifest: RuntimeManifest): RuntimeManifestError? {
         for (component in manifest.components) {
-            if (component.source == RuntimeManifestComponent.SOURCE_ANDROID_NATIVE) continue
+            if (component.source == RuntimeManifestComponent.SOURCE_PROOT) continue
             if (component.id == RuntimeManifestComponent.ID_PROOT) continue
             val componentDir = File(manifest.paths.runtimeRootHostPath, component.root)
 

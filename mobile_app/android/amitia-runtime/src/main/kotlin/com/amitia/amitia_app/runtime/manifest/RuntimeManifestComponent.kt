@@ -37,6 +37,6 @@ data class RuntimeManifestComponent(
         const val ID_PROOT: String = "runtime.proot"
 
         const val SOURCE_PACKAGE: String = "package"
-        const val SOURCE_ANDROID_NATIVE: String = "android-native"
+        const val SOURCE_PROOT: String = "android-proot"
     }
 }
