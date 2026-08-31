@@ -92,6 +92,8 @@ internal open class ProotEnvironmentAssembler(
             ProotBindMount.create("/system", "/system", readOnly = true),
             ProotBindMount.create("/apex", "/apex", readOnly = true),
             ProotBindMount.create("/dev", "/dev", readOnly = true),
+            ProotBindMount.create("/proc", "/proc", readOnly = true),
+            ProotBindMount.create("/sys", "/sys", readOnly = true),
         )
     }
 
