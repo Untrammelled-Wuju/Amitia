@@ -33,6 +33,8 @@ stdout*.log
 Thumbs.db
 .env
 .env.local
+amitia-release.p12
+amitia-signing.local.ps1
 __pycache__/
 *.pyc
 temp_*.py
@@ -317,4 +319,3 @@ trace.atrace
 .dart_tool/
 coverage/
 C*/
-
