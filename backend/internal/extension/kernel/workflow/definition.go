@@ -62,6 +62,14 @@ type WorkflowTriggerDefinition struct {
 	Enabled   bool            `json:"enabled"`
 }
 
+// WorkflowAgentToolConfig controls how a user workflow is exposed to the model
+// tool catalog. The runtime still uses CallableByAgent as the hard enable gate;
+// this object only defines the stable model-facing name and description.
+type WorkflowAgentToolConfig struct {
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
 type WorkflowNode struct {
 	ID          string                    `json:"id"`
 	Type        string                    `json:"type"`
@@ -90,6 +98,7 @@ type WorkflowDefinition struct {
 	Permissions     []string                    `json:"permissions,omitempty"`
 	Scope           string                      `json:"scope,omitempty"`
 	CallableByAgent bool                        `json:"callableByAgent"`
+	AgentTool       WorkflowAgentToolConfig     `json:"agentTool,omitempty"`
 	Enabled         bool                        `json:"enabled"`
 	HasSideEffects  bool                        `json:"hasSideEffects,omitempty"`
 	Idempotent      bool                        `json:"idempotent,omitempty"`

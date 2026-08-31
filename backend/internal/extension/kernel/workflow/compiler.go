@@ -236,6 +236,9 @@ func (c *Compiler) Compile(def WorkflowDefinition, opts CompileOptions) (*Compil
 			if err := json.Unmarshal(n.Step.Input, &inputMap); err == nil {
 				cn.Input = inputMap
 				cn.DataRefs = extractRefs(inputMap)
+				if err := validateNodeDataRefs(def.Nodes, n.ID, cn.DataRefs); err != nil {
+					return nil, fmt.Errorf("workflow %s node %s input mapping: %w", def.ID, n.ID, err)
+				}
 			} else {
 				cn.Input = map[string]any{"input": json.RawMessage(n.Step.Input)}
 			}
@@ -399,6 +402,51 @@ func collectRefs(v any, refs *[]*WorkflowValueRef) {
 			}
 		}
 	}
+}
+
+func validateNodeDataRefs(nodes []WorkflowNode, nodeID string, refs []*WorkflowValueRef) error {
+	if len(refs) == 0 {
+		return nil
+	}
+	nodeByID := make(map[string]WorkflowNode, len(nodes))
+	for _, node := range nodes {
+		nodeByID[node.ID] = node
+	}
+	for _, ref := range refs {
+		if ref == nil || ref.Source != RefSourceNodeOutput {
+			continue
+		}
+		if ref.NodeID == nodeID {
+			return fmt.Errorf("node cannot map its own output")
+		}
+		if _, ok := nodeByID[ref.NodeID]; !ok {
+			return fmt.Errorf("mapped node %q does not exist", ref.NodeID)
+		}
+		if !workflowNodeHasAncestor(nodeByID, nodeID, ref.NodeID, map[string]bool{}) {
+			return fmt.Errorf("mapped node %q must be an upstream dependency of %q", ref.NodeID, nodeID)
+		}
+	}
+	return nil
+}
+
+func workflowNodeHasAncestor(nodes map[string]WorkflowNode, nodeID, ancestorID string, seen map[string]bool) bool {
+	if seen[nodeID] {
+		return false
+	}
+	seen[nodeID] = true
+	node, ok := nodes[nodeID]
+	if !ok {
+		return false
+	}
+	for _, dep := range node.DependsOn {
+		if dep == ancestorID {
+			return true
+		}
+		if workflowNodeHasAncestor(nodes, dep, ancestorID, seen) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildPermissionClosure(m map[string]*PermissionRequirement, def WorkflowDefinition) []PermissionRequirement {

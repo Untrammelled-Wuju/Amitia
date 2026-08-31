@@ -1029,8 +1029,8 @@ func (e *WorkflowExecutor) ExecuteCompiled(ctx context.Context, req CompiledExec
 				}
 
 				var inputJSON json.RawMessage = req.Input
-				if len(cnode.DataRefs) > 0 {
-					resolved := e.resolveDataRefs(cnode.DataRefs, req.Input, outputs, &outputsMu)
+				if len(cnode.Input) > 0 {
+					resolved := e.resolveInputTemplate(cnode.Input, req.Input, outputs, &outputsMu, req.Context)
 					if merged, err := json.Marshal(resolved); err == nil {
 						inputJSON = merged
 					}
@@ -1224,37 +1224,86 @@ func (e *WorkflowExecutor) ExecuteCompiled(ctx context.Context, req CompiledExec
 	}
 }
 
-func (e *WorkflowExecutor) resolveDataRefs(refs []*WorkflowValueRef, input json.RawMessage, outputs map[string]json.RawMessage, outputsMu *sync.RWMutex) map[string]any {
-	resolved := make(map[string]any)
+func (e *WorkflowExecutor) resolveInputTemplate(template map[string]any, input json.RawMessage, outputs map[string]json.RawMessage, outputsMu *sync.RWMutex, execution ExecutionContext) map[string]any {
 	var inputMap map[string]any
 	_ = json.Unmarshal(input, &inputMap)
 	if inputMap == nil {
 		inputMap = make(map[string]any)
 	}
 
-	for _, ref := range refs {
+	runtimeMap := map[string]any{
+		"userId":           execution.UserID,
+		"rootId":           execution.RootID,
+		"characterId":      execution.CharacterID,
+		"conversationId":   execution.ConversationID,
+		"operationId":      execution.OperationID,
+		"invocationId":     execution.InvocationID,
+		"scheduleId":       execution.ScheduleID,
+		"triggerId":        execution.TriggerID,
+		"traceId":          execution.TraceID,
+		"idempotencyKey":   execution.IdempotencyKey,
+		"depth":            execution.Depth,
+		"recovery":         execution.Recovery,
+		"scopeSnapshotId":  execution.ScopeSnapshotID,
+		"permissionSnapId": execution.PermissionSnapID,
+	}
+
+	resolved := resolveWorkflowTemplateValue(template, inputMap, runtimeMap, outputs, outputsMu)
+	if mapped, ok := resolved.(map[string]any); ok {
+		return mapped
+	}
+	return map[string]any{"input": resolved}
+}
+
+func resolveWorkflowTemplateValue(value any, inputMap, runtimeMap map[string]any, outputs map[string]json.RawMessage, outputsMu *sync.RWMutex) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, child := range typed {
+			out[key] = resolveWorkflowTemplateValue(child, inputMap, runtimeMap, outputs, outputsMu)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, child := range typed {
+			out[i] = resolveWorkflowTemplateValue(child, inputMap, runtimeMap, outputs, outputsMu)
+		}
+		return out
+	case string:
+		ref, err := ParseWorkflowValueRef(typed)
+		if err != nil {
+			return typed
+		}
 		switch ref.Source {
 		case RefSourceInput:
-			if v := traversePath(inputMap, ref.Path); v != nil {
-				key := strings.Join(ref.Path, ".")
-				resolved[key] = v
-			}
+			return traversePath(inputMap, ref.Path)
+		case RefSourceRuntime:
+			return traversePath(runtimeMap, ref.Path)
 		case RefSourceNodeOutput:
 			outputsMu.RLock()
 			raw, ok := outputs[ref.NodeID]
 			outputsMu.RUnlock()
-			if ok {
-				var outMap map[string]any
-				if err := json.Unmarshal(raw, &outMap); err == nil {
-					if v := traversePath(outMap, ref.Path); v != nil {
-						key := ref.NodeID + "." + strings.Join(ref.Path, ".")
-						resolved[key] = v
-					}
-				}
+			if !ok || len(raw) == 0 {
+				return nil
 			}
+			var parsed any
+			if err := json.Unmarshal(raw, &parsed); err != nil {
+				return nil
+			}
+			return traversePath(parsed, ref.Path)
+		case RefSourceLiteral:
+			if len(ref.Path) > 0 {
+				return ref.Path[0]
+			}
+			return ""
+		default:
+			// Kernel workflow-v2 does not have a workflow-level config object.
+			// Preserve unknown/config refs verbatim instead of silently erasing data.
+			return typed
 		}
+	default:
+		return value
 	}
-	return resolved
 }
 
 func (e *WorkflowExecutor) executeStepCompiled(ctx context.Context, handler StepHandler, node WorkflowNode, input json.RawMessage, limits WorkflowLimits, retry *WorkflowRetryPolicy, journal *SideEffectJournal) StepResult {

@@ -110,6 +110,7 @@ type Container struct {
 	WorkflowTriggerManager *workflow.TriggerManager
 	WorkflowDefRepo        *sqlite.WorkflowDefinitionRepository
 	WorkflowExecRepo       *sqlite.WorkflowExecutionRepository
+	WorkflowModelGenerator WorkshopModelGenerator
 	EnablementService      *enablement.EnablementService
 	EnablementResolver     enablement.EffectiveStateResolver
 
