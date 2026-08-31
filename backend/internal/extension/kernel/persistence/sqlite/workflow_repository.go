@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 )
 
@@ -102,9 +104,36 @@ func (r *WorkflowDefinitionRepository) Save(ctx context.Context, def workflow.Wo
 }
 
 func (r *WorkflowDefinitionRepository) Delete(ctx context.Context, workflowID string) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM extension_workflow_definitions WHERE workflow_id = ?`, workflowID)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("delete workflow definition: %w", err)
+		return fmt.Errorf("begin workflow definition delete: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var source string
+	sourceErr := tx.QueryRowContext(ctx, `SELECT source FROM extension_workflow_definitions WHERE workflow_id = ?`, workflowID).Scan(&source)
+	if sourceErr != nil && sourceErr != sql.ErrNoRows {
+		return fmt.Errorf("read workflow source before delete: %w", sourceErr)
+	}
+
+	statements := []string{`DELETE FROM extension_workflow_trigger_bindings WHERE workflow_id = ?`}
+	if source == "user" {
+		statements = append(statements,
+			`DELETE FROM extension_workflow_compensations WHERE execution_id IN (SELECT execution_id FROM extension_workflow_executions WHERE workflow_id = ?)`,
+			`DELETE FROM extension_workflow_step_runs WHERE workflow_id = ?`,
+			`DELETE FROM extension_workflow_checkpoints WHERE workflow_id = ?`,
+			`DELETE FROM extension_workflow_executions WHERE workflow_id = ?`,
+			`DELETE FROM extension_workflow_revisions WHERE workflow_id = ?`,
+		)
+	}
+	statements = append(statements, `DELETE FROM extension_workflow_definitions WHERE workflow_id = ?`)
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement, workflowID); err != nil {
+			return fmt.Errorf("delete workflow data: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit workflow definition delete: %w", err)
 	}
 	return nil
 }
@@ -147,6 +176,218 @@ func (r *WorkflowDefinitionRepository) List(ctx context.Context) ([]workflow.Wor
 		defs = append(defs, *def)
 	}
 	return defs, rows.Err()
+}
+
+func (r *WorkflowDefinitionRepository) SaveRevision(ctx context.Context, ownerUserID string, def workflow.WorkflowDefinition, note string) (*workflow.WorkflowRevision, error) {
+	ownerUserID = strings.TrimSpace(ownerUserID)
+	if ownerUserID == "" || strings.TrimSpace(def.ID) == "" {
+		return nil, fmt.Errorf("workflow revision requires owner and workflow id")
+	}
+	definitionJSON, err := json.Marshal(def)
+	if err != nil {
+		return nil, fmt.Errorf("marshal workflow revision: %w", err)
+	}
+	hash := workflow.ComputeDefinitionHash(def)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin workflow revision transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var latest workflow.WorkflowRevision
+	var latestHash string
+	latestErr := tx.QueryRowContext(ctx, `
+		SELECT revision_id, revision_no, name, description, definition_hash, note, created_at
+		FROM extension_workflow_revisions
+		WHERE owner_user_id = ? AND workflow_id = ?
+		ORDER BY revision_no DESC LIMIT 1
+	`, ownerUserID, def.ID).Scan(&latest.RevisionID, &latest.RevisionNo, &latest.Name, &latest.Description, &latestHash, &latest.Note, &latest.CreatedAt)
+	if latestErr != nil && latestErr != sql.ErrNoRows {
+		return nil, fmt.Errorf("get latest workflow revision: %w", latestErr)
+	}
+	if latestErr == nil && latestHash == hash {
+		latest.WorkflowID = def.ID
+		latest.OwnerUserID = ownerUserID
+		latest.Definition = def
+		latest.DefinitionHash = latestHash
+		return &latest, nil
+	}
+	var revisionNo int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(revision_no), 0) + 1 FROM extension_workflow_revisions WHERE workflow_id = ?`, def.ID).Scan(&revisionNo); err != nil {
+		return nil, fmt.Errorf("next workflow revision: %w", err)
+	}
+	now := time.Now().UTC()
+	revision := &workflow.WorkflowRevision{
+		RevisionID:     "wfrev-" + uuid.NewString(),
+		WorkflowID:     def.ID,
+		OwnerUserID:    ownerUserID,
+		RevisionNo:     revisionNo,
+		Name:           def.Name,
+		Description:    def.Description,
+		Definition:     def,
+		DefinitionHash: hash,
+		Note:           strings.TrimSpace(note),
+		CreatedAt:      now,
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO extension_workflow_revisions
+			(revision_id, workflow_id, owner_user_id, revision_no, name, description, definition_json, definition_hash, note, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, revision.RevisionID, revision.WorkflowID, revision.OwnerUserID, revision.RevisionNo, revision.Name, revision.Description, definitionJSON, revision.DefinitionHash, revision.Note, revision.CreatedAt); err != nil {
+		return nil, fmt.Errorf("save workflow revision: %w", err)
+	}
+	// Keep history useful without allowing unbounded local growth.
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM extension_workflow_revisions
+		WHERE workflow_id = ? AND revision_id NOT IN (
+			SELECT revision_id FROM extension_workflow_revisions WHERE workflow_id = ? ORDER BY revision_no DESC LIMIT 50
+		)
+	`, def.ID, def.ID); err != nil {
+		return nil, fmt.Errorf("prune workflow revisions: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit workflow revision: %w", err)
+	}
+	return revision, nil
+}
+
+func (r *WorkflowDefinitionRepository) ListRevisions(ctx context.Context, ownerUserID, workflowID string, limit int) ([]workflow.WorkflowRevisionSummary, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT revision_id, workflow_id, revision_no, name, description, definition_hash, note, created_at
+		FROM extension_workflow_revisions
+		WHERE owner_user_id = ? AND workflow_id = ?
+		ORDER BY revision_no DESC LIMIT ?
+	`, ownerUserID, workflowID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list workflow revisions: %w", err)
+	}
+	defer rows.Close()
+	items := make([]workflow.WorkflowRevisionSummary, 0)
+	for rows.Next() {
+		var item workflow.WorkflowRevisionSummary
+		if err := rows.Scan(&item.RevisionID, &item.WorkflowID, &item.RevisionNo, &item.Name, &item.Description, &item.DefinitionHash, &item.Note, &item.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan workflow revision: %w", err)
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *WorkflowDefinitionRepository) GetRevision(ctx context.Context, ownerUserID, workflowID, revisionID string) (*workflow.WorkflowRevision, error) {
+	var item workflow.WorkflowRevision
+	var definitionJSON string
+	err := r.db.QueryRowContext(ctx, `
+		SELECT revision_id, workflow_id, owner_user_id, revision_no, name, description, definition_json, definition_hash, note, created_at
+		FROM extension_workflow_revisions
+		WHERE owner_user_id = ? AND workflow_id = ? AND revision_id = ?
+	`, ownerUserID, workflowID, revisionID).Scan(&item.RevisionID, &item.WorkflowID, &item.OwnerUserID, &item.RevisionNo, &item.Name, &item.Description, &definitionJSON, &item.DefinitionHash, &item.Note, &item.CreatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, workflow.ErrWorkflowNotFound
+		}
+		return nil, fmt.Errorf("get workflow revision: %w", err)
+	}
+	if err := json.Unmarshal([]byte(definitionJSON), &item.Definition); err != nil {
+		return nil, fmt.Errorf("unmarshal workflow revision: %w", err)
+	}
+	return &item, nil
+}
+
+func (r *WorkflowDefinitionRepository) DeleteRevisionsByWorkflow(ctx context.Context, workflowID string) error {
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM extension_workflow_revisions WHERE workflow_id = ?`, workflowID); err != nil {
+		return fmt.Errorf("delete workflow revisions: %w", err)
+	}
+	return nil
+}
+
+func (r *WorkflowDefinitionRepository) SaveTemplate(ctx context.Context, ownerUserID, name, description string, def workflow.WorkflowDefinition) (*workflow.WorkflowTemplate, error) {
+	ownerUserID = strings.TrimSpace(ownerUserID)
+	name = strings.TrimSpace(name)
+	if ownerUserID == "" || name == "" {
+		return nil, fmt.Errorf("workflow template requires owner and name")
+	}
+	definitionJSON, err := json.Marshal(def)
+	if err != nil {
+		return nil, fmt.Errorf("marshal workflow template: %w", err)
+	}
+	now := time.Now().UTC()
+	item := &workflow.WorkflowTemplate{
+		TemplateID:     "wftpl-" + uuid.NewString(),
+		OwnerUserID:    ownerUserID,
+		Name:           name,
+		Description:    strings.TrimSpace(description),
+		Definition:     def,
+		DefinitionHash: workflow.ComputeDefinitionHash(def),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if _, err := r.db.ExecContext(ctx, `
+		INSERT INTO extension_workflow_templates
+			(template_id, owner_user_id, name, description, definition_json, definition_hash, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, item.TemplateID, item.OwnerUserID, item.Name, item.Description, definitionJSON, item.DefinitionHash, item.CreatedAt, item.UpdatedAt); err != nil {
+		return nil, fmt.Errorf("save workflow template: %w", err)
+	}
+	return item, nil
+}
+
+func (r *WorkflowDefinitionRepository) ListTemplates(ctx context.Context, ownerUserID string) ([]workflow.WorkflowTemplateSummary, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT template_id, name, description, definition_json, definition_hash, created_at, updated_at
+		FROM extension_workflow_templates WHERE owner_user_id = ? ORDER BY updated_at DESC, name
+	`, ownerUserID)
+	if err != nil {
+		return nil, fmt.Errorf("list workflow templates: %w", err)
+	}
+	defer rows.Close()
+	items := make([]workflow.WorkflowTemplateSummary, 0)
+	for rows.Next() {
+		var item workflow.WorkflowTemplateSummary
+		var definitionJSON string
+		if err := rows.Scan(&item.TemplateID, &item.Name, &item.Description, &definitionJSON, &item.DefinitionHash, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan workflow template: %w", err)
+		}
+		var def workflow.WorkflowDefinition
+		if err := json.Unmarshal([]byte(definitionJSON), &def); err != nil {
+			return nil, fmt.Errorf("unmarshal workflow template %s: %w", item.TemplateID, err)
+		}
+		item.NodeCount = len(def.Nodes)
+		item.TriggerCount = len(def.Triggers)
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (r *WorkflowDefinitionRepository) GetTemplate(ctx context.Context, ownerUserID, templateID string) (*workflow.WorkflowTemplate, error) {
+	var item workflow.WorkflowTemplate
+	var definitionJSON string
+	err := r.db.QueryRowContext(ctx, `
+		SELECT template_id, owner_user_id, name, description, definition_json, definition_hash, created_at, updated_at
+		FROM extension_workflow_templates WHERE owner_user_id = ? AND template_id = ?
+	`, ownerUserID, templateID).Scan(&item.TemplateID, &item.OwnerUserID, &item.Name, &item.Description, &definitionJSON, &item.DefinitionHash, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, workflow.ErrWorkflowNotFound
+		}
+		return nil, fmt.Errorf("get workflow template: %w", err)
+	}
+	if err := json.Unmarshal([]byte(definitionJSON), &item.Definition); err != nil {
+		return nil, fmt.Errorf("unmarshal workflow template: %w", err)
+	}
+	return &item, nil
+}
+
+func (r *WorkflowDefinitionRepository) DeleteTemplate(ctx context.Context, ownerUserID, templateID string) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM extension_workflow_templates WHERE owner_user_id = ? AND template_id = ?`, ownerUserID, templateID)
+	if err != nil {
+		return fmt.Errorf("delete workflow template: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return workflow.ErrWorkflowNotFound
+	}
+	return nil
 }
 
 func (r *WorkflowDefinitionRepository) SetEnabled(ctx context.Context, workflowID string, enabled bool) error {
