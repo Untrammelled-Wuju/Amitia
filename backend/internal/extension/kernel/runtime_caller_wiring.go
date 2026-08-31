@@ -24,6 +24,8 @@ func makeWorkflowCallFunc(executor *workflow.WorkflowExecutor) capability.Workfl
 			WorkflowID: workflowID,
 			Input:      inputPayload,
 			Context: workflow.ExecutionContext{
+				UserID:         invocation.UserID,
+				RootID:         invocation.RootID,
 				InvocationID:   invocation.InvocationID,
 				CharacterID:    invocation.CharacterID,
 				ConversationID: invocation.ConversationID,

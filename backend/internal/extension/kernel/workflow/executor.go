@@ -44,6 +44,8 @@ type ExecuteRequest struct {
 }
 
 type ExecutionContext struct {
+	UserID           string
+	RootID           string
 	ExtensionID      string
 	CharacterID      string
 	ConversationID   string
@@ -62,25 +64,25 @@ type ExecutionContext struct {
 }
 
 type ExecuteResult struct {
-	ExecutionID         string
-	WorkflowID          string
-	Status              RunStatus
-	Accepted            bool
-	Output              json.RawMessage
-	Steps               []StepResult
-	Success             bool
-	Error               string
-	Duration            time.Duration
-	CompensationResults []CompensationResult
+	ExecutionID         string               `json:"executionId"`
+	WorkflowID          string               `json:"workflowId"`
+	Status              RunStatus            `json:"status"`
+	Accepted            bool                 `json:"accepted"`
+	Output              json.RawMessage      `json:"output,omitempty"`
+	Steps               []StepResult         `json:"steps,omitempty"`
+	Success             bool                 `json:"success"`
+	Error               string               `json:"error,omitempty"`
+	Duration            time.Duration        `json:"duration"`
+	CompensationResults []CompensationResult `json:"compensationResults,omitempty"`
 }
 
 type StepResult struct {
-	NodeID   string
-	Status   string
-	Output   json.RawMessage
-	Error    string
-	Duration time.Duration
-	Attempt  int
+	NodeID   string          `json:"nodeId"`
+	Status   string          `json:"status"`
+	Output   json.RawMessage `json:"output,omitempty"`
+	Error    string          `json:"error,omitempty"`
+	Duration time.Duration   `json:"duration"`
+	Attempt  int             `json:"attempt"`
 }
 
 func NewWorkflowExecutor(registry *WorkflowRegistry) *WorkflowExecutor {
@@ -296,12 +298,54 @@ func (e *WorkflowExecutor) Cancel(executionID string) bool {
 	return ok
 }
 
+// CancelRun cancels an active execution and also supports cancelling a durable
+// paused/orphaned run that no longer has an in-memory cancel function.
+func (e *WorkflowExecutor) CancelRun(ctx context.Context, executionID string) (bool, error) {
+	if e.Cancel(executionID) {
+		return true, nil
+	}
+	if e.runStore == nil {
+		return false, nil
+	}
+	run, err := e.runStore.Get(ctx, executionID)
+	if err != nil {
+		return false, err
+	}
+	if run.Status.IsTerminal() {
+		return false, nil
+	}
+	now := time.Now().UTC()
+	updated := *run
+	updated.Status = RunStatusCancelled
+	updated.Error = "cancelled"
+	updated.FinishedAt = &now
+	updated.UpdatedAt = now
+	ok, err := e.runStore.UpdateStateCAS(ctx, updated, run.Status)
+	if err != nil || !ok {
+		return ok, err
+	}
+	if err := e.runStore.Finish(ctx, updated); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteResult, error) {
 	start := time.Now()
 
 	wf, ok := e.registry.Get(req.WorkflowID)
 	if !ok {
 		return nil, ErrWorkflowNotFound
+	}
+	var edgeConditionErr error
+	wf, edgeConditionErr = MaterializeEdgeConditions(wf)
+	if edgeConditionErr != nil {
+		return nil, edgeConditionErr
+	}
+	if req.Context.UserID == "" && wf.Metadata != nil {
+		if owner, ok := wf.Metadata["ownerUserId"].(string); ok {
+			req.Context.UserID = strings.TrimSpace(owner)
+		}
 	}
 
 	if !wf.Enabled {
@@ -349,6 +393,18 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 	if executionID == "" {
 		executionID = fmt.Sprintf("%s-%d", req.WorkflowID, start.UnixNano())
 	}
+	if req.Context.RootID == "" {
+		req.Context.RootID = executionID
+	}
+	if req.Context.OperationID == "" {
+		req.Context.OperationID = "wf-op-" + executionID
+	}
+	if req.Context.TraceID == "" {
+		req.Context.TraceID = "wf-trace-" + executionID
+	}
+	if req.Context.IdempotencyKey == "" {
+		req.Context.IdempotencyKey = executionID
+	}
 	execCtx, runCancel := context.WithCancel(execCtx)
 	e.activeMu.Lock()
 	if _, running := e.active[executionID]; running && !req.Context.Recovery {
@@ -373,6 +429,9 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 		Steps:       make([]StepResult, 0, totalNodes),
 	}
 	defer func() {
+		if result.Status == RunStatusPaused || result.Status == RunStatusPausing {
+			return
+		}
 		if result.Accepted && result.Status == RunStatusRunning {
 			return
 		}
@@ -412,6 +471,9 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 			startedAt = existing.StartedAt
 		}
 		defer func() {
+			if result.Status == RunStatusPaused || result.Status == RunStatusPausing {
+				return
+			}
 			finishedAt := time.Now().UTC()
 			status := result.Status
 			if result.Success {
@@ -473,9 +535,11 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 			select {
 			case <-ctrl.pauseRequested:
 				result.Success = false
-				result.Error = "paused"
+				result.Accepted = true
+				result.Status = RunStatusPaused
+				result.Error = ""
 				result.Duration = time.Since(start)
-				go e.finalisePaused(context.Background(), executionID, currentGeneration)
+				e.finalisePaused(context.Background(), executionID, currentGeneration)
 				return result, nil
 			default:
 			}

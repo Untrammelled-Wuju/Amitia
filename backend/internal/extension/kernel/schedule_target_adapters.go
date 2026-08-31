@@ -208,6 +208,9 @@ func (a *KernelWorkflowFacadeAdapter) ExecuteWorkflow(ctx context.Context, workf
 		invocationID = fmt.Sprintf("sched-wf-%s", uuid.NewString())
 	}
 	generation := scheduleContext.Generation
+	if scheduleContext.ExtensionID == "" {
+		generation = 0
+	}
 	if a.generationResolver != nil && scheduleContext.ExtensionID != "" {
 		resolvedGeneration, resolveErr := a.generationResolver(ctx, scheduleContext.ExtensionID)
 		if resolveErr != nil {

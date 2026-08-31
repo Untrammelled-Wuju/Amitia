@@ -37,6 +37,31 @@ type WorkflowOnError struct {
 	Default json.RawMessage `json:"default,omitempty"`
 }
 
+type WorkflowPosition struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type WorkflowEdge struct {
+	ID           string          `json:"id"`
+	Source       string          `json:"source"`
+	Target       string          `json:"target"`
+	SourceHandle string          `json:"sourceHandle,omitempty"`
+	TargetHandle string          `json:"targetHandle,omitempty"`
+	Label        string          `json:"label,omitempty"`
+	Condition    json.RawMessage `json:"condition,omitempty"`
+}
+
+type WorkflowTriggerDefinition struct {
+	ID        string          `json:"id"`
+	Type      string          `json:"type"`
+	EventType string          `json:"eventType,omitempty"`
+	Schedule  json.RawMessage `json:"schedule,omitempty"`
+	Config    json.RawMessage `json:"config,omitempty"`
+	Input     json.RawMessage `json:"input,omitempty"`
+	Enabled   bool            `json:"enabled"`
+}
+
 type WorkflowNode struct {
 	ID          string                    `json:"id"`
 	Type        string                    `json:"type"`
@@ -45,28 +70,32 @@ type WorkflowNode struct {
 	Runtime     capability.RuntimeBinding `json:"runtime,omitempty"`
 	Permissions []string                  `json:"permissions,omitempty"`
 	Scope       string                    `json:"scope,omitempty"`
+	Position    WorkflowPosition          `json:"position,omitempty"`
+	Label       string                    `json:"label,omitempty"`
 	Step        WorkflowStepInput         `json:"step"`
 }
 
 type WorkflowDefinition struct {
-	SchemaVersion   string          `json:"schemaVersion"`
-	ID              string          `json:"id"`
-	ExtensionID     string          `json:"extensionId,omitempty"`
-	ModuleID        string          `json:"moduleId,omitempty"`
-	Name            string          `json:"name"`
-	Description     string          `json:"description"`
-	InputSchema     json.RawMessage `json:"inputSchema"`
-	OutputSchema    json.RawMessage `json:"outputSchema"`
-	Nodes           []WorkflowNode  `json:"nodes"`
-	Permissions     []string        `json:"permissions,omitempty"`
-	Scope           string          `json:"scope,omitempty"`
-	CallableByAgent bool            `json:"callableByAgent"`
-	Enabled         bool            `json:"enabled"`
-	HasSideEffects  bool            `json:"hasSideEffects,omitempty"`
-	Idempotent      bool            `json:"idempotent,omitempty"`
-	Limits          WorkflowLimits  `json:"limits,omitempty"`
-	Version         string          `json:"version,omitempty"`
-	Source          string          `json:"source,omitempty"`
-	Metadata        map[string]any  `json:"metadata,omitempty"`
-	DefinitionHash  string          `json:"definitionHash,omitempty"`
+	SchemaVersion   string                      `json:"schemaVersion"`
+	ID              string                      `json:"id"`
+	ExtensionID     string                      `json:"extensionId,omitempty"`
+	ModuleID        string                      `json:"moduleId,omitempty"`
+	Name            string                      `json:"name"`
+	Description     string                      `json:"description"`
+	InputSchema     json.RawMessage             `json:"inputSchema"`
+	OutputSchema    json.RawMessage             `json:"outputSchema"`
+	Nodes           []WorkflowNode              `json:"nodes"`
+	Edges           []WorkflowEdge              `json:"edges,omitempty"`
+	Triggers        []WorkflowTriggerDefinition `json:"triggers,omitempty"`
+	Permissions     []string                    `json:"permissions,omitempty"`
+	Scope           string                      `json:"scope,omitempty"`
+	CallableByAgent bool                        `json:"callableByAgent"`
+	Enabled         bool                        `json:"enabled"`
+	HasSideEffects  bool                        `json:"hasSideEffects,omitempty"`
+	Idempotent      bool                        `json:"idempotent,omitempty"`
+	Limits          WorkflowLimits              `json:"limits,omitempty"`
+	Version         string                      `json:"version,omitempty"`
+	Source          string                      `json:"source,omitempty"`
+	Metadata        map[string]any              `json:"metadata,omitempty"`
+	DefinitionHash  string                      `json:"definitionHash,omitempty"`
 }

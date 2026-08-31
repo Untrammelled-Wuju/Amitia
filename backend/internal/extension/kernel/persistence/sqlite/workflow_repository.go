@@ -23,6 +23,14 @@ func (r *WorkflowDefinitionRepository) Save(ctx context.Context, def workflow.Wo
 	if err != nil {
 		return fmt.Errorf("marshal nodes: %w", err)
 	}
+	edgesJSON, err := json.Marshal(def.Edges)
+	if err != nil {
+		return fmt.Errorf("marshal edges: %w", err)
+	}
+	triggersJSON, err := json.Marshal(def.Triggers)
+	if err != nil {
+		return fmt.Errorf("marshal triggers: %w", err)
+	}
 
 	permissionsJSON, err := json.Marshal(def.Permissions)
 	if err != nil {
@@ -56,10 +64,10 @@ func (r *WorkflowDefinitionRepository) Save(ctx context.Context, def workflow.Wo
 	_, err = r.db.ExecContext(ctx, `
 		INSERT INTO extension_workflow_definitions
 			(workflow_id, extension_id, module_id, name, description, schema_version, version,
-			 input_schema_json, output_schema_json, nodes_json, permissions_json, scope,
+			 input_schema_json, output_schema_json, nodes_json, edges_json, triggers_json, permissions_json, scope,
 			 callable_by_agent, enabled, has_side_effects, idempotent, limits_json,
 			 source, metadata_json, definition_hash, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(workflow_id) DO UPDATE SET
 			extension_id = excluded.extension_id,
 			module_id = excluded.module_id,
@@ -70,6 +78,8 @@ func (r *WorkflowDefinitionRepository) Save(ctx context.Context, def workflow.Wo
 			input_schema_json = excluded.input_schema_json,
 			output_schema_json = excluded.output_schema_json,
 			nodes_json = excluded.nodes_json,
+			edges_json = excluded.edges_json,
+			triggers_json = excluded.triggers_json,
 			permissions_json = excluded.permissions_json,
 			scope = excluded.scope,
 			callable_by_agent = excluded.callable_by_agent,
@@ -82,7 +92,7 @@ func (r *WorkflowDefinitionRepository) Save(ctx context.Context, def workflow.Wo
 			definition_hash = excluded.definition_hash,
 			updated_at = excluded.updated_at
 	`, def.ID, def.ExtensionID, def.ModuleID, def.Name, def.Description, def.SchemaVersion, def.Version,
-		inputSchema, outputSchema, nodesJSON, permissionsJSON, def.Scope,
+		inputSchema, outputSchema, nodesJSON, edgesJSON, triggersJSON, permissionsJSON, def.Scope,
 		boolToInt(def.CallableByAgent), boolToInt(def.Enabled), boolToInt(def.HasSideEffects), boolToInt(def.Idempotent),
 		limitsJSON, def.Source, metadataJSON, defHash, now, now)
 	if err != nil {
@@ -102,7 +112,7 @@ func (r *WorkflowDefinitionRepository) Delete(ctx context.Context, workflowID st
 func (r *WorkflowDefinitionRepository) Get(ctx context.Context, workflowID string) (*workflow.WorkflowDefinition, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT workflow_id, extension_id, module_id, name, description, schema_version, version,
-			input_schema_json, output_schema_json, nodes_json, permissions_json, scope,
+			input_schema_json, output_schema_json, nodes_json, edges_json, triggers_json, permissions_json, scope,
 			callable_by_agent, enabled, has_side_effects, idempotent, limits_json,
 			source, metadata_json, definition_hash
 		FROM extension_workflow_definitions WHERE workflow_id = ?
@@ -118,7 +128,7 @@ func (r *WorkflowDefinitionRepository) Get(ctx context.Context, workflowID strin
 func (r *WorkflowDefinitionRepository) List(ctx context.Context) ([]workflow.WorkflowDefinition, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT workflow_id, extension_id, module_id, name, description, schema_version, version,
-			input_schema_json, output_schema_json, nodes_json, permissions_json, scope,
+			input_schema_json, output_schema_json, nodes_json, edges_json, triggers_json, permissions_json, scope,
 			callable_by_agent, enabled, has_side_effects, idempotent, limits_json,
 			source, metadata_json, definition_hash
 		FROM extension_workflow_definitions
@@ -203,19 +213,27 @@ func (r *WorkflowDefinitionRepository) DeleteTrigger(ctx context.Context, bindin
 	return nil
 }
 
+func (r *WorkflowDefinitionRepository) DeleteTriggersByWorkflow(ctx context.Context, workflowID string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM extension_workflow_trigger_bindings WHERE workflow_id = ?`, workflowID)
+	if err != nil {
+		return fmt.Errorf("delete workflow trigger bindings: %w", err)
+	}
+	return nil
+}
+
 type scannerInterface interface {
 	Scan(dest ...any) error
 }
 
 func scanWorkflowDefinition(row scannerInterface) (*workflow.WorkflowDefinition, error) {
 	var def workflow.WorkflowDefinition
-	var inputSchema, outputSchema, nodesJSON, permissionsJSON, limitsJSON, metadataJSON string
+	var inputSchema, outputSchema, nodesJSON, edgesJSON, triggersJSON, permissionsJSON, limitsJSON, metadataJSON string
 	var callableByAgent, enabled, hasSideEffects, idempotent int
 
 	err := row.Scan(
 		&def.ID, &def.ExtensionID, &def.ModuleID, &def.Name, &def.Description,
 		&def.SchemaVersion, &def.Version,
-		&inputSchema, &outputSchema, &nodesJSON, &permissionsJSON, &def.Scope,
+		&inputSchema, &outputSchema, &nodesJSON, &edgesJSON, &triggersJSON, &permissionsJSON, &def.Scope,
 		&callableByAgent, &enabled, &hasSideEffects, &idempotent, &limitsJSON,
 		&def.Source, &metadataJSON, &def.DefinitionHash,
 	)
@@ -235,6 +253,19 @@ func scanWorkflowDefinition(row scannerInterface) (*workflow.WorkflowDefinition,
 
 	if err := json.Unmarshal([]byte(nodesJSON), &def.Nodes); err != nil {
 		return nil, fmt.Errorf("unmarshal nodes: %w", err)
+	}
+	if edgesJSON != "" {
+		if err := json.Unmarshal([]byte(edgesJSON), &def.Edges); err != nil {
+			return nil, fmt.Errorf("unmarshal edges: %w", err)
+		}
+	}
+	if triggersJSON != "" {
+		if err := json.Unmarshal([]byte(triggersJSON), &def.Triggers); err != nil {
+			return nil, fmt.Errorf("unmarshal triggers: %w", err)
+		}
+	}
+	if def.SchemaVersion != workflow.UserWorkflowSchemaVersion && len(def.Edges) == 0 {
+		def.Edges = workflow.DeriveEdges(def.Nodes)
 	}
 	if err := json.Unmarshal([]byte(permissionsJSON), &def.Permissions); err != nil {
 		return nil, fmt.Errorf("unmarshal permissions: %w", err)
@@ -335,6 +366,32 @@ type WorkflowExecutionRepository struct {
 
 func NewWorkflowExecutionRepository(db *sql.DB) *WorkflowExecutionRepository {
 	return &WorkflowExecutionRepository{db: db}
+}
+
+func (r *WorkflowExecutionRepository) DeleteByWorkflow(ctx context.Context, workflowID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin workflow execution cleanup: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{`DELETE FROM extension_workflow_compensations WHERE execution_id IN (SELECT execution_id FROM extension_workflow_executions WHERE workflow_id = ?)`, []any{workflowID}},
+		{`DELETE FROM extension_workflow_step_runs WHERE workflow_id = ?`, []any{workflowID}},
+		{`DELETE FROM extension_workflow_checkpoints WHERE workflow_id = ?`, []any{workflowID}},
+		{`DELETE FROM extension_workflow_executions WHERE workflow_id = ?`, []any{workflowID}},
+	}
+	for _, stmt := range statements {
+		if _, err := tx.ExecContext(ctx, stmt.query, stmt.args...); err != nil {
+			return fmt.Errorf("cleanup workflow execution data: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit workflow execution cleanup: %w", err)
+	}
+	return nil
 }
 
 func (r *WorkflowExecutionRepository) Save(ctx context.Context, execID, workflowID string, result *workflow.ExecuteResult, extID, charID, convID, opID string) error {
@@ -551,10 +608,82 @@ func (r *WorkflowExecutionRepository) ListRecoverable(ctx context.Context, limit
 	return result, rows.Err()
 }
 
+func (r *WorkflowExecutionRepository) ListRuns(ctx context.Context, workflowID string, status workflow.RunStatus, limit, offset int) ([]workflow.WorkflowRun, int, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	where := "WHERE (? = '' OR workflow_id = ?) AND (? = '' OR status = ?)"
+	var total int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM extension_workflow_executions `+where, workflowID, workflowID, string(status), string(status)).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count workflow executions: %w", err)
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT execution_id, workflow_id, status, input_json, output_json, error_message,
+			context_json, steps_json, compensation_json, attempt, generation,
+			pause_reason, pause_requested_at, paused_at,
+			started_at, finished_at, updated_at
+		FROM extension_workflow_executions `+where+`
+		ORDER BY started_at DESC LIMIT ? OFFSET ?
+	`, workflowID, workflowID, string(status), string(status), limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list workflow executions: %w", err)
+	}
+	defer rows.Close()
+	items := make([]workflow.WorkflowRun, 0)
+	for rows.Next() {
+		run, err := r.scanRun(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		items = append(items, *run)
+	}
+	return items, total, rows.Err()
+}
+
+func (r *WorkflowExecutionRepository) ListStepRuns(ctx context.Context, executionID string) ([]workflow.StepRun, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT execution_id, workflow_id, node_id, status, input_json, output_json,
+			error_message, attempt, started_at, finished_at
+		FROM extension_workflow_step_runs
+		WHERE execution_id = ? ORDER BY started_at, node_id
+	`, executionID)
+	if err != nil {
+		return nil, fmt.Errorf("list workflow step runs: %w", err)
+	}
+	defer rows.Close()
+	items := make([]workflow.StepRun, 0)
+	for rows.Next() {
+		var step workflow.StepRun
+		var inputJSON, outputJSON, errorMessage sql.NullString
+		var finishedAt sql.NullTime
+		if err := rows.Scan(&step.ExecutionID, &step.WorkflowID, &step.NodeID, &step.Status, &inputJSON, &outputJSON, &errorMessage, &step.Attempt, &step.StartedAt, &finishedAt); err != nil {
+			return nil, fmt.Errorf("scan workflow step run: %w", err)
+		}
+		if errorMessage.Valid {
+			step.Error = errorMessage.String
+		}
+		if inputJSON.Valid {
+			step.Input = json.RawMessage(inputJSON.String)
+		}
+		if outputJSON.Valid {
+			step.Output = json.RawMessage(outputJSON.String)
+		}
+		if finishedAt.Valid {
+			t := finishedAt.Time
+			step.FinishedAt = &t
+		}
+		items = append(items, step)
+	}
+	return items, rows.Err()
+}
+
 func (r *WorkflowExecutionRepository) scanRun(row scannerInterface) (*workflow.WorkflowRun, error) {
 	var run workflow.WorkflowRun
 	var inputJSON, outputJSON, contextJSON, stepsJSON, compensationJSON sql.NullString
-	var errorMessage string
+	var errorMessage sql.NullString
 	var finishedAt, pauseRequestedAt, pausedAt sql.NullTime
 	var pauseReason sql.NullString
 	err := row.Scan(&run.ExecutionID, &run.WorkflowID, &run.Status, &inputJSON, &outputJSON, &errorMessage,
@@ -569,7 +698,9 @@ func (r *WorkflowExecutionRepository) scanRun(row scannerInterface) (*workflow.W
 	}
 	run.Input = json.RawMessage(inputJSON.String)
 	run.Output = json.RawMessage(outputJSON.String)
-	run.Error = errorMessage
+	if errorMessage.Valid {
+		run.Error = errorMessage.String
+	}
 	if finishedAt.Valid {
 		run.FinishedAt = &finishedAt.Time
 	}

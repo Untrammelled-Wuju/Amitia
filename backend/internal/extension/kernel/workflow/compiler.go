@@ -123,6 +123,11 @@ func DefaultCompileOptions() CompileOptions {
 }
 
 func (c *Compiler) Compile(def WorkflowDefinition, opts CompileOptions) (*CompiledWorkflowDAG, error) {
+	var materializeErr error
+	def, materializeErr = MaterializeEdgeConditions(def)
+	if materializeErr != nil {
+		return nil, materializeErr
+	}
 	if def.ID == "" {
 		return nil, fmt.Errorf("workflow: missing id")
 	}

@@ -1436,6 +1436,8 @@ var schemaMigrations = []string{
 		input_schema_json TEXT NOT NULL DEFAULT '{}',
 		output_schema_json TEXT NOT NULL DEFAULT '{}',
 		nodes_json TEXT NOT NULL DEFAULT '[]',
+		edges_json TEXT NOT NULL DEFAULT '[]',
+		triggers_json TEXT NOT NULL DEFAULT '[]',
 		permissions_json TEXT NOT NULL DEFAULT '[]',
 		scope TEXT NOT NULL DEFAULT '',
 		callable_by_agent INTEGER NOT NULL DEFAULT 0,
@@ -2355,6 +2357,8 @@ type columnAddition struct {
 }
 
 var schemaColumnAdditions = []columnAddition{
+	{"extension_workflow_definitions", "edges_json", "TEXT NOT NULL DEFAULT '[]'"},
+	{"extension_workflow_definitions", "triggers_json", "TEXT NOT NULL DEFAULT '[]'"},
 	{"extension_event_deliveries", "subscription_generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_event_deliveries", "target_generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_event_deliveries", "producer_generation", "INTEGER NOT NULL DEFAULT 0"},
