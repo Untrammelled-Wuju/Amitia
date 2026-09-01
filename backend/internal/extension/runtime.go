@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
@@ -17,18 +18,20 @@ import (
 )
 
 type Runtime struct {
-	Registry      *Registry
-	Executor      *Executor
-	Permissions   *DefaultPermissionEvaluator
-	Repository    *Repository
-	Service       *ExtensionService
-	Validator     *SchemaValidator
-	Plugins       *PluginRegistry
-	PluginManager *PluginManager
-	Workshop      *WorkshopService
-	WorkflowHost  *WorkflowHostAdapter
-	AgentSkills   *AgentSkillService
-	Kernel        *kernelruntime.Runtime
+	Registry              *Registry
+	Executor              *Executor
+	Permissions           *DefaultPermissionEvaluator
+	Repository            *Repository
+	Service               *ExtensionService
+	Validator             *SchemaValidator
+	Plugins               *PluginRegistry
+	PluginManager         *PluginManager
+	Workshop              *WorkshopService
+	WorkflowHost          *WorkflowHostAdapter
+	AgentSkills           *AgentSkillService
+	Kernel                *kernelruntime.Runtime
+	WorkflowDeviceControl WorkflowDeviceControlPlane
+	workflowMutationLocks sync.Map
 }
 
 func (r *Runtime) AttachKernel(root string) error {
