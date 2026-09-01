@@ -7,6 +7,7 @@ import type {
   ExtensionPackageSelection,
   RuntimeStatus,
   SaveExtensionPackageRequest,
+  LocalVoiceASRFinalEvent,
 } from "../shared/types";
 
 const api = {
@@ -98,6 +99,9 @@ const api = {
   },
   getBackendAuthHeaders(): Promise<Record<string, string>> {
     return ipcRenderer.invoke(IPC_CHANNELS.getBackendAuthHeaders);
+  },
+  publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }> {
+    return ipcRenderer.invoke(IPC_CHANNELS.publishLocalVoiceASRFinal, event);
   },
   getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.meshGetIdentity);

@@ -95,3 +95,12 @@ export interface SaveExtensionPackageRequest {
   suggestedName: string;
   base64: string;
 }
+
+export interface LocalVoiceASRFinalEvent {
+  eventId: string;
+  transcript: string;
+  sessionId?: string;
+  conversationId?: string;
+  characterId?: string;
+  occurredAt?: string;
+}
