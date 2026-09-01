@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import com.amitia.amitia_app.nativeprovider.AndroidNativeOperationHandler
+import com.amitia.amitia_app.nativeprovider.accessibility.AccessibilityServiceRegistry
+import com.amitia.amitia_app.nativeprovider.accessibility.ForegroundStateTracker
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeError
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeProtocol
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeRequest
@@ -393,37 +395,81 @@ internal class ExternalAutomationNativeHandler(
             status = NativeBridgeProtocol.STATUS_SUCCESS,
             result = mapOf(
                 "generation" to generation.get(),
-                "capabilities" to listOf("resolve_app", "open_app", "resolve_uri", "open_uri", "open_settings", "invoke_intent"),
+                "accessibilityConnected" to AccessibilityServiceRegistry.isServiceConnected(),
+                "capabilities" to listOf("resolve_app", "open_app", "resolve_uri", "open_uri", "open_settings", "invoke_intent", "foreground_state", "wait_foreground"),
             ),
         )
     }
 
     private fun handleForegroundState(request: NativeBridgeRequest): NativeBridgeResponse {
+        val snapshot = ForegroundStateTracker.current()
+        val available = AccessibilityServiceRegistry.isServiceConnected() && snapshot.currentPackage.isNotEmpty()
         return NativeBridgeResponse(
             protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
             requestId = request.requestId,
             status = NativeBridgeProtocol.STATUS_SUCCESS,
             result = mapOf(
-                "foregroundPackageName" to "",
-                "foregroundActivityName" to null,
-                "isForeground" to false,
-                "state" to "unavailable",
-                "reason" to "foreground state detection requires accessibility service",
+                "foregroundPackageName" to snapshot.currentPackage,
+                "foregroundActivityName" to snapshot.currentActivity,
+                "previousPackageName" to snapshot.previousPackage,
+                "changedAt" to snapshot.changedAt,
+                "generation" to snapshot.generation,
+                "isForeground" to available,
+                "state" to if (available) "available" else "unavailable",
+                "reason" to if (available) "" else "accessibility service is not connected or has not observed a window",
             ),
         )
     }
 
     private fun handleWaitForeground(request: NativeBridgeRequest): NativeBridgeResponse {
-        val targetPackage = request.payload["packageName"] as? String ?: ""
-        val timeoutMs = (request.payload["timeoutMs"] as? Number)?.toLong() ?: 5000L
-
+        val targetPackage = (request.payload["packageName"] as? String)?.trim().orEmpty()
+        val timeoutMs = ((request.payload["timeoutMs"] as? Number)?.toLong() ?: 5000L).coerceIn(1L, 60_000L)
+        if (targetPackage.isEmpty()) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "EXTERNAL_AUTOMATION_INVALID_REQUEST",
+                    message = "packageName is required",
+                ),
+            )
+        }
+        if (!AccessibilityServiceRegistry.isServiceConnected()) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "EXTERNAL_AUTOMATION_ACCESSIBILITY_UNAVAILABLE",
+                    message = "accessibility service is not connected",
+                ),
+            )
+        }
+        val snapshot = ForegroundStateTracker.awaitPackage(targetPackage, timeoutMs)
+        if (snapshot.currentPackage != targetPackage) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "EXTERNAL_AUTOMATION_FOREGROUND_TIMEOUT",
+                    message = "package did not become foreground within timeout",
+                ),
+            )
+        }
+        generation.incrementAndGet()
         return NativeBridgeResponse(
             protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
             requestId = request.requestId,
-            status = NativeBridgeProtocol.STATUS_ERROR,
-            error = NativeBridgeError(
-                code = "EXTERNAL_AUTOMATION_NOT_IMPLEMENTED",
-                message = "wait foreground requires accessibility service integration",
+            status = NativeBridgeProtocol.STATUS_SUCCESS,
+            result = mapOf(
+                "foregroundPackageName" to snapshot.currentPackage,
+                "foregroundActivityName" to snapshot.currentActivity,
+                "previousPackageName" to snapshot.previousPackage,
+                "changedAt" to snapshot.changedAt,
+                "generation" to snapshot.generation,
+                "matched" to true,
             ),
         )
     }

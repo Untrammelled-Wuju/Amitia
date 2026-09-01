@@ -12,6 +12,7 @@ import com.amitia.amitia_app.runtime.bridge.RuntimeLogCallback
 import com.amitia.amitia_app.runtime.service.internal.DefaultRuntimeServiceEndpoint
 import com.amitia.amitia_app.runtime.service.internal.RuntimeForegroundNotification
 import com.amitia.amitia_app.runtime.service.internal.RuntimeForegroundNotificationResult
+import com.amitia.amitia_app.runtime.workflow.WorkflowWakeAudioMonitor
 import com.amitia.amitia_app.runtime.proot.ProotAvailability
 import com.amitia.amitia_app.runtime.proot.ProotEvent
 import com.amitia.amitia_app.runtime.proot.ProotObserver
@@ -29,6 +30,13 @@ class RuntimeService : Service() {
     private val destroyed = AtomicBoolean(false)
     private val serviceState = AtomicReference(ServiceHostState.CREATED)
     private val notificationManager by lazy { RuntimeForegroundNotification(this) }
+    private val workflowWakeAudioMonitor by lazy {
+        WorkflowWakeAudioMonitor(
+            context = this,
+            beforeCapture = { updateWakeForegroundType(enableMicrophone = true) },
+            afterCapture = { updateWakeForegroundType(enableMicrophone = false) },
+        )
+    }
 
     private val endpoint by lazy { DefaultRuntimeServiceEndpoint { this@RuntimeService } }
     private val binder by lazy { RuntimeServiceBinder(endpoint) }
@@ -319,6 +327,14 @@ class RuntimeService : Service() {
                         RuntimeServiceContract.FOREGROUND_SERVICE_TYPE
                     )
                     startProotSessionLocked(generation, profile, startId)
+                    // startProotSessionLocked can fail synchronously and tear the service down.
+                    // Only start the wake monitor after a live runtime session is actually owned.
+                    if (serviceState.get() == ServiceHostState.FOREGROUND &&
+                        currentSessionRef.get() != null &&
+                        currentSessionContextRef.get() != null
+                    ) {
+                        workflowWakeAudioMonitor.start()
+                    }
                 } catch (e: Exception) {
                     teardownAfterStartupFailure(
                         generation = generation,
@@ -1045,6 +1061,32 @@ class RuntimeService : Service() {
         }
     }
 
+    private fun updateWakeForegroundType(enableMicrophone: Boolean): Boolean {
+        if (destroyed.get() || serviceState.get() != ServiceHostState.FOREGROUND) {
+            return false
+        }
+        val notification = when (val result = notificationManager.createNotification()) {
+            is RuntimeForegroundNotificationResult.Success -> result.notification
+            is RuntimeForegroundNotificationResult.Failure -> return false
+        }
+        val serviceType = if (enableMicrophone) {
+            RuntimeServiceContract.FOREGROUND_SERVICE_TYPE_WITH_MICROPHONE
+        } else {
+            RuntimeServiceContract.FOREGROUND_SERVICE_TYPE
+        }
+        return try {
+            ServiceCompat.startForeground(
+                this,
+                RuntimeServiceContract.NOTIFICATION_ID,
+                notification,
+                serviceType,
+            )
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun stopForegroundSafely() {
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -1060,6 +1102,7 @@ class RuntimeService : Service() {
     }
 
     override fun onDestroy() {
+        runCatching { workflowWakeAudioMonitor.stop() }
         var unexpectedTerminationGeneration: Long? = null
         var unexpectedTerminationCause: RuntimeServiceTerminationCause? = null
         lock.withLock {

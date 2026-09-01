@@ -44,6 +44,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   List<Map<String, dynamic>> _catalog = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _ownedWorkflows = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _devices = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _triggerCapabilities = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _triggerAppCatalog = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _triggerWakeConfigs = <Map<String, dynamic>>[];
   Map<String, Map<String, dynamic>> _stepRuns = <String, Map<String, dynamic>>{};
   List<Map<String, dynamic>> _stepAttempts = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _checkpoints = <Map<String, dynamic>>[];
@@ -126,6 +129,25 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
           _devices = await service.workflowDevices();
         } catch (_) {
           _devices = <Map<String, dynamic>>[];
+        }
+        _triggerCapabilities = <Map<String, dynamic>>[];
+        _triggerAppCatalog = <Map<String, dynamic>>[];
+        _triggerWakeConfigs = <Map<String, dynamic>>[];
+      } else {
+        try {
+          _triggerCapabilities = await service.workflowTriggerCapabilities(target: _target);
+        } catch (_) {
+          _triggerCapabilities = <Map<String, dynamic>>[];
+        }
+        try {
+          _triggerAppCatalog = await service.workflowTriggerAppCatalog(target: _target);
+        } catch (_) {
+          _triggerAppCatalog = <Map<String, dynamic>>[];
+        }
+        try {
+          _triggerWakeConfigs = await service.workflowTriggerWakeConfigs(target: _target);
+        } catch (_) {
+          _triggerWakeConfigs = <Map<String, dynamic>>[];
         }
       }
       if (_isDevice) {
@@ -319,8 +341,49 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     return out;
   }
 
+  bool _hasEnabledDeviceTrigger() {
+    final workflowEnabled = _workflow?['enabled'] != false;
+    if (!workflowEnabled) return false;
+    const deviceEvents = <String>{
+      'device.android.intent',
+      'device.android.tasker',
+      'voice.wake.detected',
+      'voice.asr.final',
+      'device.app.foreground',
+    };
+    return _triggers.any((trigger) =>
+        trigger['enabled'] != false &&
+        trigger['type'] == 'event' &&
+        deviceEvents.contains((trigger['eventType'] ?? '').toString()));
+  }
+
+  bool _hasHighImpactWorkflowNodes() {
+    if (_workflow?['hasSideEffects'] == true) return true;
+    const highImpactTypes = <String>{'tool', 'task', 'mcp', 'javascript', 'wasm', 'trusted_service'};
+    return _nodes.any((node) => highImpactTypes.contains((node['type'] ?? '').toString().toLowerCase()));
+  }
+
+  Future<bool> _confirmDeviceTriggerRisk() async {
+    if (!_hasEnabledDeviceTrigger() || !_hasHighImpactWorkflowNodes()) return true;
+    if (!mounted) return false;
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('确认设备自动执行'),
+            content: const Text('此工作流包含可产生副作用或调用外部能力的节点，并启用了设备自动触发器。触发条件满足时可能在无人交互情况下执行。请确认触发来源、权限、输入过滤与幂等策略均符合预期。'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+              FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('确认并保存')),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Future<bool> _save({bool notify = true}) async {
     if (_workflow == null || _saving) return false;
+    if (!await _confirmDeviceTriggerRisk()) return false;
     setState(() => _saving = true);
     try {
       if (!_isDevice) {
@@ -1838,6 +1901,142 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   }
 
 
+  String _triggerCapabilityId(String preset) {
+    return switch (preset) {
+      'android_intent' => 'workflow.trigger.android_intent.v1',
+      'tasker' => 'workflow.trigger.tasker.v1',
+      'voice_wake' => 'workflow.trigger.voice_wake.v1',
+      'voice_phrase' => 'workflow.trigger.voice_phrase.v1',
+      'app_foreground' => 'workflow.trigger.app_foreground.v1',
+      _ => '',
+    };
+  }
+
+  Map<String, dynamic>? _triggerCapability(String preset) {
+    final id = _triggerCapabilityId(preset);
+    if (id.isEmpty) return null;
+    for (final item in _triggerCapabilities) {
+      if ((item['id'] ?? '').toString() == id) return item;
+    }
+    return null;
+  }
+
+  bool _canUseDeviceTrigger(String preset) {
+    if (preset == 'advanced') return true;
+    if (_isCloud) return false;
+    return _triggerCapability(preset)?['supported'] == true;
+  }
+
+  String _triggerCapabilityLabel(String preset) {
+    if (_isCloud) return '仅可用于本地或指定设备 Workflow';
+    final item = _triggerCapability(preset);
+    if (item == null) return '未取得目标设备 Capability 状态';
+    if (item['supported'] != true) return '目标设备不支持该触发器';
+    if (item['available'] == true) return '目标设备当前可用';
+    final reason = (item['reason'] ?? '').toString().trim();
+    final permission = (item['permission'] ?? '').toString().trim();
+    if (reason.isNotEmpty) return reason;
+    if (permission.isNotEmpty) return '需要权限：$permission';
+    return '目标设备当前不可用';
+  }
+
+  Future<void> _chooseWakeConfig(TextEditingController controller) async {
+    if (_triggerWakeConfigs.isEmpty) {
+      _show('目标设备没有启用的 Wake Config，请先创建并启用唤醒配置');
+      return;
+    }
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView.builder(
+          itemCount: _triggerWakeConfigs.length,
+          itemBuilder: (context, index) {
+            final item = _triggerWakeConfigs[index];
+            final id = (item['id'] ?? '').toString().trim();
+            final name = (item['name'] ?? '').toString().trim();
+            final backend = (item['backend'] ?? '').toString().trim();
+            return ListTile(
+              title: Text(name.isEmpty ? id : name),
+              subtitle: Text([if (backend.isNotEmpty) backend, id].join(' · ')),
+              onTap: id.isEmpty ? null : () => Navigator.pop(context, id),
+            );
+          },
+        ),
+      ),
+    );
+    if (selected == null || selected.trim().isEmpty) return;
+    controller.text = selected.trim();
+  }
+
+  Future<void> _appendAppPackageFromCatalog(TextEditingController controller) async {
+    if (_triggerAppCatalog.isEmpty) {
+      _show('目标设备尚未上报可启动应用目录，可继续手动填写 Package Name');
+      return;
+    }
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView.builder(
+          itemCount: _triggerAppCatalog.length,
+          itemBuilder: (context, index) {
+            final app = _triggerAppCatalog[index];
+            final packageName = (app['packageName'] ?? '').toString();
+            final label = (app['label'] ?? '').toString().trim();
+            return ListTile(
+              title: Text(label.isEmpty ? packageName : label),
+              subtitle: label.isEmpty ? null : Text(packageName),
+              onTap: packageName.isEmpty ? null : () => Navigator.pop(context, packageName),
+            );
+          },
+        ),
+      ),
+    );
+    if (selected == null || selected.trim().isEmpty) return;
+    final values = _splitValues(controller.text).toSet();
+    values.add(selected.trim());
+    controller.text = values.join(', ');
+  }
+
+  Future<void> _generateTaskerSecret(TextEditingController controller) async {
+    if (!_canUseDeviceTrigger('tasker')) {
+      _show(_triggerCapabilityLabel('tasker'));
+      return;
+    }
+    try {
+      final value = await ref.read(extensionServiceProvider).createWorkflowTaskerSecret(target: _target);
+      final secretRef = (value['secretRef'] ?? '').toString().trim();
+      final secret = (value['secret'] ?? '').toString();
+      if (secretRef.isEmpty || secret.isEmpty) throw StateError('Tasker Secret 返回数据无效');
+      controller.text = secretRef;
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Tasker Secret（仅显示一次）'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('请立即复制并保存到 Tasker。Workflow Definition 只保存 Secret Ref。'),
+                const SizedBox(height: 12),
+                const Text('Action：com.amitia.workflow.TASKER'),
+                const SizedBox(height: 8),
+                SelectableText(secret),
+              ],
+            ),
+          ),
+          actions: [FilledButton(onPressed: () => Navigator.pop(context), child: const Text('我已保存'))],
+        ),
+      );
+    } catch (error) {
+      _show('Tasker Secret 生成失败：${_message(error)}');
+    }
+  }
+
   Future<void> _editTrigger(Map<String, dynamic> trigger) async {
     final type = (trigger['type'] ?? 'manual').toString();
     final eventType = TextEditingController(text: (trigger['eventType'] ?? '').toString());
@@ -1846,51 +2045,235 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     final timezone = TextEditingController(text: (config['timezone'] ?? '').toString());
     final interval = TextEditingController(text: (config['intervalSeconds'] ?? config['seconds'] ?? '').toString());
     final runAt = TextEditingController(text: (config['runAt'] ?? '').toString());
+    final actions = TextEditingController(text: _stringList(config['actions']).join(', '));
+    final categories = TextEditingController(text: _stringList(config['categories']).join(', '));
+    final dataSchemes = TextEditingController(text: _stringList(config['dataSchemes']).join(', '));
+    final mimeTypes = TextEditingController(text: _stringList(config['mimeTypes']).join(', '));
+    final dedupWindowMs = TextEditingController(text: (config['dedupWindowMs'] ?? 2000).toString());
+    final taskerEventName = TextEditingController(text: (config['eventName'] ?? '').toString());
+    final taskerSecretRef = TextEditingController(text: (config['secretRef'] ?? '').toString());
+    final taskerVariables = TextEditingController(text: _stringList(config['allowedVariables']).join(', '));
+    final wakeConfigId = TextEditingController(text: (config['wakeConfigId'] ?? '').toString());
+    final phrases = TextEditingController(text: _stringList(config['phrases']).join('\n'));
+    final packages = TextEditingController(text: _stringList(config['packages']).join(', '));
+    final cooldownMs = TextEditingController(text: (config['cooldownMs'] ?? 30000).toString());
+    var preset = type == 'event' ? _deviceEventPresetFor(eventType.text) : 'advanced';
+    var phraseMatchMode = <String>{'exact', 'normalized'}.contains((config['matchMode'] ?? '').toString()) ? config['matchMode'].toString() : 'normalized';
     final applied = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(_triggerLabel(type)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!<String>{'manual', 'schedule', 'cron', 'interval', 'one_shot'}.contains(type))
-                TextField(controller: eventType, decoration: const InputDecoration(labelText: 'Event Type')),
-              if (type == 'cron' || type == 'schedule') ...[
-                TextField(controller: cron, decoration: const InputDecoration(labelText: 'Cron Expression', hintText: '0 8 * * *')),
-                const SizedBox(height: 10),
-                TextField(controller: timezone, decoration: const InputDecoration(labelText: 'Timezone', hintText: 'Asia/Shanghai')),
-              ],
-              if (type == 'interval')
-                TextField(controller: interval, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Interval Seconds')),
-              if (type == 'one_shot')
-                TextField(controller: runAt, decoration: const InputDecoration(labelText: 'Run At (RFC3339)')),
-            ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(_triggerLabel(type)),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (type == 'event') ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: preset,
+                      decoration: const InputDecoration(labelText: '触发方式'),
+                      items: [
+                        const DropdownMenuItem(value: 'advanced', child: Text('高级 Event Trigger')),
+                        DropdownMenuItem(value: 'android_intent', enabled: _canUseDeviceTrigger('android_intent'), child: const Text('Android Intent')),
+                        DropdownMenuItem(value: 'tasker', enabled: _canUseDeviceTrigger('tasker'), child: const Text('Tasker')),
+                        DropdownMenuItem(value: 'voice_wake', enabled: _canUseDeviceTrigger('voice_wake'), child: const Text('Voice / Wake')),
+                        DropdownMenuItem(value: 'voice_phrase', enabled: _canUseDeviceTrigger('voice_phrase'), child: const Text('Voice Phrase')),
+                        DropdownMenuItem(value: 'app_foreground', enabled: _canUseDeviceTrigger('app_foreground'), child: const Text('App Launch / Foreground')),
+                      ],
+                      onChanged: (value) {
+                        final next = value ?? 'advanced';
+                        if (!_canUseDeviceTrigger(next)) {
+                          _show(_triggerCapabilityLabel(next));
+                          return;
+                        }
+                        setDialogState(() {
+                          preset = next;
+                          eventType.text = switch (next) {
+                            'android_intent' => 'device.android.intent',
+                            'tasker' => 'device.android.tasker',
+                            'voice_wake' => 'voice.wake.detected',
+                            'voice_phrase' => 'voice.asr.final',
+                            'app_foreground' => 'device.app.foreground',
+                            _ => eventType.text,
+                          };
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    if (preset != 'advanced') ...[
+                      Text(_triggerCapabilityLabel(preset), style: Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(height: 10),
+                    ],
+                    if (preset == 'advanced')
+                      TextField(controller: eventType, decoration: const InputDecoration(labelText: 'Event Type')),
+                    if (preset == 'android_intent') ...[
+                      TextField(controller: actions, decoration: const InputDecoration(labelText: 'Intent Actions', hintText: 'com.example.EVENT')),
+                      const SizedBox(height: 10),
+                      TextField(controller: categories, decoration: const InputDecoration(labelText: 'Categories（可空，逗号分隔）')),
+                      const SizedBox(height: 10),
+                      TextField(controller: dataSchemes, decoration: const InputDecoration(labelText: 'Data Schemes（可空，逗号分隔）')),
+                      const SizedBox(height: 10),
+                      TextField(controller: mimeTypes, decoration: const InputDecoration(labelText: 'MIME Types（可空，逗号分隔）')),
+                      const SizedBox(height: 10),
+                      TextField(controller: dedupWindowMs, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '去重窗口（毫秒，最大 600000）')),
+                      const SizedBox(height: 8),
+                      const Text('第三方 App 需向 Amitia Receiver 发送显式 Broadcast；Release Component=com.amitia.amitia_app/com.amitia.amitia_app.workflow.WorkflowIntentReceiver，Debug/变体构建请使用实际 applicationId。Action 使用上方配置值。'),
+                    ],
+                    if (preset == 'tasker') ...[
+                      TextField(controller: taskerEventName, decoration: const InputDecoration(labelText: 'Tasker Event Name', hintText: 'home_arrived')),
+                      const SizedBox(height: 10),
+                      TextField(controller: taskerSecretRef, readOnly: true, decoration: const InputDecoration(labelText: 'Secret Ref', hintText: '点击下方按钮生成')),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _canUseDeviceTrigger('tasker') ? () => _generateTaskerSecret(taskerSecretRef) : null,
+                        icon: const Icon(Icons.key_outlined),
+                        label: const Text('生成 Tasker Secret'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(controller: taskerVariables, decoration: const InputDecoration(labelText: '允许变量（逗号分隔）', hintText: 'battery, location')),
+                      const SizedBox(height: 8),
+                      const Text('Tasker 使用显式 Broadcast：Action=com.amitia.workflow.TASKER；Release Component=com.amitia.amitia_app/com.amitia.amitia_app.workflow.WorkflowIntentReceiver，Debug/变体构建请使用实际 applicationId；Secret 实值只显示一次。'),
+                    ],
+                    if (preset == 'voice_wake') ...[
+                      TextField(controller: wakeConfigId, readOnly: true, decoration: const InputDecoration(labelText: 'Wake Config', hintText: '必须选择已启用配置')),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => _chooseWakeConfig(wakeConfigId),
+                        icon: const Icon(Icons.record_voice_over_outlined),
+                        label: Text(_triggerWakeConfigs.isEmpty ? '没有可用 Wake Config' : '选择 Wake Config（${_triggerWakeConfigs.length}）'),
+                      ),
+                    ],
+                    if (preset == 'voice_phrase') ...[
+                      TextField(controller: phrases, minLines: 2, maxLines: 5, decoration: const InputDecoration(labelText: '短语（每行一个）', hintText: '开始回家模式')),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: phraseMatchMode,
+                        decoration: const InputDecoration(labelText: '匹配模式'),
+                        items: const [
+                          DropdownMenuItem(value: 'normalized', child: Text('Normalized')),
+                          DropdownMenuItem(value: 'exact', child: Text('Exact')),
+                        ],
+                        onChanged: (value) => setDialogState(() => phraseMatchMode = value ?? 'normalized'),
+                      ),
+                    ],
+                    if (preset == 'app_foreground') ...[
+                      TextField(controller: packages, decoration: const InputDecoration(labelText: 'Package Names', hintText: 'com.example.app')),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => _appendAppPackageFromCatalog(packages),
+                        icon: const Icon(Icons.apps_outlined),
+                        label: Text(_triggerAppCatalog.isEmpty ? '设备应用目录未就绪' : '从设备应用选择（${_triggerAppCatalog.length}）'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(controller: cooldownMs, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '冷却时间（毫秒）')),
+                      const SizedBox(height: 8),
+                      const Text('语义为 package becomes foreground；同一 Package 内 Activity 切换不会重复触发。'),
+                    ],
+                  ] else if (!<String>{'manual', 'schedule', 'cron', 'interval', 'one_shot'}.contains(type))
+                    TextField(controller: eventType, decoration: const InputDecoration(labelText: 'Event Type')),
+                  if (type == 'cron' || type == 'schedule') ...[
+                    TextField(controller: cron, decoration: const InputDecoration(labelText: 'Cron Expression', hintText: '0 8 * * *')),
+                    const SizedBox(height: 10),
+                    TextField(controller: timezone, decoration: const InputDecoration(labelText: 'Timezone', hintText: 'Asia/Shanghai')),
+                  ],
+                  if (type == 'interval')
+                    TextField(controller: interval, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Interval Seconds')),
+                  if (type == 'one_shot')
+                    TextField(controller: runAt, decoration: const InputDecoration(labelText: 'Run At (RFC3339)')),
+                ],
+              ),
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('应用')),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('应用')),
-        ],
       ),
     );
     if (applied == true && mounted) {
       setState(() {
         trigger['eventType'] = eventType.text.trim();
-        trigger['config'] = <String, dynamic>{
-          ...config,
-          if (cron.text.trim().isNotEmpty) 'cronExpression': cron.text.trim(),
-          if (timezone.text.trim().isNotEmpty) 'timezone': timezone.text.trim(),
-          if (int.tryParse(interval.text.trim()) != null) 'intervalSeconds': int.parse(interval.text.trim()),
-          if (runAt.text.trim().isNotEmpty) 'runAt': runAt.text.trim(),
-        };
+        if (type == 'event') {
+          trigger['config'] = switch (preset) {
+            'android_intent' => <String, dynamic>{
+                'actions': _splitValues(actions.text),
+                'categories': _splitValues(categories.text),
+                'dataSchemes': _splitValues(dataSchemes.text),
+                'mimeTypes': _splitValues(mimeTypes.text),
+                'dedupWindowMs': (int.tryParse(dedupWindowMs.text.trim()) ?? 2000).clamp(0, 600000).toInt(),
+              },
+            'tasker' => <String, dynamic>{
+                'eventName': taskerEventName.text.trim(),
+                'secretRef': taskerSecretRef.text.trim(),
+                'allowedVariables': _splitValues(taskerVariables.text),
+              },
+            'voice_wake' => <String, dynamic>{'mode': 'wake', 'wakeConfigId': wakeConfigId.text.trim()},
+            'voice_phrase' => <String, dynamic>{'mode': 'phrase', 'phrases': _splitValues(phrases.text), 'matchMode': phraseMatchMode},
+            'app_foreground' => <String, dynamic>{
+                'packages': _splitValues(packages.text),
+                'cooldownMs': (int.tryParse(cooldownMs.text.trim()) ?? 30000).clamp(0, 86400000).toInt(),
+              },
+            _ => config,
+          };
+        } else {
+          trigger['config'] = <String, dynamic>{
+            ...config,
+            if (cron.text.trim().isNotEmpty) 'cronExpression': cron.text.trim(),
+            if (timezone.text.trim().isNotEmpty) 'timezone': timezone.text.trim(),
+            if (int.tryParse(interval.text.trim()) != null) 'intervalSeconds': int.parse(interval.text.trim()),
+            if (runAt.text.trim().isNotEmpty) 'runAt': runAt.text.trim(),
+          };
+        }
         _dirty = true;
       });
     }
-    for (final c in <TextEditingController>[eventType, cron, timezone, interval, runAt]) {
+    for (final c in <TextEditingController>[
+      eventType,
+      cron,
+      timezone,
+      interval,
+      runAt,
+      actions,
+      categories,
+      dataSchemes,
+      mimeTypes,
+      dedupWindowMs,
+      taskerEventName,
+      taskerSecretRef,
+      taskerVariables,
+      wakeConfigId,
+      phrases,
+      packages,
+      cooldownMs,
+    ]) {
       c.dispose();
     }
   }
+
+  String _deviceEventPresetFor(String eventType) => switch (eventType.trim()) {
+        'device.android.intent' => 'android_intent',
+        'device.android.tasker' => 'tasker',
+        'voice.wake.detected' => 'voice_wake',
+        'voice.asr.final' => 'voice_phrase',
+        'device.app.foreground' => 'app_foreground',
+        _ => 'advanced',
+      };
+
+  List<String> _stringList(dynamic value) {
+    if (value is! List) return <String>[];
+    return value.map((item) => item.toString().trim()).where((item) => item.isNotEmpty).toList(growable: false);
+  }
+
+  List<String> _splitValues(String value) => value
+      .split(RegExp(r'[,\n]'))
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toSet()
+      .toList(growable: false);
 
   String _triggerSummary(Map<String, dynamic> trigger) {
     final type = (trigger['type'] ?? 'manual').toString();

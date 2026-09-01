@@ -181,6 +181,20 @@ class _RealtimeVoiceCallSheetState
         case 'tts_ended':
           _aiSpeaking = false;
           if (mounted) setState(() {});
+        case 'asr_final':
+          final data = decoded['data'];
+          if (data is! Map) return;
+          final transcript = data['transcript']?.toString().trim() ?? '';
+          final eventId = data['eventId']?.toString().trim() ?? '';
+          if (transcript.isEmpty || eventId.isEmpty) return;
+          unawaited(
+            _audio.emitWorkflowAsrFinal(
+              transcript: transcript,
+              eventId: eventId,
+              sessionId: data['sessionId']?.toString(),
+              conversationId: data['conversationId']?.toString(),
+            ),
+          );
         case 'SessionFinished':
         case 'disconnected':
           unawaited(_shutdown(sendStop: false));

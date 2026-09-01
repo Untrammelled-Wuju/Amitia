@@ -636,6 +636,47 @@ class ExtensionService {
     return items.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList(growable: false);
   }
 
+  Future<List<Map<String, dynamic>>> workflowTriggerCapabilities({required WorkflowApiTarget target}) async {
+    if (target.isCloud) return const <Map<String, dynamic>>[];
+    final path = target.isLocal
+        ? '/api/local/workflows/trigger-capabilities'
+        : '/api/extensions/workflow-devices/${Uri.encodeComponent(target.deviceId.trim())}/trigger-capabilities';
+    final resp = await _api.get<Map<String, dynamic>>(path);
+    final items = resp?['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> workflowTriggerAppCatalog({required WorkflowApiTarget target}) async {
+    if (target.isCloud) return const <Map<String, dynamic>>[];
+    final path = target.isLocal
+        ? '/api/local/workflows/trigger-app-catalog'
+        : '/api/extensions/workflow-devices/${Uri.encodeComponent(target.deviceId.trim())}/trigger-app-catalog';
+    final resp = await _api.get<Map<String, dynamic>>(path);
+    final items = resp?['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> workflowTriggerWakeConfigs({required WorkflowApiTarget target}) async {
+    if (target.isCloud) return const <Map<String, dynamic>>[];
+    final path = target.isLocal
+        ? '/api/local/workflows/trigger-wake-configs'
+        : '/api/extensions/workflow-devices/${Uri.encodeComponent(target.deviceId.trim())}/trigger-wake-configs';
+    final resp = await _api.get<Map<String, dynamic>>(path);
+    final items = resp?['items'];
+    if (items is! List) return const <Map<String, dynamic>>[];
+    return items.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> createWorkflowTaskerSecret({required WorkflowApiTarget target}) async {
+    if (target.isCloud) throw StateError('Tasker trigger secret requires a local or device workflow target');
+    final path = target.isLocal
+        ? '/api/local/workflows/trigger-secrets/tasker'
+        : '/api/extensions/workflow-devices/${Uri.encodeComponent(target.deviceId.trim())}/trigger-secrets/tasker';
+    return await _api.post<Map<String, dynamic>>(path, data: const <String, dynamic>{}) ?? <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> workflowSyncEvents({
     WorkflowApiTarget target = const WorkflowApiTarget.cloud(),
     int? afterCursor,
