@@ -488,7 +488,11 @@ GoRoute(
   pageBuilder: (context, state) => slideFadePage(
     context: context,
     state: state,
-    child: WorkflowEditorPage(workflowId: state.pathParameters['id']!),
+    child: WorkflowEditorPage(
+      workflowId: state.pathParameters['id']!,
+      location: state.uri.queryParameters['location'] ?? 'cloud',
+      deviceId: state.uri.queryParameters['deviceId'] ?? '',
+    ),
   ),
 ),
 GoRoute(

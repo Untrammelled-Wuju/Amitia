@@ -5,6 +5,8 @@ import 'backend_service_api.dart';
 const List<String> _deviceLocalApiPrefixes = <String>[
   '/api/desktop-pets',
   '/api/desktop-pet',
+  '/api/local/workflows',
+  '/api/local/workflow-runs',
 ];
 
 bool isDeviceLocalApiPath(String path) {

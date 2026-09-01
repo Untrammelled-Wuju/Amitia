@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,11 +12,19 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/services/extension_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
-final _workflowListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  return ref.read(extensionServiceProvider).workflows(limit: 200);
+WorkflowApiTarget _workflowTargetFromKey(String key) {
+  if (key == 'local') return const WorkflowApiTarget.local();
+  if (key.startsWith('device:')) return WorkflowApiTarget.device(key.substring('device:'.length));
+  return const WorkflowApiTarget.cloud();
+}
+
+final _workflowListProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, key) async {
+  if (key == 'device:') return const <Map<String, dynamic>>[];
+  return ref.read(extensionServiceProvider).workflows(limit: 200, target: _workflowTargetFromKey(key));
 });
 
 class WorkflowListPage extends ConsumerStatefulWidget {
@@ -30,6 +39,115 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
   String _search = '';
   String _filter = 'all';
   bool _busy = false;
+  String _location = 'local';
+  String _deviceId = '';
+  List<Map<String, dynamic>> _devices = <Map<String, dynamic>>[];
+  Timer? _reconcileTimer;
+  int? _syncCursor;
+  String _syncTargetKey = '';
+  bool _syncPolling = false;
+  int _deviceRefreshTicks = 0;
+
+  String get _targetKey => _location == 'device' ? 'device:$_deviceId' : _location;
+  WorkflowApiTarget get _target => _workflowTargetFromKey(_targetKey);
+  bool get _hasUsableTarget => _location != 'device' || _deviceId.isNotEmpty;
+  int? _revisionOf(Map<String, dynamic> item) {
+    final installation = item['installation'];
+    if (installation is! Map) return null;
+    final value = installation['revision'];
+    return value is int ? value : int.tryParse(value?.toString() ?? '');
+  }
+  String _editorRoute(String id) => AppRoutes.workflowEditor(id, location: _location, deviceId: _deviceId);
+  void _refresh() => ref.invalidate(_workflowListProvider(_targetKey));
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(() async {
+      await _loadDevices();
+      if (!mounted) return;
+      await _primeSyncCursor();
+    });
+    _reconcileTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_pollSyncEvents());
+    });
+  }
+
+  @override
+  void dispose() {
+    _reconcileTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadDevices() async {
+    try {
+      final items = await ref.read(extensionServiceProvider).workflowDevices();
+      if (!mounted) return;
+      setState(() {
+        _devices = items;
+        final exists = items.any((item) => (item['deviceId'] ?? '').toString() == _deviceId);
+        if (!exists) _deviceId = items.isEmpty ? '' : (items.first['deviceId'] ?? '').toString();
+      });
+    } catch (_) {
+      if (mounted) setState(() => _devices = <Map<String, dynamic>>[]);
+    }
+  }
+
+  Future<void> _primeSyncCursor() async {
+    if (!_hasUsableTarget) return;
+    final key = _targetKey;
+    try {
+      final page = await ref.read(extensionServiceProvider).workflowSyncEvents(target: _target);
+      if (!mounted || _targetKey != key) return;
+      final raw = page['cursor'];
+      _syncCursor = raw is int ? raw : int.tryParse(raw?.toString() ?? '') ?? 0;
+      _syncTargetKey = key;
+    } catch (_) {
+      if (mounted && _targetKey == key) {
+        _syncCursor = null;
+        _syncTargetKey = '';
+      }
+    }
+  }
+
+  Future<void> _pollSyncEvents() async {
+    if (!mounted || _busy || _syncPolling || !_hasUsableTarget) return;
+    final key = _targetKey;
+    _syncPolling = true;
+    try {
+      if (_syncCursor == null || _syncTargetKey != key) {
+        await _primeSyncCursor();
+        return;
+      }
+      final page = await ref.read(extensionServiceProvider).workflowSyncEvents(
+            target: _target,
+            afterCursor: _syncCursor,
+          );
+      if (!mounted || _targetKey != key) return;
+      final rawCursor = page['cursor'];
+      _syncCursor = rawCursor is int ? rawCursor : int.tryParse(rawCursor?.toString() ?? '') ?? _syncCursor;
+      final items = page['items'];
+      final changed = items is List && items.isNotEmpty;
+      if (changed) _refresh();
+      _deviceRefreshTicks++;
+      if (_location != 'local' && _deviceRefreshTicks % 5 == 0) unawaited(_loadDevices());
+      // Device-local edits made directly on another device do not yet push into
+      // Cloud Core's outbox, so reconcile that catalog at a lower frequency.
+      if (_location == 'device' && !changed && _deviceRefreshTicks % 8 == 0) _refresh();
+    } catch (_) {
+      // Durable cursor is intentionally retained and retried on the next tick.
+    } finally {
+      _syncPolling = false;
+    }
+  }
+
+  Future<void> _resetSyncForTarget() async {
+    _syncCursor = null;
+    _syncTargetKey = '';
+    _deviceRefreshTicks = 0;
+    _refresh();
+    await _primeSyncCursor();
+  }
 
   void _show(String message) {
     if (!mounted) return;
@@ -39,26 +157,31 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
   }
 
   Future<void> _create() async {
-    final service = ref.read(extensionServiceProvider);
-    final created = await service.createWorkflow(<String, dynamic>{
-      'schemaVersion': 'workflow-v2',
-      'name': '未命名工作流',
-      'description': '',
-      'inputSchema': <String, dynamic>{'type': 'object', 'properties': <String, dynamic>{}},
-      'outputSchema': <String, dynamic>{'type': 'object', 'properties': <String, dynamic>{}},
-      'nodes': <dynamic>[],
-      'edges': <dynamic>[],
-      'triggers': <dynamic>[
-        <String, dynamic>{'id': 'manual', 'type': 'manual', 'config': <String, dynamic>{}, 'enabled': true},
-      ],
-      'callableByAgent': false,
-      'enabled': true,
-      'source': 'user',
-      'metadata': <String, dynamic>{},
-    });
-    final id = (created['id'] ?? '').toString();
-    ref.invalidate(_workflowListProvider);
-    if (mounted && id.isNotEmpty) context.push(AppRoutes.workflowEditor(id));
+    if (!_hasUsableTarget) { _show('请先选择目标设备'); return; }
+    try {
+      final service = ref.read(extensionServiceProvider);
+      final created = await service.createWorkflow(<String, dynamic>{
+        'schemaVersion': 'workflow-v2',
+        'name': '未命名工作流',
+        'description': '',
+        'inputSchema': <String, dynamic>{'type': 'object', 'properties': <String, dynamic>{}},
+        'outputSchema': <String, dynamic>{'type': 'object', 'properties': <String, dynamic>{}},
+        'nodes': <dynamic>[],
+        'edges': <dynamic>[],
+        'triggers': <dynamic>[
+          <String, dynamic>{'id': 'manual', 'type': 'manual', 'config': <String, dynamic>{}, 'enabled': true},
+        ],
+        'callableByAgent': false,
+        'enabled': true,
+        'source': 'user',
+        'metadata': <String, dynamic>{},
+      }, target: _target);
+      final id = (created['id'] ?? '').toString();
+      _refresh();
+      if (mounted && id.isNotEmpty) context.push(_editorRoute(id));
+    } catch (error) {
+      _show('创建失败：$error');
+    }
   }
 
   Future<void> _createWithAI() async {
@@ -91,16 +214,16 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
     setState(() => _busy = true);
     try {
       final service = ref.read(extensionServiceProvider);
-      final proposal = await service.generateWorkflowWithAI(instruction.trim());
+      final proposal = await service.generateWorkflowWithAI(instruction.trim(), target: _target);
       final rawDefinition = proposal['definition'];
       if (rawDefinition is! Map) throw StateError('AI 未返回有效工作流定义');
       final definition = Map<String, dynamic>.from(rawDefinition)..remove('definitionHash');
-      final created = await service.createWorkflow(definition);
+      final created = await service.createWorkflow(definition, target: _target);
       final id = (created['id'] ?? '').toString();
-      ref.invalidate(_workflowListProvider);
+      _refresh();
       final summary = (proposal['summary'] ?? '').toString().trim();
       if (summary.isNotEmpty) _show(summary);
-      if (mounted && id.isNotEmpty) context.push(AppRoutes.workflowEditor(id));
+      if (mounted && id.isNotEmpty) context.push(_editorRoute(id));
     } catch (error) {
       _show('AI 创建失败：$error');
     } finally {
@@ -111,10 +234,10 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
   Future<void> _duplicate(Map<String, dynamic> item) async {
     final id = (item['id'] ?? '').toString();
     if (id.isEmpty) return;
-    final created = await ref.read(extensionServiceProvider).duplicateWorkflow(id);
+    final created = await ref.read(extensionServiceProvider).duplicateWorkflow(id, target: _target);
     final createdId = (created['id'] ?? '').toString();
-    ref.invalidate(_workflowListProvider);
-    if (mounted && createdId.isNotEmpty) context.push(AppRoutes.workflowEditor(createdId));
+    _refresh();
+    if (mounted && createdId.isNotEmpty) context.push(_editorRoute(createdId));
   }
 
   Future<void> _delete(Map<String, dynamic> item) async {
@@ -134,16 +257,16 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
         ) ??
         false;
     if (!confirmed) return;
-    await ref.read(extensionServiceProvider).deleteWorkflow(id);
+    await ref.read(extensionServiceProvider).deleteWorkflow(id, target: _target);
     _selected.remove(id);
-    ref.invalidate(_workflowListProvider);
+    _refresh();
     if (mounted) setState(() {});
     _show('工作流已删除');
   }
 
   Future<void> _run(String id) async {
     if (id.isEmpty) return;
-    final result = await ref.read(extensionServiceProvider).runWorkflow(id);
+    final result = await ref.read(extensionServiceProvider).runWorkflow(id, target: _target);
     final runId = (result['executionId'] ?? '').toString();
     _show(runId.isEmpty ? '已提交运行' : '已提交运行 · $runId');
   }
@@ -177,12 +300,13 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
           id,
           name: name.trim(),
           description: (item['description'] ?? '').toString(),
+          target: _target,
         );
     _show('已保存为我的模板');
   }
 
   Future<void> _showTemplates() async {
-    final templates = await ref.read(extensionServiceProvider).workflowTemplates();
+    final templates = await ref.read(extensionServiceProvider).workflowTemplates(target: _target);
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
@@ -231,13 +355,13 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
                             trailing: PopupMenuButton<String>(
                               onSelected: (value) async {
                                 if (value == 'use') {
-                                  final created = await ref.read(extensionServiceProvider).instantiateWorkflowTemplate((item['templateId'] ?? '').toString());
+                                  final created = await ref.read(extensionServiceProvider).instantiateWorkflowTemplate((item['templateId'] ?? '').toString(), target: _target);
                                   final id = (created['id'] ?? '').toString();
-                                  ref.invalidate(_workflowListProvider);
+                                  _refresh();
                                   if (sheetContext.mounted) Navigator.pop(sheetContext);
-                                  if (mounted && id.isNotEmpty) context.push(AppRoutes.workflowEditor(id));
+                                  if (mounted && id.isNotEmpty) context.push(_editorRoute(id));
                                 } else if (value == 'delete') {
-                                  await ref.read(extensionServiceProvider).deleteWorkflowTemplate((item['templateId'] ?? '').toString());
+                                  await ref.read(extensionServiceProvider).deleteWorkflowTemplate((item['templateId'] ?? '').toString(), target: _target);
                                   if (sheetContext.mounted) Navigator.pop(sheetContext);
                                   _show('我的模板已删除');
                                 }
@@ -248,11 +372,11 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
                               ],
                             ),
                             onTap: () async {
-                              final created = await ref.read(extensionServiceProvider).instantiateWorkflowTemplate((item['templateId'] ?? '').toString());
+                              final created = await ref.read(extensionServiceProvider).instantiateWorkflowTemplate((item['templateId'] ?? '').toString(), target: _target);
                               final id = (created['id'] ?? '').toString();
-                              ref.invalidate(_workflowListProvider);
+                              _refresh();
                               if (sheetContext.mounted) Navigator.pop(sheetContext);
-                              if (mounted && id.isNotEmpty) context.push(AppRoutes.workflowEditor(id));
+                              if (mounted && id.isNotEmpty) context.push(_editorRoute(id));
                             },
                           );
                         },
@@ -273,7 +397,7 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
   Future<void> _export(Map<String, dynamic> item) async {
     final id = (item['id'] ?? '').toString();
     if (id.isEmpty) return;
-    final envelope = await ref.read(extensionServiceProvider).exportWorkflow(id);
+    final envelope = await ref.read(extensionServiceProvider).exportWorkflow(id, target: _target);
     final output = await FilePicker.platform.saveFile(
       dialogTitle: '导出工作流',
       fileName: '${_safeName((item['name'] ?? 'workflow').toString())}.workflow.json',
@@ -305,11 +429,11 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
       }
       final decoded = jsonDecode(text);
       if (decoded is! Map) throw const FormatException('根节点必须是 JSON Object');
-      final created = await ref.read(extensionServiceProvider).importWorkflow(decoded.cast<String, dynamic>());
+      final created = await ref.read(extensionServiceProvider).importWorkflow(decoded.cast<String, dynamic>(), target: _target);
       final id = (created['id'] ?? '').toString();
-      ref.invalidate(_workflowListProvider);
+      _refresh();
       _show('已导入。自动触发和 Agent 调用默认停用。');
-      if (mounted && id.isNotEmpty) context.push(AppRoutes.workflowEditor(id));
+      if (mounted && id.isNotEmpty) context.push(_editorRoute(id));
     } catch (error) {
       _show('导入失败：$error');
     }
@@ -320,10 +444,10 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
     setState(() => _busy = true);
     try {
       for (final id in _selected) {
-        await ref.read(extensionServiceProvider).setWorkflowEnabled(id, enabled);
+        await ref.read(extensionServiceProvider).setWorkflowEnabled(id, enabled, target: _target);
       }
       _selected.clear();
-      ref.invalidate(_workflowListProvider);
+      _refresh();
       _show(enabled ? '已批量启用' : '已批量停用');
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -349,10 +473,10 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
     setState(() => _busy = true);
     try {
       for (final id in _selected.toList()) {
-        await ref.read(extensionServiceProvider).deleteWorkflow(id);
+        await ref.read(extensionServiceProvider).deleteWorkflow(id, target: _target);
       }
       _selected.clear();
-      ref.invalidate(_workflowListProvider);
+      _refresh();
       _show('已批量删除');
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -376,32 +500,68 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final asyncItems = ref.watch(_workflowListProvider);
+    final asyncItems = ref.watch(_workflowListProvider(_targetKey));
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '工作流',
         showBackButton: true,
         fallbackRoute: AppRoutes.workshop,
         actions: [
-          IconButton(tooltip: '导入 JSON', onPressed: _busy ? null : _import, icon: const Icon(Icons.file_download_outlined)),
-          IconButton(tooltip: '我的模板', onPressed: _busy ? null : _showTemplates, icon: const Icon(Icons.dashboard_customize_outlined)),
-          IconButton(tooltip: 'AI 创建', onPressed: _busy ? null : _createWithAI, icon: const Icon(Icons.auto_awesome_outlined)),
-          IconButton(tooltip: '刷新', onPressed: () => ref.invalidate(_workflowListProvider), icon: const Icon(Icons.refresh)),
+          IconButton(tooltip: '导入 JSON', onPressed: _busy || _location == 'device' ? null : _import, icon: const Icon(Icons.file_download_outlined)),
+          IconButton(tooltip: '我的模板', onPressed: _busy || _location == 'device' ? null : _showTemplates, icon: const Icon(Icons.dashboard_customize_outlined)),
+          IconButton(tooltip: 'AI 创建', onPressed: _busy || _location == 'device' ? null : _createWithAI, icon: const Icon(Icons.auto_awesome_outlined)),
+          IconButton(tooltip: '刷新', onPressed: _refresh, icon: const Icon(Icons.refresh)),
         ],
       ),
       body: SafeArea(
         top: false,
         child: asyncItems.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => _ErrorState(message: error.toString(), onRetry: () => ref.invalidate(_workflowListProvider)),
+          error: (error, _) => _ErrorState(message: error.toString(), onRetry: _refresh),
           data: (items) {
             final filtered = _filtered(items);
             return RefreshIndicator(
-              onRefresh: () async => ref.invalidate(_workflowListProvider),
+              onRefresh: () async => _refresh(),
               child: ListView(
                 padding: EdgeInsets.all(AppSpacing.pagePadding),
                 children: [
-                  _IntroCard(onCreate: _create, onCreateAI: _createWithAI, onTemplates: _showTemplates),
+                  SegmentedButton<String>(
+                    segments: const <ButtonSegment<String>>[
+                      ButtonSegment<String>(value: 'local', label: Text('当前设备'), icon: Icon(Icons.phone_android_outlined)),
+                      ButtonSegment<String>(value: 'cloud', label: Text('云端'), icon: Icon(Icons.cloud_outlined)),
+                      ButtonSegment<String>(value: 'device', label: Text('我的设备'), icon: Icon(Icons.devices_other_outlined)),
+                    ],
+                    selected: <String>{_location},
+                    onSelectionChanged: (values) async {
+                      if (values.isEmpty) return;
+                      setState(() { _location = values.first; _selected.clear(); });
+                      if (_location == 'device' && _devices.isEmpty) await _loadDevices();
+                      await _resetSyncForTarget();
+                    },
+                  ),
+                  if (_location == 'device') ...[
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: _deviceId.isEmpty ? null : _deviceId,
+                      decoration: const InputDecoration(labelText: '目标设备'),
+                      items: _devices.map((device) {
+                        final id = (device['deviceId'] ?? '').toString();
+                        final label = (device['label'] ?? id).toString();
+                        final online = device['online'] == true;
+                        return DropdownMenuItem<String>(value: id, child: Text('$label · ${online ? '在线' : '离线'}'));
+                      }).toList(growable: false),
+                      onChanged: (value) {
+                        setState(() { _deviceId = value ?? ''; _selected.clear(); });
+                        unawaited(_resetSyncForTarget());
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  _IntroCard(
+                    onCreate: _create,
+                    onCreateAI: _location == 'device' ? () => _show('远程设备控制面不提供 AI 创建') : _createWithAI,
+                    onTemplates: _location == 'device' ? () => _show('远程设备控制面不提供模板管理') : _showTemplates,
+                  ),
                   SizedBox(height: AppSpacing.sectionGap),
                   TextField(
                     decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: '搜索工作流名称或描述'),
@@ -462,8 +622,8 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
                     _EmptyState(
                       hasAny: items.isNotEmpty,
                       onCreate: _create,
-                      onCreateAI: _createWithAI,
-                      onTemplates: _showTemplates,
+                      onCreateAI: _location == 'device' ? () => _show('远程设备控制面不提供 AI 创建') : _createWithAI,
+                      onTemplates: _location == 'device' ? () => _show('远程设备控制面不提供模板管理') : _showTemplates,
                     )
                   else
                     ...filtered.map(
@@ -475,16 +635,17 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
                             item: item,
                             selected: _selected.contains(id),
                             onSelected: (value) => setState(() => value ? _selected.add(id) : _selected.remove(id)),
-                            onOpen: () => context.push(AppRoutes.workflowEditor(id)),
-                            onRun: item['enabled'] == true ? () => _run(id) : null,
+                            onOpen: item['offline'] == true ? () => _show('设备离线：当前只能查看最后已知目录，完整 Definition 需要设备上线后读取') : () => context.push(_editorRoute(id)),
+                            onRun: item['enabled'] == true && item['offline'] != true ? () => _run(id) : null,
                             onToggle: (value) async {
-                              await ref.read(extensionServiceProvider).setWorkflowEnabled(id, value);
-                              ref.invalidate(_workflowListProvider);
+                              if (item['offline'] == true) { _show('设备离线：不能修改本地工作流'); return; }
+                              await ref.read(extensionServiceProvider).setWorkflowEnabled(id, value, target: _target, expectedRevision: _revisionOf(item));
+                              _refresh();
                             },
-                            onDuplicate: () => _duplicate(item),
-                            onTemplate: () => _saveTemplate(item),
-                            onExport: () => _export(item),
-                            onDelete: () => _delete(item),
+                            onDuplicate: _location == 'device' ? () => _show('远程设备控制面不提供复制') : () => _duplicate(item),
+                            onTemplate: _location == 'device' ? () => _show('远程设备控制面不提供模板管理') : () => _saveTemplate(item),
+                            onExport: _location == 'device' ? () => _show('远程设备离线目录不提供导出') : () => _export(item),
+                            onDelete: item['offline'] == true ? () => _show('设备离线：不能删除本地工作流') : () => _delete(item),
                           ),
                         );
                       },
@@ -496,7 +657,7 @@ class _WorkflowListPageState extends ConsumerState<WorkflowListPage> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _busy ? null : _create,
+        onPressed: _busy || !_hasUsableTarget ? null : _create,
         icon: const Icon(Icons.add),
         label: const Text('新建工作流'),
       ),
@@ -622,6 +783,7 @@ class _WorkflowCard extends StatelessWidget {
                   _Pill(label: '${_count('edges')} 连线'),
                   _Pill(label: '${_count('triggers')} Trigger'),
                   if (item['callableByAgent'] == true) const _Pill(label: 'Agent Tool'),
+                  if (item['cached'] == true) const _Pill(label: '离线目录缓存'),
                 ],
               ),
               const SizedBox(height: 12),
