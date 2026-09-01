@@ -4,12 +4,16 @@ package system
 
 import (
 	"encoding/json"
+	"log"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/modelerror"
+	"github.com/u-ai/backend/internal/realtime"
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -99,6 +103,18 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 		if err := c.ShouldBindJSON(&req); err != nil {
 			util.ErrorResponse(c, response.InvalidParams, "invalid request", nil)
 			return
+		}
+
+		actor := security.GetActor(c)
+		if actor == nil || actor.UserID == "" {
+			util.ErrorResponse(c, response.Unauthorized, "authenticated user is required", nil)
+			return
+		}
+		req.UserID = actor.UserID.String()
+		if req.IsFinal && strings.TrimSpace(req.Text) != "" {
+			if err := realtime.PublishASRWorkflowFinal(c.Request.Context(), req.UserID, req.SessionID, req.TurnID, req.ConversationID, req.CharacterID, req.Text, ""); err != nil {
+				log.Printf("voice workflow asr final publish failed: %v", err)
+			}
 		}
 
 		if req.CharacterID != "" {

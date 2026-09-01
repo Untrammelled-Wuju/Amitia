@@ -38,14 +38,16 @@ func RegisterDeviceExecutionPackageRoutes(group *gin.RouterGroup, runtime *Runti
 	kernel.POST("/extensions/resume-uninstall", kernelAPI.resumeUninstall)
 }
 
-// RegisterDeviceExecutionWorkflowRoutes exposes only the device-local Workflow
-// API. It is mounted under /api/local by desktop/mobile hosts and deliberately
-// keeps the rest of the Cloud business API unavailable on Device Agent.
+// RegisterDeviceExecutionWorkflowRoutes exposes the device-local Workflow API
+// with least-privilege authentication. Builder/CRUD remains Desktop Session
+// only; trusted native producers may use the root local token only for the
+// structured event ingress and runtime telemetry/audio endpoints.
 func RegisterDeviceExecutionWorkflowRoutes(group *gin.RouterGroup, runtime *Runtime) {
 	if group == nil || runtime == nil {
 		return
 	}
-	group.Use(func(c *gin.Context) {
+	api := NewWorkflowAPIForLocation(runtime, workflow.WorkflowLocationLocal)
+	trustedActor := func(c *gin.Context) {
 		actor := security.GetActor(c)
 		if actor == nil || actor.UserID == "" || !actor.IsLocalTrusted {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "device-local authenticated session required"})
@@ -53,6 +55,17 @@ func RegisterDeviceExecutionWorkflowRoutes(group *gin.RouterGroup, runtime *Runt
 		}
 		c.Set(authenticatedUserKey, string(actor.UserID))
 		c.Next()
-	})
-	NewWorkflowAPIForLocation(runtime, workflow.WorkflowLocationLocal).registerWorkflowRoutes(group)
+	}
+
+	management := group.Group("")
+	management.Use(security.RequireAuthMethod(security.AuthMethodDesktopSession), trustedActor)
+	api.registerWorkflowManagementRoutes(management)
+
+	events := group.Group("")
+	events.Use(security.RequireAuthMethod(security.AuthMethodDesktopSession, security.AuthMethodLocalToken), trustedActor)
+	api.registerWorkflowEventRoute(events)
+
+	runtimeProducer := group.Group("")
+	runtimeProducer.Use(security.RequireAuthMethod(security.AuthMethodLocalToken), trustedActor)
+	api.registerWorkflowRuntimeProducerRoutes(runtimeProducer)
 }
