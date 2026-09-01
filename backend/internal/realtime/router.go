@@ -21,5 +21,6 @@ func RegisterRealtimeRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	voiceGroup.POST("/sessions/:id/interrupt", handler.InterruptSession)
 	voiceGroup.POST("/sessions/:id/wake/arm", handler.ArmWake)
 	voiceGroup.POST("/sessions/:id/wake/disarm", handler.DisarmWake)
+	voiceGroup.POST("/sessions/:id/asr/final", handler.PublishASRFinal)
 	voiceGroup.GET("/status", handler.GetStatus)
 }
