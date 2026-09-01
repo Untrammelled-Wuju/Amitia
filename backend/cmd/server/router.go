@@ -46,6 +46,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
+	workflowkernel "github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -397,7 +398,30 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				c.JSON(200, gin.H{"code": 200, "msg": "ok", "data": gin.H{"revoked": affected}})
 			})
 		}
-		extension.RegisterDeviceExecutionWorkflowRoutes(localDesktop, services.Extension)
+	}
+
+	if services.DesktopInstanceStore != nil {
+		// Workflow device ingress must accept the trusted root local token used by
+		// Android RuntimeService, while CRUD/Builder remains Desktop Session only.
+		// RegisterDeviceExecutionWorkflowRoutes applies the per-endpoint method
+		// restrictions after this shared authentication layer.
+		localWorkflows := r.Group("/api/local")
+		localWorkflows.Use(
+			security.AuthenticationMiddleware(
+				security.AuthConfig{
+					Mode:             config.AppCfg.Security.Mode,
+					JWTSecret:        config.AppCfg.JWT.Secret,
+					JWTIssuer:        config.AppCfg.JWT.Issuer,
+					JWTAudience:      config.AppCfg.JWT.Audience,
+					LocalCredentials: localCredentialStore,
+					LocalUserID:      config.AppCfg.Security.LocalUserID,
+					ListenAddress:    config.AppCfg.Server.Host,
+					AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+					SessionService:   sessionSvc,
+				},
+			),
+		)
+		extension.RegisterDeviceExecutionWorkflowRoutes(localWorkflows, services.Extension)
 	}
 
 	if services.DesktopInstanceStore != nil {
@@ -480,6 +504,19 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.AdapterManager != nil {
 			realtime.SetDesktopPetVoiceObserver(newDesktopPetLifecycleBridge(services.AdapterManager))
 		}
+		realtime.SetWorkflowTriggerPublisher(func(callCtx context.Context, event realtime.VoiceWorkflowTriggerEvent) error {
+			if services.RuntimeProfile == runtimeprofile.ProfileCloudCore || services.KernelContainer == nil || services.KernelContainer.WorkflowTriggerManager == nil {
+				return nil
+			}
+			userID := strings.TrimSpace(event.UserID)
+			if userID == "" || strings.TrimSpace(event.EventID) == "" || strings.TrimSpace(event.EventType) == "" {
+				return nil
+			}
+			return services.KernelContainer.WorkflowTriggerManager.HandleStructuredEvent(callCtx, workflowkernel.WorkflowTriggerEvent{
+				EventID: event.EventID, EventType: "user:" + userID + ":" + event.EventType, Source: event.Source,
+				OwnerUserID: userID, OccurredAt: time.Now().UTC(), Payload: event.Payload,
+			}, workflowkernel.ExecutionContext{UserID: userID})
+		})
 		realtime.RegisterRealtimeRouter(apiGroup, ctx)
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)

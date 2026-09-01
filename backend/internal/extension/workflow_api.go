@@ -1,11 +1,15 @@
 package extension
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -18,6 +22,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/middleware/security"
 )
 
 const (
@@ -44,6 +49,16 @@ func (api *WorkflowAPI) RegisterRoutes(group *gin.RouterGroup) {
 }
 
 func (api *WorkflowAPI) registerWorkflowRoutes(group *gin.RouterGroup) {
+	api.registerWorkflowManagementRoutes(group)
+	api.registerWorkflowEventRoute(group)
+	api.registerWorkflowRuntimeProducerRoutes(group)
+}
+
+// registerWorkflowManagementRoutes exposes user-facing Workflow CRUD, Builder,
+// catalog and run-control endpoints. Device Agent callers using the root local
+// token must not receive this surface; RegisterDeviceExecutionWorkflowRoutes
+// mounts it behind Desktop Session authentication only.
+func (api *WorkflowAPI) registerWorkflowManagementRoutes(group *gin.RouterGroup) {
 	g := group.Group("/workflows")
 	g.GET("", api.list)
 	g.POST("", api.create)
@@ -55,7 +70,10 @@ func (api *WorkflowAPI) registerWorkflowRoutes(group *gin.RouterGroup) {
 	g.POST("/validate", api.validate)
 	g.POST("/ai/generate", api.aiGenerate)
 	g.GET("/sync-events", api.workflowSyncEvents)
-	g.POST("/events/:eventType", api.dispatchEvent)
+	g.GET("/trigger-capabilities", api.getTriggerCapabilities)
+	g.GET("/trigger-app-catalog", api.getTriggerAppCatalog)
+	g.GET("/trigger-wake-configs", api.getTriggerWakeConfigs)
+	g.POST("/trigger-secrets/tasker", api.createTaskerTriggerSecret)
 	g.GET("/:id", api.get)
 	g.GET("/:id/analysis", api.analysis)
 	g.GET("/:id/stats", api.stats)
@@ -83,6 +101,272 @@ func (api *WorkflowAPI) registerWorkflowRoutes(group *gin.RouterGroup) {
 	runs.POST("/:runId/resume", api.resumeRun)
 	runs.POST("/:runId/rerun", api.rerunRun)
 	runs.POST("/:runId/recover", api.recoverRun)
+}
+
+// registerWorkflowEventRoute is intentionally isolated because local device
+// producers need this one endpoint through the root local token while Builder
+// traffic uses a Desktop Session. The handler still applies structured-event
+// validation, rate limiting and account/device scoping.
+func (api *WorkflowAPI) registerWorkflowEventRoute(group *gin.RouterGroup) {
+	group.POST("/workflows/events/:eventType", api.dispatchEvent)
+}
+
+// registerWorkflowRuntimeProducerRoutes is the narrow device-runtime write
+// surface. These endpoints accept capability/catalog telemetry and wake PCM;
+// they are mounted root-local-token-only on Device Agent/local hosts.
+func (api *WorkflowAPI) registerWorkflowRuntimeProducerRoutes(group *gin.RouterGroup) {
+	g := group.Group("/workflows")
+	g.POST("/trigger-capabilities/status", api.updateTriggerCapabilityStatus)
+	g.POST("/trigger-app-catalog/status", api.updateTriggerAppCatalog)
+	g.GET("/wake-runtime/status", api.getWakeRuntimeStatus)
+	g.POST("/wake-runtime/audio", api.ingestWakeRuntimeAudio)
+}
+
+func (api *WorkflowAPI) getWakeRuntimeStatus(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow wake runtime unavailable"})
+		return
+	}
+	if !requireWorkflowRuntimeReporter(c) {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, api.runtime.workflowWakeStatus(c.Request.Context(), true))
+}
+
+func (api *WorkflowAPI) ingestWakeRuntimeAudio(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow wake runtime unavailable"})
+		return
+	}
+	if !requireWorkflowRuntimeReporter(c) {
+		return
+	}
+	if contentType := strings.ToLower(strings.TrimSpace(strings.Split(c.GetHeader("Content-Type"), ";")[0])); contentType != "application/octet-stream" {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "wake audio requires application/octet-stream PCM16"})
+		return
+	}
+	reader := http.MaxBytesReader(c.Writer, c.Request.Body, 64*1024)
+	pcm, err := io.ReadAll(reader)
+	if len(pcm) > 0 {
+		defer clear(pcm)
+	}
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid wake audio payload"})
+		return
+	}
+	if len(pcm) == 0 || len(pcm)%2 != 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "wake audio must contain non-empty PCM16 samples"})
+		return
+	}
+	sequence := uint64(0)
+	if raw := strings.TrimSpace(c.GetHeader("X-Amitia-Audio-Sequence")); raw != "" {
+		parsed, parseErr := strconv.ParseUint(raw, 10, 64)
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid wake audio sequence"})
+			return
+		}
+		sequence = parsed
+	}
+	capturedAt := time.Now().UTC()
+	if raw := strings.TrimSpace(c.GetHeader("X-Amitia-Captured-At-Ms")); raw != "" {
+		millis, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid wake audio timestamp"})
+			return
+		}
+		candidate := time.UnixMilli(millis).UTC()
+		now := time.Now().UTC()
+		if candidate.After(now.Add(-5*time.Minute)) && candidate.Before(now.Add(5*time.Minute)) {
+			capturedAt = candidate
+		}
+	}
+	deviceID := strings.TrimSpace(c.GetHeader("X-Amitia-Device-ID"))
+	if len(deviceID) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "device id is too long"})
+		return
+	}
+	if err := api.runtime.processWorkflowWakeAudio(c.Request.Context(), pcm, deviceID, sequence, capturedAt); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (api *WorkflowAPI) getTriggerCapabilities(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow trigger capability endpoint unavailable"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": api.workflowTriggerCapabilitiesSnapshot(c.Request.Context())})
+}
+
+func (api *WorkflowAPI) getTriggerAppCatalog(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow trigger app catalog unavailable"})
+		return
+	}
+	items, updatedAt := api.runtime.WorkflowTriggerAppCatalog()
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"items": items, "updatedAt": updatedAt})
+}
+
+func (api *WorkflowAPI) getTriggerWakeConfigs(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow trigger wake config catalog unavailable"})
+		return
+	}
+	items, err := api.runtime.workflowWakeConfigCatalog(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func requireWorkflowRuntimeReporter(c *gin.Context) bool {
+	actor := security.GetActor(c)
+	if actor == nil || !actor.IsLocalTrusted || actor.AuthMethod != security.AuthMethodLocalToken {
+		c.JSON(http.StatusForbidden, gin.H{"error": "device runtime local token required"})
+		return false
+	}
+	return true
+}
+
+func (api *WorkflowAPI) updateTriggerAppCatalog(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow trigger app catalog unavailable"})
+		return
+	}
+	if !requireWorkflowRuntimeReporter(c) {
+		return
+	}
+	var request struct {
+		Items []WorkflowTriggerAppCatalogItem `json:"items"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 512*1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid trigger app catalog"})
+		return
+	}
+	if len(request.Items) > 2000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trigger app catalog exceeds 2000 entries"})
+		return
+	}
+	seen := make(map[string]struct{}, len(request.Items))
+	filtered := make([]WorkflowTriggerAppCatalogItem, 0, len(request.Items))
+	for _, item := range request.Items {
+		item.PackageName = strings.TrimSpace(item.PackageName)
+		item.Label = strings.TrimSpace(item.Label)
+		if item.PackageName == "" || len(item.PackageName) > 255 || len(item.Label) > 256 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid trigger app catalog entry"})
+			return
+		}
+		if _, exists := seen[item.PackageName]; exists {
+			continue
+		}
+		seen[item.PackageName] = struct{}{}
+		filtered = append(filtered, item)
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		if filtered[i].Label == filtered[j].Label {
+			return filtered[i].PackageName < filtered[j].PackageName
+		}
+		return filtered[i].Label < filtered[j].Label
+	})
+	api.runtime.SetWorkflowTriggerAppCatalog(filtered)
+	c.JSON(http.StatusOK, gin.H{"updated": len(filtered)})
+}
+
+func (api *WorkflowAPI) createTaskerTriggerSecret(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow trigger secret endpoint unavailable"})
+		return
+	}
+	value, err := api.newTaskerTriggerSecret(c.Request.Context(), workflowUserID(c))
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusCreated, value)
+}
+
+func (api *WorkflowAPI) newTaskerTriggerSecret(ctx context.Context, userID string) (map[string]string, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, errors.New("workflow user is required")
+	}
+	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil || api.runtime.Kernel.Container().ExecutionKernel == nil || api.runtime.Kernel.Container().ExecutionKernel.SecretBroker == nil {
+		return nil, errors.New("workflow trigger secret broker unavailable")
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return nil, err
+	}
+	encoded := make([]byte, base64.RawURLEncoding.EncodedLen(len(raw)))
+	base64.RawURLEncoding.Encode(encoded, raw)
+	for i := range raw {
+		raw[i] = 0
+	}
+	ref, err := api.runtime.Kernel.Container().ExecutionKernel.SecretBroker.Store(ctx, workflow.TriggerSecretNamespace(userID), encoded)
+	if err != nil {
+		for i := range encoded {
+			encoded[i] = 0
+		}
+		return nil, err
+	}
+	secretValue := string(encoded)
+	for i := range encoded {
+		encoded[i] = 0
+	}
+	return map[string]string{"secretRef": ref.String(), "secret": secretValue}, nil
+}
+
+func (api *WorkflowAPI) updateTriggerCapabilityStatus(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow trigger capability endpoint unavailable"})
+		return
+	}
+	if !requireWorkflowRuntimeReporter(c) {
+		return
+	}
+	var request struct {
+		Items []WorkflowTriggerCapabilityStatus `json:"items"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 32*1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid trigger capability status"})
+		return
+	}
+	allowed := map[string]struct{}{
+		"workflow.trigger.android_intent.v1": {},
+		"workflow.trigger.tasker.v1":         {},
+		"workflow.trigger.voice_wake.v1":     {},
+		"workflow.trigger.voice_phrase.v1":   {},
+		"workflow.trigger.app_foreground.v1": {},
+	}
+	filtered := make([]WorkflowTriggerCapabilityStatus, 0, len(request.Items))
+	for _, item := range request.Items {
+		item.ID = strings.TrimSpace(item.ID)
+		if _, ok := allowed[item.ID]; !ok {
+			continue
+		}
+		if len(item.Permission) > 256 || len(item.Reason) > 512 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "trigger capability status exceeds limits"})
+			return
+		}
+		filtered = append(filtered, item)
+	}
+	if len(filtered) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no supported trigger capability status supplied"})
+		return
+	}
+	api.runtime.SetWorkflowTriggerCapabilityStatuses(filtered)
+	c.JSON(http.StatusOK, gin.H{"updated": len(filtered)})
 }
 
 func (api *WorkflowAPI) workflowSyncEvents(c *gin.Context) {
@@ -261,11 +545,17 @@ func validateUserWorkflowTriggers(def workflow.WorkflowDefinition, userID string
 		if len(trigger.Input) > 0 && !json.Valid(trigger.Input) {
 			return fmt.Errorf("trigger %s input must be valid JSON", id)
 		}
+		if len(trigger.Config) > 0 && !json.Valid(trigger.Config) {
+			return fmt.Errorf("trigger %s config must be valid JSON", id)
+		}
 		switch trigger.Type {
 		case "manual":
 		case "event":
 			if strings.TrimSpace(trigger.EventType) == "" {
 				return fmt.Errorf("trigger %s eventType is required", id)
+			}
+			if err := validateWorkflowEventTriggerConfig(trigger, userID); err != nil {
+				return fmt.Errorf("trigger %s: %w", id, err)
 			}
 		case "schedule", "cron", "interval", "one_shot":
 			if _, err := buildWorkflowSchedule(def, trigger, userID); err != nil {
@@ -1489,19 +1779,277 @@ func (api *WorkflowAPI) dispatchEvent(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "workflow trigger manager unavailable"})
 		return
 	}
+	if c.Request.ContentLength > 128*1024 {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "event payload exceeds 128 KiB"})
+		return
+	}
 	payload, err := c.GetRawData()
 	if err != nil || len(payload) == 0 {
 		payload = []byte(`{}`)
+	}
+	if len(payload) > 128*1024 {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "event payload exceeds 128 KiB"})
+		return
 	}
 	if !json.Valid(payload) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "event payload must be valid JSON"})
 		return
 	}
-	if err := kc.WorkflowTriggerManager.HandleEvent(c.Request.Context(), "user:"+workflowUserID(c)+":"+c.Param("eventType"), payload); err != nil {
+	userID := workflowUserID(c)
+	eventType := strings.TrimSpace(c.Param("eventType"))
+	if isDeviceWorkflowEventType(eventType) && api.effectiveLocation() == workflow.WorkflowLocationLocal {
+		allowed, retryAfter := api.runtime.AllowWorkflowTriggerIngress(userID, eventType)
+		if !allowed {
+			retrySeconds := int((retryAfter + time.Second - 1) / time.Second)
+			if retrySeconds < 1 {
+				retrySeconds = 1
+			}
+			c.Header("Retry-After", strconv.Itoa(retrySeconds))
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "workflow device event rate limit exceeded", "retryAfterMs": retryAfter.Milliseconds()})
+			return
+		}
+	}
+	qualifiedEventType := "user:" + userID + ":" + eventType
+	var envelope struct {
+		EventID    string          `json:"eventId"`
+		Source     string          `json:"source"`
+		OccurredAt time.Time       `json:"occurredAt"`
+		Payload    json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err == nil && strings.TrimSpace(envelope.EventID) != "" && len(envelope.Payload) > 0 {
+		eventID := strings.TrimSpace(envelope.EventID)
+		if len(eventID) > 200 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "eventId is too long"})
+			return
+		}
+		source := strings.TrimSpace(envelope.Source)
+		if len(source) > 128 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "event source is too long"})
+			return
+		}
+		occurredAt := envelope.OccurredAt
+		if isDeviceWorkflowEventType(eventType) && api.effectiveLocation() == workflow.WorkflowLocationLocal {
+			now := time.Now().UTC()
+			if occurredAt.IsZero() || occurredAt.Before(now.Add(-5*time.Minute)) || occurredAt.After(now.Add(5*time.Minute)) {
+				occurredAt = now
+			}
+		}
+		deviceID := ""
+		if api.effectiveLocation() == workflow.WorkflowLocationLocal {
+			deviceID = strings.TrimSpace(c.GetHeader("X-Amitia-Device-ID"))
+			if len(deviceID) > 200 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "device id is too long"})
+				return
+			}
+		}
+		structuredEventType := qualifiedEventType
+		structuredOwnerUserID := userID
+		execution := workflow.ExecutionContext{UserID: userID, DeviceID: deviceID}
+		if isDeviceWorkflowEventType(eventType) && api.effectiveLocation() == workflow.WorkflowLocationLocal {
+			actor := security.GetActor(c)
+			if actor != nil && actor.AuthMethod == security.AuthMethodLocalToken {
+				// Root-token device producers are device-scoped rather than account-scoped.
+				// Cloud-installed local workflows retain their cloud owner in each TriggerBinding;
+				// the TriggerManager resolves that owner per binding so Android never has to know
+				// or assert a cloud account ID. Desktop Sessions stay account-scoped.
+				structuredEventType = eventType
+				structuredOwnerUserID = ""
+				execution.UserID = ""
+			}
+		}
+		event := workflow.WorkflowTriggerEvent{
+			EventID:     eventID,
+			EventType:   structuredEventType,
+			Source:      source,
+			OwnerUserID: structuredOwnerUserID,
+			DeviceID:    deviceID,
+			OccurredAt:  occurredAt,
+			Payload:     envelope.Payload,
+		}
+		if err := kc.WorkflowTriggerManager.HandleStructuredEvent(c.Request.Context(), event, execution); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusAccepted, gin.H{"accepted": true, "eventId": eventID, "eventType": eventType})
+		return
+	}
+	if isDeviceWorkflowEventType(eventType) && api.effectiveLocation() == workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "device workflow events require a structured event envelope"})
+		return
+	}
+	if err := kc.WorkflowTriggerManager.HandleEvent(c.Request.Context(), qualifiedEventType, payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "eventType": c.Param("eventType")})
+	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "eventType": eventType})
+}
+
+func validateWorkflowEventTriggerConfig(trigger workflow.WorkflowTriggerDefinition, userID string) error {
+	eventType := strings.TrimSpace(trigger.EventType)
+	if len(trigger.Config) == 0 {
+		if isDeviceWorkflowEventType(eventType) {
+			return errors.New("device event trigger config is required")
+		}
+		return nil
+	}
+	if len(trigger.Config) > 32*1024 {
+		return errors.New("workflow trigger config exceeds 32 KiB")
+	}
+	switch eventType {
+	case "device.android.intent":
+		var cfg struct {
+			Actions       []string `json:"actions"`
+			Categories    []string `json:"categories"`
+			DataSchemes   []string `json:"dataSchemes"`
+			MimeTypes     []string `json:"mimeTypes"`
+			DedupWindowMS int64    `json:"dedupWindowMs"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		if len(cfg.Actions) == 0 {
+			return errors.New("android intent trigger requires at least one action")
+		}
+		if err := validateTriggerStringList("android intent actions", cfg.Actions, 32, 512); err != nil {
+			return err
+		}
+		if err := validateTriggerStringList("android intent categories", cfg.Categories, 32, 512); err != nil {
+			return err
+		}
+		if err := validateTriggerStringList("android intent dataSchemes", cfg.DataSchemes, 16, 128); err != nil {
+			return err
+		}
+		if err := validateTriggerStringList("android intent mimeTypes", cfg.MimeTypes, 32, 256); err != nil {
+			return err
+		}
+		if cfg.DedupWindowMS < 0 || cfg.DedupWindowMS > 10*60*1000 {
+			return errors.New("android intent dedupWindowMs must be between 0 and 600000")
+		}
+	case "device.android.tasker":
+		var cfg struct {
+			EventName        string   `json:"eventName"`
+			SecretRef        string   `json:"secretRef"`
+			AllowedVariables []string `json:"allowedVariables"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		cfg.EventName = strings.TrimSpace(cfg.EventName)
+		if cfg.EventName == "" {
+			return errors.New("tasker trigger eventName is required")
+		}
+		if len(cfg.EventName) > 128 {
+			return errors.New("tasker trigger eventName exceeds 128 characters")
+		}
+		if len(strings.TrimSpace(cfg.SecretRef)) > 512 {
+			return errors.New("tasker trigger secretRef is too long")
+		}
+		if !strings.HasPrefix(strings.TrimSpace(cfg.SecretRef), "secret://") {
+			return errors.New("tasker trigger secretRef must use secret://")
+		}
+		if !workflow.TriggerSecretRefOwnedByUser(cfg.SecretRef, userID) {
+			return errors.New("tasker trigger secretRef does not belong to the workflow owner")
+		}
+		if err := validateTriggerStringList("tasker allowedVariables", cfg.AllowedVariables, 32, 128); err != nil {
+			return err
+		}
+	case "voice.wake.detected":
+		var cfg struct {
+			Mode         string `json:"mode"`
+			WakeConfigID string `json:"wakeConfigId"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		if cfg.Mode != "" && cfg.Mode != "wake" {
+			return errors.New("voice wake trigger mode must be wake")
+		}
+		cfg.WakeConfigID = strings.TrimSpace(cfg.WakeConfigID)
+		if cfg.WakeConfigID == "" {
+			return errors.New("voice wake trigger wakeConfigId is required")
+		}
+		if len(cfg.WakeConfigID) > 200 {
+			return errors.New("voice wake trigger wakeConfigId is too long")
+		}
+	case "voice.asr.final":
+		var cfg struct {
+			Mode      string   `json:"mode"`
+			Phrases   []string `json:"phrases"`
+			MatchMode string   `json:"matchMode"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		if cfg.Mode != "" && cfg.Mode != "phrase" {
+			return errors.New("voice phrase trigger mode must be phrase")
+		}
+		if len(cfg.Phrases) == 0 {
+			return errors.New("voice phrase trigger requires phrases")
+		}
+		if err := validateTriggerStringList("voice phrases", cfg.Phrases, 32, 256); err != nil {
+			return err
+		}
+		if cfg.MatchMode != "" && cfg.MatchMode != "exact" && cfg.MatchMode != "normalized" {
+			return errors.New("voice phrase matchMode must be exact or normalized")
+		}
+	case "device.app.foreground":
+		var cfg struct {
+			Packages   []string `json:"packages"`
+			CooldownMS int64    `json:"cooldownMs"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		if len(cfg.Packages) == 0 {
+			return errors.New("app foreground trigger requires packages")
+		}
+		if err := validateTriggerStringList("app foreground packages", cfg.Packages, 64, 255); err != nil {
+			return err
+		}
+		if cfg.CooldownMS < 0 || cfg.CooldownMS > 24*60*60*1000 {
+			return errors.New("app foreground cooldownMs must be between 0 and 86400000")
+		}
+	}
+	return nil
+}
+
+func decodeWorkflowTriggerConfig(raw json.RawMessage, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return fmt.Errorf("invalid device trigger config: %w", err)
+	}
+	return nil
+}
+
+func validateTriggerStringList(name string, values []string, maxItems, maxLength int) error {
+	if len(values) > maxItems {
+		return fmt.Errorf("%s exceeds %d items", name, maxItems)
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return fmt.Errorf("%s contains an empty value", name)
+		}
+		if len(value) > maxLength {
+			return fmt.Errorf("%s contains a value longer than %d characters", name, maxLength)
+		}
+		if _, ok := seen[value]; ok {
+			return fmt.Errorf("%s contains duplicate value %q", name, value)
+		}
+		seen[value] = struct{}{}
+	}
+	return nil
+}
+
+func isDeviceWorkflowEventType(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case "device.android.intent", "device.android.tasker", "voice.wake.detected", "voice.asr.final", "device.app.foreground":
+		return true
+	default:
+		return false
+	}
 }
 
 func (api *WorkflowAPI) syncTriggers(ctx context.Context, oldDef, newDef workflow.WorkflowDefinition, userID string) error {
@@ -1520,7 +2068,7 @@ func (api *WorkflowAPI) syncTriggers(ctx context.Context, oldDef, newDef workflo
 			continue
 		}
 		eventType := strings.TrimSpace(trigger.EventType)
-		if err := kc.WorkflowDefRepo.SaveTrigger(ctx, workflow.TriggerBinding{BindingID: "userwf:" + newDef.ID + ":" + trigger.ID, Type: workflow.TriggerTypeEvent, EventType: "user:" + userID + ":" + eventType, WorkflowID: newDef.ID, Input: trigger.Input, Enabled: true}); err != nil {
+		if err := kc.WorkflowDefRepo.SaveTrigger(ctx, workflow.TriggerBinding{BindingID: "userwf:" + newDef.ID + ":" + trigger.ID, Type: workflow.TriggerTypeEvent, EventType: "user:" + userID + ":" + eventType, WorkflowID: newDef.ID, Config: trigger.Config, Input: trigger.Input, Enabled: true}); err != nil {
 			return err
 		}
 	}

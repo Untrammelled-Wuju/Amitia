@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,20 +19,29 @@ import (
 )
 
 type Runtime struct {
-	Registry              *Registry
-	Executor              *Executor
-	Permissions           *DefaultPermissionEvaluator
-	Repository            *Repository
-	Service               *ExtensionService
-	Validator             *SchemaValidator
-	Plugins               *PluginRegistry
-	PluginManager         *PluginManager
-	Workshop              *WorkshopService
-	WorkflowHost          *WorkflowHostAdapter
-	AgentSkills           *AgentSkillService
-	Kernel                *kernelruntime.Runtime
-	WorkflowDeviceControl WorkflowDeviceControlPlane
-	workflowMutationLocks sync.Map
+	Registry                    *Registry
+	Executor                    *Executor
+	Permissions                 *DefaultPermissionEvaluator
+	Repository                  *Repository
+	Service                     *ExtensionService
+	Validator                   *SchemaValidator
+	Plugins                     *PluginRegistry
+	PluginManager               *PluginManager
+	Workshop                    *WorkshopService
+	WorkflowHost                *WorkflowHostAdapter
+	AgentSkills                 *AgentSkillService
+	Kernel                      *kernelruntime.Runtime
+	WorkflowDeviceControl       WorkflowDeviceControlPlane
+	workflowMutationLocks       sync.Map
+	workflowTriggerCapabilityMu sync.RWMutex
+	workflowTriggerCapabilities map[string]WorkflowTriggerCapabilityStatus
+	workflowTriggerAppCatalogMu sync.RWMutex
+	workflowTriggerAppCatalog   []WorkflowTriggerAppCatalogItem
+	workflowTriggerAppCatalogAt time.Time
+	workflowTriggerIngressMu    sync.Mutex
+	workflowTriggerIngress      map[string]workflowTriggerIngressWindow
+	workflowWakeRuntimeMu       sync.Mutex
+	workflowWakeRuntime         *workflowWakeRuntimeState
 }
 
 func (r *Runtime) AttachKernel(root string) error {
@@ -59,6 +69,133 @@ func NewRuntime(ctx context.Context, db *gorm.DB, engineVersion string) (*Runtim
 
 type RuntimeOptions struct {
 	SkipPluginManagerStart bool
+}
+
+type WorkflowTriggerCapabilityStatus struct {
+	ID                 string    `json:"id"`
+	Supported          bool      `json:"supported"`
+	Available          bool      `json:"available"`
+	PermissionRequired bool      `json:"permissionRequired"`
+	Permission         string    `json:"permission"`
+	Reason             string    `json:"reason"`
+	UpdatedAt          time.Time `json:"updatedAt"`
+}
+
+type WorkflowTriggerAppCatalogItem struct {
+	PackageName string `json:"packageName"`
+	Label       string `json:"label"`
+}
+
+type workflowTriggerIngressWindow struct {
+	StartedAt time.Time
+	Count     int
+}
+
+func (r *Runtime) AllowWorkflowTriggerIngress(userID, eventType string) (bool, time.Duration) {
+	if r == nil {
+		return false, time.Minute
+	}
+	userID = strings.TrimSpace(userID)
+	eventType = strings.TrimSpace(eventType)
+	if userID == "" || eventType == "" {
+		return false, time.Minute
+	}
+	now := time.Now().UTC()
+	windowSize := time.Minute
+	keys := []struct {
+		key   string
+		limit int
+	}{
+		{key: "user:" + userID, limit: 600},
+		{key: "event:" + userID + "\x00" + eventType, limit: 120},
+	}
+	r.workflowTriggerIngressMu.Lock()
+	defer r.workflowTriggerIngressMu.Unlock()
+	if r.workflowTriggerIngress == nil {
+		r.workflowTriggerIngress = make(map[string]workflowTriggerIngressWindow)
+	}
+	for _, item := range keys {
+		state := r.workflowTriggerIngress[item.key]
+		if state.StartedAt.IsZero() || now.Sub(state.StartedAt) >= windowSize {
+			state = workflowTriggerIngressWindow{StartedAt: now}
+			r.workflowTriggerIngress[item.key] = state
+		}
+		if state.Count >= item.limit {
+			retryAfter := state.StartedAt.Add(windowSize).Sub(now)
+			if retryAfter < time.Second {
+				retryAfter = time.Second
+			}
+			return false, retryAfter
+		}
+	}
+	for _, item := range keys {
+		state := r.workflowTriggerIngress[item.key]
+		state.Count++
+		r.workflowTriggerIngress[item.key] = state
+	}
+	if len(r.workflowTriggerIngress) > 2048 {
+		for key, state := range r.workflowTriggerIngress {
+			if state.StartedAt.IsZero() || now.Sub(state.StartedAt) >= 2*windowSize {
+				delete(r.workflowTriggerIngress, key)
+			}
+		}
+	}
+	return true, 0
+}
+
+func (r *Runtime) SetWorkflowTriggerCapabilityStatuses(items []WorkflowTriggerCapabilityStatus) {
+	if r == nil {
+		return
+	}
+	r.workflowTriggerCapabilityMu.Lock()
+	defer r.workflowTriggerCapabilityMu.Unlock()
+	if r.workflowTriggerCapabilities == nil {
+		r.workflowTriggerCapabilities = make(map[string]WorkflowTriggerCapabilityStatus)
+	}
+	now := time.Now().UTC()
+	for _, item := range items {
+		item.ID = strings.TrimSpace(item.ID)
+		if item.ID == "" {
+			continue
+		}
+		item.Permission = strings.TrimSpace(item.Permission)
+		item.Reason = strings.TrimSpace(item.Reason)
+		item.UpdatedAt = now
+		r.workflowTriggerCapabilities[item.ID] = item
+	}
+}
+
+func (r *Runtime) WorkflowTriggerCapabilityStatuses() map[string]WorkflowTriggerCapabilityStatus {
+	if r == nil {
+		return nil
+	}
+	r.workflowTriggerCapabilityMu.RLock()
+	defer r.workflowTriggerCapabilityMu.RUnlock()
+	result := make(map[string]WorkflowTriggerCapabilityStatus, len(r.workflowTriggerCapabilities))
+	for key, item := range r.workflowTriggerCapabilities {
+		result[key] = item
+	}
+	return result
+}
+
+func (r *Runtime) SetWorkflowTriggerAppCatalog(items []WorkflowTriggerAppCatalogItem) {
+	if r == nil {
+		return
+	}
+	copyItems := append([]WorkflowTriggerAppCatalogItem(nil), items...)
+	r.workflowTriggerAppCatalogMu.Lock()
+	r.workflowTriggerAppCatalog = copyItems
+	r.workflowTriggerAppCatalogAt = time.Now().UTC()
+	r.workflowTriggerAppCatalogMu.Unlock()
+}
+
+func (r *Runtime) WorkflowTriggerAppCatalog() ([]WorkflowTriggerAppCatalogItem, time.Time) {
+	if r == nil {
+		return nil, time.Time{}
+	}
+	r.workflowTriggerAppCatalogMu.RLock()
+	defer r.workflowTriggerAppCatalogMu.RUnlock()
+	return append([]WorkflowTriggerAppCatalogItem(nil), r.workflowTriggerAppCatalog...), r.workflowTriggerAppCatalogAt
 }
 
 func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion string, options RuntimeOptions) (*Runtime, error) {
@@ -126,7 +263,17 @@ func NewRuntimeWithOptions(ctx context.Context, db *gorm.DB, engineVersion strin
 }
 
 func (r *Runtime) Close(ctx context.Context) error {
-	if r == nil || r.PluginManager == nil {
+	if r == nil {
+		return nil
+	}
+	r.workflowWakeRuntimeMu.Lock()
+	wakeRuntime := r.workflowWakeRuntime
+	r.workflowWakeRuntime = nil
+	r.workflowWakeRuntimeMu.Unlock()
+	if wakeRuntime != nil {
+		wakeRuntime.close()
+	}
+	if r.PluginManager == nil {
 		return nil
 	}
 	return r.PluginManager.Stop(ctx)

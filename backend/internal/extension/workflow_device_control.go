@@ -40,6 +40,10 @@ func (r *Runtime) AttachWorkflowDeviceControl(control WorkflowDeviceControlPlane
 func (api *WorkflowAPI) registerDeviceWorkflowRoutes(group *gin.RouterGroup) {
 	g := group.Group("/workflow-devices")
 	g.GET("", api.listWorkflowDevices)
+	g.GET("/:deviceId/trigger-capabilities", api.getDeviceWorkflowTriggerCapabilities)
+	g.GET("/:deviceId/trigger-app-catalog", api.getDeviceWorkflowTriggerAppCatalog)
+	g.GET("/:deviceId/trigger-wake-configs", api.getDeviceWorkflowTriggerWakeConfigs)
+	g.POST("/:deviceId/trigger-secrets/tasker", api.createDeviceTaskerTriggerSecret)
 	g.GET("/:deviceId/workflows", api.listDeviceWorkflows)
 	g.GET("/:deviceId/workflows/:workflowId", api.getDeviceWorkflow)
 	g.POST("/:deviceId/workflows", api.createDeviceWorkflow)
@@ -103,6 +107,42 @@ func (api *WorkflowAPI) invokeDeviceWorkflow(c *gin.Context, operation string, p
 		result = json.RawMessage(`{}`)
 	}
 	return result, true
+}
+
+func (api *WorkflowAPI) getDeviceWorkflowTriggerCapabilities(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshTriggerCapabilities, map[string]any{})
+	if !ok {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) getDeviceWorkflowTriggerAppCatalog(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshTriggerAppCatalog, map[string]any{})
+	if !ok {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) getDeviceWorkflowTriggerWakeConfigs(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshTriggerWakeConfigs, map[string]any{})
+	if !ok {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) createDeviceTaskerTriggerSecret(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshCreateTriggerSecret, map[string]any{"kind": "tasker"})
+	if !ok {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusCreated, "application/json", result)
 }
 
 func (api *WorkflowAPI) listDeviceWorkflows(c *gin.Context) {

@@ -1,11 +1,14 @@
 package extension
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 )
 
@@ -41,7 +44,95 @@ func (api *WorkflowAPI) prepareValidatedUserWorkflow(def workflow.WorkflowDefini
 	if err := api.validateNestedWorkflowTargets(prepared, userID); err != nil {
 		return def, err
 	}
+	if api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		for _, trigger := range prepared.Triggers {
+			if trigger.Type == "event" && isDeviceWorkflowEventType(trigger.EventType) {
+				return def, fmt.Errorf("device workflow trigger %s requires a local workflow installation", trigger.EventType)
+			}
+		}
+	}
+	if err := api.verifyWorkflowTriggerSecretReferences(context.Background(), prepared, userID); err != nil {
+		return def, err
+	}
+	if err := api.verifyWorkflowWakeConfigReferences(context.Background(), prepared); err != nil {
+		return def, err
+	}
 	return prepared, nil
+}
+
+func (api *WorkflowAPI) verifyWorkflowTriggerSecretReferences(ctx context.Context, def workflow.WorkflowDefinition, userID string) error {
+	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil ||
+		api.runtime.Kernel.Container().ExecutionKernel == nil || api.runtime.Kernel.Container().ExecutionKernel.SecretBroker == nil {
+		for _, trigger := range def.Triggers {
+			if trigger.Type == "event" && strings.TrimSpace(trigger.EventType) == "device.android.tasker" {
+				return fmt.Errorf("tasker trigger secret broker unavailable")
+			}
+		}
+		return nil
+	}
+	broker := api.runtime.Kernel.Container().ExecutionKernel.SecretBroker
+	for _, trigger := range def.Triggers {
+		if trigger.Type != "event" || strings.TrimSpace(trigger.EventType) != "device.android.tasker" {
+			continue
+		}
+		var cfg struct {
+			SecretRef string `json:"secretRef"`
+		}
+		if err := json.Unmarshal(trigger.Config, &cfg); err != nil {
+			return fmt.Errorf("trigger %s: invalid tasker secret config: %w", trigger.ID, err)
+		}
+		if !workflow.TriggerSecretRefOwnedByUser(cfg.SecretRef, userID) {
+			return fmt.Errorf("trigger %s: tasker trigger secretRef does not belong to the workflow owner", trigger.ID)
+		}
+		ref, err := secret.ParseRef(strings.TrimSpace(cfg.SecretRef))
+		if err != nil {
+			return fmt.Errorf("trigger %s: invalid tasker trigger secretRef: %w", trigger.ID, err)
+		}
+		if err := broker.VerifyReference(ctx, ref); err != nil {
+			return fmt.Errorf("trigger %s: tasker trigger secretRef is unavailable: %w", trigger.ID, err)
+		}
+	}
+	return nil
+}
+
+func (api *WorkflowAPI) verifyWorkflowWakeConfigReferences(ctx context.Context, def workflow.WorkflowDefinition) error {
+	referenced := make(map[string]string)
+	for _, trigger := range def.Triggers {
+		if trigger.Type != "event" || strings.TrimSpace(trigger.EventType) != "voice.wake.detected" {
+			continue
+		}
+		var cfg struct {
+			WakeConfigID string `json:"wakeConfigId"`
+		}
+		if err := json.Unmarshal(trigger.Config, &cfg); err != nil {
+			return fmt.Errorf("trigger %s: invalid wake config: %w", trigger.ID, err)
+		}
+		id := strings.TrimSpace(cfg.WakeConfigID)
+		if id == "" {
+			return fmt.Errorf("trigger %s: voice wake trigger wakeConfigId is required", trigger.ID)
+		}
+		referenced[id] = trigger.ID
+	}
+	if len(referenced) == 0 {
+		return nil
+	}
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		return errors.New("voice wake trigger requires a local workflow installation")
+	}
+	items, err := api.runtime.workflowWakeConfigCatalog(ctx)
+	if err != nil {
+		return err
+	}
+	available := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		available[item.ID] = struct{}{}
+	}
+	for id, triggerID := range referenced {
+		if _, ok := available[id]; !ok {
+			return fmt.Errorf("trigger %s: wake config %s is missing or disabled", triggerID, id)
+		}
+	}
+	return nil
 }
 
 func nestedWorkflowTarget(node workflow.WorkflowNode) string {
@@ -204,6 +295,15 @@ func analyzeWorkflowRisk(def workflow.WorkflowDefinition, registry *workflow.Wor
 	for _, trigger := range def.Triggers {
 		collectWorkflowSecretRefs(trigger.Config, secretSet)
 		collectWorkflowSecretRefs(trigger.Input, secretSet)
+		if trigger.Enabled && trigger.Type == "event" && isDeviceWorkflowEventType(trigger.EventType) {
+			level := "medium"
+			message := "工作流可由设备事件在无人交互时自动触发，启用前应确认触发来源与输入边界。"
+			if def.HasSideEffects {
+				level = "high"
+				message = "工作流包含副作用并可由设备事件自动触发，启用前应确认权限、触发来源与幂等策略。"
+			}
+			analysis.Risks = append(analysis.Risks, WorkflowRiskItem{Level: level, Code: "device_auto_trigger", Message: message})
+		}
 	}
 	for permission := range permissionSet {
 		analysis.DeclaredPermissions = append(analysis.DeclaredPermissions, permission)
@@ -253,7 +353,7 @@ func collectWorkflowSecretRefs(raw json.RawMessage, refs map[string]struct{}) {
 		case string:
 			trimmed := strings.TrimSpace(item)
 			lower := strings.ToLower(trimmed)
-			if strings.HasPrefix(lower, "credential://") || strings.HasPrefix(lower, "secrets.") {
+			if strings.HasPrefix(lower, "credential://") || strings.HasPrefix(lower, "secret://") || strings.HasPrefix(lower, "secrets.") {
 				refs[trimmed] = struct{}{}
 			}
 		}
