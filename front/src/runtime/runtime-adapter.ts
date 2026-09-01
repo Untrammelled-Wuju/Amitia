@@ -10,14 +10,20 @@ export const LOCAL_DEVICE_RUNTIME_BASE_URL = "http://127.0.0.1:18899";
 // checks in individual feature modules. Both namespaces are local because the
 // API historically uses /desktop-pets for package/installation resources and
 // /desktop-pet for Behavior control.
-export const DESKTOP_PET_DEVICE_LOCAL_ROUTE_PREFIXES = [
+export const DEVICE_LOCAL_ROUTE_PREFIXES = [
   "/api/desktop-pets",
   "/api/desktop-pet",
+  "/api/local/workflows",
+  "/api/local/workflow-runs",
 ] as const;
+
+// Kept as an alias for callers that still use the old Desktop-Pet-specific
+// name. Workflow local routing now shares the same canonical registry.
+export const DESKTOP_PET_DEVICE_LOCAL_ROUTE_PREFIXES = DEVICE_LOCAL_ROUTE_PREFIXES;
 
 export function isDeviceLocalApiPath(path: string): boolean {
   const normalized = String(path || "").split("?", 1)[0];
-  return DESKTOP_PET_DEVICE_LOCAL_ROUTE_PREFIXES.some(
+  return DEVICE_LOCAL_ROUTE_PREFIXES.some(
     (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
   );
 }
