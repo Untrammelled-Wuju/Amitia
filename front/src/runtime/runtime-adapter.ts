@@ -1,4 +1,4 @@
-import type { RuntimeConnection, DeploymentModeConfig } from "./runtime-types";
+import type { RuntimeConnection, DeploymentModeConfig, LocalVoiceASRFinalEvent } from "./runtime-types";
 
 let cachedConnection: RuntimeConnection | null = null;
 let cachedConfig: DeploymentModeConfig | null = null;
@@ -159,4 +159,13 @@ export function clearRuntimeCache(): void {
 export function resetRuntimeConnectionCache(): void {
   cachedConnection = null;
   cachedConfig = null;
+}
+
+export async function publishLocalVoiceASRFinal(
+  event: LocalVoiceASRFinalEvent,
+): Promise<boolean> {
+  const api = window.amitiaDesktop;
+  if (!api?.publishLocalVoiceASRFinal) return false;
+  await api.publishLocalVoiceASRFinal(event);
+  return true;
 }

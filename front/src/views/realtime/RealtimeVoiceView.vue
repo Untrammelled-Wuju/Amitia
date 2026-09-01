@@ -102,7 +102,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, onUnmounted } from "vue";
 import { ElMessage } from "element-plus";
 import { Phone } from "@element-plus/icons-vue";
-import { resolveWebSocketUrl } from "../../runtime/runtime-adapter";
+import { publishLocalVoiceASRFinal, resolveWebSocketUrl } from "../../runtime/runtime-adapter";
 
 const voiceList = [
   { name: "zh_female_vv_jupiter_bigtts", label: "vv - 活泼灵动女声" },
@@ -235,6 +235,9 @@ async function startCall() {
         case "audio":
           playAudio(msg.data);
           break;
+        case "asr_final":
+          void forwardASRFinalToLocalWorkflow(msg.data);
+          break;
         case "SessionFinished":
           messages.value.push({ role: "assistant", text: "通话结束" });
           break;
@@ -261,6 +264,25 @@ async function startCall() {
     connecting.value = false;
     cleanup();
   };
+}
+
+async function forwardASRFinalToLocalWorkflow(data: unknown) {
+  if (!data || typeof data !== "object") return;
+  const payload = data as Record<string, unknown>;
+  const transcript = typeof payload.transcript === "string" ? payload.transcript.trim() : "";
+  const eventId = typeof payload.eventId === "string" ? payload.eventId.trim() : "";
+  if (!transcript || !eventId) return;
+  try {
+    await publishLocalVoiceASRFinal({
+      eventId,
+      transcript,
+      sessionId: typeof payload.sessionId === "string" ? payload.sessionId : undefined,
+      conversationId: typeof payload.conversationId === "string" ? payload.conversationId : undefined,
+      occurredAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.warn("[RealtimeVoiceView] 本地语音工作流事件投递失败", error);
+  }
 }
 
 async function stopCall() {
