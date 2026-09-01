@@ -20,6 +20,16 @@ func NewCapabilityService(registry *ProviderRegistry) *CapabilityService {
 	}
 }
 
+// SetResolver lets the Kernel use one canonical, fully configured resolver
+// (runtime catalog, availability/presence, routing policy) across ToolFacade
+// and CapabilityService consumers such as WorkflowExecutionRouter.
+func (s *CapabilityService) SetResolver(resolver *Resolver) {
+	if s == nil || resolver == nil {
+		return
+	}
+	s.resolver = resolver
+}
+
 func (s *CapabilityService) SetToolRegistry(reg *ToolRegistry) {
 	s.toolRegistry = reg
 }

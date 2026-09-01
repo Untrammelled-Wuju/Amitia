@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -77,21 +78,57 @@ func (h NestedWorkflowHandler) Execute(ctx context.Context, node WorkflowNode, i
 	if !ok {
 		return nil, fmt.Errorf("nested workflow context missing")
 	}
-	targetID := node.TargetID
+	targetID := strings.TrimSpace(node.TargetID)
 	if targetID == "" {
-		targetID = node.Runtime.RuntimeID
+		targetID = strings.TrimSpace(node.Runtime.RuntimeID)
 	}
 	if targetID == "" {
 		return nil, fmt.Errorf("nested workflow target missing")
 	}
-	target, exists := h.Executor.registry.Get(targetID)
+
+	target := node.ExecutionTarget.Normalized(WorkflowExecutionLocal)
+	if node.ExecutionTarget.Placement == WorkflowExecutionDevice {
+		runner := h.Executor.RemoteWorkflowRunner()
+		if runner == nil {
+			err := fmt.Errorf("remote workflow runner not configured")
+			if target.OfflinePolicy == WorkflowOfflineWait {
+				return nil, &WorkflowDeviceUnavailableError{DeviceID: target.DeviceID, Cause: err}
+			}
+			return nil, err
+		}
+		// Execute has already appended the currently running workflow frame to
+		// CallStack. Forward that complete distributed stack unchanged so the
+		// target executor can append its own frame and reject Cloud -> Device ->
+		// Cloud (or cross-device) recursion consistently.
+		execution.Depth++
+		execution.InvocationID = fmt.Sprintf("%s/%s", execution.InvocationID, node.ID)
+		execution.IdempotencyKey = fmt.Sprintf("%s/%s", execution.IdempotencyKey, node.ID)
+		output, err := runner.RunRemoteWorkflow(ctx, RemoteWorkflowRequest{
+			WorkflowID: targetID,
+			Input:      input,
+			Target:     target,
+			Context:    execution,
+		})
+		if err != nil && target.OfflinePolicy == WorkflowOfflineWait {
+			var unavailable *WorkflowDeviceUnavailableError
+			if errors.As(err, &unavailable) {
+				return nil, unavailable
+			}
+		}
+		return output, err
+	}
+	if node.ExecutionTarget.Placement == WorkflowExecutionAuto {
+		return nil, fmt.Errorf("nested workflow auto placement requires an explicit device workflow selection")
+	}
+
+	definition, exists := h.Executor.registry.Get(targetID)
 	if !exists {
 		return nil, ErrWorkflowNotFound
 	}
-	if target.Source == "user" {
+	if definition.Source == "user" {
 		owner := ""
-		if target.Metadata != nil {
-			if value, exists := target.Metadata["ownerUserId"]; exists && value != nil {
+		if definition.Metadata != nil {
+			if value, exists := definition.Metadata["ownerUserId"]; exists && value != nil {
 				owner = strings.TrimSpace(fmt.Sprint(value))
 			}
 		}

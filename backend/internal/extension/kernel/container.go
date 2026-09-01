@@ -84,35 +84,37 @@ type Container struct {
 	PermissionRepository   sqlite.PermissionRepository
 	ResourceRepository     sqlite.ResourceRepository
 
-	PackageSecurity        *package_security.PackageSecurityService
-	PackageRepository      *PackageRepository
-	PackageArtifactStore   *PackageArtifactStore
-	PackageGenerationStore *PackageGenerationStore
-	ArtifactMaintenance    *PackageArtifactMaintenance
-	PackageTrustRepository *PackageTrustRepository
-	UserDataSnapshotStore  *UserDataSnapshotStore
-	ResourceSnapshotStore  *ResourceSnapshotStore
-	PackageSnapshotRepo    *PackageSnapshotRepository
-	LifecycleManager       *lifecycle_manager.Manager
-	ContributionRegistry   *contribution.ContributionRegistry
-	ContributionInstaller  *TypedContributionInstaller
-	DependencyResolver     dependency.Resolver
-	RuntimeSupervisor      runtime_supervisor.Supervisor
-	ExecutionKernel        *execution.ExecutionPipeline
-	HostAPIGateway         *host_api.DefaultGateway
-	PermissionBroker       permission.PermissionBroker
-	PermissionDefinitions  *permission.PermissionDefinitionRegistry
-	ScopeManager           scope.ScopeManager
-	ScopeSnapshotCreator   func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
-	AgentSkillCatalog      *agent_skill.AgentSkillCatalog
-	WorkflowRegistry       *workflow.WorkflowRegistry
-	WorkflowExecutor       *workflow.WorkflowExecutor
-	WorkflowTriggerManager *workflow.TriggerManager
-	WorkflowDefRepo        *sqlite.WorkflowDefinitionRepository
-	WorkflowExecRepo       *sqlite.WorkflowExecutionRepository
-	WorkflowModelGenerator WorkshopModelGenerator
-	EnablementService      *enablement.EnablementService
-	EnablementResolver     enablement.EffectiveStateResolver
+	PackageSecurity           *package_security.PackageSecurityService
+	PackageRepository         *PackageRepository
+	PackageArtifactStore      *PackageArtifactStore
+	PackageGenerationStore    *PackageGenerationStore
+	ArtifactMaintenance       *PackageArtifactMaintenance
+	PackageTrustRepository    *PackageTrustRepository
+	UserDataSnapshotStore     *UserDataSnapshotStore
+	ResourceSnapshotStore     *ResourceSnapshotStore
+	PackageSnapshotRepo       *PackageSnapshotRepository
+	LifecycleManager          *lifecycle_manager.Manager
+	ContributionRegistry      *contribution.ContributionRegistry
+	ContributionInstaller     *TypedContributionInstaller
+	DependencyResolver        dependency.Resolver
+	RuntimeSupervisor         runtime_supervisor.Supervisor
+	ExecutionKernel           *execution.ExecutionPipeline
+	HostAPIGateway            *host_api.DefaultGateway
+	PermissionBroker          permission.PermissionBroker
+	PermissionDefinitions     *permission.PermissionDefinitionRegistry
+	ScopeManager              scope.ScopeManager
+	ScopeSnapshotCreator      func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
+	AgentSkillCatalog         *agent_skill.AgentSkillCatalog
+	WorkflowRegistry          *workflow.WorkflowRegistry
+	WorkflowExecutor          *workflow.WorkflowExecutor
+	WorkflowTriggerManager    *workflow.TriggerManager
+	WorkflowDefRepo           *sqlite.WorkflowDefinitionRepository
+	WorkflowInstallationRepo  *sqlite.WorkflowInstallationRepository
+	WorkflowDeviceCatalogRepo *sqlite.WorkflowDeviceCatalogRepository
+	WorkflowExecRepo          *sqlite.WorkflowExecutionRepository
+	WorkflowModelGenerator    WorkshopModelGenerator
+	EnablementService         *enablement.EnablementService
+	EnablementResolver        enablement.EffectiveStateResolver
 
 	ToolRegistry    *capability.ToolRegistry
 	AdapterRegistry *capability.RuntimeAdapterRegistry

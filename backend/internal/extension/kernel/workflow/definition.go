@@ -83,18 +83,19 @@ type WorkflowAgentToolConfig struct {
 }
 
 type WorkflowNode struct {
-	ID          string                    `json:"id"`
-	Type        string                    `json:"type"`
-	DependsOn   []string                  `json:"dependsOn,omitempty"`
-	TargetID    string                    `json:"targetId,omitempty"`
-	Runtime     capability.RuntimeBinding `json:"runtime,omitempty"`
-	Permissions []string                  `json:"permissions,omitempty"`
-	Scope       string                    `json:"scope,omitempty"`
-	Position    WorkflowPosition          `json:"position,omitempty"`
-	Label       string                    `json:"label,omitempty"`
-	TimeoutMS   int64                     `json:"timeoutMs,omitempty"`
-	Retry       *WorkflowNodeRetryPolicy  `json:"retry,omitempty"`
-	Step        WorkflowStepInput         `json:"step"`
+	ID              string                    `json:"id"`
+	Type            string                    `json:"type"`
+	DependsOn       []string                  `json:"dependsOn,omitempty"`
+	TargetID        string                    `json:"targetId,omitempty"`
+	Runtime         capability.RuntimeBinding `json:"runtime,omitempty"`
+	ExecutionTarget WorkflowExecutionTarget   `json:"executionTarget,omitempty"`
+	Permissions     []string                  `json:"permissions,omitempty"`
+	Scope           string                    `json:"scope,omitempty"`
+	Position        WorkflowPosition          `json:"position,omitempty"`
+	Label           string                    `json:"label,omitempty"`
+	TimeoutMS       int64                     `json:"timeoutMs,omitempty"`
+	Retry           *WorkflowNodeRetryPolicy  `json:"retry,omitempty"`
+	Step            WorkflowStepInput         `json:"step"`
 }
 
 type WorkflowDefinition struct {

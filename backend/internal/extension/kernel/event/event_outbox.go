@@ -61,6 +61,18 @@ type OutboxRecord struct {
 	DispatchedAt         *time.Time
 }
 
+// WorkflowSyncRecord is a minimal durable projection for cross-client workflow refresh.
+// Cursor is the SQLite rowid of the outbox record and is monotonic within one database.
+type WorkflowSyncRecord struct {
+	Cursor           int64
+	EventID          string
+	EventTypeID      EventTypeID
+	AggregateID      string
+	AggregateVersion *int64
+	OccurredAt       time.Time
+	Payload          json.RawMessage
+}
+
 type OutboxStore interface {
 	EnqueueTx(ctx context.Context, tx OutboxTx, record OutboxRecord) error
 	Enqueue(ctx context.Context, record OutboxRecord) error
@@ -451,6 +463,81 @@ func (r *OutboxRepository) ListConversationUIEventsAfterSequence(ctx context.Con
 	}
 	defer rows.Close()
 	return scanOutboxRecords(rows)
+}
+
+// LatestWorkflowSyncCursor returns the current durable tail for one user. Clients
+// use this as their initial baseline so opening a page does not replay old events.
+func (r *OutboxRepository) LatestWorkflowSyncCursor(ctx context.Context, partitionKey string) (int64, error) {
+	partitionKey = strings.TrimSpace(partitionKey)
+	if partitionKey == "" {
+		return 0, errors.New("event: workflow sync partition key required")
+	}
+	var cursor sql.NullInt64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT MAX(rowid)
+		FROM extension_event_outbox
+		WHERE partition_key = ? AND event_type_id LIKE 'workflow.%'
+	`, partitionKey).Scan(&cursor)
+	if err != nil {
+		return 0, err
+	}
+	if !cursor.Valid {
+		return 0, nil
+	}
+	return cursor.Int64, nil
+}
+
+// ListWorkflowSyncEventsAfterCursor returns only workflow durable events owned by
+// the requested partition. The rowid cursor avoids introducing a second event bus
+// or a parallel sequence table solely for UI synchronization.
+func (r *OutboxRepository) ListWorkflowSyncEventsAfterCursor(ctx context.Context, partitionKey string, afterCursor int64, limit int) ([]WorkflowSyncRecord, error) {
+	partitionKey = strings.TrimSpace(partitionKey)
+	if partitionKey == "" {
+		return nil, errors.New("event: workflow sync partition key required")
+	}
+	if afterCursor < 0 {
+		afterCursor = 0
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT rowid, event_id, event_type_id, aggregate_id, aggregate_version, occurred_at, payload_json
+		FROM extension_event_outbox
+		WHERE partition_key = ? AND event_type_id LIKE 'workflow.%' AND rowid > ?
+		ORDER BY rowid ASC
+		LIMIT ?
+	`, partitionKey, afterCursor, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	records := make([]WorkflowSyncRecord, 0)
+	for rows.Next() {
+		var rec WorkflowSyncRecord
+		var typeID string
+		var aggregateID sql.NullString
+		var aggregateVersion sql.NullInt64
+		var payload string
+		if err := rows.Scan(&rec.Cursor, &rec.EventID, &typeID, &aggregateID, &aggregateVersion, &rec.OccurredAt, &payload); err != nil {
+			return nil, err
+		}
+		rec.EventTypeID = EventTypeID(typeID)
+		rec.AggregateID = aggregateID.String
+		if aggregateVersion.Valid {
+			value := aggregateVersion.Int64
+			rec.AggregateVersion = &value
+		}
+		rec.Payload = json.RawMessage(payload)
+		records = append(records, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return records, nil
 }
 
 func (r *OutboxRepository) CountByStatus(ctx context.Context, status OutboxStatus) (int, error) {

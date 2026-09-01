@@ -185,6 +185,13 @@ func (r *Resolver) applyHardFilter(defs []CapabilityProviderDefinition, request 
 			})
 			continue
 		}
+		if request.RequiredProviderID != "" && def.ID != request.RequiredProviderID {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionProviderUnavailable,
+			})
+			continue
+		}
 		if def.RoutingMode == RoutingModeProviderRequired && request.PreferredProviderID != "" && string(def.ID) != string(request.PreferredProviderID) {
 			rejections = append(rejections, CandidateRejection{
 				ProviderID: def.ID,
@@ -195,16 +202,30 @@ func (r *Resolver) applyHardFilter(defs []CapabilityProviderDefinition, request 
 		if r.policy.RequireAvailable || r.policy.RequireHealthy {
 			insts := r.catalog.ListInstancesByProvider(def.ID)
 			hasHealthy := false
+			allDeviceInstancesOffline := def.Placement == ProviderPlacementDevice && len(insts) > 0 && r.availability != nil
+			sawDeviceInstance := false
 			for _, inst := range insts {
 				if inst.IsExecutable() {
 					hasHealthy = true
-					break
+				}
+				if def.Placement != ProviderPlacementDevice || inst.DeviceID == "" || r.availability == nil {
+					allDeviceInstancesOffline = false
+					continue
+				}
+				sawDeviceInstance = true
+				offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
+				if err != nil || !offline {
+					allDeviceInstancesOffline = false
 				}
 			}
 			if !hasHealthy {
+				reason := RejectionProviderUnhealthy
+				if sawDeviceInstance && allDeviceInstancesOffline {
+					reason = RejectionDeviceOffline
+				}
 				rejections = append(rejections, CandidateRejection{
 					ProviderID: def.ID,
-					Reason:     RejectionProviderUnhealthy,
+					Reason:     reason,
 				})
 				continue
 			}
@@ -264,8 +285,22 @@ func (r *Resolver) collectExecutableInstances(defs []CapabilityProviderDefinitio
 			if seen[inst.ID] {
 				continue
 			}
-		if !inst.IsExecutable() {
-			if r.availability != nil && inst.DeviceID != "" {
+			if !inst.IsExecutable() {
+				if r.availability != nil && inst.DeviceID != "" {
+					offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
+					if err == nil && offline {
+						rejections = append(rejections, CandidateRejection{
+							ProviderID: def.ID,
+							Reason:     RejectionDeviceOffline,
+						})
+						seen[inst.ID] = true
+						continue
+					}
+				}
+				continue
+			}
+
+			if inst.DeviceID != "" && r.availability != nil {
 				offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
 				if err == nil && offline {
 					rejections = append(rejections, CandidateRejection{
@@ -276,35 +311,21 @@ func (r *Resolver) collectExecutableInstances(defs []CapabilityProviderDefinitio
 					continue
 				}
 			}
-			continue
-		}
 
-		if inst.DeviceID != "" && r.availability != nil {
-			offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
-			if err == nil && offline {
-				rejections = append(rejections, CandidateRejection{
-					ProviderID: def.ID,
-					Reason:     RejectionDeviceOffline,
-				})
-				seen[inst.ID] = true
-				continue
+			if inst.RuntimeID != "" && r.availability != nil {
+				online, err := r.availability.IsRuntimeOnline(context.Background(), inst.RuntimeID)
+				if err != nil || !online {
+					rejections = append(rejections, CandidateRejection{
+						ProviderID: def.ID,
+						Reason:     RejectionRuntimeAdapterUnavailable,
+					})
+					seen[inst.ID] = true
+					continue
+				}
 			}
-		}
 
-		if inst.RuntimeID != "" && r.availability != nil {
-			online, err := r.availability.IsRuntimeOnline(context.Background(), inst.RuntimeID)
-			if err != nil || !online {
-				rejections = append(rejections, CandidateRejection{
-					ProviderID: def.ID,
-					Reason:     RejectionRuntimeAdapterUnavailable,
-				})
-				seen[inst.ID] = true
-				continue
-			}
-		}
-
-		seen[inst.ID] = true
-		instances = append(instances, inst)
+			seen[inst.ID] = true
+			instances = append(instances, inst)
 		}
 	}
 	return instances, rejections

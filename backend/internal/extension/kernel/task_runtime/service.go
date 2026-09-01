@@ -238,6 +238,26 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 		Revision:             1,
 	}
 
+	// Workflow and other trusted coordinators may already have resolved a
+	// stable remote target. Bind it before the run is persisted/enqueued so
+	// dispatch can never race ahead and observe an unresolved remote target.
+	if req.TrustedExecutionTarget != nil {
+		targetReq := *req.TrustedExecutionTarget
+		if targetReq.Placement == "" {
+			targetReq.Placement = placement
+		}
+		if targetReq.Placement != placement {
+			return nil, NewTaskError(ErrTaskExecutionPlacementInvalid, "trusted execution target placement does not match enqueue placement")
+		}
+		if err := run.BindExecutionTarget(TaskPlacementDecision{
+			Placement: targetReq.Placement,
+			Target:    targetReq.Target,
+			Resolved:  true,
+		}, targetReq.ResolvedBy, now); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := s.store.WithinTaskTx(ctx, func(ctx context.Context) error {
 		if err := s.store.PutTaskRun(ctx, run); err != nil {
 			return fmt.Errorf("task_runtime: persist run: %w", err)

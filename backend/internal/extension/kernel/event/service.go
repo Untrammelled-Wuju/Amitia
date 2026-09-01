@@ -475,6 +475,20 @@ func (s *Service) ListConversationUIEventsAfterSequence(ctx context.Context, con
 	return s.outboxRepo.ListConversationUIEventsAfterSequence(ctx, conversationID, afterSequence, limit)
 }
 
+func (s *Service) LatestWorkflowSyncCursor(ctx context.Context, partitionKey string) (int64, error) {
+	if s == nil || s.outboxRepo == nil {
+		return 0, errors.New("event: outbox repository unavailable")
+	}
+	return s.outboxRepo.LatestWorkflowSyncCursor(ctx, partitionKey)
+}
+
+func (s *Service) ListWorkflowSyncEventsAfterCursor(ctx context.Context, partitionKey string, afterCursor int64, limit int) ([]WorkflowSyncRecord, error) {
+	if s == nil || s.outboxRepo == nil {
+		return nil, errors.New("event: outbox repository unavailable")
+	}
+	return s.outboxRepo.ListWorkflowSyncEventsAfterCursor(ctx, partitionKey, afterCursor, limit)
+}
+
 func (s *Service) ListOutboxByStatus(ctx context.Context, status OutboxStatus, limit, offset int) ([]OutboxRecord, error) {
 	return s.outboxRepo.ListByStatus(ctx, status, limit, offset)
 }

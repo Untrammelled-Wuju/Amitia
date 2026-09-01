@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -25,7 +26,26 @@ type WorkflowExecutor struct {
 	active        map[string]context.CancelFunc
 	pauseMu       sync.Mutex
 	pauseControls map[string]*WorkflowExecutionControl
+	remoteMu      sync.RWMutex
+	remoteRunner  RemoteWorkflowRunner
+	runEventMu    sync.RWMutex
+	runEventSink  WorkflowRunLifecycleSink
 }
+
+type WorkflowRunLifecycleEvent struct {
+	Type           string
+	WorkflowID     string
+	ExecutionID    string
+	InstallationID string
+	UserID         string
+	DeviceID       string
+	Status         RunStatus
+	Generation     int64
+	Error          string
+	Timestamp      time.Time
+}
+
+type WorkflowRunLifecycleSink func(context.Context, WorkflowRunLifecycleEvent)
 
 type WorkflowExecutionControl struct {
 	executionID    string
@@ -44,24 +64,28 @@ type ExecuteRequest struct {
 }
 
 type ExecutionContext struct {
-	UserID           string
-	RootID           string
-	ExtensionID      string
-	CharacterID      string
-	ConversationID   string
-	OperationID      string
-	InvocationID     string
-	ScopeSnapshotID  string
-	PermissionSnapID string
-	Generation       int64
-	ModuleID         string
-	ScheduleID       string
-	TriggerID        string
-	TraceID          string
-	IdempotencyKey   string
-	DefinitionHash   string
-	Depth            int
-	Recovery         bool
+	UserID           string              `json:"userId,omitempty"`
+	WorkflowID       string              `json:"workflowId,omitempty"`
+	InstallationID   string              `json:"installationId,omitempty"`
+	DeviceID         string              `json:"deviceId,omitempty"`
+	CallStack        []WorkflowCallFrame `json:"callStack,omitempty"`
+	RootID           string              `json:"rootId,omitempty"`
+	ExtensionID      string              `json:"extensionId,omitempty"`
+	CharacterID      string              `json:"characterId,omitempty"`
+	ConversationID   string              `json:"conversationId,omitempty"`
+	OperationID      string              `json:"operationId,omitempty"`
+	InvocationID     string              `json:"invocationId,omitempty"`
+	ScopeSnapshotID  string              `json:"scopeSnapshotId,omitempty"`
+	PermissionSnapID string              `json:"permissionSnapshotId,omitempty"`
+	Generation       int64               `json:"generation,omitempty"`
+	ModuleID         string              `json:"moduleId,omitempty"`
+	ScheduleID       string              `json:"scheduleId,omitempty"`
+	TriggerID        string              `json:"triggerId,omitempty"`
+	TraceID          string              `json:"traceId,omitempty"`
+	IdempotencyKey   string              `json:"idempotencyKey,omitempty"`
+	DefinitionHash   string              `json:"definitionHash,omitempty"`
+	Depth            int                 `json:"depth,omitempty"`
+	Recovery         bool                `json:"recovery,omitempty"`
 }
 
 type ExecuteResult struct {
@@ -128,6 +152,52 @@ func (e *WorkflowExecutor) SetStepGuard(guard StepGuard) {
 	e.guard = guard
 }
 
+func (e *WorkflowExecutor) SetRunLifecycleSink(sink WorkflowRunLifecycleSink) {
+	e.runEventMu.Lock()
+	e.runEventSink = sink
+	e.runEventMu.Unlock()
+}
+
+func (e *WorkflowExecutor) emitRunLifecycle(ctx context.Context, event WorkflowRunLifecycleEvent) {
+	e.runEventMu.RLock()
+	sink := e.runEventSink
+	e.runEventMu.RUnlock()
+	if sink == nil {
+		return
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now().UTC()
+	}
+	sink(ctx, event)
+}
+
+func runLifecycleEvent(kind string, run WorkflowRun) WorkflowRunLifecycleEvent {
+	return WorkflowRunLifecycleEvent{
+		Type:           kind,
+		WorkflowID:     run.WorkflowID,
+		ExecutionID:    run.ExecutionID,
+		InstallationID: run.Context.InstallationID,
+		UserID:         run.Context.UserID,
+		DeviceID:       run.Context.DeviceID,
+		Status:         run.Status,
+		Generation:     run.Generation,
+		Error:          run.Error,
+		Timestamp:      run.UpdatedAt,
+	}
+}
+
+func (e *WorkflowExecutor) SetRemoteWorkflowRunner(runner RemoteWorkflowRunner) {
+	e.remoteMu.Lock()
+	e.remoteRunner = runner
+	e.remoteMu.Unlock()
+}
+
+func (e *WorkflowExecutor) RemoteWorkflowRunner() RemoteWorkflowRunner {
+	e.remoteMu.RLock()
+	defer e.remoteMu.RUnlock()
+	return e.remoteRunner
+}
+
 func (e *WorkflowExecutor) Recover(ctx context.Context, limit int) error {
 	if e.runStore == nil {
 		return nil
@@ -139,6 +209,7 @@ func (e *WorkflowExecutor) Recover(ctx context.Context, limit int) error {
 	for _, run := range runs {
 		run.Context.Recovery = true
 		run.Generation++
+		run.Context.Generation = run.Generation
 		if _, err := e.Execute(ctx, ExecuteRequest{WorkflowID: run.WorkflowID, Input: run.Input, Context: run.Context}); err != nil {
 			finishedAt := time.Now().UTC()
 			run.Status = RunStatusFailed
@@ -196,6 +267,7 @@ func (e *WorkflowExecutor) Pause(ctx context.Context, executionID, reason string
 	default:
 	}
 	e.pauseMu.Unlock()
+	e.emitRunLifecycle(ctx, runLifecycleEvent("updated", updated))
 
 	return &updated, nil
 }
@@ -228,6 +300,7 @@ func (e *WorkflowExecutor) Resume(ctx context.Context, executionID string) (*Wor
 	updated.Generation = run.Generation + 1
 	updated.PausedAt = nil
 	updated.Context.Generation = updated.Generation
+	updated.Context.Recovery = true
 	updated.UpdatedAt = now
 
 	ok, err := e.runStore.UpdateStateCAS(ctx, updated, RunStatusPaused)
@@ -238,13 +311,8 @@ func (e *WorkflowExecutor) Resume(ctx context.Context, executionID string) (*Wor
 		return nil, fmt.Errorf("workflow resume: concurrent state change")
 	}
 
-	go func() {
-		_, _ = e.Execute(context.Background(), ExecuteRequest{
-			WorkflowID: updated.WorkflowID,
-			Input:      updated.Input,
-			Context:    updated.Context,
-		})
-	}()
+	e.emitRunLifecycle(ctx, runLifecycleEvent("updated", updated))
+	e.executeRecoveryAsync(updated)
 
 	return &updated, nil
 }
@@ -285,8 +353,111 @@ func (e *WorkflowExecutor) finalisePaused(ctx context.Context, executionID strin
 	updated.UpdatedAt = now
 
 	if ok, err := e.runStore.UpdateStateCAS(ctx, updated, RunStatusPausing); err == nil && ok {
+		e.emitRunLifecycle(ctx, runLifecycleEvent("updated", updated))
 		close(ctrl.paused)
 	}
+}
+
+func (e *WorkflowExecutor) markWaitingDevice(ctx context.Context, executionID, deviceID string) error {
+	if e.runStore == nil {
+		return fmt.Errorf("workflow: waiting_device requires a durable run store")
+	}
+	run, err := e.runStore.Get(ctx, executionID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return fmt.Errorf("workflow: execution %s not found while waiting for device", executionID)
+	}
+	now := time.Now().UTC()
+	updated := *run
+	updated.Status = RunStatusWaitingDevice
+	updated.PauseReason = "waiting_device:" + strings.TrimSpace(deviceID)
+	updated.UpdatedAt = now
+	ok, err := e.runStore.UpdateStateCAS(context.WithoutCancel(ctx), updated, run.Status)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("workflow: waiting_device concurrent state change")
+	}
+	e.emitRunLifecycle(context.WithoutCancel(ctx), runLifecycleEvent("updated", updated))
+	return nil
+}
+
+// ResumeWaitingDevice re-enters waiting runs on the same execution ID. Completed
+// nodes are restored from checkpoints, while Generation is incremented so
+// attempts after reconnect remain distinguishable from pre-disconnect attempts.
+func (e *WorkflowExecutor) ResumeWaitingDevice(ctx context.Context, userID, deviceID string) (int, error) {
+	store, ok := e.runStore.(WaitingDeviceRunStore)
+	if !ok || store == nil {
+		return 0, nil
+	}
+	runs, err := store.ListWaitingDevice(ctx, strings.TrimSpace(userID), strings.TrimSpace(deviceID), 100)
+	if err != nil {
+		return 0, err
+	}
+	resumed := 0
+	for i := range runs {
+		run := runs[i]
+		if run.Status != RunStatusWaitingDevice {
+			continue
+		}
+		now := time.Now().UTC()
+		updated := run
+		updated.Status = RunStatusResuming
+		updated.Generation = run.Generation + 1
+		updated.Context.Generation = updated.Generation
+		updated.Context.Recovery = true
+		updated.PauseReason = ""
+		updated.UpdatedAt = now
+		ok, casErr := e.runStore.UpdateStateCAS(ctx, updated, RunStatusWaitingDevice)
+		if casErr != nil {
+			return resumed, casErr
+		}
+		if !ok {
+			continue
+		}
+		e.emitRunLifecycle(ctx, runLifecycleEvent("updated", updated))
+		resumed++
+		e.executeRecoveryAsync(updated)
+	}
+	return resumed, nil
+}
+
+// executeRecoveryAsync re-enters a durable paused/waiting execution and makes
+// sure failures that happen before Execute reaches RunStore.Start do not leave
+// the persisted run permanently stuck in resuming.
+func (e *WorkflowExecutor) executeRecoveryAsync(run WorkflowRun) {
+	go func() {
+		_, err := e.Execute(context.Background(), ExecuteRequest{
+			WorkflowID: run.WorkflowID,
+			Input:      run.Input,
+			Context:    run.Context,
+		})
+		if err == nil || e.runStore == nil {
+			return
+		}
+
+		ctx := context.Background()
+		current, getErr := e.runStore.Get(ctx, run.ExecutionID)
+		if getErr != nil || current == nil || current.Status != RunStatusResuming {
+			return
+		}
+		now := time.Now().UTC()
+		failed := *current
+		failed.Status = RunStatusFailed
+		failed.Error = err.Error()
+		failed.FinishedAt = &now
+		failed.UpdatedAt = now
+		ok, casErr := e.runStore.UpdateStateCAS(ctx, failed, RunStatusResuming)
+		if casErr != nil || !ok {
+			return
+		}
+		if finishErr := e.runStore.Finish(ctx, failed); finishErr == nil {
+			e.emitRunLifecycle(ctx, runLifecycleEvent("finished", failed))
+		}
+	}()
 }
 
 func (e *WorkflowExecutor) Cancel(executionID string) bool {
@@ -328,6 +499,7 @@ func (e *WorkflowExecutor) CancelRun(ctx context.Context, executionID string) (b
 	if err := e.runStore.Finish(ctx, updated); err != nil {
 		return false, err
 	}
+	e.emitRunLifecycle(ctx, runLifecycleEvent("finished", updated))
 	return true, nil
 }
 
@@ -338,6 +510,19 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 	if !ok {
 		return nil, ErrWorkflowNotFound
 	}
+	currentFrame := WorkflowCallFrame{InstallationID: req.Context.InstallationID, WorkflowID: req.WorkflowID, DeviceID: req.Context.DeviceID}
+	// Durable resume/recovery reuses the persisted execution context, which
+	// already contains this workflow's frame. Do not append the same frame a
+	// second time or a legitimate resume would be mistaken for recursion. New
+	// nested invocations still append and validate normally.
+	if !(req.Context.Recovery && len(req.Context.CallStack) > 0 && req.Context.CallStack[len(req.Context.CallStack)-1].key() == currentFrame.key()) {
+		callStack, err := AppendWorkflowCallFrame(req.Context.CallStack, currentFrame)
+		if err != nil {
+			return nil, err
+		}
+		req.Context.CallStack = callStack
+	}
+	req.Context.WorkflowID = req.WorkflowID
 	definitionHash := ComputeDefinitionHash(wf)
 	var stackErr error
 	ctx, stackErr = pushWorkflowCall(ctx, req.WorkflowID)
@@ -438,7 +623,7 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 		Steps:       make([]StepResult, 0, totalNodes),
 	}
 	defer func() {
-		if result.Status == RunStatusPaused || result.Status == RunStatusPausing {
+		if result.Status == RunStatusPaused || result.Status == RunStatusPausing || result.Status == RunStatusWaitingDevice {
 			return
 		}
 		if result.Accepted && result.Status == RunStatusRunning {
@@ -479,8 +664,18 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 			}
 			startedAt = existing.StartedAt
 		}
+		startedRun := WorkflowRun{
+			ExecutionID: executionID, WorkflowID: req.WorkflowID, Status: RunStatusRunning,
+			Input: req.Input, Context: req.Context, Generation: req.Context.Generation,
+			StartedAt: startedAt, UpdatedAt: time.Now().UTC(),
+		}
+		startEventKind := "started"
+		if !created {
+			startEventKind = "updated"
+		}
+		e.emitRunLifecycle(context.WithoutCancel(execCtx), runLifecycleEvent(startEventKind, startedRun))
 		defer func() {
-			if result.Status == RunStatusPaused || result.Status == RunStatusPausing {
+			if result.Status == RunStatusPaused || result.Status == RunStatusPausing || result.Status == RunStatusWaitingDevice {
 				return
 			}
 			finishedAt := time.Now().UTC()
@@ -494,7 +689,7 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 			} else {
 				status = RunStatusFailed
 			}
-			_ = e.runStore.Finish(context.Background(), WorkflowRun{
+			finishedRun := WorkflowRun{
 				ExecutionID:         executionID,
 				WorkflowID:          req.WorkflowID,
 				Status:              status,
@@ -504,10 +699,14 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 				Context:             req.Context,
 				Steps:               result.Steps,
 				CompensationResults: result.CompensationResults,
+				Generation:          req.Context.Generation,
 				StartedAt:           startedAt,
 				FinishedAt:          &finishedAt,
 				UpdatedAt:           finishedAt,
-			})
+			}
+			if finishErr := e.runStore.Finish(context.Background(), finishedRun); finishErr == nil {
+				e.emitRunLifecycle(context.Background(), runLifecycleEvent("finished", finishedRun))
+			}
 		}()
 	}
 
@@ -717,6 +916,22 @@ func (e *WorkflowExecutor) Execute(ctx context.Context, req ExecuteRequest) (*Ex
 			if e.runStore != nil && !ner.restored {
 				finishedAt := time.Now().UTC()
 				_ = e.runStore.SaveStep(execCtx, StepRun{ExecutionID: executionID, WorkflowID: req.WorkflowID, NodeID: ner.nodeID, Status: ner.step.Status, Input: ner.input, Output: ner.step.Output, Error: ner.step.Error, Attempt: ner.step.Attempt, StartedAt: finishedAt.Add(-ner.step.Duration), FinishedAt: &finishedAt})
+			}
+
+			if ner.step.Status == "waiting_device" {
+				deviceID := strings.TrimSpace(node.ExecutionTarget.DeviceID)
+				if err := e.markWaitingDevice(execCtx, executionID, deviceID); err != nil {
+					result.Success = false
+					result.Error = err.Error()
+					result.Duration = time.Since(start)
+					return result, nil
+				}
+				result.Success = false
+				result.Accepted = true
+				result.Status = RunStatusWaitingDevice
+				result.Error = ner.step.Error
+				result.Duration = time.Since(start)
+				return result, nil
 			}
 
 			if ner.step.Status == "succeeded" || ner.step.Status == "defaulted" {
@@ -952,6 +1167,12 @@ func (e *WorkflowExecutor) executeStep(ctx context.Context, handler StepHandler,
 			attemptStatus = "cancelled"
 			e.saveAttempt(ctx, workflowID, node, input, attempt, attemptStatus, nil, lastErr, 0, attemptStarted, attemptFinished)
 			return StepResult{Status: "cancelled", Error: lastErr.Error(), Duration: time.Since(start), Attempt: attempt}
+		}
+
+		var unavailable *WorkflowDeviceUnavailableError
+		if err != nil && errors.As(err, &unavailable) {
+			e.saveAttempt(ctx, workflowID, node, input, attempt, "waiting_device", output, err, 0, attemptStarted, attemptFinished)
+			return StepResult{Status: "waiting_device", Error: err.Error(), Duration: time.Since(start), Attempt: attempt}
 		}
 
 		nextBackoff := time.Duration(0)

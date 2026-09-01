@@ -453,20 +453,21 @@ func DefaultTaskRuntimeConfig() TaskRuntimeConfig {
 }
 
 type EnqueueTaskRequest struct {
-	TaskDefinitionID     string                 `json:"taskDefinitionId"`
-	ExtensionID          string                 `json:"extensionId"`
-	ModuleID             string                 `json:"moduleId"`
-	Input                json.RawMessage        `json:"input"`
-	Priority             int                    `json:"priority"`
-	ExecutionPlacement   TaskExecutionPlacement `json:"executionPlacement,omitempty"`
-	OperationID          string                 `json:"operationId"`
-	InvocationID         string                 `json:"invocationId,omitempty"`
-	TraceID              string                 `json:"traceId,omitempty"`
-	CorrelationID        string                 `json:"correlationId,omitempty"`
-	CausationID          string                 `json:"causationId,omitempty"`
-	Source               string                 `json:"source,omitempty"`
-	ScopeSnapshotID      string                 `json:"scopeSnapshotId"`
-	PermissionSnapshotID string                 `json:"permissionSnapshotId"`
+	TaskDefinitionID       string                         `json:"taskDefinitionId"`
+	ExtensionID            string                         `json:"extensionId"`
+	ModuleID               string                         `json:"moduleId"`
+	Input                  json.RawMessage                `json:"input"`
+	Priority               int                            `json:"priority"`
+	ExecutionPlacement     TaskExecutionPlacement         `json:"executionPlacement,omitempty"`
+	TrustedExecutionTarget *TrustedExecutionTargetRequest `json:"-"`
+	OperationID            string                         `json:"operationId"`
+	InvocationID           string                         `json:"invocationId,omitempty"`
+	TraceID                string                         `json:"traceId,omitempty"`
+	CorrelationID          string                         `json:"correlationId,omitempty"`
+	CausationID            string                         `json:"causationId,omitempty"`
+	Source                 string                         `json:"source,omitempty"`
+	ScopeSnapshotID        string                         `json:"scopeSnapshotId"`
+	PermissionSnapshotID   string                         `json:"permissionSnapshotId"`
 }
 
 type TrustedExecutionTargetRequest struct {
