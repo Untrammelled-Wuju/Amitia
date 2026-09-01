@@ -17,6 +17,9 @@ internal object RuntimeServiceContract {
     const val NOTIFICATION_ID = 0x52435541
 
     const val FOREGROUND_SERVICE_TYPE = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+    const val FOREGROUND_SERVICE_TYPE_WITH_MICROPHONE =
+        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
 
     const val SPECIAL_USE_FGS_SUBTYPE = "amitia_embedded_runtime"
 }

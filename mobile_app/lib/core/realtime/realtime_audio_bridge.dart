@@ -38,4 +38,30 @@ class RealtimeAudioBridge {
   Future<void> reset() async {
     await _control.invokeMethod<void>('reset');
   }
+
+  /// Delivers a finalized realtime-ASR transcript to the Android local
+  /// workflow ingress. The native side posts directly to the Device Agent,
+  /// so cloud-mode realtime voice never executes a local trigger in Cloud Core.
+  Future<void> emitWorkflowAsrFinal({
+    required String transcript,
+    required String eventId,
+    String? sessionId,
+    String? conversationId,
+  }) async {
+    final normalized = transcript.trim();
+    if (normalized.isEmpty || eventId.trim().isEmpty) return;
+    try {
+      await _control.invokeMethod<void>('emitWorkflowASRFinal', <String, dynamic>{
+        'transcript': normalized,
+        'eventId': eventId.trim(),
+        if ((sessionId ?? '').trim().isNotEmpty) 'sessionId': sessionId!.trim(),
+        if ((conversationId ?? '').trim().isNotEmpty)
+          'conversationId': conversationId!.trim(),
+      });
+    } on MissingPluginException {
+      // Device workflow triggers are Android-only for this bridge.
+    } on PlatformException {
+      // Realtime voice must stay usable if the local Device Agent is restarting.
+    }
+  }
 }
