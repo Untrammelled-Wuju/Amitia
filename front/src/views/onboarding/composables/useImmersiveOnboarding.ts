@@ -848,6 +848,8 @@ const res = await post<any>("/api/public/model/detect-models", {
         err?.response?.data?.message ||
         "设置过程中出现错误，请重试";
       entering.value = false;
+      enteringState.value = null;
+      entryPreparing.value = false;
     }
   }
 

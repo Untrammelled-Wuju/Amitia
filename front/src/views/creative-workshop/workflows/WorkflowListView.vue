@@ -4,18 +4,26 @@
       <div>
         <div class="crumb"><router-link to="/creative-workshop">创意工坊</router-link><span>/</span><span>工作流</span></div>
         <h1>工作流</h1>
-        <p>本地创建、复用和管理 workflow-v2。模板与版本记录只保存在当前 Amitia 数据库中。</p>
+        <p>统一管理当前设备、云端以及其他已绑定设备上的 workflow-v2。</p>
       </div>
       <div class="header-actions">
         <input ref="importInput" class="hidden-input" type="file" accept="application/json,.json" @change="handleImport" />
-        <el-button @click="importInput?.click()">导入 JSON</el-button>
-        <el-button @click="openTemplates">我的模板</el-button>
-        <el-button :loading="aiCreating" @click="createWithAI">AI 创建</el-button>
-        <el-button type="primary" @click="createNew"><el-icon><Plus /></el-icon>新建</el-button>
+        <el-button :disabled="currentTarget.location === 'device'" @click="importInput?.click()">导入 JSON</el-button>
+        <el-button :disabled="currentTarget.location === 'device'" @click="openTemplates">我的模板</el-button>
+        <el-button :disabled="currentTarget.location === 'device'" :loading="aiCreating" @click="createWithAI">AI 创建</el-button>
+        <el-button type="primary" :disabled="currentTarget.location === 'device' && !deviceId" @click="createNew"><el-icon><Plus /></el-icon>新建</el-button>
       </div>
     </header>
 
     <section class="management-bar">
+      <el-radio-group v-model="location" size="small" @change="handleTargetChange">
+        <el-radio-button value="local">当前设备</el-radio-button>
+        <el-radio-button value="cloud">云端</el-radio-button>
+        <el-radio-button value="device">我的设备</el-radio-button>
+      </el-radio-group>
+      <el-select v-if="location === 'device'" v-model="deviceId" class="device-filter" placeholder="选择设备" @change="handleTargetChange">
+        <el-option v-for="device in devices" :key="device.deviceId" :value="device.deviceId" :label="`${device.label || device.deviceId}${device.online ? ' · 在线' : ' · 离线'}`" />
+      </el-select>
       <el-input v-model="search" clearable placeholder="搜索名称或描述" class="search-box" />
       <el-select v-model="statusFilter" class="status-filter">
         <el-option label="全部" value="all" />
@@ -36,13 +44,13 @@
     <section v-if="filteredWorkflows.length" class="workflow-grid">
       <article v-for="item in filteredWorkflows" :key="item.id" class="workflow-card" :class="{ selected: selectedIds.has(item.id) }">
         <div class="card-top">
-          <el-checkbox :model-value="selectedIds.has(item.id)" @change="(v) => toggleSelected(item.id, Boolean(v))" />
+          <el-checkbox :model-value="selectedIds.has(item.id)" :disabled="item.offline" @change="(v) => toggleSelected(item.id, Boolean(v))" />
           <div class="workflow-icon"><el-icon><Share /></el-icon></div>
           <div class="title-wrap">
             <h2>{{ item.name }}</h2>
             <p>{{ item.description || "未填写描述" }}</p>
           </div>
-          <el-switch :model-value="item.enabled" @change="(v) => toggle(item, Boolean(v))" />
+          <el-switch :model-value="item.enabled" :disabled="item.offline" @change="(v) => toggle(item, Boolean(v))" />
         </div>
         <div class="stats">
           <span>{{ item.nodes?.length || 0 }} 节点</span>
@@ -50,18 +58,20 @@
           <span>{{ item.triggers?.filter(t => t.enabled).length || 0 }} 活动触发器</span>
           <span v-if="item.callableByAgent">Agent Tool</span>
           <span>v{{ item.version || "1.0.0" }}</span>
+          <span v-if="item.installation">rev {{ item.installation.revision }}</span>
+          <span v-if="item.cached">离线目录缓存</span>
         </div>
         <div class="card-actions">
           <el-button type="primary" plain @click="edit(item)">打开编辑器</el-button>
-          <el-button :disabled="!item.enabled" @click="runNow(item)"><el-icon><VideoPlay /></el-icon>运行</el-button>
+          <el-button :disabled="!item.enabled || item.offline" @click="runNow(item)"><el-icon><VideoPlay /></el-icon>运行</el-button>
           <el-dropdown trigger="click">
             <el-button><el-icon><MoreFilled /></el-icon></el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="duplicate(item)">复制</el-dropdown-item>
-                <el-dropdown-item @click="saveAsTemplate(item)">保存为模板</el-dropdown-item>
-                <el-dropdown-item @click="exportItem(item)">导出 JSON</el-dropdown-item>
-                <el-dropdown-item divided @click="remove(item)">删除</el-dropdown-item>
+                <el-dropdown-item v-if="currentTarget.location !== 'device'" @click="duplicate(item)">复制</el-dropdown-item>
+                <el-dropdown-item v-if="currentTarget.location !== 'device'" @click="saveAsTemplate(item)">保存为模板</el-dropdown-item>
+                <el-dropdown-item v-if="currentTarget.location !== 'device'" @click="exportItem(item)">导出 JSON</el-dropdown-item>
+                <el-dropdown-item divided :disabled="item.offline" @click="remove(item)">删除</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -74,9 +84,9 @@
       <h2>{{ workflows.length ? "没有匹配的工作流" : "还没有工作流" }}</h2>
       <p>{{ workflows.length ? "调整搜索或筛选条件。" : "可以从空白工作流、AI 或我的模板开始。" }}</p>
       <div v-if="!workflows.length" class="empty-actions">
-        <el-button @click="openTemplates">我的模板</el-button>
-        <el-button :loading="aiCreating" @click="createWithAI">AI 创建</el-button>
-        <el-button type="primary" @click="createNew">手动创建</el-button>
+        <el-button v-if="currentTarget.location !== 'device'" @click="openTemplates">我的模板</el-button>
+        <el-button v-if="currentTarget.location !== 'device'" :loading="aiCreating" @click="createWithAI">AI 创建</el-button>
+        <el-button type="primary" :disabled="currentTarget.location === 'device' && !deviceId" @click="createNew">手动创建</el-button>
       </div>
     </section>
 
@@ -99,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { MoreFilled, Plus, Share, VideoPlay } from "@element-plus/icons-vue";
@@ -112,13 +122,18 @@ import {
   generateWorkflowWithAI,
   importWorkflow,
   instantiateWorkflowTemplate,
+  listWorkflowDevices,
+  listWorkflowSyncEvents,
   listWorkflowTemplates,
   listWorkflows,
   runWorkflow,
   saveWorkflowTemplate,
   setWorkflowEnabled,
   type WorkflowDefinition,
+  type WorkflowDeviceDescriptor,
+  type WorkflowTarget,
   type WorkflowTemplateSummary,
+  workflowTargetQuery,
 } from "@/api/workflow";
 
 const router = useRouter();
@@ -126,11 +141,22 @@ const loading = ref(false);
 const aiCreating = ref(false);
 const workflows = ref<WorkflowDefinition[]>([]);
 const templates = ref<WorkflowTemplateSummary[]>([]);
+const devices = ref<WorkflowDeviceDescriptor[]>([]);
+const location = ref<"local" | "cloud" | "device">("local");
+const deviceId = ref("");
+const currentTarget = computed<WorkflowTarget>(() => location.value === "device"
+  ? { location: "device", deviceId: deviceId.value }
+  : { location: location.value });
 const templateDrawer = ref(false);
 const importInput = ref<HTMLInputElement | null>(null);
 const search = ref("");
 const statusFilter = ref<"all" | "enabled" | "disabled" | "agent">("all");
 const selectedIds = ref(new Set<string>());
+let reconcileTimer: ReturnType<typeof setInterval> | null = null;
+let syncCursor: number | null = null;
+let syncTargetKey = "";
+let syncPolling = false;
+let deviceRefreshTicks = 0;
 
 const filteredWorkflows = computed(() => {
   const q = search.value.trim().toLowerCase();
@@ -142,13 +168,75 @@ const filteredWorkflows = computed(() => {
   });
 });
 
+async function loadDevices() {
+  try {
+    devices.value = await listWorkflowDevices();
+    if (!devices.value.some((item) => item.deviceId === deviceId.value)) deviceId.value = devices.value[0]?.deviceId || "";
+  } catch {
+    devices.value = [];
+  }
+}
 async function load() {
+  if (location.value === "device" && !deviceId.value) { workflows.value = []; return; }
   loading.value = true;
-  try { workflows.value = await listWorkflows(); }
+  try { workflows.value = await listWorkflows(currentTarget.value); }
   finally { loading.value = false; }
 }
-async function loadTemplates() { templates.value = await listWorkflowTemplates(); }
-async function openTemplates() { await loadTemplates(); templateDrawer.value = true; }
+function syncKey(target: WorkflowTarget) {
+  return target.location === "device" ? `device:${String(target.deviceId || "")}` : target.location;
+}
+function snapshotTarget(): WorkflowTarget {
+  return currentTarget.value.location === "device"
+    ? { location: "device", deviceId: String(currentTarget.value.deviceId || "") }
+    : { location: currentTarget.value.location };
+}
+async function primeSyncCursor(target = snapshotTarget()) {
+  const key = syncKey(target);
+  try {
+    const page = await listWorkflowSyncEvents(target);
+    if (syncKey(snapshotTarget()) !== key) return;
+    syncCursor = page.cursor;
+    syncTargetKey = key;
+  } catch {
+    if (syncKey(snapshotTarget()) === key) { syncCursor = null; syncTargetKey = ""; }
+  }
+}
+async function pollSyncEvents() {
+  if (document.visibilityState !== "visible" || loading.value || syncPolling) return;
+  const target = snapshotTarget();
+  if (target.location === "device" && !target.deviceId) return;
+  const key = syncKey(target);
+  syncPolling = true;
+  try {
+    if (syncCursor === null || syncTargetKey !== key) {
+      await primeSyncCursor(target);
+      return;
+    }
+    const page = await listWorkflowSyncEvents(target, syncCursor);
+    if (syncKey(snapshotTarget()) !== key) return;
+    syncCursor = page.cursor;
+    if (page.items.length > 0) await load();
+    deviceRefreshTicks += 1;
+    if (target.location !== "local" && deviceRefreshTicks % 5 === 0) await loadDevices();
+    // Device-local changes performed directly on another device cannot yet push
+    // into Cloud Core's outbox, so keep a low-frequency catalog reconciliation.
+    if (target.location === "device" && deviceRefreshTicks % 8 === 0 && page.items.length === 0) await load();
+  } catch {
+    // Keep the current list usable during transient sync failures. The cursor is
+    // preserved so durable events are retried on the next poll.
+  } finally {
+    syncPolling = false;
+  }
+}
+async function handleTargetChange() {
+  clearSelection();
+  syncCursor = null; syncTargetKey = ""; deviceRefreshTicks = 0;
+  if (location.value === "device" && !deviceId.value) await loadDevices();
+  await load();
+  await primeSyncCursor();
+}
+async function loadTemplates() { templates.value = await listWorkflowTemplates(currentTarget.value); }
+async function openTemplates() { if (currentTarget.value.location === "device") return; await loadTemplates(); templateDrawer.value = true; }
 
 async function createWithAI() {
   try {
@@ -158,11 +246,11 @@ async function createWithAI() {
     const instruction = String(value || "").trim();
     if (!instruction) return;
     aiCreating.value = true;
-    const proposal = await generateWorkflowWithAI(instruction);
-    const created = await createWorkflow({ ...proposal.definition, definitionHash: undefined });
+    const proposal = await generateWorkflowWithAI(instruction, currentTarget.value);
+    const created = await createWorkflow({ ...proposal.definition, definitionHash: undefined }, currentTarget.value);
     if (proposal.warnings?.length) ElMessage.warning(proposal.warnings.join("；"));
     else ElMessage.success(proposal.summary || "AI 工作流已生成");
-    await router.push(`/creative-workshop/workflows/${encodeURIComponent(created.id)}`);
+    await router.push({ path: `/creative-workshop/workflows/${encodeURIComponent(created.id)}`, query: workflowTargetQuery(currentTarget.value) });
   } catch (e: any) {
     if (e === "cancel" || e === "close") return;
     ElMessage.error(e?.response?.data?.error || e?.message || "AI 工作流生成失败");
@@ -170,31 +258,50 @@ async function createWithAI() {
 }
 
 async function createNew() {
-  const def = await createWorkflow({
-    name: "未命名工作流", description: "", schemaVersion: "workflow-v2",
-    inputSchema: { type: "object" }, outputSchema: {}, nodes: [], edges: [],
-    triggers: [{ id: "manual", type: "manual", enabled: true, config: {} }], callableByAgent: false, enabled: true,
-  });
-  await router.push(`/creative-workshop/workflows/${encodeURIComponent(def.id)}`);
-}
-function edit(item: WorkflowDefinition) { router.push(`/creative-workshop/workflows/${encodeURIComponent(item.id)}`); }
-async function toggle(item: WorkflowDefinition, enabled: boolean) { await setWorkflowEnabled(item.id, enabled); item.enabled = enabled; }
-async function runNow(item: WorkflowDefinition) {
-  if (!item.enabled) return;
+  if (currentTarget.value.location === "device" && !deviceId.value) { ElMessage.warning("请先选择目标设备"); return; }
   try {
-    const result = await runWorkflow(item.id, {}, false);
+    const def = await createWorkflow({
+      name: "未命名工作流", description: "", schemaVersion: "workflow-v2",
+      inputSchema: { type: "object" }, outputSchema: {}, nodes: [], edges: [],
+      triggers: [{ id: "manual", type: "manual", enabled: true, config: {} }], callableByAgent: false, enabled: true,
+    }, currentTarget.value);
+    await router.push({ path: `/creative-workshop/workflows/${encodeURIComponent(def.id)}`, query: workflowTargetQuery(currentTarget.value) });
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || e?.message || "创建失败");
+  }
+}
+function edit(item: WorkflowDefinition) {
+  if (item.offline) { ElMessage.warning("设备离线：当前只能查看最后已知目录，完整 Definition 需要设备上线后读取。"); return; }
+  router.push({ path: `/creative-workshop/workflows/${encodeURIComponent(item.id)}`, query: workflowTargetQuery(currentTarget.value) });
+}
+async function toggle(item: WorkflowDefinition, enabled: boolean) {
+  if (item.offline) { ElMessage.warning("设备离线：不能修改本地工作流"); return; }
+  try {
+    const installation = await setWorkflowEnabled(item.id, enabled, currentTarget.value, item.installation?.revision);
+    item.enabled = enabled;
+    if (installation && typeof installation === "object" && "revision" in installation) item.installation = installation as any;
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.error || e?.message || "更新失败");
+    await load();
+  }
+}
+async function runNow(item: WorkflowDefinition) {
+  if (!item.enabled || item.offline) { if (item.offline) ElMessage.warning("设备离线：不能运行本地工作流"); return; }
+  try {
+    const result = await runWorkflow(item.id, {}, false, currentTarget.value);
     ElMessage.success(`已开始运行：${result.executionId}`);
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.error || e?.message || "运行失败");
   }
 }
 async function duplicate(item: WorkflowDefinition) {
-  const created = await duplicateWorkflow(item.id);
-  await router.push(`/creative-workshop/workflows/${encodeURIComponent(created.id)}`);
+  const created = await duplicateWorkflow(item.id, currentTarget.value);
+  await router.push({ path: `/creative-workshop/workflows/${encodeURIComponent(created.id)}`, query: workflowTargetQuery(currentTarget.value) });
 }
 async function remove(item: WorkflowDefinition) {
+  if (item.offline) { ElMessage.warning("设备离线：不能删除本地工作流"); return; }
   await ElMessageBox.confirm(`确定删除“${item.name}”吗？运行历史和版本快照会一起删除。`, "删除工作流", { type: "warning" });
-  await deleteWorkflow(item.id); selectedIds.value.delete(item.id); selectedIds.value = new Set(selectedIds.value); await load();
+  await deleteWorkflow(item.id, currentTarget.value); selectedIds.value.delete(item.id); selectedIds.value = new Set(selectedIds.value); await load();
 }
 
 function toggleSelected(id: string, selected: boolean) {
@@ -203,34 +310,34 @@ function toggleSelected(id: string, selected: boolean) {
 function clearSelection() { selectedIds.value = new Set(); }
 async function batchSetEnabled(enabled: boolean) {
   const ids = [...selectedIds.value];
-  await Promise.all(ids.map((id) => setWorkflowEnabled(id, enabled)));
+  await Promise.all(ids.map((id) => { const item = workflows.value.find((w) => w.id === id); return setWorkflowEnabled(id, enabled, currentTarget.value, item?.installation?.revision); }));
   clearSelection(); await load(); ElMessage.success(enabled ? "已批量启用" : "已批量停用");
 }
 async function batchDelete() {
   const ids = [...selectedIds.value];
   await ElMessageBox.confirm(`确定删除选中的 ${ids.length} 个工作流吗？`, "批量删除", { type: "warning" });
-  for (const id of ids) await deleteWorkflow(id);
+  for (const id of ids) await deleteWorkflow(id, currentTarget.value);
   clearSelection(); await load(); ElMessage.success("已批量删除");
 }
 
 async function saveAsTemplate(item: WorkflowDefinition) {
   const { value } = await ElMessageBox.prompt("模板保存在当前 Amitia 数据库并按用户隔离，不会公开发布。", "保存为模板", { inputValue: item.name, confirmButtonText: "保存", cancelButtonText: "取消" });
   const name = String(value || "").trim(); if (!name) return;
-  await saveWorkflowTemplate(item.id, name, item.description || "");
+  await saveWorkflowTemplate(item.id, name, item.description || "", currentTarget.value);
   ElMessage.success("已保存为模板");
 }
 async function useTemplate(item: WorkflowTemplateSummary) {
-  const created = await instantiateWorkflowTemplate(item.templateId);
+  const created = await instantiateWorkflowTemplate(item.templateId, "", currentTarget.value);
   templateDrawer.value = false;
-  await router.push(`/creative-workshop/workflows/${encodeURIComponent(created.id)}`);
+  await router.push({ path: `/creative-workshop/workflows/${encodeURIComponent(created.id)}`, query: workflowTargetQuery(currentTarget.value) });
 }
 async function removeTemplate(item: WorkflowTemplateSummary) {
   await ElMessageBox.confirm(`删除我的模板“${item.name}”？`, "删除模板", { type: "warning" });
-  await deleteWorkflowTemplate(item.templateId); await loadTemplates();
+  await deleteWorkflowTemplate(item.templateId, currentTarget.value); await loadTemplates();
 }
 
 async function exportItem(item: WorkflowDefinition) {
-  const envelope = await exportWorkflow(item.id);
+  const envelope = await exportWorkflow(item.id, currentTarget.value);
   const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a"); a.href = url; a.download = `${safeFileName(item.name)}.workflow.json`; a.click(); URL.revokeObjectURL(url);
@@ -239,15 +346,21 @@ async function handleImport(event: Event) {
   const input = event.target as HTMLInputElement; const file = input.files?.[0]; input.value = ""; if (!file) return;
   try {
     const payload = JSON.parse(await file.text());
-    const created = await importWorkflow(payload);
+    const created = await importWorkflow(payload, currentTarget.value);
     ElMessage.success("已导入。为安全起见，自动触发和 Agent 调用默认停用。");
-    await router.push(`/creative-workshop/workflows/${encodeURIComponent(created.id)}`);
+    await router.push({ path: `/creative-workshop/workflows/${encodeURIComponent(created.id)}`, query: workflowTargetQuery(currentTarget.value) });
   } catch (e: any) { ElMessage.error(e?.response?.data?.error || e?.message || "导入失败"); }
 }
 function safeFileName(name: string) { return (name || "workflow").replace(/[\\/:*?"<>|\r\n]+/g, "-").slice(0, 80); }
 function formatTime(value?: string) { if (!value) return ""; const d = new Date(value); return Number.isNaN(d.getTime()) ? value : d.toLocaleString(); }
 
-onMounted(load);
+onMounted(async () => {
+  await loadDevices();
+  await load();
+  await primeSyncCursor();
+  reconcileTimer = setInterval(() => { void pollSyncEvents(); }, 2000);
+});
+onBeforeUnmount(() => { if (reconcileTimer) clearInterval(reconcileTimer); reconcileTimer = null; });
 </script>
 
 <style scoped>
@@ -257,7 +370,7 @@ onMounted(load);
 .crumb a { color:var(--el-color-primary); text-decoration:none; } h1{margin:0;font-size:24px}.page-header p{margin:6px 0 0;color:var(--console-text-muted);font-size:13px}
 .header-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.hidden-input{display:none}
 .management-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;padding:10px;border:1px solid var(--console-border);border-radius:12px;background:var(--ac-color-surface)}
-.search-box{width:min(340px,100%)}.status-filter{width:140px}.count-text{font-size:12px;color:var(--console-text-muted)}.batch-actions{margin-left:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px}
+.search-box{width:min(340px,100%)}.status-filter{width:140px}.device-filter{width:220px}.count-text{font-size:12px;color:var(--console-text-muted)}.batch-actions{margin-left:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px}
 .workflow-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}.workflow-card,.empty-card{border:1px solid var(--console-border);background:var(--ac-color-surface);border-radius:14px}.workflow-card{padding:18px;display:flex;flex-direction:column;gap:16px}.workflow-card.selected{border-color:var(--el-color-primary)}
 .card-top{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:start}.workflow-icon{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:var(--ac-color-surface-soft);color:var(--el-color-primary);font-size:20px}.title-wrap{min-width:0}.title-wrap h2{margin:1px 0 4px;font-size:16px}.title-wrap p{margin:0;color:var(--console-text-muted);font-size:12px;line-height:1.5;min-height:36px}.stats{display:flex;gap:8px;flex-wrap:wrap}.stats span{padding:5px 8px;border-radius:7px;background:var(--ac-color-surface-soft);color:var(--console-text-muted);font-size:11px}.card-actions{display:flex;gap:8px;align-items:center}
 .empty-card{min-height:310px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px}.empty-card>.el-icon{font-size:42px;color:var(--el-color-primary)}.empty-card h2{margin:0;font-size:18px}.empty-card p{margin:0 0 8px;color:var(--console-text-muted);max-width:420px}.empty-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
