@@ -2,7 +2,9 @@ package realtime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +20,7 @@ type ContinuousVoiceSession struct {
 	UserID         string                       `json:"userId"`
 	Platform       Platform                     `json:"platform"`
 	ProfileID      string                       `json:"profileId"`
+	WakeConfigID   string                       `json:"wakeConfigId,omitempty"`
 	Plan           *VoiceExecutionPlan          `json:"plan,omitempty"`
 
 	CurrentTurnID      string `json:"currentTurnId"`
@@ -49,6 +52,7 @@ type Service interface {
 	DisarmWake(ctx context.Context, sessionID string) error
 	ListActiveSessions() []*ContinuousVoiceSession
 	HandleAudioFrame(ctx context.Context, sessionID string, frame *VoiceAudioFrame) error
+	PublishASRFinal(ctx context.Context, sessionID, transcript, eventID string) error
 	Status() ServiceStatus
 }
 
@@ -63,6 +67,7 @@ type service struct {
 	mu        sync.RWMutex
 	sessions  map[string]*ContinuousVoiceSession
 	planner   VoiceRoutePlanner
+	events    *VoiceEventBus
 	startedAt time.Time
 }
 
@@ -70,6 +75,7 @@ func NewService() Service {
 	return &service{
 		sessions:  make(map[string]*ContinuousVoiceSession),
 		planner:   NewRoutePlanner(),
+		events:    NewVoiceEventBus(),
 		startedAt: time.Now(),
 	}
 }
@@ -100,7 +106,9 @@ func (s *service) CreateSession(ctx context.Context, req VoiceSessionRequest) (*
 	sess.endpoint = NewEndpointDetector(DefaultEndpointConfig())
 
 	if sess.WakeArmed {
-		sess.wake = NewSoftwareWake()
+		if err := s.loadWakeDetector(ctx, sess); err != nil {
+			return nil, err
+		}
 	}
 
 	s.mu.Lock()
@@ -124,6 +132,11 @@ func (s *service) StartSession(ctx context.Context, sessionID string) error {
 	sess, err := s.GetSession(sessionID)
 	if err != nil {
 		return err
+	}
+	if sess.Mode == ContinuousVoiceSessionModeWakeArmed && sess.wake == nil {
+		if err := s.loadWakeDetector(ctx, sess); err != nil {
+			return err
+		}
 	}
 
 	sess.mu.Lock()
@@ -228,6 +241,9 @@ func (s *service) ArmWake(ctx context.Context, sessionID string) error {
 	if err != nil {
 		return err
 	}
+	if err := s.loadWakeDetector(ctx, sess); err != nil {
+		return err
+	}
 
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
@@ -276,10 +292,10 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 		return err
 	}
 
+	var detected *WakeDetectionResult
 	sess.mu.Lock()
-	defer sess.mu.Unlock()
-
 	if sess.State.IsTerminal() {
+		sess.mu.Unlock()
 		return fmt.Errorf("voice session: terminal state=%s", sess.State)
 	}
 
@@ -288,8 +304,13 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 	switch sess.State {
 	case ContinuousVoiceSessionStatusArmed:
 		if sess.wake != nil {
-			result, err := sess.wake.Process(frame)
-			if err == nil && result.Detected {
+			result, processErr := sess.wake.Process(frame)
+			if processErr != nil {
+				sess.mu.Unlock()
+				return processErr
+			}
+			if result.Detected {
+				detected = &result
 				sess.State = ContinuousVoiceSessionStatusListening
 				sess.WakeArmed = false
 			}
@@ -297,8 +318,8 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 
 	case ContinuousVoiceSessionStatusListening:
 		if sess.vad != nil {
-			vadResult, err := sess.vad.Process(frame)
-			if err == nil && vadResult.SpeechStarted {
+			vadResult, processErr := sess.vad.Process(frame)
+			if processErr == nil && vadResult.SpeechStarted {
 				sess.State = ContinuousVoiceSessionStatusTranscribing
 				sess.CurrentTurnID = uuid.New().String()
 				sess.CaptureGeneration++
@@ -308,8 +329,8 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 
 	case ContinuousVoiceSessionStatusTranscribing:
 		if sess.vad != nil {
-			vadResult, err := sess.vad.Process(frame)
-			if err == nil && vadResult.SpeechEnded {
+			vadResult, processErr := sess.vad.Process(frame)
+			if processErr == nil && vadResult.SpeechEnded {
 				sess.State = ContinuousVoiceSessionStatusProcessing
 				sess.PlaybackGeneration++
 				emitDesktopPetVoice(ctx, sess, "listening.ended")
@@ -319,8 +340,8 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 
 	case ContinuousVoiceSessionStatusSpeaking:
 		if sess.vad != nil {
-			vadResult, err := sess.vad.Process(frame)
-			if err == nil && vadResult.Speech {
+			vadResult, processErr := sess.vad.Process(frame)
+			if processErr == nil && vadResult.Speech {
 				sess.State = ContinuousVoiceSessionStatusListening
 				sess.PlaybackGeneration++
 				sess.CurrentTurnID = uuid.New().String()
@@ -330,8 +351,181 @@ func (s *service) HandleAudioFrame(ctx context.Context, sessionID string, frame 
 			}
 		}
 	}
+	wakeConfigID := sess.WakeConfigID
+	userID := sess.UserID
+	turnID := sess.CurrentTurnID
+	sess.mu.Unlock()
+
+	if detected != nil {
+		payload := map[string]any{
+			"sessionId":    sessionID,
+			"turnId":       turnID,
+			"wakeConfigId": wakeConfigID,
+			"phraseId":     detected.PhraseID,
+			"confidence":   detected.Confidence,
+			"detectedAtNs": detected.DetectedAtNS,
+		}
+		s.events.PublishSessionEvent(sessionID, VoiceEventWakeDetected, payload)
+		raw, marshalErr := json.Marshal(payload)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		wakeEventID := makeVoiceWorkflowEventID("voice-wake", fmt.Sprintf("%s\n%s\n%d", sessionID, wakeConfigID, detected.DetectedAtNS))
+		if err := publishVoiceWorkflowTrigger(ctx, VoiceWorkflowTriggerEvent{
+			EventID:   wakeEventID,
+			EventType: string(VoiceEventWakeDetected),
+			UserID:    userID,
+			Source:    "voice.wake",
+			Payload:   raw,
+		}); err != nil {
+			return err
+		}
+	}
 
 	return nil
+}
+
+func (s *service) PublishASRFinal(ctx context.Context, sessionID, transcript, eventID string) error {
+	transcript = strings.TrimSpace(transcript)
+	if transcript == "" {
+		return fmt.Errorf("voice asr final transcript is required")
+	}
+	if len([]rune(transcript)) > maxWorkflowASRTranscriptChars {
+		return fmt.Errorf("voice asr final transcript exceeds %d characters", maxWorkflowASRTranscriptChars)
+	}
+	sess, err := s.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	sess.mu.RLock()
+	userID := sess.UserID
+	turnID := sess.CurrentTurnID
+	conversationID := sess.ConversationID
+	characterID := sess.CharacterID
+	sess.mu.RUnlock()
+	payload := map[string]any{
+		"sessionId":      sessionID,
+		"turnId":         turnID,
+		"conversationId": conversationID,
+		"characterId":    characterID,
+		"transcript":     transcript,
+		"final":          true,
+	}
+	s.events.PublishSessionEvent(sessionID, VoiceEventASRFinal, payload)
+	return PublishASRWorkflowFinal(ctx, userID, sessionID, turnID, conversationID, characterID, transcript, eventID)
+}
+
+func (s *service) loadWakeDetector(ctx context.Context, sess *ContinuousVoiceSession) error {
+	if dbInstance == nil {
+		return fmt.Errorf("wake config storage unavailable")
+	}
+	var profile VoiceProfile
+	profileID := strings.TrimSpace(sess.ProfileID)
+	profileQuery := dbInstance.WithContext(ctx).Table("voice_profiles")
+	var profileErr error
+	if profileID != "" && profileID != "default" {
+		profileErr = profileQuery.Where("id = ?", profileID).First(&profile).Error
+	} else {
+		profileErr = profileQuery.Where("is_default = 1").First(&profile).Error
+	}
+	wakeConfigID := strings.TrimSpace(profile.WakeConfigID)
+	if profileErr != nil || wakeConfigID == "" {
+		var fallback WakeConfig
+		if err := dbInstance.WithContext(ctx).Table("wake_configs").Where("enabled = 1").Order("updated_at DESC").First(&fallback).Error; err != nil {
+			if profileErr != nil {
+				return fmt.Errorf("load voice profile wake config: %w", profileErr)
+			}
+			return fmt.Errorf("voice profile has no wake config")
+		}
+		return s.installWakeDetector(ctx, sess, fallback)
+	}
+	var config WakeConfig
+	if err := dbInstance.WithContext(ctx).Table("wake_configs").Where("id = ? AND enabled = 1", wakeConfigID).First(&config).Error; err != nil {
+		return fmt.Errorf("load wake config %s: %w", wakeConfigID, err)
+	}
+	return s.installWakeDetector(ctx, sess, config)
+}
+
+func (s *service) installWakeDetector(ctx context.Context, sess *ContinuousVoiceSession, config WakeConfig) error {
+	backend := strings.TrimSpace(config.Backend)
+	if backend == "" {
+		backend = "software"
+	}
+	factory, ok := GetWakeBackend(backend)
+	if !ok {
+		return fmt.Errorf("wake backend unavailable: %s", backend)
+	}
+	detector, err := factory("{}")
+	if err != nil {
+		return err
+	}
+	phrases, err := decodeWakePhrases(config.Phrases)
+	if err != nil {
+		return err
+	}
+	if err := detector.Load(ctx, WakeDetectorConfig{
+		Enabled:          config.Enabled,
+		Backend:          backend,
+		ModelResourceURI: config.ModelResourceURI,
+		Phrases:          phrases,
+		Threshold:        config.Threshold,
+		CooldownMS:       config.CooldownMS,
+	}); err != nil {
+		return err
+	}
+	sess.mu.Lock()
+	old := sess.wake
+	sess.wake = detector
+	sess.WakeConfigID = config.ID
+	sess.mu.Unlock()
+	if old != nil && old != detector {
+		_ = old.Unload()
+	}
+	return nil
+}
+
+func decodeWakePhrases(raw string) ([]WakePhrase, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, fmt.Errorf("wake config phrases are empty")
+	}
+	var objects []struct {
+		ID          string `json:"id"`
+		DisplayText string `json:"displayText"`
+		Locale      string `json:"locale"`
+	}
+	if err := json.Unmarshal([]byte(raw), &objects); err == nil && len(objects) > 0 {
+		result := make([]WakePhrase, 0, len(objects))
+		for i, item := range objects {
+			text := strings.TrimSpace(item.DisplayText)
+			if text == "" {
+				continue
+			}
+			id := strings.TrimSpace(item.ID)
+			if id == "" {
+				id = fmt.Sprintf("wake-%d", i+1)
+			}
+			result = append(result, WakePhrase{ID: id, DisplayText: text, Locale: strings.TrimSpace(item.Locale)})
+		}
+		if len(result) > 0 {
+			return result, nil
+		}
+	}
+	var stringsOnly []string
+	if err := json.Unmarshal([]byte(raw), &stringsOnly); err != nil {
+		return nil, fmt.Errorf("decode wake phrases: %w", err)
+	}
+	result := make([]WakePhrase, 0, len(stringsOnly))
+	for i, value := range stringsOnly {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			result = append(result, WakePhrase{ID: fmt.Sprintf("wake-%d", i+1), DisplayText: value})
+		}
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("wake config phrases are empty")
+	}
+	return result, nil
 }
 
 func (s *service) Status() ServiceStatus {

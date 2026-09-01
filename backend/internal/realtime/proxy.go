@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -244,6 +245,26 @@ func HandleSession(c *gin.Context) {
 		RemoveVoiceSession(sessID)
 	}()
 	desktopPetSpeaking := false
+	latestASRTranscript := ""
+	asrTurnSequence := uint64(0)
+	flushASRFinal := func() {
+		transcript := latestASRTranscript
+		if transcript == "" {
+			return
+		}
+		asrTurnSequence++
+		latestASRTranscript = ""
+		eventID := makeVoiceWorkflowEventID("realtime-asr", fmt.Sprintf("%s\n%d\n%s", sessID, asrTurnSequence, transcript))
+		_ = browserConn.WriteJSON(gin.H{
+			"event": "asr_final",
+			"data": gin.H{
+				"transcript":     transcript,
+				"eventId":        eventID,
+				"sessionId":      sessID,
+				"conversationId": conversationId,
+			},
+		})
+	}
 	defer func() {
 		if desktopPetVoiceSession.CharacterID == "" || desktopPetVoiceSession.UserID == "" {
 			return
@@ -287,6 +308,16 @@ func HandleSession(c *gin.Context) {
 			}
 			appLog.Info("volc evt:", frame.EventCode)
 			switch frame.EventCode {
+			case 451:
+				if transcript := extractRealtimeASRTranscript(frame.Payload); transcript != "" {
+					latestASRTranscript = transcript
+				}
+			case 459:
+				flushASRFinal()
+			case 350, 550:
+				// ASREnded normally arrives before chat/TTS. Flush here as a
+				// compatibility fallback for providers that omit event 459.
+				flushASRFinal()
 			case 352:
 				if !desktopPetSpeaking && desktopPetVoiceSession.CharacterID != "" && desktopPetVoiceSession.UserID != "" {
 					desktopPetSpeaking = true
@@ -344,6 +375,31 @@ func HandleSession(c *gin.Context) {
 	}()
 
 	wg.Wait()
+}
+
+func extractRealtimeASRTranscript(payload []byte) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var envelope struct {
+		Results []struct {
+			Text string `json:"text"`
+		} `json:"results"`
+		Text       string `json:"text"`
+		Transcript string `json:"transcript"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return ""
+	}
+	for i := len(envelope.Results) - 1; i >= 0; i-- {
+		if text := strings.TrimSpace(envelope.Results[i].Text); text != "" {
+			return text
+		}
+	}
+	if text := strings.TrimSpace(envelope.Text); text != "" {
+		return text
+	}
+	return strings.TrimSpace(envelope.Transcript)
 }
 
 func itoa(i int32) string { return fmt.Sprintf("%d", i) }

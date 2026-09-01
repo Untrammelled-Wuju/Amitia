@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -33,14 +34,18 @@ func (h *VoiceHandler) CreateSession(c *gin.Context) {
 		return
 	}
 
+	userID := req.UserID
+	if actor := security.GetActor(c); actor != nil && actor.UserID != "" {
+		userID = actor.UserID.String()
+	}
 	voiceReq := VoiceSessionRequest{
 		ConversationID: req.ConversationID,
 		CharacterID:    req.CharacterID,
-		UserID:         req.UserID,
+		UserID:         userID,
 		ProfileID:      req.ProfileID,
 	}
 
-		if req.Mode != "" {
+	if req.Mode != "" {
 		voiceReq.Mode = ContinuousVoiceSessionMode(req.Mode)
 	} else {
 		voiceReq.Mode = ContinuousVoiceSessionModePushToTalk
@@ -152,6 +157,37 @@ func (h *VoiceHandler) DisarmWake(c *gin.Context) {
 	util.SuccessMsgResponse(c, "已关闭唤醒", gin.H{"sessionId": sessionID})
 }
 
+func (h *VoiceHandler) PublishASRFinal(c *gin.Context) {
+	sessionID := c.Param("id")
+	if sessionID == "" {
+		util.ErrorResponse(c, http.StatusBadRequest, "会话ID不能为空", nil)
+		return
+	}
+	sess, err := h.service.GetSession(sessionID)
+	if err != nil {
+		util.ErrorResponse(c, http.StatusNotFound, "会话不存在", err.Error())
+		return
+	}
+	actor := security.GetActor(c)
+	if actor == nil || actor.UserID == "" || actor.UserID.String() != sess.UserID {
+		util.ErrorResponse(c, http.StatusForbidden, "无权发布该会话的 ASR Final", nil)
+		return
+	}
+	var req struct {
+		Transcript string `json:"transcript"`
+		EventID    string `json:"eventId"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, http.StatusBadRequest, "请求参数错误", err.Error())
+		return
+	}
+	if err := h.service.PublishASRFinal(c.Request.Context(), sessionID, req.Transcript, req.EventID); err != nil {
+		util.ErrorResponse(c, http.StatusBadRequest, "发布 ASR Final 失败", err.Error())
+		return
+	}
+	util.SuccessMsgResponse(c, "ASR Final 已发布", gin.H{"sessionId": sessionID})
+}
+
 func (h *VoiceHandler) ListSessions(c *gin.Context) {
 	sessions := h.service.ListActiveSessions()
 	util.SuccessResponse(c, gin.H{"sessions": sessions, "total": len(sessions)})
@@ -161,4 +197,3 @@ func (h *VoiceHandler) GetStatus(c *gin.Context) {
 	status := h.service.Status()
 	util.SuccessResponse(c, status)
 }
-
