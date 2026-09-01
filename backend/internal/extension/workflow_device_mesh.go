@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -16,12 +17,16 @@ import (
 )
 
 const (
-	WorkflowMeshCatalog    = "workflow.catalog"
-	WorkflowMeshGet        = "workflow.get"
-	WorkflowMeshUpsert     = "workflow.upsert"
-	WorkflowMeshDelete     = "workflow.delete"
-	WorkflowMeshSetEnabled = "workflow.set_enabled"
-	WorkflowMeshRun        = "workflow.run"
+	WorkflowMeshCatalog             = "workflow.catalog"
+	WorkflowMeshGet                 = "workflow.get"
+	WorkflowMeshUpsert              = "workflow.upsert"
+	WorkflowMeshDelete              = "workflow.delete"
+	WorkflowMeshSetEnabled          = "workflow.set_enabled"
+	WorkflowMeshRun                 = "workflow.run"
+	WorkflowMeshTriggerCapabilities = "workflow.trigger_capabilities"
+	WorkflowMeshTriggerAppCatalog   = "workflow.trigger_app_catalog"
+	WorkflowMeshTriggerWakeConfigs  = "workflow.trigger_wake_configs"
+	WorkflowMeshCreateTriggerSecret = "workflow.trigger_secret.create"
 )
 
 type WorkflowDeviceRuntimeDispatcher interface {
@@ -37,12 +42,16 @@ func RegisterDeviceWorkflowMeshHandlers(dispatcher WorkflowDeviceRuntimeDispatch
 	}
 	api := NewWorkflowAPIForLocation(runtime, workflow.WorkflowLocationLocal)
 	for name, handler := range map[string]agent.CancellableRuntimeInvokeHandler{
-		WorkflowMeshCatalog:    api.meshCatalog,
-		WorkflowMeshGet:        api.meshGet,
-		WorkflowMeshUpsert:     api.meshUpsert,
-		WorkflowMeshDelete:     api.meshDelete,
-		WorkflowMeshSetEnabled: api.meshSetEnabled,
-		WorkflowMeshRun:        api.meshRun,
+		WorkflowMeshCatalog:             api.meshCatalog,
+		WorkflowMeshGet:                 api.meshGet,
+		WorkflowMeshUpsert:              api.meshUpsert,
+		WorkflowMeshDelete:              api.meshDelete,
+		WorkflowMeshSetEnabled:          api.meshSetEnabled,
+		WorkflowMeshRun:                 api.meshRun,
+		WorkflowMeshTriggerCapabilities: api.meshTriggerCapabilities,
+		WorkflowMeshTriggerAppCatalog:   api.meshTriggerAppCatalog,
+		WorkflowMeshTriggerWakeConfigs:  api.meshTriggerWakeConfigs,
+		WorkflowMeshCreateTriggerSecret: api.meshCreateTriggerSecret,
 	} {
 		dispatcher.RegisterCancellable(name, handler)
 	}
@@ -96,6 +105,89 @@ func (api *WorkflowAPI) meshOwned(ctx context.Context, userID, workflowID string
 		return workflow.WorkflowDefinition{}, nil, err
 	}
 	return applyInstallation(def, *inst), inst, nil
+}
+
+func (api *WorkflowAPI) workflowTriggerCapabilitiesSnapshot(ctx context.Context) []WorkflowTriggerCapabilityStatus {
+	android := strings.TrimSpace(os.Getenv("ANDROID_ROOT")) != ""
+	statuses := api.runtime.WorkflowTriggerCapabilityStatuses()
+	defaults := []WorkflowTriggerCapabilityStatus{
+		{ID: "workflow.trigger.android_intent.v1", Supported: android, Available: android, PermissionRequired: false, Reason: capabilityReason(android, "Android runtime unavailable")},
+		{ID: "workflow.trigger.tasker.v1", Supported: android, Available: android, PermissionRequired: false, Reason: capabilityReason(android, "Android runtime unavailable")},
+		{ID: "workflow.trigger.voice_wake.v1", Supported: android, Available: false, PermissionRequired: true, Permission: "android.permission.RECORD_AUDIO", Reason: capabilityReason(false, "Microphone permission status unavailable")},
+		{ID: "workflow.trigger.voice_phrase.v1", Supported: true, Available: true, PermissionRequired: false},
+		{ID: "workflow.trigger.app_foreground.v1", Supported: android, Available: false, PermissionRequired: true, Permission: "android.accessibilityservice.AccessibilityService", Reason: capabilityReason(false, "Accessibility service is not connected")},
+	}
+	items := make([]WorkflowTriggerCapabilityStatus, 0, len(defaults))
+	for _, item := range defaults {
+		if reported, ok := statuses[item.ID]; ok {
+			item = reported
+		}
+		if item.ID == "workflow.trigger.voice_wake.v1" && item.Available {
+			configs, err := api.runtime.workflowWakeConfigCatalog(ctx)
+			if err != nil || len(configs) == 0 {
+				item.Available = false
+				if err != nil {
+					item.Reason = "Wake-word backend status unavailable"
+				} else {
+					item.Reason = "No enabled wake-word recognizer configuration"
+				}
+			} else {
+				status := api.runtime.workflowWakeStatus(ctx, false)
+				if status.Required && !status.Ready {
+					item.Available = false
+					item.Reason = strings.TrimSpace(status.Reason)
+					if item.Reason == "" {
+						item.Reason = "Wake-word runtime is not ready"
+					}
+				}
+			}
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
+func (api *WorkflowAPI) meshTriggerCapabilities(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+	return meshResult(invoke, map[string]any{"items": api.workflowTriggerCapabilitiesSnapshot(ctx)})
+}
+
+func (api *WorkflowAPI) meshTriggerAppCatalog(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+	items, updatedAt := api.runtime.WorkflowTriggerAppCatalog()
+	return meshResult(invoke, map[string]any{"items": items, "updatedAt": updatedAt})
+}
+
+func (api *WorkflowAPI) meshTriggerWakeConfigs(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+	items, err := api.runtime.workflowWakeConfigCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return meshResult(invoke, map[string]any{"items": items})
+}
+
+func (api *WorkflowAPI) meshCreateTriggerSecret(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+	var request struct {
+		Kind string `json:"kind"`
+	}
+	if len(invoke.Input) > 0 {
+		if err := json.Unmarshal(invoke.Input, &request); err != nil {
+			return nil, err
+		}
+	}
+	if strings.TrimSpace(request.Kind) != "tasker" {
+		return nil, errors.New("unsupported workflow trigger secret kind")
+	}
+	value, err := api.newTaskerTriggerSecret(ctx, invoke.UserID.String())
+	if err != nil {
+		return nil, err
+	}
+	return meshResult(invoke, value)
+}
+
+func capabilityReason(available bool, reason string) string {
+	if available {
+		return ""
+	}
+	return reason
 }
 
 func (api *WorkflowAPI) meshCatalog(ctx context.Context, invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
