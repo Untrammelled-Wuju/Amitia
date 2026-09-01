@@ -4,11 +4,37 @@ package system
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/pkg/util"
 )
 
 func (h *Handler) RuntimeHealth(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetRuntimeHealth())
+}
+
+func (h *Handler) RuntimeCapabilities(c *gin.Context) {
+	profile := runtimeprofile.CurrentProcessProfile()
+	capabilities := map[string]bool{
+		"gameMode":           false,
+		"devicePluginRuntime": false,
+		"deviceExecutionPlane": false,
+		"localUIEndpoints":   false,
+	}
+
+	switch profile {
+	case runtimeprofile.ProfileLocal:
+		capabilities["gameMode"] = true
+		capabilities["localUIEndpoints"] = true
+	case runtimeprofile.ProfileDeviceAgent:
+		capabilities["devicePluginRuntime"] = true
+		capabilities["deviceExecutionPlane"] = true
+		capabilities["localUIEndpoints"] = true
+	}
+
+	util.SuccessResponse(c, gin.H{
+		"runtimeProfile": profile.String(),
+		"capabilities":  capabilities,
+	})
 }
 
 func (h *Handler) HealthHistory(c *gin.Context) {

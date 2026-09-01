@@ -72,6 +72,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/onboarding/status", handler.OnboardingStatus)
 	r.POST("/onboarding/complete", handler.OnboardingComplete)
 	r.POST("/onboarding/reset", handler.OnboardingReset)
+	r.GET("/runtime/capabilities", handler.RuntimeCapabilities)
 
 	r.GET("/config", handler.AppConfig)
 	r.PUT("/config", handler.UpdateConfig)
