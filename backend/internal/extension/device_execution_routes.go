@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/middleware/security"
 )
 
@@ -35,4 +36,23 @@ func RegisterDeviceExecutionPackageRoutes(group *gin.RouterGroup, runtime *Runti
 	kernel.POST("/extensions/uninstall/confirm", kernelAPI.confirmUninstall)
 	kernel.POST("/extensions/uninstall", kernelAPI.uninstall)
 	kernel.POST("/extensions/resume-uninstall", kernelAPI.resumeUninstall)
+}
+
+// RegisterDeviceExecutionWorkflowRoutes exposes only the device-local Workflow
+// API. It is mounted under /api/local by desktop/mobile hosts and deliberately
+// keeps the rest of the Cloud business API unavailable on Device Agent.
+func RegisterDeviceExecutionWorkflowRoutes(group *gin.RouterGroup, runtime *Runtime) {
+	if group == nil || runtime == nil {
+		return
+	}
+	group.Use(func(c *gin.Context) {
+		actor := security.GetActor(c)
+		if actor == nil || actor.UserID == "" || !actor.IsLocalTrusted {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "device-local authenticated session required"})
+			return
+		}
+		c.Set(authenticatedUserKey, string(actor.UserID))
+		c.Next()
+	})
+	NewWorkflowAPIForLocation(runtime, workflow.WorkflowLocationLocal).registerWorkflowRoutes(group)
 }

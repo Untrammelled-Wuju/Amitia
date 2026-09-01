@@ -397,6 +397,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				c.JSON(200, gin.H{"code": 200, "msg": "ok", "data": gin.H{"revoked": affected}})
 			})
 		}
+		extension.RegisterDeviceExecutionWorkflowRoutes(localDesktop, services.Extension)
 	}
 
 	if services.DesktopInstanceStore != nil {

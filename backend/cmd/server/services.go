@@ -1112,6 +1112,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			return nil, fmt.Errorf("device-agent task runtime service is required")
 		}
 		localRuntimeDispatcher := devicemeshagent.NewRuntimeDispatcher()
+		extension.RegisterDeviceWorkflowMeshHandlers(localRuntimeDispatcher, services.Extension)
 		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshResolveHandler, newDesktopPetBehaviorMeshResolveHandler(services))
 		localRuntimeDispatcher.RegisterCancellable(desktopPetBehaviorMeshHandler, newDesktopPetBehaviorMeshInvokeHandler(services))
 		if kernelContainer.GameHost != nil {
@@ -1165,6 +1166,16 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			deviceMeshRuntime.SetTaskRuntime(NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService))
 		}
 		services.DeviceMesh = deviceMeshRuntime
+		services.Extension.AttachWorkflowDeviceControl(newWorkflowDeviceControlPlane(deviceMeshRuntime))
+		if deviceMeshRuntime.Handler != nil && kernelContainer != nil && kernelContainer.WorkflowExecutor != nil {
+			deviceMeshRuntime.Handler.SetOnReady(func(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) {
+				go func() {
+					if _, resumeErr := kernelContainer.WorkflowExecutor.ResumeWaitingDevice(context.Background(), userID.String(), deviceID.String()); resumeErr != nil {
+						log.Warnf("workflow waiting-device resume failed: userId=%s deviceId=%s err=%v", userID, deviceID, resumeErr)
+					}
+				}()
+			})
+		}
 		if behaviorMeshPublisher != nil {
 			behaviorMeshPublisher.SetRuntime(deviceMeshRuntime)
 		}
