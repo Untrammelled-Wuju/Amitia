@@ -39,6 +39,43 @@ func (b *Broker) Redactor() *Redactor {
 	return b.redactor
 }
 
+// VerifyReference validates that ref is syntactically valid and resolves in the
+// encrypted store without exposing the secret to callers. The temporary value is
+// zeroed before returning.
+func (b *Broker) VerifyReference(ctx context.Context, ref SecretRef) error {
+	if b == nil || b.store == nil {
+		return ErrSecretStoreUnavailable
+	}
+	if ref == "" || !ref.Valid() {
+		return ErrSecretRefInvalid
+	}
+	value, err := b.store.Get(ctx, string(ref))
+	if err != nil {
+		return err
+	}
+	zeroizeBytes(value)
+	return nil
+}
+func (b *Broker) Store(ctx context.Context, namespace string, value []byte) (SecretRef, error) {
+	if b == nil || b.store == nil {
+		return "", ErrSecretStoreUnavailable
+	}
+	if len(value) == 0 {
+		return "", ErrSecretRefInvalid
+	}
+	raw, err := b.store.Put(ctx, namespace, value)
+	if err != nil {
+		return "", err
+	}
+	ref, err := ParseRef(raw)
+	if err != nil {
+		_ = b.store.Delete(ctx, raw)
+		return "", err
+	}
+	b.redactor.Add(value)
+	return ref.Canonical(), nil
+}
+
 func (b *Broker) Issue(ctx context.Context, req LeaseRequest) (Lease, error) {
 	if b.store == nil {
 		return Lease{}, ErrSecretStoreUnavailable
@@ -106,6 +143,7 @@ func (b *Broker) Issue(ctx context.Context, req LeaseRequest) (Lease, error) {
 	}
 	valueCopy := make([]byte, len(rawValue))
 	copy(valueCopy, rawValue)
+	zeroizeBytes(rawValue)
 
 	st := &leaseState{
 		descriptor: descriptor,

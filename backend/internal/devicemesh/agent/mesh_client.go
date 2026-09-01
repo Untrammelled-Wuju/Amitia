@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -193,6 +194,23 @@ func (c *MeshClient) completeHandshake(err error) {
 	})
 }
 
+func deviceWorkflowRuntimeCapabilities() []string {
+	// ASR-final phrase events are a platform-neutral Workflow ingress capability:
+	// official Flutter and Electron clients both forward final realtime ASR into
+	// the local Device Agent. Android-only native producers are advertised only
+	// when the backend is running inside the Android runtime.
+	capabilities := []string{"workflow.trigger.voice_phrase.v1"}
+	if strings.TrimSpace(os.Getenv("ANDROID_ROOT")) == "" {
+		return capabilities
+	}
+	return append(capabilities,
+		"workflow.trigger.android_intent.v1",
+		"workflow.trigger.tasker.v1",
+		"workflow.trigger.voice_wake.v1",
+		"workflow.trigger.app_foreground.v1",
+	)
+}
+
 func (c *MeshClient) sendHello() error {
 	cursor := c.conf.Cursor
 	lastGen := int64(1)
@@ -217,7 +235,7 @@ func (c *MeshClient) sendHello() error {
 		RuntimeContractVersion:       meshprotocol.RuntimeContractVersion,
 		DeviceID:                     c.conf.Identity.DeviceID,
 		RuntimeID:                    c.conf.Identity.RuntimeID,
-		RuntimeCapabilities:          []string{},
+		RuntimeCapabilities:          deviceWorkflowRuntimeCapabilities(),
 		LastAppliedStateRevision:     lastAppliedStateRev,
 		LastProcessedCommandSequence: lastProcessedCmdSeq,
 		LastEventSequence:            lastEventSeq,
