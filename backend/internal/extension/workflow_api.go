@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,12 +26,24 @@ const (
 )
 
 type WorkflowAPI struct {
-	runtime *Runtime
+	runtime  *Runtime
+	location workflow.WorkflowLocation
 }
 
-func NewWorkflowAPI(runtime *Runtime) *WorkflowAPI { return &WorkflowAPI{runtime: runtime} }
+func NewWorkflowAPI(runtime *Runtime) *WorkflowAPI {
+	return &WorkflowAPI{runtime: runtime}
+}
+
+func NewWorkflowAPIForLocation(runtime *Runtime, location workflow.WorkflowLocation) *WorkflowAPI {
+	return &WorkflowAPI{runtime: runtime, location: location}
+}
 
 func (api *WorkflowAPI) RegisterRoutes(group *gin.RouterGroup) {
+	api.registerDeviceWorkflowRoutes(group)
+	api.registerWorkflowRoutes(group)
+}
+
+func (api *WorkflowAPI) registerWorkflowRoutes(group *gin.RouterGroup) {
 	g := group.Group("/workflows")
 	g.GET("", api.list)
 	g.POST("", api.create)
@@ -41,6 +54,7 @@ func (api *WorkflowAPI) RegisterRoutes(group *gin.RouterGroup) {
 	g.POST("/import", api.importWorkflow)
 	g.POST("/validate", api.validate)
 	g.POST("/ai/generate", api.aiGenerate)
+	g.GET("/sync-events", api.workflowSyncEvents)
 	g.POST("/events/:eventType", api.dispatchEvent)
 	g.GET("/:id", api.get)
 	g.GET("/:id/analysis", api.analysis)
@@ -71,12 +85,88 @@ func (api *WorkflowAPI) RegisterRoutes(group *gin.RouterGroup) {
 	runs.POST("/:runId/recover", api.recoverRun)
 }
 
+func (api *WorkflowAPI) workflowSyncEvents(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "workflow kernel unavailable"})
+		return
+	}
+	service := api.runtime.Kernel.Container().EventService
+	if service == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "workflow durable event service unavailable"})
+		return
+	}
+	userID := strings.TrimSpace(workflowUserID(c))
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "workflow user is required"})
+		return
+	}
+
+	afterRaw := strings.TrimSpace(c.Query("afterCursor"))
+	if afterRaw == "" {
+		cursor, err := service.LatestWorkflowSyncCursor(c.Request.Context(), userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"cursor": cursor, "items": []any{}})
+		return
+	}
+	afterCursor, err := strconv.ParseInt(afterRaw, 10, 64)
+	if err != nil || afterCursor < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "afterCursor must be a non-negative integer"})
+		return
+	}
+	limit := 200
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || parsed <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a positive integer"})
+			return
+		}
+		if parsed > 1000 {
+			parsed = 1000
+		}
+		limit = parsed
+	}
+	records, err := service.ListWorkflowSyncEventsAfterCursor(c.Request.Context(), userID, afterCursor, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	type item struct {
+		Cursor           int64           `json:"cursor"`
+		EventID          string          `json:"eventId"`
+		Type             string          `json:"type"`
+		AggregateID      string          `json:"aggregateId,omitempty"`
+		AggregateVersion *int64          `json:"aggregateVersion,omitempty"`
+		OccurredAt       time.Time       `json:"occurredAt"`
+		Payload          json.RawMessage `json:"payload"`
+	}
+	items := make([]item, 0, len(records))
+	cursor := afterCursor
+	for _, record := range records {
+		if record.Cursor > cursor {
+			cursor = record.Cursor
+		}
+		items = append(items, item{
+			Cursor:           record.Cursor,
+			EventID:          record.EventID,
+			Type:             string(record.EventTypeID),
+			AggregateID:      record.AggregateID,
+			AggregateVersion: record.AggregateVersion,
+			OccurredAt:       record.OccurredAt,
+			Payload:          record.Payload,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"cursor": cursor, "items": items})
+}
+
 func (api *WorkflowAPI) kernelContainer() (*workflow.WorkflowRegistry, *workflow.WorkflowExecutor, error) {
 	if api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil {
 		return nil, nil, errors.New("workflow kernel unavailable")
 	}
 	c := api.runtime.Kernel.Container()
-	if c.WorkflowRegistry == nil || c.WorkflowExecutor == nil || c.WorkflowDefRepo == nil || c.WorkflowExecRepo == nil {
+	if c.WorkflowRegistry == nil || c.WorkflowExecutor == nil || c.WorkflowDefRepo == nil || c.WorkflowInstallationRepo == nil || c.WorkflowExecRepo == nil {
 		return nil, nil, errors.New("workflow services unavailable")
 	}
 	return c.WorkflowRegistry, c.WorkflowExecutor, nil
@@ -195,14 +285,20 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 		return
 	}
 	userID := workflowUserID(c)
-	items := make([]workflow.WorkflowDefinition, 0)
+	items := make([]workflowAPIResponse, 0)
 	for _, def := range registry.List(workflow.WorkflowFilter{}) {
-		if workflowOwnedBy(def, userID) {
-			if def.SchemaVersion != workflow.UserWorkflowSchemaVersion && len(def.Edges) == 0 {
-				def.Edges = workflow.DeriveEdges(def.Nodes)
-			}
-			items = append(items, def)
+		if !workflowOwnedBy(def, userID) {
+			continue
 		}
+		inst, installErr := api.installationFor(c.Request.Context(), def, userID)
+		if installErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": installErr.Error()})
+			return
+		}
+		if def.SchemaVersion != workflow.UserWorkflowSchemaVersion && len(def.Edges) == 0 {
+			def.Edges = workflow.DeriveEdges(def.Nodes)
+		}
+		items = append(items, workflowResponse(def, inst))
 	}
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].Name == items[j].Name {
@@ -213,7 +309,7 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 	total := len(items)
 	limit, offset := parsePagination(c)
 	if offset >= total {
-		items = []workflow.WorkflowDefinition{}
+		items = []workflowAPIResponse{}
 	} else {
 		end := offset + limit
 		if end > total {
@@ -221,7 +317,7 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 		}
 		items = items[offset:end]
 	}
-	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset})
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset, "location": api.effectiveLocation()})
 }
 
 func (api *WorkflowAPI) catalog(c *gin.Context) {
@@ -277,15 +373,25 @@ func (api *WorkflowAPI) create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := api.validateExecutionTargets(def); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	if _, exists := registry.Get(def.ID); exists {
 		c.JSON(http.StatusConflict, gin.H{"error": "workflow id already exists"})
 		return
 	}
-	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, workflowUserID(c), "初始版本"); err != nil {
+	userID := workflowUserID(c)
+	if err := api.registerNewUserWorkflow(c.Request.Context(), registry, def, userID, "初始版本"); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, def)
+	inst, err := api.installationFor(c.Request.Context(), def, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, workflowResponse(def, inst))
 }
 
 func (api *WorkflowAPI) validate(c *gin.Context) {
@@ -296,6 +402,10 @@ func (api *WorkflowAPI) validate(c *gin.Context) {
 	}
 	prepared, err := api.prepareValidatedUserWorkflow(def, workflowUserID(c), def.ID)
 	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"valid": false, "error": err.Error()})
+		return
+	}
+	if err := api.validateExecutionTargets(prepared); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"valid": false, "error": err.Error()})
 		return
 	}
@@ -313,11 +423,22 @@ func (api *WorkflowAPI) owned(c *gin.Context) (workflow.WorkflowDefinition, bool
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return workflow.WorkflowDefinition{}, false
 	}
+	userID := workflowUserID(c)
 	def, ok := registry.Get(c.Param("id"))
-	if !ok || !workflowOwnedBy(def, workflowUserID(c)) {
+	if !ok || !workflowOwnedBy(def, userID) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow not found"})
 		return workflow.WorkflowDefinition{}, false
 	}
+	inst, err := api.installationFor(c.Request.Context(), def, userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "workflow installation not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return workflow.WorkflowDefinition{}, false
+	}
+	def = applyInstallation(def, *inst)
 	if def.SchemaVersion != workflow.UserWorkflowSchemaVersion && len(def.Edges) == 0 {
 		def.Edges = workflow.DeriveEdges(def.Nodes)
 	}
@@ -329,7 +450,12 @@ func (api *WorkflowAPI) get(c *gin.Context) {
 	if !ok {
 		return
 	}
-	c.JSON(http.StatusOK, def)
+	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, workflowResponse(def, inst))
 }
 
 func (api *WorkflowAPI) update(c *gin.Context) {
@@ -338,8 +464,25 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
+	userID := workflowUserID(c)
+	unlock := api.lockWorkflowMutation(userID, c.Param("id"))
+	defer unlock()
 	old, ok := api.owned(c)
 	if !ok {
+		return
+	}
+	currentInst, err := api.installationFor(c.Request.Context(), old, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	expectedRevision, err := api.expectedRevision(c, currentInst.Revision)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := requireWorkflowRevision(expectedRevision, currentInst.Revision); err != nil {
+		writeWorkflowRevisionConflict(c)
 		return
 	}
 	var def workflow.WorkflowDefinition
@@ -347,13 +490,17 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow: " + err.Error()})
 		return
 	}
-	def, err = api.prepareValidatedUserWorkflow(def, workflowUserID(c), old.ID)
+	def, err = api.prepareValidatedUserWorkflow(def, userID, old.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := api.validateExecutionTargets(def); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	if old.DefinitionHash != def.DefinitionHash {
-		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), workflowUserID(c), old, "保存前自动快照"); err != nil {
+		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), userID, old, "保存前自动快照"); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -362,13 +509,26 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.syncTriggers(c.Request.Context(), old, def, workflowUserID(c)); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), def, old, workflowUserID(c))
+	rollback := func() {
+		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
 		_ = registry.Upsert(old)
+	}
+	if err := api.syncTriggers(c.Request.Context(), old, def, userID); err != nil {
+		rollback()
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, def)
+	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, userID, currentInst, expectedRevision)
+	if err != nil {
+		rollback()
+		if isWorkflowRevisionConflict(err) {
+			writeWorkflowRevisionConflict(c)
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, workflowResponse(def, updatedInst))
 }
 
 func (api *WorkflowAPI) patch(c *gin.Context) {
@@ -377,8 +537,25 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
+	userID := workflowUserID(c)
+	unlock := api.lockWorkflowMutation(userID, c.Param("id"))
+	defer unlock()
 	old, ok := api.owned(c)
 	if !ok {
+		return
+	}
+	currentInst, err := api.installationFor(c.Request.Context(), old, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	expectedRevision, err := api.expectedRevision(c, currentInst.Revision)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := requireWorkflowRevision(expectedRevision, currentInst.Revision); err != nil {
+		writeWorkflowRevisionConflict(c)
 		return
 	}
 	var patch map[string]json.RawMessage
@@ -386,13 +563,14 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow patch: " + err.Error()})
 		return
 	}
+	delete(patch, "expectedRevision")
 	baseRaw, err := json.Marshal(old)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	immutable := map[string]struct{}{
-		"id": {}, "extensionId": {}, "moduleId": {}, "source": {}, "definitionHash": {},
+		"id": {}, "extensionId": {}, "moduleId": {}, "source": {}, "definitionHash": {}, "installation": {},
 	}
 	for key := range immutable {
 		delete(patch, key)
@@ -412,13 +590,17 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid workflow patch: " + err.Error()})
 		return
 	}
-	def, err = api.prepareValidatedUserWorkflow(def, workflowUserID(c), old.ID)
+	def, err = api.prepareValidatedUserWorkflow(def, userID, old.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := api.validateExecutionTargets(def); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	if old.DefinitionHash != def.DefinitionHash {
-		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), workflowUserID(c), old, "保存前自动快照"); err != nil {
+		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), userID, old, "保存前自动快照"); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -427,13 +609,26 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.syncTriggers(c.Request.Context(), old, def, workflowUserID(c)); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), def, old, workflowUserID(c))
+	rollback := func() {
+		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
 		_ = registry.Upsert(old)
+	}
+	if err := api.syncTriggers(c.Request.Context(), old, def, userID); err != nil {
+		rollback()
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, def)
+	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, userID, currentInst, expectedRevision)
+	if err != nil {
+		rollback()
+		if isWorkflowRevisionConflict(err) {
+			writeWorkflowRevisionConflict(c)
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, workflowResponse(def, updatedInst))
 }
 
 func applyJSONMergePatch(base, patch []byte) ([]byte, error) {
@@ -505,23 +700,47 @@ func (api *WorkflowAPI) duplicate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, clone)
+	inst, err := api.installationFor(c.Request.Context(), clone, workflowUserID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, workflowResponse(clone, inst))
 }
 
 func (api *WorkflowAPI) registerNewUserWorkflow(ctx context.Context, registry *workflow.WorkflowRegistry, def workflow.WorkflowDefinition, userID, revisionNote string) error {
+	if err := api.validateExecutionTargets(def); err != nil {
+		return err
+	}
 	if err := registry.Upsert(def); err != nil {
 		return err
 	}
-	if err := api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, userID); err != nil {
+	rollback := func() {
 		_ = api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, userID)
 		_ = registry.Unregister(def.ID)
+	}
+	if err := api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, userID); err != nil {
+		rollback()
 		return err
 	}
 	if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(ctx, userID, def, revisionNote); err != nil {
-		_ = api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, userID)
-		_ = registry.Unregister(def.ID)
+		rollback()
 		return err
 	}
+	created, err := api.runtime.Kernel.Container().WorkflowInstallationRepo.Create(ctx, workflow.WorkflowInstallation{
+		WorkflowID:      def.ID,
+		OwnerUserID:     userID,
+		Location:        api.effectiveLocation(),
+		Enabled:         def.Enabled,
+		Triggers:        def.Triggers,
+		CallableByAgent: def.CallableByAgent,
+		AgentTool:       def.AgentTool,
+	})
+	if err != nil {
+		rollback()
+		return err
+	}
+	api.emitWorkflowInstallationEvent(ctx, "workflow.installation.created", created)
 	return nil
 }
 
@@ -616,7 +835,12 @@ func (api *WorkflowAPI) importWorkflow(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, def)
+	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, workflowResponse(def, inst))
 }
 
 func (api *WorkflowAPI) saveTemplate(c *gin.Context) {
@@ -704,7 +928,12 @@ func (api *WorkflowAPI) instantiateTemplate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, def)
+	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, workflowResponse(def, inst))
 }
 
 func (api *WorkflowAPI) deleteTemplate(c *gin.Context) {
@@ -755,11 +984,28 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
+	userID := workflowUserID(c)
+	unlock := api.lockWorkflowMutation(userID, c.Param("id"))
+	defer unlock()
 	current, ok := api.owned(c)
 	if !ok {
 		return
 	}
-	revision, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetRevision(c.Request.Context(), workflowUserID(c), current.ID, c.Param("revisionId"))
+	inst, err := api.installationFor(c.Request.Context(), current, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	expectedRevision, err := api.expectedRevision(c, inst.Revision)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := requireWorkflowRevision(expectedRevision, inst.Revision); err != nil {
+		writeWorkflowRevisionConflict(c)
+		return
+	}
+	revision, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetRevision(c.Request.Context(), userID, current.ID, c.Param("revisionId"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow revision not found"})
 		return
@@ -769,16 +1015,20 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	target, err = api.prepareValidatedUserWorkflow(target, workflowUserID(c), current.ID)
+	target, err = api.prepareValidatedUserWorkflow(target, userID, current.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if current.DefinitionHash == target.DefinitionHash {
-		c.JSON(http.StatusOK, target)
+	if err := api.validateExecutionTargets(target); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), workflowUserID(c), current, "回滚前自动快照"); err != nil {
+	if current.DefinitionHash == target.DefinitionHash {
+		c.JSON(http.StatusOK, workflowResponse(target, inst))
+		return
+	}
+	if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), userID, current, "回滚前自动快照"); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -786,13 +1036,26 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.syncTriggers(c.Request.Context(), current, target, workflowUserID(c)); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), target, current, workflowUserID(c))
+	rollback := func() {
+		_ = api.syncTriggers(c.Request.Context(), target, current, userID)
 		_ = registry.Upsert(current)
+	}
+	if err := api.syncTriggers(c.Request.Context(), current, target, userID); err != nil {
+		rollback()
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, target)
+	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), target, userID, inst, expectedRevision)
+	if err != nil {
+		rollback()
+		if isWorkflowRevisionConflict(err) {
+			writeWorkflowRevisionConflict(c)
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, workflowResponse(target, updatedInst))
 }
 
 func (api *WorkflowAPI) delete(c *gin.Context) {
@@ -801,19 +1064,28 @@ func (api *WorkflowAPI) delete(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
+	userID := workflowUserID(c)
+	unlock := api.lockWorkflowMutation(userID, c.Param("id"))
+	defer unlock()
 	old, ok := api.owned(c)
 	if !ok {
 		return
 	}
-	if err := api.syncTriggers(c.Request.Context(), old, workflow.WorkflowDefinition{}, workflowUserID(c)); err != nil {
+	inst, err := api.installationFor(c.Request.Context(), old, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := api.syncTriggers(c.Request.Context(), old, workflow.WorkflowDefinition{}, userID); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if err := registry.Unregister(old.ID); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, old, workflowUserID(c))
+		_ = api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, old, userID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	api.emitWorkflowInstallationEvent(c.Request.Context(), "workflow.installation.deleted", inst)
 	c.JSON(http.StatusOK, gin.H{"deleted": true, "id": old.ID})
 }
 
@@ -823,8 +1095,25 @@ func (api *WorkflowAPI) setEnabled(c *gin.Context, enabled bool) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
+	userID := workflowUserID(c)
+	unlock := api.lockWorkflowMutation(userID, c.Param("id"))
+	defer unlock()
 	old, ok := api.owned(c)
 	if !ok {
+		return
+	}
+	currentInst, err := api.installationFor(c.Request.Context(), old, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	expectedRevision, err := api.expectedRevision(c, currentInst.Revision)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := requireWorkflowRevision(expectedRevision, currentInst.Revision); err != nil {
+		writeWorkflowRevisionConflict(c)
 		return
 	}
 	def := old
@@ -833,13 +1122,29 @@ func (api *WorkflowAPI) setEnabled(c *gin.Context, enabled bool) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if err := api.syncTriggers(c.Request.Context(), old, def, workflowUserID(c)); err != nil {
-		_ = api.syncTriggers(c.Request.Context(), def, old, workflowUserID(c))
+	if err := api.syncTriggers(c.Request.Context(), old, def, userID); err != nil {
+		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
 		_ = registry.Upsert(old)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"id": def.ID, "enabled": enabled})
+	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, userID, currentInst, expectedRevision)
+	if err != nil {
+		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
+		_ = registry.Upsert(old)
+		if isWorkflowRevisionConflict(err) {
+			writeWorkflowRevisionConflict(c)
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	eventType := "workflow.installation.disabled"
+	if enabled {
+		eventType = "workflow.installation.enabled"
+	}
+	api.emitWorkflowInstallationEvent(c.Request.Context(), eventType, updatedInst)
+	c.JSON(http.StatusOK, gin.H{"id": def.ID, "enabled": enabled, "installation": updatedInst})
 }
 func (api *WorkflowAPI) enable(c *gin.Context)  { api.setEnabled(c, true) }
 func (api *WorkflowAPI) disable(c *gin.Context) { api.setEnabled(c, false) }
@@ -871,8 +1176,13 @@ func (api *WorkflowAPI) run(c *gin.Context) {
 	if len(body.Input) == 0 {
 		body.Input = json.RawMessage(`{}`)
 	}
+	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	executionID := "wf-run-" + uuid.NewString()
-	req := workflow.ExecuteRequest{WorkflowID: def.ID, Input: body.Input, Context: workflow.ExecutionContext{UserID: workflowUserID(c), RootID: executionID, InvocationID: executionID, OperationID: "wf-op-" + uuid.NewString(), TraceID: "trace-" + uuid.NewString()}}
+	req := workflow.ExecuteRequest{WorkflowID: def.ID, Input: body.Input, Context: workflow.ExecutionContext{UserID: workflowUserID(c), WorkflowID: def.ID, InstallationID: inst.InstallationID, RootID: executionID, InvocationID: executionID, OperationID: "wf-op-" + uuid.NewString(), TraceID: "trace-" + uuid.NewString()}}
 	if body.Wait {
 		result, err := executor.Execute(c.Request.Context(), req)
 		if err != nil {
@@ -1120,12 +1430,19 @@ func (api *WorkflowAPI) rerunRun(c *gin.Context) {
 	if len(input) == 0 {
 		input = json.RawMessage(`{}`)
 	}
+	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	executionID := "wf-run-" + uuid.NewString()
 	req := workflow.ExecuteRequest{
 		WorkflowID: def.ID,
 		Input:      input,
 		Context: workflow.ExecutionContext{
 			UserID:         workflowUserID(c),
+			WorkflowID:     def.ID,
+			InstallationID: inst.InstallationID,
 			RootID:         executionID,
 			InvocationID:   executionID,
 			OperationID:    "wf-op-" + uuid.NewString(),

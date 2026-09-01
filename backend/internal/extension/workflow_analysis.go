@@ -54,6 +54,10 @@ func nestedWorkflowTarget(node workflow.WorkflowNode) string {
 	return strings.TrimSpace(node.Runtime.RuntimeID)
 }
 
+func remoteDeviceNestedWorkflow(node workflow.WorkflowNode) bool {
+	return node.Type == "nested_workflow" && node.ExecutionTarget.Placement == workflow.WorkflowExecutionDevice
+}
+
 func ownedWorkflowUserID(def workflow.WorkflowDefinition) string {
 	if def.Metadata == nil {
 		return ""
@@ -73,6 +77,15 @@ func (api *WorkflowAPI) validateNestedWorkflowTargets(def workflow.WorkflowDefin
 	for _, node := range def.Nodes {
 		targetID := nestedWorkflowTarget(node)
 		if targetID == "" {
+			continue
+		}
+		// A device-targeted nested workflow belongs to that Device Agent's local
+		// Workflow Registry, not this Core's registry. Existence/ownership is
+		// authoritatively checked by Cloud Core's device ownership gate and the
+		// target Device Agent's meshOwned() call at execution time. Treating it as
+		// a local dependency here would make Cloud -> Device Local Workflow
+		// impossible to save. Distributed recursion is enforced by CallStack.
+		if remoteDeviceNestedWorkflow(node) {
 			continue
 		}
 		if targetID == def.ID {
@@ -101,7 +114,7 @@ func (api *WorkflowAPI) validateNestedWorkflowTargets(def workflow.WorkflowDefin
 		defer delete(visiting, current.ID)
 		for _, node := range current.Nodes {
 			targetID := nestedWorkflowTarget(node)
-			if targetID == "" {
+			if targetID == "" || remoteDeviceNestedWorkflow(node) {
 				continue
 			}
 			var target workflow.WorkflowDefinition
@@ -156,7 +169,12 @@ func analyzeWorkflowRisk(def workflow.WorkflowDefinition, registry *workflow.Wor
 		}
 		if targetID := nestedWorkflowTarget(node); targetID != "" {
 			dep := WorkflowNestedDependency{NodeID: node.ID, WorkflowID: targetID, Status: "missing"}
-			if registry != nil {
+			if remoteDeviceNestedWorkflow(node) {
+				// The device catalog is intentionally not mirrored into the Core's
+				// Workflow Registry. Report a remote dependency rather than a false
+				// "missing" finding; runtime control-plane checks remain authoritative.
+				dep.Status = "remote_device"
+			} else if registry != nil {
 				if target, ok := registry.Get(targetID); ok {
 					dep.Name = target.Name
 					dep.DefinitionHash = target.DefinitionHash
