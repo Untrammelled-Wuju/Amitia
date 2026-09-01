@@ -486,6 +486,27 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("kernel: build secret broker: %w", err)
 	}
+	workflowTriggerManager.SetSecretResolver(func(ctx context.Context, rawRef string, event workflow.WorkflowTriggerEvent, binding workflow.TriggerBinding) ([]byte, error) {
+		if !workflow.TriggerSecretRefOwnedByUser(rawRef, event.OwnerUserID) {
+			return nil, fmt.Errorf("workflow trigger secret does not belong to event owner")
+		}
+		ref, err := secret.ParseRef(rawRef)
+		if err != nil {
+			return nil, err
+		}
+		invocationID := "device-event/" + event.EventID + "/" + binding.BindingID
+		const runtimeInstanceID = "workflow-trigger-manager"
+		lease, err := kernelSecretBroker.Issue(ctx, secret.LeaseRequest{
+			Ref: ref, Purpose: "workflow-trigger-match", InvocationID: invocationID, RuntimeInstanceID: runtimeInstanceID,
+			UserID: event.OwnerUserID, Generation: binding.Generation, TTL: 30 * time.Second, MaxUses: 1,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return kernelSecretBroker.Consume(ctx, lease.ID, secret.LeaseUseContext{
+			InvocationID: invocationID, RuntimeInstanceID: runtimeInstanceID, Generation: binding.Generation,
+		})
+	})
 	observabilityStore := observability.NewSQLiteStorage(db)
 	observabilityWriter := observability.NewRecordWriter(observabilityStore, observability.DefaultWriterConfig())
 	observabilitySanitizer := observability.NewRecordSanitizer()

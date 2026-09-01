@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,7 +15,15 @@ import (
 
 type WorkflowDefinitionRepository struct {
 	db *sql.DB
+
+	receiptCleanupMu   sync.Mutex
+	lastReceiptCleanup time.Time
 }
+
+const (
+	triggerReceiptRetention       = 30 * 24 * time.Hour
+	triggerReceiptCleanupInterval = time.Hour
+)
 
 func NewWorkflowDefinitionRepository(db *sql.DB) *WorkflowDefinitionRepository {
 	return &WorkflowDefinitionRepository{db: db}
@@ -406,14 +415,14 @@ func (r *WorkflowDefinitionRepository) SaveTrigger(ctx context.Context, binding 
 	now := time.Now().UTC()
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO extension_workflow_trigger_bindings
-			(binding_id, trigger_type, event_type, schedule_id, workflow_id, input_json, generation, enabled, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(binding_id, trigger_type, event_type, schedule_id, workflow_id, config_json, input_json, generation, enabled, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(binding_id) DO UPDATE SET
 			trigger_type = excluded.trigger_type, event_type = excluded.event_type,
 			schedule_id = excluded.schedule_id, workflow_id = excluded.workflow_id,
-			input_json = excluded.input_json, generation = excluded.generation,
+			config_json = excluded.config_json, input_json = excluded.input_json, generation = excluded.generation,
 			enabled = excluded.enabled, updated_at = excluded.updated_at
-	`, binding.BindingID, binding.Type, binding.EventType, binding.ScheduleID, binding.WorkflowID, binding.Input, binding.Generation, boolToInt(binding.Enabled), now, now)
+	`, binding.BindingID, binding.Type, binding.EventType, binding.ScheduleID, binding.WorkflowID, normalizedRawJSON(binding.Config), normalizedRawJSON(binding.Input), binding.Generation, boolToInt(binding.Enabled), now, now)
 	if err != nil {
 		return fmt.Errorf("save workflow trigger binding: %w", err)
 	}
@@ -422,7 +431,7 @@ func (r *WorkflowDefinitionRepository) SaveTrigger(ctx context.Context, binding 
 
 func (r *WorkflowDefinitionRepository) ListTriggers(ctx context.Context, triggerType workflow.TriggerType, eventType, scheduleID string) ([]workflow.TriggerBinding, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT binding_id, trigger_type, event_type, schedule_id, workflow_id, input_json, generation, enabled
+		SELECT binding_id, trigger_type, event_type, schedule_id, workflow_id, config_json, input_json, generation, enabled
 		FROM extension_workflow_trigger_bindings
 		WHERE trigger_type = ? AND enabled = 1
 			AND (? = '' OR event_type = ?)
@@ -436,11 +445,12 @@ func (r *WorkflowDefinitionRepository) ListTriggers(ctx context.Context, trigger
 	result := make([]workflow.TriggerBinding, 0)
 	for rows.Next() {
 		var binding workflow.TriggerBinding
-		var inputJSON string
+		var configJSON, inputJSON string
 		var enabled int
-		if err := rows.Scan(&binding.BindingID, &binding.Type, &binding.EventType, &binding.ScheduleID, &binding.WorkflowID, &inputJSON, &binding.Generation, &enabled); err != nil {
+		if err := rows.Scan(&binding.BindingID, &binding.Type, &binding.EventType, &binding.ScheduleID, &binding.WorkflowID, &configJSON, &inputJSON, &binding.Generation, &enabled); err != nil {
 			return nil, fmt.Errorf("scan workflow trigger binding: %w", err)
 		}
+		binding.Config = json.RawMessage(configJSON)
 		binding.Input = json.RawMessage(inputJSON)
 		binding.Enabled = enabled == 1
 		result = append(result, binding)
@@ -456,12 +466,176 @@ func (r *WorkflowDefinitionRepository) DeleteTrigger(ctx context.Context, bindin
 	return nil
 }
 
+func (r *WorkflowDefinitionRepository) ClaimTriggerReceipt(ctx context.Context, eventID, bindingID, invocationID string, occurredAt time.Time) (bool, error) {
+	now := time.Now().UTC()
+	r.maybePruneTriggerReceipts(ctx, now)
+	result, err := r.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO extension_workflow_trigger_receipts
+			(event_id, binding_id, invocation_id, status, occurred_at, created_at, updated_at)
+		VALUES (?, ?, ?, 'claimed', ?, ?, ?)
+	`, eventID, bindingID, invocationID, occurredAt.UTC(), now, now)
+	if err != nil {
+		return false, fmt.Errorf("claim workflow trigger receipt: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("claim workflow trigger receipt rows: %w", err)
+	}
+	if rows > 0 {
+		return true, nil
+	}
+
+	// A claimed receipt is a durable lease for the deterministic workflow
+	// invocation. Do not reclaim it only because wall-clock time elapsed: a
+	// legitimate long-running workflow may have no receipt heartbeat, and the
+	// workflow recovery subsystem already owns recovery of persisted active runs.
+	// We only recycle a stale receipt when the matching execution is absent or
+	// terminally retryable (failed/cancelled). Completed/paused runs are treated as
+	// consumed trigger deliveries, while active runs remain claimed.
+	var receiptStatus, receiptInvocation string
+	var receiptUpdated time.Time
+	err = r.db.QueryRowContext(ctx, `
+		SELECT status, invocation_id, updated_at
+		FROM extension_workflow_trigger_receipts
+		WHERE event_id = ? AND binding_id = ?
+	`, eventID, bindingID).Scan(&receiptStatus, &receiptInvocation, &receiptUpdated)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("read workflow trigger receipt: %w", err)
+	}
+	if receiptStatus == "completed" {
+		return false, nil
+	}
+	if receiptStatus != "claimed" || now.Sub(receiptUpdated.UTC()) < 15*time.Minute {
+		return false, nil
+	}
+	if strings.TrimSpace(receiptInvocation) == "" {
+		receiptInvocation = invocationID
+	}
+
+	var runStatus string
+	err = r.db.QueryRowContext(ctx, `
+		SELECT status FROM extension_workflow_executions WHERE execution_id = ?
+	`, receiptInvocation).Scan(&runStatus)
+	if err != nil && err != sql.ErrNoRows {
+		return false, fmt.Errorf("inspect workflow trigger execution: %w", err)
+	}
+	if err == nil {
+		switch workflow.RunStatus(runStatus) {
+		case workflow.RunStatusSucceeded, workflow.RunStatusCompensated,
+			workflow.RunStatusPaused, workflow.RunStatusWaitingDevice:
+			if _, updateErr := r.db.ExecContext(ctx, `
+				UPDATE extension_workflow_trigger_receipts
+				SET status = 'completed', updated_at = ?
+				WHERE event_id = ? AND binding_id = ? AND status = 'claimed'
+			`, now, eventID, bindingID); updateErr != nil {
+				return false, fmt.Errorf("finalize workflow trigger receipt from execution: %w", updateErr)
+			}
+			return false, nil
+		case workflow.RunStatusRunning, workflow.RunStatusPausing, workflow.RunStatusResuming, workflow.RunStatusCompensating:
+			return false, nil
+		case workflow.RunStatusFailed, workflow.RunStatusCancelled:
+			// Retry below with the same deterministic invocation id. WorkflowExecutor
+			// will reuse the persisted run rather than creating a second identity.
+		default:
+			return false, nil
+		}
+	}
+
+	result, err = r.db.ExecContext(ctx, `
+		UPDATE extension_workflow_trigger_receipts
+		SET invocation_id = ?, status = 'claimed', occurred_at = ?, updated_at = ?
+		WHERE event_id = ? AND binding_id = ? AND status = 'claimed' AND updated_at < ?
+	`, invocationID, occurredAt.UTC(), now, eventID, bindingID, now.Add(-15*time.Minute))
+	if err != nil {
+		return false, fmt.Errorf("reclaim workflow trigger receipt: %w", err)
+	}
+	rows, err = result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("reclaim workflow trigger receipt rows: %w", err)
+	}
+	return rows > 0, nil
+}
+
+func (r *WorkflowDefinitionRepository) maybePruneTriggerReceipts(ctx context.Context, now time.Time) {
+	if r == nil || r.db == nil {
+		return
+	}
+	r.receiptCleanupMu.Lock()
+	if !r.lastReceiptCleanup.IsZero() && now.Sub(r.lastReceiptCleanup) < triggerReceiptCleanupInterval {
+		r.receiptCleanupMu.Unlock()
+		return
+	}
+	r.lastReceiptCleanup = now
+	r.receiptCleanupMu.Unlock()
+
+	// Never age out an in-flight receipt solely by time. A workflow can remain
+	// running/paused for longer than the retention window, and deleting its claim
+	// would allow the same producer event to enter TriggerManager again. Completed
+	// receipts are safe to prune because workflow execution keeps the same durable
+	// idempotency identity. Claimed receipts are pruned only when their execution is
+	// absent (crash before Start) or terminally retryable (failed/cancelled).
+	_, _ = r.db.ExecContext(ctx, `
+		DELETE FROM extension_workflow_trigger_receipts AS receipt
+		WHERE receipt.updated_at < ?
+		  AND (
+			receipt.status = 'completed'
+			OR (
+				receipt.status = 'claimed'
+				AND (
+					NOT EXISTS (
+						SELECT 1 FROM extension_workflow_executions AS run
+						WHERE run.execution_id = receipt.invocation_id
+					)
+					OR EXISTS (
+						SELECT 1 FROM extension_workflow_executions AS run
+						WHERE run.execution_id = receipt.invocation_id
+						  AND run.status IN ('failed', 'cancelled')
+					)
+				)
+			)
+		  )
+	`, now.Add(-triggerReceiptRetention))
+}
+
+func (r *WorkflowDefinitionRepository) CompleteTriggerReceipt(ctx context.Context, eventID, bindingID string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE extension_workflow_trigger_receipts
+		SET status = 'completed', updated_at = ?
+		WHERE event_id = ? AND binding_id = ?
+	`, time.Now().UTC(), eventID, bindingID)
+	if err != nil {
+		return fmt.Errorf("complete workflow trigger receipt: %w", err)
+	}
+	return nil
+}
+
+func (r *WorkflowDefinitionRepository) ReleaseTriggerReceipt(ctx context.Context, eventID, bindingID string) error {
+	_, err := r.db.ExecContext(ctx, `
+		DELETE FROM extension_workflow_trigger_receipts
+		WHERE event_id = ? AND binding_id = ? AND status = 'claimed'
+	`, eventID, bindingID)
+	if err != nil {
+		return fmt.Errorf("release workflow trigger receipt: %w", err)
+	}
+	return nil
+}
+
 func (r *WorkflowDefinitionRepository) DeleteTriggersByWorkflow(ctx context.Context, workflowID string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM extension_workflow_trigger_bindings WHERE workflow_id = ?`, workflowID)
 	if err != nil {
 		return fmt.Errorf("delete workflow trigger bindings: %w", err)
 	}
 	return nil
+}
+
+func normalizedRawJSON(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return json.RawMessage(`{}`)
+	}
+	return raw
 }
 
 type scannerInterface interface {
