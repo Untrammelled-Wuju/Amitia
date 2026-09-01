@@ -10,7 +10,7 @@ import { refreshTrayMenu } from "./tray";
 import { setAuthToken } from "./auth-token-store";
 import { getDesktopAuthHeaders } from "./backend-session-client";
 import { getMeshCoordinator } from "./device-mesh/coordinator";
-import { getMeshIdentity, getMeshStatus } from "./device-mesh/local-agent-client";
+import { getMeshIdentity, getMeshStatus, publishLocalVoiceASRFinal } from "./device-mesh/local-agent-client";
 import {
   listDevices as cloudListDevices,
   revokeDevice as cloudRevokeDevice,
@@ -310,6 +310,10 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.getBackendAuthHeaders, async () => {
     return getDesktopAuthHeaders();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.publishLocalVoiceASRFinal, async (_event, payload) => {
+    return publishLocalVoiceASRFinal(payload);
   });
 
   ipcMain.handle(IPC_CHANNELS.meshGetStatus, async () => {
