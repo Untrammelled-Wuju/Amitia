@@ -99,7 +99,10 @@ abstract final class AppRoutes {
   static String petProcessing(String taskId) => '/workshop/pet/processing/$taskId';
   static String petActionEditor(String taskId, String actionKey) => '/workshop/pet/processing/$taskId/actions/$actionKey/editor';
   static String skillDraftEditor(String id) => '/workshop/skills/$id/editor';
-  static String workflowEditor(String id) => '/workshop/workflows/$id';
+  static String workflowEditor(String id, {String location = 'cloud', String deviceId = ''}) {
+    final query = <String, String>{'location': location, if (deviceId.isNotEmpty) 'deviceId': deviceId};
+    return Uri(path: '/workshop/workflows/$id', queryParameters: query).toString();
+  }
   static String modelConfig(String type) => '/settings/models/$type';
   static String kernelPage(String page) => '/developer/kernel/$page';
 }

@@ -10,12 +10,21 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/services/extension_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
 class WorkflowEditorPage extends ConsumerStatefulWidget {
   final String workflowId;
-  const WorkflowEditorPage({super.key, required this.workflowId});
+  final String location;
+  final String deviceId;
+
+  const WorkflowEditorPage({
+    super.key,
+    required this.workflowId,
+    this.location = 'cloud',
+    this.deviceId = '',
+  });
 
   @override
   ConsumerState<WorkflowEditorPage> createState() => _WorkflowEditorPageState();
@@ -34,6 +43,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   List<Map<String, dynamic>> _triggers = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _catalog = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _ownedWorkflows = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> _devices = <Map<String, dynamic>>[];
   Map<String, Map<String, dynamic>> _stepRuns = <String, Map<String, dynamic>>{};
   List<Map<String, dynamic>> _stepAttempts = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> _checkpoints = <Map<String, dynamic>>[];
@@ -50,17 +60,41 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   bool _dirty = false;
   bool _disposed = false;
   Timer? _pollTimer;
+  Timer? _syncTimer;
+  int? _syncCursor;
+  bool _syncBusy = false;
+  int _conflictNoticeRevision = 0;
+  int _deviceSyncTicks = 0;
+
+  WorkflowApiTarget get _target {
+    if (widget.location == 'local') return const WorkflowApiTarget.local();
+    if (widget.location == 'device') return WorkflowApiTarget.device(widget.deviceId);
+    return const WorkflowApiTarget.cloud();
+  }
+
+  bool get _isCloud => widget.location == 'cloud';
+  bool get _isDevice => widget.location == 'device';
+  String get _locationLabel => _isCloud ? '云端' : (_isDevice ? '设备 · ${widget.deviceId}' : '当前设备');
 
   @override
   void initState() {
     super.initState();
-    _load();
+    unawaited(_initialize());
+  }
+
+  Future<void> _initialize() async {
+    await _load();
+    if (_disposed) return;
+    await _primeSyncCursor();
+    if (_disposed) return;
+    _syncTimer = Timer.periodic(const Duration(seconds: 2), (_) => unawaited(_pollSyncEvents()));
   }
 
   @override
   void dispose() {
     _disposed = true;
     _pollTimer?.cancel();
+    _syncTimer?.cancel();
     _transform.dispose();
     super.dispose();
   }
@@ -69,19 +103,38 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     setState(() => _loading = true);
     try {
       final service = ref.read(extensionServiceProvider);
-      final workflow = await service.getWorkflow(widget.workflowId);
+      final workflow = await service.getWorkflow(widget.workflowId, target: _target);
       _normalize(workflow);
-      try {
-        _catalog = await service.workflowCatalog();
-      } catch (_) {
+      if (_isDevice) {
         _catalog = <Map<String, dynamic>>[];
+      } else {
+        try {
+          _catalog = await service.workflowCatalog(target: _target);
+        } catch (_) {
+          _catalog = <Map<String, dynamic>>[];
+        }
       }
       try {
-        _ownedWorkflows = (await service.workflows(limit: 200)).where((item) => (item['id'] ?? '').toString() != widget.workflowId).toList(growable: false);
+        _ownedWorkflows = (await service.workflows(limit: 200, target: _target))
+            .where((item) => (item['id'] ?? '').toString() != widget.workflowId)
+            .toList(growable: false);
       } catch (_) {
         _ownedWorkflows = <Map<String, dynamic>>[];
       }
-      await Future.wait(<Future<void>>[_loadRuns(), _loadRevisions(), _loadStats()]);
+      if (_isCloud) {
+        try {
+          _devices = await service.workflowDevices();
+        } catch (_) {
+          _devices = <Map<String, dynamic>>[];
+        }
+      }
+      if (_isDevice) {
+        _runHistory = <Map<String, dynamic>>[];
+        _revisions = <Map<String, dynamic>>[];
+        _workflowStats = <String, dynamic>{};
+      } else {
+        await Future.wait(<Future<void>>[_loadRuns(), _loadRevisions(), _loadStats()]);
+      }
       if (!mounted) return;
       setState(() => _loading = false);
       WidgetsBinding.instance.addPostFrameCallback((_) => _fitView());
@@ -116,6 +169,24 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         fallback: <String, dynamic>{'x': 160.0 + (i % 4) * 280.0, 'y': 160.0 + (i ~/ 4) * 190.0},
       );
       node['runtime'] = _asMap(node['runtime']);
+      var executionTarget = _asMap(node['executionTarget']);
+      if (_isCloud) {
+        var placement = (executionTarget['placement'] ?? 'cloud').toString();
+        if (!<String>{'cloud', 'device', 'auto'}.contains(placement)) placement = 'cloud';
+        executionTarget = <String, dynamic>{
+          'placement': placement,
+          'deviceId': (executionTarget['deviceId'] ?? '').toString(),
+          'runtimeId': (executionTarget['runtimeId'] ?? '').toString(),
+          'providerId': (executionTarget['providerId'] ?? '').toString(),
+          'providerInstanceId': (executionTarget['providerInstanceId'] ?? '').toString(),
+          'offlinePolicy': <String>{'fail', 'wait'}.contains((executionTarget['offlinePolicy'] ?? '').toString())
+              ? executionTarget['offlinePolicy'].toString()
+              : 'fail',
+        };
+      } else {
+        executionTarget = <String, dynamic>{'placement': 'local', 'offlinePolicy': 'fail'};
+      }
+      node['executionTarget'] = executionTarget;
       node['step'] = _asMap(node['step']);
       final step = node['step'] as Map<String, dynamic>;
       step['onError'] = _asMap(step['onError'], fallback: <String, dynamic>{'mode': 'fail'});
@@ -161,6 +232,85 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     if (!_dirty && mounted) setState(() => _dirty = true);
   }
 
+  int _revisionOf(Map<String, dynamic>? definition) {
+    final installation = definition?['installation'];
+    if (installation is! Map) return 0;
+    final raw = installation['revision'];
+    return raw is int ? raw : int.tryParse(raw?.toString() ?? '') ?? 0;
+  }
+
+  bool _syncEventMatches(Map<String, dynamic> event) {
+    if (!(event['type'] ?? '').toString().startsWith('workflow.installation.')) return false;
+    final payload = _asMap(event['payload']);
+    if ((payload['workflowId'] ?? '').toString() != widget.workflowId) return false;
+    if (_isDevice) return (payload['hostDeviceId'] ?? '').toString() == widget.deviceId;
+    if (_isCloud) return (payload['location'] ?? '').toString() == 'cloud';
+    return true;
+  }
+
+  Future<void> _primeSyncCursor() async {
+    try {
+      final page = await ref.read(extensionServiceProvider).workflowSyncEvents(target: _target);
+      if (_disposed) return;
+      final raw = page['cursor'];
+      _syncCursor = raw is int ? raw : int.tryParse(raw?.toString() ?? '') ?? 0;
+    } catch (_) {
+      _syncCursor = null;
+    }
+  }
+
+  Future<void> _refreshDefinitionFromSync() async {
+    try {
+      final latest = await ref.read(extensionServiceProvider).getWorkflow(widget.workflowId, target: _target);
+      if (_disposed || !mounted) return;
+      final latestRevision = _revisionOf(latest);
+      final localRevision = _revisionOf(_workflow);
+      if (_dirty) {
+        if (latestRevision > localRevision && latestRevision != _conflictNoticeRevision) {
+          _conflictNoticeRevision = latestRevision;
+          _show('该工作流已在其他客户端更新到 revision $latestRevision。当前草稿不会被覆盖，保存时会执行冲突校验。');
+        }
+        return;
+      }
+      if (latestRevision > 0 && latestRevision == localRevision) return;
+      setState(() {
+        _normalize(latest);
+        _conflictNoticeRevision = 0;
+      });
+      if (!_isDevice) {
+        await Future.wait(<Future<void>>[_loadRuns(), _loadRevisions(), _loadStats()]);
+      }
+    } catch (_) {
+      // A transient sync failure must not make the editor unusable.
+    }
+  }
+
+  Future<void> _pollSyncEvents() async {
+    if (_disposed || _syncBusy) return;
+    _syncBusy = true;
+    try {
+      if (_syncCursor == null) {
+        await _primeSyncCursor();
+        return;
+      }
+      final page = await ref.read(extensionServiceProvider).workflowSyncEvents(target: _target, afterCursor: _syncCursor);
+      if (_disposed) return;
+      final rawCursor = page['cursor'];
+      _syncCursor = rawCursor is int ? rawCursor : int.tryParse(rawCursor?.toString() ?? '') ?? _syncCursor;
+      final events = ((page['items'] as List?) ?? const <dynamic>[])
+          .whereType<Map>()
+          .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+          .toList(growable: false);
+      if (events.any(_syncEventMatches)) await _refreshDefinitionFromSync();
+      _deviceSyncTicks++;
+      if (_isDevice && _deviceSyncTicks % 8 == 0) await _refreshDefinitionFromSync();
+    } catch (_) {
+      // Keep the durable cursor and retry on the next tick.
+    } finally {
+      _syncBusy = false;
+    }
+  }
+
   Map<String, dynamic> _definition() {
     final out = Map<String, dynamic>.from(_workflow ?? <String, dynamic>{});
     out['nodes'] = _nodes;
@@ -173,19 +323,21 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     if (_workflow == null || _saving) return false;
     setState(() => _saving = true);
     try {
-      final validation = await ref.read(extensionServiceProvider).validateWorkflow(_definition());
-      if (validation['valid'] != true) {
-        throw StateError((validation['error'] ?? '工作流校验失败').toString());
+      if (!_isDevice) {
+        final validation = await ref.read(extensionServiceProvider).validateWorkflow(_definition(), target: _target);
+        if (validation['valid'] != true) {
+          throw StateError((validation['error'] ?? '工作流校验失败').toString());
+        }
       }
-      final saved = await ref.read(extensionServiceProvider).updateWorkflow(widget.workflowId, _definition());
+      final saved = await ref.read(extensionServiceProvider).updateWorkflow(widget.workflowId, _definition(), target: _target);
       _normalize(saved);
       if (!mounted) return true;
       setState(() {
         _saving = false;
         _dirty = false;
       });
-      await _loadRevisions();
-      if (notify) _show('已保存并通过 DAG 校验');
+      if (!_isDevice) await _loadRevisions();
+      if (notify) _show(_isDevice ? '已保存到目标设备' : '已保存并通过 DAG 校验');
       return true;
     } catch (error) {
       if (!mounted) return false;
@@ -196,8 +348,12 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   }
 
   Future<void> _validate() async {
+    if (_isDevice) {
+      _show('远程设备工作流由设备本地 Kernel 在保存/运行时校验');
+      return;
+    }
     try {
-      final result = await ref.read(extensionServiceProvider).validateWorkflow(_definition());
+      final result = await ref.read(extensionServiceProvider).validateWorkflow(_definition(), target: _target);
       if (result['valid'] == true) {
         final order = ((result['topologicalOrder'] as List?) ?? const <dynamic>[]).join(' → ');
         _show(order.isEmpty ? 'DAG 校验通过' : 'DAG 校验通过：$order');
@@ -212,7 +368,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   Future<void> _run() async {
     if (_dirty && !await _save(notify: false)) return;
     try {
-      final result = await ref.read(extensionServiceProvider).runWorkflow(widget.workflowId);
+      final result = await ref.read(extensionServiceProvider).runWorkflow(widget.workflowId, target: _target);
       final id = (result['executionId'] ?? '').toString();
       if (id.isEmpty) throw StateError('后端没有返回 executionId');
       setState(() {
@@ -222,8 +378,8 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         _stepAttempts = <Map<String, dynamic>>[];
         _checkpoints = <Map<String, dynamic>>[];
       });
-      _startPolling();
-      _show('工作流已开始运行');
+      if (!_isDevice) _startPolling();
+      _show(_isDevice ? '已提交到目标设备运行' : '工作流已开始运行');
     } catch (error) {
       _show('运行失败：${_message(error)}');
     }
@@ -239,7 +395,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     final id = _activeRunId;
     if (id == null || id.isEmpty || _disposed) return;
     try {
-      final detail = await ref.read(extensionServiceProvider).getWorkflowRun(id);
+      final detail = await ref.read(extensionServiceProvider).getWorkflowRun(id, target: _target);
       final run = _asMap(detail['run']);
       final steps = _asMapList(detail['stepRuns']);
       final attempts = _asMapList(detail['attempts']);
@@ -266,17 +422,18 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   bool _terminal(String status) => <String>{'succeeded', 'failed', 'cancelled', 'completed', 'compensated'}.contains(status.toLowerCase());
 
   Future<void> _loadRuns() async {
-    if (_workflow == null) return;
+    if (_workflow == null || _isDevice) return;
     try {
-      final result = await ref.read(extensionServiceProvider).workflowRuns(widget.workflowId, limit: 30);
+      final result = await ref.read(extensionServiceProvider).workflowRuns(widget.workflowId, limit: 30, target: _target);
       final items = _asMapList(result['items']);
       if (mounted) setState(() => _runHistory = items);
     } catch (_) {}
   }
 
   Future<void> _loadStats() async {
+    if (_isDevice) return;
     try {
-      final stats = await ref.read(extensionServiceProvider).workflowStats(widget.workflowId);
+      final stats = await ref.read(extensionServiceProvider).workflowStats(widget.workflowId, target: _target);
       if (mounted) setState(() => _workflowStats = stats);
     } catch (_) {}
   }
@@ -284,14 +441,14 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   Future<void> _pauseRun() async {
     final id = _activeRunId;
     if (id == null) return;
-    await ref.read(extensionServiceProvider).pauseWorkflowRun(id);
+    await ref.read(extensionServiceProvider).pauseWorkflowRun(id, target: _target);
     await _pollRun();
   }
 
   Future<void> _resumeRun() async {
     final id = _activeRunId;
     if (id == null) return;
-    await ref.read(extensionServiceProvider).resumeWorkflowRun(id);
+    await ref.read(extensionServiceProvider).resumeWorkflowRun(id, target: _target);
     await _pollRun();
   }
 
@@ -299,7 +456,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     final id = _activeRunId;
     if (id == null || !_terminal(_activeRunStatus) || _workflow?['enabled'] == false) return;
     try {
-      final result = await ref.read(extensionServiceProvider).rerunWorkflowRun(id);
+      final result = await ref.read(extensionServiceProvider).rerunWorkflowRun(id, target: _target);
       final newId = (result['executionId'] ?? '').toString();
       if (newId.isEmpty) throw StateError('后端没有返回 executionId');
       if (!mounted) return;
@@ -333,7 +490,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     );
     if (confirmed != true) return;
     try {
-      final result = await ref.read(extensionServiceProvider).recoverWorkflowRun(id);
+      final result = await ref.read(extensionServiceProvider).recoverWorkflowRun(id, target: _target);
       if (!mounted) return;
       setState(() => _activeRunStatus = (result['status'] ?? 'running').toString());
       _startPolling();
@@ -346,7 +503,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   Future<void> _cancelRun() async {
     final id = _activeRunId;
     if (id == null) return;
-    await ref.read(extensionServiceProvider).cancelWorkflowRun(id);
+    await ref.read(extensionServiceProvider).cancelWorkflowRun(id, target: _target);
     await _pollRun();
   }
 
@@ -446,6 +603,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       'targetId': '',
       'dependsOn': <dynamic>[],
       'runtime': <String, dynamic>{'runtimeType': _defaultRuntimeType(type), 'runtimeId': '', 'handlerName': '', 'metadata': <String, dynamic>{}},
+      'executionTarget': _isCloud
+          ? <String, dynamic>{'placement': 'cloud', 'deviceId': '', 'offlinePolicy': 'fail'}
+          : <String, dynamic>{'placement': 'local', 'offlinePolicy': 'fail'},
       'permissions': <dynamic>[],
       'position': <String, dynamic>{'x': 220.0 + (index % 5) * 80, 'y': 180.0 + (index % 6) * 80},
       'step': <String, dynamic>{
@@ -769,12 +929,13 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   }
 
   Future<void> _aiEdit() async {
+    if (_isDevice) { _show('远程设备工作流暂不提供云端 AI 编辑入口'); return; }
     if (_aiWorking || _workflow == null) return;
     final instruction = await _promptAI('AI 修改工作流', '例如：在天气节点后增加条件，只有下雨才通知；失败重试三次。');
     if (instruction == null || instruction.isEmpty || !await _ensureSavedForAI()) return;
     setState(() => _aiWorking = true);
     try {
-      final result = await ref.read(extensionServiceProvider).editWorkflowWithAI(widget.workflowId, instruction);
+      final result = await ref.read(extensionServiceProvider).editWorkflowWithAI(widget.workflowId, instruction, target: _target);
       _applyAIProposal(result);
       await _showAIProposalResult(result, 'AI 修改已应用到草稿');
     } catch (error) {
@@ -785,12 +946,13 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   }
 
   Future<void> _aiRepair() async {
+    if (_isDevice) { _show('远程设备工作流暂不提供云端 AI 修复入口'); return; }
     if (_aiWorking || _workflow == null) return;
     final instruction = await _promptAI('AI 修复工作流', '可选：描述当前问题；留空则自动检查并修复 DAG。', allowEmpty: true);
     if (instruction == null || !await _ensureSavedForAI()) return;
     setState(() => _aiWorking = true);
     try {
-      final result = await ref.read(extensionServiceProvider).repairWorkflowWithAI(widget.workflowId, instruction: instruction);
+      final result = await ref.read(extensionServiceProvider).repairWorkflowWithAI(widget.workflowId, instruction: instruction, target: _target);
       _applyAIProposal(result);
       await _showAIProposalResult(result, 'AI 修复已应用到草稿');
     } catch (error) {
@@ -801,12 +963,13 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   }
 
   Future<void> _aiExplain() async {
+    if (_isDevice) { _show('远程设备工作流暂不提供云端 AI 解释入口'); return; }
     if (_aiWorking || _workflow == null) return;
     final instruction = await _promptAI('AI 解释工作流', '可选：例如“重点解释失败路径和权限风险”。', allowEmpty: true);
     if (instruction == null || !await _ensureSavedForAI()) return;
     setState(() => _aiWorking = true);
     try {
-      final result = await ref.read(extensionServiceProvider).explainWorkflowWithAI(widget.workflowId, instruction: instruction);
+      final result = await ref.read(extensionServiceProvider).explainWorkflowWithAI(widget.workflowId, instruction: instruction, target: _target);
       if (!mounted) return;
       final flow = ((result['flow'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList();
       final issues = ((result['issues'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList();
@@ -842,8 +1005,12 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   }
 
   Future<void> _loadRevisions() async {
+    if (_isDevice) {
+      if (mounted) setState(() => _revisions = <Map<String, dynamic>>[]);
+      return;
+    }
     try {
-      final items = await ref.read(extensionServiceProvider).workflowRevisions(widget.workflowId, limit: 50);
+      final items = await ref.read(extensionServiceProvider).workflowRevisions(widget.workflowId, limit: 50, target: _target);
       if (mounted) setState(() => _revisions = items);
     } catch (_) {
       if (mounted) setState(() => _revisions = <Map<String, dynamic>>[]);
@@ -851,6 +1018,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   }
 
   Future<void> _createRevisionSnapshot() async {
+    if (_isDevice) { _show('远程设备工作流版本历史请在目标设备查看'); return; }
     if (_revisionBusy) return;
     if (_dirty && !await _save(notify: false)) return;
     final controller = TextEditingController();
@@ -869,7 +1037,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     if (note == null || !mounted) return;
     setState(() => _revisionBusy = true);
     try {
-      await ref.read(extensionServiceProvider).createWorkflowRevision(widget.workflowId, note: note);
+      await ref.read(extensionServiceProvider).createWorkflowRevision(widget.workflowId, note: note, target: _target);
       await _loadRevisions();
       _show('版本快照已保存');
     } catch (error) {
@@ -880,6 +1048,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   }
 
   Future<void> _rollbackRevision(Map<String, dynamic> item) async {
+    if (_isDevice) return;
     if (_revisionBusy) return;
     final revisionNo = (item['revisionNo'] ?? '').toString();
     final revisionId = (item['revisionId'] ?? '').toString();
@@ -899,7 +1068,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     if (!confirmed) return;
     setState(() => _revisionBusy = true);
     try {
-      final restored = await ref.read(extensionServiceProvider).rollbackWorkflowRevision(widget.workflowId, revisionId);
+      final restored = await ref.read(extensionServiceProvider).rollbackWorkflowRevision(widget.workflowId, revisionId, target: _target);
       _normalize(restored);
       await Future.wait(<Future<void>>[_loadRevisions(), _loadRuns()]);
       if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => _fitView());
@@ -912,6 +1081,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   }
 
   Future<void> _showRevisions() async {
+    if (_isDevice) { _show('远程设备工作流版本历史请在目标设备查看'); return; }
     await _loadRevisions();
     if (!mounted) return;
     await showModalBottomSheet<void>(
@@ -1079,7 +1249,26 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     final retryMaxBackoffMs = TextEditingController(text: _number(retryConfig['maxBackoffMs'], 30000).round().toString());
     final retryMultiplier = TextEditingController(text: _number(retryConfig['multiplier'], 2).toString());
     final retryJitter = TextEditingController(text: _number(retryConfig['jitter'], 0.2).toString());
-    final runtimeConfigurable = _needsRuntime((node['type'] ?? '').toString());
+    final nodeType = (node['type'] ?? '').toString();
+    final runtimeConfigurable = _needsRuntime(nodeType);
+    final executionTarget = _asMap(node['executionTarget']);
+    var executionPlacement = _isCloud ? (executionTarget['placement'] ?? 'cloud').toString() : 'local';
+    if (_isCloud && !<String>{'cloud', 'device', 'auto'}.contains(executionPlacement)) executionPlacement = 'cloud';
+    var executionDeviceId = (executionTarget['deviceId'] ?? '').toString();
+    var offlinePolicy = <String>{'fail', 'wait'}.contains((executionTarget['offlinePolicy'] ?? '').toString())
+        ? executionTarget['offlinePolicy'].toString()
+        : 'fail';
+    var nestedWorkflows = List<Map<String, dynamic>>.from(_ownedWorkflows);
+    if (_isCloud && nodeType == 'nested_workflow' && executionPlacement == 'device' && executionDeviceId.isNotEmpty) {
+      try {
+        nestedWorkflows = await ref.read(extensionServiceProvider).workflows(
+              limit: 200,
+              target: WorkflowApiTarget.device(executionDeviceId),
+            );
+      } catch (_) {
+        nestedWorkflows = <Map<String, dynamic>>[];
+      }
+    }
     var delete = false;
     final applied = await showModalBottomSheet<bool>(
       context: context,
@@ -1111,20 +1300,102 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                       children: [
                         TextField(controller: label, decoration: const InputDecoration(labelText: '显示名称')),
                         const SizedBox(height: 10),
-                        if ((node['type'] ?? '').toString() == 'nested_workflow')
+                        if (_isCloud && _supportsExecutionTarget(nodeType)) ...[
+                          Text('执行位置', style: Theme.of(context).textTheme.titleSmall),
+                          const SizedBox(height: 8),
                           DropdownButtonFormField<String>(
-                            initialValue: _ownedWorkflows.any((item) => (item['id'] ?? '').toString() == target.text) ? target.text : null,
+                            initialValue: executionPlacement,
+                            decoration: const InputDecoration(labelText: 'Placement'),
+                            items: <DropdownMenuItem<String>>[
+                              const DropdownMenuItem(value: 'cloud', child: Text('云端')),
+                              if (nodeType != 'nested_workflow') const DropdownMenuItem(value: 'auto', child: Text('自动选择设备')),
+                              const DropdownMenuItem(value: 'device', child: Text('指定设备')),
+                            ],
+                            onChanged: (value) async {
+                              final next = value ?? 'cloud';
+                              setSheetState(() {
+                                executionPlacement = next;
+                                if (next != 'device') executionDeviceId = '';
+                                if (nodeType == 'nested_workflow') {
+                                  nestedWorkflows = List<Map<String, dynamic>>.from(_ownedWorkflows);
+                                  target.text = '';
+                                }
+                              });
+                            },
+                          ),
+                          if (executionPlacement == 'device') ...[
+                            const SizedBox(height: 10),
+                            DropdownButtonFormField<String>(
+                              initialValue: _devices.any((item) => (item['deviceId'] ?? '').toString() == executionDeviceId) ? executionDeviceId : null,
+                              decoration: const InputDecoration(labelText: '目标设备'),
+                              hint: const Text('选择账号下设备'),
+                              items: _devices.map((item) {
+                                final id = (item['deviceId'] ?? '').toString();
+                                final labelText = (item['label'] ?? item['name'] ?? id).toString();
+                                final online = item['online'] == true;
+                                return DropdownMenuItem<String>(value: id, child: Text('$labelText${online ? '' : ' · 离线'}', overflow: TextOverflow.ellipsis));
+                              }).toList(growable: false),
+                              onChanged: (value) async {
+                                final next = value ?? '';
+                                setSheetState(() {
+                                  executionDeviceId = next;
+                                  if (nodeType == 'nested_workflow') {
+                                    nestedWorkflows = <Map<String, dynamic>>[];
+                                    target.text = '';
+                                  }
+                                });
+                                if (nodeType == 'nested_workflow' && next.isNotEmpty) {
+                                  try {
+                                    final items = await ref.read(extensionServiceProvider).workflows(
+                                          limit: 200,
+                                          target: WorkflowApiTarget.device(next),
+                                        );
+                                    if (context.mounted) setSheetState(() => nestedWorkflows = items);
+                                  } catch (_) {
+                                    if (context.mounted) setSheetState(() => nestedWorkflows = <Map<String, dynamic>>[]);
+                                  }
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                            DropdownButtonFormField<String>(
+                              initialValue: offlinePolicy,
+                              decoration: const InputDecoration(labelText: '设备离线时'),
+                              items: const [
+                                DropdownMenuItem(value: 'fail', child: Text('失败')),
+                                DropdownMenuItem(value: 'wait', child: Text('等待设备上线')),
+                              ],
+                              onChanged: (value) => setSheetState(() => offlinePolicy = value ?? 'fail'),
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                        ] else if (!_isCloud) ...[
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.memory_outlined),
+                            title: const Text('执行位置'),
+                            subtitle: Text(_isDevice ? '目标设备本地 Runtime' : '当前设备本地 Runtime'),
+                          ),
+                        ],
+                        if (nodeType == 'nested_workflow')
+                          DropdownButtonFormField<String>(
+                            key: ValueKey<String>('nested-$executionPlacement-$executionDeviceId-${nestedWorkflows.length}'),
+                            initialValue: nestedWorkflows.any((item) => (item['id'] ?? item['workflowId'] ?? '').toString() == target.text) ? target.text : null,
                             decoration: const InputDecoration(labelText: '子工作流'),
-                            hint: const Text('选择我的另一个工作流'),
-                            items: _ownedWorkflows
-                                .map((item) => DropdownMenuItem<String>(value: (item['id'] ?? '').toString(), child: Text((item['name'] ?? item['id'] ?? '').toString(), overflow: TextOverflow.ellipsis)))
+                            hint: Text(executionPlacement == 'device' ? '选择该设备上的本地工作流' : '选择我的另一个工作流'),
+                            items: nestedWorkflows
+                                .map((item) {
+                                  final id = (item['id'] ?? item['workflowId'] ?? '').toString();
+                                  return DropdownMenuItem<String>(value: id, child: Text((item['name'] ?? id).toString(), overflow: TextOverflow.ellipsis));
+                                })
+                                .where((item) => item.value?.isNotEmpty == true)
                                 .toList(growable: false),
                             onChanged: (value) => setSheetState(() => target.text = value ?? ''),
                           )
                         else
                           TextField(controller: target, decoration: const InputDecoration(labelText: 'Target ID')),
                         const SizedBox(height: 10),
-                        if (runtimeConfigurable) ...[
+                        if (runtimeConfigurable && (!_isCloud || executionPlacement == 'cloud')) ...[
                           TextField(controller: runtimeType, decoration: const InputDecoration(labelText: 'Runtime Type')),
                           const SizedBox(height: 10),
                           TextField(controller: runtimeId, decoration: const InputDecoration(labelText: 'Runtime ID')),
@@ -1270,9 +1541,25 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
               'jitter': jitter,
             };
           }
+          if (_isCloud && executionPlacement == 'device' && executionDeviceId.isEmpty) {
+            throw const FormatException('指定设备执行时必须选择目标设备');
+          }
+          if (nodeType == 'nested_workflow' && target.text.trim().isEmpty) {
+            throw const FormatException('Nested Workflow 必须选择目标工作流');
+          }
           setState(() {
             node['label'] = label.text.trim().isEmpty ? (node['type'] ?? 'Node').toString() : label.text.trim();
             node['targetId'] = target.text.trim();
+            node['executionTarget'] = _isCloud
+                ? <String, dynamic>{
+                    'placement': executionPlacement,
+                    'deviceId': executionPlacement == 'device' ? executionDeviceId : '',
+                    'runtimeId': '',
+                    'providerId': '',
+                    'providerInstanceId': '',
+                    'offlinePolicy': executionPlacement == 'device' ? offlinePolicy : 'fail',
+                  }
+                : <String, dynamic>{'placement': 'local', 'offlinePolicy': 'fail'};
             node['runtime'] = <String, dynamic>{
               ...runtime,
               'runtimeType': runtimeConfigurable ? runtimeType.text.trim() : (runtime['runtimeType'] ?? '').toString(),
@@ -1308,6 +1595,8 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       controller.dispose();
     }
   }
+
+  static bool _supportsExecutionTarget(String type) => const <String>{'tool', 'mcp', 'task', 'javascript', 'wasm', 'trusted_service', 'nested_workflow'}.contains(type);
 
   static bool _needsRuntime(String type) => const <String>{'mcp', 'task', 'javascript', 'wasm', 'trusted_service'}.contains(type);
 
@@ -1724,8 +2013,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   }
 
   Future<void> _showSafetyAnalysis() async {
+    if (_isDevice) { _show('远程设备工作流的安全分析在设备本地执行'); return; }
     try {
-      final analysis = await ref.read(extensionServiceProvider).workflowAnalysis(widget.workflowId);
+      final analysis = await ref.read(extensionServiceProvider).workflowAnalysis(widget.workflowId, target: _target);
       if (!mounted) return;
       final permissions = ((analysis['declaredPermissions'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList(growable: false);
       final secrets = ((analysis['secretReferences'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).toList(growable: false);
@@ -1784,6 +2074,8 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Flexible(child: Text((_workflow?['name'] ?? '工作流').toString(), overflow: TextOverflow.ellipsis, style: AppTypography.pageTitle(context))),
+              const SizedBox(width: 6),
+              Text(_locationLabel, style: AppTypography.caption(context)),
               if (_dirty) Padding(padding: const EdgeInsets.only(left: 6), child: Icon(Icons.circle, size: 7, color: context.warning)),
             ],
           ),
@@ -1830,17 +2122,17 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                   break;
               }
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'ai_edit', child: ListTile(leading: Icon(Icons.auto_awesome_outlined), title: Text('AI 修改工作流'))),
-              PopupMenuItem(value: 'ai_repair', child: ListTile(leading: Icon(Icons.build_circle_outlined), title: Text('AI 修复工作流'))),
-              PopupMenuItem(value: 'ai_explain', child: ListTile(leading: Icon(Icons.psychology_alt_outlined), title: Text('AI 解释工作流'))),
-              PopupMenuItem(value: 'settings', child: ListTile(leading: Icon(Icons.settings_outlined), title: Text('工作流设置'))),
-              PopupMenuItem(value: 'triggers', child: ListTile(leading: Icon(Icons.bolt_outlined), title: Text('Trigger Center'))),
-              PopupMenuItem(value: 'edges', child: ListTile(leading: Icon(Icons.route_outlined), title: Text('连线配置'))),
-              PopupMenuItem(value: 'runs', child: ListTile(leading: Icon(Icons.timeline_outlined), title: Text('Execution Trace'))),
-              PopupMenuItem(value: 'versions', child: ListTile(leading: Icon(Icons.history_outlined), title: Text('版本历史'))),
-              PopupMenuItem(value: 'security', child: ListTile(leading: Icon(Icons.security_outlined), title: Text('权限与风险摘要'))),
-              PopupMenuItem(value: 'layout', child: ListTile(leading: Icon(Icons.auto_fix_high_outlined), title: Text('自动布局'))),
+            itemBuilder: (context) => <PopupMenuEntry<String>>[
+              if (!_isDevice) const PopupMenuItem(value: 'ai_edit', child: ListTile(leading: Icon(Icons.auto_awesome_outlined), title: Text('AI 修改工作流'))),
+              if (!_isDevice) const PopupMenuItem(value: 'ai_repair', child: ListTile(leading: Icon(Icons.build_circle_outlined), title: Text('AI 修复工作流'))),
+              if (!_isDevice) const PopupMenuItem(value: 'ai_explain', child: ListTile(leading: Icon(Icons.psychology_alt_outlined), title: Text('AI 解释工作流'))),
+              const PopupMenuItem(value: 'settings', child: ListTile(leading: Icon(Icons.settings_outlined), title: Text('工作流设置'))),
+              const PopupMenuItem(value: 'triggers', child: ListTile(leading: Icon(Icons.bolt_outlined), title: Text('Trigger Center'))),
+              const PopupMenuItem(value: 'edges', child: ListTile(leading: Icon(Icons.route_outlined), title: Text('连线配置'))),
+              if (!_isDevice) const PopupMenuItem(value: 'runs', child: ListTile(leading: Icon(Icons.timeline_outlined), title: Text('Execution Trace'))),
+              if (!_isDevice) const PopupMenuItem(value: 'versions', child: ListTile(leading: Icon(Icons.history_outlined), title: Text('版本历史'))),
+              if (!_isDevice) const PopupMenuItem(value: 'security', child: ListTile(leading: Icon(Icons.security_outlined), title: Text('权限与风险摘要'))),
+              const PopupMenuItem(value: 'layout', child: ListTile(leading: Icon(Icons.auto_fix_high_outlined), title: Text('自动布局'))),
             ],
           ),
         ],
