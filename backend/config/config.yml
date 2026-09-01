@@ -25,10 +25,11 @@ desktopPetRuntime:
 
 security:
   mode: "local_single_user"
-  localToken: "local-dev-token-amitia-20260831-secure"
+  localToken: ""
   localTokenFile: "security/local-token"
   allowedOrigins:
     - "http://localhost:5178"
+    - "http://127.0.0.1:5178"
 
 providers:
   scriptRuntime:
