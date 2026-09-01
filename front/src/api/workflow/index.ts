@@ -43,6 +43,18 @@ export interface WorkflowDeviceDescriptor {
   online: boolean;
   lastSeenAt?: string;
 }
+export interface WorkflowTriggerCapabilityStatus {
+  id: string;
+  supported: boolean;
+  available: boolean;
+  permissionRequired: boolean;
+  permission?: string;
+  reason?: string;
+  updatedAt?: string;
+}
+export interface WorkflowTriggerAppCatalogItem { packageName: string; label: string }
+export interface WorkflowTriggerWakeConfigItem { id: string; name: string; backend: string }
+export interface WorkflowTaskerSecret { secretRef: string; secret: string }
 export interface WorkflowOnError { mode?: string; default?: unknown }
 export interface WorkflowNodeRetryPolicy { maxAttempts?: number; initialBackoffMs?: number; maxBackoffMs?: number; multiplier?: number; jitter?: number }
 export interface WorkflowStepInput { input?: unknown; when?: unknown; onError: WorkflowOnError }
@@ -236,6 +248,45 @@ export function workflowTargetFromQuery(query: Record<string, unknown>): Workflo
 export async function listWorkflowDevices(): Promise<WorkflowDeviceDescriptor[]> {
   const res = await apiClient.get<{ items: WorkflowDeviceDescriptor[] }>("/api/extensions/workflow-devices");
   return res.data.items ?? [];
+}
+
+export async function getWorkflowTriggerCapabilities(target: WorkflowTarget): Promise<WorkflowTriggerCapabilityStatus[]> {
+  const value = normalizeTarget(target);
+  let url = "";
+  if (value.location === "local") url = "/api/local/workflows/trigger-capabilities";
+  else if (value.location === "device") url = `/api/extensions/workflow-devices/${encodeURIComponent(String(value.deviceId))}/trigger-capabilities`;
+  else return [];
+  const res = await apiClient.get<{ items: WorkflowTriggerCapabilityStatus[] }>(url, { headers: { "Cache-Control": "no-cache" } });
+  return res.data.items ?? [];
+}
+
+export async function getWorkflowTriggerAppCatalog(target: WorkflowTarget): Promise<WorkflowTriggerAppCatalogItem[]> {
+  const value = normalizeTarget(target);
+  let url = "";
+  if (value.location === "local") url = "/api/local/workflows/trigger-app-catalog";
+  else if (value.location === "device") url = `/api/extensions/workflow-devices/${encodeURIComponent(String(value.deviceId))}/trigger-app-catalog`;
+  else return [];
+  const res = await apiClient.get<{ items: WorkflowTriggerAppCatalogItem[] }>(url, { headers: { "Cache-Control": "no-cache" } });
+  return res.data.items ?? [];
+}
+
+export async function getWorkflowTriggerWakeConfigs(target: WorkflowTarget): Promise<WorkflowTriggerWakeConfigItem[]> {
+  const value = normalizeTarget(target);
+  let url = "";
+  if (value.location === "local") url = "/api/local/workflows/trigger-wake-configs";
+  else if (value.location === "device") url = `/api/extensions/workflow-devices/${encodeURIComponent(String(value.deviceId))}/trigger-wake-configs`;
+  else return [];
+  const res = await apiClient.get<{ items: WorkflowTriggerWakeConfigItem[] }>(url, { headers: { "Cache-Control": "no-cache" } });
+  return res.data.items ?? [];
+}
+
+export async function createWorkflowTaskerSecret(target: WorkflowTarget): Promise<WorkflowTaskerSecret> {
+  const value = normalizeTarget(target);
+  let url = "";
+  if (value.location === "local") url = "/api/local/workflows/trigger-secrets/tasker";
+  else if (value.location === "device") url = `/api/extensions/workflow-devices/${encodeURIComponent(String(value.deviceId))}/trigger-secrets/tasker`;
+  else throw new Error("Tasker trigger secret requires a local or device workflow target");
+  return (await apiClient.post<WorkflowTaskerSecret>(url, {})).data;
 }
 
 export async function listWorkflowSyncEvents(target: WorkflowTarget = CLOUD_TARGET, afterCursor?: number): Promise<WorkflowSyncPage> {

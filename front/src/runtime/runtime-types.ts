@@ -52,6 +52,15 @@ export interface SaveExtensionPackageRequest {
   base64: string;
 }
 
+export interface LocalVoiceASRFinalEvent {
+  eventId: string;
+  transcript: string;
+  sessionId?: string;
+  conversationId?: string;
+  characterId?: string;
+  occurredAt?: string;
+}
+
 export interface AmitiaDesktopAPI {
   getEnvironment(): Promise<DesktopEnvironment>;
   getDeploymentConfig(): Promise<DeploymentModeConfig>;
@@ -117,6 +126,7 @@ export interface AmitiaDesktopAPI {
   onUpdateError(callback: (event: unknown, data: unknown) => void): () => void;
   setAuthToken(token: string): Promise<void>;
   getBackendAuthHeaders(): Promise<Record<string, string>>;
+  publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }>;
   getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null>;
   getMeshStatus(): Promise<{ state: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null>;
   onUINavigate(callback: (target: string) => void): () => void;
