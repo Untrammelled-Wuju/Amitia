@@ -2286,6 +2286,18 @@ var schemaMigrations = []string{
 		PRIMARY KEY(owner_user_id, device_id, workflow_id)
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_device_catalog_seen ON extension_workflow_device_catalog(owner_user_id, device_id, last_seen DESC)`,
+	`ALTER TABLE extension_workflow_trigger_bindings ADD COLUMN config_json TEXT NOT NULL DEFAULT '{}'`,
+	`CREATE TABLE IF NOT EXISTS extension_workflow_trigger_receipts (
+		event_id TEXT NOT NULL,
+		binding_id TEXT NOT NULL,
+		invocation_id TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'claimed',
+		occurred_at DATETIME NOT NULL,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY(event_id, binding_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_trigger_receipts_updated ON extension_workflow_trigger_receipts(updated_at)`,
 }
 
 type dbExecutor interface {
@@ -2437,6 +2449,7 @@ type columnAddition struct {
 
 var schemaColumnAdditions = []columnAddition{
 	{"extension_workflow_definitions", "edges_json", "TEXT NOT NULL DEFAULT '[]'"},
+	{"extension_workflow_trigger_bindings", "config_json", "TEXT NOT NULL DEFAULT '{}'"},
 	{"extension_workflow_definitions", "triggers_json", "TEXT NOT NULL DEFAULT '[]'"},
 	{"extension_event_deliveries", "subscription_generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_event_deliveries", "target_generation", "INTEGER NOT NULL DEFAULT 0"},
