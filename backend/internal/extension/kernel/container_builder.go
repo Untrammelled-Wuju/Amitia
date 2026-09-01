@@ -393,8 +393,26 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	workflowRegistry := workflow.NewWorkflowRegistry()
 	workflowDefRepo := sqlite.NewWorkflowDefinitionRepository(db)
+	workflowInstallationRepo := sqlite.NewWorkflowInstallationRepository(db)
+	workflowDeviceCatalogRepo := sqlite.NewWorkflowDeviceCatalogRepository(db)
 	workflowRegistry.SetDefinitionStore(workflowDefRepo)
 	_ = workflowRegistry.LoadFromStore(ctx)
+	legacyWorkflowLocation := workflow.WorkflowLocationLocal
+	if b.runtimeProfile == runtimeprofile.ProfileCloudCore {
+		legacyWorkflowLocation = workflow.WorkflowLocationCloud
+	}
+	for _, def := range workflowRegistry.List(workflow.WorkflowFilter{}) {
+		if def.Source != "user" || def.Metadata == nil {
+			continue
+		}
+		ownerUserID := strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"]))
+		if ownerUserID == "" {
+			continue
+		}
+		if _, ensureErr := workflowInstallationRepo.EnsureLegacy(ctx, def, ownerUserID, legacyWorkflowLocation); ensureErr != nil {
+			return nil, fmt.Errorf("migrate workflow installation %s: %w", def.ID, ensureErr)
+		}
+	}
 	workflowExecutor := workflow.NewWorkflowExecutor(workflowRegistry)
 	workflowExecutor.SetCheckpointStore(sqlite.NewSQLiteCheckpointStore(db))
 	workflowExecutor.SetCompensationManager(workflow.NewCompensationManager())
@@ -637,6 +655,37 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if err := eventSvc.RegisterDefaultEventTypes(ctx); err != nil {
 			return nil, fmt.Errorf("kernel: register default event types: %w", err)
 		}
+		workflowExecutor.SetRunLifecycleSink(func(eventCtx context.Context, lifecycle workflow.WorkflowRunLifecycleEvent) {
+			typeID := event.EventTypeID("workflow.run.updated")
+			switch lifecycle.Type {
+			case "started":
+				typeID = "workflow.run.started"
+			case "finished":
+				typeID = "workflow.run.finished"
+			}
+			payload, marshalErr := json.Marshal(map[string]any{
+				"workflowId":     lifecycle.WorkflowID,
+				"executionId":    lifecycle.ExecutionID,
+				"installationId": lifecycle.InstallationID,
+				"deviceId":       lifecycle.DeviceID,
+				"status":         lifecycle.Status,
+				"generation":     lifecycle.Generation,
+				"error":          lifecycle.Error,
+				"timestamp":      lifecycle.Timestamp,
+			})
+			if marshalErr != nil {
+				return
+			}
+			_, _ = eventSvc.Publish(eventCtx, typeID, 1, payload, event.PublishOptions{
+				ProducerID:    "host",
+				ProducerType:  event.EventProducerTypeSystem,
+				Domain:        event.EventDomainSync,
+				AggregateType: "workflow_run",
+				AggregateID:   lifecycle.ExecutionID,
+				PartitionKey:  lifecycle.UserID,
+				OrderingKey:   lifecycle.UserID,
+			})
+		})
 		eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher(), enablementResolver, instRepo)
 		if err := eventSvc.SetEffectiveResolver(eventResolver); err != nil {
 			return nil, fmt.Errorf("kernel: set event effective resolver: %w", err)
@@ -824,6 +873,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	capabilityResolver.SetAvailability(runtimeAvailabilityAdapter)
 
 	capabilityService := capability.NewCapabilityService(capabilityProviderRegistry)
+	capabilityService.SetResolver(capabilityResolver)
 
 	builtinCatalog := builtin.NewCatalog()
 	builtinHandlerRegistry := builtin.NewHandlerRegistry()
@@ -1092,7 +1142,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := registerDeepSearchSystemTask(ctx, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
 		return nil, fmt.Errorf("kernel: register deep search system task: %w", err)
 	}
-	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry)
+	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry, NewWorkflowExecutionRouter(capabilityService, toolRegistry, taskRuntimeService))
 
 	if b.host != nil && b.androidLinuxProvider != nil {
 		if err := registerTerminalTools(b.host, b.androidLinuxProvider, toolRegistry); err != nil {
@@ -1503,15 +1553,17 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			}
 			return snapshot.SnapshotID, nil
 		},
-		AgentSkillCatalog:      agentSkillCatalog,
-		WorkflowRegistry:       workflowRegistry,
-		WorkflowExecutor:       workflowExecutor,
-		WorkflowTriggerManager: workflowTriggerManager,
-		WorkflowDefRepo:        workflowDefRepo,
-		WorkflowExecRepo:       workflowExecRepo,
-		WorkflowModelGenerator: b.workshopModelGenerator,
-		EnablementService:      enablementService,
-		EnablementResolver:     enablementResolver,
+		AgentSkillCatalog:         agentSkillCatalog,
+		WorkflowRegistry:          workflowRegistry,
+		WorkflowExecutor:          workflowExecutor,
+		WorkflowTriggerManager:    workflowTriggerManager,
+		WorkflowDefRepo:           workflowDefRepo,
+		WorkflowInstallationRepo:  workflowInstallationRepo,
+		WorkflowDeviceCatalogRepo: workflowDeviceCatalogRepo,
+		WorkflowExecRepo:          workflowExecRepo,
+		WorkflowModelGenerator:    b.workshopModelGenerator,
+		EnablementService:         enablementService,
+		EnablementResolver:        enablementResolver,
 
 		ToolRegistry:    toolRegistry,
 		AdapterRegistry: adapterRegistry,

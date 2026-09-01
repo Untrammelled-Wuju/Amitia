@@ -9,15 +9,16 @@ import (
 type RunStatus string
 
 const (
-	RunStatusRunning      RunStatus = "running"
-	RunStatusPausing      RunStatus = "pausing"
-	RunStatusPaused       RunStatus = "paused"
-	RunStatusResuming     RunStatus = "resuming"
-	RunStatusSucceeded    RunStatus = "succeeded"
-	RunStatusFailed       RunStatus = "failed"
-	RunStatusCancelled    RunStatus = "cancelled"
-	RunStatusCompensating RunStatus = "compensating"
-	RunStatusCompensated  RunStatus = "compensated"
+	RunStatusRunning       RunStatus = "running"
+	RunStatusPausing       RunStatus = "pausing"
+	RunStatusPaused        RunStatus = "paused"
+	RunStatusResuming      RunStatus = "resuming"
+	RunStatusWaitingDevice RunStatus = "waiting_device"
+	RunStatusSucceeded     RunStatus = "succeeded"
+	RunStatusFailed        RunStatus = "failed"
+	RunStatusCancelled     RunStatus = "cancelled"
+	RunStatusCompensating  RunStatus = "compensating"
+	RunStatusCompensated   RunStatus = "compensated"
 )
 
 func (s RunStatus) IsTerminal() bool {
@@ -126,4 +127,11 @@ type RunStore interface {
 	Get(ctx context.Context, executionID string) (*WorkflowRun, error)
 	ListRecoverable(ctx context.Context, limit int) ([]WorkflowRun, error)
 	UpdateStateCAS(ctx context.Context, run WorkflowRun, expectedStatus RunStatus) (bool, error)
+}
+
+// WaitingDeviceRunStore is an optional durable extension used only by distributed
+// workflow resume. It keeps the base RunStore interface compatible with memory
+// stores and older tests.
+type WaitingDeviceRunStore interface {
+	ListWaitingDevice(ctx context.Context, userID, deviceID string, limit int) ([]WorkflowRun, error)
 }

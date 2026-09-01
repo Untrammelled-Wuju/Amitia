@@ -2251,6 +2251,41 @@ var schemaMigrations = []string{
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_attempts_execution ON extension_workflow_step_attempts(execution_id, node_id, generation, attempt)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_attempts_workflow ON extension_workflow_step_attempts(workflow_id, started_at DESC)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_workflow_installations (
+		installation_id TEXT PRIMARY KEY,
+		workflow_id TEXT NOT NULL,
+		owner_user_id TEXT NOT NULL,
+		location TEXT NOT NULL,
+		host_device_id TEXT NOT NULL DEFAULT '',
+		enabled INTEGER NOT NULL DEFAULT 0,
+		triggers_json TEXT NOT NULL DEFAULT '[]',
+		callable_by_agent INTEGER NOT NULL DEFAULT 0,
+		agent_tool_json TEXT NOT NULL DEFAULT '{}',
+		revision INTEGER NOT NULL DEFAULT 1,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		UNIQUE(owner_user_id, workflow_id, location, host_device_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_install_owner_location ON extension_workflow_installations(owner_user_id, location, updated_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_install_workflow ON extension_workflow_installations(workflow_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_install_device ON extension_workflow_installations(owner_user_id, host_device_id, updated_at DESC)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_workflow_device_catalog (
+		owner_user_id TEXT NOT NULL,
+		device_id TEXT NOT NULL,
+		workflow_id TEXT NOT NULL,
+		name TEXT NOT NULL,
+		description TEXT NOT NULL DEFAULT '',
+		input_schema_json TEXT NOT NULL DEFAULT '{}',
+		output_schema_json TEXT NOT NULL DEFAULT '{}',
+		version TEXT NOT NULL DEFAULT '',
+		enabled INTEGER NOT NULL DEFAULT 0,
+		updated_at DATETIME NOT NULL,
+		last_seen DATETIME NOT NULL,
+		PRIMARY KEY(owner_user_id, device_id, workflow_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_device_catalog_seen ON extension_workflow_device_catalog(owner_user_id, device_id, last_seen DESC)`,
 }
 
 type dbExecutor interface {

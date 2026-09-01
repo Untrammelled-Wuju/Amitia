@@ -422,16 +422,20 @@ func ValidateResolvedTaskExecutionTarget(
 				"device execution requires runtimeId",
 			)
 		}
-		if target.RuntimeSessionID == "" {
+		// RuntimeSessionID/ConnectionGeneration are transient connection bindings.
+		// A durable resolved target only needs the stable provider + device +
+		// runtime identity; MeshRemoteTaskExecutor resolves the current session at
+		// dispatch time and recovery deliberately clears stale session bindings.
+		if target.RuntimeSessionID != "" && target.ConnectionGeneration < 1 {
 			return NewTaskError(
 				ErrTaskRuntimeSessionBindingInvalid,
-				"device execution requires runtimeSessionId",
+				"device runtime session requires connectionGeneration >= 1",
 			)
 		}
-		if target.ConnectionGeneration < 1 {
+		if target.ConnectionGeneration > 0 && target.RuntimeSessionID == "" {
 			return NewTaskError(
 				ErrTaskRuntimeSessionBindingInvalid,
-				"device execution requires connectionGeneration >= 1",
+				"device connection generation requires runtimeSessionId",
 			)
 		}
 		return nil

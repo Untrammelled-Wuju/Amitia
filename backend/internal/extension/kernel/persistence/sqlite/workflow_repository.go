@@ -119,6 +119,7 @@ func (r *WorkflowDefinitionRepository) Delete(ctx context.Context, workflowID st
 	statements := []string{`DELETE FROM extension_workflow_trigger_bindings WHERE workflow_id = ?`}
 	if source == "user" {
 		statements = append(statements,
+			`DELETE FROM extension_workflow_installations WHERE workflow_id = ?`,
 			`DELETE FROM extension_workflow_compensations WHERE execution_id IN (SELECT execution_id FROM extension_workflow_executions WHERE workflow_id = ?)`,
 			`DELETE FROM extension_workflow_step_attempts WHERE workflow_id = ?`,
 			`DELETE FROM extension_workflow_step_runs WHERE workflow_id = ?`,
@@ -831,6 +832,44 @@ func (r *WorkflowExecutionRepository) getByIdempotency(ctx context.Context, work
 			started_at, finished_at, updated_at
 		FROM extension_workflow_executions WHERE workflow_id = ? AND idempotency_key = ?
 	`, workflowID, idempotencyKey))
+}
+
+func (r *WorkflowExecutionRepository) ListWaitingDevice(ctx context.Context, userID, deviceID string, limit int) ([]workflow.WorkflowRun, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT execution_id, workflow_id, status, input_json, output_json, error_message,
+			context_json, steps_json, compensation_json, attempt, generation,
+			pause_reason, pause_requested_at, paused_at,
+			started_at, finished_at, updated_at
+		FROM extension_workflow_executions
+		WHERE status = ?
+		ORDER BY updated_at ASC LIMIT ?
+	`, workflow.RunStatusWaitingDevice, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list waiting-device workflow executions: %w", err)
+	}
+	defer rows.Close()
+
+	wantedUser := strings.TrimSpace(userID)
+	wantedDevice := strings.TrimSpace(deviceID)
+	result := make([]workflow.WorkflowRun, 0)
+	for rows.Next() {
+		run, scanErr := r.scanRun(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		if wantedUser != "" && strings.TrimSpace(run.Context.UserID) != wantedUser {
+			continue
+		}
+		reason := strings.TrimSpace(strings.TrimPrefix(run.PauseReason, "waiting_device:"))
+		if wantedDevice != "" && reason != "" && reason != wantedDevice {
+			continue
+		}
+		result = append(result, *run)
+	}
+	return result, rows.Err()
 }
 
 func (r *WorkflowExecutionRepository) ListRecoverable(ctx context.Context, limit int) ([]workflow.WorkflowRun, error) {

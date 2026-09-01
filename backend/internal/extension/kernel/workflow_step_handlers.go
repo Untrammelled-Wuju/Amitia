@@ -13,6 +13,7 @@ import (
 
 type workflowToolStepHandler struct {
 	kernel execution.ExecutionSecurityKernel
+	router *WorkflowExecutionRouter
 }
 
 func (h workflowToolStepHandler) Execute(ctx context.Context, node workflow.WorkflowNode, input json.RawMessage) (json.RawMessage, error) {
@@ -31,16 +32,25 @@ func (h workflowToolStepHandler) Execute(ctx context.Context, node workflow.Work
 		return nil, fmt.Errorf("workflow tool target missing")
 	}
 	invocationID := fmt.Sprintf("%s/%s", execCtx.InvocationID, node.ID)
+	invocation := workflowInvocation(execCtx, invocationID)
+	if node.ExecutionTarget.Placement != "" {
+		resolved, err := h.router.ResolveNode(ctx, node, execCtx)
+		if err != nil {
+			return nil, err
+		}
+		invocation.ExecutionTarget = resolved.InvocationTarget
+	}
 	result := h.kernel.Execute(ctx, execution.ToolExecutionRequest{
 		ToolID:     capability.CapabilityID(targetID),
 		Input:      input,
-		Invocation: workflowInvocation(execCtx, invocationID),
+		Invocation: invocation,
 	})
 	return workflowStepOutput(result)
 }
 
 type workflowRuntimeStepHandler struct {
 	registry    *capability.RuntimeAdapterRegistry
+	router      *WorkflowExecutionRouter
 	runtimeType capability.RuntimeType
 }
 
@@ -59,12 +69,31 @@ func (h workflowRuntimeStepHandler) Execute(ctx context.Context, node workflow.W
 	if binding.RuntimeID == "" {
 		binding.RuntimeID = node.TargetID
 	}
+	invocationID := fmt.Sprintf("%s/%s", execCtx.InvocationID, node.ID)
+	invocation := workflowInvocation(execCtx, invocationID)
+	if node.ExecutionTarget.Placement != "" {
+		resolved, err := h.router.ResolveNode(ctx, node, execCtx)
+		if err != nil {
+			return nil, err
+		}
+		invocation.ExecutionTarget = resolved.InvocationTarget
+		adapter, ok := h.registry.ResolveRoute(resolved.Route)
+		if !ok {
+			return nil, fmt.Errorf("workflow runtime adapter not found for resolved target: %s", resolved.Route.Binding.RuntimeType)
+		}
+		var result capability.UnifiedToolResult
+		if routed, ok := adapter.(capability.RoutedRuntimeAdapter); ok {
+			result = routed.ExecuteRoute(ctx, resolved.Route, invocation, input)
+		} else {
+			result = adapter.Execute(ctx, resolved.Route.Binding, invocation, input)
+		}
+		return workflowStepOutput(result)
+	}
 	adapter, ok := h.registry.Resolve(binding)
 	if !ok {
 		return nil, fmt.Errorf("workflow runtime adapter not found: %s", binding.RuntimeType)
 	}
-	invocationID := fmt.Sprintf("%s/%s", execCtx.InvocationID, node.ID)
-	result := adapter.Execute(ctx, binding, workflowInvocation(execCtx, invocationID), input)
+	result := adapter.Execute(ctx, binding, invocation, input)
 	return workflowStepOutput(result)
 }
 
@@ -133,8 +162,8 @@ func workflowStepOutput(result capability.UnifiedToolResult) (json.RawMessage, e
 	return json.RawMessage(`{}`), nil
 }
 
-func registerWorkflowStepHandlers(executor *workflow.WorkflowExecutor, executionKernel execution.ExecutionSecurityKernel, registry *capability.RuntimeAdapterRegistry) {
-	executor.RegisterHandler("tool", workflowToolStepHandler{kernel: executionKernel})
+func registerWorkflowStepHandlers(executor *workflow.WorkflowExecutor, executionKernel execution.ExecutionSecurityKernel, registry *capability.RuntimeAdapterRegistry, router *WorkflowExecutionRouter) {
+	executor.RegisterHandler("tool", workflowToolStepHandler{kernel: executionKernel, router: router})
 	runtimeTypes := map[string]capability.RuntimeType{
 		"task":            capability.RuntimeTypeTask,
 		"mcp":             capability.RuntimeTypeMCP,
@@ -144,7 +173,7 @@ func registerWorkflowStepHandlers(executor *workflow.WorkflowExecutor, execution
 		"trusted service": capability.RuntimeTypeTrustedService,
 	}
 	for name, runtimeType := range runtimeTypes {
-		executor.RegisterHandler(strings.ToLower(name), workflowRuntimeStepHandler{registry: registry, runtimeType: runtimeType})
+		executor.RegisterHandler(strings.ToLower(name), workflowRuntimeStepHandler{registry: registry, router: router, runtimeType: runtimeType})
 	}
 	executor.RegisterHandler("nested_workflow", workflow.NestedWorkflowHandler{Executor: executor})
 	executor.RegisterHandler("nested workflow", workflow.NestedWorkflowHandler{Executor: executor})

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -421,7 +422,74 @@ func makeTaskEnqueueFunc(svc *task_runtime.TaskRuntimeService) capability.TaskEn
 		if svc == nil {
 			return "", fmt.Errorf("task runtime service not configured")
 		}
-		return "", fmt.Errorf("task adapter enqueue not implemented")
+		defID := strings.TrimSpace(request.TaskDefinitionID)
+		if defID == "" {
+			return "", fmt.Errorf("task definition id is required")
+		}
+		def, err := svc.GetTaskDefinition(ctx, defID)
+		if err != nil {
+			return "", fmt.Errorf("get task definition %s: %w", defID, err)
+		}
+		if def == nil {
+			return "", fmt.Errorf("task definition %s not found", defID)
+		}
+
+		placement := task_runtime.TaskExecutionPlacementLocal
+		switch strings.ToLower(strings.TrimSpace(request.Invocation.ExecutionTarget.Placement)) {
+		case "device":
+			placement = task_runtime.TaskExecutionPlacementDevice
+		case "cloud":
+			placement = task_runtime.TaskExecutionPlacementCloud
+		case "", "core", "local":
+			// A core provider executes inside the current Core. TaskRuntime's
+			// local placement means local to that Core, including Cloud Core.
+			placement = task_runtime.TaskExecutionPlacementLocal
+		default:
+			return "", fmt.Errorf("unsupported task execution placement %q", request.Invocation.ExecutionTarget.Placement)
+		}
+
+		var trustedTarget *task_runtime.TrustedExecutionTargetRequest
+		if placement == task_runtime.TaskExecutionPlacementDevice {
+			target := request.Invocation.ExecutionTarget
+			if target.ProviderID == "" || target.ProviderInstanceID == "" || target.UserID == "" || target.DeviceID == "" || target.RuntimeID == "" {
+				return "", fmt.Errorf("device task execution target is incomplete")
+			}
+			trustedTarget = &task_runtime.TrustedExecutionTargetRequest{
+				Placement: task_runtime.TaskExecutionPlacementDevice,
+				Target: task_runtime.TaskExecutionTarget{
+					ProviderID:         capability.ProviderID(target.ProviderID),
+					ProviderInstanceID: capability.ProviderInstanceID(target.ProviderInstanceID),
+					UserID:             target.UserID,
+					DeviceID:           target.DeviceID,
+					RuntimeID:          target.RuntimeID,
+				},
+				ResolvedBy: "workflow_execution_router",
+			}
+		}
+
+		result, err := svc.Enqueue(ctx, task_runtime.EnqueueTaskRequest{
+			TaskDefinitionID:       def.TaskID,
+			ExtensionID:            def.ExtensionID,
+			ModuleID:               def.ModuleID,
+			Input:                  request.Input,
+			ExecutionPlacement:     placement,
+			TrustedExecutionTarget: trustedTarget,
+			OperationID:            request.Invocation.OperationID,
+			InvocationID:           request.Invocation.InvocationID,
+			TraceID:                request.Invocation.TraceID,
+			CorrelationID:          request.Invocation.CorrelationID,
+			CausationID:            request.Invocation.CausationID,
+			Source:                 string(request.Invocation.Source),
+			ScopeSnapshotID:        request.Invocation.ScopeSnapshotID,
+			PermissionSnapshotID:   request.Invocation.PermissionSnapshotID,
+		}, def)
+		if err != nil {
+			return "", err
+		}
+		if result == nil || strings.TrimSpace(result.TaskRunID) == "" {
+			return "", fmt.Errorf("task runtime returned an empty task run id")
+		}
+		return result.TaskRunID, nil
 	}
 }
 
@@ -430,7 +498,35 @@ func makeTaskStatusFunc(svc *task_runtime.TaskRuntimeService) capability.TaskSta
 		if svc == nil {
 			return capability.TaskRunStatus{}, fmt.Errorf("task runtime service not configured")
 		}
-		return capability.TaskRunStatus{}, fmt.Errorf("task adapter status not implemented")
+		run, err := svc.GetTaskRun(ctx, strings.TrimSpace(taskRunID))
+		if err != nil {
+			return capability.TaskRunStatus{}, err
+		}
+		if run == nil {
+			return capability.TaskRunStatus{}, fmt.Errorf("task run %s not found", taskRunID)
+		}
+
+		status := capability.TaskRunStatus{
+			State:    string(run.Status),
+			Finished: run.Status.IsTerminal(),
+		}
+		if run.ErrorMessage != nil {
+			status.Error = strings.TrimSpace(*run.ErrorMessage)
+		}
+		if run.Status == task_runtime.RunStatusSucceeded {
+			result, resultErr := svc.GetTaskResult(ctx, run.TaskRunID)
+			if resultErr != nil {
+				return capability.TaskRunStatus{}, resultErr
+			}
+			if result != nil {
+				if len(result.ResultJSON) > 0 {
+					status.Output = result.ResultJSON
+				} else if strings.TrimSpace(result.ArtifactID) != "" {
+					status.Output, _ = json.Marshal(map[string]any{"artifactId": result.ArtifactID})
+				}
+			}
+		}
+		return status, nil
 	}
 }
 
