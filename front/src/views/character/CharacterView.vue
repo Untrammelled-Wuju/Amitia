@@ -7,7 +7,10 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="char-sidebar">
       <div class="sidebar-header">
         <h3>角色</h3>
-        <el-button size="small" type="primary" @click="openCreate">+</el-button>
+        <div class="sidebar-actions">
+          <el-button size="small" @click="showImportDialog = true">导入</el-button>
+          <el-button size="small" type="primary" @click="openCreate">+</el-button>
+        </div>
       </div>
       <div class="char-list">
         <div
@@ -41,6 +44,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <h2>{{ selectedChar?.name }}</h2>
           <el-button size="small" @click="editCurrent">编辑</el-button>
           <el-button size="small" @click="goToChatLogs">聊天记录</el-button>
+          <el-button size="small" :loading="exportingPack" @click="exportCurrentCharacter">导出角色卡</el-button>
           <el-button size="small" type="danger" @click="deleteCurrent"
             >删除</el-button
           >
@@ -238,6 +242,20 @@ SPDX-License-Identifier: AGPL-3.0-only
         >
       </template>
     </el-dialog>
+
+    <ImportPackDialog
+      v-model="showImportDialog"
+      v-model:pack-name="importPackName"
+      v-model:confirm-text="importConfirmText"
+      :preview="importPreview"
+      :previewing="importPreviewing"
+      :importing="importing"
+      :history="packHistory"
+      @preview="previewImport"
+      @cancel-preview="cancelImportPreview"
+      @confirm="confirmImportAndReload"
+      @file-selected="setSelectedFile"
+    />
   </div>
 </template>
 
@@ -256,9 +274,28 @@ import {
 import CharacterPsycheView from "./CharacterPsycheView.vue";
 import MemoryManagerView from "@/views/memory-manager/MemoryManagerView.vue";
 import MemoryTimeline from "@/views/memory-timeline/MemoryTimeline.vue";
+import ImportPackDialog from "@/views/character-config/components/ImportPackDialog.vue";
+import { useCharacterImportExport } from "@/views/character-config/composables/useCharacterImportExport";
 
 const router = useRouter();
 const route = useRoute();
+
+const {
+  exportingPack,
+  showImportDialog,
+  importPackName,
+  importPreview,
+  importPreviewing,
+  importConfirmText,
+  importing,
+  packHistory,
+  exportPack,
+  previewImport,
+  confirmImport,
+  loadPackHistory,
+  cancelImportPreview,
+  setSelectedFile,
+} = useCharacterImportExport();
 
 const currentCharacterId = computed(() => selectedId.value);
 provide("currentCharacterId", currentCharacterId);
@@ -266,6 +303,24 @@ provide("currentCharacterId", currentCharacterId);
 function goToChatLogs() {
   if (!selectedId.value) return;
   router.push({ path: "/logs", query: { characterId: selectedId.value } });
+}
+
+async function exportCurrentCharacter() {
+  if (!selectedId.value) return;
+  await exportPack(selectedId.value, selectedChar.value?.name || "character");
+}
+
+async function confirmImportAndReload() {
+  const result = await confirmImport();
+  if (!result) return;
+  await loadCharacters();
+  const importedId = String(
+    result?.characterId || result?.id || result?.character?.id || "",
+  );
+  const imported = importedId
+    ? characters.value.find((item: any) => String(item.id) === importedId)
+    : characters.value.at(-1);
+  if (imported) selectChar(imported);
 }
 
 const characters = ref<any[]>([]);
@@ -342,6 +397,7 @@ const activeTab = computed(() => {
 });
 
 onMounted(async () => {
+  await Promise.allSettled([loadPackHistory()]);
   await loadVoices();
   await loadGlobalApiKey();
   await loadCharacters();
@@ -688,6 +744,12 @@ async function deleteCurrent() {
   padding: 12px;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .sidebar-header h3 {
   font-size: 15px;
   font-weight: 600;

@@ -37,20 +37,14 @@
     "PingFang SC",
     "Microsoft YaHei",
     sans-serif;
-  background:
-    radial-gradient(
-      circle at 50% 45%,
-      rgba(200, 121, 91, 0.08),
-      transparent 26%
-    ),
-    radial-gradient(
-      circle at 12% 14%,
-      rgba(181, 154, 120, 0.05),
-      transparent 24%
-    ),
-    linear-gradient(145deg, #000 0%, #000 54%, #000 100%);
+  background: #070708;
   color: var(--ob-text);
-  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  align-items: center;
+  justify-items: center;
+  overflow: auto;
 }
 
 html.amitia-desktop-shell .onboarding-world {
@@ -65,7 +59,7 @@ html.amitia-desktop-shell .onboarding-world {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.24;
+  opacity: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
   mix-blend-mode: soft-light;
 }
@@ -90,33 +84,11 @@ html.amitia-desktop-shell .onboarding-world {
   outline-offset: 3px;
 }
 
-.onboarding-world .starfield {
+.onboarding-world .solid-bg {
   position: absolute;
   inset: 0;
-  overflow: hidden;
   pointer-events: none;
-}
-
-.onboarding-world .star {
-  position: absolute;
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.34);
-  animation: ob-drift var(--dur) linear infinite;
-  opacity: var(--op);
-}
-
-@keyframes ob-drift {
-  from {
-    transform: translate3d(0, 14px, 0);
-  }
-  50% {
-    opacity: calc(var(--op) * 0.4);
-  }
-  to {
-    transform: translate3d(var(--dx), -26px, 0);
-  }
+  z-index: 0;
 }
 
 .onboarding-world .core-zone {
@@ -364,125 +336,4 @@ html.amitia-desktop-shell .onboarding-world {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   transition: opacity 0.4s ease;
-}
-
-.onboarding-world {
-}
-
-.ob-stage {
-  overflow: hidden !important;
-  overscroll-behavior: none;
-  scrollbar-width: none;
-}
-
-.ob-stage::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
-.ob-stage {
-  display: block !important;
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-  transform: none !important;
-  transition: opacity 0.38s ease !important;
-  animation: none !important;
-  z-index: 0 !important;
-}
-
-.ob-stage.active {
-  display: block !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-  transform: none !important;
-  animation: amitiaStageEnter 0.32s var(--ob-ease) both;
-  z-index: 10 !important;
-}
-
-.ob-stage.active.stage-enter-prep {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-.ob-stage.stage-leaving {
-  display: block !important;
-  opacity: 0 !important;
-  visibility: visible !important;
-  pointer-events: none !important;
-  z-index: 11 !important;
-  transition: opacity 0.38s var(--ob-ease) !important;
-}
-
-.onboarding-world[data-stage-transitioning="true"] .ob-back {
-  pointer-events: none !important;
-}
-
-.onboarding-world[data-core-reveal-pending="true"] .ob-stage.active {
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-
-.onboarding-world .core-zone {
-  transition:
-    left var(--amitia-core-move) var(--amitia-core-ease),
-    top var(--amitia-core-move) var(--amitia-core-ease),
-    width var(--amitia-core-resize) var(--amitia-core-ease),
-    height var(--amitia-core-resize) var(--amitia-core-ease),
-    transform var(--amitia-core-move) var(--amitia-core-ease),
-    opacity 0.24s ease !important;
-}
-
-.onboarding-world[data-core-reveal-pending="true"] .core-zone {
-  transition-delay: 90ms, 90ms, 90ms, 90ms, 90ms, 0ms !important;
-}
-
-.ob-stage.step-fade-surface {
-  transition: opacity 0.38s ease !important;
-  animation: none !important;
-}
-
-.ob-stage.step-fade-surface.step-fade-out {
-  opacity: 0 !important;
-  pointer-events: none !important;
-  transition-duration: 0.28s !important;
-}
-
-.ob-stage.step-fade-surface.step-fade-prep {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-@keyframes amitiaStageEnter {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.onboarding-world[data-config-transition="true"] .ob-stage {
-  transition-duration: 0.42s !important;
-}
-
-.onboarding-world[data-config-transition="true"] .ob-stage.stage-leaving {
-  transition-duration: 0.42s !important;
-}
-
-.onboarding-world[data-config-transition="true"] .ob-stage.active {
-  animation-duration: 0.36s !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ob-stage,
-  .step-fade-surface,
-  .core-zone {
-    transition-duration: 0.01ms !important;
-  }
 }

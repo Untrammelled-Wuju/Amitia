@@ -1,8 +1,8 @@
 <template>
-  <div class="ob-stage-inner ob-setup-stage-inner">
+  <div class="ob-stage-inner ob-setup-stage-inner ob-flow-stage-inner">
     <div
+      v-if="step === 'environment'"
       class="ob-boot-panel ob-setup-step-panel"
-      :class="panelClass('environment')"
     >
       <h2 class="ob-boot-title">
         {{ deployMode === "local" ? "正在检查运行环境" : "正在检查远程服务" }}
@@ -29,8 +29,8 @@
     </div>
 
     <div
+      v-else
       class="ob-account-sheet ob-setup-step-panel"
-      :class="panelClass('account')"
     >
       <div class="kicker">{{ isLogin ? "账号登录" : "账号注册" }}</div>
       <div class="ob-sheet-title">
@@ -80,24 +80,12 @@
         </label>
       </div>
       <div class="ob-error">{{ errorMsg }}</div>
-      <button
-        class="ob-stage-action ob-setup-inline-action"
-        @click="handleSubmit"
-      >
-        {{
-          deployMode === "remote"
-            ? "登录远程服务并继续"
-            : isLogin
-              ? "登录并继续"
-              : "注册账号并继续"
-        }}
-      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, watch, onMounted, onUnmounted } from "vue";
 import { getApiBaseURL } from "@/runtime/runtime-adapter";
 
 const props = defineProps<{
@@ -109,7 +97,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  "update:step": [value: string];
   healthCheckDone: [];
   submit: [
     data: {
@@ -136,52 +123,6 @@ const bootRows = ref([
 ]);
 
 let abortController: AbortController | null = null;
-let flowTransitionToken = 0;
-
-const visibleStep = ref(props.step);
-const panelPhase = ref<Record<string, string>>({});
-
-function panelClass(panel: string) {
-  const phase = panelPhase.value[panel] || "";
-  if (phase) return phase;
-  if (visibleStep.value !== panel) return "setup-panel-entering";
-  return "";
-}
-
-function switchSetupPanel(step: string) {
-  if (visibleStep.value === step && !panelPhase.value[step]) return;
-
-  const token = ++flowTransitionToken;
-  const outgoing = visibleStep.value;
-  const incoming = step;
-
-  if (outgoing !== incoming) {
-    panelPhase.value = { [outgoing]: "setup-panel-leaving" };
-  }
-
-  setTimeout(() => {
-    if (token !== flowTransitionToken) return;
-
-    panelPhase.value = {};
-    visibleStep.value = incoming;
-
-    nextTick(() => {
-      if (token !== flowTransitionToken) return;
-      panelPhase.value = { [incoming]: "setup-panel-entering" };
-
-      requestAnimationFrame(() => {
-        if (token !== flowTransitionToken) return;
-        panelPhase.value = {};
-
-        if (incoming === "environment") {
-          updateBootLabels();
-          startRealChecks();
-        }
-      });
-    });
-  }, 320);
-}
-
 watch(
   () => props.deployMode,
   () => {
@@ -192,7 +133,6 @@ watch(
 );
 
 onMounted(() => {
-  visibleStep.value = props.step;
   if (props.step === "environment") {
     updateBootLabels();
     startRealChecks();
@@ -209,8 +149,9 @@ onUnmounted(() => {
 watch(
   () => props.step,
   (s) => {
-    if (s !== visibleStep.value) {
-      switchSetupPanel(s);
+    if (s === "environment") {
+      updateBootLabels();
+      startRealChecks();
     }
   },
 );
@@ -536,4 +477,6 @@ function handleSubmit() {
     deployMode: props.deployMode,
   });
 }
+
+defineExpose({ submit: handleSubmit });
 </script>

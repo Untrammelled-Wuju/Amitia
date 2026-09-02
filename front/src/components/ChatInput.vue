@@ -18,6 +18,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       class="hidden-input"
       @change="handleVideoInput"
     />
+    <input
+      ref="genericFileInputRef"
+      type="file"
+      class="hidden-input"
+      @change="handleGenericFileInput"
+    />
 
         <div class="composer-stack">
       <div ref="inputWrapperRef" class="input-wrapper">
@@ -173,6 +179,14 @@ SPDX-License-Identifier: AGPL-3.0-only
                     ><strong>上传视频</strong
                     ><small>添加一个视频到消息</small></span
                   >
+                </button>
+                <button
+                  type="button"
+                  class="add-menu-item"
+                  @click="openGenericFilePicker"
+                >
+                  <span class="add-menu-icon"><el-icon><Document /></el-icon></span>
+                  <span><strong>上传文件</strong><small>发送文档、压缩包或其他文件</small></span>
                 </button>
                 <div class="add-menu-divider"></div>
                 <button
@@ -418,6 +432,7 @@ import {
   Promotion,
   Search,
   VideoCamera,
+  Document,
 } from "@element-plus/icons-vue";
 import { useTextInput } from "../composables/useTextInput";
 import { useMediaUpload } from "../composables/useMediaUpload";
@@ -459,6 +474,7 @@ const emit = defineEmits<{
   removeVideo: [];
   cancelReply: [];
   emote: [emote: any];
+  file: [file: File];
 }>();
 
 const isDisabled = () =>
@@ -500,6 +516,7 @@ const {
 } = mediaUpload;
 
 const addMenuOpen = ref(false);
+const genericFileInputRef = ref<HTMLInputElement | null>(null);
 const inputWrapperRef = ref<HTMLElement>();
 const skillsPanelOpen = ref(false);
 const skillSearch = ref("");
@@ -607,6 +624,18 @@ function openImagePicker() {
 function openVideoPicker() {
   addMenuOpen.value = false;
   videoInputRef.value?.click();
+}
+
+function openGenericFilePicker() {
+  addMenuOpen.value = false;
+  genericFileInputRef.value?.click();
+}
+
+function handleGenericFileInput(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (file) emit("file", file);
 }
 
 async function handleImageInput(event: Event) {

@@ -147,6 +147,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       @voiceText="handleVoiceText"
       @video="onVideoAttached"
       @removeVideo="onVideoRemoved"
+      @file="handleFileSend"
       @cancel-reply="replyTarget = null"
       @emote="handleEmoteSend"
     /></div>
@@ -252,7 +253,7 @@ function handleCallStateChange(state: string) {
   }
 }
 
-const { get, post } = useApi();
+const { get, post, del } = useApi();
 const { cachedGet, invalidateCache } = useCachedApi();
 const currentCharName = inject<any>("currentCharName", null);
 const extensionUIStore = useExtensionUIStore();
@@ -380,6 +381,37 @@ async function handleNewChat(event?: CustomEvent) {
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.msg || "创建新对话失败");
   }
+}
+
+async function handleFileSend(file: File) {
+  if (!file) return;
+  if (!convId.value || !characterId.value) {
+    ElMessage.warning("请先选择角色和会话");
+    return;
+  }
+  try {
+    const form = new FormData();
+    form.append("kind", "file");
+    form.append("source", "chat_upload");
+    form.append("file", file, file.name);
+    const response = await post<any>("/api/artifacts/v1", form);
+    const artifact = response?.artifact ?? response;
+    const artifactId = String(artifact?.artifactId ?? artifact?.id ?? "").trim();
+    if (!artifactId) throw new Error("上传结果缺少 artifactId");
+    const filename = String(artifact?.filename || file.name || "文件");
+    const resourceUri = `amitia://artifacts/${artifactId}`;
+    await handleSend(`[文件] ${filename}\n${resourceUri}`);
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || error?.message || "文件上传失败");
+  }
+}
+
+async function deleteConversationMessage(messageId: string) {
+  const id = String(messageId || "").trim();
+  if (!id) return;
+  await del(`/api/chats/messages/${encodeURIComponent(id)}`);
+  const index = messages.value.findIndex((item) => String(item.id) === id);
+  if (index >= 0) messages.value.splice(index, 1);
 }
 
 async function handleEmoteSend(emote: any) {
@@ -548,10 +580,34 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
   "conversation.stop": async () => handleStop(),
   "conversation.retry": async (input) => { const id = String(input?.messageId ?? input ?? ""); const msg = messages.value.find((item) => item.id === id); if (msg) await handleRetry(msg); },
   "conversation.regenerate": async () => handleRegenerate(),
+  "conversation.delete": async (input) => deleteConversationMessage(String(input?.messageId ?? input ?? "")),
   "conversation.new": async () => handleNewChat(),
   "conversation.clear": async () => handleClear(),
   "conversation.openDrawer": async () => { showDrawer.value = true; },
   "conversation.reply": async (input) => { const msg = messages.value.find((item) => item.id === String(input?.messageId ?? input ?? "")); if (msg) handleSetReply(msg); },
+  "conversation.sendFile": async (input) => {
+    if (input?.file instanceof File) return handleFileSend(input.file);
+    const resourceUri = String(input?.resourceUri ?? "").trim();
+    const fileName = String(input?.fileName ?? input?.filename ?? "文件").trim() || "文件";
+    if (resourceUri) return handleSend(`[文件] ${fileName}\n${resourceUri}`);
+  },
+  "conversation.sendImage": async (input) => {
+    const imageBase64 = String(input?.imageBase64 ?? "").trim();
+    if (imageBase64) return handleSend(String(input?.text ?? ""), imageBase64);
+  },
+  "conversation.sendCode": async (input) => {
+    const language = String(input?.language ?? "text").trim() || "text";
+    const code = String(input?.code ?? "");
+    if (code) return handleSend(`\`\`\`${language}\n${code}\n\`\`\``);
+  },
+  "conversation.sendVoice": async (input) => {
+    if (input?.blob instanceof Blob) return handleVoiceAudio(input.blob, input?.transcript, input?.duration);
+    if (input?.text) return handleVoiceText(String(input.text));
+  },
+  "conversation.sendEmote": async (input) => {
+    const emoteId = String(input?.emoteId ?? input?.id ?? "").trim();
+    if (emoteId) return handleEmoteSend({ ...input, id: emoteId });
+  },
 };
 
 provideConversationUIContext({

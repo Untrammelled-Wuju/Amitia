@@ -1,26 +1,31 @@
 .onboarding-world .ob-stage {
-  position: absolute;
-  inset: 0;
+  grid-row: 1;
+  grid-column: 1;
+  width: 100%;
+  min-height: 100%;
   padding: clamp(26px, 4.5vh, 48px) clamp(24px, 5vw, 76px)
-    clamp(88px, 11vh, 118px);
+    clamp(120px, 14vh, 150px);
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
-  opacity: 0;
-  pointer-events: none;
 }
 
 .onboarding-world .ob-stage.active {
-  opacity: 1;
-  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .onboarding-world .ob-stage-inner {
   position: relative;
   width: 100%;
-  min-height: max(590px, calc(100vh - 150px));
-  height: 100%;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .onboarding-world .ob-back {
@@ -51,7 +56,7 @@
 }
 
 .onboarding-world .kicker {
-  margin: 0 0 18px;
+  margin: 0 0 12px;
   color: var(--ob-accent2);
   font-size: 11px;
   font-weight: 650;
@@ -62,18 +67,18 @@
 .onboarding-world .ob-title {
   margin: 0;
   color: var(--ob-text);
-  font-size: clamp(40px, 5.4vw, 72px);
-  line-height: 1.08;
+  font-size: 28px;
+  line-height: 1.2;
   font-weight: 520;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.02em;
 }
 
 .onboarding-world .ob-subtitle {
-  margin: 22px 0 0;
+  margin: 12px 0 0;
   color: var(--ob-muted);
-  font-size: 15px;
-  line-height: 1.85;
-  max-width: 600px;
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 500px;
 }
 
 .onboarding-world .ob-primary-ghost {
@@ -111,23 +116,20 @@
 }
 
 .onboarding-world .ob-stage-action {
-  position: absolute;
-  right: 7%;
-  bottom: 10%;
-  height: 46px;
-  padding: 0 22px;
-  border: 1px solid var(--ob-accent);
-  border-radius: 12px;
-  background: var(--ob-accent);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 590;
+  position: fixed;
+  right: 40px;
+  bottom: 28px;
+  z-index: 100;
+  border: 0;
+  background: transparent;
+  color: var(--ob-faint);
   cursor: pointer;
-  box-shadow: 0 14px 40px rgba(200, 121, 91, 0.14);
+  padding: 10px 12px;
+  font-size: 12px;
 }
 
 .onboarding-world .ob-stage-action:hover {
-  background: var(--ob-accent2);
+  color: var(--ob-text);
 }
 
 .onboarding-world .ob-stage-action:disabled {
@@ -145,6 +147,8 @@
 .onboarding-world .ob-form-stack {
   display: grid;
   gap: 13px;
+  width: 100%;
+  text-align: left;
 }
 
 .onboarding-world .ob-input-label {
