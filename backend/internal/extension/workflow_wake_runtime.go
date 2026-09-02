@@ -201,7 +201,7 @@ func normalizeWorkflowWakeBackend(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "", "auto", "local", "local_kws", workflowLocalKWSWakeBackend:
 		return workflowLocalKWSWakeBackend
-	case "cloud", "asr", "asr_phrase", workflowASRWakeBackend:
+	case "cloud", "asr", workflowASRWakeBackend:
 		return workflowASRWakeBackend
 	default:
 		return strings.TrimSpace(value)

@@ -564,6 +564,56 @@ func buildBrowserContributions(extID domain.ExtensionID, modID domain.ModuleID) 
 				{"capability": "browser.resources.screenshot", "description": "Capture browser screenshots"},
 			},
 		},
+		{
+			id: "browser_console_messages", name: "Browser Console Messages", description: "Read bounded console and JavaScript exception events captured for one browser tab", modelName: "browser_console_messages", handlerName: "browser.devtools.console_messages",
+			inputSchema: `{"type":"object","additionalProperties":false,"required":["sessionId","tabId"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":500},"clear":{"type":"boolean"}}}`, outputSchema: `{"type":"object","additionalProperties":true}`,
+			riskLevel: "low", sideEffect: "read_only", idempotent: true, retryable: true, timeoutMs: 5000, permissions: []map[string]any{{"capability": "browser.runtime"}, {"capability": "browser.dom.read"}},
+		},
+		{
+			id: "browser_evaluate", name: "Browser Evaluate", description: "Evaluate a JavaScript expression in the selected tab and return a bounded by-value result", modelName: "browser_evaluate", handlerName: "browser.devtools.evaluate",
+			inputSchema: `{"type":"object","additionalProperties":false,"required":["sessionId","tabId","expression"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"expression":{"type":"string","maxLength":65536},"awaitPromise":{"type":"boolean"},"returnByValue":{"type":"boolean"},"userGesture":{"type":"boolean"}}}`, outputSchema: `{"type":"object","additionalProperties":true}`,
+			riskLevel: "high", sideEffect: "external", idempotent: false, retryable: false, timeoutMs: 30000, permissions: []map[string]any{{"capability": "browser.runtime"}, {"capability": "browser.interact"}},
+		},
+		{
+			id: "browser_network_requests", name: "Browser Network Requests", description: "Read bounded request/response/loading events captured for one browser tab", modelName: "browser_network_requests", handlerName: "browser.devtools.network_requests",
+			inputSchema: `{"type":"object","additionalProperties":false,"required":["sessionId","tabId"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":500},"clear":{"type":"boolean"}}}`, outputSchema: `{"type":"object","additionalProperties":true}`,
+			riskLevel: "medium", sideEffect: "read_only", idempotent: true, retryable: true, timeoutMs: 5000, permissions: []map[string]any{{"capability": "browser.runtime"}, {"capability": "browser.dom.read"}},
+		},
+		{
+			id: "browser_handle_dialog", name: "Browser Handle Dialog", description: "Accept or dismiss the active JavaScript alert/confirm/prompt dialog", modelName: "browser_handle_dialog", handlerName: "browser.devtools.handle_dialog",
+			inputSchema: `{"type":"object","additionalProperties":false,"required":["sessionId","tabId","accept"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"accept":{"type":"boolean"},"promptText":{"type":"string","maxLength":4096}}}`, outputSchema: `{"type":"object","additionalProperties":true}`,
+			riskLevel: "high", sideEffect: "external", idempotent: false, retryable: false, timeoutMs: 10000, permissions: []map[string]any{{"capability": "browser.runtime"}, {"capability": "browser.interact"}},
+		},
+		{
+			id: "browser_resize", name: "Browser Resize", description: "Override or clear page device metrics for responsive-layout testing", modelName: "browser_resize", handlerName: "browser.devtools.resize",
+			inputSchema: `{"type":"object","additionalProperties":false,"required":["sessionId","tabId"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"width":{"type":"integer","minimum":1,"maximum":10000},"height":{"type":"integer","minimum":1,"maximum":10000},"deviceScaleFactor":{"type":"number","minimum":0.1,"maximum":10},"mobile":{"type":"boolean"},"clear":{"type":"boolean"}}}`, outputSchema: `{"type":"object","additionalProperties":true}`,
+			riskLevel: "medium", sideEffect: "system", idempotent: true, retryable: true, timeoutMs: 10000, permissions: []map[string]any{{"capability": "browser.runtime"}, {"capability": "browser.interact"}},
+		},
+		{
+			id: "browser_run_code", name: "Browser Run Code", description: "Run bounded JavaScript code in an async function in the selected page", modelName: "browser_run_code", handlerName: "browser.devtools.run_code",
+			inputSchema: `{"type":"object","additionalProperties":false,"required":["sessionId","tabId","code"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"code":{"type":"string","maxLength":65536},"awaitPromise":{"type":"boolean"},"returnByValue":{"type":"boolean"},"userGesture":{"type":"boolean"}}}`, outputSchema: `{"type":"object","additionalProperties":true}`,
+			riskLevel: "high", sideEffect: "external", idempotent: false, retryable: false, timeoutMs: 30000, permissions: []map[string]any{{"capability": "browser.runtime"}, {"capability": "browser.interact"}},
+		},
+		{
+			id: "browser_wait_for", name: "Browser Wait For", description: "Wait until a selector, visible page text, or JavaScript predicate becomes true", modelName: "browser_wait_for", handlerName: "browser.devtools.wait_for",
+			inputSchema: `{"type":"object","additionalProperties":false,"required":["sessionId","tabId"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"selector":{"type":"string","maxLength":4096},"text":{"type":"string","maxLength":4096},"expression":{"type":"string","maxLength":16384},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000},"pollIntervalMs":{"type":"integer","minimum":50,"maximum":5000}},"anyOf":[{"required":["selector"]},{"required":["text"]},{"required":["expression"]}]}`, outputSchema: `{"type":"object","additionalProperties":true}`,
+			riskLevel: "medium", sideEffect: "read_only", idempotent: true, retryable: true, timeoutMs: 125000, permissions: []map[string]any{{"capability": "browser.runtime"}, {"capability": "browser.dom.read"}},
+		},
+		{
+			id: "manage_cookies", name: "Manage Browser Cookies", description: "Get, set, delete, or clear cookies for the selected browser tab through Chromium Network domain", modelName: "manage_cookies", handlerName: "browser.devtools.cookies",
+			inputSchema: `{"type":"object","additionalProperties":false,"required":["sessionId","tabId"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"action":{"type":"string","enum":["get","list","set","delete","clear"]},"urls":{"type":"array","maxItems":32,"items":{"type":"string"}},"name":{"type":"string","maxLength":4096},"value":{"type":"string","maxLength":16384},"url":{"type":"string","maxLength":4096},"domain":{"type":"string","maxLength":1024},"path":{"type":"string","maxLength":1024},"secure":{"type":"boolean"},"httpOnly":{"type":"boolean"},"sameSite":{"type":"string","enum":["Strict","Lax","None"]},"expires":{"type":"number"}}}`, outputSchema: `{"type":"object","additionalProperties":true}`,
+			riskLevel: "high", sideEffect: "external", idempotent: false, retryable: false, timeoutMs: 10000, permissions: []map[string]any{{"capability": "browser.runtime"}, {"capability": "browser.interact"}},
+		},
+		{
+			id: "browser_drag", name: "Browser Drag", description: "Perform a bounded left-button pointer drag between page coordinates", modelName: "browser_drag", handlerName: "browser.devtools.drag",
+			inputSchema: `{"type":"object","additionalProperties":false,"required":["sessionId","tabId","fromX","fromY","toX","toY"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"fromX":{"type":"number"},"fromY":{"type":"number"},"toX":{"type":"number"},"toY":{"type":"number"},"steps":{"type":"integer","minimum":1,"maximum":100},"durationMs":{"type":"integer","minimum":0,"maximum":10000}}}`, outputSchema: `{"type":"object","additionalProperties":true}`,
+			riskLevel: "high", sideEffect: "external", idempotent: false, retryable: false, timeoutMs: 15000, permissions: []map[string]any{{"capability": "browser.runtime"}, {"capability": "browser.interact"}},
+		},
+		{
+			id: "browser_press_key", name: "Browser Press Key", description: "Dispatch an explicit keyboard key or text input event to the selected page", modelName: "browser_press_key", handlerName: "browser.devtools.press_key",
+			inputSchema: `{"type":"object","additionalProperties":false,"required":["sessionId","tabId"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"key":{"type":"string","maxLength":128},"code":{"type":"string","maxLength":128},"text":{"type":"string","maxLength":4096},"keyCode":{"type":"integer","minimum":0,"maximum":65535},"modifiers":{"type":"integer","minimum":0,"maximum":15}},"anyOf":[{"required":["key"]},{"required":["text"]}]}`, outputSchema: `{"type":"object","additionalProperties":true}`,
+			riskLevel: "high", sideEffect: "external", idempotent: false, retryable: false, timeoutMs: 10000, permissions: []map[string]any{{"capability": "browser.runtime"}, {"capability": "browser.interact"}},
+		},
 	}
 
 	contributions := make([]domain.ContributionDefinition, 0, len(specs))

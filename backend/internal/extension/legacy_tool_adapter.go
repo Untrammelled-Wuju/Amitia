@@ -133,14 +133,26 @@ func normalizeLegacyName(name string) string {
 }
 
 func legacyInputSchema(parameters tool.Parameters) (json.RawMessage, error) {
-	properties := map[string]interface{}{}
-	for name, property := range parameters.Properties {
-		properties[name] = map[string]interface{}{"type": property.Type, "description": property.Description}
+	raw, err := json.Marshal(parameters)
+	if err != nil {
+		return nil, err
 	}
-	schema := map[string]interface{}{
-		"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": properties,
-		"required": parameters.Required, "additionalProperties": false,
+	schema := map[string]interface{}{}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return nil, err
 	}
+	// Preserve the complete schema carried by Parameters (including enum/items/
+	// bounds/patterns from ParseParametersSchema) while keeping the legacy
+	// adapter's strict object contract. Rebuilding Properties field-by-field
+	// silently discarded those constraints.
+	schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+	if _, ok := schema["type"]; !ok {
+		schema["type"] = "object"
+	}
+	if _, ok := schema["properties"]; !ok {
+		schema["properties"] = map[string]interface{}{}
+	}
+	schema["additionalProperties"] = false
 	return json.Marshal(schema)
 }
 
@@ -160,8 +172,14 @@ func legacyCapabilities(name string) ([]string, bool, bool) {
 		return []string{"runtime.character.read"}, false, true
 	case "read_psyche_state":
 		return []string{"runtime.emotion.read"}, false, true
-	case "summarize_memories":
+	case "summarize_memories", "query_memory", "get_memory_by_title":
 		return []string{"memory.read"}, false, true
+	case "read_environment_variable":
+		return []string{"secrets.read"}, false, true
+	case "write_environment_variable":
+		return []string{"secrets.write"}, true, true
+	case "execute_sandbox_script_direct":
+		return []string{"service.runtime.execute"}, true, false
 	case "save_memory", "save_profile", "save_episodic_memory":
 		return []string{"memory.candidate.write"}, true, true
 	default:

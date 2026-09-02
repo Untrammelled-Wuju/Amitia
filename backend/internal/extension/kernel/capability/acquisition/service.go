@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -207,7 +208,10 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 	capSvc := s.capabilityService
 	s.mu.RUnlock()
 
-	if capSvc != nil && capSvc.HasExecutableProvider(request.CapabilityID) {
+	// An explicit candidate request means the caller wants that concrete provider
+	// enabled even when another provider already satisfies the same capability.
+	// This is required for package-name activation (for example use_package).
+	if request.RequestedCandidateID == "" && capSvc != nil && capSvc.HasExecutableProvider(request.CapabilityID) {
 		result := &AcquisitionResult{
 			State:         StateReady,
 			Installed:     true,
@@ -238,6 +242,29 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 		Target:      plan.Target,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
+	}
+
+	// An explicit candidate is candidate-scoped, not capability-scoped. If that
+	// exact provider is already executable, return Ready idempotently. This keeps
+	// package-name activation from reinstalling/re-enabling an already active
+	// Extension or MCP server while still allowing a different provider for the
+	// same capability to be explicitly selected.
+	if request.RequestedCandidateID != "" {
+		if providerIDs := s.executableProviderIDsForCandidate(plan.Candidate, request.CapabilityID); len(providerIDs) > 0 {
+			result.State = StateReady
+			result.Installed = true
+			result.Enabled = true
+			result.ProviderIDs = providerIDs
+			result.CapabilityIDs = []capability.CapabilityID{request.CapabilityID}
+			result.UpdatedAt = time.Now()
+			if request.ExecContext != nil {
+				result.ExecutionID = request.ExecContext.ExecutionID
+			}
+			if s.execution != nil {
+				s.execution.CompleteExecution(acqExecCtx, "requested_candidate_already_executable")
+			}
+			return result, nil
+		}
 	}
 
 	// Step 5: If policy = Deny → return error.
@@ -315,20 +342,34 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 	// Persist the installed capability to the result
 	result.InstalledCapability = plan.InstalledCapability
 
-	// Step 7b: Verify the capability is executable via authoritative state.
-	if capSvc != nil && capSvc.HasExecutableProvider(request.CapabilityID) {
+	// Step 7b: Verify executable state through the authoritative registry. For
+	// an explicit candidate request, success is candidate-scoped: another
+	// provider that happens to expose the same capability must not make this
+	// acquisition look successful.
+	verified := false
+	if request.RequestedCandidateID != "" {
+		providerIDs := s.executableProviderIDsForCandidate(plan.Candidate, request.CapabilityID)
+		if len(providerIDs) > 0 {
+			verified = true
+			result.ProviderIDs = providerIDs
+		}
+	} else if capSvc != nil && capSvc.HasExecutableProvider(request.CapabilityID) {
+		verified = true
+	}
+
+	if verified {
 		result.State = StateReady
 		result.Installed = true
 		result.Enabled = true
 		result.CapabilityIDs = []capability.CapabilityID{request.CapabilityID}
 	} else {
-		// Plan steps completed but authoritative state has not yet produced an
-		// executable instance. Do NOT fabricate Ready or ProviderInstance here.
+		// Plan steps completed but authoritative state has not yet produced the
+		// requested executable provider. Do NOT fabricate Ready here.
 		result.State = StateReconciling
 		result.Installed = true
 		result.Enabled = false
 		result.CapabilityIDs = []capability.CapabilityID{request.CapabilityID}
-		result.Warnings = append(result.Warnings, "plan executed but executable provider not yet reconciled")
+		result.Warnings = append(result.Warnings, "plan executed but requested executable provider not yet reconciled")
 	}
 
 	result.UpdatedAt = time.Now()
@@ -336,6 +377,113 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 		s.execution.CompleteExecution(acqExecCtx, "acquisition_completed: "+string(result.State))
 	}
 	return result, nil
+}
+
+func (s *AcquisitionService) executableProviderIDsForCandidate(candidate CapabilityCandidate, capabilityID capability.CapabilityID) []capability.ProviderID {
+	if s == nil || s.providerRegistry == nil || capabilityID == "" {
+		return nil
+	}
+
+	seen := make(map[capability.ProviderID]struct{})
+	providerIDs := make([]capability.ProviderID, 0)
+	appendIfExecutable := func(instance *capability.CapabilityProviderInstance) {
+		if instance == nil || !instance.IsExecutable() {
+			return
+		}
+		definition, ok := s.providerRegistry.GetByID(instance.ProviderID)
+		if !ok || definition == nil || !candidateMatchesProvider(candidate, definition) {
+			return
+		}
+		if _, exists := seen[instance.ProviderID]; exists {
+			return
+		}
+		seen[instance.ProviderID] = struct{}{}
+		providerIDs = append(providerIDs, instance.ProviderID)
+	}
+
+	if candidate.Kind == CandidateMCP {
+		// MCP package discovery uses a server-level synthetic capability
+		// (mcp.server.<name>), while executable provider definitions are emitted
+		// per concrete MCP tool (mcp/<server>/<tool>). Verify server activation by
+		// matching executable MCP providers to the requested server identity.
+		for _, definition := range s.providerRegistry.ListAllProviders() {
+			if definition == nil || !candidateMatchesProvider(candidate, definition) {
+				continue
+			}
+			for _, instance := range s.providerRegistry.ListInstancesByProvider(definition.ID) {
+				appendIfExecutable(instance)
+			}
+		}
+		return providerIDs
+	}
+
+	for _, instance := range s.providerRegistry.ListExecutableInstances(capabilityID) {
+		appendIfExecutable(instance)
+	}
+	return providerIDs
+}
+
+func candidateHasConcreteProviderIdentity(candidate CapabilityCandidate) bool {
+	switch candidate.Kind {
+	case CandidateInstalledExtension, CandidateExtensionPackage, CandidateMCP:
+		return true
+	default:
+		return false
+	}
+}
+
+func candidateMatchesProvider(candidate CapabilityCandidate, definition *capability.CapabilityProviderDefinition) bool {
+	if definition == nil {
+		return false
+	}
+
+	equal := func(a, b string) bool {
+		return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b)) && strings.TrimSpace(a) != ""
+	}
+
+	switch candidate.Kind {
+	case CandidateInstalledExtension:
+		return equal(candidate.ID, string(definition.ID))
+	case CandidateExtensionPackage:
+		extensionID := candidate.ID
+		if candidate.Metadata != nil {
+			if value, ok := candidate.Metadata["extensionId"].(string); ok && strings.TrimSpace(value) != "" {
+				extensionID = value
+			}
+		}
+		return equal(extensionID, definition.ExtensionID)
+	case CandidateMCP:
+		if definition.Runtime.RuntimeType != capability.RuntimeTypeMCP {
+			return false
+		}
+		identifiers := []string{candidate.ID, candidate.Name}
+		if candidate.Install.MCP != nil {
+			identifiers = append(identifiers, candidate.Install.MCP.ServerName)
+		}
+		providerIdentifiers := []string{definition.Runtime.RuntimeID}
+		if definition.Runtime.Metadata != nil {
+			for _, key := range []string{"mcpServerId", "mcpServerName", "bindingId", "bindingID"} {
+				if value, ok := definition.Runtime.Metadata[key].(string); ok {
+					providerIdentifiers = append(providerIdentifiers, value)
+				}
+			}
+		}
+		if definition.Metadata != nil {
+			for _, key := range []string{"mcpServerId", "mcpServerName", "bindingId", "bindingID"} {
+				if value, ok := definition.Metadata[key].(string); ok {
+					providerIdentifiers = append(providerIdentifiers, value)
+				}
+			}
+		}
+		for _, left := range identifiers {
+			for _, right := range providerIdentifiers {
+				if equal(left, right) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // ResumeAcquire continues a previously suspended acquisition using the resume
@@ -461,6 +609,10 @@ func (s *AcquisitionService) executeInstall(ctx context.Context, candidate Capab
 // It does NOT fabricate ProviderInstance directly; instead it delegates to the
 // ProviderLifecyclePort so that the canonical lifecycle produces instances.
 func (s *AcquisitionService) executeEnable(ctx context.Context, candidate CapabilityCandidate) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	s.mu.RLock()
 	reg := s.providerRegistry
 	capSvc := s.capabilityService
@@ -476,23 +628,38 @@ func (s *AcquisitionService) executeEnable(ctx context.Context, candidate Capabi
 		capID = candidate.Capabilities[0]
 	}
 
-	// Already executable? Nothing to do.
-	if capSvc != nil && capSvc.HasExecutableProvider(capID) {
-		return nil
-	}
-	if reg.CountExecutableInstances(capID) > 0 {
-		return nil
+	providerScoped := candidateHasConcreteProviderIdentity(candidate)
+	if providerScoped {
+		// A named package/server must be checked against its own provider identity.
+		// An unrelated provider exposing the same capability must not suppress
+		// enablement of the requested candidate.
+		if len(s.executableProviderIDsForCandidate(candidate, capID)) > 0 {
+			return nil
+		}
+	} else {
+		if capSvc != nil && capSvc.HasExecutableProvider(capID) {
+			return nil
+		}
+		if reg.CountExecutableInstances(capID) > 0 {
+			return nil
+		}
 	}
 
-	defs := reg.ListByCapability(capID)
+	var defs []*capability.CapabilityProviderDefinition
+	if providerScoped {
+		for _, def := range reg.ListAllProviders() {
+			if def != nil && candidateMatchesProvider(candidate, def) {
+				defs = append(defs, def)
+			}
+		}
+	} else {
+		defs = reg.ListByCapability(capID)
+	}
 	if len(defs) == 0 {
 		return ErrProviderDefinitionNotFound
 	}
 
 	for _, def := range defs {
-		if def == nil {
-			continue
-		}
 		if err := s.enableProviderViaLifecycle(def, candidate, lc); err != nil {
 			return err
 		}
@@ -529,6 +696,21 @@ func (s *AcquisitionService) executeReconcile(ctx context.Context, candidate Cap
 	if len(candidate.Capabilities) > 0 {
 		capID = candidate.Capabilities[0]
 	}
+	providerScoped := candidateHasConcreteProviderIdentity(candidate)
+
+	isReady := func() bool {
+		if providerScoped {
+			return len(s.executableProviderIDsForCandidate(candidate, capID)) > 0
+		}
+		if reg.CountExecutableInstances(capID) > 0 {
+			return true
+		}
+		return capSvc != nil && capSvc.HasExecutableProvider(capID)
+	}
+
+	if isReady() {
+		return nil
+	}
 
 	// Bounded waiting: poll with timeout for authoritative executable state.
 	deadline := time.Now().Add(30 * time.Second)
@@ -540,10 +722,7 @@ func (s *AcquisitionService) executeReconcile(ctx context.Context, candidate Cap
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			if reg.CountExecutableInstances(capID) > 0 {
-				return nil
-			}
-			if capSvc != nil && capSvc.HasExecutableProvider(capID) {
+			if isReady() {
 				return nil
 			}
 			if time.Now().After(deadline) {

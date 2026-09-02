@@ -39,6 +39,9 @@ var capabilityCatalog = map[string]CapabilityDefinition{
 	"message.send":               {Name: "message.send", Risk: "high", Description: "通过外部服务发送消息"},
 	"data.delete":                {Name: "data.delete", Risk: "high", Description: "删除外部数据"},
 	"financial.action":           {Name: "financial.action", Risk: "high", Description: "执行金融操作"},
+	"secrets.read":              {Name: "secrets.read", Risk: "high", Description: "读取存储的密钥与凭据"},
+	"secrets.write":             {Name: "secrets.write", Risk: "high", Description: "写入存储的密钥与凭据"},
+	"service.runtime.execute":   {Name: "service.runtime.execute", Risk: "high", Description: "在沙箱中执行运行时脚本"},
 }
 
 func Capability(name string) (CapabilityDefinition, bool) {

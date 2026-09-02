@@ -81,6 +81,8 @@ electron-builder保持compression: normal，实际7z压缩等级由scripts/build
 
 启动项目前必须先杀一遍项目占用（环境除外）
 
+Electron 桌面端启动时会自动通过 CoreManager 拉起后端服务（AmitiaCore.exe），无需手动单独启动后端。
+
 数据库迁移规则（三库统一版本注册）：
 
 架构概述：

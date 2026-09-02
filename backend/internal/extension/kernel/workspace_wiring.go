@@ -15,6 +15,7 @@ func makeWorkspaceCallFunc(svc *workspace.Service) capability.WorkspaceCallFunc 
 			return nil, fmt.Errorf("workspace service not configured")
 		}
 		dispatcher := workspace.NewToolDispatcher(svc)
+		dispatcher.SetPreciseService(workspace.NewDefaultPreciseEditingService(svc))
 		return dispatcher.Dispatch(ctx, handlerName, input)
 	}
 }

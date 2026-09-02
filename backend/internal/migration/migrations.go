@@ -192,6 +192,20 @@ func DefaultMigrations() []Migration {
 		DesktopPetBehaviorV2ColumnsRepairMigration(),
 		DesktopPetActionRevisionDataRepairMigration(),
 		DesktopPetInstallationOperationCreatedAtMigration(),
+		SyncSequenceSeedMigration(),
+		SandboxEnvironmentMigration(),
+		DesktopPetCutoverBaselineBackfillMigration(),
+	}
+}
+
+func SyncSequenceSeedMigration() Migration {
+	return Migration{
+		Version: "20260902001",
+		Name:    "seed_sync_sequence_initial_row",
+		Up: func(s *Step) error {
+			s.Execute("INSERT OR IGNORE INTO sync_sequence (id, seq) VALUES (1, 0)")
+			return nil
+		},
 	}
 }
 

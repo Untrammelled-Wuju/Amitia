@@ -260,6 +260,7 @@ func BuildMediaExtension(version string) Definition {
 					ProvidedCapabilities: []domain.ProvidedCapability{
 						{ID: "media.metadata", Version: "1.0.0"},
 						{ID: "media.convert", Version: "1.0.0"},
+						{ID: "media.ffmpeg.execute", Version: "1.0.0"},
 					},
 					Provider: &domain.ProviderMetadata{
 						ID:       "builtin.media",
@@ -336,6 +337,32 @@ func buildMediaContributions(extID domain.ExtensionID, modID domain.ModuleID) []
 			Metadata: map[string]any{
 				"system.builtin": true,
 			},
+		},
+		{
+			ID:          domain.ContributionID("media.ffmpeg.execute"),
+			ModuleID:    modID,
+			ExtensionID: extID,
+			Kind:        domain.ContributionKindTool,
+			Name:        domain.LocalizedText{Default: "Advanced FFmpeg Execute"},
+			Description: domain.LocalizedText{Default: "Run advanced bounded FFmpeg arguments against one ResourceURI input and output"},
+			Definition: map[string]any{
+				"capabilityId": "media.ffmpeg.execute",
+				"modelName":    "ffmpeg_execute",
+				"inputSchema":  `{"type":"object","required":["sourceUri","targetUri","args"],"properties":{"sourceUri":{"type":"string","minLength":1},"targetUri":{"type":"string","minLength":1},"args":{"type":"array","maxItems":128,"items":{"type":"string","maxLength":8192}}},"additionalProperties":false}`,
+				"outputSchema": `{"type":"object","properties":{"resourceUri":{"type":"string"},"exitCode":{"type":"integer"},"stdout":{"type":"string"},"stderr":{"type":"string"},"durationMs":{"type":"integer"}}}`,
+				"riskLevel":    "high",
+				"sideEffect":   "write",
+				"permissions":  []map[string]any{{"capability": "media.ffmpeg.execute", "risk": "high"}},
+				"timeoutMs":    int64(120000),
+				"idempotent":   false,
+				"retryable":    false,
+				"runtime": map[string]any{
+					"runtimeType": "media",
+					"runtimeId":   "default",
+					"handlerName": "media.ffmpeg.execute",
+				},
+			},
+			Metadata: map[string]any{"system.builtin": true},
 		},
 	}
 }
