@@ -26,6 +26,33 @@ export function getAmitiaDataDir(): string {
   return path.join(path.dirname(installDir), "AmitiaData");
 }
 
+export function getBackendDataDir(): string {
+  if (process.env.AMITIA_DATA_DIR && process.env.AMITIA_DATA_DIR.trim() !== "") {
+    return path.resolve(process.env.AMITIA_DATA_DIR.trim());
+  }
+  return getAmitiaDataDir();
+}
+
+export function ensureLocalToken(): string {
+  const dataDir = getBackendDataDir();
+  const tokenDir = path.join(dataDir, "security");
+  const tokenFile = path.join(tokenDir, "local-token");
+  const fs = require("node:fs");
+  if (!fs.existsSync(tokenDir)) {
+    fs.mkdirSync(tokenDir, { recursive: true });
+  }
+  if (fs.existsSync(tokenFile)) {
+    const existing = fs.readFileSync(tokenFile, "utf8").trim();
+    if (existing.length >= 32) {
+      return tokenFile;
+    }
+  }
+  const { randomBytes } = require("node:crypto");
+  const token = randomBytes(32).toString("base64url");
+  fs.writeFileSync(tokenFile, token, { mode: 0o600 });
+  return tokenFile;
+}
+
 export function ensureAmitiaDataDir(): string {
   const dataDir = getAmitiaDataDir();
 

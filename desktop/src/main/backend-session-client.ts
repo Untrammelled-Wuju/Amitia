@@ -2,7 +2,7 @@ import http from "node:http";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { getAmitiaDataDir } from "./path-manager";
+import { getBackendDataDir, ensureLocalToken } from "./path-manager";
 import { getDesktopInstanceID } from "./desktop-identity";
 
 interface DesktopSessionResponse {
@@ -25,12 +25,18 @@ function readTextFile(filePath: string): string {
 }
 
 function readLocalRootToken(): string {
+  ensureLocalToken();
   const tokenFile = path.join(
-    getAmitiaDataDir(),
+    getBackendDataDir(),
     "security",
     "local-token",
   );
-  const token = readTextFile(tokenFile);
+  let token = "";
+  try {
+    token = readTextFile(tokenFile);
+  } catch {
+    token = "";
+  }
   if (token.length < 32) {
     throw new Error("local root token is missing or too short");
   }
