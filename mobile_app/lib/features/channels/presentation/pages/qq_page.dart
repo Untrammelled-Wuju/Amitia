@@ -27,6 +27,7 @@ class _QqPageState extends ConsumerState<QqPage> {
   String _appId = '';
   String _token = '';
   bool _obscureToken = true;
+  bool _sandbox = false;
   int _testState = 0;
   bool _loading = true;
 
@@ -54,6 +55,7 @@ class _QqPageState extends ConsumerState<QqPage> {
       if (config != null && mounted) {
         _appId = (config['appId'] ?? config['app_id'] ?? '').toString();
         _token = (config['token'] ?? config['botToken'] ?? config['bot_token'] ?? '').toString();
+        _sandbox = config['sandbox'] == true || config['sandbox'] == 1;
         _appIdController.text = _appId;
         _tokenController.text = _token;
       }
@@ -166,6 +168,7 @@ class _QqPageState extends ConsumerState<QqPage> {
       await svc.connect({
         'appId': _appIdController.text.trim(),
         'token': _tokenController.text.trim(),
+        'sandbox': _sandbox,
       });
       if (!mounted) return;
       setState(() {
@@ -186,6 +189,45 @@ class _QqPageState extends ConsumerState<QqPage> {
         _logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] 连接失败: $e');
       });
       _snack('连接失败: $e', color: context.error);
+    }
+  }
+
+  Future<void> _reconnect() async {
+    setState(() {
+      _status = _QqStatus.connecting;
+      _wsStatus = '连接中...';
+      _errorMessage = null;
+    });
+    try {
+      final svc = ref.read(qqServiceProvider);
+      final config = await svc.config();
+      final appId = (config?['appId'] ?? config?['app_id'] ?? '').toString().trim();
+      final token = (config?['token'] ?? config?['botToken'] ?? config?['bot_token'] ?? '').toString().trim();
+      final sandbox = config?['sandbox'] == true || config?['sandbox'] == 1;
+      if (appId.isEmpty || token.isEmpty) {
+        throw StateError('后端没有可用于重连的已保存 QQ 配置');
+      }
+      await svc.connect({'appId': appId, 'token': token, 'sandbox': sandbox});
+      if (!mounted) return;
+      setState(() {
+        _status = _QqStatus.connected;
+        _wsStatus = '已连接';
+        _appId = appId;
+        _token = token;
+        _sandbox = sandbox;
+        _appIdController.text = appId;
+        _tokenController.text = token;
+        _logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] 使用持久化配置重新连接');
+      });
+      _snack('已使用后端保存配置重新连接', color: context.success);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _status = _QqStatus.disconnected;
+        _wsStatus = '未连接';
+        _errorMessage = safeErrorMessage(e);
+      });
+      _snack('重新连接失败: ${safeErrorMessage(e)}', color: context.error);
     }
   }
 
@@ -381,6 +423,14 @@ class _QqPageState extends ConsumerState<QqPage> {
                 ),
               ),
               SizedBox(height: AppSpacing.md),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('Sandbox', style: AppTypography.bodySmall(context)),
+                subtitle: Text('使用 QQ Bot 沙箱环境；该值会随连接配置持久化', style: AppTypography.caption(context)),
+                value: _sandbox,
+                onChanged: _status == _QqStatus.connecting ? null : (value) => setState(() => _sandbox = value),
+              ),
+              SizedBox(height: AppSpacing.xs),
               Row(
                 children: [
                   Icon(Icons.info_outline, size: 14, color: context.textTertiary),
@@ -479,7 +529,7 @@ class _QqPageState extends ConsumerState<QqPage> {
               label: '重新连接',
               icon: Icons.refresh,
               isSecondary: true,
-              onPressed: _status == _QqStatus.connecting ? null : _doConnect,
+              onPressed: _status == _QqStatus.connecting ? null : _reconnect,
             ),
             AmitiaButton(
               label: '断开',

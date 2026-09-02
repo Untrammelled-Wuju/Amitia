@@ -72,8 +72,17 @@ internal class ScreenCaptureNativeHandler : AndroidNativeOperationHandler {
         val displayId = (request.payload["displayId"] as? Number)?.toInt() ?: 0
         val maxWidth = ((request.payload["maxWidth"] as? Number)?.toInt() ?: DEFAULT_MAX_WIDTH).coerceIn(320, 4096)
         val maxHeight = ((request.payload["maxHeight"] as? Number)?.toInt() ?: DEFAULT_MAX_HEIGHT).coerceIn(320, 4096)
+        val format = (request.payload["format"] as? String)?.trim()?.lowercase() ?: FORMAT_PNG
+        if (format !in SUPPORTED_FORMATS) {
+            return error(request, "SCREEN_CAPTURE_INVALID_FORMAT", "unsupported screenshot format: $format")
+        }
+        val defaultQuality = if (format == FORMAT_PNG) 100 else DEFAULT_LOSSY_QUALITY
+        val quality = (request.payload["quality"] as? Number)?.toInt() ?: defaultQuality
+        if (quality !in 1..100) {
+            return error(request, "SCREEN_CAPTURE_INVALID_QUALITY", "screenshot quality must be between 1 and 100")
+        }
 
-        return captureApi30(service, request, displayId, maxWidth, maxHeight)
+        return captureApi30(service, request, displayId, maxWidth, maxHeight, format, quality)
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -83,6 +92,8 @@ internal class ScreenCaptureNativeHandler : AndroidNativeOperationHandler {
         displayId: Int,
         maxWidth: Int,
         maxHeight: Int,
+        format: String,
+        quality: Int,
     ): NativeBridgeResponse = suspendCancellableCoroutine { continuation ->
         service.takeScreenshot(
             displayId,
@@ -105,8 +116,19 @@ internal class ScreenCaptureNativeHandler : AndroidNativeOperationHandler {
                         val encodedBitmap = downscaleIfNeeded(software, maxWidth, maxHeight)
                         if (encodedBitmap !== software) software.recycle()
 
+                        val compressFormat = when (format) {
+                            FORMAT_JPEG -> Bitmap.CompressFormat.JPEG
+                            FORMAT_WEBP -> Bitmap.CompressFormat.WEBP_LOSSY
+                            else -> Bitmap.CompressFormat.PNG
+                        }
+                        val mimeType = when (format) {
+                            FORMAT_JPEG -> "image/jpeg"
+                            FORMAT_WEBP -> "image/webp"
+                            else -> "image/png"
+                        }
+                        val compressionQuality = if (format == FORMAT_PNG) 100 else quality
                         val bytes = ByteArrayOutputStream().use { stream ->
-                            if (!encodedBitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)) {
+                            if (!encodedBitmap.compress(compressFormat, compressionQuality, stream)) {
                                 ByteArray(0)
                             } else {
                                 stream.toByteArray()
@@ -145,7 +167,8 @@ internal class ScreenCaptureNativeHandler : AndroidNativeOperationHandler {
                                         "capturedAt" to System.currentTimeMillis(),
                                         "generation" to generation,
                                         "stateToken" to stateToken,
-                                        "mime" to "image/png",
+                                        "format" to format,
+                                        "mime" to mimeType,
                                         "dataBase64" to Base64.encodeToString(bytes, Base64.NO_WRAP),
                                     ),
                                 ),
@@ -203,6 +226,11 @@ internal class ScreenCaptureNativeHandler : AndroidNativeOperationHandler {
         const val OP_CAPTURE = "screen_capture.capture"
         private const val DEFAULT_MAX_WIDTH = 1440
         private const val DEFAULT_MAX_HEIGHT = 2560
+        private const val DEFAULT_LOSSY_QUALITY = 90
+        private const val FORMAT_PNG = "png"
+        private const val FORMAT_JPEG = "jpeg"
+        private const val FORMAT_WEBP = "webp"
+        private val SUPPORTED_FORMATS = setOf(FORMAT_PNG, FORMAT_JPEG, FORMAT_WEBP)
         private const val MAX_BRIDGE_BYTES = 16 * 1024 * 1024
     }
 }

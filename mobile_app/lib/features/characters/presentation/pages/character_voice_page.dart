@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,6 +14,7 @@ import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/models/voice.dart';
+import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -31,12 +35,15 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
   String _voiceMode = 'preset';
   String _voiceType = 'zh_female_vv_uranus_bigtts';
   String _customVoiceId = '';
+  String _voiceConfigId = '';
   String _emotion = '';
   int _emotionScale = 4;
   double _speed = 1;
   double _pitch = 1;
   double _volume = 1;
+  int _silenceDuration = 0;
   List<Map<String, dynamic>> _voices = const [];
+  List<VoiceConfigDto> _voiceConfigs = const [];
 
   @override
   void initState() {
@@ -53,19 +60,23 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
       final values = await Future.wait<dynamic>([
         ref.read(characterDetailServiceProvider).character(widget.characterId),
         ref.read(ttsServiceProvider).voices(),
+        ref.read(ttsServiceProvider).listConfigs(),
       ]);
       final character = values[0] as Map<String, dynamic>? ?? <String, dynamic>{};
       if (!mounted) return;
       setState(() {
         _voices = values[1] as List<Map<String, dynamic>>;
+        _voiceConfigs = values[2] as List<VoiceConfigDto>;
         _voiceMode = (character['voiceMode'] ?? 'preset').toString();
         _voiceType = (character['voiceType'] ?? _voiceType).toString();
         _customVoiceId = (character['customVoiceId'] ?? '').toString();
+        _voiceConfigId = (character['voiceConfigId'] ?? '').toString();
         _speed = (character['voiceSpeed'] as num?)?.toDouble() ?? 1;
         _pitch = (character['voicePitch'] as num?)?.toDouble() ?? 1;
         _volume = (character['voiceVolume'] as num?)?.toDouble() ?? 1;
         _emotion = (character['emotion'] ?? '').toString();
         _emotionScale = (character['emotionScale'] as num?)?.toInt() ?? 4;
+        _silenceDuration = (character['silenceDuration'] as num?)?.toInt() ?? 0;
         _loading = false;
       });
     } catch (e) {
@@ -77,11 +88,11 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
     }
   }
 
-  Future<void> _save() async {
-    if (_saving) return;
+  Future<bool> _save() async {
+    if (_saving) return false;
     if (_voiceMode == 'clone' && _customVoiceId.trim().isEmpty) {
       _show('请先完成声音复刻或填写克隆音色 ID', error: true);
-      return;
+      return false;
     }
     setState(() => _saving = true);
     try {
@@ -89,29 +100,94 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
         'voiceMode': _voiceMode,
         'voiceType': _voiceType,
         'customVoiceId': _customVoiceId.trim(),
+        'voiceConfigId': _voiceConfigId,
         'voiceSpeed': _speed,
         'voicePitch': _pitch,
         'voiceVolume': _volume,
         'emotion': _emotion,
         'emotionScale': _emotionScale,
+        'silenceDuration': _silenceDuration,
       });
       _show('当前角色语音设置已保存');
+      return true;
     } catch (e) {
       _show('保存失败：$e', error: true);
+      return false;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
   Future<void> _preview() async {
+    File? tempFile;
+    Dio? dio;
     try {
-      await _save();
-      final result = await ref.read(ttsServiceProvider).synthesizeForCharacter(widget.characterId, '你好，这是当前角色的语音试听。');
-      final url = (result?['audioUrl'] ?? '').toString();
-      _show(url.isEmpty ? '试听请求已完成' : '试听音频已生成：$url');
+      if (!await _save()) return;
+      final result = await ref.read(ttsServiceProvider).synthesizeForCharacter(
+            widget.characterId,
+            '你好，这是当前角色的语音试听。',
+          );
+      final url = (result?['audioUrl'] ?? '').toString().trim();
+      if (url.isEmpty) throw StateError('后端未返回试听音频地址');
+      final platform = switch (defaultTargetPlatform) {
+        TargetPlatform.android => 'android',
+        TargetPlatform.iOS => 'ios',
+        TargetPlatform.windows => 'windows',
+        _ => null,
+      };
+      if (kIsWeb || platform == null) {
+        throw UnsupportedError('当前平台尚未接入 Flutter 角色语音本地播放桥');
+      }
+      dio = await _dio();
+      final tempDir = await Directory.systemTemp.createTemp('amitia_voice_preview_');
+      tempFile = File('${tempDir.path}/preview_audio${_previewAudioExtension(url)}');
+      await dio.download(url, tempFile.path);
+      if (!await tempFile.exists() || await tempFile.length() == 0) {
+        throw StateError('试听音频下载失败');
+      }
+      final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
+      final nativeResult = await dispatcher.execute({
+        'protocolVersion': 1,
+        'requestId': 'character-voice-preview-${DateTime.now().microsecondsSinceEpoch}',
+        'platform': platform,
+        'operation': 'media.audio.play_file',
+        'payload': {'path': tempFile.path},
+      });
+      if (!const {'success', 'ok'}.contains((nativeResult['status'] ?? '').toString())) {
+        final error = nativeResult['error'];
+        final message = error is Map ? (error['message'] ?? error['code'])?.toString() : null;
+        throw StateError(message?.isNotEmpty == true ? message! : '系统音频播放失败');
+      }
+      _show('试听已开始播放');
+      // MediaPlayer opens the file before start(), so the temporary file can be
+      // removed after a short grace period without keeping stale previews.
+      final cleanupDir = tempFile.parent;
+      Future<void>.delayed(const Duration(seconds: 30), () async {
+        try {
+          if (await cleanupDir.exists()) await cleanupDir.delete(recursive: true);
+        } catch (_) {}
+      });
+      tempFile = null;
     } catch (e) {
       _show('试听失败：$e', error: true);
+    } finally {
+      dio?.close(force: true);
+      if (tempFile != null) {
+        try {
+          final parent = tempFile.parent;
+          if (await parent.exists()) await parent.delete(recursive: true);
+        } catch (_) {}
+      }
     }
+  }
+
+
+  String _previewAudioExtension(String url) {
+    final lower = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
+    for (final extension in const ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac']) {
+      if (lower.endsWith(extension)) return extension;
+    }
+    return '.mp3';
   }
 
   Future<Dio> _dio() async {
@@ -250,6 +326,19 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                       AmitiaCard(
                         child: Column(
                           children: [
+                            DropdownButtonFormField<String>(
+                              value: _voiceConfigs.any((item) => item.id == _voiceConfigId) ? _voiceConfigId : '',
+                              decoration: const InputDecoration(labelText: 'TTS 配置'),
+                              items: [
+                                const DropdownMenuItem(value: '', child: Text('跟随当前全局配置')),
+                                ..._voiceConfigs.map((item) => DropdownMenuItem(
+                                      value: item.id,
+                                      child: Text(item.name.isEmpty ? '${item.provider} · ${item.id}' : item.name),
+                                    )),
+                              ],
+                              onChanged: (value) => setState(() => _voiceConfigId = value ?? ''),
+                            ),
+                            SizedBox(height: AppSpacing.sm),
                             _slider('语速', _speed, 0.5, 2, (v) => setState(() => _speed = v)),
                             _slider('音调', _pitch, 0.5, 2, (v) => setState(() => _pitch = v)),
                             _slider('音量', _volume, 0.2, 2, (v) => setState(() => _volume = v)),
@@ -260,6 +349,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                               onChanged: (value) => setState(() => _emotion = value ?? ''),
                             ),
                             _slider('情绪强度', _emotionScale.toDouble(), 1, 5, (v) => setState(() => _emotionScale = v.round()), divisions: 4),
+                            _slider('句尾静音(ms)', _silenceDuration.toDouble(), 0, 5000, (v) => setState(() => _silenceDuration = v.round()), divisions: 50),
                           ],
                         ),
                       ),

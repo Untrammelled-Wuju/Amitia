@@ -102,12 +102,22 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
   final _workStartController = TextEditingController();
   final _workEndController = TextEditingController();
   final _workDaysController = TextEditingController();
+  final _lunchStartController = TextEditingController();
+  final _lunchEndController = TextEditingController();
+  final _commuteMinController = TextEditingController();
+  final _commuteMaxController = TextEditingController();
+  final _prepareMinController = TextEditingController();
+  final _prepareMaxController = TextEditingController();
+  final _overtimeMinController = TextEditingController();
+  final _overtimeMaxController = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
   String? _error;
   bool _timeAwareness = true;
   bool _sleepEnabled = true;
+  bool _sleepReplyEnabled = false;
+  String _sleepReplyMode = 'NO_REPLY';
   String _gender = 'UNSPECIFIED';
   String _pronoun = 'TA';
   int _genderExpression = 30;
@@ -137,6 +147,14 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       _workStartController,
       _workEndController,
       _workDaysController,
+      _lunchStartController,
+      _lunchEndController,
+      _commuteMinController,
+      _commuteMaxController,
+      _prepareMinController,
+      _prepareMaxController,
+      _overtimeMinController,
+      _overtimeMaxController,
     ]) {
       controller.dispose();
     }
@@ -202,6 +220,8 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
         _bedController.text = (sleep['bedTime'] ?? '23:00').toString();
         _wakeController.text = (sleep['wakeTime'] ?? '07:00').toString();
         _sleepEnabled = _bool(sleep['enabled'], fallback: true);
+        _sleepReplyEnabled = _bool(sleep['sleepReplyEnabled']);
+        _sleepReplyMode = (sleep['sleepReplyMode'] ?? 'NO_REPLY').toString();
         _timeAwareness = _bool(temporalProfile['enabled'], fallback: true);
         _gender = (role['gender'] ?? character['gender'] ?? 'UNSPECIFIED').toString();
         _pronoun = (role['pronoun'] ?? character['pronoun'] ?? 'TA').toString();
@@ -216,6 +236,14 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
         _workStartController.text = (_workProfile['workStartTime'] ?? '09:00').toString();
         _workEndController.text = (_workProfile['workEndTime'] ?? '18:00').toString();
         _workDaysController.text = (_workProfile['workDays'] ?? 'MON,TUE,WED,THU,FRI').toString();
+        _lunchStartController.text = (_workProfile['lunchBreakStartTime'] ?? '12:00').toString();
+        _lunchEndController.text = (_workProfile['lunchBreakEndTime'] ?? '13:30').toString();
+        _commuteMinController.text = _int(_workProfile['commuteMinMinutes'], 15).toString();
+        _commuteMaxController.text = _int(_workProfile['commuteMaxMinutes'], 45).toString();
+        _prepareMinController.text = _int(_workProfile['prepareMinMinutes'], 20).toString();
+        _prepareMaxController.text = _int(_workProfile['prepareMaxMinutes'], 60).toString();
+        _overtimeMinController.text = _int(_workProfile['overtimeMinMinutes'], 30).toString();
+        _overtimeMaxController.text = _int(_workProfile['overtimeMaxMinutes'], 180).toString();
         _loading = false;
       });
     } catch (e) {
@@ -242,7 +270,15 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       final work = Map<String, dynamic>.from(_workProfile)
         ..['workStartTime'] = _workStartController.text.trim()
         ..['workEndTime'] = _workEndController.text.trim()
-        ..['workDays'] = _workDaysController.text.trim();
+        ..['workDays'] = _workDaysController.text.trim()
+        ..['lunchBreakStartTime'] = _lunchStartController.text.trim()
+        ..['lunchBreakEndTime'] = _lunchEndController.text.trim()
+        ..['commuteMinMinutes'] = _int(_commuteMinController.text, 15)
+        ..['commuteMaxMinutes'] = _int(_commuteMaxController.text, 45)
+        ..['prepareMinMinutes'] = _int(_prepareMinController.text, 20)
+        ..['prepareMaxMinutes'] = _int(_prepareMaxController.text, 60)
+        ..['overtimeMinMinutes'] = _int(_overtimeMinController.text, 30)
+        ..['overtimeMaxMinutes'] = _int(_overtimeMaxController.text, 180);
       final lifestyle = Map<String, dynamic>.from(_lifestyle)..['manuallyConfigured'] = true;
       final saveOperations = <Future<dynamic>>[
         characterService.updateCharacter(widget.characterId, {
@@ -262,6 +298,8 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
           'enabled': _sleepEnabled,
           'bedTime': _bedController.text.trim(),
           'wakeTime': _wakeController.text.trim(),
+          'sleepReplyEnabled': _sleepReplyEnabled,
+          'sleepReplyMode': _sleepReplyMode,
         }, characterId: widget.characterId),
         companion.updateLifestyleTendency(lifestyle, characterId: widget.characterId),
         companion.updateWorkProfile(work, characterId: widget.characterId),
@@ -290,6 +328,8 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       _personalityConfig = Map<String, dynamic>.from(_personalityDefaults);
       _timeAwareness = true;
       _sleepEnabled = true;
+      _sleepReplyEnabled = false;
+      _sleepReplyMode = 'NO_REPLY';
       _bedController.text = '23:00';
       _wakeController.text = '07:00';
       _gender = 'UNSPECIFIED';
@@ -299,10 +339,27 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       _addressingController.clear();
       _lifeIdentity = 'CUSTOM';
       _lifestyle = {for (final key in _lifestyleLabels.keys) key: 50, 'manuallyConfigured': true};
-      _workProfile = <String, dynamic>{'enabled': false};
+      _workProfile = <String, dynamic>{
+        'enabled': false,
+        'replyMode': 'SHORT_REPLY',
+        'allowOvertime': false,
+        'overtimeProbability': 10,
+        'overtimeReplyMode': 'SHORT_REPLY',
+        'delayedReplyEnabled': false,
+        'commuteHomeShareEnabled': true,
+        'commuteHomeShareProbability': 60,
+      };
       _workStartController.text = '09:00';
       _workEndController.text = '18:00';
       _workDaysController.text = 'MON,TUE,WED,THU,FRI';
+      _lunchStartController.text = '12:00';
+      _lunchEndController.text = '13:30';
+      _commuteMinController.text = '15';
+      _commuteMaxController.text = '45';
+      _prepareMinController.text = '20';
+      _prepareMaxController.text = '60';
+      _overtimeMinController.text = '30';
+      _overtimeMaxController.text = '180';
       _relationshipTime = {
         'enabled': true,
         'reunionEnabled': true,
@@ -334,8 +391,8 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
           FilledButton(
             onPressed: () => Navigator.pop(context, special
-                ? {'title': title.text.trim(), 'startDate': start.text.trim(), 'endDate': end.text.trim(), 'enabled': true}
-                : {'title': title.text.trim(), 'startTime': start.text.trim(), 'endTime': end.text.trim(), 'enabled': true}),
+                ? {'title': title.text.trim(), 'startDate': start.text.trim(), 'endDate': end.text.trim(), 'enabled': _bool(event?['enabled'], fallback: true)}
+                : {'title': title.text.trim(), 'startTime': start.text.trim(), 'endTime': end.text.trim(), 'enabled': _bool(event?['enabled'], fallback: true)}),
             child: const Text('保存'),
           ),
         ],
@@ -360,6 +417,19 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       }
     }
     await _load();
+  }
+
+  Future<void> _toggleFixedEvent(Map<String, dynamic> event) async {
+    final id = (event['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    try {
+      await ref.read(companionServiceProvider).toggleFixedEventEnabled(id);
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('固定日程启停失败：$e')));
+      }
+    }
   }
 
   Future<void> _deleteEvent(Map<String, dynamic> event, {required bool special}) async {
@@ -393,6 +463,12 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
         ]),
       );
 
+  Widget _numberField(TextEditingController controller, String label) => TextField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(labelText: label),
+      );
+
   Widget _slider(String label, int value, ValueChanged<int> onChanged) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -416,10 +492,19 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
                     subtitle: Text(special
                         ? '${event['startDate'] ?? '—'} - ${event['endDate'] ?? '—'}'
                         : '${event['startTime'] ?? '—'} - ${event['endTime'] ?? '—'}'),
-                    trailing: Wrap(spacing: 4, children: [
-                      IconButton(icon: const Icon(Icons.edit_outlined), tooltip: '编辑', onPressed: () => _editEvent(event: event, special: special)),
-                      IconButton(icon: const Icon(Icons.delete_outline), tooltip: '删除', onPressed: () => _deleteEvent(event, special: special)),
-                    ]),
+                    trailing: Wrap(
+                      spacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (!special)
+                          Switch(
+                            value: _bool(event['enabled'], fallback: true),
+                            onChanged: (_) => _toggleFixedEvent(event),
+                          ),
+                        IconButton(icon: const Icon(Icons.edit_outlined), tooltip: '编辑', onPressed: () => _editEvent(event: event, special: special)),
+                        IconButton(icon: const Icon(Icons.delete_outline), tooltip: '删除', onPressed: () => _deleteEvent(event, special: special)),
+                      ],
+                    ),
                   )),
           ],
         ),
@@ -517,6 +602,36 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
                           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('时间感知'), subtitle: const Text('使用当前角色 Temporal Profile'), value: _timeAwareness, onChanged: (v) => setState(() => _timeAwareness = v)),
                           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('睡眠规则'), value: _sleepEnabled, onChanged: (v) => setState(() => _sleepEnabled = v)),
                           Row(children: [Expanded(child: TextField(controller: _bedController, decoration: const InputDecoration(labelText: '入睡时间'))), const SizedBox(width: 12), Expanded(child: TextField(controller: _wakeController, decoration: const InputDecoration(labelText: '起床时间')))]),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('睡眠时回复'),
+                            subtitle: const Text('与桌面端使用同一 SleepSetting'),
+                            value: _sleepReplyEnabled,
+                            onChanged: (v) => setState(() {
+                              _sleepReplyEnabled = v;
+                              if (!v && _sleepReplyMode == 'SHORT_SLEEPY_REPLY') {
+                                _sleepReplyMode = 'NO_REPLY';
+                              }
+                            }),
+                          ),
+                          DropdownButtonFormField<String>(
+                            value: (_sleepReplyEnabled
+                                    ? const ['NO_REPLY', 'SYSTEM_NOTICE', 'SHORT_SLEEPY_REPLY']
+                                    : const ['NO_REPLY', 'SYSTEM_NOTICE'])
+                                .contains(_sleepReplyMode)
+                                ? _sleepReplyMode
+                                : 'NO_REPLY',
+                            decoration: InputDecoration(
+                              labelText: _sleepReplyEnabled ? '睡眠回复模式' : '关闭时行为',
+                            ),
+                            items: [
+                              const DropdownMenuItem(value: 'NO_REPLY', child: Text('不回复')),
+                              const DropdownMenuItem(value: 'SYSTEM_NOTICE', child: Text('系统提示正在睡觉')),
+                              if (_sleepReplyEnabled)
+                                const DropdownMenuItem(value: 'SHORT_SLEEPY_REPLY', child: Text('简短困倦回复')),
+                            ],
+                            onChanged: (value) => setState(() => _sleepReplyMode = value ?? 'NO_REPLY'),
+                          ),
                         ]),
                       ),
                       _section(
@@ -543,9 +658,38 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
                           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('启用工作状态'), value: _bool(_workProfile['enabled']), onChanged: (v) => setState(() => _workProfile['enabled'] = v)),
                           TextField(controller: _workDaysController, decoration: const InputDecoration(labelText: '工作日', hintText: 'MON,TUE,WED,THU,FRI')),
                           Row(children: [Expanded(child: TextField(controller: _workStartController, decoration: const InputDecoration(labelText: '开始时间'))), const SizedBox(width: 12), Expanded(child: TextField(controller: _workEndController, decoration: const InputDecoration(labelText: '结束时间')))]),
+                          Row(children: [Expanded(child: TextField(controller: _lunchStartController, decoration: const InputDecoration(labelText: '午休开始'))), const SizedBox(width: 12), Expanded(child: TextField(controller: _lunchEndController, decoration: const InputDecoration(labelText: '午休结束')))]),
+                          Row(children: [Expanded(child: _numberField(_commuteMinController, '通勤最短（分钟）')), const SizedBox(width: 12), Expanded(child: _numberField(_commuteMaxController, '通勤最长（分钟）'))]),
+                          Row(children: [Expanded(child: _numberField(_prepareMinController, '准备最短（分钟）')), const SizedBox(width: 12), Expanded(child: _numberField(_prepareMaxController, '准备最长（分钟）'))]),
+                          DropdownButtonFormField<String>(
+                            value: const ['NO_REPLY', 'SHORT_REPLY', 'NORMAL_REPLY'].contains(_workProfile['replyMode']) ? _workProfile['replyMode'] as String : 'SHORT_REPLY',
+                            decoration: const InputDecoration(labelText: '工作时回复模式'),
+                            items: const [
+                              DropdownMenuItem(value: 'NO_REPLY', child: Text('不回复')),
+                              DropdownMenuItem(value: 'SHORT_REPLY', child: Text('简短回复')),
+                              DropdownMenuItem(value: 'NORMAL_REPLY', child: Text('正常回复')),
+                            ],
+                            onChanged: (value) => setState(() => _workProfile['replyMode'] = value ?? 'SHORT_REPLY'),
+                          ),
                           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('允许加班'), value: _bool(_workProfile['allowOvertime']), onChanged: (v) => setState(() => _workProfile['allowOvertime'] = v)),
+                          if (_bool(_workProfile['allowOvertime'])) ...[
+                            _slider('加班概率', _int(_workProfile['overtimeProbability'], 10), (v) => setState(() => _workProfile['overtimeProbability'] = v)),
+                            Row(children: [Expanded(child: _numberField(_overtimeMinController, '加班最短（分钟）')), const SizedBox(width: 12), Expanded(child: _numberField(_overtimeMaxController, '加班最长（分钟）'))]),
+                            DropdownButtonFormField<String>(
+                              value: const ['NO_REPLY', 'SHORT_REPLY', 'NORMAL_REPLY'].contains(_workProfile['overtimeReplyMode']) ? _workProfile['overtimeReplyMode'] as String : 'SHORT_REPLY',
+                              decoration: const InputDecoration(labelText: '加班回复模式'),
+                              items: const [
+                                DropdownMenuItem(value: 'NO_REPLY', child: Text('不回复')),
+                                DropdownMenuItem(value: 'SHORT_REPLY', child: Text('简短回复')),
+                                DropdownMenuItem(value: 'NORMAL_REPLY', child: Text('正常回复')),
+                              ],
+                              onChanged: (value) => setState(() => _workProfile['overtimeReplyMode'] = value ?? 'SHORT_REPLY'),
+                            ),
+                          ],
                           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('延迟回复'), value: _bool(_workProfile['delayedReplyEnabled']), onChanged: (v) => setState(() => _workProfile['delayedReplyEnabled'] = v)),
-                          _slider('下班分享概率', _int(_workProfile['commuteHomeShareProbability'], 60), (v) => setState(() => _workProfile['commuteHomeShareProbability'] = v)),
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('下班后主动分享'), value: _bool(_workProfile['commuteHomeShareEnabled'], fallback: true), onChanged: (v) => setState(() => _workProfile['commuteHomeShareEnabled'] = v)),
+                          if (_bool(_workProfile['commuteHomeShareEnabled'], fallback: true))
+                            _slider('下班分享概率', _int(_workProfile['commuteHomeShareProbability'], 60), (v) => setState(() => _workProfile['commuteHomeShareProbability'] = v)),
                         ]),
                       ),
                       _eventsSection('固定日程', _fixedEvents, special: false),

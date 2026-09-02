@@ -351,3 +351,218 @@ private let supportedProtocolVersions: Set<Int> = [1]
         return String(parts.first ?? "")
     }
 }
+
+
+@objc public class IOSLocalNotificationNativeHandler: NSObject, IOSNativeOperationHandler {
+    public let operations: Set<String> = ["notification.status", "notification.post"]
+    private let stateLock = NSLock()
+    private var cachedAuthorizationStatus: UNAuthorizationStatus = .notDetermined
+
+    public func capabilitySnapshot() -> IOSNativeCapability {
+        stateLock.lock()
+        let status = cachedAuthorizationStatus
+        stateLock.unlock()
+        let authorized = isAuthorized(status)
+        return IOSNativeCapability(
+            available: true,
+            authorized: authorized,
+            hardwareAvailable: true,
+            platformSupported: true,
+            foregroundRequired: false
+        )
+    }
+
+    public func execute(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        switch request.operation {
+        case "notification.status":
+            return await handleStatus(request)
+        case "notification.post":
+            return await handlePost(request)
+        default:
+            return error(request, code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
+        }
+    }
+
+    private func handleStatus(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        let settings = await currentSettings()
+        cache(settings.authorizationStatus)
+        return success(request, result: [
+            "authorized": isAuthorized(settings.authorizationStatus),
+            "authorizationStatus": authorizationName(settings.authorizationStatus),
+            "canPost": isAuthorized(settings.authorizationStatus)
+        ])
+    }
+
+    private func handlePost(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        let title = (request.payload?["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = (request.payload?["body"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let channel = (request.payload?["channel"] as? String ?? "amitia_agent").trimmingCharacters(in: .whitespacesAndNewlines)
+        let silent = request.payload?["silent"] as? Bool ?? false
+
+        guard !title.isEmpty || !body.isEmpty else {
+            return error(request, code: "NOTIFICATION_POST_FAILED", message: "both title and body are empty")
+        }
+
+        var settings = await currentSettings()
+        cache(settings.authorizationStatus)
+        if settings.authorizationStatus == .notDetermined {
+            do {
+                let granted = try await requestAuthorization()
+                guard granted else {
+                    return error(request, code: "NOTIFICATION_POST_PERMISSION_REQUIRED", message: "notification permission was not granted")
+                }
+                settings = await currentSettings()
+                cache(settings.authorizationStatus)
+            } catch {
+                return self.error(request, code: "NOTIFICATION_POST_PERMISSION_REQUIRED", message: error.localizedDescription)
+            }
+        }
+
+        guard isAuthorized(settings.authorizationStatus) else {
+            return error(request, code: "NOTIFICATION_POST_DISABLED", message: "notifications are disabled for this app")
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = String(title.prefix(256))
+        content.body = String(body.prefix(4096))
+        content.categoryIdentifier = channel.isEmpty ? "amitia_agent" : String(channel.prefix(128))
+        if !silent {
+            content.sound = .default
+        }
+
+        let identifier = "amitia.local.\(UUID().uuidString)"
+        let notificationRequest = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        do {
+            try await add(notificationRequest)
+            return success(request, result: ["notificationRef": identifier, "posted": true])
+        } catch {
+            return self.error(request, code: "NOTIFICATION_POST_FAILED", message: error.localizedDescription)
+        }
+    }
+
+    private func currentSettings() async -> UNNotificationSettings {
+        await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                continuation.resume(returning: settings)
+            }
+        }
+    }
+
+    private func requestAuthorization() async throws -> Bool {
+        try await withCheckedThrowingContinuation { continuation in
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: granted)
+                }
+            }
+        }
+    }
+
+    private func add(_ request: UNNotificationRequest) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+        }
+    }
+
+    private func cache(_ status: UNAuthorizationStatus) {
+        stateLock.lock()
+        cachedAuthorizationStatus = status
+        stateLock.unlock()
+    }
+
+    private func isAuthorized(_ status: UNAuthorizationStatus) -> Bool {
+        return status.rawValue == UNAuthorizationStatus.authorized.rawValue
+            || status.rawValue == UNAuthorizationStatus.provisional.rawValue
+            || status.rawValue == 4
+    }
+
+    private func authorizationName(_ status: UNAuthorizationStatus) -> String {
+        switch status.rawValue {
+        case UNAuthorizationStatus.notDetermined.rawValue: return "notDetermined"
+        case UNAuthorizationStatus.denied.rawValue: return "denied"
+        case UNAuthorizationStatus.authorized.rawValue: return "authorized"
+        case UNAuthorizationStatus.provisional.rawValue: return "provisional"
+        case 4: return "ephemeral"
+        default: return "unknown"
+        }
+    }
+
+    private func success(_ request: IOSNativeRequest, result: [String: Any]) -> IOSNativeResponse {
+        IOSNativeResponse(
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            status: "success",
+            result: result,
+            error: nil
+        )
+    }
+
+    private func error(_ request: IOSNativeRequest, code: String, message: String) -> IOSNativeResponse {
+        IOSNativeResponse(
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            status: "error",
+            result: nil,
+            error: IOSNativeError(code: code, message: message)
+        )
+    }
+}
+
+
+@objc public final class IOSDeviceTimeNativeHandler: NSObject, IOSNativeOperationHandler {
+    public let operations: Set<String> = ["device.timezone.get"]
+
+    public func capabilitySnapshot() -> IOSNativeCapability {
+        IOSNativeCapability(
+            available: true,
+            authorized: true,
+            hardwareAvailable: true,
+            platformSupported: true,
+            foregroundRequired: false
+        )
+    }
+
+    public func execute(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        guard request.operation == "device.timezone.get" else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(
+                    code: "OPERATION_NOT_SUPPORTED",
+                    message: "unknown device time operation: \(request.operation)"
+                )
+            )
+        }
+        let timezone = TimeZone.autoupdatingCurrent.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !timezone.isEmpty else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "TIMEZONE_UNAVAILABLE", message: "device timezone is unavailable")
+            )
+        }
+        return IOSNativeResponse(
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            status: "ok",
+            result: [
+                "timezone": timezone,
+                "ianaTimezone": timezone,
+                "source": "ios.system"
+            ],
+            error: nil
+        )
+    }
+}

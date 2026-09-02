@@ -32,6 +32,8 @@ import UIKit
     self.iosNativeHost?.registerHandler(ShortcutNativeHandler())
     self.iosNativeHost?.registerHandler(BackgroundNativeHandler())
     self.iosNativeHost?.registerHandler(FileNativeHandler())
+    self.iosNativeHost?.registerHandler(IOSLocalNotificationNativeHandler())
+    self.iosNativeHost?.registerHandler(IOSDeviceTimeNativeHandler())
 
     if let host = self.iosNativeHost {
       self.nativeTransport = IOSNativeTransport(host: host, delegate: self)

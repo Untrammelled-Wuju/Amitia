@@ -37,6 +37,7 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
   final _searchCtrl = TextEditingController();
   String _levelFilter = '全部';
   List<_LogEntry> _logs = const [];
+  List<Map<String, dynamic>> _files = const [];
   bool _loading = true;
   bool _clearing = false;
   String? _error;
@@ -79,16 +80,28 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
       final api = ref.read(backendServiceProvider);
-      final resp = await api.get<Map<String, dynamic>>(
-        '/api/logs/recent',
-        fromJson: (e) => Map<String, dynamic>.from(e as Map),
-      );
-      final items = (resp?['logs'] as List<dynamic>? ?? const []);
+      final results = await Future.wait([
+        api.get<Map<String, dynamic>>(
+          '/api/logs/recent',
+          fromJson: (e) => Map<String, dynamic>.from(e as Map),
+        ),
+        api.get<Map<String, dynamic>>(
+          '/api/logs/files',
+          fromJson: (e) => Map<String, dynamic>.from(e as Map),
+        ),
+      ]);
+      final recent = results[0];
+      final filesResponse = results[1];
+      final items = (recent?['logs'] as List<dynamic>? ?? const []);
       final logs = items
           .whereType<Map>()
           .map((e) => _parseLine(Map<String, dynamic>.from(e)))
           .toList();
-      if (mounted) setState(() { _logs = logs; _loading = false; });
+      final files = (filesResponse?['files'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(growable: false);
+      if (mounted) setState(() { _logs = logs; _files = files; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
@@ -109,6 +122,89 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
     } finally {
       if (mounted) setState(() => _clearing = false);
     }
+  }
+
+  Future<void> _openLogFile(Map<String, dynamic> file) async {
+    final name = (file['name'] ?? '').toString();
+    if (name.isEmpty) return;
+    try {
+      final content = await ref.read(backendServiceProvider).get<String>(
+        '/api/logs/files/${Uri.encodeComponent(name)}',
+        fromJson: (value) => value?.toString() ?? '',
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(name),
+          content: SizedBox(
+            width: 760,
+            height: MediaQuery.of(dialogContext).size.height * 0.65,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                content ?? '',
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.45),
+              ),
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取日志文件失败：$e')));
+    }
+  }
+
+  Future<void> _showLogFiles() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * 0.72,
+          child: Column(
+            children: [
+              Padding(
+                padding: EdgeInsets.all(AppSpacing.lg),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('日志文件 (${_files.length})', style: AppTypography.sectionTitle(context))),
+                    IconButton(icon: const Icon(Icons.refresh), onPressed: () async { Navigator.pop(sheetContext); await _load(); if (mounted) await _showLogFiles(); }),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _files.isEmpty
+                    ? const Center(child: Text('暂无日志文件'))
+                    : ListView.separated(
+                        itemCount: _files.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (_, index) {
+                          final file = _files[index];
+                          final name = (file['name'] ?? '').toString();
+                          final size = (file['size'] as num?)?.toInt() ?? 0;
+                          return ListTile(
+                            leading: const Icon(Icons.description_outlined),
+                            title: Text(name),
+                            subtitle: Text('${_formatBytes(size)} · ${file['modTime'] ?? ''}'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () { Navigator.pop(sheetContext); _openLogFile(file); },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   List<_LogEntry> get _filtered {
@@ -145,6 +241,10 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
         title: '运行日志',
         showBackButton: true,
         fallbackRoute: AppRoutes.settingsToolbox,
+        actions: [
+          AmitiaIconButton(icon: Icons.folder_open_outlined, tooltip: '日志文件', onPressed: _showLogFiles),
+          AmitiaIconButton(icon: Icons.refresh, tooltip: '刷新', onPressed: _load),
+        ],
       ),
       body: Column(
         children: [

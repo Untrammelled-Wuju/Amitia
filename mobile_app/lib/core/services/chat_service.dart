@@ -78,6 +78,15 @@ class ChatService {
     return true;
   }
 
+  Future<void> renameConversation(String id, String title) async {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) throw ArgumentError('会话标题不能为空');
+    await _api.put<Map<String, dynamic>>(
+      '/api/web-chat/conversations/$id',
+      data: {'title': trimmed},
+    );
+  }
+
   Future<void> deleteMessages(String conversationId) async {
     await _api.delete('/api/chats/conversations/$conversationId/messages');
   }

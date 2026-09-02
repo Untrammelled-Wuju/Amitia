@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_routes.dart';
@@ -189,6 +191,12 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
                 onTap: () => _showPermissionSettings(skill),
               ),
               _ActionChip(
+                label: '配置',
+                icon: Icons.tune,
+                color: context.info,
+                onTap: () => _showSkillConfig(skill),
+              ),
+              _ActionChip(
                 label: '手动测试',
                 icon: Icons.science_outlined,
                 color: context.success,
@@ -361,6 +369,124 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
         ],
       ),
     );
+  }
+
+
+  Future<void> _showSkillConfig(Map<String, dynamic> skill) async {
+    final id = (skill['id'] ?? '').toString();
+    final name = (skill['name'] ?? id).toString();
+    if (id.isEmpty) return;
+    try {
+      final service = ref.read(extensionServiceProvider);
+      final current = await service.getSkillConfig(id, characterId: _characterId) ?? const <String, dynamic>{};
+      if (!mounted) return;
+      final controller = TextEditingController(text: const JsonEncoder.withIndent('  ').convert(current));
+      String? errorText;
+      bool saving = false;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            backgroundColor: dialogContext.surfacePrimary,
+            shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+            title: Text('$name · 配置', style: AppTypography.cardTitle(dialogContext)),
+            content: SizedBox(
+              width: 560,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('当前角色配置 JSON', style: AppTypography.label(dialogContext)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: controller,
+                    minLines: 10,
+                    maxLines: 18,
+                    enabled: !saving,
+                    keyboardType: TextInputType.multiline,
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                    decoration: const InputDecoration(border: OutlineInputBorder(), alignLabelWithHint: true),
+                  ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 8),
+                    Text(errorText!, style: AppTypography.caption(dialogContext).copyWith(color: dialogContext.error)),
+                  ],
+                  const SizedBox(height: 8),
+                  Text('保存时由后端按该 Skill 的 Config Schema 校验。Secret 字段不会从后端以明文回显。', style: AppTypography.caption(dialogContext)),
+                  if (saving) ...[
+                    const SizedBox(height: 10),
+                    const LinearProgressIndicator(),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        setDialogState(() {
+                          saving = true;
+                          errorText = null;
+                        });
+                        try {
+                          await service.resetSkillConfig(id, characterId: _characterId);
+                          final reset = await service.getSkillConfig(id, characterId: _characterId) ?? const <String, dynamic>{};
+                          controller.text = const JsonEncoder.withIndent('  ').convert(reset);
+                          setDialogState(() => saving = false);
+                        } catch (e) {
+                          setDialogState(() {
+                            saving = false;
+                            errorText = '恢复默认失败：${safeErrorMessage(e)}';
+                          });
+                        }
+                      },
+                child: const Text('恢复默认'),
+              ),
+              TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: const Text('关闭')),
+              FilledButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        Map<String, dynamic> value;
+                        try {
+                          final decoded = jsonDecode(controller.text);
+                          if (decoded is! Map) throw const FormatException('配置根节点必须是 JSON Object');
+                          value = decoded.map((key, val) => MapEntry(key.toString(), val));
+                        } catch (e) {
+                          setDialogState(() => errorText = 'JSON 格式错误：$e');
+                          return;
+                        }
+                        setDialogState(() {
+                          saving = true;
+                          errorText = null;
+                        });
+                        try {
+                          await service.updateSkillConfig(id, value, characterId: _characterId);
+                          if (!dialogContext.mounted) return;
+                          Navigator.pop(dialogContext);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Skill 配置已保存')));
+                          }
+                        } catch (e) {
+                          setDialogState(() {
+                            saving = false;
+                            errorText = '保存失败：${safeErrorMessage(e)}';
+                          });
+                        }
+                      },
+                child: const Text('保存配置'),
+              ),
+            ],
+          ),
+        ),
+      );
+      controller.dispose();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取配置失败: ${safeErrorMessage(e)}'), backgroundColor: context.error));
+      }
+    }
   }
 
   Future<void> _showPermissionSettings(Map<String, dynamic> skill) async {

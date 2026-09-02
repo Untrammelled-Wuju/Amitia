@@ -1,563 +1,629 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../app/app_routes.dart';
+
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
-import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
-final _skillDetailProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, draftId) async {
-  final svc = ref.read(extensionServiceProvider);
-  return svc.getSkill(draftId);
-});
-
-class SkillDraftEditorPage extends ConsumerWidget {
-  final String draftId;
-
+class SkillDraftEditorPage extends ConsumerStatefulWidget {
   const SkillDraftEditorPage({super.key, required this.draftId});
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final skillAsync = ref.watch(_skillDetailProvider(draftId));
-
-    return AmitiaScaffold(
-      appBar: AmitiaAppBar(
-        title: 'Draft 编辑器',
-        showBackButton: true,
-        fallbackRoute: AppRoutes.workshop,
-      ),
-      body: skillAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.error_outline, size: 48, color: context.textSecondary),
-                const SizedBox(height: 16),
-                Text(
-                  '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
-                  style: AppTypography.body(context).copyWith(color: context.error),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                AmitiaButton(
-                  label: '重试',
-                  onPressed: () => ref.invalidate(_skillDetailProvider(draftId)),
-                ),
-              ],
-            ),
-          ),
-        ),
-        data: (skill) {
-          return _SkillDraftContent(
-            draftId: draftId,
-            skill: skill,
-            onRefresh: () => ref.invalidate(_skillDetailProvider(draftId)),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _SkillDraftContent extends ConsumerStatefulWidget {
   final String draftId;
-  final Map<String, dynamic>? skill;
-  final VoidCallback onRefresh;
-
-  const _SkillDraftContent({required this.draftId, this.skill, required this.onRefresh});
 
   @override
-  ConsumerState<_SkillDraftContent> createState() => _SkillDraftContentState();
+  ConsumerState<SkillDraftEditorPage> createState() => _SkillDraftEditorPageState();
 }
 
-class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
-  late TextEditingController _nameController;
-  late TextEditingController _descController;
-  late TextEditingController _metadataController;
-  late TextEditingController _inputSchemaController;
-  late TextEditingController _outputSchemaController;
-  late TextEditingController _riskController;
-
-  bool _isTesting = false;
-  bool _hasTested = false;
-  String _testResult = '';
-  String _selectedRisk = '低风险';
-  bool _isSaving = false;
-
-  final _riskOptions = ['低风险', '中风险', '高风险'];
+class _SkillDraftEditorPageState extends ConsumerState<SkillDraftEditorPage> {
+  Map<String, dynamic>? _session;
+  Map<String, dynamic>? _revision;
+  Map<String, dynamic>? _validation;
+  List<Map<String, dynamic>> _tests = const [];
+  bool _loading = true;
+  bool _busy = false;
+  String _testMode = 'dry_run';
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    final name = (widget.skill?['name'] ?? '').toString();
-    final description = (widget.skill?['description'] ?? '').toString();
-    final metadata = (widget.skill?['metadata'] ?? '').toString();
-    final inputSchema = (widget.skill?['inputSchema'] ?? '').toString();
-    final outputSchema = (widget.skill?['outputSchema'] ?? '').toString();
-    final riskAssessment = (widget.skill?['riskAssessment'] ?? '低风险').toString();
-    final testResult = (widget.skill?['testResult'] ?? '未测试').toString();
-
-    _nameController = TextEditingController(text: name);
-    _descController = TextEditingController(text: description);
-    _metadataController = TextEditingController(text: metadata);
-    _inputSchemaController = TextEditingController(text: inputSchema);
-    _outputSchemaController = TextEditingController(text: outputSchema);
-    _riskController = TextEditingController(text: riskAssessment);
-    _selectedRisk = _riskOptions.contains(riskAssessment) ? riskAssessment : '低风险';
-    _hasTested = testResult != '未测试';
-    _testResult = testResult;
+    _load();
   }
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _descController.dispose();
-    _metadataController.dispose();
-    _inputSchemaController.dispose();
-    _outputSchemaController.dispose();
-    _riskController.dispose();
-    super.dispose();
-  }
-
-  BadgeType _riskBadgeType(String risk) {
-    switch (risk) {
-      case '低风险':
-        return BadgeType.success;
-      case '中风险':
-        return BadgeType.warning;
-      case '高风险':
-        return BadgeType.error;
-      default:
-        return BadgeType.neutral;
-    }
-  }
-
-  Future<void> _runTest() async {
-    setState(() => _isTesting = true);
-    final svc = ref.read(extensionServiceProvider);
-    final result = await svc.executeSkill(widget.draftId, {
-      'action': 'test',
-      'inputSchema': _inputSchemaController.text,
-      'outputSchema': _outputSchemaController.text,
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
     });
-    if (mounted) {
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final session = await svc.getWorkshopSession(widget.draftId);
+      Map<String, dynamic>? revision;
+      Map<String, dynamic>? validation;
+      if (session != null) {
+        final embedded = session['revision'];
+        if (embedded is Map) {
+          revision = Map<String, dynamic>.from(embedded);
+        } else {
+          final currentRevision =
+              (session['currentRevision'] as num?)?.toInt() ?? 0;
+          if (currentRevision > 0) {
+            revision = await svc.getWorkshopRevision(
+              widget.draftId,
+              currentRevision,
+            );
+          }
+        }
+        final rawValidation = revision?['validation'];
+        if (rawValidation is Map) {
+          validation = Map<String, dynamic>.from(rawValidation);
+        }
+      }
+      final tests = await svc.workshopTests(widget.draftId);
+      if (!mounted) return;
       setState(() {
-        _isTesting = false;
-        _hasTested = true;
-        _testResult = (result?['passed'] == true) ? '通过' : '失败';
+        _session = session;
+        _revision = revision;
+        _validation = validation;
+        _tests = tests;
+        _loading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('测试$_testResult')),
-      );
-    }
-  }
-
-  Future<void> _saveDraft() async {
-    if (_nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请填写技能名称')),
-      );
-      return;
-    }
-    setState(() => _isSaving = true);
-    final svc = ref.read(extensionServiceProvider);
-    await svc.updateSkillConfig(widget.draftId, {
-      'name': _nameController.text,
-      'description': _descController.text,
-      'metadata': _metadataController.text,
-      'inputSchema': _inputSchemaController.text,
-      'outputSchema': _outputSchemaController.text,
-      'riskAssessment': _selectedRisk,
-    });
-    if (mounted) {
-      setState(() => _isSaving = false);
-      widget.onRefresh();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('「${_nameController.text}」已保存')),
-      );
-    }
-  }
-
-  Future<void> _installSkill() async {
-    if (!_hasTested) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先运行测试')),
-      );
-      return;
-    }
-    final svc = ref.read(extensionServiceProvider);
-    await svc.enableSkill(widget.draftId);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('「${_nameController.text}」安装成功')),
-      );
-    }
-  }
-
-  Future<void> _archiveDraft() async {
-    final svc = ref.read(extensionServiceProvider);
-    await svc.disableSkill(widget.draftId);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('草稿已归档')),
-      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.all(AppSpacing.pagePadding),
-              children: [
-                _buildStatusBanner(context),
-                SizedBox(height: AppSpacing.sectionGap),
-                _buildMetadataSection(context),
-                SizedBox(height: AppSpacing.sectionGap),
-                _buildSchemaSection(context, '输入 Schema', _inputSchemaController, '定义技能的输入参数'),
-                SizedBox(height: AppSpacing.sectionGap),
-                _buildSchemaSection(context, '输出 Schema', _outputSchemaController, '定义技能的输出结果'),
-                SizedBox(height: AppSpacing.sectionGap),
-                _buildRiskSection(context),
-                SizedBox(height: AppSpacing.sectionGap),
-                _buildTestSection(context),
-                SizedBox(height: AppSpacing.sectionGap),
-                _buildInstallPreviewSection(context),
-                SizedBox(height: AppSpacing.xxl),
-              ],
-            ),
-          ),
-          _buildBottomActions(context),
-        ],
+    return AmitiaScaffold(
+      appBar: AmitiaAppBar(
+        title: 'Skill 制作',
+        showBackButton: true,
       ),
-    );
-  }
-
-  Widget _buildStatusBanner(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: context.accentSoft,
-        borderRadius: AppRadius.brMedium,
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.edit_note, size: 22, color: context.accentPrimary),
-          SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('编辑模式', style: AppTypography.body(context)),
-                const SizedBox(height: 2),
-                Text(
-                  '修改完成后请提交保存，所有变更将同步到草稿',
-                  style: AppTypography.label(context),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetadataSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('元数据', style: AppTypography.sectionTitle(context)),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('技能名称', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(
-                hintText: '输入技能名称',
-                controller: _nameController,
-              ),
-              SizedBox(height: AppSpacing.md),
-              Text('描述', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(
-                hintText: '输入技能描述',
-                controller: _descController,
-                maxLines: 3,
-              ),
-              SizedBox(height: AppSpacing.md),
-              Text('版本信息', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(
-                hintText: '例如：版本 1.0.0',
-                controller: _metadataController,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSchemaSection(
-    BuildContext context,
-    String title,
-    TextEditingController controller,
-    String hint,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: AppTypography.sectionTitle(context)),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(hint, style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              Container(
-                decoration: BoxDecoration(
-                  color: context.surfaceSecondary,
-                  borderRadius: AppRadius.brSmall,
-                ),
-                padding: EdgeInsets.all(AppSpacing.md),
-                child: AmitiaTextField(
-                  hintText: '{"type": "object", ...}',
-                  controller: controller,
-                  maxLines: 6,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRiskSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('能力风险评估', style: AppTypography.sectionTitle(context)),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text('风险等级', style: AppTypography.body(context)),
-                  const Spacer(),
-                  AmitiaStatusBadge(label: _selectedRisk, type: _riskBadgeType(_selectedRisk)),
-                ],
-              ),
-              SizedBox(height: AppSpacing.sm),
-              Row(
-                children: _riskOptions.map((risk) {
-                  final isSelected = risk == _selectedRisk;
-                  return Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(right: AppSpacing.xs),
-                      child: GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedRisk = risk;
-                          });
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: isSelected ? context.accentPrimary : context.surfaceSecondary,
-                            borderRadius: AppRadius.brSmall,
-                          ),
-                          child: Center(
-                            child: Text(
-                              risk,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                                color: isSelected ? Colors.white : context.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              SizedBox(height: AppSpacing.md),
-              Text('评估说明', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(
-                hintText: '描述风险点和缓解措施',
-                controller: _riskController,
-                maxLines: 3,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTestSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('测试结果', style: AppTypography.sectionTitle(context)),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.science_outlined, size: 20, color: context.accentPrimary),
-                  SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      _isTesting
-                          ? '正在测试...'
-                          : _hasTested
-                              ? '测试结果：$_testResult'
-                              : '尚未测试',
-                      style: AppTypography.body(context),
-                    ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? _buildError()
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.all(AppSpacing.pagePadding),
+                    children: [
+                      _buildSessionHeader(),
+                      SizedBox(height: AppSpacing.md),
+                      _buildActions(),
+                      SizedBox(height: AppSpacing.md),
+                      _buildRevisionCard(),
+                      SizedBox(height: AppSpacing.md),
+                      _buildValidationCard(),
+                      SizedBox(height: AppSpacing.md),
+                      _buildTestsCard(),
+                    ],
                   ),
-                  if (_hasTested && !_isTesting)
-                    AmitiaStatusBadge(
-                      label: _testResult == '通过' ? '通过' : '失败',
-                      type: _testResult == '通过' ? BadgeType.success : BadgeType.error,
-                    ),
-                ],
-              ),
-              if (_isTesting) ...[
-                SizedBox(height: AppSpacing.sm),
-                AmitiaProgressBar(progress: 0.7),
-              ],
-              SizedBox(height: AppSpacing.md),
-              AmitiaButton(
-                label: _isTesting ? '测试中...' : '运行测试',
-                icon: Icons.play_arrow,
-                isFullWidth: true,
-                isSecondary: _isTesting,
-                onPressed: _isTesting ? null : _runTest,
-              ),
-            ],
-          ),
-        ),
-      ],
+                ),
     );
   }
 
-  Widget _buildInstallPreviewSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('安装预览', style: AppTypography.sectionTitle(context)),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildPreviewRow(context, '技能名称', _nameController.text.isEmpty ? '未命名' : _nameController.text),
-              SizedBox(height: AppSpacing.sm),
-              _buildPreviewRow(context, '版本', _metadataController.text.isEmpty ? '未设置' : _metadataController.text),
-              SizedBox(height: AppSpacing.sm),
-              _buildPreviewRow(context, '风险等级', _selectedRisk),
-              SizedBox(height: AppSpacing.sm),
-              _buildPreviewRow(context, '测试状态', _hasTested ? _testResult : '未测试'),
-              SizedBox(height: AppSpacing.sm),
-              _buildPreviewRow(context, '输入 Schema', _inputSchemaController.text.isEmpty ? '未定义' : '已定义'),
-              SizedBox(height: AppSpacing.sm),
-              _buildPreviewRow(context, '输出 Schema', _outputSchemaController.text.isEmpty ? '未定义' : '已定义'),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPreviewRow(BuildContext context, String label, String value) {
-    return Row(
-      children: [
-        Text(label, style: AppTypography.caption(context)),
-        const Spacer(),
-        Text(value, style: AppTypography.bodySmall(context)),
-      ],
-    );
-  }
-
-  Widget _buildBottomActions(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(AppSpacing.pagePadding),
-      decoration: BoxDecoration(
-        color: context.surfacePrimary,
-        border: Border(
-          top: BorderSide(color: context.borderPrimary, width: 0.5),
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: context.error),
+            const SizedBox(height: 12),
+            Text(_error ?? '加载失败', textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            AmitiaButton(label: '重试', onPressed: _load),
+          ],
         ),
       ),
-      child: Row(
+    );
+  }
+
+  Widget _buildSessionHeader() {
+    final session = _session ?? const <String, dynamic>{};
+    final requirement = (session['requirement'] ?? '').toString();
+    final status = (session['status'] ?? 'draft').toString();
+    final revision = (session['currentRevision'] as num?)?.toInt() ?? 0;
+    return AmitiaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: AmitiaButton(
-              label: '归档',
-              isSecondary: true,
-              onPressed: () => _confirmArchive(context),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  requirement.isEmpty ? '未提供需求描述' : requirement,
+                  style: AppTypography.sectionTitle(context),
+                ),
+              ),
+              AmitiaStatusBadge(
+                label: _statusLabel(status),
+                type: _statusBadge(status),
+              ),
+            ],
           ),
-          SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: AmitiaButton(
-              label: _isSaving ? '保存中...' : '提交',
-              icon: Icons.check,
-              onPressed: _isSaving ? null : _saveDraft,
-            ),
+          SizedBox(height: AppSpacing.sm),
+          Text(
+            revision > 0 ? '当前 Revision：$revision' : '尚未生成 Revision',
+            style: AppTypography.caption(context),
           ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmArchive(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-          title: Text('归档草稿', style: AppTypography.cardTitle(context)),
-          content: Text(
-            '确认归档「${_nameController.text}」？归档后草稿将不再可编辑。',
-            style: AppTypography.body(context),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('取消', style: TextStyle(color: context.textSecondary)),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                _archiveDraft();
-              },
-              child: Text('归档', style: TextStyle(color: context.warning)),
+          if ((session['installedSkillId'] ?? '').toString().isNotEmpty) ...[
+            SizedBox(height: AppSpacing.xs),
+            Text(
+              '已安装 Skill：${session['installedSkillId']} ${session['installedVersion'] ?? ''}',
+              style: AppTypography.caption(context),
             ),
           ],
-        );
-      },
+        ],
+      ),
     );
+  }
+
+  Widget _buildActions() {
+    final status = (_session?['status'] ?? 'draft').toString();
+    final currentRevision =
+        (_session?['currentRevision'] as num?)?.toInt() ?? 0;
+    final hasRevision = currentRevision > 0;
+    final canGenerate = status == 'draft' ||
+        status == 'generated' ||
+        status == 'validation_failed' ||
+        status == 'error';
+    final canValidate = hasRevision &&
+        (status == 'generated' ||
+            status == 'validation_failed' ||
+            status == 'validated' ||
+            status == 'awaiting_permission_confirmation');
+    final canTest = hasRevision &&
+        (status == 'validated' ||
+            status == 'awaiting_permission_confirmation' ||
+            status == 'test_failed' ||
+            status == 'test_passed');
+    final canInstall = hasRevision && status == 'test_passed';
+
+    return AmitiaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('真实 Workshop 流程', style: AppTypography.cardTitle(context)),
+          SizedBox(height: AppSpacing.xs),
+          Text(
+            '生成 → 校验 → 确认测试权限 → 测试 → 确认生产权限 → 安装。',
+            style: AppTypography.caption(context),
+          ),
+          SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              AmitiaButton(
+                label: '生成 Revision',
+                height: 38,
+                isSecondary: true,
+                onPressed: _busy || !canGenerate ? null : _generate,
+              ),
+              AmitiaButton(
+                label: '校验',
+                height: 38,
+                isSecondary: true,
+                onPressed: _busy || !canValidate ? null : _validate,
+              ),
+              AmitiaButton(
+                label: '测试',
+                height: 38,
+                isSecondary: true,
+                onPressed: _busy || !canTest ? null : _prepareAndTest,
+              ),
+              AmitiaButton(
+                label: '安装',
+                height: 38,
+                onPressed: _busy || !canInstall ? null : _prepareAndInstall,
+              ),
+            ],
+          ),
+          SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Text('测试模式', style: AppTypography.label(context)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _testMode,
+                  decoration: const InputDecoration(isDense: true),
+                  items: const [
+                    DropdownMenuItem(value: 'dry_run', child: Text('Dry Run')),
+                    DropdownMenuItem(value: 'mocked', child: Text('Mocked')),
+                    DropdownMenuItem(
+                      value: 'controlled_live',
+                      child: Text('Controlled Live'),
+                    ),
+                  ],
+                  onChanged: _busy
+                      ? null
+                      : (value) => setState(() => _testMode = value ?? 'dry_run'),
+                ),
+              ),
+            ],
+          ),
+          if (_busy) ...[
+            SizedBox(height: AppSpacing.md),
+            const LinearProgressIndicator(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRevisionCard() {
+    final revision = _revision;
+    if (revision == null) {
+      return AmitiaCard(
+        child: Text('尚未生成 Revision。', style: AppTypography.body(context)),
+      );
+    }
+    final draft = revision['normalizedDraft'] is Map
+        ? Map<String, dynamic>.from(revision['normalizedDraft'] as Map)
+        : revision['draft'] is Map
+            ? Map<String, dynamic>.from(revision['draft'] as Map)
+            : const <String, dynamic>{};
+    final metadata = draft['metadata'] is Map
+        ? Map<String, dynamic>.from(draft['metadata'] as Map)
+        : const <String, dynamic>{};
+    final plan = revision['plan'] is Map
+        ? Map<String, dynamic>.from(revision['plan'] as Map)
+        : const <String, dynamic>{};
+    return AmitiaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Revision ${(revision['revision'] as num?)?.toInt() ?? '-'}',
+              style: AppTypography.cardTitle(context)),
+          SizedBox(height: AppSpacing.sm),
+          _kv('Skill', (metadata['name'] ?? metadata['id'] ?? '-').toString()),
+          _kv('版本', (metadata['version'] ?? '-').toString()),
+          _kv('模型',
+              '${revision['modelProvider'] ?? '-'} / ${revision['modelName'] ?? '-'}'),
+          if (plan.isNotEmpty) _jsonSection('生成计划', plan),
+          _jsonSection('标准化草稿', draft),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildValidationCard() {
+    final validation = _validation;
+    if (validation == null) {
+      return AmitiaCard(
+        child: Text('尚未执行校验。', style: AppTypography.body(context)),
+      );
+    }
+    final capabilities = validation['capabilities'] is Map
+        ? Map<String, dynamic>.from(validation['capabilities'] as Map)
+        : const <String, dynamic>{};
+    final required = _stringList(capabilities['required']);
+    final highRisk = _stringList(capabilities['highRisk']);
+    final issues = validation['issues'] is List ? validation['issues'] as List : const [];
+    return AmitiaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('校验结果', style: AppTypography.cardTitle(context)),
+              ),
+              AmitiaStatusBadge(
+                label: validation['valid'] == true ? '通过' : '未通过',
+                type: validation['valid'] == true
+                    ? BadgeType.success
+                    : BadgeType.error,
+              ),
+            ],
+          ),
+          SizedBox(height: AppSpacing.sm),
+          _kv('Workflow Checksum',
+              (validation['workflowChecksum'] ?? '-').toString()),
+          _kv('副作用', validation['hasSideEffects'] == true ? '有' : '无'),
+          _kv('幂等', validation['idempotent'] == true ? '是' : '否'),
+          _kv('必须 Capability', required.isEmpty ? '无' : required.join(', ')),
+          _kv('高风险 Capability', highRisk.isEmpty ? '无' : highRisk.join(', ')),
+          if (issues.isNotEmpty) _jsonSection('问题', {'items': issues}),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTestsCard() {
+    return AmitiaCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('测试记录', style: AppTypography.cardTitle(context)),
+          SizedBox(height: AppSpacing.sm),
+          if (_tests.isEmpty)
+            Text('暂无测试记录', style: AppTypography.caption(context))
+          else
+            ..._tests.take(10).map((test) {
+              final status = (test['status'] ?? '').toString();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      status == 'passed' ? Icons.check_circle : Icons.error_outline,
+                      size: 18,
+                      color: status == 'passed' ? context.success : context.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${test['testRunId'] ?? '-'} · $status · ${test['durationMs'] ?? 0}ms',
+                        style: AppTypography.caption(context),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _generate() async {
+    await _runAction('生成', () async {
+      final revision = await ref
+          .read(extensionServiceProvider)
+          .generateWorkshopDraft(widget.draftId);
+      if (revision == null) throw StateError('后端未返回 Revision');
+    });
+  }
+
+  Future<void> _validate() async {
+    final revision = (_session?['currentRevision'] as num?)?.toInt() ?? 0;
+    if (revision < 1) return;
+    await _runAction('校验', () async {
+      final validation = await ref
+          .read(extensionServiceProvider)
+          .validateWorkshopRevision(widget.draftId, revision);
+      if (validation == null) throw StateError('后端未返回校验结果');
+    });
+  }
+
+  Future<void> _prepareAndTest() async {
+    final revision = (_session?['currentRevision'] as num?)?.toInt() ?? 0;
+    if (revision < 1) return;
+    final validation = _validation ??
+        await ref
+            .read(extensionServiceProvider)
+            .validateWorkshopRevision(widget.draftId, revision);
+    if (validation == null || validation['valid'] != true) {
+      if (mounted) amitiaSnackBar(context, '当前 Revision 尚未通过校验');
+      await _load();
+      return;
+    }
+    final capabilities = validation['capabilities'] is Map
+        ? Map<String, dynamic>.from(validation['capabilities'] as Map)
+        : const <String, dynamic>{};
+    final required = _stringList(capabilities['required']);
+    final highRisk = _stringList(capabilities['highRisk']);
+    final confirmed = await _confirmCapabilities(
+      title: '确认测试权限',
+      capabilities: required,
+      highRisk: highRisk,
+      production: false,
+    );
+    if (confirmed != true) return;
+    if (_testMode == 'controlled_live') {
+      final liveConfirmed = await showAmitiaConfirmDialog(
+        context,
+        title: 'Controlled Live',
+        message: '该模式可能产生真实外部副作用。确认继续真实受控测试吗？',
+        confirmLabel: '确认执行',
+        isDestructive: true,
+      );
+      if (liveConfirmed != true) return;
+    }
+    await _runAction('测试', () async {
+      final svc = ref.read(extensionServiceProvider);
+      await svc.confirmWorkshopPermissions(
+        id: widget.draftId,
+        revision: revision,
+        workflowChecksum: (validation['workflowChecksum'] ?? '').toString(),
+        capabilities: required,
+        confirmedHighRisk: highRisk,
+        production: false,
+      );
+      final report = await svc.testWorkshopRevision(
+        id: widget.draftId,
+        revision: revision,
+        mode: _testMode,
+        controlledLiveConfirmed: _testMode == 'controlled_live',
+      );
+      if (report == null) throw StateError('测试没有返回报告');
+      if ((report['status'] ?? '').toString() != 'passed') {
+        throw StateError('测试未通过：${report['error'] ?? report['status']}');
+      }
+    });
+  }
+
+  Future<void> _prepareAndInstall() async {
+    final revision = (_session?['currentRevision'] as num?)?.toInt() ?? 0;
+    if (revision < 1 || _validation == null) return;
+    final validation = _validation!;
+    final capabilities = validation['capabilities'] is Map
+        ? Map<String, dynamic>.from(validation['capabilities'] as Map)
+        : const <String, dynamic>{};
+    final required = _stringList(capabilities['required']);
+    final highRisk = _stringList(capabilities['highRisk']);
+    final confirmed = await _confirmCapabilities(
+      title: '确认生产权限并安装',
+      capabilities: required,
+      highRisk: highRisk,
+      production: true,
+    );
+    if (confirmed != true) return;
+    await _runAction('安装', () async {
+      final svc = ref.read(extensionServiceProvider);
+      await svc.confirmWorkshopPermissions(
+        id: widget.draftId,
+        revision: revision,
+        workflowChecksum: (validation['workflowChecksum'] ?? '').toString(),
+        capabilities: required,
+        confirmedHighRisk: highRisk,
+        production: true,
+      );
+      final installed = await svc.installWorkshopRevision(
+        widget.draftId,
+        revision,
+      );
+      if (installed == null) throw StateError('安装没有返回结果');
+    });
+  }
+
+  Future<bool?> _confirmCapabilities({
+    required String title,
+    required List<String> capabilities,
+    required List<String> highRisk,
+    required bool production,
+  }) {
+    final text = capabilities.isEmpty
+        ? '当前 Revision 不需要额外 Capability。\n\n确认继续${production ? '安装' : '测试'}吗？'
+        : '必须 Capability：\n${capabilities.map((e) => '• $e').join('\n')}\n\n'
+            '${highRisk.isEmpty ? '' : '高风险 Capability：\n${highRisk.map((e) => '• $e').join('\n')}\n\n'}'
+            '确认这些权限与当前 Workflow Checksum 绑定并继续吗？';
+    return showAmitiaConfirmDialog(
+      context,
+      title: title,
+      message: text,
+      confirmLabel: production ? '确认并安装' : '确认并测试',
+      isDestructive: highRisk.isNotEmpty,
+    );
+  }
+
+  Future<void> _runAction(
+    String label,
+    Future<void> Function() action,
+  ) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+      await _load();
+      if (mounted) amitiaSnackBar(context, '$label完成');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '$label失败：$error');
+      await _load();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _kv(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 118,
+            child: Text(label, style: AppTypography.caption(context)),
+          ),
+          Expanded(
+            child: SelectableText(
+              value,
+              style: AppTypography.caption(context)
+                  .copyWith(color: context.textPrimary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _jsonSection(String title, Map<String, dynamic> value) {
+    const encoder = JsonEncoder.withIndent('  ');
+    return Padding(
+      padding: EdgeInsets.only(top: AppSpacing.sm),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Text(title, style: AppTypography.label(context)),
+        children: [
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: context.surfaceSecondary,
+              borderRadius: AppRadius.brSmall,
+            ),
+            child: SelectableText(
+              encoder.convert(value),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<String> _stringList(dynamic value) {
+    if (value is! List) return const <String>[];
+    return value.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+  }
+
+  String _statusLabel(String status) {
+    const labels = <String, String>{
+      'draft': '草稿',
+      'generating': '生成中',
+      'generated': '已生成',
+      'validating': '校验中',
+      'validation_failed': '校验失败',
+      'validated': '已校验',
+      'awaiting_permission_confirmation': '待确认权限',
+      'testing': '测试中',
+      'test_failed': '测试失败',
+      'test_passed': '测试通过',
+      'installing': '安装中',
+      'installed': '已安装',
+      'enabled': '已启用',
+      'disabled': '已停用',
+      'archived': '已归档',
+      'error': '错误',
+    };
+    return labels[status] ?? status;
+  }
+
+  BadgeType _statusBadge(String status) {
+    if (status == 'installed' ||
+        status == 'enabled' ||
+        status == 'test_passed' ||
+        status == 'validated') {
+      return BadgeType.success;
+    }
+    if (status.contains('failed') || status == 'error') {
+      return BadgeType.error;
+    }
+    if (status == 'generating' ||
+        status == 'validating' ||
+        status == 'testing' ||
+        status == 'installing') {
+      return BadgeType.accent;
+    }
+    return BadgeType.neutral;
   }
 }

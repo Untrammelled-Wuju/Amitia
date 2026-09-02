@@ -69,6 +69,7 @@ class AmitiaMessageBubble extends StatelessWidget {
   final List<AmitiaAgentActivity> agentActivities;
   final bool showThinking;
   final VoidCallback? onRetry;
+  final VoidCallback? onReply;
   final VoidCallback? onAgentTaskTap;
   final VoidCallback? onPauseAgentTask;
   final VoidCallback? onResumeAgentTask;
@@ -87,6 +88,7 @@ class AmitiaMessageBubble extends StatelessWidget {
     this.agentActivities = const <AmitiaAgentActivity>[],
     this.showThinking = false,
     this.onRetry,
+    this.onReply,
     this.onAgentTaskTap,
     this.onPauseAgentTask,
     this.onResumeAgentTask,
@@ -149,16 +151,50 @@ class AmitiaMessageBubble extends StatelessWidget {
               ),
             ),
           ),
+          if ((message.replyToMessageId ?? '').isNotEmpty) ...[
+            Container(
+              constraints: const BoxConstraints(maxWidth: 280),
+              margin: const EdgeInsets.only(bottom: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              decoration: BoxDecoration(
+                color: context.surfaceSecondary,
+                borderRadius: AppRadius.brSmall,
+                border: Border(left: BorderSide(color: context.accentPrimary, width: 2)),
+              ),
+              child: Text(
+                '引用：${(message.replyToExcerpt ?? '原消息').trim()}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.label(context).copyWith(color: context.textSecondary),
+              ),
+            ),
+          ],
           _buildContent(context, isUser),
           if (!(showThinking && message.content.trim().isEmpty))
             Padding(
-              padding: const EdgeInsets.only(top: 5),
-              child: Text(
-                _formatTime(message.time),
-                style: AppTypography.label(context).copyWith(
-                  fontSize: 9,
-                  color: context.textTertiary,
-                ),
+              padding: const EdgeInsets.only(top: 3),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _formatTime(message.time),
+                    style: AppTypography.label(context).copyWith(
+                      fontSize: 9,
+                      color: context.textTertiary,
+                    ),
+                  ),
+                  if (onReply != null) ...[
+                    const SizedBox(width: 7),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onReply,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                        child: Icon(Icons.reply_rounded, size: 14, color: context.textTertiary),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           if (message.status == MessageStatus.error)
@@ -1214,6 +1250,9 @@ class AmitiaChatInput extends StatefulWidget {
   final void Function(String lang, String code)? onSendCode;
   final Future<List<Map<String, dynamic>>> Function()? onLoadEmotes;
   final void Function(String emoteId, String displayText)? onSendEmote;
+  final Future<List<Map<String, dynamic>>> Function()? onLoadAgentSkills;
+  final String? replyPreview;
+  final VoidCallback? onCancelReply;
 
   const AmitiaChatInput({
     super.key,
@@ -1228,6 +1267,9 @@ class AmitiaChatInput extends StatefulWidget {
     this.onSendCode,
     this.onLoadEmotes,
     this.onSendEmote,
+    this.onLoadAgentSkills,
+    this.replyPreview,
+    this.onCancelReply,
   });
 
   @override
@@ -1239,6 +1281,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
   final _inputFocusNode = FocusNode();
   bool _hasText = false;
   bool _isInputFocused = false;
+  final List<String> _selectedSkillNames = <String>[];
 
   @override
   void initState() {
@@ -1260,10 +1303,15 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
 
   void _send() {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    widget.onSend(text);
+    if (text.isEmpty && _selectedSkillNames.isEmpty) return;
+    final prefix = _selectedSkillNames.map((name) => '\$$name').join(' ');
+    final outgoing = [prefix, text].where((part) => part.trim().isNotEmpty).join(' ');
+    widget.onSend(outgoing);
     _controller.clear();
-    setState(() => _hasText = false);
+    setState(() {
+      _hasText = false;
+      _selectedSkillNames.clear();
+    });
   }
 
   void _showFileSheet() {
@@ -1496,6 +1544,81 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     );
   }
 
+  Future<void> _showAgentSkillPicker() async {
+    final loader = widget.onLoadAgentSkills;
+    if (loader == null) return;
+    List<Map<String, dynamic>> skills;
+    try {
+      skills = await loader();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('加载 Agent Skill 失败：$error')));
+      return;
+    }
+    if (!mounted) return;
+    final usable = skills.where((skill) {
+      final enabled = skill['enabled'] == true || skill['isEnabled'] == true || skill['enabled'] == 1;
+      final status = (skill['compatibilityStatus'] ?? skill['compatibility'] ?? '').toString().toLowerCase();
+      return enabled && status != 'blocked' && status != 'incompatible';
+    }).toList();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.surfacePrimary,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * 0.62,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text('本次消息使用 Agent Skill', style: AppTypography.pageTitle(sheetContext))),
+                      IconButton(onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close)),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: sheetContext.borderSecondary),
+                Expanded(
+                  child: usable.isEmpty
+                      ? Center(child: Text('暂无已启用且兼容的 Agent Skill', style: AppTypography.caption(sheetContext)))
+                      : ListView.builder(
+                          itemCount: usable.length,
+                          itemBuilder: (_, index) {
+                            final skill = usable[index];
+                            final name = (skill['name'] ?? '').toString();
+                            final displayName = (skill['displayName'] ?? name).toString();
+                            final selected = _selectedSkillNames.contains(name);
+                            return CheckboxListTile(
+                              value: selected,
+                              title: Text(displayName),
+                              subtitle: Text((skill['shortDescription'] ?? skill['description'] ?? '').toString(), maxLines: 2, overflow: TextOverflow.ellipsis),
+                              onChanged: name.isEmpty
+                                  ? null
+                                  : (value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          if (!_selectedSkillNames.contains(name)) _selectedSkillNames.add(name);
+                                        } else {
+                                          _selectedSkillNames.remove(name);
+                                        }
+                                      });
+                                      setSheetState(() {});
+                                    },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showVoiceSheet() {
     widget.onPickAudio?.call();
   }
@@ -1585,6 +1708,15 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                   _showCodeDialog();
                 },
               ),
+              if (widget.onLoadAgentSkills != null)
+                _ComposerTool(
+                  icon: Icons.auto_awesome_outlined,
+                  label: '使用 Agent Skill',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showAgentSkillPicker();
+                  },
+                ),
               _ComposerTool(
                 icon: Icons.emoji_emotions_outlined,
                 label: '选择表情',
@@ -1631,6 +1763,34 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if ((widget.replyPreview ?? '').trim().isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brSmall),
+                  child: Row(
+                    children: [
+                      Icon(Icons.reply_rounded, size: 16, color: context.accentPrimary),
+                      const SizedBox(width: 7),
+                      Expanded(child: Text(widget.replyPreview!, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTypography.caption(context))),
+                      GestureDetector(onTap: widget.onCancelReply, child: Icon(Icons.close, size: 17, color: context.textTertiary)),
+                    ],
+                  ),
+                ),
+              if (_selectedSkillNames.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _selectedSkillNames.map((name) => InputChip(
+                      visualDensity: VisualDensity.compact,
+                      avatar: const Icon(Icons.auto_awesome_outlined, size: 14),
+                      label: Text('\$$name'),
+                      onDeleted: () => setState(() => _selectedSkillNames.remove(name)),
+                    )).toList(),
+                  ),
+                ),
               TapRegion(
                 onTapOutside: (_) => _inputFocusNode.unfocus(),
                 child: TextField(
@@ -1685,14 +1845,14 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                       const SizedBox(width: 6),
                       GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: _hasText ? _send : null,
+                        onTap: (_hasText || _selectedSkillNames.isNotEmpty) ? _send : null,
                         child: Tooltip(
                           message: '发送消息',
                           child: Container(
                             width: 31,
                             height: 31,
                             decoration: BoxDecoration(
-                              color: _hasText
+                              color: (_hasText || _selectedSkillNames.isNotEmpty)
                                   ? context.accentPrimary
                                   : context.borderPrimary,
                               shape: BoxShape.circle,
@@ -1701,7 +1861,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                             child: Icon(
                               Icons.arrow_upward_rounded,
                               size: 18,
-                              color: _hasText
+                              color: (_hasText || _selectedSkillNames.isNotEmpty)
                                   ? context.surfacePrimary
                                   : context.textTertiary,
                             ),

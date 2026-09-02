@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -25,6 +26,18 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
   bool _loading = true;
   String? _error;
 
+  bool _asBool(dynamic value, {bool fallback = false}) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) return value == '1' || value.toLowerCase() == 'true';
+    return fallback;
+  }
+
+  List<String> _stringList(dynamic value) {
+    if (value is! List) return const [];
+    return value.map((item) => item.toString()).where((item) => item.isNotEmpty).toList(growable: false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -45,19 +58,37 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
 
   List<Map<String, dynamic>> get _filteredEmotes {
     if (_selectedGroup == '全部') return _emotes;
-    return _emotes.where((e) => (e['group'] ?? '').toString() == _selectedGroup).toList();
+    final group = _groups.where((item) => (item['name'] ?? '').toString() == _selectedGroup).firstOrNull;
+    final groupId = (group?['id'] ?? '').toString();
+    if (groupId.isEmpty) return const [];
+    return _emotes.where((emote) {
+      final ids = emote['groupIds'];
+      return ids is List && ids.map((e) => e.toString()).contains(groupId);
+    }).toList(growable: false);
   }
 
   int _groupCount(String groupName) {
     if (groupName == '全部') return _emotes.length;
-    final g = _groups.firstWhere(
-      (gr) => (gr['name'] ?? '').toString() == groupName,
-      orElse: () => {},
-    );
-    if (g.isEmpty) {
-      return _emotes.where((e) => (e['group'] ?? '').toString() == groupName).length;
-    }
-    return (g['count'] as int?) ?? 0;
+    final group = _groups.where((item) => (item['name'] ?? '').toString() == groupName).firstOrNull;
+    final groupId = (group?['id'] ?? '').toString();
+    if (groupId.isEmpty) return 0;
+    return _emotes.where((emote) {
+      final ids = emote['groupIds'];
+      return ids is List && ids.map((e) => e.toString()).contains(groupId);
+    }).length;
+  }
+
+  String _groupNames(Map<String, dynamic> emote) {
+    final ids = (emote['groupIds'] is List)
+        ? (emote['groupIds'] as List).map((e) => e.toString()).toSet()
+        : <String>{};
+    if (ids.isEmpty) return '未分组';
+    final names = _groups
+        .where((group) => ids.contains((group['id'] ?? '').toString()))
+        .map((group) => (group['name'] ?? '').toString())
+        .where((name) => name.isNotEmpty)
+        .toList(growable: false);
+    return names.isEmpty ? '未分组' : names.join('、');
   }
 
   @override
@@ -155,29 +186,139 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
         children: [
           Text('已选 ${_selected.length} 项', style: AppTypography.bodySmall(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600)),
           const Spacer(),
-          if (_selected.isNotEmpty)
+          if (_selected.isNotEmpty) ...[
+            PopupMenuButton<String>(
+              tooltip: '批量操作',
+              onSelected: _runBatchAction,
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'enable_ai', child: Text('启用 AI 使用')),
+                PopupMenuItem(value: 'disable_ai', child: Text('关闭 AI 使用')),
+                PopupMenuItem(value: 'enable', child: Text('启用表情')),
+                PopupMenuItem(value: 'disable', child: Text('禁用表情')),
+                PopupMenuItem(value: 'add_group', child: Text('加入分组')),
+                PopupMenuItem(value: 'remove_group', child: Text('移出分组')),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Text('批量操作', style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            SizedBox(width: AppSpacing.xs),
             GestureDetector(
               onTap: () => _showBatchDeleteConfirm(context),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(color: context.error, borderRadius: AppRadius.brTag),
-                child: Text('批量删除', style: TextStyle(fontSize: 13, color: Colors.white)),
+                child: const Text('批量删除', style: TextStyle(fontSize: 13, color: Colors.white)),
               ),
             ),
+          ],
         ],
       ),
     );
+  }
+
+  Future<void> _runBatchAction(String action) async {
+    if (_selected.isEmpty) return;
+    if (action == 'add_group' || action == 'remove_group') {
+      await _showBatchGroupEditor(remove: action == 'remove_group');
+      return;
+    }
+    final update = switch (action) {
+      'enable_ai' => <String, dynamic>{'aiEnabled': true},
+      'disable_ai' => <String, dynamic>{'aiEnabled': false},
+      'enable' => <String, dynamic>{'enabled': true},
+      'disable' => <String, dynamic>{'enabled': false},
+      _ => <String, dynamic>{},
+    };
+    if (update.isEmpty) return;
+    try {
+      await ref.read(emoteServiceProvider).batchUpdateEmotes(_selected.toList(growable: false), update);
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('批量更新完成')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('批量更新失败：$e')));
+    }
+  }
+
+  Future<void> _showBatchGroupEditor({required bool remove}) async {
+    if (_groups.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('当前没有可用分组')),
+        );
+      }
+      return;
+    }
+    String? selectedGroupId;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(remove ? '批量移出分组' : '批量加入分组'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: _groups.map((group) {
+                final id = (group['id'] ?? '').toString();
+                return RadioListTile<String>(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text((group['name'] ?? id).toString()),
+                  value: id,
+                  groupValue: selectedGroupId,
+                  onChanged: (value) => setDialogState(() => selectedGroupId = value),
+                );
+              }).toList(growable: false),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+            FilledButton(
+              onPressed: selectedGroupId == null ? null : () => Navigator.pop(dialogContext, true),
+              child: Text(remove ? '移出' : '加入'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || selectedGroupId == null) return;
+    try {
+      final service = ref.read(emoteServiceProvider);
+      final ids = _selected.toList(growable: false);
+      if (remove) {
+        for (final emoteId in ids) {
+          await service.removeEmoteFromGroup(selectedGroupId!, emoteId);
+        }
+      } else {
+        await service.addEmotesToGroup(selectedGroupId!, ids);
+      }
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(remove ? '已移出分组' : '已加入分组')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${remove ? '移出' : '加入'}分组失败：$e')),
+        );
+      }
+    }
   }
 
   Widget _buildEmoteCard(BuildContext context, Map<String, dynamic> emote) {
     final id = (emote['id'] ?? '').toString();
     final name = (emote['name'] ?? '').toString();
     final meaning = (emote['meaning'] ?? '').toString();
-    final group = (emote['group'] ?? '').toString();
+    final group = _groupNames(emote);
     final emoji = (emote['emoji'] ?? '😊').toString();
-    final characterId = emote['characterId']?.toString();
-    final isEnabled = (emote['isEnabled'] as bool?) ?? ((emote['enabled'] as int?) == 1);
-    final sendProbability = (emote['sendProbability'] ?? emote['probability'] ?? 50) as int;
+    final characterIds = _stringList(emote['characterIds']);
+    final isEnabled = _asBool(emote['isEnabled'] ?? emote['enabled'], fallback: true);
+    final aiEnabled = _asBool(emote['aiEnabled']);
     final isSelected = _selected.contains(id);
 
     return AmitiaCard(
@@ -190,6 +331,8 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
           setState(() {
             if (isSelected) { _selected.remove(id); } else { _selected.add(id); }
           });
+        } else {
+          _showEmoteEditor(emote);
         }
       },
       child: Row(
@@ -217,7 +360,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
                   children: [
                     Expanded(child: Text(name, style: AppTypography.cardTitle(context))),
                     SizedBox(width: AppSpacing.sm),
-                    if (characterId != null && characterId.isNotEmpty)
+                    if (characterIds.isNotEmpty)
                       AmitiaStatusBadge(label: '专属', type: BadgeType.accent),
                   ],
                 ),
@@ -240,9 +383,12 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
           SizedBox(width: AppSpacing.sm),
           Column(
             children: [
-              Text('发送概率', style: AppTypography.label(context)),
+              Text('AI 使用', style: AppTypography.label(context)),
               const SizedBox(height: 2),
-              Text('$sendProbability%', style: AppTypography.bodySmall(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600)),
+              AmitiaStatusBadge(
+                label: aiEnabled ? '启用' : '关闭',
+                type: aiEnabled ? BadgeType.success : BadgeType.neutral,
+              ),
             ],
           ),
           if (!_batchMode) ...[
@@ -259,67 +405,258 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
     );
   }
 
-  void _showGroupEditor(BuildContext context, Map<String, dynamic>? existing) {
-    final isEdit = existing != null;
-    final nameCtrl = TextEditingController(text: (existing?['name'] ?? '').toString());
+  Future<void> _showEmoteEditor(Map<String, dynamic> emote) async {
+    final id = (emote['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    final nameController = TextEditingController(text: (emote['name'] ?? '').toString());
+    final meaningController = TextEditingController(text: (emote['meaning'] ?? '').toString());
+    final keywordsController = TextEditingController(text: _stringList(emote['keywords']).join(', '));
+    var enabled = _asBool(emote['isEnabled'] ?? emote['enabled'], fallback: true);
+    var aiEnabled = _asBool(emote['aiEnabled']);
+    var roleScope = (emote['roleScope'] ?? 'all_characters').toString();
+    final selectedCharacters = _stringList(emote['characterIds']).toSet();
+    final selectedGroups = _stringList(emote['groupIds']).toSet();
+    final characters = ref.read(characterListProvider).valueOrNull ?? const [];
 
-    showModalBottomSheet(
+    final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
-            SizedBox(height: AppSpacing.lg),
-            Text(isEdit ? '重命名分组' : '新建分组', style: AppTypography.sectionTitle(context)),
-            SizedBox(height: AppSpacing.lg),
-            Text('分组名称', style: AppTypography.label(context)),
-            SizedBox(height: AppSpacing.xs),
-            AmitiaTextField(controller: nameCtrl, hintText: '输入分组名称'),
-            SizedBox(height: AppSpacing.xl),
-            Row(
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              AppSpacing.lg,
+              AppSpacing.xl,
+              MediaQuery.of(context).viewInsets.bottom + AppSpacing.xl,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (isEdit)
-                  Expanded(
-                    child: AmitiaButton(
-                      label: '删除分组',
-                      isDestructive: true,
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _showDeleteGroupConfirm(context, existing!);
-                      },
-                    ),
-                  ),
-                if (isEdit) SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: AmitiaButton(
-                    label: isEdit ? '保存' : '创建',
-                    onPressed: () async {
-                      if (nameCtrl.text.trim().isEmpty) return;
-                      final svc = ref.read(emoteServiceProvider);
-                      if (isEdit) {
-                        final id = (existing!['id'] ?? '').toString();
-                        await svc.updateGroup(id, {'name': nameCtrl.text.trim()});
+                Text('编辑表情', style: AppTypography.sectionTitle(context)),
+                SizedBox(height: AppSpacing.md),
+                AmitiaTextField(controller: nameController, hintText: '表情名称'),
+                SizedBox(height: AppSpacing.sm),
+                AmitiaTextField(controller: meaningController, hintText: '含义 / 使用语境'),
+                SizedBox(height: AppSpacing.sm),
+                AmitiaTextField(controller: keywordsController, hintText: '关键词，用逗号分隔'),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('启用表情'),
+                  value: enabled,
+                  onChanged: (value) => setSheetState(() => enabled = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('允许 AI 使用'),
+                  value: aiEnabled,
+                  onChanged: (value) => setSheetState(() => aiEnabled = value),
+                ),
+                DropdownButtonFormField<String>(
+                  value: roleScope == 'selected_characters' ? 'selected_characters' : 'all_characters',
+                  decoration: const InputDecoration(labelText: '角色作用域'),
+                  items: const [
+                    DropdownMenuItem(value: 'all_characters', child: Text('全部角色')),
+                    DropdownMenuItem(value: 'selected_characters', child: Text('指定角色')),
+                  ],
+                  onChanged: (value) => setSheetState(() => roleScope = value ?? 'all_characters'),
+                ),
+                if (roleScope == 'selected_characters') ...[
+                  SizedBox(height: AppSpacing.md),
+                  Text('可使用角色', style: AppTypography.label(context)),
+                  ...characters.map((character) => CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        title: Text(character.name),
+                        value: selectedCharacters.contains(character.id),
+                        onChanged: (checked) => setSheetState(() {
+                          if (checked == true) {
+                            selectedCharacters.add(character.id);
+                          } else {
+                            selectedCharacters.remove(character.id);
+                          }
+                        }),
+                      )),
+                ],
+                SizedBox(height: AppSpacing.md),
+                Text('所属分组', style: AppTypography.label(context)),
+                ..._groups.map((group) {
+                  final groupId = (group['id'] ?? '').toString();
+                  return CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text((group['name'] ?? groupId).toString()),
+                    value: selectedGroups.contains(groupId),
+                    onChanged: (checked) => setSheetState(() {
+                      if (checked == true) {
+                        selectedGroups.add(groupId);
                       } else {
-                        await svc.createGroup({'name': nameCtrl.text.trim()});
+                        selectedGroups.remove(groupId);
                       }
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      _loadData();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEdit ? '分组已更新' : '分组已创建'), duration: const Duration(seconds: 1)));
+                    }),
+                  );
+                }),
+                SizedBox(height: AppSpacing.lg),
+                AmitiaButton(
+                  label: '保存表情设置',
+                  isFullWidth: true,
+                  onPressed: () async {
+                    final keywords = keywordsController.text
+                        .split(RegExp(r'[,，\n]'))
+                        .map((value) => value.trim())
+                        .where((value) => value.isNotEmpty)
+                        .toList(growable: false);
+                    try {
+                      await ref.read(emoteServiceProvider).updateEmote(id, {
+                        'name': nameController.text.trim(),
+                        'meaning': meaningController.text.trim(),
+                        'keywords': keywords,
+                        'enabled': enabled,
+                        'aiEnabled': aiEnabled,
+                        'roleScope': roleScope,
+                        'characterIds': roleScope == 'selected_characters' ? selectedCharacters.toList(growable: false) : <String>[],
+                        'groupIds': selectedGroups.toList(growable: false),
+                      });
+                      if (sheetContext.mounted) Navigator.pop(sheetContext, true);
+                    } catch (e) {
+                      if (sheetContext.mounted) {
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text('保存失败：$e')));
                       }
-                    },
-                  ),
+                    }
+                  },
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );
+    nameController.dispose();
+    meaningController.dispose();
+    keywordsController.dispose();
+    if (saved == true) {
+      await _loadData();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('表情设置已保存')));
+    }
+  }
+
+  Future<void> _showGroupEditor(BuildContext context, Map<String, dynamic>? existing) async {
+    final isEdit = existing != null;
+    final nameCtrl = TextEditingController(text: (existing?['name'] ?? '').toString());
+    var coverEmoteId = (existing?['coverEmoteId'] ?? '').toString();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(isEdit ? '编辑分组' : '新建分组', style: AppTypography.sectionTitle(context)),
+              SizedBox(height: AppSpacing.lg),
+              AmitiaTextField(controller: nameCtrl, hintText: '输入分组名称'),
+              if (isEdit && _emotes.isNotEmpty) ...[
+                SizedBox(height: AppSpacing.md),
+                DropdownButtonFormField<String>(
+                  value: _emotes.any((item) => (item['id'] ?? '').toString() == coverEmoteId) ? coverEmoteId : '',
+                  decoration: const InputDecoration(labelText: '分组封面'),
+                  items: [
+                    const DropdownMenuItem(value: '', child: Text('自动 / 无指定封面')),
+                    ..._emotes.map((item) => DropdownMenuItem(
+                          value: (item['id'] ?? '').toString(),
+                          child: Text((item['name'] ?? item['id'] ?? '').toString()),
+                        )),
+                  ],
+                  onChanged: (value) => setSheetState(() => coverEmoteId = value ?? ''),
+                ),
+              ],
+              SizedBox(height: AppSpacing.xl),
+              Row(
+                children: [
+                  if (isEdit) ...[
+                    IconButton(
+                      tooltip: '前移分组',
+                      onPressed: () async {
+                        await _moveGroup(existing!, -1);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      },
+                      icon: const Icon(Icons.arrow_back),
+                    ),
+                    IconButton(
+                      tooltip: '后移分组',
+                      onPressed: () async {
+                        await _moveGroup(existing!, 1);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      },
+                      icon: const Icon(Icons.arrow_forward),
+                    ),
+                    const Spacer(),
+                  ],
+                  Expanded(
+                    child: AmitiaButton(
+                      label: isEdit ? '保存' : '创建',
+                      onPressed: () async {
+                        if (nameCtrl.text.trim().isEmpty) return;
+                        final svc = ref.read(emoteServiceProvider);
+                        try {
+                          if (isEdit) {
+                            final id = (existing['id'] ?? '').toString();
+                            await svc.updateGroup(id, {
+                              'name': nameCtrl.text.trim(),
+                              'coverEmoteId': coverEmoteId,
+                            });
+                          } else {
+                            await svc.createGroup({'name': nameCtrl.text.trim()});
+                          }
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          await _loadData();
+                        } catch (e) {
+                          if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('保存分组失败：$e')));
+                        }
+                      },
+                    ),
+                  ),
+                  if (isEdit) ...[
+                    SizedBox(width: AppSpacing.sm),
+                    AmitiaButton(
+                      label: '删除',
+                      isDestructive: true,
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showDeleteGroupConfirm(context, existing);
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    nameCtrl.dispose();
+  }
+
+  Future<void> _moveGroup(Map<String, dynamic> group, int delta) async {
+    final id = (group['id'] ?? '').toString();
+    final current = _groups.indexWhere((item) => (item['id'] ?? '').toString() == id);
+    final target = current + delta;
+    if (current < 0 || target < 0 || target >= _groups.length) return;
+    final reordered = List<Map<String, dynamic>>.from(_groups);
+    final item = reordered.removeAt(current);
+    reordered.insert(target, item);
+    try {
+      await ref.read(emoteServiceProvider).reorderGroups(
+        reordered.map((item) => (item['id'] ?? '').toString()).where((value) => value.isNotEmpty).toList(growable: false),
+      );
+      await _loadData();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('调整分组顺序失败：$e')));
+    }
   }
 
   void _showDeleteGroupConfirm(BuildContext context, Map<String, dynamic> group) {
@@ -349,8 +686,21 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
     );
   }
 
-  void _showImportPreview(BuildContext context) {
-    showDialog(
+  Future<void> _showImportPreview(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.image,
+    );
+    if (!mounted || result == null || result.files.isEmpty) return;
+    final selectedFiles = result.files.where((file) => file.path != null).toList(growable: false);
+    if (selectedFiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未能读取所选文件路径')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('批量导入预览', style: AppTypography.cardTitle(context)),
@@ -358,40 +708,71 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(AppSpacing.lg),
-              decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brMedium),
-              child: Column(
-                children: [
-                  Icon(Icons.folder_open, size: 40, color: context.accentPrimary),
-                  SizedBox(height: AppSpacing.sm),
-                  Text('表情包文件.zip', style: AppTypography.bodySmall(context)),
-                  Text('包含 24 个表情', style: AppTypography.label(context)),
-                ],
+            Text('已选择 ${selectedFiles.length} 个图片文件。', style: AppTypography.bodySmall(context)),
+            SizedBox(height: AppSpacing.sm),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: ListView(
+                shrinkWrap: true,
+                children: selectedFiles
+                    .map((file) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(file.name, style: AppTypography.caption(context)),
+                        ))
+                    .toList(growable: false),
               ),
             ),
-            SizedBox(height: AppSpacing.md),
-            Text('导入后将创建新分组并添加表情。', style: AppTypography.caption(context)),
+            SizedBox(height: AppSpacing.sm),
+            Text(
+              '导入后可继续在表情详情中配置含义、关键词、角色作用域和分组。',
+              style: AppTypography.caption(context),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
           TextButton(
-            onPressed: () async {
-              final svc = ref.read(emoteServiceProvider);
-              await svc.createGroup({'name': '导入表情'});
-              if (ctx.mounted) Navigator.pop(ctx);
-              _loadData();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已导入24个表情'), duration: Duration(seconds: 1)));
-              }
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: Text('确认导入', style: TextStyle(color: context.accentPrimary)),
           ),
         ],
       ),
     );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final svc = ref.read(emoteServiceProvider);
+      final configs = selectedFiles
+          .map((file) => <String, dynamic>{
+                'sourceName': file.name,
+                'name': file.name.replaceFirst(RegExp(r'\.[^.]+$'), ''),
+                'aiEnabled': false,
+                'roleScope': 'all_characters',
+              })
+          .toList(growable: false);
+      final response = await svc.batchUploadEmotes(
+        selectedFiles.map((file) => file.path!).toList(growable: false),
+        configs: configs,
+      );
+      final summary = response['summary'] is Map
+          ? Map<String, dynamic>.from(response['summary'] as Map)
+          : <String, dynamic>{};
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '导入完成：成功 ${summary['success'] ?? 0}，重复 ${summary['duplicates'] ?? 0}，失败 ${summary['failed'] ?? 0}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('批量导入失败: $e'), backgroundColor: context.error),
+        );
+      }
+    }
   }
 
   void _showDeleteConfirm(BuildContext context, Map<String, dynamic> emote) {
@@ -407,7 +788,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
           TextButton(
             onPressed: () async {
               final svc = ref.read(emoteServiceProvider);
-              await svc.deleteGroup(emoteId);
+              await svc.deleteEmote(emoteId);
               if (ctx.mounted) Navigator.pop(ctx);
               _loadData();
               if (mounted) {
@@ -433,7 +814,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
             onPressed: () async {
               final svc = ref.read(emoteServiceProvider);
               for (final id in _selected) {
-                await svc.deleteGroup(id);
+                await svc.deleteEmote(id);
               }
               if (ctx.mounted) Navigator.pop(ctx);
               _loadData();

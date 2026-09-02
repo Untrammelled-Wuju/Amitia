@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -38,6 +40,56 @@ class ExtensionCenterPage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        Text('扩展能力', style: AppTypography.pageTitle(context).copyWith(fontSize: 16)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _CenterEntry(label: '扩展包', icon: Icons.inventory_2_outlined, onTap: () => context.push(AppRoutes.extensionsPackages)),
+            _CenterEntry(label: 'MCP', icon: Icons.hub_outlined, onTap: () => context.push(AppRoutes.extensionsMcp)),
+            _CenterEntry(label: 'Agent Skill', icon: Icons.auto_awesome_outlined, onTap: () => context.push(AppRoutes.extensionsAgentSkills)),
+            _CenterEntry(label: '兼容 Skill', icon: Icons.psychology_outlined, onTap: () => context.push(AppRoutes.extensionsSkills)),
+            _CenterEntry(label: '系统插件', icon: Icons.extension_outlined, onTap: () => context.push(AppRoutes.extensionsPlugins)),
+            _CenterEntry(label: '执行记录', icon: Icons.receipt_long_outlined, onTap: () => context.push(AppRoutes.extensionsRuns)),
+          ],
+        ),
+        if (view.updates.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('可更新 (${view.updates.length})', style: AppTypography.pageTitle(context).copyWith(fontSize: 16)),
+          const SizedBox(height: 8),
+          ...view.updates.map((card) => AmitiaExtensionCard(
+                name: card.displayName,
+                description: card.description,
+                icon: Icons.system_update_alt,
+                typeLabel: card.status,
+                isInstalled: true,
+                isEnabled: card.enabled,
+                onAction: () => context.push(AppRoutes.extensionsPackages),
+                onToggle: (enabled) async {
+                  await ref.read(extensionServiceProvider).setKernelExtensionEnabled(card.extensionId, enabled);
+                  ref.invalidate(installedExtensionViewProvider);
+                },
+              )),
+        ],
+        if (view.needsAction.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('需要处理 (${view.needsAction.length})', style: AppTypography.pageTitle(context).copyWith(fontSize: 16)),
+          const SizedBox(height: 8),
+          ...view.needsAction.map((card) => AmitiaExtensionCard(
+                name: card.displayName,
+                description: card.description,
+                icon: Icons.warning_amber_outlined,
+                typeLabel: card.status,
+                isInstalled: true,
+                isEnabled: card.enabled,
+                onAction: () => context.push(AppRoutes.extensionsPackages),
+                onToggle: (enabled) async {
+                  await ref.read(extensionServiceProvider).setKernelExtensionEnabled(card.extensionId, enabled);
+                  ref.invalidate(installedExtensionViewProvider);
+                },
+              )),
+        ],
         if (view.installed.isNotEmpty) ...[
           Text('已安装', style: AppTypography.pageTitle(context).copyWith(fontSize: 16)),
           const SizedBox(height: 8),
@@ -76,6 +128,40 @@ class ExtensionCenterPage extends ConsumerWidget {
               )),
         ],
       ],
+    );
+  }
+}
+
+
+class _CenterEntry extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _CenterEntry({required this.label, required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: AppRadius.brSmall,
+      onTap: onTap,
+      child: Container(
+        width: 112,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: context.surfacePrimary,
+          borderRadius: AppRadius.brSmall,
+          border: Border.all(color: context.borderPrimary, width: .5),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 22, color: context.accentPrimary),
+            const SizedBox(height: 6),
+            Text(label, style: AppTypography.caption(context), textAlign: TextAlign.center),
+          ],
+        ),
+      ),
     );
   }
 }

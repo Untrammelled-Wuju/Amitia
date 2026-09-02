@@ -116,7 +116,7 @@ class DeveloperHomePage extends ConsumerWidget {
         title: '桌面贡献中心',
         subtitle: '快捷键、菜单与窗口贡献',
         icon: Icons.desktop_windows_outlined,
-        route: AppRoutes.kernelPage('desktop-contributions'),
+        route: AppRoutes.kernelPage('desktop'),
       ),
       _DevEntry(
         title: '更新中心',

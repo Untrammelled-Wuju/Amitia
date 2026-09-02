@@ -22,8 +22,25 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
   String _typeFilter = '全部';
   String _characterFilter = '全部';
 
-  final _months = ['全部', '7月', '6月', '5月'];
-  final _types = ['全部', '对话', '主动消息', '记忆形成', '情绪', '关系', '行为'];
+  late final List<String> _months = [
+    '全部',
+    ...List.generate(12, (index) {
+      var month = DateTime.now().month - index;
+      while (month <= 0) month += 12;
+      return '$month月';
+    }),
+  ];
+  final _types = [
+    '全部',
+    '记忆新增',
+    '记忆编辑',
+    '记忆删除',
+    '候选已采纳',
+    '候选已拒绝',
+    '候选待确认',
+    '记忆操作',
+    '情景记忆',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -263,16 +280,27 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
                     ],
                   ),
                   SizedBox(height: AppSpacing.xs),
-                  Text(entry.description, style: AppTypography.caption(context)),
+                  if (entry.description.isNotEmpty)
+                    Text(entry.description, style: AppTypography.caption(context)),
                   SizedBox(height: AppSpacing.sm),
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.xs,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (entry.characterId != null && entry.characterId!.isNotEmpty)
+                        Text('角色：${_getCharacterName(entry.characterId!)}', style: AppTypography.label(context)),
+                      if (entry.source.isNotEmpty)
+                        AmitiaStatusBadge(label: '来源 ${entry.source}', type: BadgeType.info),
+                      if (entry.memoryType.isNotEmpty)
+                        AmitiaStatusBadge(label: entry.memoryType, type: BadgeType.neutral),
+                      if (entry.isImportant)
+                        AmitiaStatusBadge(label: '重要', type: BadgeType.warning),
+                    ],
+                  ),
+                  SizedBox(height: AppSpacing.xs),
                   Row(
                     children: [
-                      if (entry.characterId != null)
-                        Text('角色：${_getCharacterName(entry.characterId!)}', style: AppTypography.label(context)),
-                      if (entry.isImportant) ...[
-                        SizedBox(width: AppSpacing.sm),
-                        AmitiaStatusBadge(label: '重要', type: BadgeType.warning),
-                      ],
                       const Spacer(),
                       GestureDetector(
                         onTap: () => context.push(AppRoutes.memoryManager),
@@ -301,38 +329,29 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
   }
 
   Color _getTypeColor(BuildContext context, String type) {
-    switch (type) {
-      case '对话': return context.accentPrimary;
-      case '主动消息': return context.info;
-      case '记忆形成': return context.success;
-      case '情绪': return context.warning;
-      case '关系': return context.error;
-      case '行为': return context.accentSecondary;
-      default: return context.textSecondary;
-    }
+    if (type.contains('删除') || type.contains('拒绝')) return context.error;
+    if (type.contains('编辑') || type.contains('待确认')) return context.warning;
+    if (type.contains('新增') || type.contains('采纳')) return context.success;
+    if (type.contains('情景')) return context.info;
+    return context.accentPrimary;
   }
 
   IconData _getTypeIcon(String type) {
-    switch (type) {
-      case '对话': return Icons.chat_bubble_outline;
-      case '主动消息': return Icons.notifications_active_outlined;
-      case '记忆形成': return Icons.memory;
-      case '情绪': return Icons.mood;
-      case '关系': return Icons.favorite_outline;
-      case '行为': return Icons.analytics_outlined;
-      default: return Icons.circle_outlined;
-    }
+    if (type.contains('删除')) return Icons.delete_outline;
+    if (type.contains('编辑')) return Icons.edit_outlined;
+    if (type.contains('待确认')) return Icons.hourglass_empty;
+    if (type.contains('拒绝')) return Icons.close;
+    if (type.contains('采纳')) return Icons.check_circle_outline;
+    if (type.contains('情景')) return Icons.auto_stories_outlined;
+    return Icons.memory;
   }
 
   BadgeType _getTypeBadge(String type) {
-    switch (type) {
-      case '对话': return BadgeType.accent;
-      case '主动消息': return BadgeType.info;
-      case '记忆形成': return BadgeType.success;
-      case '情绪': return BadgeType.warning;
-      case '关系': return BadgeType.error;
-      default: return BadgeType.neutral;
-    }
+    if (type.contains('删除') || type.contains('拒绝')) return BadgeType.error;
+    if (type.contains('编辑') || type.contains('待确认')) return BadgeType.warning;
+    if (type.contains('新增') || type.contains('采纳')) return BadgeType.success;
+    if (type.contains('情景')) return BadgeType.info;
+    return BadgeType.accent;
   }
 
   String _getCharacterName(String id) {
@@ -368,6 +387,8 @@ class _TimelineEntry {
   final String description;
   final bool isImportant;
   final String? characterId;
+  final String source;
+  final String memoryType;
 
   _TimelineEntry({
     required this.id,
@@ -377,29 +398,81 @@ class _TimelineEntry {
     required this.description,
     this.isImportant = false,
     this.characterId,
+    this.source = '',
+    this.memoryType = '',
   });
 
-  factory _TimelineEntry.fromMap(Map<String, dynamic> map) {
-    final timeRaw = map['time'] ?? map['timestamp'] ?? map['createdAt'] ?? '';
-    DateTime parsedTime;
-    try {
-      if (timeRaw is String && timeRaw.isNotEmpty) {
-        parsedTime = DateTime.parse(timeRaw);
-      } else {
-        parsedTime = DateTime.now();
+  static String _string(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString();
       }
-    } catch (_) {
-      parsedTime = DateTime.now();
     }
+    return '';
+  }
+
+  static DateTime _date(Map<String, dynamic> map) {
+    final raw = _string(map, const [
+      'created_at',
+      'createdAt',
+      'message_time_start',
+      'messageTimeStart',
+      'timestamp',
+      'time',
+    ]);
+    if (raw.isEmpty) return DateTime.fromMillisecondsSinceEpoch(0);
+    return DateTime.tryParse(raw)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  static String _eventLabel(String eventType, String timelineType) {
+    const labels = <String, String>{
+      'memory_created': '记忆新增',
+      'memory_edited': '记忆编辑',
+      'memory_deleted': '记忆删除',
+      'candidate_accepted': '候选已采纳',
+      'candidate_rejected': '候选已拒绝',
+      'candidate_pending': '候选待确认',
+      'memory_operation': '记忆操作',
+      'memory_reinforced': '记忆增强',
+      'memory_merged': '记忆合并',
+      'consolidation': '记忆整合',
+    };
+    if (eventType.isNotEmpty) return labels[eventType] ?? eventType;
+    if (timelineType == 'episodic') return '情景记忆';
+    return '记忆事件';
+  }
+
+  factory _TimelineEntry.fromMap(Map<String, dynamic> map) {
+    final eventType = _string(map, const ['event_type', 'eventType']);
+    final timelineType = _string(map, const ['timelineType', 'timeline_type']);
+    final key = _string(map, const ['key', 'title', 'summary', 'scene_type', 'sceneType']);
+    final value = _string(map, const [
+      'value',
+      'content',
+      'summary',
+      'context_after',
+      'contextAfter',
+      'key_quote',
+      'keyQuote',
+    ]);
+    final importanceRaw = map['importance'];
+    final important = map['isImportant'] == true ||
+        map['is_important'] == true ||
+        (importanceRaw is num && importanceRaw.toDouble() >= 0.7);
 
     return _TimelineEntry(
-      id: (map['id'] ?? '').toString(),
-      time: parsedTime,
-      type: (map['type'] ?? '').toString(),
-      title: (map['title'] ?? map['name'] ?? '').toString(),
-      description: (map['description'] ?? map['content'] ?? map['detail'] ?? '').toString(),
-      isImportant: map['isImportant'] == true || map['is_important'] == true,
-      characterId: map['characterId']?.toString() ?? map['character_id']?.toString(),
+      id: _string(map, const ['id', 'memory_id', 'memoryId']),
+      time: _date(map),
+      type: _eventLabel(eventType, timelineType),
+      title: key.isEmpty ? _eventLabel(eventType, timelineType) : key,
+      description: value,
+      isImportant: important,
+      characterId: _string(map, const ['character_id', 'characterId']).isEmpty
+          ? null
+          : _string(map, const ['character_id', 'characterId']),
+      source: _string(map, const ['source']),
+      memoryType: _string(map, const ['memory_type', 'memoryType', 'scene_type', 'sceneType']),
     );
   }
 }

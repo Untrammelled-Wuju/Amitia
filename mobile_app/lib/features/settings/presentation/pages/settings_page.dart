@@ -10,14 +10,15 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/settings/appearance_preferences.dart';
 import '../../../../shared/models/models.dart';
 
-final _settingsGroups = <SettingGroup>[
+List<SettingGroup> _settingsGroups({required String modelSummary, required String appearanceSummary}) => <SettingGroup>[
   SettingGroup(title: 'AI 与个性化', items: [
-    SettingItem(title: '模型设置', icon: Icons.psychology_outlined, value: 'GPT-4', route: AppRoutes.settingsModels),
+    SettingItem(title: '模型设置', icon: Icons.psychology_outlined, value: modelSummary, route: AppRoutes.settingsModels),
     SettingItem(title: 'AI 配置', icon: Icons.smart_toy_outlined, route: AppRoutes.settingsAi),
     SettingItem(title: '语音识别', icon: Icons.transcribe_outlined, route: AppRoutes.settingsAsr),
-    SettingItem(title: '外观设置', icon: Icons.palette_outlined, value: '亮色', route: AppRoutes.settingsAppearance),
+    SettingItem(title: '外观设置', icon: Icons.palette_outlined, value: appearanceSummary, route: AppRoutes.settingsAppearance),
     SettingItem(title: '主题设置', icon: Icons.color_lens_outlined, route: AppRoutes.settingsTheme),
     SettingItem(title: '界面提供者', icon: Icons.dashboard_customize_outlined, route: AppRoutes.settingsUIProviders),
     SettingItem(title: '用户设置', icon: Icons.person_outline, route: AppRoutes.settingsUser),
@@ -52,7 +53,22 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groups = _settingsGroups;
+    final modelConfigs = ref.watch(modelConfigListProvider).valueOrNull ?? const [];
+    final activeModel = modelConfigs.where((item) => item.isActive == 1).firstOrNull;
+    final modelSummary = activeModel == null
+        ? '未配置'
+        : (activeModel.name.trim().isNotEmpty
+            ? activeModel.name.trim()
+            : (activeModel.model.trim().isNotEmpty ? activeModel.model.trim() : activeModel.provider.trim()));
+    final appearance = ref.watch(appearancePreferencesProvider);
+    final themeSummary = switch (appearance.themeMode) {
+      ThemeMode.dark => '暗色',
+      ThemeMode.system => '跟随系统',
+      _ => '亮色',
+    };
+    const accentNames = ['暖棕', '蓝色', '绿色', '琥珀'];
+    final appearanceSummary = '$themeSummary · ${accentNames[appearance.accentColorIndex]}';
+    final groups = _settingsGroups(modelSummary: modelSummary, appearanceSummary: appearanceSummary);
     final isDevMode = ref.watch(isDeveloperModeProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(

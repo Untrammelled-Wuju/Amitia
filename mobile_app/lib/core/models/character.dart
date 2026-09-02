@@ -8,6 +8,7 @@ class CharacterDto {
   final String description;
   final String status;
   final int isActive;
+  final bool isDefault;
   final String createdAt;
   final String? voiceType;
   final double? voiceSpeed;
@@ -22,6 +23,7 @@ class CharacterDto {
     this.description = '',
     this.status = '',
     this.isActive = 0,
+    this.isDefault = false,
     this.createdAt = '',
     this.voiceType,
     this.voiceSpeed,
@@ -37,7 +39,8 @@ class CharacterDto {
       speakingStyle: json['speakingStyle'] as String? ?? '',
       description: json['description'] as String? ?? '',
       status: json['status'] as String? ?? '',
-      isActive: json['isActive'] as int? ?? 0,
+      isActive: (json['isActive'] as num?)?.toInt() ?? 0,
+      isDefault: json['isDefault'] == true || json['isDefault'] == 1,
       createdAt: json['createdAt'] as String? ?? '',
       voiceType: json['voiceType'] as String?,
       voiceSpeed: (json['voiceSpeed'] as num?)?.toDouble(),

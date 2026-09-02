@@ -24,6 +24,8 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
   final Set<String> _selected = {};
   String _typeFilter = '';
   String _importanceFilter = '全部';
+  String _scopeFilter = '';
+  Map<String, dynamic>? _pipelineStatus;
   bool _searchVisible = false;
   final _searchController = TextEditingController();
   String _searchQuery = '';
@@ -44,6 +46,20 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
   };
   final _types = const ['', 'personal_info', 'hobby', 'preference', 'fact', 'plan', 'habit', 'relationship', 'custom'];
   final _importances = ['全部', '高', '较高', '中', '低'];
+  static const _scopes = <String, String>{'': '全部', 'character': '角色', 'user': '用户全局', 'world': '世界'};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPipelineStatus();
+  }
+
+  Future<void> _loadPipelineStatus() async {
+    try {
+      final status = await ref.read(systemServiceProvider).pipelineStatus();
+      if (mounted) setState(() => _pipelineStatus = status);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -156,6 +172,27 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                       ],
                     ),
                   ),
+                if (_pipelineStatus != null)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.xs, AppSpacing.pagePadding, 0),
+                    child: AmitiaCard(
+                      child: Row(
+                        children: [
+                          Icon(Icons.hub_outlined, size: 18, color: context.accentPrimary),
+                          SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              _pipelineSummary(_pipelineStatus!),
+                              style: AppTypography.caption(context),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(icon: const Icon(Icons.refresh, size: 18), tooltip: '刷新记忆管线状态', onPressed: _loadPipelineStatus),
+                        ],
+                      ),
+                    ),
+                  ),
                 _buildFilters(context),
                 if (_batchMode) _buildBatchBar(context),
                 Expanded(
@@ -191,6 +228,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     final source = _remoteResults ?? memories;
     return source.where((m) {
       if (_typeFilter.isNotEmpty && m.type != _typeFilter) return false;
+      if (_scopeFilter.isNotEmpty && m.scope != _scopeFilter) return false;
       if (_importanceFilter != '全部') {
         final impStr = _importanceIntToString(m.importance);
         if (impStr != _importanceFilter) return false;
@@ -199,6 +237,19 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       return true;
     }).toList();
   }
+
+  String _pipelineSummary(Map<String, dynamic> status) {
+    final layers = status['layers'];
+    if (layers is List && layers.isNotEmpty) {
+      final completed = layers.whereType<Map>().where((row) => (row['status'] ?? '').toString() == 'completed').length;
+      final failed = layers.whereType<Map>().where((row) => (row['status'] ?? '').toString() == 'failed').length;
+      return '记忆管线：$completed/${layers.length} 层完成${failed > 0 ? ' · $failed 层失败' : ''}';
+    }
+    final state = (status['status'] ?? status['state'] ?? '可用').toString();
+    return '记忆管线：$state';
+  }
+
+  String _scopeLabel(String scope) => _scopes[scope] ?? (scope.isEmpty ? '角色' : scope);
 
   String _importanceIntToString(int importance) {
     if (importance >= 9) return '高';
@@ -232,6 +283,14 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
             ),
             SizedBox(width: AppSpacing.sm),
             _buildFilterChip(context, '重要度: $_importanceFilter', _importances, (v) => setState(() => _importanceFilter = v)),
+            SizedBox(width: AppSpacing.sm),
+            _buildFilterChip(
+              context,
+              '范围: ${_scopes[_scopeFilter] ?? _scopeFilter}',
+              _scopes.keys.toList(growable: false),
+              (v) => setState(() => _scopeFilter = v),
+              optionLabel: (value) => _scopes[value] ?? value,
+            ),
             SizedBox(width: AppSpacing.sm),
           ],
         ),
@@ -503,7 +562,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     }
   }
 
-  Future<bool> _createWithConflictCheck(MemoryService svc, {required String content, required String type, required int importance}) async {
+  Future<bool> _createWithConflictCheck(MemoryService svc, {required String content, required String type, required int importance, required String scope}) async {
     final key = content.replaceAll(RegExp(r'\s+'), ' ').trim();
     final normalizedKey = key.length <= 60 ? key : key.substring(0, 60);
     final check = await svc.checkConflict(key: normalizedKey, value: content, memoryType: type, importance: importance);
@@ -511,7 +570,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     final conflictsRaw = check['conflicts'];
     final conflicts = conflictsRaw is List ? conflictsRaw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : <Map<String, dynamic>>[];
     if (!hasConflict || conflicts.isEmpty) {
-      await svc.create({'key': normalizedKey, 'value': content, 'memoryType': type, 'importance': importance, 'verifiedStatus': 'user_verified'});
+      await svc.create({'key': normalizedKey, 'value': content, 'memoryType': type, 'importance': importance, 'verifiedStatus': 'user_verified', 'scope': scope});
       return true;
     }
     if (!mounted) return false;
@@ -532,7 +591,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       ),
     );
     if (action == null) return false;
-    await svc.resolveConflict(
+    final resolved = await svc.resolveConflict(
       action: action,
       newKey: normalizedKey,
       newValue: content,
@@ -541,6 +600,10 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       conflictId: (memory['id'] ?? '').toString(),
       characterId: (memory['characterId'] ?? '').toString(),
     );
+    final resolvedId = (resolved['memoryId'] ?? resolved['memoryID'] ?? '').toString().trim();
+    if (resolvedId.isNotEmpty && scope != 'character') {
+      await svc.update(resolvedId, {'scope': scope});
+    }
     return true;
   }
 
@@ -666,6 +729,8 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     SizedBox(width: AppSpacing.sm),
                     AmitiaStatusBadge(label: _memoryTypeLabel(memory.type), type: BadgeType.neutral),
                     SizedBox(width: AppSpacing.sm),
+                    AmitiaStatusBadge(label: _scopeLabel(memory.scope), type: memory.scope == 'world' || memory.scope == 'user' ? BadgeType.success : BadgeType.neutral),
+                    SizedBox(width: AppSpacing.sm),
                     Text(memory.status, style: AppTypography.label(context)),
                     const Spacer(),
                     Text(_formatTimeString(memory.createdAt), style: AppTypography.label(context)),
@@ -711,6 +776,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     final contentCtrl = TextEditingController(text: existing?.content ?? '');
     String importance = existing != null ? _importanceIntToString(existing.importance) : '中';
     String type = _memoryTypeLabels.containsKey(existing?.type) ? (existing?.type ?? 'fact') : 'fact';
+    String scope = _scopes.containsKey(existing?.scope) ? (existing?.scope ?? 'character') : 'character';
 
     showModalBottomSheet(
       context: context,
@@ -770,6 +836,20 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                   );
                 }).toList(),
               ),
+              SizedBox(height: AppSpacing.md),
+              Text('记忆范围', style: AppTypography.label(context)),
+              SizedBox(height: AppSpacing.xs),
+              Wrap(
+                spacing: AppSpacing.sm,
+                children: _scopes.entries.where((entry) => entry.key.isNotEmpty).map((entry) {
+                  final selected = scope == entry.key;
+                  return ChoiceChip(
+                    label: Text(entry.value),
+                    selected: selected,
+                    onSelected: (_) => setSheetState(() => scope = entry.key),
+                  );
+                }).toList(growable: false),
+              ),
               SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
@@ -786,6 +866,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     'memoryType': type,
                     'importance': _importanceStringToInt(importance),
                     'verifiedStatus': 'user_verified',
+                    'scope': scope,
                   };
                   try {
                     if (isEdit) {
@@ -796,6 +877,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                         content: contentCtrl.text.trim(),
                         type: type,
                         importance: _importanceStringToInt(importance),
+                        scope: scope,
                       );
                       if (!handled) return;
                     }

@@ -4,6 +4,8 @@ import Photos
 import UIKit
 
 public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
+    private let playbackLock = NSLock()
+    private var previewPlayer: AVAudioPlayer?
     public let operations: Set<String> = [
         "media.status",
         "media.photos.pick",
@@ -20,6 +22,8 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         "media.camera.record_video",
         "media.audio.status",
         "media.audio.record",
+        "media.audio.play_file",
+        "media.audio.stop",
         "native.resource.stat",
         "native.resource.read_chunk",
         "native.resource.release"
@@ -71,6 +75,10 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             return handleAudioStatus(request)
         case "media.audio.record":
             return await handleAudioRecord(request)
+        case "media.audio.play_file":
+            return handleAudioPlayFile(request)
+        case "media.audio.stop":
+            return handleAudioStop(request)
         case "native.resource.stat":
             return handleResourceStat(request)
         case "native.resource.read_chunk":
@@ -612,6 +620,53 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         )
     }
 
+    private func handleAudioPlayFile(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        guard let path = request.payload?["path"] as? String, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "audio file path is required")
+        }
+        guard FileManager.default.isReadableFile(atPath: path) else {
+            return errorResponse(request, code: "AUDIO_FILE_UNAVAILABLE", message: "audio file is unavailable: \(path)")
+        }
+
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try session.setActive(true)
+
+            let player = try AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
+            player.prepareToPlay()
+            guard player.play() else {
+                return errorResponse(request, code: "AUDIO_PLAYBACK_FAILED", message: "AVAudioPlayer refused to start playback")
+            }
+
+            playbackLock.lock()
+            previewPlayer?.stop()
+            previewPlayer = player
+            playbackLock.unlock()
+
+            return successResponse(request, result: [
+                "playing": true,
+                "path": path,
+                "durationMs": Int(player.duration * 1000)
+            ])
+        } catch {
+            playbackLock.lock()
+            previewPlayer?.stop()
+            previewPlayer = nil
+            playbackLock.unlock()
+            return errorResponse(request, code: "AUDIO_PLAYBACK_FAILED", message: error.localizedDescription)
+        }
+    }
+
+    private func handleAudioStop(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        playbackLock.lock()
+        previewPlayer?.stop()
+        previewPlayer = nil
+        playbackLock.unlock()
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        return successResponse(request, result: ["playing": false])
+    }
+
     private func handleResourceStat(_ request: IOSNativeRequest) -> IOSNativeResponse {
         guard let nativeStagingId = request.payload?["nativeStagingId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing nativeStagingId")
@@ -649,6 +704,26 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         let released = MediaStaging.release(nativeStagingId: nativeStagingId)
         return successResponse(request, result: ["released": released, "nativeStagingId": nativeStagingId])
+    }
+
+    private func successResponse(_ request: IOSNativeRequest, result: [String: Any]) -> IOSNativeResponse {
+        return IOSNativeResponse(
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            status: "success",
+            result: result,
+            error: nil
+        )
+    }
+
+    private func errorResponse(_ request: IOSNativeRequest, code: String, message: String) -> IOSNativeResponse {
+        return IOSNativeResponse(
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            status: "error",
+            result: nil,
+            error: IOSNativeError(code: code, message: message)
+        )
     }
 
     private func readDataChunked(from url: URL, maxBytes: Int64 = 104857600) -> Data? {

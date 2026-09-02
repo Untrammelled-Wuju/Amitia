@@ -32,6 +32,8 @@ class ChatMessage {
   final int? durationMs;
   final String? toolName;
   final String? toolResult;
+  final String? replyToMessageId;
+  final String? replyToExcerpt;
 
   ChatMessage({
     required this.id,
@@ -52,6 +54,8 @@ class ChatMessage {
     this.durationMs,
     this.toolName,
     this.toolResult,
+    this.replyToMessageId,
+    this.replyToExcerpt,
   });
 }
 

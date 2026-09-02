@@ -95,19 +95,12 @@ class AgentTaskItem {
 
   static int _progressFor(AgentTaskStatus status) {
     switch (status) {
-      case AgentTaskStatus.pending:
-        return 10;
-      case AgentTaskStatus.waitingApproval:
-        return 50;
-      case AgentTaskStatus.running:
-        return 65;
-      case AgentTaskStatus.paused:
-        return 65;
       case AgentTaskStatus.completed:
-        return 100;
       case AgentTaskStatus.failed:
       case AgentTaskStatus.cancelled:
         return 100;
+      default:
+        return 0;
     }
   }
 
@@ -207,10 +200,53 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
     } else if (newStatus == AgentTaskStatus.running &&
         (current?.status == AgentTaskStatus.failed || current?.status == AgentTaskStatus.cancelled || current?.status == AgentTaskStatus.completed)) {
       await api.post<Map<String, dynamic>>('/api/extensions/tasks/$id/retry');
+    } else {
+      throw UnsupportedError(
+        'Kernel Task 不支持从 ${current?.status.name ?? 'unknown'} 直接切换到 ${newStatus.name}；必须使用真实服务端 Action',
+      );
     }
     await refresh();
   }
+
+  Future<void> recover(String id) async {
+    await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
+      '/api/extensions/tasks/$id/recover',
+    );
+    await refresh();
+  }
 }
+
+class AgentTaskRuntimeDetail {
+  final Map<String, dynamic> run;
+  final Map<String, dynamic> progress;
+  final Map<String, dynamic> result;
+  final Map<String, dynamic> checkpoint;
+
+  const AgentTaskRuntimeDetail({
+    required this.run,
+    required this.progress,
+    required this.result,
+    required this.checkpoint,
+  });
+
+  double? get percentage => (progress['percentage'] as num?)?.toDouble();
+}
+
+final agentTaskRuntimeDetailProvider = FutureProvider.autoDispose.family<AgentTaskRuntimeDetail, String>((ref, taskId) async {
+  final api = ref.read(backendServiceProvider);
+  final values = await Future.wait<Map<String, dynamic>?>([
+    api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskId'),
+    api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskId/progress'),
+    api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskId/result'),
+    api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskId/checkpoint'),
+  ]);
+  return AgentTaskRuntimeDetail(
+    run: values[0] ?? const <String, dynamic>{},
+    progress: values[1] ?? const <String, dynamic>{},
+    result: values[2] ?? const <String, dynamic>{},
+    checkpoint: values[3] ?? const <String, dynamic>{},
+  );
+});
 
 final agentTasksProvider = AsyncNotifierProvider<AgentTaskNotifier, List<AgentTaskItem>>(AgentTaskNotifier.new);
 

@@ -9,6 +9,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class KernelHomePage extends ConsumerStatefulWidget {
   const KernelHomePage({super.key});
@@ -21,6 +22,10 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
   bool _loading = true;
   String? _error;
   Map<String, dynamic>? _health;
+  int? _wasmCount;
+  int? _hookCount;
+  int? _trustedCount;
+  int? _taskCount;
 
   @override
   void initState() {
@@ -34,14 +39,24 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
       _error = null;
     });
     try {
-      final svc = ref.read(systemServiceProvider);
-      final data = await svc.health();
-      if (mounted) {
-        setState(() {
-          _health = data;
-          _loading = false;
-        });
-      }
+      final healthFuture = ref.read(systemServiceProvider).health();
+      final countFuture = Future.wait<int?>([
+        _loadWasmCount(),
+        _loadHookCount(),
+        _loadTrustedServiceCount(),
+        _loadTaskCount(),
+      ]);
+      final health = await healthFuture;
+      final counts = await countFuture;
+      if (!mounted) return;
+      setState(() {
+        _health = health;
+        _wasmCount = counts[0];
+        _hookCount = counts[1];
+        _trustedCount = counts[2];
+        _taskCount = counts[3];
+        _loading = false;
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -49,6 +64,51 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
           _loading = false;
         });
       }
+    }
+  }
+
+  Future<int?> _loadWasmCount() async {
+    try {
+      final data = await ref.read(backendServiceProvider).get<List<dynamic>>('/api/wasm/modules');
+      return data?.length;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int?> _loadHookCount() async {
+    try {
+      final data = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
+        '/api/extensions/hooks/contributions',
+        fromJson: (value) => Map<String, dynamic>.from(value as Map),
+      );
+      return (data?['contributions'] as List?)?.length;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int?> _loadTrustedServiceCount() async {
+    try {
+      final data = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
+        '/api/extensions/services',
+        fromJson: (value) => Map<String, dynamic>.from(value as Map),
+      );
+      return (data?['services'] as List?)?.length;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int?> _loadTaskCount() async {
+    try {
+      final data = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
+        '/api/extensions/tasks',
+        fromJson: (value) => Map<String, dynamic>.from(value as Map),
+      );
+      return (data?['items'] as List?)?.length;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -90,11 +150,18 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
   }
 
   Widget _buildKernelStatusCard(BuildContext context) {
-    final status = _health?['status'] as String? ?? 'running';
-    final version = _health?['version'] as String? ?? '1.2.0';
-    final wasmCount = _health?['wasm_modules'] ?? 3;
-    final hookCount = _health?['hooks'] ?? 5;
-    final trustedCount = _health?['trusted_services'] ?? 4;
+    final health = _health ?? const <String, dynamic>{};
+    final checks = health['checks'] is Map
+        ? Map<String, dynamic>.from(health['checks'] as Map)
+        : <String, dynamic>{};
+    final orchestrator = checks['orchestrator'] is Map
+        ? Map<String, dynamic>.from(checks['orchestrator'] as Map)
+        : <String, dynamic>{};
+    final databaseHealthy = health['database'] == 'ok' || checks['database'] == 'ok';
+    final ready = health['ready'] == true || health['health'] == true;
+    final runtimeReady = orchestrator['ready'] == true;
+    final version = (health['version'] ?? 'unknown').toString();
+    final statusLabel = ready ? '就绪' : (databaseHealthy ? '运行中 / 未就绪' : '异常');
 
     return AmitiaCard(
       child: Column(
@@ -118,33 +185,32 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
                   children: [
                     Text('扩展内核', style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 2),
-                    Text('v$version · $status', style: AppTypography.caption(context)),
+                    Text('v$version · Runtime ${runtimeReady ? 'ready' : 'not ready'}', style: AppTypography.caption(context)),
                   ],
                 ),
               ),
-              const AmitiaStatusBadge(label: '运行中', type: BadgeType.success),
+              AmitiaStatusBadge(
+                label: statusLabel,
+                type: ready ? BadgeType.success : (databaseHealthy ? BadgeType.warning : BadgeType.error),
+              ),
             ],
           ),
           SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              Expanded(
-                child: _buildStatItem(context, 'WASM 模块', '$wasmCount', Icons.extension_outlined),
-              ),
+              Expanded(child: _buildStatItem(context, 'WASM 模块', _countText(_wasmCount), Icons.extension_outlined)),
               Container(width: 1, height: 36, color: context.borderPrimary),
-              Expanded(
-                child: _buildStatItem(context, 'Hook 点', '$hookCount', Icons.account_tree_outlined),
-              ),
+              Expanded(child: _buildStatItem(context, 'Hook 点', _countText(_hookCount), Icons.account_tree_outlined)),
               Container(width: 1, height: 36, color: context.borderPrimary),
-              Expanded(
-                child: _buildStatItem(context, '可信服务', '$trustedCount', Icons.verified_user_outlined),
-              ),
+              Expanded(child: _buildStatItem(context, '可信服务', _countText(_trustedCount), Icons.verified_user_outlined)),
             ],
           ),
         ],
       ),
     );
   }
+
+  String _countText(int? value) => value == null ? '—' : '$value';
 
   Widget _buildStatItem(BuildContext context, String label, String value, IconData icon) {
     return Column(
@@ -160,10 +226,10 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
 
   Widget _buildModuleGrid(BuildContext context) {
     final modules = <_KernelModule>[
-      _KernelModule(title: 'WASM Runtime', subtitle: '3 个模块', icon: Icons.extension_outlined, route: AppRoutes.kernelPage('wasm')),
-      _KernelModule(title: 'Hook 中心', subtitle: '5 个 Hook 点', icon: Icons.account_tree_outlined, route: AppRoutes.kernelPage('hooks')),
-      _KernelModule(title: '可信服务', subtitle: '4 个服务', icon: Icons.verified_user_outlined, route: AppRoutes.kernelPage('trusted-services')),
-      _KernelModule(title: '任务运行时', subtitle: '4 个任务', icon: Icons.play_circle_outline, route: AppRoutes.kernelPage('tasks')),
+      _KernelModule(title: 'WASM Runtime', subtitle: _wasmCount == null ? '数量不可用' : '$_wasmCount 个模块', icon: Icons.extension_outlined, route: AppRoutes.kernelPage('wasm')),
+      _KernelModule(title: 'Hook 中心', subtitle: _hookCount == null ? '数量不可用' : '$_hookCount 个 Hook 点', icon: Icons.account_tree_outlined, route: AppRoutes.kernelPage('hooks')),
+      _KernelModule(title: '可信服务', subtitle: _trustedCount == null ? '数量不可用' : '$_trustedCount 个服务', icon: Icons.verified_user_outlined, route: AppRoutes.kernelPage('trusted-services')),
+      _KernelModule(title: '任务运行时', subtitle: _taskCount == null ? '数量不可用' : '$_taskCount 个任务', icon: Icons.play_circle_outline, route: AppRoutes.kernelPage('tasks')),
     ];
 
     return GridView.builder(
@@ -209,7 +275,7 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
     final entries = <_DevEntry>[
       _DevEntry(title: '事件中心', subtitle: '事件订阅与历史', icon: Icons.notifications_active_outlined, route: AppRoutes.kernelPage('events')),
       _DevEntry(title: '调度中心', subtitle: '定时任务管理', icon: Icons.schedule_outlined, route: AppRoutes.kernelPage('schedules')),
-      _DevEntry(title: '桌面贡献中心', subtitle: '快捷键与窗口', icon: Icons.desktop_windows_outlined, route: AppRoutes.kernelPage('desktop-contributions')),
+      _DevEntry(title: '桌面贡献中心', subtitle: '快捷键与窗口', icon: Icons.desktop_windows_outlined, route: AppRoutes.kernelPage('desktop')),
       _DevEntry(title: '更新中心', subtitle: '版本更新与回滚', icon: Icons.system_update_outlined, route: AppRoutes.kernelPage('updates')),
       _DevEntry(title: '诊断控制台', subtitle: '日志与诊断', icon: Icons.terminal, route: AppRoutes.kernelPage('dev-console')),
       _DevEntry(title: '迁移与灰度', subtitle: '数据迁移与灰度发布', icon: Icons.merge_type_outlined, route: AppRoutes.kernelPage('migrations')),

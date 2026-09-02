@@ -36,17 +36,29 @@ class _AgentPageState extends ConsumerState<AgentPage> {
     }
   }
 
-  void _togglePause(AgentTaskItem task) {
-    ref.read(agentTasksProvider.notifier).changeStatus(
-      task.id,
-      task.status == AgentTaskStatus.running ? AgentTaskStatus.paused : AgentTaskStatus.running,
-    );
-    amitiaSnackBar(context, task.status == AgentTaskStatus.running ? '任务已暂停' : '任务已继续');
+  Future<void> _togglePause(AgentTaskItem task) async {
+    try {
+      await ref.read(agentTasksProvider.notifier).changeStatus(
+        task.id,
+        task.status == AgentTaskStatus.running ? AgentTaskStatus.paused : AgentTaskStatus.running,
+      );
+      if (mounted) amitiaSnackBar(context, task.status == AgentTaskStatus.running ? '任务已真实暂停' : '任务已真实继续');
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '操作失败：$e');
+    }
   }
 
-  void _startTask(AgentTaskItem task) {
-    ref.read(agentTasksProvider.notifier).changeStatus(task.id, AgentTaskStatus.running);
-    amitiaSnackBar(context, '任务已开始');
+  Future<void> _startTask(AgentTaskItem task) async {
+    if (task.status == AgentTaskStatus.pending) {
+      amitiaSnackBar(context, 'Kernel Task 没有手动 start API；排队任务由运行时自动调度');
+      return;
+    }
+    try {
+      await ref.read(agentTasksProvider.notifier).changeStatus(task.id, AgentTaskStatus.running);
+      if (mounted) amitiaSnackBar(context, '任务已通过真实服务端操作重新入队');
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '操作失败：$e');
+    }
   }
 
   void _showCreateTaskSheet() {
@@ -337,7 +349,7 @@ class _TaskCard extends StatelessWidget {
       case AgentTaskStatus.waitingApproval:
         return _miniButton(context, '审批', Icons.shield_outlined, onTap, accent: true);
       case AgentTaskStatus.pending:
-        return _miniButton(context, '开始', Icons.play_arrow, onStart, accent: true);
+        return _miniButton(context, '等待调度', Icons.schedule, onTap);
       case AgentTaskStatus.completed:
         return _miniButton(context, '查看结果', Icons.visibility_outlined, onTap);
       case AgentTaskStatus.failed:

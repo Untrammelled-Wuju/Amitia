@@ -11,6 +11,8 @@ abstract final class ConversationUIAction {
   static const delete = 'conversation.delete';
   static const newConversation = 'conversation.new';
   static const openDrawer = 'conversation.openDrawer';
+  static const clear = 'conversation.clear';
+  static const reply = 'conversation.reply';
   static const sendFile = 'conversation.sendFile';
   static const sendImage = 'conversation.sendImage';
   static const sendCode = 'conversation.sendCode';

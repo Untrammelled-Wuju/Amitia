@@ -1,46 +1,61 @@
 class ProfileDto {
   final String id;
-  final String name;
-  final int age;
-  final String gender;
-  final String occupation;
-  final String personality;
-  final String background;
+  final String userId;
+  final String characterId;
+  final String category;
+  final String attributeName;
+  final String attributeValue;
+  final int confidence;
+  final String source;
+  final String sourceConvId;
+  final String verifiedAt;
   final String createdAt;
+  final String updatedAt;
 
-  ProfileDto({
+  const ProfileDto({
     required this.id,
-    this.name = '',
-    this.age = 0,
-    this.gender = '',
-    this.occupation = '',
-    this.personality = '',
-    this.background = '',
+    this.userId = '',
+    this.characterId = '',
+    this.category = 'personal_info',
+    this.attributeName = '',
+    this.attributeValue = '',
+    this.confidence = 50,
+    this.source = '',
+    this.sourceConvId = '',
+    this.verifiedAt = '',
     this.createdAt = '',
+    this.updatedAt = '',
   });
 
   factory ProfileDto.fromJson(Map<String, dynamic> json) {
     return ProfileDto(
       id: (json['id'] ?? '').toString(),
-      name: json['name'] as String? ?? '',
-      age: json['age'] as int? ?? 0,
-      gender: json['gender'] as String? ?? '',
-      occupation: json['occupation'] as String? ?? '',
-      personality: json['personality'] as String? ?? '',
-      background: json['background'] as String? ?? '',
-      createdAt: json['createdAt'] as String? ?? '',
+      userId: (json['userId'] ?? '').toString(),
+      characterId: (json['characterId'] ?? '').toString(),
+      category: (json['category'] ?? 'personal_info').toString(),
+      attributeName: (json['attributeName'] ?? '').toString(),
+      attributeValue: (json['attributeValue'] ?? '').toString(),
+      confidence: (json['confidence'] as num?)?.toInt() ?? 50,
+      source: (json['source'] ?? '').toString(),
+      sourceConvId: (json['sourceConvId'] ?? '').toString(),
+      verifiedAt: (json['verifiedAt'] ?? '').toString(),
+      createdAt: (json['createdAt'] ?? '').toString(),
+      updatedAt: (json['updatedAt'] ?? '').toString(),
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'age': age,
-      'gender': gender,
-      'occupation': occupation,
-      'personality': personality,
-      'background': background,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'userId': userId,
+        'characterId': characterId,
+        'category': category,
+        'attributeName': attributeName,
+        'attributeValue': attributeValue,
+        'confidence': confidence,
+        'source': source,
+        'sourceConvId': sourceConvId,
+        'verifiedAt': verifiedAt,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+      };
 }

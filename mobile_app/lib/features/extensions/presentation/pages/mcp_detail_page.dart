@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,6 +28,8 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
   String? _error;
   late Map<String, bool> _toolEnabledState;
   late Map<String, bool> _capabilityState;
+  final Set<String> _resourceSubscriptions = <String>{};
+  bool _connectionAction = false;
 
   final _tabs = ['概览', '工具', 'Prompts', 'Resources', 'Tasks', '权限', '日志'];
 
@@ -278,6 +281,28 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
             _CapabilityChip(label: 'OAuth', enabled: hasOAuth, icon: Icons.lock_outline),
           ],
         ),
+        SizedBox(height: AppSpacing.md),
+        Row(
+          children: [
+            Expanded(
+              child: AmitiaButton(
+                label: _connectionAction ? '处理中...' : '重新连接',
+                isSecondary: true,
+                icon: Icons.sync,
+                onPressed: _connectionAction ? null : _reconnectServer,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: AmitiaButton(
+                label: '重新发现能力',
+                isSecondary: true,
+                icon: Icons.refresh,
+                onPressed: _connectionAction ? null : _refreshServer,
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -349,7 +374,17 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: '参数补全',
+                      onPressed: () => _showPromptCompletionDialog(prompt),
+                      icon: Icon(Icons.auto_fix_high_outlined, size: 18, color: context.accentPrimary),
+                    ),
+                    Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
+                  ],
+                ),
               ],
             ),
           ),
@@ -395,7 +430,21 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: _resourceSubscriptions.contains(uri) ? '取消订阅' : '订阅资源更新',
+                      icon: Icon(
+                        _resourceSubscriptions.contains(uri) ? Icons.notifications_active_outlined : Icons.notifications_none_outlined,
+                        size: 19,
+                        color: _resourceSubscriptions.contains(uri) ? context.accentPrimary : context.textTertiary,
+                      ),
+                      onPressed: uri.isEmpty ? null : () => _toggleResourceSubscription(uri),
+                    ),
+                    Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
+                  ],
+                ),
               ],
             ),
           ),
@@ -436,6 +485,17 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                   SizedBox(height: AppSpacing.sm),
                   Text(message, style: AppTypography.caption(context)),
                 ],
+                if (<String>{'working', 'running', 'input_required'}.contains(status.toLowerCase())) ...[
+                  SizedBox(height: AppSpacing.sm),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: remoteId.isEmpty ? null : () => _cancelRemoteTask(remoteId),
+                      icon: Icon(Icons.stop_circle_outlined, size: 18, color: context.error),
+                      label: Text('取消任务', style: TextStyle(color: context.error)),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -474,22 +534,32 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
         if (hasOAuth) ...[
           SizedBox(height: AppSpacing.md),
           AmitiaCard(
-            onTap: _showOAuthDialog,
-            child: Row(
+            child: Column(
               children: [
-                Icon(Icons.lock_outline, size: 20, color: context.error),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('OAuth 授权', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 2),
-                      Text('打开真实 OAuth 授权流程', style: AppTypography.caption(context)),
-                    ],
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.lock_outline, size: 20, color: context.error),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('OAuth 授权', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 2),
+                          Text('授权与撤销都会直接调用当前 MCP Server 的真实 OAuth 生命周期接口', style: AppTypography.caption(context)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
+                SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    Expanded(child: AmitiaButton(label: '开始授权', isSecondary: true, onPressed: _showOAuthDialog)),
+                    const SizedBox(width: 8),
+                    Expanded(child: AmitiaButton(label: '撤销授权', isSecondary: true, onPressed: _revokeOAuth)),
+                  ],
+                ),
               ],
             ),
           ),
@@ -555,6 +625,84 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
     );
   }
 
+  Future<void> _reconnectServer() async {
+    if (_connectionAction) return;
+    setState(() => _connectionAction = true);
+    try {
+      await ref.read(mcpServiceProvider).reconnectServer(widget.mcpId);
+      await _loadServer();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('MCP 服务已重新连接')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('重新连接失败：$e')));
+    } finally {
+      if (mounted) setState(() => _connectionAction = false);
+    }
+  }
+
+  Future<void> _refreshServer() async {
+    if (_connectionAction) return;
+    setState(() => _connectionAction = true);
+    try {
+      await ref.read(mcpServiceProvider).refreshTools(widget.mcpId);
+      await _loadServer();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('MCP 能力已重新发现')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('重新发现失败：$e')));
+    } finally {
+      if (mounted) setState(() => _connectionAction = false);
+    }
+  }
+
+  Future<void> _toggleResourceSubscription(String uri) async {
+    final next = !_resourceSubscriptions.contains(uri);
+    try {
+      await ref.read(mcpServiceProvider).setResourceSubscription(widget.mcpId, uri, next);
+      if (!mounted) return;
+      setState(() {
+        if (next) {
+          _resourceSubscriptions.add(uri);
+        } else {
+          _resourceSubscriptions.remove(uri);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(next ? '已订阅 Resource 更新' : '已取消 Resource 订阅')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Resource 订阅操作失败：$e')));
+    }
+  }
+
+  Future<void> _cancelRemoteTask(String taskId) async {
+    try {
+      await ref.read(mcpServiceProvider).cancelTask(widget.mcpId, taskId);
+      await _loadServer();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('远端任务已取消')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('取消任务失败：$e')));
+    }
+  }
+
+  Future<void> _revokeOAuth() async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('撤销 OAuth 授权'),
+            content: const Text('将删除该 MCP Server 已保存的 OAuth 授权凭据。后续调用可能需要重新授权。'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+              FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('撤销')),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+    try {
+      await ref.read(mcpServiceProvider).revokeOAuth(widget.mcpId);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('OAuth 授权已撤销')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('撤销授权失败：$e')));
+    }
+  }
+
   Future<void> _setToolEnabled(Map<String, dynamic> tool, String name, bool enabled) async {
     final toolId = (tool['id'] ?? '').toString();
     if (toolId.isEmpty) return;
@@ -616,6 +764,107 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
     if (mimeType.contains('directory')) return Icons.folder_outlined;
     if (mimeType.contains('image')) return Icons.image_outlined;
     return Icons.insert_drive_file_outlined;
+  }
+
+  Future<void> _showPromptCompletionDialog(Map<String, dynamic> prompt) async {
+    final name = (prompt['remoteName'] ?? prompt['name'] ?? '').toString();
+    final rawArguments = prompt['arguments'];
+    List<Map<String, dynamic>> arguments = <Map<String, dynamic>>[];
+    try {
+      final decoded = rawArguments is String ? jsonDecode(rawArguments) : rawArguments;
+      if (decoded is List) {
+        arguments = decoded.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (_) {}
+    if (arguments.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('该 Prompt 没有声明可补全参数')));
+      return;
+    }
+    String selected = (arguments.first['name'] ?? '').toString();
+    final valueController = TextEditingController();
+    List<String> suggestions = <String>[];
+    bool loading = false;
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Prompt 参数补全'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: selected,
+                  decoration: const InputDecoration(labelText: '参数'),
+                  items: arguments
+                      .map((item) => (item['name'] ?? '').toString())
+                      .where((item) => item.isNotEmpty)
+                      .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                      .toList(),
+                  onChanged: (value) => setDialogState(() {
+                    selected = value ?? selected;
+                    suggestions = <String>[];
+                  }),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: valueController,
+                  decoration: const InputDecoration(labelText: '当前输入', hintText: '输入部分内容后请求服务端补全'),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: loading || selected.isEmpty
+                        ? null
+                        : () async {
+                            setDialogState(() => loading = true);
+                            try {
+                              final result = await ref.read(mcpServiceProvider).completePromptArgument(
+                                    widget.mcpId,
+                                    promptName: name,
+                                    argumentName: selected,
+                                    value: valueController.text,
+                                  );
+                              final values = (result?['values'] as List? ?? const <dynamic>[]).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+                              if (dialogContext.mounted) setDialogState(() => suggestions = values);
+                            } catch (e) {
+                              if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('补全失败：$e')));
+                            } finally {
+                              if (dialogContext.mounted) setDialogState(() => loading = false);
+                            }
+                          },
+                    icon: loading ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.auto_fix_high_outlined),
+                    label: const Text('获取建议'),
+                  ),
+                ),
+                if (suggestions.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: suggestions
+                        .map((value) => ActionChip(
+                              label: Text(value),
+                              onPressed: () {
+                                valueController.text = value;
+                                valueController.selection = TextSelection.collapsed(offset: value.length);
+                              },
+                            ))
+                        .toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+        ),
+      ),
+    );
+    valueController.dispose();
   }
 
   Future<void> _showUsePromptDialog(String name, String description) async {

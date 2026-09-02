@@ -154,6 +154,12 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
                 onTap: () => _toggleExtension(pkg, !enabled),
               ),
               _MiniButton(
+                label: '检查更新',
+                icon: Icons.system_update_alt,
+                color: context.accentPrimary,
+                onTap: () => _checkUpdate(pkg),
+              ),
+              _MiniButton(
                 label: '详情',
                 icon: Icons.info_outline,
                 color: context.accentPrimary,
@@ -168,6 +174,229 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+
+  Future<void> _checkUpdate(Map<String, dynamic> pkg) async {
+    if (_busy) return;
+    final extensionId = (pkg['extensionId'] ?? '').toString();
+    if (extensionId.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final result = await ref.read(extensionServiceProvider).checkKernelExtensionUpdate(extensionId);
+      final rawItems = result['items'];
+      final items = rawItems is List
+          ? rawItems.whereType<Map>().map((item) => item.cast<String, dynamic>()).toList(growable: false)
+          : const <Map<String, dynamic>>[];
+      if (!mounted) return;
+      if (items.isEmpty) {
+        _toast('当前已是最新版本');
+        return;
+      }
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: context.surfacePrimary,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('可用更新 · $extensionId', style: AppTypography.sectionTitle(context)),
+                const SizedBox(height: 6),
+                Text('当前版本：${pkg['version'] ?? 'unknown'}', style: AppTypography.caption(context)),
+                SizedBox(height: AppSpacing.md),
+                ...items.map((item) {
+                  final version = (item['version'] ?? '').toString();
+                  final size = (item['packageSize'] as num?)?.toInt() ?? 0;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: AmitiaCard(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(version.isEmpty ? '未知版本' : 'v$version', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${item['releaseChannel'] ?? 'stable'}${size > 0 ? ' · ${(size / 1024 / 1024).toStringAsFixed(1)} MB' : ''}',
+                                  style: AppTypography.caption(context),
+                                ),
+                              ],
+                            ),
+                          ),
+                          AmitiaButton(
+                            label: '下载',
+                            icon: Icons.download_outlined,
+                            height: 36,
+                            onPressed: version.isEmpty
+                                ? null
+                                : () async {
+                                    Navigator.of(sheetContext).pop();
+                                    await _downloadUpdate(extensionId, version);
+                                  },
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      _toast('检查更新失败: ${safeErrorMessage(e)}', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _downloadUpdate(String extensionId, String version) async {
+    if (mounted) setState(() => _busy = true);
+    try {
+      final result = await ref.read(extensionServiceProvider).downloadKernelExtensionUpdate(extensionId, version);
+      final operationId = (result['operationId'] ?? '').toString();
+      if (operationId.isEmpty) throw StateError('后端未返回更新操作 ID');
+      _toast('更新包下载任务已创建');
+      if (!mounted) return;
+      await _showUpdateOperation(extensionId, operationId);
+    } catch (e) {
+      _toast('下载更新失败: ${safeErrorMessage(e)}', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _showUpdateOperation(String extensionId, String operationId) async {
+    Map<String, dynamic> operation = const <String, dynamic>{};
+    List<Map<String, dynamic>> steps = const <Map<String, dynamic>>[];
+    String? localError;
+    bool localBusy = false;
+
+    Future<void> refresh(StateSetter setDialogState) async {
+      setDialogState(() {
+        localBusy = true;
+        localError = null;
+      });
+      try {
+        final service = ref.read(extensionServiceProvider);
+        final values = await Future.wait<dynamic>([
+          service.kernelUpdateOperation(operationId),
+          service.kernelUpdateOperationSteps(operationId),
+        ]);
+        setDialogState(() {
+          operation = Map<String, dynamic>.from(values[0] as Map);
+          steps = (values[1] as List).whereType<Map>().map((item) => item.cast<String, dynamic>()).toList(growable: false);
+          localBusy = false;
+        });
+      } catch (e) {
+        setDialogState(() {
+          localError = safeErrorMessage(e);
+          localBusy = false;
+        });
+      }
+    }
+
+    Future<void> runAction(StateSetter setDialogState, String action) async {
+      setDialogState(() => localBusy = true);
+      try {
+        final service = ref.read(extensionServiceProvider);
+        switch (action) {
+          case 'install':
+            await service.installKernelExtensionUpdate(extensionId, operationId);
+            break;
+          case 'cancel':
+            await service.cancelKernelExtensionUpdate(extensionId, operationId);
+            break;
+          case 'retry':
+            await service.retryKernelExtensionUpdate(extensionId, operationId);
+            break;
+          case 'rollback':
+            await service.rollbackKernelExtensionUpdate(extensionId, operationId);
+            break;
+        }
+        await refresh(setDialogState);
+        await _loadPackages();
+      } catch (e) {
+        setDialogState(() {
+          localError = safeErrorMessage(e);
+          localBusy = false;
+        });
+      }
+    }
+
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          if (operation.isEmpty && !localBusy && localError == null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => refresh(setDialogState));
+          }
+          final status = (operation['status'] ?? 'loading').toString();
+          return AlertDialog(
+            backgroundColor: dialogContext.surfacePrimary,
+            shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+            title: Text('更新操作', style: AppTypography.cardTitle(dialogContext)),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _DetailRow(label: '扩展', value: extensionId),
+                    _DetailRow(label: '操作 ID', value: operationId),
+                    _DetailRow(label: '状态', value: status),
+                    if ((operation['version'] ?? '').toString().isNotEmpty) _DetailRow(label: '版本', value: operation['version'].toString()),
+                    if ((operation['error'] ?? '').toString().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(operation['error'].toString(), style: AppTypography.caption(dialogContext).copyWith(color: dialogContext.error)),
+                      ),
+                    if (localError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(localError!, style: AppTypography.caption(dialogContext).copyWith(color: dialogContext.error)),
+                      ),
+                    if (steps.isNotEmpty) ...[
+                      SizedBox(height: AppSpacing.md),
+                      Text('执行步骤', style: AppTypography.bodySmall(dialogContext).copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      ...steps.map(
+                        (step) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text('• ${step['name'] ?? step['stepId'] ?? '-'} · ${step['status'] ?? '-'}', style: AppTypography.caption(dialogContext)),
+                        ),
+                      ),
+                    ],
+                    if (localBusy) ...[
+                      SizedBox(height: AppSpacing.md),
+                      const LinearProgressIndicator(),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: localBusy ? null : () => refresh(setDialogState), child: const Text('刷新')),
+              TextButton(onPressed: localBusy ? null : () => runAction(setDialogState, 'cancel'), child: const Text('取消任务')),
+              TextButton(onPressed: localBusy ? null : () => runAction(setDialogState, 'retry'), child: const Text('重试')),
+              TextButton(onPressed: localBusy ? null : () => runAction(setDialogState, 'rollback'), child: const Text('回滚')),
+              FilledButton(onPressed: localBusy ? null : () => runAction(setDialogState, 'install'), child: const Text('安装更新')),
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+            ],
+          );
+        },
       ),
     );
   }

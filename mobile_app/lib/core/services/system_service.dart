@@ -119,8 +119,8 @@ class SystemService {
     return resp;
   }
 
-  Future<Map<String, dynamic>?> cleanupPreview() async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/chats/cleanup/preview');
+  Future<Map<String, dynamic>?> cleanupPreview([Map<String, dynamic>? data]) async {
+    final resp = await _api.post<Map<String, dynamic>>('/api/chats/cleanup/preview', data: data ?? const <String, dynamic>{});
     return resp;
   }
 
@@ -163,7 +163,32 @@ class SystemService {
   Future<List<Map<String, dynamic>>> graphEdges() async {
     final resp = await _api.get<List<dynamic>>('/api/graph/edges');
     if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    return resp.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<Map<String, dynamic>?> graphNeighbors(
+    String nodeId, {
+    int depth = 2,
+  }) async {
+    return _api.get<Map<String, dynamic>>(
+      '/api/graph/node/${Uri.encodeComponent(nodeId)}/neighbors',
+      queryParameters: {'depth': depth},
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> graphPath(
+    String from,
+    String to, {
+    int maxDepth = 4,
+  }) async {
+    final resp = await _api.get<List<dynamic>>(
+      '/api/graph/path',
+      queryParameters: {'from': from, 'to': to, 'maxDepth': maxDepth},
+    );
+    return (resp ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
   }
 }
 
@@ -194,6 +219,18 @@ class SafetyService {
   Future<bool> updateBdiConfig(Map<String, dynamic> data) async {
     await _api.put('/api/safety/bdi-config', data: data);
     return true;
+  }
+
+  Future<Map<String, dynamic>> safetyEvents({int page = 1, int pageSize = 20}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/safety/events',
+      queryParameters: <String, dynamic>{'page': page, 'pageSize': pageSize},
+    );
+    return resp ?? <String, dynamic>{'items': <dynamic>[], 'total': 0};
+  }
+
+  Future<void> clearSafetyEvents() async {
+    await _api.delete('/api/safety/events');
   }
 
   Future<List<Map<String, dynamic>>> auditLogs() async {

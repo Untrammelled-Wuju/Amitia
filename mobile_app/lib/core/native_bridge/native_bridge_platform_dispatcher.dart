@@ -140,6 +140,50 @@ class IOSNativeBridgeDispatcher implements NativeBridgePlatformDispatcher {
   }
 }
 
+
+class WindowsNativeBridgeDispatcher implements NativeBridgePlatformDispatcher {
+  static const MethodChannel _channel =
+      MethodChannel('com.amitia.windows_native/bridge');
+
+  final StreamController<Map<String, dynamic>> _eventController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  WindowsNativeBridgeDispatcher() {
+    _channel.setMethodCallHandler(_handleNativeCall);
+  }
+
+  Future<dynamic> _handleNativeCall(MethodCall call) async {
+    if (call.method == 'nativeEvent' && call.arguments is Map) {
+      _eventController.add(Map<String, dynamic>.from(call.arguments as Map));
+    }
+    return null;
+  }
+
+  @override
+  Future<Map<String, dynamic>> execute(Map<String, dynamic> nativeRequest) async {
+    final result = await _channel.invokeMapMethod<String, dynamic>(
+      'nativeBridge.execute',
+      nativeRequest,
+    );
+    return result ?? {};
+  }
+
+  @override
+  Future<Map<String, dynamic>> health() async {
+    final result = await _channel.invokeMapMethod<String, dynamic>(
+      'nativeBridge.health',
+      {},
+    );
+    return result ?? {};
+  }
+
+  @override
+  Stream<Map<String, dynamic>> get eventStream => _eventController.stream;
+
+  @override
+  void setBackendActionHandler(NativeBackendActionHandler? handler) {}
+}
+
 class FallbackNativeBridgeDispatcher implements NativeBridgePlatformDispatcher {
   @override
   Future<Map<String, dynamic>> execute(Map<String, dynamic> nativeRequest) async {
@@ -169,5 +213,6 @@ NativeBridgePlatformDispatcher createPlatformDispatcher() {
   if (kIsWeb) return FallbackNativeBridgeDispatcher();
   if (Platform.isIOS) return IOSNativeBridgeDispatcher();
   if (Platform.isAndroid) return AndroidNativeBridgeDispatcher();
+  if (Platform.isWindows) return WindowsNativeBridgeDispatcher();
   return FallbackNativeBridgeDispatcher();
 }

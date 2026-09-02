@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'errors/backend_transport_error.dart';
 import 'errors/backend_transport_error_code.dart';
 import 'http/backend_http_method.dart';
@@ -128,6 +129,33 @@ class BackendServiceApi {
       queryParameters: queryParameters,
       headers: headers,
       body: data,
+    ));
+    return _parseResponse<T>(response, fromJson, path);
+  }
+
+  Future<T?> postMultipart<T>(
+    String path, {
+    Map<String, String> fields = const {},
+    Map<String, List<String>> files = const {},
+    Map<String, dynamic>? queryParameters,
+    T Function(dynamic)? fromJson,
+  }) async {
+    final form = FormData();
+    for (final entry in fields.entries) {
+      form.fields.add(MapEntry(entry.key, entry.value));
+    }
+    for (final entry in files.entries) {
+      for (final filePath in entry.value) {
+        form.files.add(
+          MapEntry(entry.key, await MultipartFile.fromFile(filePath)),
+        );
+      }
+    }
+    final response = await _http.send(BackendHttpRequest(
+      method: BackendHttpMethod.post,
+      path: path,
+      queryParameters: queryParameters,
+      body: form,
     ));
     return _parseResponse<T>(response, fromJson, path);
   }

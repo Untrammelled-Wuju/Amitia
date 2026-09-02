@@ -15,6 +15,7 @@ import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/models/character.dart';
 import '../../../../core/artifact/artifact_model.dart';
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/artifact/artifact_service.dart';
@@ -48,6 +49,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   List<ChatMessage>? _cachedMessagesForContext;
   Map<String, FutureOr<dynamic> Function(dynamic)>? _cachedProviderActions;
   Timer? _conversationEventRefreshTimer;
+  ChatMessage? _replyTarget;
 
   @override
   void initState() {
@@ -160,7 +162,41 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
 
   void _onSend(String text) {
-    _runtime.sendText(text);
+    final reply = _replyTarget;
+    if (reply != null) {
+      setState(() => _replyTarget = null);
+    }
+    _runtime.sendText(
+      text,
+      replyToMessageId: reply?.id,
+      replyToExcerpt: reply == null ? null : _replyExcerpt(reply),
+    );
+  }
+
+  String _replyExcerpt(ChatMessage message) {
+    final content = message.content.trim();
+    if (content.isNotEmpty) {
+      return content.length <= 120 ? content : '${content.substring(0, 120)}…';
+    }
+    if ((message.fileName ?? '').trim().isNotEmpty) return message.fileName!.trim();
+    return switch (message.type) {
+      MessageType.image => '[图片]',
+      MessageType.video => '[视频]',
+      MessageType.audio => '[语音]',
+      MessageType.file => '[文件]',
+      MessageType.emote => '[表情]',
+      MessageType.code => '[代码]',
+      _ => '[消息]',
+    };
+  }
+
+  void _setReplyTarget(ChatMessage? message) {
+    if (!mounted) return;
+    setState(() => _replyTarget = message);
+  }
+
+  Future<List<Map<String, dynamic>>> _loadAgentSkills(String characterId) {
+    return ref.read(extensionServiceProvider).agentSkills(characterId: characterId);
   }
 
   Future<void> _pickAndSendFile() async {
@@ -536,7 +572,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (result == null || !mounted) return;
       switch (result) {
         case 0:
-          context.push(AppRoutes.character(ref.read(currentCharacterIdProvider)));
+          final id = ref.read(currentCharacterIdProvider).trim();
+          if (id.isNotEmpty) context.push(AppRoutes.character(id));
         case 1:
           _showMessageSearch(context);
         case 2:
@@ -588,13 +625,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         return _runtime.regenerate(messageId: id);
       },
       ConversationUIAction.stop: (_) => _runtime.stop(),
-      ConversationUIAction.delete: (input) {
+      ConversationUIAction.delete: (input) async {
         final id = input is Map ? input['messageId']?.toString() : input?.toString();
-        if (id != null && id.isNotEmpty) _runtime.deleteMessage(id);
+        if (id != null && id.isNotEmpty) await _runtime.deleteMessage(id);
         return null;
       },
       ConversationUIAction.newConversation: (_) => _runtime.createConversation(characterId),
       ConversationUIAction.openDrawer: (_) => _openDrawer(context),
+      ConversationUIAction.clear: (_) => _clearCurrentConversation(),
+      ConversationUIAction.reply: (input) {
+        final id = input is Map ? input['messageId']?.toString() : input?.toString();
+        if (id == null || id.isEmpty) return null;
+        final message = _runtime.messages.where((row) => row.id == id).firstOrNull;
+        if (message != null) _setReplyTarget(message);
+        return null;
+      },
       ConversationUIAction.sendFile: (_) => _pickAndSendFile(),
       ConversationUIAction.sendImage: (input) {
         final camera = input is Map && input['source']?.toString() == 'camera';
@@ -621,17 +666,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final isAgentMode = ref.watch(isAgentModeProvider);
-    final characterId = ref.watch(currentCharacterIdProvider);
-    _runtime.setCharacterId(characterId);
-    final charactersAsync = ref.watch(characterListProvider);
-
-    final character = charactersAsync.when(
-      loading: () => null,
-      error: (_, __) => null,
-      data: (characters) {
-        return characters.where((c) => c.id == characterId).firstOrNull;
-      },
-    );
+    final selectedCharacterId = ref.watch(currentCharacterIdProvider);
+    final characters = ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
+    CharacterDto? character = characters.where((item) => item.id == selectedCharacterId).firstOrNull;
+    character ??= characters.where((item) => item.isActive == 1).firstOrNull;
+    character ??= characters.where((item) => item.isDefault).firstOrNull;
+    character ??= characters.firstOrNull;
+    final characterId = character?.id ?? selectedCharacterId;
+    if (characterId.isNotEmpty && characterId != selectedCharacterId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(currentCharacterIdProvider) != characterId) {
+          ref.read(currentCharacterIdProvider.notifier).state = characterId;
+        }
+      });
+    }
+    if (characterId.isNotEmpty) _runtime.setCharacterId(characterId);
 
     final characterName = (character?.name ?? '').trim();
     final avatarInitial = characterName.isNotEmpty ? characterName.characters.first : 'A';
@@ -809,6 +858,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 onRetry: message.status == MessageStatus.error
                                     ? () => _retryMessage(index)
                                     : null,
+                                onReply: message.type == MessageType.systemNotice
+                                    ? null
+                                    : () => _setReplyTarget(message),
                                 onAgentTaskTap: isAgentTask
                                     ? () => context.push(AppRoutes.agent)
                                     : null,
@@ -875,6 +927,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     onSendCode: _onSendCode,
                     onLoadEmotes: () => ref.read(emoteServiceProvider).listEmotes(),
                     onSendEmote: _onSendEmote,
+                    onLoadAgentSkills: () => _loadAgentSkills(characterId),
+                    replyPreview: _replyTarget == null ? null : _replyExcerpt(_replyTarget!),
+                    onCancelReply: () => _setReplyTarget(null),
                     ),
                   ),
                 ],

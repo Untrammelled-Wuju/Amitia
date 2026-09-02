@@ -9,6 +9,10 @@ import '../../../../app/app_routes.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 
 class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
@@ -47,12 +51,13 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   final _visionProviderCtrl = TextEditingController(text: 'OpenAI');
   final _visionModelCtrl = TextEditingController(text: 'GPT-4o-mini');
   final _visionKeyCtrl = TextEditingController();
-  final _voiceProviderCtrl = TextEditingController(text: 'DeepSeek');
-  final _voiceModelCtrl = TextEditingController(text: 'DeepSeek-Voice');
+  final _voiceProviderCtrl = TextEditingController(text: 'Volcengine');
+  final _voiceModelCtrl = TextEditingController(text: 'seed-tts-2.0');
   final _voiceKeyCtrl = TextEditingController();
   final _vectorProviderCtrl = TextEditingController(text: '火山方舟');
   final _vectorModelCtrl = TextEditingController(text: 'Doubao Embedding');
   final _vectorKeyCtrl = TextEditingController();
+  final _remoteCoreCtrl = TextEditingController();
   final _charNameCtrl = TextEditingController();
   final _charIdentityCtrl = TextEditingController();
   final _initMemoryCtrl = TextEditingController();
@@ -63,6 +68,13 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   final List<bool> _boundaryAgreed = [false, false, false];
   int _selectedAvatarColor = 0;
   final List<bool> _selectedTraits = List.filled(8, false);
+  bool _submitting = false;
+  bool _adminInitialized = false;
+  String? _textConfigId;
+  String? _visionConfigId;
+  String? _ttsConfigId;
+  String? _embeddingConfigId;
+  String? _createdCharacterId;
 
   static const _avatarColors = ['#8A5728', '#52B788', '#6C8FEA', '#E9A23B', '#E66767', '#9C91F5'];
   static const _personalityTraits = ['温柔', '理性', '活泼', '冷静', '幽默', '严谨', '热情', '内敛'];
@@ -83,39 +95,297 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     _vectorProviderCtrl.dispose();
     _vectorModelCtrl.dispose();
     _vectorKeyCtrl.dispose();
+    _remoteCoreCtrl.dispose();
     _charNameCtrl.dispose();
     _charIdentityCtrl.dispose();
     _initMemoryCtrl.dispose();
     super.dispose();
   }
 
-  void _next() {
-    if (_currentStep < _steps.length - 1) {
-      setState(() => _currentStep++);
-    } else {
-      context.go(AppRoutes.chat);
+  Future<void> _next() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      await _persistCurrentStep();
+      if (!mounted) return;
+      if (_currentStep < _steps.length - 1) {
+        setState(() => _currentStep++);
+      } else {
+        await _completeOnboarding();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      amitiaSnackBar(context, '该步骤未完成：$error');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
   void _prev() {
-    if (_currentStep > 0) {
+    if (_currentStep > 0 && !_submitting) {
       setState(() => _currentStep--);
     }
   }
 
-  void _runEnvCheck() {
+  Future<void> _runEnvCheck() async {
     setState(() {
       _envChecked = false;
       _envResults = List.filled(5, false);
     });
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted) {
-        setState(() {
-          _envResults = [true, true, true, false, true];
-          _envChecked = true;
-        });
+    try {
+      final onboarding = ref.read(onboardingServiceProvider);
+      final results = await Future.wait<dynamic>([
+        onboarding.health(),
+        onboarding.runtimeCapabilities(),
+        ref.read(authServiceProvider).hasAdmin(),
+      ]);
+      if (!mounted) return;
+      final health = results[0] as Map<String, dynamic>;
+      final capabilities = results[1] as Map<String, dynamic>;
+      setState(() {
+        _envResults = [
+          health.isNotEmpty,
+          capabilities.isNotEmpty,
+          true,
+          true,
+          true,
+        ];
+        _envChecked = _envResults.take(2).every((value) => value);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _envResults = [false, false, false, false, false];
+        _envChecked = false;
+      });
+    }
+  }
+
+  Future<void> _persistCurrentStep() async {
+    switch (_currentStep) {
+      case 2:
+        if (_deployMode == 1 && _remoteCoreCtrl.text.trim().isEmpty) {
+          throw StateError('云端模式必须填写 Cloud Core 地址');
+        }
+        return;
+      case 3:
+        if (_adminInitialized) return;
+        final auth = ref.read(authServiceProvider);
+        final username = _adminUserController.text.trim();
+        final password = _adminPassController.text;
+        if (await auth.hasAdmin()) {
+          await auth.login(username, password);
+        } else {
+          await auth.setupAndLogin(username, password);
+        }
+        _adminInitialized = true;
+        ref.invalidate(currentUserProvider);
+        return;
+      case 5:
+        await _persistTextModel();
+        return;
+      case 6:
+        await _persistVisionModel();
+        return;
+      case 7:
+        await _persistVoiceModel();
+        return;
+      case 8:
+        await _persistEmbeddingModel();
+        return;
+      default:
+        return;
+    }
+  }
+
+  Future<void> _persistTextModel() async {
+    final provider = _textProviderCtrl.text.trim();
+    final model = _textModelCtrl.text.trim();
+    final key = _textKeyCtrl.text.trim();
+    final baseUrl = _baseUrlFor(provider, 'text');
+    final detected = await ref.read(onboardingServiceProvider).detectModels(
+          baseUrl: baseUrl,
+          apiKey: key,
+          apiType: _apiTypeFor(provider),
+        );
+    if (detected.isEmpty) {
+      throw StateError('文本模型连接检测失败');
+    }
+    final payload = <String, dynamic>{
+      'name': '默认文本模型',
+      'apiType': _apiTypeFor(provider),
+      'baseUrl': baseUrl,
+      'apiKey': key,
+      'modelName': model,
+      'isActive': 1,
+    };
+    final svc = ref.read(modelConfigServiceProvider);
+    if (_textConfigId == null) {
+      final created = await svc.create(payload);
+      _textConfigId = created?.id;
+    } else {
+      await svc.update(_textConfigId!, payload);
+    }
+  }
+
+  Future<void> _persistVisionModel() async {
+    final provider = _visionProviderCtrl.text.trim();
+    final model = _visionModelCtrl.text.trim();
+    final key = _visionKeyCtrl.text.trim();
+    final baseUrl = _baseUrlFor(provider, 'vision');
+    final detected = await ref.read(onboardingServiceProvider).detectModels(
+          baseUrl: baseUrl,
+          apiKey: key,
+          apiType: _apiTypeFor(provider),
+        );
+    if (detected.isEmpty) throw StateError('视觉模型连接检测失败');
+    final payload = <String, dynamic>{
+      'name': '默认视觉模型',
+      'apiType': _apiTypeFor(provider),
+      'baseUrl': baseUrl,
+      'apiKey': key,
+      'modelName': model,
+      'isActive': 1,
+    };
+    final svc = ref.read(visionServiceProvider);
+    if (_visionConfigId == null) {
+      final created = await svc.createConfig(payload);
+      _visionConfigId = created?['id']?.toString();
+    } else {
+      await svc.updateConfig(_visionConfigId!, payload);
+    }
+  }
+
+  Future<void> _persistVoiceModel() async {
+    final provider = _voiceProviderCtrl.text.trim();
+    final resource = _voiceModelCtrl.text.trim();
+    final key = _voiceKeyCtrl.text.trim();
+    final payload = <String, dynamic>{
+      'name': '默认语音模型',
+      'apiType': _apiTypeFor(provider, tts: true),
+      'baseUrl': _baseUrlFor(provider, 'tts'),
+      'apiKey': key,
+      'resourceId': resource,
+      'voiceType': 'zh_female_vv_uranus_bigtts',
+      'speed': 1.0,
+      'pitch': 1.0,
+      'volume': 1.0,
+      'isActive': 1,
+    };
+    final svc = ref.read(ttsServiceProvider);
+    await svc.testConnection(payload);
+    if (_ttsConfigId == null) {
+      final created = await svc.createConfig(payload);
+      _ttsConfigId = created?.id.toString();
+    } else {
+      await svc.updateConfig(_ttsConfigId!, payload);
+    }
+  }
+
+  Future<void> _persistEmbeddingModel() async {
+    final provider = _vectorProviderCtrl.text.trim();
+    final model = _vectorModelCtrl.text.trim();
+    final key = _vectorKeyCtrl.text.trim();
+    final baseUrl = _baseUrlFor(provider, 'embedding');
+    final detected = await ref.read(onboardingServiceProvider).detectModels(
+          baseUrl: baseUrl,
+          apiKey: key,
+          apiType: _apiTypeFor(provider),
+        );
+    if (detected.isEmpty) throw StateError('向量模型连接检测失败');
+    final payload = <String, dynamic>{
+      'name': '默认向量模型',
+      'apiType': _apiTypeFor(provider),
+      'baseUrl': baseUrl,
+      'apiKey': key,
+      'modelName': model,
+      'isActive': 1,
+    };
+    final svc = ref.read(embeddingServiceProvider);
+    if (_embeddingConfigId == null) {
+      final created = await svc.createConfig(payload);
+      _embeddingConfigId = created?['id']?.toString();
+    } else {
+      await svc.updateConfig(_embeddingConfigId!, payload);
+    }
+  }
+
+  Future<void> _completeOnboarding() async {
+    final traits = _personalityTraits
+        .asMap()
+        .entries
+        .where((entry) => _selectedTraits[entry.key])
+        .map((entry) => entry.value)
+        .join('、');
+    var characterId = _createdCharacterId;
+    if (characterId == null || characterId.isEmpty) {
+      final character = await ref.read(characterServiceProvider).create({
+        'name': _charNameCtrl.text.trim(),
+        'identity': _charIdentityCtrl.text.trim(),
+        'personality': traits,
+        'description': _charIdentityCtrl.text.trim(),
+        'isDefault': true,
+      });
+      if (character == null || character.id.isEmpty) {
+        throw StateError('角色创建失败');
       }
-    });
+      characterId = character.id;
+      _createdCharacterId = characterId;
+    }
+    await ref.read(characterServiceProvider).setActive(characterId);
+    final memory = _initMemoryCtrl.text.trim();
+    if (memory.isNotEmpty) {
+      final user = await ref.read(authServiceProvider).currentUser;
+      await ref.read(profileServiceProvider).create({
+        'category': 'memory',
+        'attributeName': '初始记忆',
+        'attributeValue': memory,
+        if (user?.id.isNotEmpty == true) 'userId': user!.id,
+        'characterId': characterId,
+        'confidence': 1.0,
+        'source': 'onboarding',
+      });
+    }
+    await ref.read(onboardingServiceProvider).complete(
+          deployMode: _deployMode == 0 ? 'mobile-local' : 'cloud-web',
+          username: _adminUserController.text.trim(),
+        );
+    final deploymentNotifier = ref.read(mobileDeploymentConfigProvider.notifier);
+    await deploymentNotifier.update(
+      _deployMode == 0
+          ? MobileDeploymentConfig.local
+          : MobileDeploymentConfig(
+              mode: MobileDeploymentMode.cloud,
+              remoteCoreUri: _remoteCoreCtrl.text.trim(),
+            ),
+    );
+    ref.invalidate(characterListProvider);
+    ref.read(currentCharacterIdProvider.notifier).state = characterId;
+    if (!mounted) return;
+    context.go(AppRoutes.chat);
+  }
+
+  String _apiTypeFor(String provider, {bool tts = false}) {
+    final p = provider.toLowerCase();
+    if (tts && (p.contains('volc') || p.contains('火山'))) return 'volcengine';
+    if (p.contains('anthropic')) return 'anthropic';
+    return 'openai-compatible';
+  }
+
+  String _baseUrlFor(String provider, String kind) {
+    final p = provider.toLowerCase();
+    if (kind == 'tts') {
+      if (p.contains('volc') || p.contains('火山')) {
+        return 'https://openspeech.bytedance.com/api/v1';
+      }
+      return 'https://openspeech.bytedance.com/api/v1';
+    }
+    if (p.contains('deepseek')) return 'https://api.deepseek.com/v1';
+    if (p.contains('volc') || p.contains('火山')) {
+      return 'https://ark.cn-beijing.volces.com/api/v3';
+    }
+    if (p.contains('anthropic')) return 'https://api.anthropic.com/v1';
+    return 'https://api.openai.com/v1';
   }
 
   void _toggleTrait(int index) {
@@ -128,6 +398,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     switch (_currentStep) {
       case 1:
         return _envChecked;
+      case 2:
+        return _deployMode == 0 || _remoteCoreCtrl.text.trim().isNotEmpty;
       case 3:
         return _adminUserController.text.isNotEmpty && _adminPassController.text.isNotEmpty;
       case 4:
@@ -231,7 +503,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 child: AmitiaButton(
                   label: '上一步',
                   isSecondary: true,
-                  onPressed: _prev,
+                  onPressed: _submitting ? null : _prev,
                 ),
               )
             else
@@ -239,9 +511,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             SizedBox(width: AppSpacing.md),
             Expanded(
               child: AmitiaButton(
-                label: isLast ? '进入 Amitia' : '下一步',
+                label: _submitting ? '正在保存…' : (isLast ? '进入 Amitia' : '下一步'),
                 icon: isLast ? Icons.rocket_launch : Icons.arrow_forward,
-                onPressed: _canProceed ? _next : null,
+                onPressed: _canProceed && !_submitting ? _next : null,
               ),
             ),
           ],
@@ -560,6 +832,29 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ),
           );
         }),
+        if (_deployMode == 1) ...[
+          SizedBox(height: AppSpacing.lg),
+          AmitiaCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Cloud Core 地址', style: AppTypography.label(context)),
+                SizedBox(height: AppSpacing.xs),
+                AmitiaTextField(
+                  controller: _remoteCoreCtrl,
+                  hintText: 'https://core.example.com',
+                  prefixIcon: Icon(Icons.link, size: 20, color: context.textTertiary),
+                  onChanged: (_) => setState(() {}),
+                ),
+                SizedBox(height: AppSpacing.sm),
+                Text(
+                  '完成初始化后会把该地址写入移动端部署配置，不再只保存在向导页面。',
+                  style: AppTypography.caption(context),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

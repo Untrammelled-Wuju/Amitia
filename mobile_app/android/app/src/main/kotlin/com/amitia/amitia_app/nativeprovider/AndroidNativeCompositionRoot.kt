@@ -3,6 +3,7 @@ package com.amitia.amitia_app.nativeprovider
 import android.content.Context
 import com.amitia.amitia_app.nativeprovider.accessibility.AccessibilityNativeHandler
 import com.amitia.amitia_app.nativeprovider.accessibility.AccessibilityNativeHandlerAdapter
+import com.amitia.amitia_app.nativeprovider.audio.AudioPlaybackNativeHandler
 import com.amitia.amitia_app.nativeprovider.camera.CameraNativeHandler
 import com.amitia.amitia_app.nativeprovider.clipboard.ClipboardNativeHandler
 import com.amitia.amitia_app.nativeprovider.clipboard.ClipboardNativeHandlerAdapter
@@ -19,6 +20,7 @@ import com.amitia.amitia_app.nativeprovider.screencapture.ScreenCaptureNativeHan
 import com.amitia.amitia_app.nativeprovider.share.ShareNativeHandler
 import com.amitia.amitia_app.nativeprovider.share.ShareNativeHandlerAdapter
 import com.amitia.amitia_app.nativeprovider.shizuku.ShizukuNativeHandler
+import com.amitia.amitia_app.nativeprovider.time.DeviceTimeNativeHandler
 import com.amitia.amitia_app.nativeprovider.uitree.UITreeNativeHandler
 import com.amitia.amitia_app.nativeprovider.virtualdisplay.VirtualDisplayNativeHandler
 import kotlinx.coroutines.runBlocking
@@ -52,6 +54,8 @@ internal object AndroidNativeCompositionRoot {
             buildClipboardHandler(context),
             buildShareHandler(context),
             buildNotificationHandler(context),
+            AudioPlaybackNativeHandler(),
+            DeviceTimeNativeHandler(),
             RootNativeHandler(context),
             ShizukuNativeHandler(context),
             ScreenCaptureNativeHandler(),

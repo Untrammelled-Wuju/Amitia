@@ -1,155 +1,111 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
-import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_radius.dart';
-import '../../../../app/app_routes.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
 
-final _workshopSessionsProvider = FutureProvider<List<Map<String, dynamic>>?>((ref) async {
-  final svc = ref.read(extensionServiceProvider);
-  final sessions = await svc.workshopSessions();
-  return sessions;
+import '../../../../app/app_routes.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_radius.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
+
+final _workshopSessionsProvider =
+    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  return ref.read(extensionServiceProvider).workshopSessions();
 });
 
-class SkillWorkshopPage extends ConsumerWidget {
+class SkillWorkshopPage extends ConsumerStatefulWidget {
   const SkillWorkshopPage({super.key});
 
-  BadgeType _statusBadgeType(String status) {
-    switch (status) {
-      case '已完成':
-        return BadgeType.success;
-      case '进行中':
-        return BadgeType.accent;
-      case '草稿':
-        return BadgeType.neutral;
-      default:
-        return BadgeType.neutral;
-    }
-  }
+  @override
+  ConsumerState<SkillWorkshopPage> createState() => _SkillWorkshopPageState();
+}
 
-  String _formatDate(DateTime date) {
-    return '${date.month}/${date.day}';
+class _SkillWorkshopPageState extends ConsumerState<SkillWorkshopPage> {
+  final _requirementController = TextEditingController();
+  bool _creating = false;
+
+  @override
+  void dispose() {
+    _requirementController.dispose();
+    super.dispose();
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final sessionsAsync = ref.watch(_workshopSessionsProvider);
-
+  Widget build(BuildContext context) {
+    final sessions = ref.watch(_workshopSessionsProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '技能制作',
         showBackButton: true,
         fallbackRoute: AppRoutes.workshop,
       ),
-      body: sessionsAsync.when(
+      body: sessions.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.error_outline, size: 48, color: context.textSecondary),
-                const SizedBox(height: 16),
-                Text(
-                  '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
-                  style: AppTypography.body(context).copyWith(color: context.error),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                AmitiaButton(
-                  label: '重试',
-                  onPressed: () => ref.invalidate(_workshopSessionsProvider),
-                ),
-              ],
-            ),
-          ),
+        error: (error, _) => _ErrorState(
+          error: error,
+          onRetry: () => ref.invalidate(_workshopSessionsProvider),
         ),
-        data: (sessions) {
-          final sessionList = sessions ?? [];
-          return _SkillWorkshopContent(
-            sessions: sessionList,
-            onRefresh: () => ref.invalidate(_workshopSessionsProvider),
-          );
-        },
+        data: (items) => RefreshIndicator(
+          onRefresh: () async => ref.refresh(_workshopSessionsProvider.future),
+          child: items.isEmpty
+              ? ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.all(AppSpacing.pagePadding),
+                  children: [
+                    SizedBox(height: AppSpacing.xxl),
+                    AmitiaEmptyState(
+                      icon: Icons.psychology_outlined,
+                      title: '暂无制作会话',
+                      subtitle: '从需求描述开始，生成、校验、测试并安装一个 Skill。',
+                      actionText: '新建技能',
+                      onAction: _showCreateSheet,
+                    ),
+                  ],
+                )
+              : ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.all(AppSpacing.pagePadding),
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '制作会话',
+                            style: AppTypography.sectionTitle(context),
+                          ),
+                        ),
+                        AmitiaButton(
+                          label: '新建技能',
+                          icon: Icons.add,
+                          height: 38,
+                          onPressed: _showCreateSheet,
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    ...items.map(_sessionCard),
+                  ],
+                ),
+        ),
       ),
     );
   }
-}
 
-class _SkillWorkshopContent extends ConsumerStatefulWidget {
-  final List<Map<String, dynamic>> sessions;
-  final VoidCallback onRefresh;
-
-  const _SkillWorkshopContent({required this.sessions, required this.onRefresh});
-
-  @override
-  ConsumerState<_SkillWorkshopContent> createState() => _SkillWorkshopContentState();
-}
-
-class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
-  final _descController = TextEditingController();
-
-  @override
-  void dispose() {
-    _descController.dispose();
-    super.dispose();
-  }
-
-  BadgeType _statusBadgeType(String status) {
-    switch (status) {
-      case '已完成':
-        return BadgeType.success;
-      case '进行中':
-        return BadgeType.accent;
-      case '草稿':
-        return BadgeType.neutral;
-      default:
-        return BadgeType.neutral;
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.month}/${date.day}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: widget.sessions.isEmpty
-          ? AmitiaEmptyState(
-              icon: Icons.psychology_outlined,
-              title: '暂无制作会话',
-              subtitle: '创建新技能来开始制作',
-              actionText: '新建技能',
-              onAction: _showCreateBottomSheet,
-            )
-          : ListView.builder(
-              padding: EdgeInsets.all(AppSpacing.pagePadding),
-              itemCount: widget.sessions.length,
-              itemBuilder: (context, index) {
-                return _buildSessionCard(context, widget.sessions[index]);
-              },
-            ),
-    );
-  }
-
-  Widget _buildSessionCard(BuildContext context, Map<String, dynamic> session) {
-    final title = (session['title'] ?? session['name'] ?? '').toString();
-    final type = (session['type'] ?? 'Skill').toString();
-    final status = (session['status'] ?? '草稿').toString();
-    final updated = DateTime.tryParse((session['updatedAt'] ?? '').toString()) ?? DateTime.now();
+  Widget _sessionCard(Map<String, dynamic> session) {
+    final id = (session['id'] ?? '').toString();
+    final requirement = (session['requirement'] ?? '').toString().trim();
+    final status = (session['status'] ?? 'draft').toString();
+    final revision = (session['currentRevision'] as num?)?.toInt() ?? 0;
+    final installedSkillId = (session['installedSkillId'] ?? '').toString();
+    final updated = DateTime.tryParse((session['updatedAt'] ?? '').toString());
 
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
-        onTap: () => _openDraftEditor(session),
+        onTap: id.isEmpty ? null : () => context.push(AppRoutes.skillDraftEditor(id)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -162,34 +118,54 @@ class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
                     color: context.accentSoft,
                     borderRadius: AppRadius.brSmall,
                   ),
-                  child: Icon(Icons.psychology_outlined, size: 22, color: context.accentPrimary),
+                  child: Icon(Icons.extension_outlined,
+                      color: context.accentPrimary, size: 22),
                 ),
                 SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: AppTypography.cardTitle(context)),
-                      const SizedBox(height: 2),
                       Text(
-                        '$type · ${_formatDate(updated)}',
+                        requirement.isEmpty ? '未命名 Skill 会话' : requirement,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.cardTitle(context),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        [
+                          if (revision > 0) 'Revision $revision',
+                          if (updated != null)
+                            '${updated.month}/${updated.day} ${updated.hour.toString().padLeft(2, '0')}:${updated.minute.toString().padLeft(2, '0')}',
+                        ].join(' · '),
                         style: AppTypography.caption(context),
                       ),
                     ],
                   ),
                 ),
-                AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
+                AmitiaStatusBadge(
+                  label: _statusLabel(status),
+                  type: _statusBadge(status),
+                ),
               ],
             ),
+            if (installedSkillId.isNotEmpty) ...[
+              SizedBox(height: AppSpacing.sm),
+              Text('已安装 Skill：$installedSkillId',
+                  style: AppTypography.caption(context)),
+            ],
             SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 Expanded(
                   child: AmitiaButton(
-                    label: '编辑',
+                    label: '打开',
                     isSecondary: true,
                     height: 38,
-                    onPressed: () => _openDraftEditor(session),
+                    onPressed: id.isEmpty
+                        ? null
+                        : () => context.push(AppRoutes.skillDraftEditor(id)),
                   ),
                 ),
                 SizedBox(width: AppSpacing.sm),
@@ -198,15 +174,7 @@ class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
                     label: '归档',
                     isSecondary: true,
                     height: 38,
-                    onPressed: () => _showArchiveConfirm(session),
-                  ),
-                ),
-                SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: AmitiaButton(
-                    label: '安装',
-                    height: 38,
-                    onPressed: () => _showInstallConfirm(session),
+                    onPressed: id.isEmpty ? null : () => _archive(session),
                   ),
                 ),
               ],
@@ -217,163 +185,170 @@ class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
     );
   }
 
-  void _showCreateBottomSheet() {
-    _descController.clear();
-    showModalBottomSheet(
+  void _showCreateSheet() {
+    _requirementController.clear();
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.surfacePrimary,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.pagePadding,
-            AppSpacing.lg,
-            AppSpacing.pagePadding,
-            MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: context.borderPrimary,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              SizedBox(height: AppSpacing.lg),
-              Text('新建技能', style: AppTypography.sectionTitle(context)),
-              SizedBox(height: AppSpacing.md),
-              Text('描述你要创建的技能，系统将自动生成结构化草稿', style: AppTypography.caption(context)),
-              SizedBox(height: AppSpacing.sm),
-              AmitiaTextField(
-                hintText: '例如：帮我自动分类下载目录中的文件',
-                controller: _descController,
-                maxLines: 4,
-              ),
-              SizedBox(height: AppSpacing.lg),
-              AmitiaButton(
-                label: '创建草稿',
-                icon: Icons.auto_awesome_outlined,
-                isFullWidth: true,
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  _createDraft();
-                },
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.pagePadding,
+          AppSpacing.lg,
+          AppSpacing.pagePadding,
+          MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('新建 Skill 制作会话',
+                style: AppTypography.sectionTitle(sheetContext)),
+            SizedBox(height: AppSpacing.xs),
+            Text(
+              '这里提交的是 Workshop 的 requirement，不再伪造 title/type/status。',
+              style: AppTypography.caption(sheetContext),
+            ),
+            SizedBox(height: AppSpacing.md),
+            AmitiaTextField(
+              controller: _requirementController,
+              hintText: '例如：创建一个能按扩展名整理下载目录的 Skill',
+              maxLines: 4,
+            ),
+            SizedBox(height: AppSpacing.lg),
+            AmitiaButton(
+              label: _creating ? '创建中…' : '创建并进入',
+              icon: Icons.auto_awesome_outlined,
+              isFullWidth: true,
+              onPressed: _creating
+                  ? null
+                  : () async {
+                      Navigator.pop(sheetContext);
+                      await _createSession();
+                    },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Future<void> _createDraft() async {
-    final desc = _descController.text.trim();
-    if (desc.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入技能描述')),
-      );
+  Future<void> _createSession() async {
+    final requirement = _requirementController.text.trim();
+    if (requirement.isEmpty) {
+      if (mounted) amitiaSnackBar(context, '请输入 Skill 需求描述');
       return;
     }
-    final svc = ref.read(extensionServiceProvider);
-    await svc.createWorkshopSession({
-      'title': desc.length > 12 ? '${desc.substring(0, 12)}…' : desc,
-      'type': 'Skill',
-      'status': '草稿',
-      'description': desc,
-    });
-    if (mounted) {
-      widget.onRefresh();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已创建草稿：$desc')),
-      );
+    setState(() => _creating = true);
+    try {
+      final created = await ref
+          .read(extensionServiceProvider)
+          .createWorkshopSession(requirement: requirement);
+      final id = (created?['id'] ?? '').toString();
+      ref.invalidate(_workshopSessionsProvider);
+      if (!mounted) return;
+      if (id.isEmpty) {
+        amitiaSnackBar(context, '制作会话已创建，但后端未返回会话 ID');
+        return;
+      }
+      context.push(AppRoutes.skillDraftEditor(id));
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '创建失败：$error');
+    } finally {
+      if (mounted) setState(() => _creating = false);
     }
   }
 
-  void _openDraftEditor(Map<String, dynamic> session) {
-    final draftId = (session['id'] ?? 'sd_new').toString();
-    context.push(AppRoutes.skillDraftEditor(draftId));
-  }
-
-  void _showInstallConfirm(Map<String, dynamic> session) {
-    final title = (session['title'] ?? session['name'] ?? '').toString();
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-          title: Text('安装技能', style: AppTypography.cardTitle(context)),
-          content: Text(
-            '确认安装技能「$title」？安装后可在扩展中心管理。',
-            style: AppTypography.body(context),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('取消', style: TextStyle(color: context.textSecondary)),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-                final svc = ref.read(extensionServiceProvider);
-                await svc.enableSkill(session['id'].toString());
-                if (mounted) {
-                  widget.onRefresh();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('「$title」安装成功')),
-                  );
-                }
-              },
-              child: Text('安装', style: TextStyle(color: context.accentPrimary)),
-            ),
-          ],
-        );
-      },
+  Future<void> _archive(Map<String, dynamic> session) async {
+    final id = (session['id'] ?? '').toString();
+    final requirement = (session['requirement'] ?? '').toString();
+    final confirmed = await showAmitiaConfirmDialog(
+      context,
+      title: '归档制作会话',
+      message: '确定归档“${requirement.isEmpty ? id : requirement}”吗？',
+      confirmLabel: '归档',
     );
+    if (confirmed != true) return;
+    try {
+      await ref.read(extensionServiceProvider).archiveWorkshopSession(id);
+      ref.invalidate(_workshopSessionsProvider);
+      if (mounted) amitiaSnackBar(context, '已归档');
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '归档失败：$error');
+    }
   }
 
-  void _showArchiveConfirm(Map<String, dynamic> session) {
-    final title = (session['title'] ?? session['name'] ?? '').toString();
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-          title: Text('归档会话', style: AppTypography.cardTitle(context)),
-          content: Text(
-            '确认归档「$title」？归档后将不再显示在列表中。',
-            style: AppTypography.body(context),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('取消', style: TextStyle(color: context.textSecondary)),
+  String _statusLabel(String status) {
+    const labels = <String, String>{
+      'draft': '草稿',
+      'generating': '生成中',
+      'generated': '已生成',
+      'validating': '校验中',
+      'validation_failed': '校验失败',
+      'validated': '已校验',
+      'awaiting_permission_confirmation': '待确认权限',
+      'testing': '测试中',
+      'test_failed': '测试失败',
+      'test_passed': '测试通过',
+      'installing': '安装中',
+      'installed': '已安装',
+      'enabled': '已启用',
+      'disabled': '已停用',
+      'archived': '已归档',
+      'error': '错误',
+    };
+    return labels[status] ?? status;
+  }
+
+  BadgeType _statusBadge(String status) {
+    if (status == 'installed' ||
+        status == 'enabled' ||
+        status == 'test_passed' ||
+        status == 'validated') {
+      return BadgeType.success;
+    }
+    if (status.contains('failed') || status == 'error') {
+      return BadgeType.error;
+    }
+    if (status == 'generating' ||
+        status == 'validating' ||
+        status == 'testing' ||
+        status == 'installing') {
+      return BadgeType.accent;
+    }
+    return BadgeType.neutral;
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.error, required this.onRetry});
+
+  final Object error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: context.error),
+            const SizedBox(height: 16),
+            Text(
+              '加载失败：$error',
+              textAlign: TextAlign.center,
+              style: AppTypography.body(context),
             ),
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-                final svc = ref.read(extensionServiceProvider);
-                await svc.removeAgentSkill(session['id'].toString());
-                if (mounted) {
-                  widget.onRefresh();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('「$title」已归档')),
-                  );
-                }
-              },
-              child: Text('归档', style: TextStyle(color: context.warning)),
-            ),
+            const SizedBox(height: 16),
+            AmitiaButton(label: '重试', onPressed: onRetry),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 }

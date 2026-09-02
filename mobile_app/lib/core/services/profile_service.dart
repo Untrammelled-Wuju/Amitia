@@ -6,22 +6,39 @@ class ProfileService {
 
   ProfileService(this._api);
 
-  Future<List<ProfileDto>> list() async {
-    final resp = await _api.get<List<dynamic>>('/api/profiles');
-    if (resp == null) return [];
-    return resp.map((e) => ProfileDto.fromJson(e as Map<String, dynamic>)).toList();
+  Future<List<ProfileDto>> list({
+    String userId = '',
+    String characterId = '',
+    String category = '',
+    int page = 1,
+    int pageSize = 100,
+  }) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/profiles',
+      queryParameters: {
+        if (userId.isNotEmpty) 'userId': userId,
+        if (characterId.isNotEmpty) 'characterId': characterId,
+        if (category.isNotEmpty) 'category': category,
+        'page': page,
+        'pageSize': pageSize,
+      },
+    );
+    final items = resp?['items'];
+    if (items is! List) return const [];
+    return items
+        .whereType<Map>()
+        .map((e) => ProfileDto.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
   }
 
   Future<ProfileDto?> create(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/profiles', data: data);
-    if (resp == null) return null;
-    return ProfileDto.fromJson(resp);
+    return resp == null ? null : ProfileDto.fromJson(resp);
   }
 
   Future<ProfileDto?> update(String id, Map<String, dynamic> data) async {
     final resp = await _api.put<Map<String, dynamic>>('/api/profiles/$id', data: data);
-    if (resp == null) return null;
-    return ProfileDto.fromJson(resp);
+    return resp == null ? null : ProfileDto.fromJson(resp);
   }
 
   Future<bool> delete(String id) async {
@@ -29,23 +46,52 @@ class ProfileService {
     return true;
   }
 
-  Future<ProfileDto?> getByUser() async {
-    final resp = await _api.get<Map<String, dynamic>>(
+  Future<List<ProfileDto>> getByUser({
+    String userId = 'default',
+    String characterId = '',
+  }) async {
+    final resp = await _api.get<List<dynamic>>(
       '/api/profiles/by-user',
-      fromJson: (e) => e as Map<String, dynamic>,
+      queryParameters: {
+        'userId': userId,
+        if (characterId.isNotEmpty) 'characterId': characterId,
+      },
     );
-    if (resp == null) return null;
-    return ProfileDto.fromJson(resp);
+    if (resp == null) return const [];
+    return resp
+        .whereType<Map>()
+        .map((e) => ProfileDto.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
   }
 
-  Future<ProfileDto?> extract(String text) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/profiles/extract', data: {'text': text});
-    if (resp == null) return null;
-    return ProfileDto.fromJson(resp);
+  Future<bool> extract({
+    String userId = 'default',
+    String characterId = '',
+    required String conversationId,
+    required List<Map<String, String>> messages,
+  }) async {
+    await _api.post(
+      '/api/profiles/extract',
+      data: {
+        'userId': userId,
+        'characterId': characterId,
+        'conversationId': conversationId,
+        'messages': messages,
+      },
+    );
+    return true;
   }
 
-  Future<Map<String, dynamic>?> systemPrompt() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/profiles/system-prompt');
-    return resp;
+  Future<Map<String, dynamic>?> systemPrompt({
+    String userId = 'default',
+    String characterId = '',
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/api/profiles/system-prompt',
+      queryParameters: {
+        'userId': userId,
+        if (characterId.isNotEmpty) 'characterId': characterId,
+      },
+    );
   }
 }

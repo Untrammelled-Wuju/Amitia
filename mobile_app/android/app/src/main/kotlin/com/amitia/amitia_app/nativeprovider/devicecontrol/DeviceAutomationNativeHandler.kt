@@ -24,11 +24,15 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.StatFs
 import android.provider.Settings
 import android.view.KeyEvent
+import android.widget.Toast
 import androidx.core.content.ContextCompat
+import com.amitia.amitia_app.MainActivity
 import com.amitia.amitia_app.nativeprovider.AndroidNativeOperationHandler
 import com.amitia.amitia_app.nativeprovider.accessibility.AccessibilityServiceRegistry
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeError
@@ -46,6 +50,7 @@ internal class DeviceAutomationNativeHandler(
 ) : AndroidNativeOperationHandler {
 
     private val bluetoothSessions = BluetoothAutomationManager(context)
+    private val musicPlayback = MusicPlaybackManager(context.applicationContext)
     private val locationExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "amitia-location-callback").apply { isDaemon = true }
     }
@@ -69,6 +74,7 @@ internal class DeviceAutomationNativeHandler(
         OP_APP_UNINSTALL,
         OP_BLUETOOTH_STATUS,
         OP_BLUETOOTH_REQUEST_ENABLE,
+        OP_BLUETOOTH_REQUEST_PERMISSION,
         OP_BLUETOOTH_PAIR,
         OP_BLUETOOTH_PAIRED,
         OP_BLUETOOTH_SCAN,
@@ -88,7 +94,19 @@ internal class DeviceAutomationNativeHandler(
         OP_BLE_WRITE,
         OP_BLE_SUBSCRIBE,
         OP_BLE_UNSUBSCRIBE,
+        OP_BLE_READ_NOTIFICATIONS,
+        OP_MUSIC_PLAY,
+        OP_MUSIC_PLAY_QUEUE,
+        OP_MUSIC_PAUSE,
+        OP_MUSIC_RESUME,
+        OP_MUSIC_STOP,
+        OP_MUSIC_SEEK,
+        OP_MUSIC_SET_VOLUME,
+        OP_MUSIC_STATUS,
+        OP_SEND_BROADCAST,
+        OP_TOAST,
         OP_TASKER_RUN_TASK,
+        OP_TASKER_TRIGGER_EVENT,
     )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse = when (request.operation) {
@@ -110,6 +128,7 @@ internal class DeviceAutomationNativeHandler(
         OP_APP_UNINSTALL -> appUninstall(request)
         OP_BLUETOOTH_STATUS -> bluetoothStatus(request)
         OP_BLUETOOTH_REQUEST_ENABLE -> bluetoothRequestEnable(request)
+        OP_BLUETOOTH_REQUEST_PERMISSION -> bluetoothRequestPermission(request)
         OP_BLUETOOTH_PAIR -> bluetoothPair(request)
         OP_BLUETOOTH_PAIRED -> bluetoothPaired(request)
         OP_BLUETOOTH_SCAN -> bluetoothScan(request)
@@ -129,7 +148,19 @@ internal class DeviceAutomationNativeHandler(
         OP_BLE_WRITE -> bluetoothResult(request, bluetoothSessions.bleWrite(request.payload))
         OP_BLE_SUBSCRIBE -> bluetoothResult(request, bluetoothSessions.bleSubscribe(request.payload))
         OP_BLE_UNSUBSCRIBE -> bluetoothResult(request, bluetoothSessions.bleUnsubscribe(request.payload))
+        OP_BLE_READ_NOTIFICATIONS -> bluetoothResult(request, bluetoothSessions.bleReadNotifications(request.payload))
+        OP_MUSIC_PLAY -> musicPlay(request)
+        OP_MUSIC_PLAY_QUEUE -> musicPlayQueue(request)
+        OP_MUSIC_PAUSE -> musicAction(request) { musicPlayback.pause() }
+        OP_MUSIC_RESUME -> musicAction(request) { musicPlayback.resume() }
+        OP_MUSIC_STOP -> musicAction(request) { musicPlayback.stop() }
+        OP_MUSIC_SEEK -> musicSeek(request)
+        OP_MUSIC_SET_VOLUME -> musicSetVolume(request)
+        OP_MUSIC_STATUS -> musicAction(request) { musicPlayback.status() }
+        OP_SEND_BROADCAST -> sendBroadcast(request)
+        OP_TOAST -> showToast(request)
         OP_TASKER_RUN_TASK -> taskerRunTask(request)
+        OP_TASKER_TRIGGER_EVENT -> taskerTriggerEvent(request)
         else -> error(request, "DEVICE_OPERATION_NOT_SUPPORTED", "unsupported device operation: ${request.operation}")
     }
 
@@ -594,6 +625,39 @@ internal class DeviceAutomationNativeHandler(
         )
     }
 
+    private fun bluetoothRequestPermission(request: NativeBridgeRequest): NativeBridgeResponse {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return success(request, mapOf("started" to false, "alreadyGranted" to true, "scanPermission" to true, "connectPermission" to true, "requestedPermissions" to emptyList<String>()))
+        }
+        val requestScan = request.payload["scan"] as? Boolean ?: true
+        val requestConnect = request.payload["connect"] as? Boolean ?: true
+        val permissions = linkedSetOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (requestScan && !hasPermission(Manifest.permission.BLUETOOTH_SCAN)) permissions += Manifest.permission.BLUETOOTH_SCAN
+            if (requestConnect && !hasPermission(Manifest.permission.BLUETOOTH_CONNECT)) permissions += Manifest.permission.BLUETOOTH_CONNECT
+        } else if (requestScan && !hasAnyLocationPermission()) {
+            permissions += Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        if (permissions.isEmpty()) {
+            return success(request, mapOf("started" to false, "alreadyGranted" to true, "scanPermission" to hasBluetoothScanPermission(), "connectPermission" to hasBluetoothConnectPermission(), "requestedPermissions" to emptyList<String>()))
+        }
+        val activity = MainActivity.currentActivity()
+        if (activity == null) {
+            return try {
+                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                success(request, mapOf("started" to true, "alreadyGranted" to false, "requiresForegroundActivity" to true, "openedAppSettings" to true, "requestedPermissions" to permissions.toList()))
+            } catch (t: Throwable) {
+                error(request, "DEVICE_BLUETOOTH_PERMISSION_REQUEST_FAILED", t.message ?: "Bluetooth permission UI could not be opened")
+            }
+        }
+        return try {
+            Handler(Looper.getMainLooper()).post { activity.requestPermissions(permissions.toTypedArray(), BLUETOOTH_PERMISSION_REQUEST_CODE) }
+            success(request, mapOf("started" to true, "alreadyGranted" to false, "requiresUserConfirmation" to true, "requestedPermissions" to permissions.toList(), "scanPermission" to hasBluetoothScanPermission(), "connectPermission" to hasBluetoothConnectPermission()))
+        } catch (t: Throwable) {
+            error(request, "DEVICE_BLUETOOTH_PERMISSION_REQUEST_FAILED", t.message ?: "Bluetooth permission request failed")
+        }
+    }
+
     private fun bluetoothRequestEnable(request: NativeBridgeRequest): NativeBridgeResponse {
         val adapter = bluetoothAdapter() ?: return error(request, "DEVICE_BLUETOOTH_UNAVAILABLE", "Bluetooth adapter is unavailable")
         if (!hasBluetoothConnectPermission()) {
@@ -766,6 +830,111 @@ internal class DeviceAutomationNativeHandler(
         }
     }
 
+    private fun musicPlay(request: NativeBridgeRequest): NativeBridgeResponse {
+        val source = request.string("source")
+        if (source.isBlank()) return error(request, "DEVICE_INVALID_REQUEST", "source is required")
+        val startPosition = request.int("startPositionMs", 0).coerceAtLeast(0)
+        return musicAction(request) { musicPlayback.play(source, startPosition) }
+    }
+
+    private fun musicPlayQueue(request: NativeBridgeRequest): NativeBridgeResponse {
+        val sources = (request.payload["sources"] as? List<*>)
+            ?.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
+            .orEmpty()
+        if (sources.isEmpty()) return error(request, "DEVICE_INVALID_REQUEST", "sources must not be empty")
+        if (sources.size > 100) return error(request, "DEVICE_INVALID_REQUEST", "sources exceeds 100 entries")
+        val startIndex = request.int("startIndex", 0)
+        if (startIndex !in sources.indices) return error(request, "DEVICE_INVALID_REQUEST", "startIndex is out of range")
+        return musicAction(request) { musicPlayback.playQueue(sources, startIndex) }
+    }
+
+    private fun musicSeek(request: NativeBridgeRequest): NativeBridgeResponse {
+        val position = request.int("positionMs", -1)
+        if (position < 0) return error(request, "DEVICE_INVALID_REQUEST", "positionMs must be >= 0")
+        return musicAction(request) { musicPlayback.seek(position) }
+    }
+
+    private fun musicSetVolume(request: NativeBridgeRequest): NativeBridgeResponse {
+        val raw = request.payload["volume"] as? Number
+            ?: return error(request, "DEVICE_INVALID_REQUEST", "volume is required")
+        val volume = raw.toFloat()
+        if (volume !in 0f..1f) return error(request, "DEVICE_INVALID_REQUEST", "volume must be between 0 and 1")
+        return musicAction(request) { musicPlayback.setVolume(volume) }
+    }
+
+    private fun musicAction(
+        request: NativeBridgeRequest,
+        action: () -> Map<String, Any?>,
+    ): NativeBridgeResponse = try {
+        success(request, action())
+    } catch (t: Throwable) {
+        error(request, "DEVICE_MUSIC_FAILED", t.message ?: "music operation failed")
+    }
+
+    private fun sendBroadcast(request: NativeBridgeRequest): NativeBridgeResponse {
+        val action = request.string("action")
+        if (action.isBlank()) return error(request, "DEVICE_INVALID_REQUEST", "action is required")
+        if (action.length > 255) return error(request, "DEVICE_INVALID_REQUEST", "action is too long")
+        val packageName = request.string("packageName").takeIf { it.isNotEmpty() }
+        val dataUri = request.string("dataUri").takeIf { it.isNotEmpty() }
+        val flags = (request.payload["flags"] as? Number)?.toInt()?.coerceAtLeast(0) ?: 0
+        val extras = request.payload["extras"] as? Map<*, *>
+        if ((extras?.size ?: 0) > 64) return error(request, "DEVICE_INVALID_REQUEST", "extras exceeds 64 entries")
+        val intent = Intent(action).apply {
+            if (packageName != null) setPackage(packageName)
+            if (dataUri != null) data = runCatching { Uri.parse(dataUri) }.getOrNull()
+            if (flags != 0) this.flags = flags
+        }
+        try {
+            extras?.forEach { (rawKey, value) ->
+                val key = rawKey?.toString()?.trim().orEmpty()
+                if (key.isEmpty() || key.length > 128) return@forEach
+                when (value) {
+                    null -> Unit
+                    is String -> intent.putExtra(key, value.take(8192))
+                    is Boolean -> intent.putExtra(key, value)
+                    is Byte -> intent.putExtra(key, value)
+                    is Short -> intent.putExtra(key, value)
+                    is Int -> intent.putExtra(key, value)
+                    is Long -> intent.putExtra(key, value)
+                    is Float -> intent.putExtra(key, value)
+                    is Double -> intent.putExtra(key, value)
+                    is Number -> intent.putExtra(key, value.toDouble())
+                    else -> throw IllegalArgumentException("unsupported extra type for $key")
+                }
+            }
+            context.sendBroadcast(intent)
+            return success(
+                request,
+                mapOf(
+                    "sent" to true,
+                    "action" to action,
+                    "packageName" to packageName,
+                    "dataUri" to dataUri,
+                    "extraCount" to (extras?.size ?: 0),
+                ),
+            )
+        } catch (t: Throwable) {
+            return error(request, "DEVICE_BROADCAST_FAILED", t.message ?: "broadcast failed")
+        }
+    }
+
+    private fun showToast(request: NativeBridgeRequest): NativeBridgeResponse {
+        val text = request.string("text")
+        if (text.isBlank()) return error(request, "DEVICE_INVALID_REQUEST", "text is required")
+        val bounded = text.take(512)
+        val durationName = request.string("duration").lowercase(Locale.US)
+        val duration = if (durationName == "long") Toast.LENGTH_LONG else Toast.LENGTH_SHORT
+        return try {
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(context.applicationContext, bounded, duration).show()
+            }
+            success(request, mapOf("shown" to true, "duration" to if (duration == Toast.LENGTH_LONG) "long" else "short"))
+        } catch (t: Throwable) {
+            error(request, "DEVICE_TOAST_FAILED", t.message ?: "toast failed")
+        }
+    }
+
     private fun taskerRunTask(request: NativeBridgeRequest): NativeBridgeResponse {
         val taskName = request.string("taskName")
         if (taskName.isBlank()) return error(request, "DEVICE_INVALID_REQUEST", "taskName is required")
@@ -817,6 +986,47 @@ internal class DeviceAutomationNativeHandler(
             )
         } catch (t: Throwable) {
             error(request, "DEVICE_TASKER_FAILED", t.message ?: "Tasker broadcast failed")
+        }
+    }
+
+    private fun taskerTriggerEvent(request: NativeBridgeRequest): NativeBridgeResponse {
+        val eventName = request.string("eventName")
+        if (eventName.isBlank()) return error(request, "DEVICE_INVALID_REQUEST", "eventName is required")
+        val packageName = installedTaskerPackage()
+            ?: return error(request, "DEVICE_TASKER_NOT_INSTALLED", "Tasker is not installed")
+        val explicitAction = request.string("action")
+        val action = if (explicitAction.isNotBlank()) explicitAction else {
+            val normalized = eventName.uppercase(Locale.US).replace(Regex("[^A-Z0-9_.-]+"), "_").trim('_').take(96)
+            if (normalized.isBlank()) return error(request, "DEVICE_INVALID_REQUEST", "eventName does not contain a usable event identifier")
+            "$TASKER_EVENT_ACTION_PREFIX$normalized"
+        }
+        if (action.length > 255) return error(request, "DEVICE_INVALID_REQUEST", "broadcast action is too long")
+        val intent = Intent(action).apply {
+            setPackage(packageName)
+            putExtra("amitia_event_name", eventName)
+            val variables = request.payload["variables"] as? Map<*, *>
+            variables?.entries?.take(64)?.forEach { (key, value) ->
+                val normalizedKey = key?.toString()?.trim().orEmpty()
+                if (normalizedKey.matches(Regex("^[A-Za-z][A-Za-z0-9_.-]{0,63}$"))) {
+                    when (value) {
+                        is String -> putExtra(normalizedKey, value.take(4096))
+                        is Boolean -> putExtra(normalizedKey, value)
+                        is Int -> putExtra(normalizedKey, value)
+                        is Long -> putExtra(normalizedKey, value)
+                        is Float -> putExtra(normalizedKey, value)
+                        is Double -> putExtra(normalizedKey, value)
+                        is Number -> putExtra(normalizedKey, value.toDouble())
+                        null -> putExtra(normalizedKey, "")
+                        else -> putExtra(normalizedKey, value.toString().take(4096))
+                    }
+                }
+            }
+        }
+        return try {
+            context.sendBroadcast(intent)
+            success(request, mapOf("sent" to true, "eventName" to eventName, "action" to action, "taskerPackage" to packageName, "taskerProfileEvent" to "Intent Received"))
+        } catch (t: Throwable) {
+            error(request, "DEVICE_TASKER_EVENT_FAILED", t.message ?: "Tasker event broadcast failed")
         }
     }
 
@@ -928,6 +1138,7 @@ internal class DeviceAutomationNativeHandler(
         const val OP_APP_UNINSTALL = "device.app_uninstall"
         const val OP_BLUETOOTH_STATUS = "device.bluetooth_status"
         const val OP_BLUETOOTH_REQUEST_ENABLE = "device.bluetooth_request_enable"
+        const val OP_BLUETOOTH_REQUEST_PERMISSION = "device.bluetooth_request_permission"
         const val OP_BLUETOOTH_PAIR = "device.bluetooth_pair"
         const val OP_BLUETOOTH_PAIRED = "device.bluetooth_paired"
         const val OP_BLUETOOTH_SCAN = "device.bluetooth_scan"
@@ -947,7 +1158,19 @@ internal class DeviceAutomationNativeHandler(
         const val OP_BLE_WRITE = "device.ble_write"
         const val OP_BLE_SUBSCRIBE = "device.ble_subscribe"
         const val OP_BLE_UNSUBSCRIBE = "device.ble_unsubscribe"
+        const val OP_BLE_READ_NOTIFICATIONS = "device.ble_read_notifications"
+        const val OP_MUSIC_PLAY = "device.music_play"
+        const val OP_MUSIC_PLAY_QUEUE = "device.music_play_queue"
+        const val OP_MUSIC_PAUSE = "device.music_pause"
+        const val OP_MUSIC_RESUME = "device.music_resume"
+        const val OP_MUSIC_STOP = "device.music_stop"
+        const val OP_MUSIC_SEEK = "device.music_seek"
+        const val OP_MUSIC_SET_VOLUME = "device.music_set_volume"
+        const val OP_MUSIC_STATUS = "device.music_status"
+        const val OP_SEND_BROADCAST = "device.send_broadcast"
+        const val OP_TOAST = "device.toast"
         const val OP_TASKER_RUN_TASK = "device.tasker_run_task"
+        const val OP_TASKER_TRIGGER_EVENT = "device.tasker_trigger_event"
 
         private const val TASKER_PACKAGE_MARKET = "net.dinglisch.android.taskerm"
         private const val TASKER_PACKAGE_DIRECT = "net.dinglisch.android.tasker"
@@ -958,5 +1181,7 @@ internal class DeviceAutomationNativeHandler(
         private const val TASKER_EXTRA_VAR_NAMES = "varNames"
         private const val TASKER_EXTRA_VAR_VALUES = "varValues"
         private const val TASKER_PERMISSION_RUN_TASKS = "net.dinglisch.android.tasker.PERMISSION_RUN_TASKS"
+        private const val TASKER_EVENT_ACTION_PREFIX = "com.amitia.tasker.EVENT."
+        private const val BLUETOOTH_PERMISSION_REQUEST_CODE = 0xB1E
     }
 }

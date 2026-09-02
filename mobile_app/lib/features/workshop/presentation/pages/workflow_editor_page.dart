@@ -170,6 +170,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   String? _connectFrom;
   String? _activeRunId;
   String _activeRunStatus = '';
+  String _activeRunMode = 'live';
+  List<String> _requiredConfirmations = <String>[];
+  Map<String, dynamic>? _classifiedRunError;
   bool _loading = true;
   bool _saving = false;
   bool _aiWorking = false;
@@ -605,23 +608,174 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     }
   }
 
+  Future<Map<String, dynamic>?> _promptRunOptions() async {
+    var mode = 'live';
+    final inputController = TextEditingController(text: '{}');
+    final mocksController = TextEditingController(text: '[]');
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('运行工作流'),
+          content: SizedBox(
+            width: 620,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: mode,
+                    decoration: const InputDecoration(labelText: '执行模式'),
+                    items: const [
+                      DropdownMenuItem(value: 'live', child: Text('Live · 正式执行')),
+                      DropdownMenuItem(value: 'dry_run', child: Text('Dry Run · 只验证/规划，不产生副作用')),
+                      DropdownMenuItem(value: 'mocked', child: Text('Mocked · 使用显式 Mock 输出')),
+                      DropdownMenuItem(value: 'controlled_live', child: Text('Controlled Live · 副作用前等待确认')),
+                    ],
+                    onChanged: (value) => setDialogState(() => mode = value ?? 'live'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: inputController,
+                    minLines: 4,
+                    maxLines: 10,
+                    decoration: const InputDecoration(labelText: 'Input JSON', border: OutlineInputBorder()),
+                  ),
+                  if (mode == 'mocked') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: mocksController,
+                      minLines: 5,
+                      maxLines: 12,
+                      decoration: const InputDecoration(labelText: 'Mocks JSON Array', border: OutlineInputBorder()),
+                    ),
+                  ],
+                  if (mode == 'controlled_live') ...[
+                    const SizedBox(height: 10),
+                    const Text('副作用节点会进入 waiting_confirmation；确认后继续同一个 Run，不会重新创建运行。'),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+            FilledButton(
+              onPressed: () {
+                try {
+                  final inputRaw = jsonDecode(inputController.text.trim().isEmpty ? '{}' : inputController.text);
+                  if (inputRaw is! Map) throw const FormatException('Input 必须是 JSON Object');
+                  final mocks = <Map<String, dynamic>>[];
+                  if (mode == 'mocked') {
+                    final raw = jsonDecode(mocksController.text.trim().isEmpty ? '[]' : mocksController.text);
+                    if (raw is! List) throw const FormatException('Mocks 必须是 JSON Array');
+                    for (final item in raw) {
+                      if (item is! Map) throw const FormatException('Mocks 每项必须是 JSON Object');
+                      mocks.add(Map<String, dynamic>.from(item));
+                    }
+                  }
+                  Navigator.pop(dialogContext, <String, dynamic>{
+                    'mode': mode,
+                    'input': Map<String, dynamic>.from(inputRaw),
+                    'mocks': mocks,
+                  });
+                } catch (e) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('参数错误：$e')));
+                }
+              },
+              child: const Text('运行'),
+            ),
+          ],
+        ),
+      ),
+    );
+    inputController.dispose();
+    mocksController.dispose();
+    return result;
+  }
+
   Future<void> _run() async {
     if (_dirty && !await _save(notify: false)) return;
+    final options = await _promptRunOptions();
+    if (options == null) return;
     try {
-      final result = await ref.read(extensionServiceProvider).runWorkflow(widget.workflowId, target: _target);
+      final result = await ref.read(extensionServiceProvider).runWorkflow(
+            widget.workflowId,
+            target: _target,
+            input: Map<String, dynamic>.from(options['input'] as Map),
+            mode: (options['mode'] ?? 'live').toString(),
+            mocks: (options['mocks'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(),
+          );
       final id = (result['executionId'] ?? '').toString();
       if (id.isEmpty) throw StateError('后端没有返回 executionId');
+      final required = ((result['requiredConfirmations'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+      if (!mounted) return;
       setState(() {
         _activeRunId = id;
         _activeRunStatus = (result['status'] ?? 'running').toString();
+        _activeRunMode = (result['executionMode'] ?? options['mode'] ?? 'live').toString();
+        _requiredConfirmations = required;
+        _classifiedRunError = null;
         _stepRuns = <String, Map<String, dynamic>>{};
         _stepAttempts = <Map<String, dynamic>>[];
         _checkpoints = <Map<String, dynamic>>[];
       });
+      if (_activeRunStatus == 'waiting_confirmation' && _requiredConfirmations.isNotEmpty) {
+        await _confirmPendingRun();
+        return;
+      }
       if (!_isDevice) _startPolling();
-      _show(_isDevice ? '已提交到目标设备运行' : '工作流已开始运行');
+      _show(_activeRunMode == 'dry_run' ? 'Dry Run 已完成 · $id' : (_isDevice ? '已提交到目标设备运行' : '工作流已开始运行'));
     } catch (error) {
       _show('运行失败：${_message(error)}');
+    }
+  }
+
+  Future<void> _confirmPendingRun() async {
+    final id = _activeRunId;
+    if (id == null || _requiredConfirmations.isEmpty) return;
+    final nodeIds = List<String>.from(_requiredConfirmations);
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('确认副作用节点'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Controlled Live 已暂停。确认后将继续当前 Run ID，不会重新执行已完成步骤。'),
+                  const SizedBox(height: 12),
+                  ...nodeIds.map((nodeId) => ListTile(dense: true, leading: const Icon(Icons.warning_amber_outlined), title: Text(nodeId))),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('暂不确认')),
+              FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('确认并继续')),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) {
+      _show('运行保持 waiting_confirmation，可在运行详情中继续确认');
+      return;
+    }
+    try {
+      final result = await ref.read(extensionServiceProvider).confirmWorkflowRun(id, nodeIds, target: _target);
+      final missing = ((result['missingConfirmations'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+      if (!mounted) return;
+      setState(() {
+        _requiredConfirmations = missing;
+        final run = _asMap(result['run']);
+        if (run.isNotEmpty) _activeRunStatus = (run['status'] ?? _activeRunStatus).toString();
+        if (_requiredConfirmations.isEmpty && _activeRunStatus == 'waiting_confirmation') _activeRunStatus = 'running';
+      });
+      if (!_isDevice) _startPolling();
+      _show(missing.isEmpty ? '确认已提交，继续当前运行' : '仍有 ${missing.length} 个节点等待确认');
+    } catch (error) {
+      _show('确认失败：${_message(error)}');
     }
   }
 
@@ -640,17 +794,21 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       final steps = _asMapList(detail['stepRuns']);
       final attempts = _asMapList(detail['attempts']);
       final checkpoints = _asMapList(detail['checkpoints']);
+      final required = ((detail['requiredConfirmations'] as List?) ?? const <dynamic>[]).map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+      final classified = _asMap(detail['classifiedError']);
       final status = (run['status'] ?? '').toString();
       if (!mounted) return;
       setState(() {
         _activeRunStatus = status;
+        _requiredConfirmations = required;
+        _classifiedRunError = classified.isEmpty ? null : classified;
         _stepRuns = <String, Map<String, dynamic>>{
           for (final step in steps) (step['nodeId'] ?? '').toString(): step,
         };
         _stepAttempts = attempts;
         _checkpoints = checkpoints;
       });
-      if (_terminal(status)) {
+      if (_terminal(status) || status == 'waiting_confirmation') {
         _pollTimer?.cancel();
         await Future.wait(<Future<void>>[_loadRuns(), _loadStats()]);
       }
@@ -659,7 +817,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     }
   }
 
-  bool _terminal(String status) => <String>{'succeeded', 'failed', 'cancelled', 'completed', 'compensated'}.contains(status.toLowerCase());
+  bool _terminal(String status) => <String>{'succeeded', 'failed', 'cancelled', 'completed', 'compensated', 'compensation_failed', 'manual_intervention_required', 'cancel_timeout', 'cancel_failed', 'dropped'}.contains(status.toLowerCase());
 
   Future<void> _loadRuns() async {
     if (_workflow == null || _isDevice) return;
@@ -3368,7 +3526,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      OutlinedButton.icon(onPressed: _activeRunStatus == 'paused' ? null : _pauseRun, icon: const Icon(Icons.pause), label: const Text('暂停')),
+                      if (_activeRunStatus == 'waiting_confirmation' && _requiredConfirmations.isNotEmpty)
+                        FilledButton.icon(onPressed: _confirmPendingRun, icon: const Icon(Icons.verified_user_outlined), label: Text('确认副作用 (${_requiredConfirmations.length})')),
+                      OutlinedButton.icon(onPressed: _activeRunStatus == 'paused' || _activeRunStatus == 'waiting_confirmation' ? null : _pauseRun, icon: const Icon(Icons.pause), label: const Text('暂停')),
                       OutlinedButton.icon(onPressed: _activeRunStatus == 'paused' ? _resumeRun : null, icon: const Icon(Icons.play_arrow), label: const Text('恢复')),
                       OutlinedButton.icon(
                         onPressed: <String>{'failed', 'cancelled'}.contains(_activeRunStatus.toLowerCase()) && _checkpoints.isNotEmpty && _workflow?['enabled'] != false ? _recoverActiveRun : null,
@@ -3382,6 +3542,14 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                       ),
                       OutlinedButton.icon(onPressed: _terminal(_activeRunStatus) ? null : _cancelRun, icon: const Icon(Icons.stop), label: const Text('取消')),
                     ],
+                  ),
+                ),
+              if (_classifiedRunError != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('错误分类：${_classifiedRunError!['code'] ?? _classifiedRunError!['category'] ?? _classifiedRunError}', style: TextStyle(color: Theme.of(context).colorScheme.error)),
                   ),
                 ),
               const SizedBox(height: 8),
