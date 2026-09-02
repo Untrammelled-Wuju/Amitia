@@ -22,6 +22,7 @@ import 'workspace_service.dart';
 import 'device_mesh_service.dart';
 import 'privacy_service.dart';
 import 'temporal_service.dart' as temporal_config;
+import 'onboarding_service.dart';
 import '../models/character.dart';
 import '../models/conversation.dart';
 import '../models/memory.dart';
@@ -36,6 +37,8 @@ BackendServiceApi _getDynamicServiceApi(Ref ref) {
 }
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService(_getDynamicServiceApi(ref)));
+
+final onboardingServiceProvider = Provider<OnboardingService>((ref) => OnboardingService(_getDynamicServiceApi(ref)));
 
 final characterServiceProvider = Provider<CharacterService>((ref) => CharacterService(_getDynamicServiceApi(ref)));
 

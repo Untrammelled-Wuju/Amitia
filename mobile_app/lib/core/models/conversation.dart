@@ -48,6 +48,8 @@ class MessageDto {
   final String? emoteId;
   final String? altText;
   final int? tokens;
+  final String? replyToMessageId;
+  final String? replyToExcerpt;
 
   MessageDto({
     required this.id,
@@ -64,6 +66,8 @@ class MessageDto {
     this.emoteId,
     this.altText,
     this.tokens,
+    this.replyToMessageId,
+    this.replyToExcerpt,
   });
 
   factory MessageDto.fromJson(Map<String, dynamic> json) {
@@ -82,6 +86,8 @@ class MessageDto {
       emoteId: json['emoteId'] as String?,
       altText: json['altText'] as String?,
       tokens: (json['tokens'] as num?)?.toInt(),
+      replyToMessageId: json['replyToMessageId'] as String?,
+      replyToExcerpt: json['replyToExcerpt'] as String?,
     );
   }
 }

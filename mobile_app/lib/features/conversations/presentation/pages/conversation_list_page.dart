@@ -171,7 +171,11 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                         ...entry.value.map((conv) => _ConversationItem(
                               conversation: conv,
                               timeText: _formatTime(conv.updatedAt),
-                              onTap: () => context.go(AppRoutes.chat),
+                              onTap: () {
+                                final uri = '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conv.id)}'
+                                    '${conv.characterId.isNotEmpty ? '&characterId=${Uri.encodeQueryComponent(conv.characterId)}' : ''}';
+                                context.go(uri);
+                              },
                               onMore: () => _showActionsSheet(conv),
                             )),
                       ],
@@ -220,14 +224,20 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                 _SheetActionItem(
                   icon: Icons.edit_outlined,
                   label: '重命名',
-                  onTap: () => Navigator.pop(sheetContext),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _renameConversation(conv);
+                  },
                 ),
                 _SheetActionItem(
                   icon: Icons.delete_outline,
                   label: '删除',
                   iconColor: context.error,
                   textColor: context.error,
-                  onTap: () => Navigator.pop(sheetContext),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _deleteConversation(conv);
+                  },
                 ),
               ],
             ),
@@ -236,6 +246,57 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       },
     );
   }
+
+  Future<void> _renameConversation(ConversationDto conv) async {
+    final controller = TextEditingController(text: conv.title);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: dialogContext.surfacePrimary,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+        title: Text('重命名对话', style: AppTypography.cardTitle(dialogContext)),
+        content: AmitiaTextField(controller: controller, hintText: '输入新的对话标题'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+          TextButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (title == null || title == conv.title) return;
+    try {
+      await ref.read(chatServiceProvider).renameConversation(conv.id, title);
+      ref.invalidate(conversationListProvider);
+      if (mounted) amitiaSnackBar(context, '对话已重命名');
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '重命名失败：$e');
+    }
+  }
+
+  Future<void> _deleteConversation(ConversationDto conv) async {
+    final confirmed = await showAmitiaConfirmDialog(
+      context,
+      title: '删除对话',
+      message: '确定删除「${conv.title}」及其聊天记录吗？此操作不可撤销。',
+      confirmLabel: '删除',
+      isDestructive: true,
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(chatServiceProvider).deleteConversation(conv.id);
+      ref.invalidate(conversationListProvider);
+      if (mounted) amitiaSnackBar(context, '对话已删除');
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '删除失败：$e');
+    }
+  }
+
 }
 
 class _ConversationItem extends StatelessWidget {

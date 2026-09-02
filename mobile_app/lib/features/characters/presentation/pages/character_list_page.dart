@@ -27,13 +27,18 @@ class CharacterListPage extends ConsumerStatefulWidget {
 enum _SortOrder { none, name, createdAt }
 
 class _CharacterListPageState extends ConsumerState<CharacterListPage> {
-  String? _defaultCharacterId;
-  final Set<String> _archivedIds = {};
   List<CharacterDto> _characters = [];
+  String _query = '';
   _SortOrder _sortOrder = _SortOrder.none;
 
   List<CharacterDto> get _activeCharacters {
-    var list = _characters.where((c) => !_archivedIds.contains(c.id)).toList();
+    var list = _characters.where((c) {
+      if (_query.trim().isEmpty) return true;
+      final q = _query.trim().toLowerCase();
+      return c.name.toLowerCase().contains(q) ||
+          c.identity.toLowerCase().contains(q) ||
+          c.description.toLowerCase().contains(q);
+    }).toList();
     switch (_sortOrder) {
       case _SortOrder.name:
         list.sort((a, b) => a.name.compareTo(b.name));
@@ -66,7 +71,10 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                 AppSpacing.pagePadding,
                 AppSpacing.sm,
               ),
-              child: const AmitiaSearchField(hintText: '搜索角色'),
+              child: AmitiaSearchField(
+                hintText: '搜索角色',
+                onChanged: (value) => setState(() => _query = value),
+              ),
             ),
             Expanded(
               child: charactersAsync.when(
@@ -95,7 +103,6 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                 ),
                 data: (characters) {
                   _characters = characters;
-                  _defaultCharacterId ??= characters.isNotEmpty ? characters.first.id : null;
                   final activeChars = _activeCharacters;
                   if (activeChars.isEmpty) {
                     return Center(
@@ -116,7 +123,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                     separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                     itemBuilder: (context, index) {
                       final character = activeChars[index];
-                      final isDefault = character.id == _defaultCharacterId;
+                      final isDefault = character.isDefault;
                       return AmitiaCharacterCard(
                         name: isDefault ? '${character.name} (默认)' : character.name,
                         status: character.status,
@@ -312,11 +319,16 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   title: '设为默认',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '设为默认角色', (character) {
-                      setState(() {
-                        _defaultCharacterId = character.id;
-                      });
-                      amitiaSnackBar(context, '已将 ${character.name} 设为默认角色');
+                    _showCharacterSelection(context, '设为默认角色', (character) async {
+                      try {
+                        await ref.read(characterServiceProvider).setDefault(character.id);
+                        await ref.read(characterServiceProvider).setActive(character.id);
+                        ref.read(currentCharacterIdProvider.notifier).state = character.id;
+                        ref.invalidate(characterListProvider);
+                        if (mounted) amitiaSnackBar(context, '已将 ${character.name} 设为默认角色');
+                      } catch (e) {
+                        if (mounted) amitiaSnackBar(context, '设置默认角色失败：$e');
+                      }
                     });
                   },
                 ),
@@ -325,8 +337,15 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   title: '复制角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '复制角色', (character) {
-                      amitiaSnackBar(context, '角色复制功能开发中');
+                    _showCharacterSelection(context, '复制角色', (character) async {
+                      try {
+                        final created = await ref.read(characterServiceProvider).duplicate(character.id);
+                        if (created == null) throw StateError('后端未返回新角色');
+                        ref.invalidate(characterListProvider);
+                        if (mounted) amitiaSnackBar(context, '已复制为 ${created.name}');
+                      } catch (e) {
+                        if (mounted) amitiaSnackBar(context, '复制角色失败：$e');
+                      }
                     });
                   },
                 ),
@@ -343,8 +362,8 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   title: '导出角色卡',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '导出角色卡', (character) {
-                      _exportCharacter(character);
+                    _showCharacterSelection(context, '导出角色卡', (character) async {
+                      await _exportCharacter(character);
                     });
                   },
                 ),
@@ -353,16 +372,18 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   title: '归档角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '归档角色', (character) {
-                      setState(() {
-                        _archivedIds.add(character.id);
-                        if (_defaultCharacterId == character.id) {
-                          _defaultCharacterId = _activeCharacters.isNotEmpty
-                              ? _activeCharacters.first.id
-                              : '';
-                        }
-                      });
-                      amitiaSnackBar(context, '角色 ${character.name} 已归档');
+                    _showCharacterSelection(context, '归档角色', (character) async {
+                      if (character.isDefault) {
+                        amitiaSnackBar(context, '默认角色不能直接归档，请先设置其他默认角色');
+                        return;
+                      }
+                      try {
+                        await ref.read(characterServiceProvider).archive(character.id);
+                        ref.invalidate(characterListProvider);
+                        if (mounted) amitiaSnackBar(context, '角色 ${character.name} 已归档');
+                      } catch (e) {
+                        if (mounted) amitiaSnackBar(context, '归档失败：$e');
+                      }
                     });
                   },
                 ),
@@ -371,8 +392,8 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   title: '删除角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '删除角色', (character) {
-                      _handleDelete(context, character);
+                    _showCharacterSelection(context, '删除角色', (character) async {
+                      await _handleDelete(context, character);
                     });
                   },
                 ),
@@ -457,7 +478,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
   void _showCharacterSelection(
     BuildContext context,
     String title,
-    ValueChanged<CharacterDto> onSelected,
+    Future<void> Function(CharacterDto) onSelected,
   ) {
     final characters = _activeCharacters;
     showModalBottomSheet(
@@ -494,12 +515,12 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                     separatorBuilder: (_, _) => Divider(height: 1, color: context.borderSecondary),
                     itemBuilder: (_, index) {
                       final character = characters[index];
-                      final isDefault = character.id == _defaultCharacterId;
+                      final isDefault = character.isDefault;
                       return GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () {
+                        onTap: () async {
                           Navigator.pop(sheetContext);
-                          onSelected(character);
+                          await onSelected(character);
                         },
                         child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
@@ -549,25 +570,25 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     );
   }
 
-  void _handleDelete(BuildContext context, CharacterDto character) {
-    if (character.id == _defaultCharacterId) {
+  Future<void> _handleDelete(BuildContext context, CharacterDto character) async {
+    if (character.isDefault) {
       amitiaSnackBar(context, '删除默认角色需要先选择替代角色');
-    } else {
-      showAmitiaConfirmDialog(
-        context,
-        title: '删除角色',
-        message: '确定要删除 ${character.name} 吗？此操作不可撤销。',
-        confirmLabel: '删除',
-        isDestructive: true,
-      ).then((confirmed) {
-        if (confirmed == true) {
-          setState(() {
-            _archivedIds.add(character.id);
-          });
-          ref.invalidate(characterListProvider);
-          amitiaSnackBar(context, '${character.name} 已删除');
-        }
-      });
+      return;
+    }
+    final confirmed = await showAmitiaConfirmDialog(
+      context,
+      title: '删除角色',
+      message: '确定要删除 ${character.name} 吗？此操作不可撤销。',
+      confirmLabel: '删除',
+      isDestructive: true,
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(characterServiceProvider).delete(character.id);
+      ref.invalidate(characterListProvider);
+      if (mounted) amitiaSnackBar(context, '${character.name} 已删除');
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '删除角色失败：$e');
     }
   }
 

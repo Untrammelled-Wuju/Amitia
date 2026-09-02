@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../backend_transport/backend_service_api.dart';
 
 class MCPService {
@@ -44,6 +45,10 @@ class MCPService {
   Future<Map<String, dynamic>?> disconnectServer(String id) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/disconnect');
     return resp;
+  }
+
+  Future<Map<String, dynamic>?> reconnectServer(String id) async {
+    return _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/reconnect');
   }
 
   Future<Map<String, dynamic>?> refreshTools(String id) async {
@@ -117,6 +122,35 @@ class MCPService {
         data: {'characterId': '', 'uri': uri},
       );
 
+  Future<Map<String, dynamic>?> setResourceSubscription(
+    String serverId,
+    String uri,
+    bool subscribed, {
+    String characterId = '',
+  }) =>
+      _api.post<Map<String, dynamic>>(
+        '/api/mcp/servers/$serverId/resources/${subscribed ? 'subscribe' : 'unsubscribe'}',
+        data: {'characterId': characterId, 'uri': uri},
+      );
+
+  Future<Map<String, dynamic>?> completePromptArgument(
+    String serverId, {
+    required String promptName,
+    required String argumentName,
+    String value = '',
+    Map<String, String> contextArguments = const <String, String>{},
+    String characterId = '',
+  }) =>
+      _api.post<Map<String, dynamic>>(
+        '/api/mcp/servers/$serverId/completion',
+        data: {
+          'characterId': characterId,
+          'ref': {'type': 'ref/prompt', 'name': promptName},
+          'argument': {'name': argumentName, 'value': value},
+          'contextArguments': contextArguments,
+        },
+      );
+
   Future<Map<String, dynamic>?> getPrompt(
     String serverId,
     String name, {
@@ -126,6 +160,9 @@ class MCPService {
         '/api/mcp/servers/$serverId/prompts/get',
         data: {'characterId': '', 'name': name, 'arguments': arguments},
       );
+
+  Future<Map<String, dynamic>?> cancelTask(String serverId, String taskId) =>
+      _api.post<Map<String, dynamic>>('/api/mcp/servers/$serverId/tasks/$taskId/cancel');
 
   Future<Map<String, dynamic>?> startOAuth(
     String serverId, {
@@ -141,6 +178,49 @@ class MCPService {
           'scopes': scopes,
         },
       );
+
+  Future<Map<String, dynamic>?> revokeOAuth(String serverId) =>
+      _api.post<Map<String, dynamic>>('/api/mcp/servers/$serverId/oauth/revoke');
+
+  Future<Map<String, dynamic>?> previewAgentSkillDependencies({
+    required String agentSkillExtensionId,
+    required String characterId,
+    required List<dynamic> dependencies,
+  }) =>
+      _api.post<Map<String, dynamic>>(
+        '/api/mcp/agent-skills/dependencies/preview',
+        data: {
+          'agentSkillExtensionId': agentSkillExtensionId,
+          'characterId': characterId,
+          'dependencies': dependencies,
+        },
+      );
+
+  Future<Map<String, dynamic>?> installAgentSkillDependencies(
+    Map<String, dynamic> plan, {
+    bool installOptional = false,
+    bool confirmHttp = false,
+    bool confirmStdio = false,
+  }) =>
+      _api.post<Map<String, dynamic>>(
+        '/api/mcp/agent-skills/dependencies/install',
+        data: {
+          'plan': plan,
+          'installOptional': installOptional,
+          'confirmHttp': confirmHttp,
+          'confirmStdio': confirmStdio,
+          'enableServers': true,
+        },
+      );
+
+  Future<Map<String, dynamic>?> removeAgentSkillDependencies(String skillId) =>
+      _api.delete<Map<String, dynamic>>('/api/mcp/agent-skills/$skillId/dependencies');
+
+  Future<List<Map<String, dynamic>>> agentSkillDependencies(String skillId) async {
+    final resp = await _api.get<List<dynamic>>('/api/mcp/agent-skills/$skillId/dependencies');
+    if (resp == null) return const [];
+    return resp.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
 
   Future<List<Map<String, dynamic>>> interactions() async {
     final resp = await _api.get<List<dynamic>>('/api/mcp/interactions');
@@ -384,6 +464,24 @@ class EmoteService {
     return true;
   }
 
+  Future<bool> reorderGroups(List<String> ids) async {
+    await _api.post('/api/emote-groups/reorder', data: {'ids': ids});
+    return true;
+  }
+
+  Future<bool> addEmotesToGroup(String groupId, List<String> emoteIds) async {
+    await _api.post(
+      '/api/emote-groups/$groupId/emotes',
+      data: {'emoteIds': emoteIds},
+    );
+    return true;
+  }
+
+  Future<bool> removeEmoteFromGroup(String groupId, String emoteId) async {
+    await _api.delete('/api/emote-groups/$groupId/emotes/$emoteId');
+    return true;
+  }
+
   Future<List<Map<String, dynamic>>> listEmotes() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/emotes');
     final items = resp?['items'];
@@ -391,9 +489,48 @@ class EmoteService {
     return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  Future<Map<String, dynamic>?> uploadEmote(String filePath) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/emotes/upload', data: {'filePath': filePath});
+  Future<Map<String, dynamic>?> uploadEmote(
+    String filePath, {
+    Map<String, dynamic> config = const {},
+  }) async {
+    final resp = await _api.postMultipart<Map<String, dynamic>>(
+      '/api/emotes/upload',
+      fields: {'config': jsonEncode(config)},
+      files: {'file': [filePath]},
+    );
     return resp;
+  }
+
+  Future<Map<String, dynamic>> batchUploadEmotes(
+    List<String> filePaths, {
+    List<Map<String, dynamic>> configs = const [],
+  }) async {
+    final resp = await _api.postMultipart<Map<String, dynamic>>(
+      '/api/emotes/batch-upload',
+      fields: {'configs': jsonEncode(configs)},
+      files: {'files': filePaths},
+    );
+    return resp ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>?> updateEmote(String id, Map<String, dynamic> data) async {
+    return _api.put<Map<String, dynamic>>('/api/emotes/$id', data: data);
+  }
+
+  Future<bool> deleteEmote(String id) async {
+    await _api.delete('/api/emotes/$id');
+    return true;
+  }
+
+  Future<Map<String, dynamic>> batchUpdateEmotes(
+    List<String> ids,
+    Map<String, dynamic> update,
+  ) async {
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/emotes/batch-update',
+      data: {'ids': ids, 'update': update},
+    );
+    return resp ?? <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>?> sendEmote(String conversationId, String characterId, String emoteId) async {
@@ -452,6 +589,25 @@ class ProactiveService {
   Future<bool> triggerRule(String id) async {
     await _api.post('/api/proactive/rules/$id/trigger');
     return true;
+  }
+
+  Future<Map<String, dynamic>?> testRule(String id) {
+    return _api.post<Map<String, dynamic>>('/api/proactive/rules/test/$id');
+  }
+
+  Future<Map<String, dynamic>?> resetPresets({String? characterId}) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/proactive/presets/reset',
+      data: <String, dynamic>{
+        if (characterId != null && characterId.isNotEmpty) 'characterId': characterId,
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> ruleMessages(String id) async {
+    final resp = await _api.get<List<dynamic>>('/api/proactive/rules/$id/messages');
+    if (resp == null) return const <Map<String, dynamic>>[];
+    return resp.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList(growable: false);
   }
 
   Future<Map<String, dynamic>?> status({String? characterId}) async {

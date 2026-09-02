@@ -83,6 +83,10 @@ class CompanionService {
     return true;
   }
 
+  Future<Map<String, dynamic>?> toggleFixedEventEnabled(String id) {
+    return _api.patch<Map<String, dynamic>>('/api/companion/fixed-events/$id/enabled');
+  }
+
   Future<List<Map<String, dynamic>>> specialEvents({String? characterId}) async {
     final resp = await _api.get<List<dynamic>>(
       '/api/companion/special-events',

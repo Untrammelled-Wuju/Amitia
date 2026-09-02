@@ -42,6 +42,13 @@ class DeviceMeshService {
       '/api/device-mesh/v1/devices/${Uri.encodeComponent(deviceId)}/runtimes/${Uri.encodeComponent(runtimeId)}/probe',
     );
   }
+
+  Future<Map<String, dynamic>?> syncStatus(String deviceId) async {
+    return _api.get<Map<String, dynamic>>(
+      '/api/v1/sync/status',
+      queryParameters: <String, dynamic>{'deviceId': deviceId},
+    );
+  }
 }
 
 class DeviceMeshLocalService {

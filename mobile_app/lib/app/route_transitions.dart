@@ -33,6 +33,7 @@ CustomTransitionPage<T> slideFadePage<T>({
     transitionDuration: AppMotion.pageEnter,
     reverseTransitionDuration: AppMotion.pageExit,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (MediaQuery.maybeOf(context)?.disableAnimations == true) return child;
       final incomingAnimation = CurvedAnimation(
         parent: animation,
         curve: AppMotion.enterCurve,
@@ -66,6 +67,7 @@ CustomTransitionPage<T> drawerSlideFadePage<T>({
     transitionDuration: AppMotion.pageEnter,
     reverseTransitionDuration: AppMotion.pageExit,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (MediaQuery.maybeOf(context)?.disableAnimations == true) return child;
       final transition = CurvedAnimation(
         parent: animation,
         curve: AppMotion.enterCurve,
@@ -97,6 +99,7 @@ CustomTransitionPage<T> chatRootPage<T>({
     transitionDuration: Duration.zero,
     reverseTransitionDuration: Duration.zero,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (MediaQuery.maybeOf(context)?.disableAnimations == true) return child;
       return backTargetTransition(
         secondaryAnimation: secondaryAnimation,
         child: child,

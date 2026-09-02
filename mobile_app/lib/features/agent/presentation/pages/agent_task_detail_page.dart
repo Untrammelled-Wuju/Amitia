@@ -251,8 +251,22 @@ class AgentTaskDetailPage extends ConsumerWidget {
   }
 
   Widget _buildBottomActions(BuildContext context, AgentTaskItem task, WidgetRef ref) {
-    void changeStatus(AgentTaskStatus newStatus) {
-      ref.read(agentTasksProvider.notifier).changeStatus(task.id, newStatus);
+    Future<void> changeStatus(AgentTaskStatus newStatus, String successMessage) async {
+      try {
+        await ref.read(agentTasksProvider.notifier).changeStatus(task.id, newStatus);
+        if (context.mounted) amitiaSnackBar(context, successMessage);
+      } catch (e) {
+        if (context.mounted) amitiaSnackBar(context, '操作失败：$e');
+      }
+    }
+
+    Future<void> recover() async {
+      try {
+        await ref.read(agentTasksProvider.notifier).recover(task.id);
+        if (context.mounted) amitiaSnackBar(context, '已通过 Kernel recover 提交恢复');
+      } catch (e) {
+        if (context.mounted) amitiaSnackBar(context, '恢复失败：$e');
+      }
     }
 
     switch (task.status) {
@@ -261,12 +275,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
           children: [
             Expanded(
               child: AmitiaButton(
-                label: '开始',
-                icon: Icons.play_arrow,
-                onPressed: () {
-                  changeStatus(AgentTaskStatus.running);
-                  amitiaSnackBar(context, '任务已开始执行');
-                },
+                label: '等待 Kernel 调度',
+                icon: Icons.schedule,
+                onPressed: null,
               ),
             ),
             SizedBox(width: AppSpacing.sm),
@@ -279,12 +290,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
                 onPressed: () => _confirmDestructive(
                   context,
                   title: '取消任务',
-                  message: '确定要取消此任务吗？取消后需重新创建。',
+                  message: 'Kernel Task 不提供手动 start 接口；当前任务由队列自动调度。确定取消此排队任务吗？',
                   confirmLabel: '取消任务',
-                  onConfirm: () {
-                    changeStatus(AgentTaskStatus.cancelled);
-                    amitiaSnackBar(context, '任务已取消');
-                  },
+                  onConfirm: () => changeStatus(AgentTaskStatus.cancelled, '任务已由服务端取消'),
                 ),
               ),
             ),
@@ -295,25 +303,19 @@ class AgentTaskDetailPage extends ConsumerWidget {
           children: [
             Expanded(
               child: AmitiaButton(
-                label: '允许',
-                icon: Icons.check,
-                onPressed: () {
-                  changeStatus(AgentTaskStatus.running);
-                  amitiaSnackBar(context, '已批准，任务开始执行');
-                },
+                label: '允许并恢复',
+                icon: Icons.settings_backup_restore,
+                onPressed: recover,
               ),
             ),
             SizedBox(width: AppSpacing.sm),
             Expanded(
               child: AmitiaButton(
-                label: '拒绝',
+                label: '拒绝并取消',
                 isSecondary: true,
                 isDestructive: true,
                 icon: Icons.close,
-                onPressed: () {
-                  changeStatus(AgentTaskStatus.cancelled);
-                  amitiaSnackBar(context, '已拒绝，任务已取消');
-                },
+                onPressed: () => changeStatus(AgentTaskStatus.cancelled, '已拒绝并由服务端取消任务'),
               ),
             ),
           ],
@@ -332,8 +334,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
                   message: '确定要暂停此任务吗？',
                   confirmLabel: '暂停',
                   onConfirm: () {
-                    changeStatus(AgentTaskStatus.paused);
-                    amitiaSnackBar(context, '任务已暂停');
+                    changeStatus(AgentTaskStatus.paused, '任务已由服务端暂停');
                   },
                 ),
               ),
@@ -350,8 +351,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
                   message: '确定要停止此任务吗？此操作不可撤销。',
                   confirmLabel: '停止',
                   onConfirm: () {
-                    changeStatus(AgentTaskStatus.cancelled);
-                    amitiaSnackBar(context, '任务已停止');
+                    changeStatus(AgentTaskStatus.cancelled, '任务已由服务端停止');
                   },
                 ),
               ),
@@ -366,8 +366,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
                 label: '继续',
                 icon: Icons.play_arrow,
                 onPressed: () {
-                  changeStatus(AgentTaskStatus.running);
-                  amitiaSnackBar(context, '任务已继续执行');
+                  changeStatus(AgentTaskStatus.running, '任务已由服务端继续执行');
                 },
               ),
             ),
@@ -383,8 +382,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
                   message: '确定要停止此任务吗？此操作不可撤销。',
                   confirmLabel: '停止',
                   onConfirm: () {
-                    changeStatus(AgentTaskStatus.cancelled);
-                    amitiaSnackBar(context, '任务已停止');
+                    changeStatus(AgentTaskStatus.cancelled, '任务已由服务端停止');
                   },
                 ),
               ),
@@ -409,10 +407,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
               child: AmitiaButton(
                 label: '再次执行',
                 icon: Icons.refresh,
-                onPressed: () {
-                  changeStatus(AgentTaskStatus.running);
-                  amitiaSnackBar(context, '任务已重新开始');
-                },
+                onPressed: () => changeStatus(AgentTaskStatus.running, '任务已通过 Retry 重新入队'),
               ),
             ),
           ],
@@ -435,10 +430,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
               child: AmitiaButton(
                 label: '重试',
                 icon: Icons.refresh,
-                onPressed: () {
-                  changeStatus(AgentTaskStatus.running);
-                  amitiaSnackBar(context, '任务已重新开始');
-                },
+                onPressed: () => changeStatus(AgentTaskStatus.running, '任务已通过 Retry 重新入队'),
               ),
             ),
           ],
@@ -448,10 +440,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
           label: '再次执行',
           icon: Icons.refresh,
           isFullWidth: true,
-          onPressed: () {
-            changeStatus(AgentTaskStatus.running);
-            amitiaSnackBar(context, '任务已重新开始');
-          },
+          onPressed: () => changeStatus(AgentTaskStatus.running, '任务已通过 Retry 重新入队'),
         );
     }
   }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -190,6 +192,143 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
     }
   }
 
+  Future<void> _showBdiConfig() async {
+    try {
+      final current = await ref.read(systemServiceProvider).bdiConfig() ?? <String, dynamic>{};
+      if (!mounted) return;
+      final controller = TextEditingController(text: const JsonEncoder.withIndent('  ').convert(current));
+      final saved = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('BDI 安全策略'),
+          content: SizedBox(
+            width: 680,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('可配置 hardConstraints、softPreferences、copingStrategy 和 emotionExpression。保存时由后端统一持久化。', style: AppTypography.caption(dialogContext)),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: MediaQuery.sizeOf(dialogContext).height * 0.5,
+                  child: TextField(
+                    controller: controller,
+                    expands: true,
+                    minLines: null,
+                    maxLines: null,
+                    textAlignVertical: TextAlignVertical.top,
+                    keyboardType: TextInputType.multiline,
+                    decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'BDI JSON'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+            FilledButton(
+              onPressed: () async {
+                try {
+                  final decoded = jsonDecode(controller.text);
+                  if (decoded is! Map) throw const FormatException('根节点必须是 JSON 对象');
+                  await ref.read(systemServiceProvider).updateBdiConfig(Map<String, dynamic>.from(decoded));
+                  if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+                } catch (e) {
+                  if (dialogContext.mounted) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('保存失败：$e')));
+                  }
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      );
+      controller.dispose();
+      if (saved == true && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('BDI 安全策略已保存')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取 BDI 配置失败：$e')));
+    }
+  }
+
+  Future<void> _showSafetyEvents() async {
+    try {
+      final result = await ref.read(systemServiceProvider).safetyEvents(pageSize: 100);
+      if (!mounted) return;
+      final raw = result['items'];
+      final items = raw is List ? raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : <Map<String, dynamic>>[];
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: context.surfacePrimary,
+        builder: (sheetContext) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * 0.75,
+            child: Column(
+              children: [
+                Padding(
+                  padding: EdgeInsets.all(AppSpacing.lg),
+                  child: Row(children: [
+                    Expanded(child: Text('安全事件 (${result['total'] ?? items.length})', style: AppTypography.sectionTitle(sheetContext))),
+                    TextButton.icon(
+                      onPressed: items.isEmpty ? null : () async {
+                        final confirmed = await showDialog<bool>(
+                          context: sheetContext,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('清空安全事件'),
+                            content: const Text('确定清空全部安全事件日志吗？此操作不可撤销。'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+                              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('清空')),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true) return;
+                        await ref.read(systemServiceProvider).clearSafetyEvents();
+                        if (sheetContext.mounted) Navigator.pop(sheetContext);
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('安全事件已清空')));
+                      },
+                      icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                      label: const Text('清空'),
+                    ),
+                    IconButton(onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close)),
+                  ]),
+                ),
+                Divider(height: 1, color: sheetContext.borderSecondary),
+                Expanded(
+                  child: items.isEmpty
+                      ? Center(child: Text('暂无安全事件', style: AppTypography.caption(sheetContext)))
+                      : ListView.separated(
+                          itemCount: items.length,
+                          separatorBuilder: (_, __) => Divider(height: 1, color: sheetContext.borderSecondary),
+                          itemBuilder: (_, index) {
+                            final item = items[index];
+                            final eventType = (item['eventType'] ?? 'unknown').toString();
+                            final description = (item['description'] ?? '').toString();
+                            final direction = (item['direction'] ?? '').toString();
+                            final createdAt = (item['createdAt'] ?? '').toString();
+                            final handled = item['handled'] == true || item['handled'] == 1;
+                            return ListTile(
+                              leading: Icon(handled ? Icons.verified_outlined : Icons.warning_amber_outlined, color: handled ? sheetContext.success : sheetContext.warning),
+                              title: Text(eventType, style: AppTypography.body(sheetContext)),
+                              subtitle: Text([description, direction, createdAt].where((e) => e.isNotEmpty).join('\n'), style: AppTypography.caption(sheetContext)),
+                              isThreeLine: description.isNotEmpty,
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取安全事件失败：$e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -249,6 +388,10 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
         SizedBox(height: AppSpacing.sm),
         _buildCard([
           _navTile(Icons.security, '隐私扫描', () => context.push(AppRoutes.settingsPrivacyScan)),
+          _divider(),
+          _navTile(Icons.rule_folder_outlined, 'BDI 安全策略', _showBdiConfig),
+          _divider(),
+          _navTile(Icons.warning_amber_outlined, '安全事件', _showSafetyEvents),
           _divider(),
           _navTile(Icons.receipt_long_outlined, _logsLoading ? '读取审计记录...' : '安全审计记录', _showAuditLogs),
         ]),

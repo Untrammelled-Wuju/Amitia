@@ -61,7 +61,7 @@ class BackendHttpClient implements BackendHttpTransport {
 
     final headers = <String, String>{
       BackendBaseHeaders.userAgent: BackendBaseHeaders.userAgentValue,
-      if (request.body != null)
+      if (request.body != null && request.body is! FormData)
         BackendBaseHeaders.contentType: BackendBaseHeaders.contentTypeJsonValue,
     };
 

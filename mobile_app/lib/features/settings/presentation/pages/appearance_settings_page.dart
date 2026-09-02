@@ -7,7 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/settings/appearance_preferences.dart';
 
 class AppearanceSettingsPage extends ConsumerStatefulWidget {
   const AppearanceSettingsPage({super.key});
@@ -18,12 +18,7 @@ class AppearanceSettingsPage extends ConsumerStatefulWidget {
 }
 
 class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage> {
-  int _fontSizeIndex = 1;
-  int _accentColorIndex = 0;
-  int _cornerStyleIndex = 1;
-  bool _dynamicEffect = true;
-  bool _reduceAnimation = false;
-
+  static const _fontScales = <double>[0.9, 1.0, 1.15, 1.3];
   static const _accentColors = <Color>[
     Color(0xFF8A5728),
     Color(0xFF6C8FEA),
@@ -31,12 +26,27 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
     Color(0xFFE9A23B),
   ];
 
+  int _fontIndex(double scale) {
+    var bestIndex = 0;
+    var bestDistance = double.infinity;
+    for (var i = 0; i < _fontScales.length; i++) {
+      final distance = (_fontScales[i] - scale).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final themeMode = ref.watch(themeModeProvider);
-    final themeIndex = themeMode == ThemeMode.dark
+    final appearance = ref.watch(appearancePreferencesProvider);
+    final notifier = ref.read(appearancePreferencesProvider.notifier);
+    final themeIndex = appearance.themeMode == ThemeMode.dark
         ? 1
-        : (themeMode == ThemeMode.system ? 2 : 0);
+        : (appearance.themeMode == ThemeMode.system ? 2 : 0);
+    final fontSizeIndex = _fontIndex(appearance.fontScale);
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '外观设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
@@ -50,9 +60,9 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
               segments: const ['亮色', '暗色', '跟随系统'],
               selectedIndex: themeIndex,
               onChanged: (i) {
-                ref.read(themeModeProvider.notifier).state = i == 0
+                notifier.setThemeMode(i == 0
                     ? ThemeMode.light
-                    : (i == 1 ? ThemeMode.dark : ThemeMode.system);
+                    : (i == 1 ? ThemeMode.dark : ThemeMode.system));
               },
             ),
           ),
@@ -62,8 +72,8 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
             padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: _OptionChips(
               options: const ['小', '标准', '大', '超大'],
-              selectedIndex: _fontSizeIndex,
-              onChanged: (i) => setState(() => _fontSizeIndex = i),
+              selectedIndex: fontSizeIndex,
+              onChanged: (i) => notifier.setFontScale(_fontScales[i]),
             ),
           ),
           SizedBox(height: AppSpacing.sectionGap),
@@ -75,8 +85,8 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
                 for (int i = 0; i < _accentColors.length; i++) ...[
                   _ColorDot(
                     color: _accentColors[i],
-                    isSelected: _accentColorIndex == i,
-                    onTap: () => setState(() => _accentColorIndex = i),
+                    isSelected: appearance.accentColorIndex == i,
+                    onTap: () => notifier.setAccentColorIndex(i),
                   ),
                   if (i < _accentColors.length - 1)
                     SizedBox(width: AppSpacing.lg),
@@ -90,8 +100,8 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
             padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: _OptionChips(
               options: const ['克制', '标准', '圆润'],
-              selectedIndex: _cornerStyleIndex,
-              onChanged: (i) => setState(() => _cornerStyleIndex = i),
+              selectedIndex: appearance.cornerStyleIndex,
+              onChanged: notifier.setCornerStyleIndex,
             ),
           ),
           SizedBox(height: AppSpacing.sectionGap),
@@ -109,8 +119,8 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
                 AmitiaSwitchTile(
                   title: '动态效果',
                   subtitle: '启用页面过渡和微交互动画',
-                  value: _dynamicEffect,
-                  onChanged: (v) => setState(() => _dynamicEffect = v),
+                  value: appearance.dynamicEffect,
+                  onChanged: notifier.setDynamicEffect,
                 ),
                 Divider(
                   height: 1,
@@ -120,8 +130,8 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
                 AmitiaSwitchTile(
                   title: '减少动画',
                   subtitle: '降低界面动画强度以提升性能',
-                  value: _reduceAnimation,
-                  onChanged: (v) => setState(() => _reduceAnimation = v),
+                  value: appearance.reduceAnimation,
+                  onChanged: notifier.setReduceAnimation,
                 ),
               ],
             ),

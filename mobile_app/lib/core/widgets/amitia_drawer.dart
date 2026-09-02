@@ -9,14 +9,17 @@ import '../../app/theme/app_typography.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../app/app_routes.dart';
 import '../../app/drawer_route_state.dart';
+import '../models/character.dart';
+import '../settings/appearance_preferences.dart';
+import '../runtime/backend/mobile_backend_providers.dart';
+import '../runtime/backend/mobile_deployment_mode.dart';
 import '../services/extension_service.dart';
 import '../services/providers.dart';
 import '../ui_runtime/ui_navigation_registry.dart';
 import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_misc.dart';
 
-final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
-final currentCharacterIdProvider = StateProvider<String>((ref) => 'c1');
+final currentCharacterIdProvider = StateProvider<String>((ref) => '');
 final isAgentModeProvider = StateProvider<bool>((ref) => false);
 final isDeveloperModeProvider = StateProvider<bool>((ref) => false);
 final _installedExtensionViewProvider =
@@ -26,14 +29,15 @@ final _installedExtensionViewProvider =
     });
 
 class _CharInfo {
-  final String name, status, description, avatarInitial, avatarColor;
-  _CharInfo(
-    this.name,
-    this.status,
-    this.description,
-    this.avatarInitial,
-    this.avatarColor,
-  );
+  final String name;
+  final String avatarInitial;
+
+  const _CharInfo(this.name, this.avatarInitial);
+
+  factory _CharInfo.fromCharacter(CharacterDto character) {
+    final name = character.name.trim().isEmpty ? '未命名角色' : character.name.trim();
+    return _CharInfo(name, name.characters.first);
+  }
 }
 
 class AmitiaDrawer extends ConsumerStatefulWidget {
@@ -54,23 +58,68 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     router.push(route);
   }
 
-  _CharInfo _getCharacter(String id) {
-    const chars = {
-      'c1': ('Amitia', '在线 · 空闲中', '温柔、细心，喜欢帮助你解决问题', '阿', '#7668EE'),
-      'c2': ('小雨', '在线 · 专注中', '理性、高效，擅长分析和规划', '雨', '#52B788'),
-      'c3': ('Epsilon', '离线', '冷静、专业，精通技术问题', 'E', '#6C8FEA'),
-      'c4': ('Karin', '在线 · 活力满满', '活泼、充满创意，喜欢头脑风暴', 'K', '#E9A23B'),
-    };
-    final c = chars[id] ?? chars['c1']!;
-    return _CharInfo(c.$1, c.$2, c.$3, c.$4, c.$5);
+
+  Future<void> _showGlobalSearch(
+    List<UINavigationItem> navigationItems,
+    List<CharacterDto> characters,
+  ) async {
+    final pages = <_DrawerSearchPage>[
+      for (final item in navigationItems)
+        _DrawerSearchPage(item.label, item.route, item.icon),
+      const _DrawerSearchPage('会话列表', AppRoutes.conversations, Icons.forum_outlined),
+      const _DrawerSearchPage('微信连接', AppRoutes.channelsWechat, Icons.wechat_outlined),
+      const _DrawerSearchPage('QQ 连接', AppRoutes.channelsQq, Icons.chat_outlined),
+      const _DrawerSearchPage('日程提醒', AppRoutes.reminders, Icons.notifications_none),
+      const _DrawerSearchPage('记忆总览', AppRoutes.memory, Icons.psychology_outlined),
+      const _DrawerSearchPage('情景记忆', AppRoutes.memoryEpisodic, Icons.auto_stories_outlined),
+      const _DrawerSearchPage('记忆图谱', AppRoutes.memoryGraph, Icons.hub_outlined),
+      const _DrawerSearchPage('时间线', AppRoutes.memoryTimeline, Icons.timeline_outlined),
+      const _DrawerSearchPage('用户画像', AppRoutes.memoryProfiles, Icons.person_search_outlined),
+      const _DrawerSearchPage('世界书', AppRoutes.memoryWorldBook, Icons.menu_book_outlined),
+      const _DrawerSearchPage('聊天记录', AppRoutes.chatLogs, Icons.history_outlined),
+      const _DrawerSearchPage('导入记录', AppRoutes.chatImport, Icons.file_upload_outlined),
+      const _DrawerSearchPage('表情管理', AppRoutes.emotes, Icons.emoji_emotions_outlined),
+      const _DrawerSearchPage('设置', AppRoutes.settings, Icons.settings_outlined),
+    ];
+    final result = await showSearch<_DrawerSearchResult>(
+      context: context,
+      delegate: _AmitiaDrawerSearchDelegate(pages: pages, characters: characters),
+    );
+    if (!mounted || result == null || result.route.isEmpty) return;
+    if (result.characterId != null) {
+      ref.read(currentCharacterIdProvider.notifier).state = result.characterId!;
+    }
+    _navigateTo(result.route);
   }
 
   @override
   Widget build(BuildContext context) {
-    final themeMode = ref.watch(themeModeProvider);
-    final isDark = themeMode == ThemeMode.dark;
+    final appearance = ref.watch(appearancePreferencesProvider);
+    final platformBrightness = MediaQuery.platformBrightnessOf(context);
+    final isDark = appearance.themeMode == ThemeMode.dark ||
+        (appearance.themeMode == ThemeMode.system && platformBrightness == Brightness.dark);
     final characterId = ref.watch(currentCharacterIdProvider);
-    final character = _getCharacter(characterId);
+    final characters = ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
+    CharacterDto? selectedCharacter = characters.where((item) => item.id == characterId).firstOrNull;
+    selectedCharacter ??= characters.where((item) => item.isActive == 1).firstOrNull;
+    selectedCharacter ??= characters.where((item) => item.isDefault).firstOrNull;
+    selectedCharacter ??= characters.firstOrNull;
+    if (selectedCharacter != null && selectedCharacter.id != characterId) {
+      final resolvedId = selectedCharacter.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ref.read(currentCharacterIdProvider) != resolvedId) {
+          ref.read(currentCharacterIdProvider.notifier).state = resolvedId;
+        }
+      });
+    }
+    final character = selectedCharacter == null
+        ? const _CharInfo('暂无角色', '角')
+        : _CharInfo.fromCharacter(selectedCharacter);
+    final currentUser = ref.watch(currentUserProvider).valueOrNull;
+    final userName = (currentUser?.username ?? '').trim().isEmpty ? '未登录' : currentUser!.username.trim();
+    final userInitial = userName.characters.first;
+    final deployment = ref.watch(mobileDeploymentConfigProvider);
+    final runtimeLabel = deployment.mode == MobileDeploymentMode.cloud ? '云端运行' : '本地运行';
     final navigationItems = UINavigationRegistry.resolve(
       ref.watch(uiRuntimeProvider).valueOrNull,
     );
@@ -90,17 +139,20 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
             character: character,
             isDark: isDark,
             onToggleTheme: () {
-              ref.read(themeModeProvider.notifier).state = isDark
-                  ? ThemeMode.light
-                  : ThemeMode.dark;
+              ref.read(appearancePreferencesProvider.notifier).setThemeMode(
+                    isDark ? ThemeMode.light : ThemeMode.dark,
+                  );
             },
-            onSearchTap: () => _navigateTo(AppRoutes.conversations),
+            onSearchTap: () => _showGlobalSearch(navigationItems, characters),
             onNavigate: _navigateTo,
             onSettingsTap: () => _navigateTo(AppRoutes.settings),
             navigationItems: navigationItems,
             installedExtensions: installedExtensions,
             currentRoute: widget.currentRoute,
             settingsSelected: routeState.settingsSelected,
+            userName: userName,
+            userInitial: userInitial,
+            runtimeLabel: runtimeLabel,
           ),
         ),
       ),
@@ -119,6 +171,9 @@ class _DrawerMainPanel extends StatelessWidget {
   final AsyncValue<ExtensionCenterView> installedExtensions;
   final String currentRoute;
   final bool settingsSelected;
+  final String userName;
+  final String userInitial;
+  final String runtimeLabel;
 
   const _DrawerMainPanel({
     required this.character,
@@ -131,6 +186,9 @@ class _DrawerMainPanel extends StatelessWidget {
     required this.installedExtensions,
     required this.currentRoute,
     required this.settingsSelected,
+    required this.userName,
+    required this.userInitial,
+    required this.runtimeLabel,
   });
 
   @override
@@ -178,8 +236,9 @@ class _DrawerMainPanel extends StatelessWidget {
         _DrawerBottomArea(
           onSettingsTap: onSettingsTap,
           settingsSelected: settingsSelected,
-          userName: character.name,
-          userInitial: character.avatarInitial,
+          userName: userName,
+          userInitial: userInitial,
+          runtimeLabel: runtimeLabel,
         ),
       ],
     );
@@ -319,12 +378,14 @@ class _DrawerBottomArea extends StatelessWidget {
   final bool settingsSelected;
   final String userName;
   final String userInitial;
+  final String runtimeLabel;
 
   const _DrawerBottomArea({
     required this.onSettingsTap,
     required this.settingsSelected,
-    this.userName = '无拘',
-    this.userInitial = '无',
+    required this.userName,
+    required this.userInitial,
+    required this.runtimeLabel,
   });
 
   @override
@@ -416,7 +477,7 @@ class _DrawerBottomArea extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              '本地运行',
+                              runtimeLabel,
                               style: TextStyle(
                                 fontSize: 9,
                                 color: context.textTertiary,
@@ -554,6 +615,106 @@ class _MainMenuItem extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DrawerSearchPage {
+  final String label;
+  final String route;
+  final IconData icon;
+
+  const _DrawerSearchPage(this.label, this.route, this.icon);
+}
+
+class _DrawerSearchResult {
+  final String route;
+  final String? characterId;
+
+  const _DrawerSearchResult(this.route, {this.characterId});
+}
+
+class _AmitiaDrawerSearchDelegate extends SearchDelegate<_DrawerSearchResult> {
+  final List<_DrawerSearchPage> pages;
+  final List<CharacterDto> characters;
+
+  _AmitiaDrawerSearchDelegate({required this.pages, required this.characters});
+
+  @override
+  String get searchFieldLabel => '搜索页面、角色';
+
+  @override
+  List<Widget>? buildActions(BuildContext context) => [
+        if (query.isNotEmpty)
+          IconButton(icon: const Icon(Icons.clear), onPressed: () => query = ''),
+      ];
+
+  @override
+  Widget? buildLeading(BuildContext context) => IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => Navigator.of(context).maybePop(),
+      );
+
+  @override
+  Widget buildResults(BuildContext context) => _buildList(context);
+
+  @override
+  Widget buildSuggestions(BuildContext context) => _buildList(context);
+
+  Widget _buildList(BuildContext context) {
+    final keyword = query.trim().toLowerCase();
+    final uniquePages = <String, _DrawerSearchPage>{};
+    for (final page in pages) {
+      uniquePages.putIfAbsent(page.route, () => page);
+    }
+    final matchedPages = uniquePages.values
+        .where((page) => keyword.isEmpty || page.label.toLowerCase().contains(keyword) || page.route.toLowerCase().contains(keyword))
+        .toList(growable: false);
+    final matchedCharacters = characters
+        .where((character) {
+          if (keyword.isEmpty) return true;
+          return character.name.toLowerCase().contains(keyword) ||
+              character.identity.toLowerCase().contains(keyword) ||
+              character.description.toLowerCase().contains(keyword);
+        })
+        .toList(growable: false);
+
+    if (matchedPages.isEmpty && matchedCharacters.isEmpty) {
+      return const Center(child: Text('没有匹配结果'));
+    }
+    return ListView(
+      children: [
+        if (matchedPages.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
+            child: Text('页面', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
+          ...matchedPages.map((page) => ListTile(
+                leading: Icon(page.icon),
+                title: Text(page.label),
+                subtitle: Text(page.route),
+                onTap: () => close(context, _DrawerSearchResult(page.route)),
+              )),
+        ],
+        if (matchedCharacters.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
+            child: Text('角色', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
+          ...matchedCharacters.map((character) => ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: Text(character.name),
+                subtitle: Text(character.identity.isNotEmpty ? character.identity : character.description),
+                onTap: () => close(
+                  context,
+                  _DrawerSearchResult(
+                    AppRoutes.character(character.id),
+                    characterId: character.id,
+                  ),
+                ),
+              )),
+        ],
+      ],
     );
   }
 }

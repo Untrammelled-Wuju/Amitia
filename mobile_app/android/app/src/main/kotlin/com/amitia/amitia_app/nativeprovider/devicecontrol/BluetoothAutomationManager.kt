@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import com.amitia.amitia_app.runtime.workflow.WorkflowDeviceEventIngress
 import org.json.JSONObject
 import java.io.IOException
+import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -342,6 +343,27 @@ internal class BluetoothAutomationManager(
         return ok(mapOf("sessionId" to session.sessionId, "serviceUuid" to characteristic.service.uuid.toString(), "characteristicUuid" to characteristic.uuid.toString(), "subscribed" to false))
     }
 
+    fun bleReadNotifications(payload: Map<String, Any?>): Result {
+        val session = session(payload) ?: return fail("DEVICE_BLE_SESSION_NOT_FOUND", "BLE session was not found")
+        val serviceFilterRaw = payload.string("serviceUuid")
+        val characteristicFilterRaw = payload.string("characteristicUuid")
+        val serviceFilter = if (serviceFilterRaw.isBlank()) null else parseUUID(serviceFilterRaw)
+            ?: return fail("DEVICE_INVALID_REQUEST", "serviceUuid must be a valid UUID")
+        val characteristicFilter = if (characteristicFilterRaw.isBlank()) null else parseUUID(characteristicFilterRaw)
+            ?: return fail("DEVICE_INVALID_REQUEST", "characteristicUuid must be a valid UUID")
+        val maxItems = payload.int("maxItems", 50).coerceIn(1, 100)
+        val clearAfterRead = payload.boolean("clearAfterRead", true)
+        val snapshot = session.readNotifications(serviceFilter, characteristicFilter, maxItems, clearAfterRead)
+        return ok(mapOf(
+            "sessionId" to session.sessionId,
+            "notifications" to snapshot.items,
+            "count" to snapshot.items.size,
+            "remaining" to snapshot.remaining,
+            "clearAfterRead" to clearAfterRead,
+            "dropped" to snapshot.dropped,
+        ))
+    }
+
     private fun session(payload: Map<String, Any?>): BleSession? = bleSessions[payload.string("sessionId")]
 
     private fun findCharacteristic(session: BleSession, payload: Map<String, Any?>): BluetoothGattCharacteristic? {
@@ -380,6 +402,10 @@ internal class BluetoothAutomationManager(
         private val attachedGatt = AtomicReference<BluetoothGatt?>(null)
         private val connectLatch = CountDownLatch(1)
         private val opLock = Any()
+        private val notificationLock = Any()
+        private val notificationBuffer = ArrayDeque<BleNotification>()
+        private var notificationSequence = 0L
+        private var droppedNotifications = 0L
         private var operationLatch: CountDownLatch? = null
         private var operationStatus: AtomicInteger? = null
         private var operationValue: AtomicReference<ByteArray?>? = null
@@ -481,6 +507,43 @@ internal class BluetoothAutomationManager(
             success
         }
 
+        fun readNotifications(serviceUuid: UUID?, characteristicUuid: UUID?, maxItems: Int, clearAfterRead: Boolean): NotificationSnapshot = synchronized(notificationLock) {
+            val matching = notificationBuffer.filter { item ->
+                (serviceUuid == null || item.serviceUuid.equals(serviceUuid.toString(), true)) &&
+                    (characteristicUuid == null || item.characteristicUuid.equals(characteristicUuid.toString(), true))
+            }.take(maxItems)
+            if (clearAfterRead && matching.isNotEmpty()) {
+                val consumed = matching.mapTo(hashSetOf()) { it.sequence }
+                val retained = notificationBuffer.filterNot { consumed.contains(it.sequence) }
+                notificationBuffer.clear()
+                retained.forEach(notificationBuffer::addLast)
+            }
+            NotificationSnapshot(
+                items = matching.map(BleNotification::asMap),
+                remaining = notificationBuffer.count { item ->
+                    (serviceUuid == null || item.serviceUuid.equals(serviceUuid.toString(), true)) &&
+                        (characteristicUuid == null || item.characteristicUuid.equals(characteristicUuid.toString(), true))
+                },
+                dropped = droppedNotifications,
+            )
+        }
+
+        private fun bufferNotification(characteristic: BluetoothGattCharacteristic, encoded: String, length: Int) = synchronized(notificationLock) {
+            notificationSequence += 1
+            notificationBuffer.addLast(BleNotification(
+                sequence = notificationSequence,
+                receivedAtMs = System.currentTimeMillis(),
+                serviceUuid = characteristic.service.uuid.toString(),
+                characteristicUuid = characteristic.uuid.toString(),
+                length = length,
+                valueBase64 = encoded,
+            ))
+            while (notificationBuffer.size > MAX_BLE_NOTIFICATION_BUFFER) {
+                notificationBuffer.removeFirst()
+                droppedNotifications += 1
+            }
+        }
+
         private fun beginOperation(captureValue: Boolean = false): CountDownLatch {
             val latch = CountDownLatch(1)
             operationLatch = latch
@@ -545,6 +608,7 @@ internal class BluetoothAutomationManager(
 
         private fun emitCharacteristicChanged(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
             val encoded = Base64.encodeToString(value, Base64.NO_WRAP)
+            bufferNotification(characteristic, encoded, value.size)
             val payload = JSONObject()
                 .put("sessionId", sessionId)
                 .put("address", address)
@@ -561,6 +625,7 @@ internal class BluetoothAutomationManager(
         }
 
         fun close() {
+            synchronized(notificationLock) { notificationBuffer.clear() }
             connected = false
             completeOperation(BluetoothGatt.GATT_FAILURE)
             val gatt = attachedGatt.getAndSet(null)
@@ -568,6 +633,30 @@ internal class BluetoothAutomationManager(
             runCatching { gatt?.close() }
         }
     }
+
+    private data class BleNotification(
+        val sequence: Long,
+        val receivedAtMs: Long,
+        val serviceUuid: String,
+        val characteristicUuid: String,
+        val length: Int,
+        val valueBase64: String,
+    ) {
+        fun asMap(): Map<String, Any?> = mapOf(
+            "sequence" to sequence,
+            "receivedAtMs" to receivedAtMs,
+            "serviceUuid" to serviceUuid,
+            "characteristicUuid" to characteristicUuid,
+            "length" to length,
+            "valueBase64" to valueBase64,
+        )
+    }
+
+    private data class NotificationSnapshot(
+        val items: List<Map<String, Any?>>,
+        val remaining: Int,
+        val dropped: Long,
+    )
 
     private fun hasConnectPermission(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
         ContextCompat.checkSelfPermission(appContext, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
@@ -609,5 +698,6 @@ internal class BluetoothAutomationManager(
         private const val MAX_CLASSIC_WRITE_BYTES = 64 * 1024
         private const val MAX_CLASSIC_READ_BYTES = 64 * 1024
         private const val MAX_BLE_WRITE_BYTES = 512
+        private const val MAX_BLE_NOTIFICATION_BUFFER = 256
     }
 }

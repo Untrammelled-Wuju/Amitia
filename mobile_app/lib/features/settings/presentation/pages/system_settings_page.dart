@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 
 class SystemSettingsPage extends ConsumerStatefulWidget {
   const SystemSettingsPage({super.key});
@@ -124,21 +126,47 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
 
   Future<void> _testNotification() async {
     try {
-      final result = await ref.read(systemServiceProvider).testNotification();
+      final backendResult = await ref.read(systemServiceProvider).testNotification();
+      final accepted = backendResult?['accepted'] == true;
+      final reason = backendResult?['reason']?.toString();
+      if (!accepted) {
+        throw StateError(reason?.isNotEmpty == true ? reason : '后端通知配置未就绪');
+      }
+      final platform = switch (defaultTargetPlatform) {
+        TargetPlatform.android => 'android',
+        TargetPlatform.iOS => 'ios',
+        TargetPlatform.windows => 'windows',
+        _ => null,
+      };
+      if (kIsWeb || platform == null) {
+        throw UnsupportedError('当前平台尚未接入可验证的本地系统通知投递桥');
+      }
+      final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
+      final nativeResult = await dispatcher.execute({
+        'protocolVersion': 1,
+        'requestId': 'settings-notification-test-${DateTime.now().microsecondsSinceEpoch}',
+        'platform': platform,
+        'operation': 'notification.post',
+        'payload': const {
+          'title': 'Amitia 测试通知',
+          'body': '如果你看到这条通知，说明系统通知投递链路可用。',
+          'channel': 'amitia_agent',
+          'silent': false,
+        },
+      });
+      if (!const {'success', 'ok'}.contains((nativeResult['status'] ?? '').toString())) {
+        final error = nativeResult['error'];
+        final message = error is Map ? (error['message'] ?? error['code'])?.toString() : null;
+        throw StateError(message?.isNotEmpty == true ? message! : '系统通知投递失败');
+      }
       if (!mounted) return;
-      final accepted = result?['accepted'] == true;
-      final reason = result?['reason']?.toString();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(accepted
-              ? '通知配置验证通过；实际通知由客户端本地通知能力投递'
-              : (reason?.isNotEmpty == true ? '通知配置未就绪：$reason' : '通知配置未就绪')),
-        ),
+        const SnackBar(content: Text('测试通知已真实投递到系统通知中心')),
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('发送测试通知失败: $e')),
+          SnackBar(content: Text('发送测试通知失败: ${e.toString().replaceFirst('Bad state: ', '').replaceFirst('Unsupported operation: ', '')}')),
         );
       }
     }
@@ -240,12 +268,27 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
   }
 
   Widget _buildHealthContent() {
-    final components = (_healthData?['components'] as List?)
-            ?.map((e) => Map<String, dynamic>.from(e as Map))
-            .toList() ??
-        [];
-    final version = (_healthData?['version'] ?? '').toString();
-    final status = (_healthData?['status'] ?? 'unknown').toString();
+    final health = _healthData ?? const <String, dynamic>{};
+    final checks = health['checks'] is Map
+        ? Map<String, dynamic>.from(health['checks'] as Map)
+        : <String, dynamic>{};
+    final orchestrator = checks['orchestrator'] is Map
+        ? Map<String, dynamic>.from(checks['orchestrator'] as Map)
+        : <String, dynamic>{};
+    final unifiedEntry = checks['unifiedEntry'] is Map
+        ? Map<String, dynamic>.from(checks['unifiedEntry'] as Map)
+        : <String, dynamic>{};
+    final version = (health['version'] ?? '').toString();
+    final ready = health['ready'] == true || health['health'] == true;
+    final databaseHealthy = health['database'] == 'ok' || checks['database'] == 'ok';
+    final modelConfigured = health['model'] == 'configured';
+
+    final components = <({String name, bool ready})>[
+      (name: '数据库', ready: databaseHealthy),
+      (name: 'Agent Runtime', ready: orchestrator['ready'] == true),
+      (name: '统一入口', ready: unifiedEntry['ready'] == true),
+      (name: '模型', ready: modelConfigured),
+    ];
 
     return Padding(
       padding: EdgeInsets.all(AppSpacing.cardPadding),
@@ -258,41 +301,43 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
                 width: 10,
                 height: 10,
                 decoration: BoxDecoration(
-                  color: status == 'ok' ? context.success : context.warning,
+                  color: ready ? context.success : context.warning,
                   shape: BoxShape.circle,
                 ),
               ),
               SizedBox(width: AppSpacing.sm),
-              Text('系统 $status', style: AppTypography.body(context)),
+              Text(ready ? '系统就绪' : '系统未完全就绪', style: AppTypography.body(context)),
               const Spacer(),
               if (version.isNotEmpty) Text('v$version', style: AppTypography.label(context)),
               SizedBox(width: AppSpacing.sm),
-              Icon(Icons.refresh, size: 18, color: context.textTertiary),
+              GestureDetector(
+                onTap: _loadSettings,
+                child: Icon(Icons.refresh, size: 18, color: context.textTertiary),
+              ),
             ],
           ),
-          if (components.isNotEmpty) ...[
-            SizedBox(height: AppSpacing.md),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.xs,
-              children: components.map((c) {
-                final name = (c['name'] ?? '').toString();
-                final compStatus = (c['status'] ?? 'unknown').toString();
-                final isOk = compStatus == 'ok';
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isOk ? Icons.check_circle : Icons.error_outline,
-                      size: 14,
-                      color: isOk ? context.success : context.warning,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(name, style: AppTypography.label(context)),
-                  ],
-                );
-              }).toList(),
-            ),
+          SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.sm,
+            children: components.map((component) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    component.ready ? Icons.check_circle : Icons.error_outline,
+                    size: 14,
+                    color: component.ready ? context.success : context.warning,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(component.name, style: AppTypography.label(context)),
+                ],
+              );
+            }).toList(),
+          ),
+          if ((health['deployMode'] ?? '').toString().isNotEmpty) ...[
+            SizedBox(height: AppSpacing.sm),
+            Text('部署模式：${health['deployMode']}', style: AppTypography.label(context)),
           ],
         ],
       ),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_routes.dart';
@@ -294,11 +296,22 @@ class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
   }
 
   void _showPermissionSettings(Map<String, dynamic> plugin) {
+    final characters = ref.read(characterListProvider).valueOrNull ?? const [];
+    if (characters.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先创建角色，再配置插件权限')),
+      );
+      return;
+    }
+    final active = characters.where((item) => item.isActive == 1).firstOrNull;
+    final character = active ?? characters.first;
     showDialog(
       context: context,
       builder: (ctx) => _PermissionSettingsDialog(
+        pluginId: (plugin['id'] ?? '').toString(),
         pluginName: (plugin['name'] ?? '').toString(),
-        hooks: _stringList(plugin['hooks']),
+        characterId: character.id,
+        characterName: character.name,
       ),
     );
   }
@@ -358,114 +371,392 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
-class _PluginDetailSheet extends StatelessWidget {
+class _PluginDetailSheet extends ConsumerStatefulWidget {
   final Map<String, dynamic> plugin;
   final VoidCallback onPermissionTap;
 
   const _PluginDetailSheet({required this.plugin, required this.onPermissionTap});
 
-  List<String> _stringList(dynamic list) {
-    if (list is List) {
-      return list.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+  @override
+  ConsumerState<_PluginDetailSheet> createState() => _PluginDetailSheetState();
+}
+
+class _PluginDetailSheetState extends ConsumerState<_PluginDetailSheet> {
+  bool _loading = true;
+  bool _working = false;
+  String? _error;
+  Map<String, dynamic> _config = const {};
+  Map<String, dynamic> _health = const {};
+  Map<String, dynamic> _surface = const {};
+  List<Map<String, dynamic>> _state = const [];
+  List<Map<String, dynamic>> _schedules = const [];
+  List<Map<String, dynamic>> _events = const [];
+  String _characterId = '';
+
+  String get _pluginId => (widget.plugin['id'] ?? '').toString();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (_pluginId.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = '插件 ID 缺失';
+      });
+      return;
     }
-    return [];
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final characters = await ref.read(characterServiceProvider).list();
+      final active = characters.where((item) => item.isActive == 1).firstOrNull;
+      final characterId = (active ?? (characters.isNotEmpty ? characters.first : null))?.id ?? '';
+      final svc = ref.read(extensionServiceProvider);
+      final configFuture = svc.getPluginConfig(_pluginId);
+      final healthFuture = svc.getPluginHealth(_pluginId);
+      final surfaceFuture = svc.getPluginSurface(_pluginId);
+      final stateFuture = characterId.isEmpty
+          ? Future<List<Map<String, dynamic>>>.value(const [])
+          : svc.getPluginState(_pluginId, characterId: characterId);
+      final schedulesFuture = characterId.isEmpty
+          ? Future<List<Map<String, dynamic>>>.value(const [])
+          : svc.getPluginSchedules(_pluginId, characterId: characterId);
+      final eventsFuture = characterId.isEmpty
+          ? Future<Map<String, dynamic>>.value(const {'items': <dynamic>[]})
+          : svc.getPluginEvents(_pluginId, characterId: characterId);
+      final values = await Future.wait<dynamic>([
+        configFuture,
+        healthFuture,
+        surfaceFuture,
+        stateFuture,
+        schedulesFuture,
+        eventsFuture,
+      ]);
+      final eventPage = values[5] as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _characterId = characterId;
+        _config = Map<String, dynamic>.from(values[0] as Map? ?? const {});
+        _health = Map<String, dynamic>.from(values[1] as Map? ?? const {});
+        _surface = Map<String, dynamic>.from(values[2] as Map? ?? const {});
+        _state = (values[3] as List).cast<Map<String, dynamic>>();
+        _schedules = (values[4] as List).cast<Map<String, dynamic>>();
+        _events = ((eventPage['items'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList(growable: false);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _run(String successMessage, Future<void> Function() action) async {
+    if (_working) return;
+    setState(() => _working = true);
+    try {
+      await action();
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(successMessage)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _editConfig() async {
+    final controller = TextEditingController(
+      text: const JsonEncoder.withIndent('  ').convert(_config),
+    );
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑真实插件配置'),
+        content: SizedBox(
+          width: 620,
+          child: TextField(
+            controller: controller,
+            minLines: 12,
+            maxLines: 22,
+            decoration: const InputDecoration(
+              hintText: '{\n  "key": "value"\n}',
+              border: OutlineInputBorder(),
+            ),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('保存')),
+        ],
+      ),
+    );
+    if (save != true) return;
+    try {
+      final decoded = jsonDecode(controller.text);
+      if (decoded is! Map) throw const FormatException('配置根节点必须是 JSON Object');
+      await _run('插件配置已保存', () async {
+        await ref.read(extensionServiceProvider).updatePluginConfig(
+              _pluginId,
+              Map<String, dynamic>.from(decoded),
+            );
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('配置无效: $e')));
+      }
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  String _pretty(dynamic value) {
+    try {
+      return const JsonEncoder.withIndent('  ').convert(value);
+    } catch (_) {
+      return value.toString();
+    }
+  }
+
+  String _scheduleId(Map<String, dynamic> item) =>
+      (item['id'] ?? item['scheduleId'] ?? item['schedule_id'] ?? '').toString();
+
+  bool _scheduleEnabled(Map<String, dynamic> item) {
+    final raw = item['enabled'] ?? item['isEnabled'] ?? item['is_enabled'];
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    final status = (item['status'] ?? '').toString().toLowerCase();
+    return status != 'paused' && status != 'disabled';
+  }
+
+  String _eventId(Map<String, dynamic> item) =>
+      (item['id'] ?? item['eventId'] ?? item['event_id'] ?? '').toString();
+
+  List<Map<String, dynamic>> _surfaceActions() {
+    final raw = _surface['actions'];
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
+  Future<void> _executeAction(Map<String, dynamic> action) async {
+    if (_characterId.isEmpty) return;
+    final actionId = (action['id'] ?? action['actionId'] ?? '').toString();
+    if (actionId.isEmpty) return;
+    final controller = TextEditingController(text: '{}');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('执行 ${action['label'] ?? actionId}'),
+        content: TextField(
+          controller: controller,
+          minLines: 4,
+          maxLines: 10,
+          decoration: const InputDecoration(labelText: 'Input JSON', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('执行')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final decoded = jsonDecode(controller.text);
+      if (decoded is! Map) throw const FormatException('Input 必须是 JSON Object');
+      final result = await ref.read(extensionServiceProvider).executePluginAction(
+            _pluginId,
+            actionId,
+            characterId: _characterId,
+            input: Map<String, dynamic>.from(decoded),
+          );
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Action Result'),
+            content: SingleChildScrollView(child: SelectableText(_pretty(result))),
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('执行失败: $e')));
+    } finally {
+      controller.dispose();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final plugin = widget.plugin;
     final name = (plugin['name'] ?? '').toString();
-    final description = (plugin['description'] ?? '').toString();
     final version = (plugin['version'] ?? '').toString();
-    final runtimeStatus = (plugin['runtimeStatus'] ?? plugin['runtime_status'] ?? '运行中').toString();
-    final isEnabled = (plugin['isEnabled'] as bool?) ?? ((plugin['enabled'] as int?) == 1);
-    final hooks = _stringList(plugin['hooks']);
-    final events = _stringList(plugin['events']);
-    final schedules = _stringList(plugin['schedules']);
-    final registeredSkills = _stringList(plugin['registeredSkills'] ?? plugin['registered_skills']);
+    final runtimeStatus = (plugin['runtimeStatus'] ?? plugin['runtime_status'] ?? '未知').toString();
+    final healthStatus = (_health['status'] ?? _health['state'] ?? '未知').toString();
+    final circuit = (_health['circuit'] ?? _health['circuitState'] ?? _health['circuit_state'] ?? '未知').toString();
+    final actions = _surfaceActions();
 
+    return SafeArea(
+      top: false,
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.88,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: Text('$name  v$version', style: AppTypography.cardTitle(context))),
+                  IconButton(onPressed: _working ? null : _load, icon: const Icon(Icons.refresh)),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                ],
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  AmitiaStatusBadge(label: 'Runtime $runtimeStatus', type: BadgeType.neutral),
+                  AmitiaStatusBadge(label: 'Health $healthStatus', type: healthStatus.toLowerCase().contains('healthy') ? BadgeType.success : BadgeType.warning),
+                  AmitiaStatusBadge(label: 'Circuit $circuit', type: circuit.toLowerCase().contains('open') ? BadgeType.warning : BadgeType.neutral),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (_loading)
+                const Expanded(child: Center(child: CircularProgressIndicator()))
+              else if (_error != null)
+                Expanded(child: AmitiaErrorState(message: _error!, onRetry: _load))
+              else
+                Expanded(
+                  child: ListView(
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(onPressed: _working ? null : () => _run('插件已重载', () async => ref.read(extensionServiceProvider).reloadPlugin(_pluginId)), icon: const Icon(Icons.restart_alt), label: const Text('重载插件')),
+                          OutlinedButton.icon(onPressed: _working ? null : _editConfig, icon: const Icon(Icons.tune), label: const Text('编辑配置')),
+                          OutlinedButton.icon(onPressed: _working ? null : () => _run('配置已恢复默认', () async => ref.read(extensionServiceProvider).resetPluginConfig(_pluginId)), icon: const Icon(Icons.settings_backup_restore), label: const Text('恢复配置')),
+                          OutlinedButton.icon(onPressed: _working ? null : () => _run('Circuit 已重置', () async => ref.read(extensionServiceProvider).resetPluginCircuit(_pluginId)), icon: const Icon(Icons.electrical_services), label: const Text('重置 Circuit')),
+                          OutlinedButton.icon(onPressed: widget.onPermissionTap, icon: const Icon(Icons.shield_outlined), label: const Text('权限设置')),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _RuntimeJsonSection(title: 'Health / Circuit', value: _health),
+                      _RuntimeJsonSection(title: '真实配置', value: _config),
+                      _RuntimeJsonSection(title: 'UI Surface', value: _surface),
+                      _RuntimeJsonSection(title: 'Runtime State', value: _state),
+                      const SizedBox(height: 10),
+                      Text('调度任务', style: AppTypography.cardTitle(context)),
+                      const SizedBox(height: 6),
+                      if (_schedules.isEmpty)
+                        Text(_characterId.isEmpty ? '未创建角色，无法读取角色作用域调度' : '暂无调度任务', style: AppTypography.bodySmall(context))
+                      else
+                        ..._schedules.map((item) {
+                          final id = _scheduleId(item);
+                          final enabled = _scheduleEnabled(item);
+                          return SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text((item['name'] ?? item['label'] ?? id).toString()),
+                            subtitle: Text(id.isEmpty ? _pretty(item) : id, maxLines: 2, overflow: TextOverflow.ellipsis),
+                            value: enabled,
+                            onChanged: id.isEmpty || _working || _characterId.isEmpty
+                                ? null
+                                : (value) => _run('调度状态已更新', () => ref.read(extensionServiceProvider).setPluginScheduleEnabled(_pluginId, id, value, characterId: _characterId)),
+                          );
+                        }),
+                      const SizedBox(height: 10),
+                      Text('事件状态', style: AppTypography.cardTitle(context)),
+                      const SizedBox(height: 6),
+                      if (_events.isEmpty)
+                        Text(_characterId.isEmpty ? '未创建角色，无法读取角色作用域事件' : '暂无事件', style: AppTypography.bodySmall(context))
+                      else
+                        ..._events.map((item) {
+                          final id = _eventId(item);
+                          final status = (item['status'] ?? 'unknown').toString();
+                          final retryable = id.isNotEmpty && !{'success', 'completed', 'done'}.contains(status.toLowerCase());
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text((item['name'] ?? item['type'] ?? id).toString()),
+                            subtitle: Text('状态: $status${id.isEmpty ? '' : ' · $id'}'),
+                            trailing: retryable && _characterId.isNotEmpty
+                                ? TextButton(onPressed: _working ? null : () => _run('事件已重新入队', () => ref.read(extensionServiceProvider).retryPluginEvent(_pluginId, id, characterId: _characterId)), child: const Text('重试'))
+                                : null,
+                          );
+                        }),
+                      if (actions.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text('Surface Actions', style: AppTypography.cardTitle(context)),
+                        const SizedBox(height: 6),
+                        ...actions.map((action) {
+                          final id = (action['id'] ?? action['actionId'] ?? '').toString();
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text((action['label'] ?? action['name'] ?? id).toString()),
+                            subtitle: Text(id),
+                            trailing: TextButton(
+                              onPressed: id.isEmpty || _characterId.isEmpty ? null : () => _executeAction(action),
+                              child: const Text('执行'),
+                            ),
+                          );
+                        }),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RuntimeJsonSection extends StatelessWidget {
+  final String title;
+  final dynamic value;
+
+  const _RuntimeJsonSection({required this.title, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    String text;
+    try {
+      text = const JsonEncoder.withIndent('  ').convert(value);
+    } catch (_) {
+      text = value.toString();
+    }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 34),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2))),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: context.accentSoft,
-                  borderRadius: AppRadius.brSmall,
-                ),
-                child: Icon(Icons.extension, size: 22, color: context.accentPrimary),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name, style: AppTypography.cardTitle(context)),
-                    const SizedBox(height: 2),
-                    Text('v$version', style: AppTypography.label(context)),
-                  ],
-                ),
-              ),
-              AmitiaStatusBadge(
-                label: '$runtimeStatus ${isEnabled ? '· 已启用' : '· 已禁用'}',
-                type: runtimeStatus == '运行中' ? BadgeType.success : BadgeType.warning,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(description, style: AppTypography.bodySmall(context)),
-          const SizedBox(height: 16),
-          if (hooks.isNotEmpty) ...[
-            _SectionLabel(label: 'Hook', icon: Icons.link),
-            const SizedBox(height: 6),
-            ...hooks.map((h) => _ListItem(text: h)),
-          ],
-          if (events.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _SectionLabel(label: '事件', icon: Icons.event_outlined),
-            const SizedBox(height: 6),
-            ...events.map((e) => _ListItem(text: e)),
-          ],
-          if (schedules.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _SectionLabel(label: '调度', icon: Icons.schedule),
-            const SizedBox(height: 6),
-            ...schedules.map((s) => _ListItem(text: s)),
-          ],
-          if (registeredSkills.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _SectionLabel(label: '注册技能', icon: Icons.auto_awesome),
-            const SizedBox(height: 6),
-            ...registeredSkills.map((s) => _ListItem(text: s)),
-          ],
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: AmitiaButton(
-                  label: '权限设置',
-                  isSecondary: true,
-                  icon: Icons.shield_outlined,
-                  onPressed: onPermissionTap,
-                ),
-              ),
-              SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: AmitiaButton(
-                  label: '关闭',
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-            ],
+          Text(title, style: AppTypography.cardTitle(context)),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxHeight: 180),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brSmall),
+            child: SingleChildScrollView(child: SelectableText(text, style: const TextStyle(fontFamily: 'monospace', fontSize: 11))),
           ),
         ],
       ),
@@ -604,29 +895,99 @@ class _ImpactItem extends StatelessWidget {
   }
 }
 
-class _PermissionSettingsDialog extends StatefulWidget {
+class _PermissionSettingsDialog extends ConsumerStatefulWidget {
+  final String pluginId;
   final String pluginName;
-  final List<String> hooks;
+  final String characterId;
+  final String characterName;
 
-  const _PermissionSettingsDialog({required this.pluginName, required this.hooks});
+  const _PermissionSettingsDialog({
+    required this.pluginId,
+    required this.pluginName,
+    required this.characterId,
+    required this.characterName,
+  });
 
   @override
-  State<_PermissionSettingsDialog> createState() => _PermissionSettingsDialogState();
+  ConsumerState<_PermissionSettingsDialog> createState() => _PermissionSettingsDialogState();
 }
 
-class _PermissionSettingsDialogState extends State<_PermissionSettingsDialog> {
-  late Map<String, bool> _permissions;
+class _PermissionSettingsDialogState extends ConsumerState<_PermissionSettingsDialog> {
+  List<Map<String, dynamic>> _grants = const [];
+  bool _loading = true;
+  bool _saving = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _permissions = {
-      '文件系统访问': true,
-      '网络访问': widget.hooks.any((h) => h.contains('message')),
-      '消息读取': true,
-      '记忆访问': widget.pluginName.contains('记忆'),
-      '情感分析': widget.pluginName.contains('情感'),
-    };
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final items = await ref.read(extensionServiceProvider).getPluginPermissions(
+            widget.pluginId,
+            characterId: widget.characterId,
+          );
+      if (mounted) {
+        setState(() {
+          _grants = items
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList(growable: true);
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  bool _allowed(Map<String, dynamic> grant) {
+    final decision = (grant['decision'] ?? '').toString();
+    return decision == 'allow_always' ||
+        decision == 'allow_session' ||
+        decision == 'allow_once' ||
+        decision == 'allow';
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final grants = _grants.map((grant) {
+        return <String, dynamic>{
+          'capability': (grant['capability'] ?? '').toString(),
+          'decision': (grant['decision'] ?? 'deny').toString(),
+          'scopeType': 'character',
+          'scopeId': widget.characterId,
+          if ((grant['expiresAt'] ?? '').toString().isNotEmpty)
+            'expiresAt': grant['expiresAt'].toString(),
+        };
+      }).where((grant) => (grant['capability'] ?? '').toString().isNotEmpty).toList();
+
+      await ref.read(extensionServiceProvider).updatePluginPermissions(
+            widget.pluginId,
+            characterId: widget.characterId,
+            grants: grants,
+          );
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${widget.pluginName} 权限已更新')),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('保存权限失败: $e'), backgroundColor: context.error),
+        );
+      }
+    }
   }
 
   @override
@@ -637,25 +998,82 @@ class _PermissionSettingsDialogState extends State<_PermissionSettingsDialog> {
       title: Text('${widget.pluginName} - 权限', style: AppTypography.cardTitle(context)),
       content: SizedBox(
         width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: _permissions.entries.map((e) => AmitiaSwitchTile(
-                title: e.key,
-                value: e.value,
-                onChanged: (val) => setState(() => _permissions[e.key] = val),
-              )).toList(),
-        ),
+        child: _loading
+            ? const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            : _error != null
+                ? Text(
+                    '读取权限失败：$_error',
+                    style: AppTypography.bodySmall(context).copyWith(color: context.error),
+                  )
+                : _grants.isEmpty
+                    ? Text(
+                        '当前角色「${widget.characterName}」没有已声明的插件权限。',
+                        style: AppTypography.bodySmall(context),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '作用角色：${widget.characterName}',
+                            style: AppTypography.caption(context),
+                          ),
+                          const SizedBox(height: 8),
+                          Flexible(
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: _grants.length,
+                              separatorBuilder: (_, _) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final grant = _grants[index];
+                                final capability = (grant['capability'] ?? '').toString();
+                                final description = (grant['description'] ?? '').toString();
+                                final risk = (grant['risk'] ?? '').toString();
+                                return SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(
+                                    capability,
+                                    style: AppTypography.bodySmall(context).copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    [
+                                      if (description.isNotEmpty) description,
+                                      if (risk.isNotEmpty) '风险：$risk',
+                                    ].join('\n'),
+                                    style: AppTypography.caption(context),
+                                  ),
+                                  value: _allowed(grant),
+                                  onChanged: (value) => setState(() {
+                                    _grants[index] = {
+                                      ...grant,
+                                      'decision': value ? 'allow_always' : 'deny',
+                                      'scopeType': 'character',
+                                      'scopeId': widget.characterId,
+                                    };
+                                  }),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
         TextButton(
-          onPressed: () {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('${widget.pluginName} 权限已更新'), backgroundColor: context.success),
-            );
-          },
-          child: Text('保存', style: TextStyle(color: context.accentPrimary)),
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: Text('取消', style: TextStyle(color: context.textSecondary)),
+        ),
+        TextButton(
+          onPressed: _loading || _error != null || _saving ? null : _save,
+          child: Text(
+            _saving ? '保存中...' : '保存',
+            style: TextStyle(color: context.accentPrimary),
+          ),
         ),
       ],
     );

@@ -46,6 +46,8 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
     switch (kind) {
       case 'saf':
         return 'Android 目录';
+      case 'isolated':
+        return '隔离工作区';
       case 'local':
       default:
         return '本地';
@@ -103,6 +105,159 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
     }
   }
 
+
+
+  Future<void> _showCreateIsolated() async {
+    final nameCtrl = TextEditingController();
+    final remoteCtrl = TextEditingController();
+    final refCtrl = TextEditingController();
+    final lifetimeCtrl = TextEditingController();
+    String mode = 'snapshot';
+    String sourceUri = _workspaces.where((item) => item.kind != 'isolated' && item.available).firstOrNull?.rootUri ?? '';
+    bool readOnly = false;
+    bool saving = false;
+    String? localError;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('创建隔离工作区', style: AppTypography.sectionTitle(context)),
+                  SizedBox(height: AppSpacing.lg),
+                  TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: '名称', border: OutlineInputBorder())),
+                  SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String>(
+                    value: mode,
+                    decoration: const InputDecoration(labelText: '创建方式', border: OutlineInputBorder()),
+                    items: const [
+                      DropdownMenuItem(value: 'snapshot', child: Text('当前工作区快照')),
+                      DropdownMenuItem(value: 'git_clone', child: Text('Git Clone')),
+                    ],
+                    onChanged: saving ? null : (value) => setSheetState(() => mode = value ?? 'snapshot'),
+                  ),
+                  SizedBox(height: AppSpacing.md),
+                  if (mode == 'snapshot')
+                    DropdownButtonFormField<String>(
+                      value: _workspaces.any((item) => item.rootUri == sourceUri) ? sourceUri : null,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: '源工作区', border: OutlineInputBorder()),
+                      items: _workspaces
+                          .where((item) => item.kind != 'isolated' && item.available)
+                          .map((item) => DropdownMenuItem(value: item.rootUri, child: Text(item.name, overflow: TextOverflow.ellipsis)))
+                          .toList(growable: false),
+                      onChanged: saving ? null : (value) => setSheetState(() => sourceUri = value ?? ''),
+                    )
+                  else ...[
+                    TextField(controller: remoteCtrl, decoration: const InputDecoration(labelText: 'Git Remote URL', border: OutlineInputBorder())),
+                    SizedBox(height: AppSpacing.md),
+                    TextField(controller: refCtrl, decoration: const InputDecoration(labelText: 'Ref / Branch（可选）', border: OutlineInputBorder())),
+                  ],
+                  SizedBox(height: AppSpacing.md),
+                  TextField(controller: lifetimeCtrl, decoration: const InputDecoration(labelText: 'Lifetime（可选，例如 24h）', border: OutlineInputBorder())),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('只读'),
+                    value: readOnly,
+                    onChanged: saving ? null : (value) => setSheetState(() => readOnly = value),
+                  ),
+                  if (localError != null) Text(localError!, style: AppTypography.caption(context).copyWith(color: context.error)),
+                  SizedBox(height: AppSpacing.md),
+                  AmitiaButton(
+                    label: saving ? '创建中...' : '创建',
+                    isFullWidth: true,
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            final name = nameCtrl.text.trim();
+                            if (name.isEmpty) {
+                              setSheetState(() => localError = '名称不能为空');
+                              return;
+                            }
+                            if (mode == 'snapshot' && sourceUri.isEmpty) {
+                              setSheetState(() => localError = '请选择源工作区');
+                              return;
+                            }
+                            if (mode == 'git_clone' && remoteCtrl.text.trim().isEmpty) {
+                              setSheetState(() => localError = 'Git Remote URL 不能为空');
+                              return;
+                            }
+                            setSheetState(() {
+                              saving = true;
+                              localError = null;
+                            });
+                            try {
+                              await ref.read(workspaceServiceProvider).createIsolated(
+                                    name: name,
+                                    mode: mode,
+                                    sourceWorkspaceUri: mode == 'snapshot' ? sourceUri : '',
+                                    remoteUrl: mode == 'git_clone' ? remoteCtrl.text.trim() : '',
+                                    refName: refCtrl.text.trim(),
+                                    readOnly: readOnly,
+                                    lifetime: lifetimeCtrl.text.trim(),
+                                  );
+                              if (!sheetContext.mounted) return;
+                              Navigator.pop(sheetContext);
+                              await _load();
+                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('隔离工作区已创建')));
+                            } catch (e) {
+                              setSheetState(() {
+                                saving = false;
+                                localError = e.toString();
+                              });
+                            }
+                          },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    nameCtrl.dispose();
+    remoteCtrl.dispose();
+    refCtrl.dispose();
+    lifetimeCtrl.dispose();
+  }
+
+  Future<void> _deleteIsolated(WorkspaceMountDto workspace) async {
+    final force = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除隔离工作区'),
+        content: Text('确定删除「${workspace.name}」及其隔离文件吗？如果工作区存在未提交修改，普通删除会被后端拒绝。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, null), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('删除')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text('强制删除', style: TextStyle(color: context.error))),
+        ],
+      ),
+    );
+    if (force == null) return;
+    try {
+      await ref.read(workspaceServiceProvider).deleteIsolated(workspace.rootUri, force: force);
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('隔离工作区已删除')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败：$e'), backgroundColor: context.error));
+    }
+  }
 
   Future<void> _showIsolatedInfo(WorkspaceMountDto workspace) async {
     try {
@@ -202,7 +357,7 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                           SizedBox(height: AppSpacing.md),
                           Row(
                             children: [
-                              Expanded(child: AmitiaButton(label: '暂存全部', isSecondary: true, icon: Icons.add_task, onPressed: workspace.readOnly ? null : () async { await svc.gitAdd(workspace.rootUri, all: true); await refresh(setSheetState); })),
+                              Expanded(child: AmitiaButton(label: '暂存全部', isSecondary: true, icon: Icons.add_task, onPressed: workspace.readOnly ? null : () async { await svc.gitAdd(workspace.rootUri, all: true, force: true); await refresh(setSheetState); })),
                               SizedBox(width: AppSpacing.sm),
                               Expanded(child: AmitiaButton(label: '提交', icon: Icons.commit, onPressed: workspace.readOnly ? null : () => _gitCommitDialog(workspace, refresh: () => refresh(setSheetState)))),
                             ],
@@ -358,87 +513,110 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const AmitiaLoadingState(message: '正在加载工作区...');
-    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
-    if (_workspaces.isEmpty) {
-      return const AmitiaEmptyState(
-        icon: Icons.work_outline,
-        title: '暂无工作区',
-        subtitle: '添加本地目录或 Android 文件夹后会显示在这里',
-      );
-    }
-
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '工作区', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
-      body: ListView.separated(
-        padding: EdgeInsets.all(AppSpacing.pagePadding),
-        itemCount: _workspaces.length,
-        separatorBuilder: (_, _) => SizedBox(height: AppSpacing.md),
-        itemBuilder: (context, i) {
-          final w = _workspaces[i];
-          final kindLabel = _kindLabel(w.kind);
-          final statusLabel = _statusLabel(w.status);
-          return Container(
-            padding: EdgeInsets.all(AppSpacing.cardPadding),
-            decoration: BoxDecoration(
-              color: context.surfacePrimary,
-              borderRadius: AppRadius.brMedium,
-              border: Border.all(color: context.borderPrimary, width: 0.5),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
-                  child: Icon(_iconForKind(w.kind), size: 22, color: context.accentPrimary),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(w.name, style: AppTypography.cardTitle(context)),
-                      const SizedBox(height: 2),
-                      Text('$kindLabel · $statusLabel', style: AppTypography.caption(context)),
-                      if (w.readOnly) Text('只读', style: AppTypography.caption(context).copyWith(color: AppColors.warning)),
-                    ],
-                  ),
-                ),
-                Icon(_statusIcon(w.status), size: 20, color: _statusColor(w.status)),
-                  ],
-                ),
-                SizedBox(height: AppSpacing.md),
-                Row(
-                  children: [
-                    Expanded(
-                      child: AmitiaButton(
-                        label: 'Git 管理',
-                        isSecondary: true,
-                        icon: Icons.account_tree_outlined,
-                        onPressed: w.available ? () => _openGitPanel(w) : null,
-                      ),
-                    ),
-                    if (w.kind == 'isolated') ...[
-                      SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: AmitiaButton(
-                          label: '隔离信息',
-                          isSecondary: true,
-                          icon: Icons.info_outline,
-                          onPressed: () => _showIsolatedInfo(w),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
+      appBar: AmitiaAppBar(
+        title: '工作区',
+        showBackButton: true,
+        fallbackRoute: AppRoutes.settingsToolbox,
+        actions: [
+          IconButton(onPressed: _loading ? null : _showCreateIsolated, icon: const Icon(Icons.add), tooltip: '创建隔离工作区'),
+          IconButton(onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh), tooltip: '刷新'),
+        ],
       ),
+      body: _loading
+          ? const AmitiaLoadingState(message: '正在加载工作区...')
+          : _error != null
+              ? AmitiaErrorState(message: _error!, onRetry: _load)
+              : _workspaces.isEmpty
+                  ? AmitiaEmptyState(
+                      icon: Icons.work_outline,
+                      title: '暂无工作区',
+                      subtitle: '可从桌面/移动端添加工作目录，或创建 Git Clone 隔离工作区',
+                      actionText: '创建隔离工作区',
+                      onAction: _showCreateIsolated,
+                    )
+                  : ListView.separated(
+                      padding: EdgeInsets.all(AppSpacing.pagePadding),
+                      itemCount: _workspaces.length,
+                      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.md),
+                      itemBuilder: (context, i) {
+                        final w = _workspaces[i];
+                        final kindLabel = _kindLabel(w.kind);
+                        final statusLabel = _statusLabel(w.status);
+                        return Container(
+                          padding: EdgeInsets.all(AppSpacing.cardPadding),
+                          decoration: BoxDecoration(
+                            color: context.surfacePrimary,
+                            borderRadius: AppRadius.brMedium,
+                            border: Border.all(color: context.borderPrimary, width: 0.5),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
+                                    child: Icon(_iconForKind(w.kind), size: 22, color: context.accentPrimary),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(w.name, style: AppTypography.cardTitle(context)),
+                                        const SizedBox(height: 2),
+                                        Text('$kindLabel · $statusLabel', style: AppTypography.caption(context)),
+                                        if (w.readOnly) Text('只读', style: AppTypography.caption(context).copyWith(color: AppColors.warning)),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(_statusIcon(w.status), size: 20, color: _statusColor(w.status)),
+                                ],
+                              ),
+                              SizedBox(height: AppSpacing.md),
+                              Wrap(
+                                spacing: AppSpacing.sm,
+                                runSpacing: AppSpacing.sm,
+                                children: [
+                                  AmitiaButton(
+                                    label: 'Git 管理',
+                                    isSecondary: true,
+                                    icon: Icons.account_tree_outlined,
+                                    onPressed: w.available ? () => _openGitPanel(w) : null,
+                                  ),
+                                  if (w.kind == 'isolated') ...[
+                                    AmitiaButton(
+                                      label: '隔离信息',
+                                      isSecondary: true,
+                                      icon: Icons.info_outline,
+                                      onPressed: () => _showIsolatedInfo(w),
+                                    ),
+                                    AmitiaButton(
+                                      label: '删除隔离区',
+                                      isDestructive: true,
+                                      icon: Icons.delete_outline,
+                                      onPressed: () => _deleteIsolated(w),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
     );
+  }
+
+}
+
+
+extension _WorkspaceFirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull {
+    final iterator = this.iterator;
+    if (!iterator.moveNext()) return null;
+    return iterator.current;
   }
 }

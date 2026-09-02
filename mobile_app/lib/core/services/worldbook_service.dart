@@ -6,22 +6,37 @@ class WorldBookService {
 
   WorldBookService(this._api);
 
-  Future<List<WorldBookDto>> list() async {
-    final resp = await _api.get<List<dynamic>>('/api/world-book');
-    if (resp == null) return [];
-    return resp.map((e) => WorldBookDto.fromJson(e as Map<String, dynamic>)).toList();
+  Future<List<WorldBookDto>> list({
+    String matchType = '',
+    String characterId = '',
+    int page = 1,
+    int pageSize = 100,
+  }) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/world-book',
+      queryParameters: {
+        if (matchType.isNotEmpty) 'matchType': matchType,
+        if (characterId.isNotEmpty) 'characterId': characterId,
+        'page': page,
+        'pageSize': pageSize,
+      },
+    );
+    final items = resp?['items'];
+    if (items is! List) return const [];
+    return items
+        .whereType<Map>()
+        .map((e) => WorldBookDto.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
   }
 
   Future<WorldBookDto?> create(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/world-book', data: data);
-    if (resp == null) return null;
-    return WorldBookDto.fromJson(resp);
+    return resp == null ? null : WorldBookDto.fromJson(resp);
   }
 
   Future<WorldBookDto?> update(String id, Map<String, dynamic> data) async {
     final resp = await _api.put<Map<String, dynamic>>('/api/world-book/$id', data: data);
-    if (resp == null) return null;
-    return WorldBookDto.fromJson(resp);
+    return resp == null ? null : WorldBookDto.fromJson(resp);
   }
 
   Future<bool> delete(String id) async {
@@ -34,13 +49,20 @@ class WorldBookService {
     return true;
   }
 
-  Future<Map<String, dynamic>?> testMatch(String text) async {
+  Future<List<WorldBookMatchDto>> testMatch(String text) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/world-book/match', data: {'text': text});
-    return resp;
+    final matches = resp?['matches'];
+    if (matches is! List) return const [];
+    return matches
+        .whereType<Map>()
+        .map((e) => WorldBookMatchDto.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
   }
 
-  Future<Map<String, dynamic>?> systemPrompt() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/world-book/system-prompt');
-    return resp;
+  Future<Map<String, dynamic>?> systemPrompt({String userMessage = ''}) {
+    return _api.get<Map<String, dynamic>>(
+      '/api/world-book/system-prompt',
+      queryParameters: {if (userMessage.isNotEmpty) 'userMessage': userMessage},
+    );
   }
 }

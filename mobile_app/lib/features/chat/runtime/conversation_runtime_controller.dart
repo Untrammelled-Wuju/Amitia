@@ -60,10 +60,12 @@ class ConversationRuntimeController extends ChangeNotifier {
       durationMs: message.durationMs,
       toolName: message.toolName,
       toolResult: message.toolResult,
+      replyToMessageId: message.replyToMessageId,
+      replyToExcerpt: message.replyToExcerpt,
     );
   }
 
-  Future<void> sendText(String text) async {
+  Future<void> sendText(String text, {String? replyToMessageId, String? replyToExcerpt}) async {
     final value = text.trim();
     if (value.isEmpty || _sending) return;
     await _send(
@@ -74,8 +76,11 @@ class ConversationRuntimeController extends ChangeNotifier {
         content: value,
         time: DateTime.now(),
         status: MessageStatus.sending,
+        replyToMessageId: replyToMessageId,
+        replyToExcerpt: replyToExcerpt,
       ),
       message: value,
+      replyToMessageId: replyToMessageId,
     );
   }
 
@@ -237,6 +242,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     String? audioUrl,
     double audioDuration = 0,
     String? videoUrl,
+    String? replyToMessageId,
   }) async {
     _messages.add(localMessage);
     _lastError = null;
@@ -253,6 +259,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         audioUrl: audioUrl,
         audioDuration: audioDuration,
         videoUrl: videoUrl,
+        replyToMessageId: replyToMessageId,
       );
       if (epoch != _generationEpoch) return;
       if (result.conversationId.isNotEmpty) {
@@ -346,6 +353,8 @@ class ConversationRuntimeController extends ChangeNotifier {
         durationMs: dto.audioDuration > 0
             ? (dto.audioDuration * 1000).round()
             : existing?.durationMs,
+        replyToMessageId: dto.replyToMessageId ?? existing?.replyToMessageId,
+        replyToExcerpt: dto.replyToExcerpt ?? existing?.replyToExcerpt,
       );
     }).toList(growable: false);
     _messages
@@ -464,11 +473,15 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
-  void deleteMessage(String messageId) {
-    final index = _messages.indexWhere((message) => message.id == messageId);
-    if (index < 0) return;
-    _messages.removeAt(index);
-    notifyListeners();
+  Future<void> deleteMessage(String messageId) async {
+    final id = messageId.trim();
+    if (id.isEmpty) return;
+    await _chatService.deleteMessage(id);
+    final index = _messages.indexWhere((message) => message.id == id);
+    if (index >= 0) {
+      _messages.removeAt(index);
+      notifyListeners();
+    }
   }
 
   Future<void> stop() async {
@@ -552,5 +565,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         if (message.durationMs != null) 'durationMs': message.durationMs,
         if (message.toolName != null) 'toolName': message.toolName,
         if (message.toolResult != null) 'toolResult': message.toolResult,
+        if ((message.replyToMessageId ?? '').isNotEmpty) 'replyToMessageId': message.replyToMessageId,
+        if ((message.replyToExcerpt ?? '').isNotEmpty) 'replyToExcerpt': message.replyToExcerpt,
       };
 }

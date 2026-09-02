@@ -85,13 +85,22 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   Widget _runOverview(Map<String, dynamic> data) {
     final health = data['health'] as Map<String, dynamic>?;
-    final status = health?['status'] is Map ? Map<String, dynamic>.from(health!['status'] as Map) : <String, dynamic>{};
+    final checks = health?['checks'] is Map
+        ? Map<String, dynamic>.from(health!['checks'] as Map)
+        : <String, dynamic>{};
+    final orchestrator = checks['orchestrator'] is Map
+        ? Map<String, dynamic>.from(checks['orchestrator'] as Map)
+        : <String, dynamic>{};
+    final unifiedEntry = checks['unifiedEntry'] is Map
+        ? Map<String, dynamic>.from(checks['unifiedEntry'] as Map)
+        : <String, dynamic>{};
     final qqConnected = _connected(data['qq'] as Map<String, dynamic>?);
     final wechatConnected = _connected(data['wechat'] as Map<String, dynamic>?);
     final security = data['security'] as Map<String, dynamic>?;
     final securityStatus = (security?['status'] ?? 'unknown').toString();
-    final backendRunning = status['database'] == true;
-    final runtimeReady = status['orchestratorReady'] == true;
+    final databaseHealthy = health?['database'] == 'ok' || checks['database'] == 'ok';
+    final backendReady = health?['ready'] == true || health?['health'] == true;
+    final runtimeReady = orchestrator['ready'] == true;
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(dashboardOverviewProvider),
       child: ListView(
@@ -100,20 +109,23 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           AmitiaSectionHeader(title: '系统状态'),
           SizedBox(height: AppSpacing.md),
           _StatusGrid(items: [
-            _StatusItem(label: '后端', value: backendRunning ? '运行中' : '异常', icon: Icons.dns_outlined, type: backendRunning ? BadgeType.success : BadgeType.error),
+            _StatusItem(label: '后端', value: backendReady ? '就绪' : (databaseHealthy ? '运行中' : '异常'), icon: Icons.dns_outlined, type: backendReady ? BadgeType.success : (databaseHealthy ? BadgeType.warning : BadgeType.error)),
             _StatusItem(label: 'Agent Runtime', value: runtimeReady ? '就绪' : '未就绪', icon: Icons.auto_awesome, type: runtimeReady ? BadgeType.success : BadgeType.warning),
             _StatusItem(label: 'QQ', value: qqConnected ? '已连接' : '未连接', icon: Icons.chat_bubble_outline, type: qqConnected ? BadgeType.success : BadgeType.neutral),
             _StatusItem(label: '微信', value: wechatConnected ? '已连接' : '未连接', icon: Icons.wechat_outlined, type: wechatConnected ? BadgeType.success : BadgeType.neutral),
-            _StatusItem(label: '数据库', value: status['database'] == true ? '正常' : '异常', icon: Icons.storage, type: status['database'] == true ? BadgeType.success : BadgeType.error),
+            _StatusItem(label: '数据库', value: databaseHealthy ? '正常' : '异常', icon: Icons.storage, type: databaseHealthy ? BadgeType.success : BadgeType.error),
             _StatusItem(label: '访问安全', value: securityStatus == 'secure' ? '安全' : securityStatus, icon: Icons.shield_outlined, type: securityStatus == 'secure' ? BadgeType.success : BadgeType.warning),
           ]),
           SizedBox(height: AppSpacing.sectionGap),
           AmitiaSectionHeader(title: '后端健康信息'),
           SizedBox(height: AppSpacing.sm),
           AmitiaCard(child: Column(children: [
-            _kv('状态', status['status'] ?? health?['status'] ?? 'unknown'),
-            _kv('就绪组件', status['readyCount'] ?? 0),
-            _kv('Readiness', status['readinessReady'] == true ? 'ready' : 'not ready'),
+            _kv('Readiness', backendReady ? 'ready' : 'not ready'),
+            _kv('数据库', databaseHealthy ? 'ok' : (health?['database'] ?? 'unknown')),
+            _kv('Agent Runtime', runtimeReady ? 'ready' : 'not ready'),
+            _kv('统一入口', unifiedEntry['ready'] == true ? 'ready' : 'not ready'),
+            _kv('部署模式', health?['deployMode'] ?? 'unknown'),
+            _kv('运行时长', health?['uptime'] ?? 'unknown'),
             _kv('安全状态', securityStatus),
           ])),
         ],

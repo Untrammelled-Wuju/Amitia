@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +8,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/character.dart';
+import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -147,6 +149,8 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   late bool _anniversaryAwareness;
   late bool _memoryResonance;
   late bool _allowSharedDateMention;
+  String _pendingTimezoneSuggestion = '';
+  bool _resolvingTimezoneSuggestion = false;
   late List<TimeAnchor> _anchors;
   String? _selectedReunionCharacterId;
   bool _savingProfile = false;
@@ -178,6 +182,9 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     super.initState();
     _applyConfig(widget.config);
     _anchors = List<TimeAnchor>.from(widget.anchors);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _detectDeviceTimezoneSuggestion();
+    });
   }
 
   @override
@@ -212,6 +219,43 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     _memoryResonance = config?['memoryResonance'] as bool? ?? true;
     _allowSharedDateMention =
         config?['allowSharedDateMention'] as bool? ?? true;
+    _pendingTimezoneSuggestion =
+        (config?['pendingTimezoneSuggestion'] ?? '').toString().trim();
+  }
+
+
+  Future<void> _detectDeviceTimezoneSuggestion() async {
+    if (!mounted || kIsWeb || !_autoDetectTimezone || _timezoneMode != 'follow_device') return;
+    if (_pendingTimezoneSuggestion.isNotEmpty) return;
+    final platform = switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      TargetPlatform.windows => 'windows',
+      _ => null,
+    };
+    if (platform == null) return;
+    try {
+      final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
+      final response = await dispatcher.execute(<String, dynamic>{
+        'protocolVersion': 1,
+        'requestId': 'temporal-timezone-${DateTime.now().microsecondsSinceEpoch}',
+        'platform': platform,
+        'operation': 'device.timezone.get',
+        'payload': const <String, dynamic>{},
+      });
+      if (!const {'success', 'ok'}.contains((response['status'] ?? '').toString())) return;
+      final rawResult = response['result'];
+      if (rawResult is! Map) return;
+      final result = Map<String, dynamic>.from(rawResult);
+      final candidate = (result['ianaTimezone'] ?? '').toString().trim();
+      if (candidate.isEmpty || !_looksLikeIanaTimezone(candidate) || candidate == _timezone.trim()) return;
+      final profile = await ref.read(temporalServiceProvider).suggestTimezone(candidate);
+      if (!mounted || profile == null) return;
+      setState(() => _applyConfig(profile));
+    } catch (_) {
+      // Device timezone detection is advisory. Keep the user's persisted timezone
+      // unchanged when native detection or backend validation is unavailable.
+    }
   }
 
   List<TimeAnchor> get _periodicAnchors =>
@@ -224,6 +268,29 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   List<TimeAnchor> get _otherAnchors => _anchors
       .where((anchor) => !anchor.isPeriodic && !anchor.isSpecialDate)
       .toList(growable: false);
+
+  Future<void> _resolveTimezoneSuggestion(bool accept) async {
+    if (_resolvingTimezoneSuggestion || _pendingTimezoneSuggestion.isEmpty) return;
+    setState(() => _resolvingTimezoneSuggestion = true);
+    try {
+      final service = ref.read(temporalServiceProvider);
+      final profile = accept
+          ? await service.acceptTimezoneSuggestion()
+          : await service.rejectTimezoneSuggestion();
+      if (!mounted) return;
+      if (profile != null) {
+        _applyConfig(profile);
+      } else {
+        _pendingTimezoneSuggestion = '';
+      }
+      widget.onRefresh();
+      _showMessage(accept ? '已接受设备时区建议' : '已拒绝设备时区建议');
+    } catch (error) {
+      if (mounted) _showMessage(_errorText(error), error: true);
+    } finally {
+      if (mounted) setState(() => _resolvingTimezoneSuggestion = false);
+    }
+  }
 
   Future<void> _saveConfig() async {
     if (_timezone.trim().isEmpty || !_looksLikeIanaTimezone(_timezone)) {
@@ -272,6 +339,55 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     return ListView(
       padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
       children: [
+        if (_pendingTimezoneSuggestion.isNotEmpty) ...[
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: Container(
+              padding: EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                color: context.accentSoft,
+                borderRadius: AppRadius.brMedium,
+                border: Border.all(color: context.accentPrimary.withValues(alpha: 0.22)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.public, size: 19, color: context.accentPrimary),
+                      SizedBox(width: AppSpacing.sm),
+                      Expanded(child: Text('检测到时区变化', style: AppTypography.cardTitle(context))),
+                    ],
+                  ),
+                  SizedBox(height: AppSpacing.sm),
+                  Text(
+                    '当前设置：$_timezone；设备建议：$_pendingTimezoneSuggestion。接受后才会写入，拒绝后会清除建议，不会自动覆盖你的选择。',
+                    style: AppTypography.caption(context),
+                  ),
+                  SizedBox(height: AppSpacing.md),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AmitiaButtonOutline(
+                          label: '拒绝',
+                          onPressed: _resolvingTimezoneSuggestion ? null : () => _resolveTimezoneSuggestion(false),
+                        ),
+                      ),
+                      SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: AmitiaButton(
+                          label: _resolvingTimezoneSuggestion ? '处理中...' : '接受建议',
+                          onPressed: _resolvingTimezoneSuggestion ? null : () => _resolveTimezoneSuggestion(true),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: AppSpacing.sectionGap),
+        ],
         const _SectionLabel(text: '基础设置'),
         SizedBox(height: AppSpacing.sm),
         _buildCard([

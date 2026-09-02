@@ -59,6 +59,106 @@ class _StoragePageState extends ConsumerState<StoragePage> {
     }
   }
 
+  Future<void> _showChatCleanup() async {
+    var olderThanDays = 90;
+    var includeMemories = false;
+    final config = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('清理历史聊天数据'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('先生成预览，确认数量后才会执行删除。'),
+              SizedBox(height: AppSpacing.md),
+              DropdownButtonFormField<int>(
+                initialValue: olderThanDays,
+                decoration: const InputDecoration(labelText: '删除多久以前的会话'),
+                items: const [
+                  DropdownMenuItem(value: 30, child: Text('30 天以前')),
+                  DropdownMenuItem(value: 90, child: Text('90 天以前')),
+                  DropdownMenuItem(value: 180, child: Text('180 天以前')),
+                  DropdownMenuItem(value: 365, child: Text('365 天以前')),
+                ],
+                onChanged: (value) => setDialogState(() => olderThanDays = value ?? 90),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: includeMemories,
+                title: const Text('同时删除来源于这些会话的记忆'),
+                subtitle: const Text('默认关闭；开启后会删除 sourceConvId 关联记忆'),
+                onChanged: (value) => setDialogState(() => includeMemories = value ?? false),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, {
+                'olderThanDays': olderThanDays,
+                'includeMemories': includeMemories,
+              }),
+              child: const Text('生成预览'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (config == null || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final system = ref.read(systemServiceProvider);
+      final preview = await system.cleanupPreview(config) ?? const <String, dynamic>{};
+      if (!mounted) return;
+      final previewId = (preview['previewId'] ?? '').toString();
+      final conversationCount = (preview['conversationCount'] as num?)?.toInt() ?? 0;
+      final messageCount = (preview['messageCount'] as num?)?.toInt() ?? 0;
+      final memoryCount = (preview['memoryCount'] as num?)?.toInt() ?? 0;
+      if (previewId.isEmpty) throw StateError('清理预览未返回 previewId');
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('确认清理'),
+          content: Text('将删除 $conversationCount 个会话、$messageCount 条消息${memoryCount > 0 ? '、$memoryCount 条关联记忆' : ''}。此操作不可撤销。'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+            FilledButton(
+              onPressed: conversationCount == 0 ? null : () => Navigator.pop(dialogContext, true),
+              child: Text(conversationCount == 0 ? '没有可清理数据' : '确认清理'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      final result = await system.cleanupConfirm({'previewId': previewId, 'confirmText': '确认清理'});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('清理完成：${result?['conversationCount'] ?? conversationCount} 个会话')));
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('聊天清理失败：$e'), backgroundColor: context.error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _vacuumChatDatabase() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(systemServiceProvider).cleanupVacuum();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('数据库空间整理完成')));
+      await _load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('数据库空间整理失败：$e'), backgroundColor: context.error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _run(String label, String path) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -135,6 +235,10 @@ class _StoragePageState extends ConsumerState<StoragePage> {
         AmitiaButton(label: '检查数据库完整性', icon: Icons.fact_check_outlined, isFullWidth: true, isSecondary: true, onPressed: _busy ? null : () => _run('数据库完整性检查', '/api/runtime/check-db-integrity')),
         SizedBox(height: AppSpacing.sm),
         AmitiaButton(label: '清理临时文件', icon: Icons.cleaning_services_outlined, isFullWidth: true, isSecondary: true, onPressed: _busy ? null : () => _run('临时文件清理', '/api/runtime/cleanup-temp')),
+        SizedBox(height: AppSpacing.sm),
+        AmitiaButton(label: '预览并清理历史聊天', icon: Icons.delete_sweep_outlined, isFullWidth: true, isSecondary: true, onPressed: _busy ? null : _showChatCleanup),
+        SizedBox(height: AppSpacing.sm),
+        AmitiaButton(label: '整理数据库空间（VACUUM）', icon: Icons.compress_outlined, isFullWidth: true, isSecondary: true, onPressed: _busy ? null : _vacuumChatDatabase),
         SizedBox(height: AppSpacing.sm),
         AmitiaButton(label: '检查数据迁移', icon: Icons.schema_outlined, isFullWidth: true, isSecondary: true, onPressed: _busy ? null : () => _run('数据迁移检查', '/api/storage/migrations/check')),
         SizedBox(height: AppSpacing.sm),
