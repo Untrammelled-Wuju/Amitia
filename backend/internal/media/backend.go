@@ -19,6 +19,10 @@ type Backend interface {
 	CancelAll()
 }
 
+type RawFFmpegBackend interface {
+	ExecuteRaw(ctx context.Context, args []string) (*ffmpeg.ProcessResult, error)
+}
+
 type MediaBackendCapabilities struct {
 	Available bool
 
@@ -29,10 +33,10 @@ type MediaBackendCapabilities struct {
 	VideoCodecs []string `json:"videoCodecs,omitempty"`
 	AudioCodecs []string `json:"audioCodecs,omitempty"`
 
-	SupportsScale    bool     `json:"supportsScale"`
-	SupportsFPS      bool     `json:"supportsFps"`
-	SupportsLoudnorm bool     `json:"supportsLoudnorm"`
-	SupportsGIF      bool     `json:"supportsGif"`
+	SupportsScale    bool `json:"supportsScale"`
+	SupportsFPS      bool `json:"supportsFps"`
+	SupportsLoudnorm bool `json:"supportsLoudnorm"`
+	SupportsGIF      bool `json:"supportsGif"`
 
 	HardwareAcceleration []string `json:"hardwareAcceleration,omitempty"`
 
@@ -97,6 +101,17 @@ func (b *FFmpegBackend) Convert(ctx context.Context, request conversion.ConvertR
 
 	converter := conversion.NewConverter(b.runner, env.FFmpegPath, env.FFprobePath, b.config, "")
 	return converter.Convert(ctx, metadata.MediaMetadata{}, request, plan, inputPath, outputPath, opts)
+}
+
+func (b *FFmpegBackend) ExecuteRaw(ctx context.Context, args []string) (*ffmpeg.ProcessResult, error) {
+	env, err := b.inner.CheckVersion(ctx)
+	if err != nil {
+		return nil, ffmpeg.NewError(ffmpeg.FFMPEG_UNAVAILABLE, fmt.Sprintf("cannot get ffmpeg environment: %v", err))
+	}
+	if !env.Available || env.FFmpegPath == "" {
+		return nil, ffmpeg.NewError(ffmpeg.FFMPEG_UNAVAILABLE, "ffmpeg not available")
+	}
+	return b.runner.RunProcess(ctx, env.FFmpegPath, args)
 }
 
 func (b *FFmpegBackend) CancelAll() {

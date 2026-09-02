@@ -149,6 +149,34 @@ func (s *Service) ReplaceSAFGrant(ctx context.Context, mountID WorkspaceID, gran
 	return mount, nil
 }
 
+// RegisterIsolatedMount registers and persists a workspace backed by an
+// isolated filesystem root. Git/workspace controllers must use this method
+// instead of writing directly to Registry, otherwise the mount disappears
+// after a backend restart.
+func (s *Service) RegisterIsolatedMount(ctx context.Context, name string, backendConfig string, readOnly bool) (WorkspaceMount, error) {
+	mount, err := s.registry.RegisterIsolatedMount(ctx, name, backendConfig, readOnly)
+	if err != nil {
+		return WorkspaceMount{}, err
+	}
+	if s.mountRepo != nil {
+		rec := persistenceRecord{
+			id:            string(mount.ID),
+			name:          mount.Name,
+			kind:          mount.Kind,
+			readOnly:      mount.ReadOnly,
+			enabled:       true,
+			createdAt:     mount.CreatedAt,
+			updatedAt:     mount.UpdatedAt,
+			backendConfig: mount.BackendConfig,
+		}
+		if err := s.mountRepo.Insert(rec); err != nil {
+			_ = s.registry.RemoveMount(ctx, mount.ID)
+			return WorkspaceMount{}, fmt.Errorf("persist isolated mount: %w", err)
+		}
+	}
+	return mount, nil
+}
+
 func (s *Service) RemoveMount(ctx context.Context, id WorkspaceID) error {
 	if err := s.registry.RemoveMount(ctx, id); err != nil {
 		return err
@@ -287,7 +315,10 @@ func (s *Service) LoadAndRestoreMounts(ctx context.Context) error {
 		}
 		switch rec.kind {
 		case WorkspaceKindLocal:
-			if _, err := s.registry.RegisterLocalMount(ctx, rec.name, rec.localRoot, rec.readOnly); err == nil {
+			// Restore the persisted ID instead of allocating a new one so saved
+			// amitia://workspace/@<id>/ URIs remain stable across restarts.
+			if err := s.registry.RestoreMount(mount); err != nil {
+				continue
 			}
 		case WorkspaceKindSAF:
 			mount.Available = false
@@ -314,6 +345,13 @@ func (s *Service) LoadAndRestoreMounts(ctx context.Context) error {
 						s.registry.UpdateStatus(mount.ID, status, status == WorkspaceStatusReady || status == WorkspaceStatusReadOnly)
 					})
 				}
+			}
+		case WorkspaceKindIsolated:
+			if mount.ReadOnly {
+				mount.Status = WorkspaceStatusReadOnly
+			}
+			if err := s.registry.RestoreMount(mount); err != nil {
+				continue
 			}
 		}
 	}

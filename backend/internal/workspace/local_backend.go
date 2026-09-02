@@ -112,19 +112,28 @@ func (b *LocalBackend) Read(ctx context.Context, mount WorkspaceMount, path stri
 	if opts.MaxBytes > 0 && opts.MaxBytes < maxBytes {
 		maxBytes = opts.MaxBytes
 	}
-	if info.Size() > maxBytes {
+	// A default read remains bounded by MaxDirectRead. Explicit ranged reads
+	// (Offset and/or MaxBytes supplied) are allowed against larger files and
+	// return at most maxBytes, which is required by CopyTo and line-range tools.
+	explicitRange := opts.Offset > 0 || opts.MaxBytes > 0
+	if !explicitRange && info.Size() > maxBytes {
 		return ReadResult{}, fmt.Errorf("%w: file size %d exceeds max %d", ErrResourceTooLarge, info.Size(), maxBytes)
 	}
-	data, err := os.ReadFile(target)
+
+	file, err := os.Open(target)
 	if err != nil {
 		return ReadResult{}, fmt.Errorf("%w: %v", ErrReadFailed, err)
 	}
+	defer file.Close()
+
 	if opts.Offset > 0 {
-		if opts.Offset >= int64(len(data)) {
-			data = nil
-		} else {
-			data = data[opts.Offset:]
+		if _, err := file.Seek(opts.Offset, io.SeekStart); err != nil {
+			return ReadResult{}, fmt.Errorf("%w: %v", ErrReadFailed, err)
 		}
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes))
+	if err != nil {
+		return ReadResult{}, fmt.Errorf("%w: %v", ErrReadFailed, err)
 	}
 	return ReadResult{
 		Content: data,
@@ -190,8 +199,8 @@ func (b *LocalBackend) Mkdir(ctx context.Context, mount WorkspaceMount, path str
 		return WorkspaceEntry{}, err
 	}
 	if err := os.MkdirAll(target, 0o700); err != nil {
-			return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrCreateFailed, err)
-		}
+		return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrCreateFailed, err)
+	}
 	info, err := os.Stat(target)
 	if err != nil {
 		return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrCreateFailed, err)
@@ -304,8 +313,8 @@ func (b *LocalBackend) Copy(ctx context.Context, mount WorkspaceMount, source st
 		return WorkspaceEntry{}, fmt.Errorf("%w: copy size %d exceeds max %d", ErrResourceTooLarge, len(data), MaxSingleWrite)
 	}
 	if err := os.WriteFile(targetPath, data, 0o600); err != nil {
-			return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrCopyFailed, err)
-		}
+		return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrCopyFailed, err)
+	}
 	rel := filepath.Join(destinationDir, baseName)
 	info, err := os.Stat(targetPath)
 	if err != nil {

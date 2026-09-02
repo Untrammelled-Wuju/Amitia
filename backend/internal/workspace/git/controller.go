@@ -4,21 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/workspace"
 )
 
 type GitController struct {
-	workspace  *workspace.Service
-	mounts     *workspace.Registry
-	engine     GitEngine
-	policy     GitPolicy
-	roots      IsolatedRootResolver
-	mu         sync.Mutex
+	workspace *workspace.Service
+	mounts    *workspace.Registry
+	engine    GitEngine
+	policy    GitPolicy
+	roots     IsolatedRootResolver
+	mu        sync.Mutex
 }
 
 func NewGitController(
@@ -87,7 +91,18 @@ func (c *GitController) Status(ctx context.Context, workspaceURI string, include
 		return nil, err
 	}
 	limit := c.policy.MaxStatusEntries
-	return c.engine.Status(ctx, root, includeIgnored, limit)
+	result, err := c.engine.Status(ctx, root, includeIgnored, limit)
+	if err != nil {
+		return nil, err
+	}
+	result.RepositoryRootURI = workspaceURI
+	for i := range result.Entries {
+		result.Entries[i].URI = qualifyWorkspacePath(workspaceURI, result.Entries[i].URI)
+		if result.Entries[i].OldURI != "" {
+			result.Entries[i].OldURI = qualifyWorkspacePath(workspaceURI, result.Entries[i].OldURI)
+		}
+	}
+	return result, nil
 }
 
 func (c *GitController) Diff(ctx context.Context, req GitDiffRequest) (*GitDiffResult, error) {
@@ -95,11 +110,15 @@ func (c *GitController) Diff(ctx context.Context, req GitDiffRequest) (*GitDiffR
 	if err != nil {
 		return nil, err
 	}
+	paths, err := normalizeWorkspacePaths(req.WorkspaceURI, req.Paths)
+	if err != nil {
+		return nil, err
+	}
 	opts := DiffOptions{
 		Mode:     req.Mode,
 		Base:     req.Base,
 		Target:   req.Target,
-		Paths:    req.Paths,
+		Paths:    paths,
 		MaxBytes: req.MaxBytes,
 	}
 	if opts.MaxBytes == 0 {
@@ -111,7 +130,17 @@ func (c *GitController) Diff(ctx context.Context, req GitDiffRequest) (*GitDiffR
 	if err := ValidateRefName(opts.Target); err != nil && opts.Target != "" {
 		return nil, err
 	}
-	return c.engine.Diff(ctx, root, opts)
+	result, err := c.engine.Diff(ctx, root, opts)
+	if err != nil {
+		return nil, err
+	}
+	for i := range result.Files {
+		result.Files[i].URI = qualifyWorkspacePath(req.WorkspaceURI, result.Files[i].URI)
+		if result.Files[i].OldURI != "" {
+			result.Files[i].OldURI = qualifyWorkspacePath(req.WorkspaceURI, result.Files[i].OldURI)
+		}
+	}
+	return result, nil
 }
 
 func (c *GitController) Log(ctx context.Context, req GitLogRequest) (*GitLogResult, error) {
@@ -144,11 +173,15 @@ func (c *GitController) Add(ctx context.Context, req GitAddRequest) (*GitAddResu
 	if err != nil {
 		return nil, err
 	}
+	paths, err := normalizeWorkspacePaths(req.WorkspaceURI, req.Paths)
+	if err != nil {
+		return nil, err
+	}
 	if req.All && !req.Force {
 		return nil, fmt.Errorf("%w: add all requires explicit force flag", ErrGitAddFailed)
 	}
 	if req.All {
-		for _, p := range req.Paths {
+		for _, p := range paths {
 			if p == "" {
 				continue
 			}
@@ -157,17 +190,17 @@ func (c *GitController) Add(ctx context.Context, req GitAddRequest) (*GitAddResu
 			}
 		}
 	} else {
-		if err := ValidatePaths(req.Paths); err != nil {
+		if err := ValidatePaths(paths); err != nil {
 			return nil, err
 		}
 	}
-	for _, p := range req.Paths {
+	for _, p := range paths {
 		if IsSecretFile(p) {
 			return nil, fmt.Errorf("%w: staged path %q matches secret file pattern", ErrGitAddFailed, p)
 		}
 	}
 	opts := AddOptions{
-		Paths: req.Paths,
+		Paths: paths,
 		All:   req.All,
 		Force: req.Force,
 	}
@@ -183,14 +216,18 @@ func (c *GitController) Restore(ctx context.Context, req GitRestoreRequest) (*Gi
 	if err != nil {
 		return nil, err
 	}
-	if err := ValidatePaths(req.Paths); err != nil {
+	paths, err := normalizeWorkspacePaths(req.WorkspaceURI, req.Paths)
+	if err != nil {
 		return nil, err
 	}
-	if len(req.Paths) == 0 {
+	if err := ValidatePaths(paths); err != nil {
+		return nil, err
+	}
+	if len(paths) == 0 {
 		return nil, fmt.Errorf("%w: restore requires explicit paths", ErrGitRestoreFailed)
 	}
 	opts := RestoreOptions{
-		Paths:    req.Paths,
+		Paths:    paths,
 		Source:   req.Source,
 		Staged:   req.Staged,
 		Worktree: req.Worktree,
@@ -198,7 +235,11 @@ func (c *GitController) Restore(ctx context.Context, req GitRestoreRequest) (*Gi
 	if err := c.engine.Restore(ctx, root, opts); err != nil {
 		return nil, err
 	}
-	return &GitRestoreResult{Restored: req.Paths}, nil
+	restored := make([]string, 0, len(paths))
+	for _, path := range paths {
+		restored = append(restored, qualifyWorkspacePath(req.WorkspaceURI, path))
+	}
+	return &GitRestoreResult{Restored: restored}, nil
 }
 
 func (c *GitController) Commit(ctx context.Context, req GitCommitRequest) (*GitCommitResult, error) {
@@ -281,10 +322,10 @@ func (c *GitController) Pull(ctx context.Context, req GitPullRequest) (*GitPullR
 		return nil, err
 	}
 	return &GitPullResult{
-		Fetched:        fetched,
-		FastForwarded:  newHead != "" && oldHead != newHead,
-		OldHead:        oldHead,
-		NewHead:        newHead,
+		Fetched:       fetched,
+		FastForwarded: newHead != "" && oldHead != newHead,
+		OldHead:       oldHead,
+		NewHead:       newHead,
 	}, nil
 }
 
@@ -332,89 +373,248 @@ func (c *GitController) ListRemotes(ctx context.Context, workspaceURI string) ([
 }
 
 type IsolatedCreateResult struct {
-	MountID        string    `json:"mountId"`
-	Name           string    `json:"name"`
-	RootKey        string    `json:"rootKey"`
-	RepositoryPath string    `json:"repositoryPath"`
-	Branch         string    `json:"branch"`
-	Detached       bool      `json:"detached"`
-	Clean          bool      `json:"clean"`
-	CreatedAt      string    `json:"createdAt"`
+	MountID        string `json:"mountId"`
+	Name           string `json:"name"`
+	RootKey        string `json:"rootKey"`
+	RepositoryPath string `json:"repositoryPath"`
+	Branch         string `json:"branch"`
+	Detached       bool   `json:"detached"`
+	Clean          bool   `json:"clean"`
+	CreatedAt      string `json:"createdAt"`
 }
 
-func (c *GitController) CreateIsolatedFromClone(ctx context.Context, req IsolatedCreateRequest) (*IsolatedCreateResult, error) {
-	if req.Mode != string(GitIsolationModeClone) && req.Mode != "" {
-		return nil, fmt.Errorf("%w: mode %q not supported", ErrIsolatedCreateFailed, req.Mode)
+func (c *GitController) CreateIsolated(ctx context.Context, req IsolatedCreateRequest) (*IsolatedCreateResult, error) {
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return nil, fmt.Errorf("%w: name is required", ErrIsolatedCreateFailed)
 	}
-	if req.GitRemote == nil {
-		return nil, fmt.Errorf("%w: gitRemote required for clone mode", ErrIsolatedCreateFailed)
+	mode := GitIsolationMode(strings.TrimSpace(req.Mode))
+	if mode == "" {
+		if req.GitRemote != nil {
+			mode = GitIsolationModeClone
+		} else {
+			mode = GitIsolationModeSnapshot
+		}
 	}
-	
-	rootsResolver := c.roots
-	dataRoot := rootsResolver.DataRoot()
-	opID := fmt.Sprintf("clone-%d", len(req.Name))
+	if mode != GitIsolationModeClone && mode != GitIsolationModeSnapshot {
+		return nil, fmt.Errorf("%w: mode %q not supported", ErrIsolatedCreateFailed, mode)
+	}
+
+	dataRoot := c.roots.DataRoot()
+	opID := uuid.NewString()
 	stagingRoot := filepath.Join(dataRoot, "workspaces", IsolatedRootPrefix, StagingDirName, opID)
-	if err := os.MkdirAll(stagingRoot, 0755); err != nil {
-		return nil, fmt.Errorf("%w: cannot create staging: %v", ErrIsolatedCreateFailed, err)
+	if err := os.MkdirAll(filepath.Dir(stagingRoot), 0o755); err != nil {
+		return nil, fmt.Errorf("%w: cannot create staging parent: %v", ErrIsolatedCreateFailed, err)
 	}
-	cloneOpts := CloneOptions{
-		URL:   req.GitRemote.URL,
-		Ref:   req.Ref,
-		Depth: req.Depth,
-	}
-	cloneResult, err := c.engine.Clone(ctx, stagingRoot, cloneOpts)
-	if err != nil {
-		os.RemoveAll(stagingRoot)
-		return nil, fmt.Errorf("%w: clone failed: %v", ErrIsolatedCreateFailed, err)
-	}
-	if hasSym, _ := c.engine.HasSymlinkEntries(ctx, stagingRoot); hasSym && c.policy.SymlinkPolicy == "reject_repository_with_symlink" {
-		os.RemoveAll(stagingRoot)
-		return nil, fmt.Errorf("%w: repository contains symlink entries", ErrGitSymlinkUnsupported)
-	}
-	if hasFilter, _ := c.engine.HasSubmodules(ctx, stagingRoot); hasFilter {
-		cloneResult.Branch = cloneResult.Branch
-	}
-	isolatedID := workspace.WorkspaceID(mountIDFromString(fmt.Sprintf("iso-%s", req.Name[:min(8, len(req.Name))])))
-	isolatedRoot := filepath.Join(dataRoot, "workspaces", IsolatedRootPrefix, string(isolatedID))
-	if err := os.Rename(stagingRoot, isolatedRoot); err != nil {
-		os.RemoveAll(stagingRoot)
-		return nil, fmt.Errorf("%w: cannot move to isolated root: %v", ErrIsolatedCreateFailed, err)
-	}
-	config := &GitMountConfig{
-		Mode:    GitIsolationModeClone,
-		RootKey: filepath.Join(IsolatedRootPrefix, string(isolatedID)),
-		Source: &GitSourceSpec{
-			Type: "git",
-			URI:  req.GitRemote.URL,
-			Ref:  req.Ref,
-		},
-		CreatedBy: "user",
-	}
-	configJSON, _ := json.Marshal(config)
-	mount, err := c.mounts.RegisterIsolatedMount(ctx, req.Name, string(configJSON), req.ReadOnly)
-	if err != nil {
-		os.RemoveAll(isolatedRoot)
-		return nil, fmt.Errorf("%w: register failed: %v", ErrIsolatedCreateFailed, err)
-	}
-	state, _ := c.engine.Detect(ctx, isolatedRoot)
+	_ = os.RemoveAll(stagingRoot)
+
+	var source *GitSourceSpec
 	branch := ""
 	detached := false
-	if state != nil {
-		branch = state.Branch
-		detached = state.Detached
-	} else {
+	clean := true
+
+	switch mode {
+	case GitIsolationModeClone:
+		if req.GitRemote == nil || strings.TrimSpace(req.GitRemote.URL) == "" {
+			return nil, fmt.Errorf("%w: gitRemote.url is required for clone mode", ErrIsolatedCreateFailed)
+		}
+		if err := ValidateRemoteURL(req.GitRemote.URL); err != nil {
+			return nil, err
+		}
+		cloneResult, err := c.engine.Clone(ctx, stagingRoot, CloneOptions{URL: req.GitRemote.URL, Ref: req.Ref, Depth: req.Depth})
+		if err != nil {
+			_ = os.RemoveAll(stagingRoot)
+			return nil, fmt.Errorf("%w: clone failed: %v", ErrIsolatedCreateFailed, err)
+		}
+		if hasSym, _ := c.engine.HasSymlinkEntries(ctx, stagingRoot); hasSym && c.policy.SymlinkPolicy == "reject_repository_with_symlink" {
+			_ = os.RemoveAll(stagingRoot)
+			return nil, fmt.Errorf("%w: repository contains symlink entries", ErrGitSymlinkUnsupported)
+		}
 		branch = cloneResult.Branch
+		source = &GitSourceSpec{Type: "git", URI: req.GitRemote.URL, Ref: req.Ref, Depth: req.Depth, RemoteID: req.GitRemote.RemoteID}
+	case GitIsolationModeSnapshot:
+		if strings.TrimSpace(req.SourceWorkspaceURI) == "" {
+			return nil, fmt.Errorf("%w: sourceWorkspaceUri is required for snapshot mode", ErrIsolatedCreateFailed)
+		}
+		sourceRoot, _, err := c.resolveRepositoryPath(req.SourceWorkspaceURI)
+		if err != nil {
+			return nil, fmt.Errorf("%w: snapshot source: %v", ErrIsolatedCreateFailed, err)
+		}
+		if err := copySnapshotTree(sourceRoot, stagingRoot, c.policy.SymlinkPolicy); err != nil {
+			_ = os.RemoveAll(stagingRoot)
+			return nil, err
+		}
+		source = &GitSourceSpec{Type: "workspace", URI: req.SourceWorkspaceURI, Ref: req.Ref}
+		if state, detectErr := c.engine.Detect(ctx, stagingRoot); detectErr == nil && state != nil {
+			branch, detached, clean = state.Branch, state.Detached, state.Clean
+		}
+	}
+
+	rootID := uuid.NewString()
+	rootKey := filepath.Join(IsolatedRootPrefix, rootID)
+	isolatedRoot := filepath.Join(dataRoot, "workspaces", rootKey)
+	if err := os.MkdirAll(filepath.Dir(isolatedRoot), 0o755); err != nil {
+		_ = os.RemoveAll(stagingRoot)
+		return nil, fmt.Errorf("%w: create isolated parent: %v", ErrIsolatedCreateFailed, err)
+	}
+	if err := os.Rename(stagingRoot, isolatedRoot); err != nil {
+		_ = os.RemoveAll(stagingRoot)
+		return nil, fmt.Errorf("%w: cannot move to isolated root: %v", ErrIsolatedCreateFailed, err)
+	}
+
+	config := &GitMountConfig{Mode: mode, RootKey: rootKey, Source: source, CreatedBy: "user", ExpiresAt: parseIsolationLifetime(req.Lifetime)}
+	configJSON, _ := json.Marshal(config)
+	mount, err := c.workspace.RegisterIsolatedMount(ctx, req.Name, string(configJSON), req.ReadOnly)
+	if err != nil {
+		_ = os.RemoveAll(isolatedRoot)
+		return nil, fmt.Errorf("%w: register failed: %v", ErrIsolatedCreateFailed, err)
+	}
+	if state, detectErr := c.engine.Detect(ctx, isolatedRoot); detectErr == nil && state != nil {
+		branch, detached, clean = state.Branch, state.Detached, state.Clean
 	}
 	return &IsolatedCreateResult{
-		MountID:        string(mount.ID),
-		Name:           req.Name,
-		RootKey:        config.RootKey,
-		RepositoryPath: isolatedRoot,
-		Branch:         branch,
-		Detached:       detached,
-		Clean:          true,
-		CreatedAt:      mount.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		MountID: string(mount.ID), Name: req.Name, RootKey: config.RootKey, RepositoryPath: isolatedRoot,
+		Branch: branch, Detached: detached, Clean: clean, CreatedAt: mount.CreatedAt.Format(time.RFC3339),
 	}, nil
+}
+
+// CreateIsolatedFromClone is retained for callers/tests that used the original
+// clone-only entry point. New HTTP callers should use CreateIsolated.
+func (c *GitController) CreateIsolatedFromClone(ctx context.Context, req IsolatedCreateRequest) (*IsolatedCreateResult, error) {
+	req.Mode = string(GitIsolationModeClone)
+	return c.CreateIsolated(ctx, req)
+}
+
+func parseIsolationLifetime(raw string) *time.Time {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	if raw == "" || raw == "session" || raw == "manual" || raw == "forever" {
+		return nil
+	}
+	var d time.Duration
+	var err error
+	if strings.HasSuffix(raw, "d") {
+		days, parseErr := time.ParseDuration(strings.TrimSuffix(raw, "d") + "h")
+		if parseErr == nil {
+			d = days * 24
+		} else {
+			err = parseErr
+		}
+	} else {
+		d, err = time.ParseDuration(raw)
+	}
+	if err != nil || d <= 0 {
+		return nil
+	}
+	expires := time.Now().UTC().Add(d)
+	return &expires
+}
+
+func copySnapshotTree(sourceRoot, targetRoot, symlinkPolicy string) error {
+	sourceRoot = filepath.Clean(sourceRoot)
+	targetRoot = filepath.Clean(targetRoot)
+	if err := os.MkdirAll(targetRoot, 0o755); err != nil {
+		return fmt.Errorf("%w: create snapshot root: %v", ErrIsolatedCreateFailed, err)
+	}
+	return filepath.WalkDir(sourceRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		path = filepath.Clean(path)
+		// A local workspace can contain the isolated-workspace staging directory
+		// itself. Never recurse into the destination while taking a snapshot.
+		if path == targetRoot || strings.HasPrefix(path, targetRoot+string(filepath.Separator)) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, err := filepath.Rel(sourceRoot, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			if symlinkPolicy == "reject_repository_with_symlink" {
+				return fmt.Errorf("%w: snapshot contains symlink %q", ErrGitSymlinkUnsupported, rel)
+			}
+			return nil
+		}
+		dst := filepath.Join(targetRoot, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(dst, 0o755)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		src, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+		if err != nil {
+			_ = src.Close()
+			return err
+		}
+		_, copyErr := io.Copy(dstFile, src)
+		srcCloseErr := src.Close()
+		dstCloseErr := dstFile.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if srcCloseErr != nil {
+			return srcCloseErr
+		}
+		return dstCloseErr
+	})
+}
+
+func normalizeWorkspacePaths(workspaceURI string, paths []string) ([]string, error) {
+	result := make([]string, 0, len(paths))
+	for _, raw := range paths {
+		path := strings.TrimSpace(raw)
+		if path == "" {
+			continue
+		}
+		if strings.HasPrefix(path, "amitia://workspace/") {
+			base := workspaceURI
+			if !strings.HasSuffix(base, "/") {
+				base += "/"
+			}
+			if !strings.HasPrefix(path, base) {
+				return nil, ErrGitPathOutsideRepository
+			}
+			path = strings.TrimPrefix(path, base)
+		}
+		path = strings.TrimPrefix(filepath.ToSlash(path), "/")
+		if path == "" {
+			continue
+		}
+		if err := ValidatePaths([]string{path}); err != nil {
+			return nil, err
+		}
+		result = append(result, path)
+	}
+	return result, nil
+}
+
+func qualifyWorkspacePath(workspaceURI, path string) string {
+	path = strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(path)), "/")
+	if path == "" || strings.HasPrefix(path, "amitia://workspace/") {
+		return path
+	}
+	if !strings.HasSuffix(workspaceURI, "/") {
+		workspaceURI += "/"
+	}
+	return workspaceURI + path
 }
 
 func (c *GitController) DeleteIsolated(ctx context.Context, workspaceURI string, force bool) error {
@@ -439,7 +639,7 @@ func (c *GitController) DeleteIsolated(ctx context.Context, workspaceURI string,
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.mounts.RemoveMount(ctx, mountID); err != nil {
+	if err := c.workspace.RemoveMount(ctx, mountID); err != nil {
 		return err
 	}
 	return os.RemoveAll(root)
@@ -480,7 +680,7 @@ func (c *GitController) IsolatedInfo(ctx context.Context, workspaceURI string) (
 	return &IsolatedWorkspaceInfo{
 		Mode:      string(cfg.Mode),
 		Source:    sourceStr,
-		Git:       true,
+		Git:       state != nil,
 		Dirty:     dirty,
 		Branch:    branch,
 		Head:      head,

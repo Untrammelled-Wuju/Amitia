@@ -131,7 +131,8 @@ func (h *Handler) WebChatDeleteConv(c *gin.Context) {
 func (h *Handler) WebChatUpdateConv(c *gin.Context) {
 	id := c.Param("id")
 	var body struct {
-		CharacterID string `json:"characterId"`
+		CharacterID string  `json:"characterId"`
+		Title       *string `json:"title"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
@@ -141,6 +142,17 @@ func (h *Handler) WebChatUpdateConv(c *gin.Context) {
 		_, err := h.chatSvc.ChangeCharacter(id, body.CharacterID)
 		if err != nil {
 			util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+			return
+		}
+	}
+	if body.Title != nil {
+		title := strings.TrimSpace(*body.Title)
+		if title == "" {
+			util.ErrorResponse(c, response.InvalidParams, "会话标题不能为空", nil)
+			return
+		}
+		if err := h.db.Model(&chat.Conversation{}).Where("id = ?", id).Update("title", title).Error; err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "重命名失败", nil)
 			return
 		}
 	}
