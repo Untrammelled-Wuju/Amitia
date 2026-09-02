@@ -63,15 +63,15 @@ export class SnapshotApplier {
   }
 
   private hasBlockingConflicts(snapshot: DesktopSnapshot): boolean {
-    return snapshot.conflicts.some(
+    return snapshot.conflicts?.some(
       (c) =>
         !c.resolved &&
         (c.severity === "error" || c.severity === "critical"),
-    );
+    ) ?? false;
   }
 
   private filterSupported(snapshot: DesktopSnapshot): DesktopSnapshot {
-    const supported = snapshot.contributions.filter((c) =>
+    const supported = (snapshot.contributions ?? []).filter((c) =>
       this.isPlatformSupported(c),
     );
     const supportedIds = new Set(
@@ -91,9 +91,9 @@ export class SnapshotApplier {
     return {
       ...snapshot,
       contributions: supported,
-      menuTree: filterTree(snapshot.menuTree),
-      trayTree: filterTree(snapshot.trayTree),
-      shortcuts: snapshot.shortcuts.filter((c) =>
+      menuTree: filterTree(snapshot.menuTree ?? {}),
+      trayTree: filterTree(snapshot.trayTree ?? {}),
+      shortcuts: (snapshot.shortcuts ?? []).filter((c) =>
         supportedIds.has(c.definition.contributionId),
       ),
     };
