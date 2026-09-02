@@ -34,6 +34,9 @@ import com.amitia.amitia_app.runtime.recovery.RuntimeCrashRecoveryPolicy
 import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryDecision
 import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryRequest
 import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryScheduler
+import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryScheduleRequest
+import com.amitia.amitia_app.runtime.recovery.RuntimeDesiredStateStore
+import com.amitia.amitia_app.runtime.recovery.NoOpRuntimeDesiredStateStore
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostEvent
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
@@ -64,7 +67,8 @@ internal class DefaultRuntimeController(
     private val endpointPolicy: BackendEndpointPolicy = embeddedAndroidBackendPolicy(),
     private val recoveryPolicy: RuntimeCrashRecoveryPolicy = NoOpRecoveryPolicy(),
     private val recoveryScheduler: RuntimeRecoveryScheduler = ExecutorRuntimeRecoveryScheduler(),
-    private val installedRuntimeSource: InstalledRuntimeSource = AlwaysInstalledRuntimeSource()
+    private val installedRuntimeSource: InstalledRuntimeSource = AlwaysInstalledRuntimeSource(),
+    private val desiredStateStore: RuntimeDesiredStateStore = NoOpRuntimeDesiredStateStore,
 ) : RuntimeController {
 
     private data class ExpectedStopContext(
@@ -634,6 +638,7 @@ internal class DefaultRuntimeController(
 
     private fun evaluateRecovery(error: RuntimeError, requestedStop: Boolean) {
         val current = stateStore.snapshot()
+        runCatching { desiredStateStore.recordFailure(error.code.name, current.generation) }
         if (current.state != RuntimeState.FAILED) return
         cancelPendingRecovery(resetBudget = false)
         val currentExpectedStop = expectedStopRef.get()
@@ -651,6 +656,7 @@ internal class DefaultRuntimeController(
                 scheduleRecovery(decision.delayMillis)
             }
             is RuntimeRecoveryDecision.Exhausted -> {
+                runCatching { desiredStateStore.markRecoveryExhausted(decision.attempts) }
                 stateStore.update {
                     it.copy(
                         lastError = RuntimeError(
@@ -670,7 +676,15 @@ internal class DefaultRuntimeController(
         if (failedGen <= 0) return
         try {
             val jobRef = AtomicReference<com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryJob?>(null)
-            val job = recoveryScheduler.schedule(delayMillis) {
+            val current = stateStore.snapshot()
+            val job = recoveryScheduler.schedule(
+                RuntimeRecoveryScheduleRequest(
+                    delayMillis = delayMillis,
+                    failedGeneration = failedGen,
+                    profile = current.activeProfile ?: desiredStateStore.snapshot().profile,
+                    reason = current.lastError?.code?.name ?: "runtime_failure",
+                )
+            ) {
                 val runningJob = jobRef.get()
                 if (runningJob != null) {
                     pendingRecoveryJob.compareAndSet(runningJob, null)
@@ -719,6 +733,11 @@ internal class DefaultRuntimeController(
                 job.cancel()
             } catch (_: Throwable) {
             }
+        } else {
+            // After process recreation there is no in-memory RuntimeRecoveryJob,
+            // but JobScheduler can still own a persisted recovery. Cancel it through
+            // the scheduler contract so a user stop/fresh start cannot be replayed.
+            runCatching { recoveryScheduler.cancelPending() }
         }
         try {
             recoveryPolicy.cancelPending()
@@ -731,6 +750,7 @@ internal class DefaultRuntimeController(
 
     private fun recordRecoveryReady(generation: Long) {
         cancelPendingRecovery(resetBudget = false)
+        runCatching { desiredStateStore.markReady(generation) }
         try {
             recoveryPolicy.recordReady(generation)
         } catch (_: Throwable) {
@@ -1092,6 +1112,8 @@ internal class DefaultRuntimeController(
             return handle
         }
 
+        runCatching { desiredStateStore.requestStart(requestedProfile) }
+
         // Only cancel ownership from a previous generation after this start
         // request has been accepted. A duplicate STARTING request must be a
         // read-only rejection; cancelling here earlier would kill the active
@@ -1138,6 +1160,7 @@ internal class DefaultRuntimeController(
             return handle
         }
 
+        runCatching { desiredStateStore.markStarted(requestedProfile) }
         callback.onCompleted(
             RuntimeOperationResult.Success(
                 operationId = operationId,
@@ -1158,6 +1181,7 @@ internal class DefaultRuntimeController(
 
         try {
             val current = stateStore.snapshot()
+            runCatching { desiredStateStore.requestStop() }
 
             if (current.state == RuntimeState.STOPPED) {
                 callback.onCompleted(

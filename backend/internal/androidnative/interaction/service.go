@@ -2,13 +2,14 @@ package interaction
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/androidnative/uitree"
 )
 
 type Service struct {
-	nodeResolver  uitree.NodeResolver
+	nodeResolver     uitree.NodeResolver
 	snapshotResolver uitree.SnapshotResolver
 
 	accessibility AccessibilityExecutor
@@ -16,13 +17,17 @@ type Service struct {
 
 	visual VisualLocator
 
-	root     RootInteractionExecutor
-	adb      ADBInteractionExecutor
-	shizuku  ShizukuInteractionExecutor
+	root    RootInteractionExecutor
+	adb     ADBInteractionExecutor
+	shizuku ShizukuInteractionExecutor
 
 	verifier Verifier
 
 	policy Policy
+
+	routeMu     sync.Mutex
+	routeStats  map[string]providerRouteStats
+	routeHealth map[string]providerHealthCacheEntry
 }
 
 func NewService(
@@ -48,51 +53,124 @@ func NewService(
 		shizuku:          shizuku,
 		verifier:         verifier,
 		policy:           policy,
+		routeStats:       make(map[string]providerRouteStats),
+		routeHealth:      make(map[string]providerHealthCacheEntry),
 	}
 }
 
 func (s *Service) Status(ctx context.Context) CapabilityState {
 	state := CapabilityState{
-		State: "unavailable",
+		State:       "unavailable",
+		HealthState: ProviderStateUnavailable,
+		Providers:   make(map[string]ProviderCapabilityHealth),
 	}
 
-	if s.accessibility != nil {
-		state.AccessibilityAction = true
-		state.AccessibilityGesture = true
-		state.Available = true
-		state.State = "available"
-	}
+	accessibilityHealth := probeProviderHealth(ctx, "accessibility", s.accessibility)
+	coordinateHealth := probeProviderHealth(ctx, "accessibility_gesture", s.coordinate)
+	shizukuHealth := probeProviderHealth(ctx, "shizuku", s.shizuku)
+	rootHealth := probeProviderHealth(ctx, "root", s.root)
+	adbHealth := probeProviderHealth(ctx, "adb", s.adb)
+	state.Providers["accessibility"] = accessibilityHealth
+	state.Providers["accessibilityGesture"] = coordinateHealth
+	state.Providers["shizuku"] = shizukuHealth
+	state.Providers["root"] = rootHealth
+	state.Providers["adb"] = adbHealth
 
-	if s.coordinate != nil {
-		state.CoordinateTap = true
-		state.Available = true
-		if state.State != "available" {
-			state.State = "degraded"
-		}
-	}
+	state.AccessibilityAction = providerUsable(accessibilityHealth)
+	state.AccessibilityGesture = providerUsable(coordinateHealth)
+	state.CoordinateTap = providerUsable(coordinateHealth)
+	state.Shizuku = s.policy.AllowShizukuFallback && providerUsable(shizukuHealth)
+	state.RootFallback = s.policy.AllowRootFallback && providerUsable(rootHealth)
+	state.ADBFallback = s.policy.AllowADBFallback && providerUsable(adbHealth)
 
-	if s.shizuku != nil && s.policy.AllowShizukuFallback {
-		state.Shizuku = true
-		if state.State == "unavailable" {
-			state.State = "degraded"
-		}
-	}
-
-	state.TextInput = s.accessibility != nil || (s.shizuku != nil && s.policy.AllowShizukuFallback)
-	state.Scroll = s.accessibility != nil || (s.shizuku != nil && s.policy.AllowShizukuFallback)
+	state.TextInput = state.AccessibilityAction || state.Shizuku || state.RootFallback || state.ADBFallback
+	state.Scroll = state.AccessibilityAction || state.AccessibilityGesture || state.Shizuku || state.RootFallback || state.ADBFallback
 
 	if s.visual != nil {
-		state.VisualLocate = true
-		state.OCRAvailable = true
-		state.ImageUnderstandAvailable = true
+		if probe, ok := s.visual.(VisualCapabilityProbe); ok {
+			visualState := probe.ProviderState(ctx)
+			state.VisualLocate = visualState.ScreenshotAvailable && (visualState.OCRAvailable || visualState.ImageUnderstandAvailable)
+			state.OCRAvailable = visualState.OCRAvailable
+			state.ImageUnderstandAvailable = visualState.ImageUnderstandAvailable
+			visualHealth := newProviderHealth("visual", ProviderStateUnavailable, visualState.Reason, "", true)
+			if state.VisualLocate {
+				visualHealth = newProviderHealth("visual", ProviderStateReady, "", "", true)
+			} else if visualState.ScreenshotAvailable {
+				visualHealth = newProviderHealth("visual", ProviderStateDegraded, visualState.Reason, "", true)
+			}
+			state.Providers["visual"] = visualHealth
+			if visualState.OCRAvailable {
+				state.Providers["ocr"] = newProviderHealth("ocr", ProviderStateReady, "", "", true)
+			} else {
+				state.Providers["ocr"] = newProviderHealth("ocr", ProviderStateUnavailable, "OCR provider unavailable", "", true)
+			}
+			if visualState.ImageUnderstandAvailable {
+				state.Providers["vision"] = newProviderHealth("vision", ProviderStateReady, "", "", true)
+			} else {
+				state.Providers["vision"] = newProviderHealth("vision", ProviderStateUnavailable, "image understanding provider unavailable", "", true)
+			}
+			if !state.VisualLocate && state.Reason == "" {
+				state.Reason = visualState.Reason
+			}
+		} else {
+			state.Providers["visual"] = newProviderHealth("visual", ProviderStateSupported, "visual locator does not expose provider health", "", true)
+			state.VisualLocate = true
+		}
+	} else {
+		state.Providers["visual"] = newProviderHealth("visual", ProviderStateUnavailable, "visual locator not configured", "", true)
 	}
 
-	if s.root != nil && s.policy.AllowRootFallback {
-		state.RootFallback = true
+	state.Available = state.AccessibilityAction || state.CoordinateTap || state.Shizuku || state.RootFallback || state.ADBFallback || state.VisualLocate
+
+	readyCount := 0
+	degradedCount := 0
+	permissionCount := 0
+	failedCount := 0
+	for _, health := range state.Providers {
+		switch health.State {
+		case ProviderStateReady:
+			readyCount++
+		case ProviderStateSupported, ProviderStateDegraded, ProviderStateStarting:
+			degradedCount++
+		case ProviderStatePermissionRequired:
+			permissionCount++
+		case ProviderStateFailed:
+			failedCount++
+		}
 	}
 
-	if s.adb != nil && s.policy.AllowADBFallback {
-		state.ADBFallback = true
+	switch {
+	case state.Available && failedCount == 0:
+		state.State = "available"
+		if readyCount > 0 {
+			state.HealthState = ProviderStateReady
+		} else {
+			state.HealthState = ProviderStateDegraded
+		}
+	case state.Available:
+		state.State = "degraded"
+		state.HealthState = ProviderStateDegraded
+	case permissionCount > 0:
+		state.State = "unavailable"
+		state.HealthState = ProviderStatePermissionRequired
+	case failedCount > 0:
+		state.State = "unavailable"
+		state.HealthState = ProviderStateFailed
+	case degradedCount > 0:
+		state.State = "degraded"
+		state.HealthState = ProviderStateDegraded
+	default:
+		state.State = "unavailable"
+		state.HealthState = ProviderStateUnavailable
+	}
+
+	if state.Reason == "" && !state.Available {
+		for _, name := range []string{"accessibility", "accessibilityGesture", "shizuku", "adb", "root", "visual"} {
+			if health, ok := state.Providers[name]; ok && health.Reason != "" {
+				state.Reason = health.Reason
+				break
+			}
+		}
 	}
 
 	return state
@@ -137,35 +215,50 @@ func (s *Service) clickNode(
 		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found"}
 	}
 
+	bounds := node.Node.Bounds
+	displayID := s.nodeDisplayID(ctx, node)
+	centerX, centerY := bounds.CenterX(), bounds.CenterY()
+	candidates := make([]providerRouteCandidate, 0, 5)
 	if s.accessibility != nil && s.accessibility.SupportsAction(node, NodeActionClick) {
-		err := s.accessibility.PerformNodeAction(ctx, node, NodeActionClick, nil)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationClick,
-				Strategy:   StrategyAccessibilityAction,
-				SnapshotID: target.SnapshotID,
-				NodeID:     target.NodeID,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
+		candidates = append(candidates, providerRouteCandidate{
+			name: "accessibility", strategy: StrategyAccessibilityAction, provider: s.accessibility, baseScore: 120,
+			execute: func() error { return s.accessibility.PerformNodeAction(ctx, node, NodeActionClick, nil) },
+		})
+	}
+	if req.AllowCoordinateFallback && bounds.Width() > 0 && bounds.Height() > 0 {
+		if s.coordinate != nil {
+			candidates = append(candidates, providerRouteCandidate{
+				name: "accessibility_gesture", strategy: StrategyNodeBounds, provider: s.coordinate, baseScore: 100,
+				execute: func() error { return s.coordinate.Tap(ctx, displayID, centerX, centerY) },
+			})
 		}
-		if isUnsupportedError(err) {
-			if req.AllowCoordinateFallback {
-				return s.clickNodeBounds(ctx, node, req, startTime)
-			}
+		if displayID == 0 && req.AllowShizukuFallback && s.policy.AllowShizukuFallback && s.shizuku != nil {
+			candidates = append(candidates, providerRouteCandidate{name: "shizuku", strategy: StrategyShizuku, provider: s.shizuku, baseScore: 95, execute: func() error { return s.shizuku.Tap(ctx, centerX, centerY) }})
 		}
+		if displayID == 0 && req.AllowRootFallback && s.policy.AllowRootFallback && s.root != nil {
+			candidates = append(candidates, providerRouteCandidate{name: "root", strategy: StrategyRoot, provider: s.root, baseScore: 90, execute: func() error { return s.root.Tap(ctx, centerX, centerY) }})
+		}
+		if displayID == 0 && req.AllowADBFallback && s.policy.AllowADBFallback && s.adb != nil {
+			candidates = append(candidates, providerRouteCandidate{name: "adb", strategy: StrategyADB, provider: s.adb, baseScore: 80, execute: func() error { return s.adb.Tap(ctx, centerX, centerY) }})
+		}
+	}
+
+	strategy, err := s.executeRankedProvider(ctx, candidates)
+	if err != nil {
 		return InteractionResult{}, err
 	}
-
-	if req.AllowCoordinateFallback {
-		return s.clickNodeBounds(ctx, node, req, startTime)
+	result := InteractionResult{
+		Success: true, Operation: OperationClick, Strategy: strategy,
+		SnapshotID: target.SnapshotID, NodeID: target.NodeID, DisplayID: displayID,
+		DurationMS: time.Since(startTime).Milliseconds(),
 	}
-
-	return InteractionResult{}, &Error{Code: INTERACTION_ACTION_UNSUPPORTED, Message: "click not supported on node"}
+	if strategy != StrategyAccessibilityAction {
+		result.X, result.Y = &centerX, &centerY
+	}
+	if req.Verify {
+		s.verifyResult(ctx, &result)
+	}
+	return result, nil
 }
 
 func (s *Service) clickNodeBounds(
@@ -178,95 +271,21 @@ func (s *Service) clickNodeBounds(
 	if bounds.Width() <= 0 || bounds.Height() <= 0 {
 		return InteractionResult{}, &Error{Code: INTERACTION_COORDINATE_INVALID, Message: "node has no valid bounds"}
 	}
-
-	centerX := bounds.CenterX()
-	centerY := bounds.CenterY()
-
-	if s.coordinate != nil {
-		err := s.coordinate.Tap(ctx, 0, centerX, centerY)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationClick,
-				Strategy:   StrategyNodeBounds,
-				SnapshotID: node.SnapshotID,
-				NodeID:     node.Node.NodeID,
-				X:          &centerX,
-				Y:          &centerY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
+	centerX, centerY := bounds.CenterX(), bounds.CenterY()
+	displayID := s.nodeDisplayID(ctx, node)
+	strategy, err := s.executeTapRouted(ctx, displayID, centerX, centerY,
+		req.AllowCoordinateFallback, req.AllowShizukuFallback, req.AllowRootFallback, req.AllowADBFallback)
+	if err != nil {
 		return InteractionResult{}, err
 	}
-
-	if s.shizuku != nil && req.AllowShizukuFallback && s.policy.AllowShizukuFallback {
-		err := s.shizuku.Tap(ctx, centerX, centerY)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationClick,
-				Strategy:   StrategyShizuku,
-				SnapshotID: node.SnapshotID,
-				NodeID:     node.Node.NodeID,
-				X:          &centerX,
-				Y:          &centerY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
-		return InteractionResult{}, err
+	if strategy == StrategyCoordinate {
+		strategy = StrategyNodeBounds
 	}
-
-	if s.root != nil && req.AllowRootFallback && s.policy.AllowRootFallback {
-		err := s.root.Tap(ctx, centerX, centerY)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationClick,
-				Strategy:   StrategyRoot,
-				SnapshotID: node.SnapshotID,
-				NodeID:     node.Node.NodeID,
-				X:          &centerX,
-				Y:          &centerY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
-		return InteractionResult{}, err
+	result := InteractionResult{Success: true, Operation: OperationClick, Strategy: strategy, SnapshotID: node.SnapshotID, NodeID: node.Node.NodeID, DisplayID: displayID, X: &centerX, Y: &centerY, DurationMS: time.Since(startTime).Milliseconds()}
+	if req.Verify {
+		s.verifyResult(ctx, &result)
 	}
-
-	if s.adb != nil && req.AllowADBFallback && s.policy.AllowADBFallback {
-		err := s.adb.Tap(ctx, centerX, centerY)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationClick,
-				Strategy:   StrategyADB,
-				SnapshotID: node.SnapshotID,
-				NodeID:     node.Node.NodeID,
-				X:          &centerX,
-				Y:          &centerY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
-		return InteractionResult{}, err
-	}
-
-	return InteractionResult{}, &Error{Code: INTERACTION_ACTION_UNSUPPORTED, Message: "no coordinate executor available"}
+	return result, nil
 }
 
 func (s *Service) clickCoordinate(
@@ -278,87 +297,16 @@ func (s *Service) clickCoordinate(
 	if !target.HasCoordinate() {
 		return InteractionResult{}, &Error{Code: INTERACTION_COORDINATE_INVALID, Message: "invalid coordinate target"}
 	}
-
-	x := *target.X
-	y := *target.Y
-
-	if s.coordinate != nil {
-		err := s.coordinate.Tap(ctx, 0, x, y)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationClick,
-				Strategy:   StrategyCoordinate,
-				X:          &x,
-				Y:          &y,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
+	x, y := *target.X, *target.Y
+	strategy, err := s.executeTapRouted(ctx, target.DisplayID, x, y, true, req.AllowShizukuFallback, req.AllowRootFallback, req.AllowADBFallback)
+	if err != nil {
 		return InteractionResult{}, err
 	}
-
-	if s.shizuku != nil && req.AllowShizukuFallback && s.policy.AllowShizukuFallback {
-		err := s.shizuku.Tap(ctx, x, y)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationClick,
-				Strategy:   StrategyShizuku,
-				X:          &x,
-				Y:          &y,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
-		return InteractionResult{}, err
+	result := InteractionResult{Success: true, Operation: OperationClick, Strategy: strategy, DisplayID: target.DisplayID, X: &x, Y: &y, DurationMS: time.Since(startTime).Milliseconds()}
+	if req.Verify {
+		s.verifyResult(ctx, &result)
 	}
-
-	if s.root != nil && req.AllowRootFallback && s.policy.AllowRootFallback {
-		err := s.root.Tap(ctx, x, y)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationClick,
-				Strategy:   StrategyRoot,
-				X:          &x,
-				Y:          &y,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
-		return InteractionResult{}, err
-	}
-
-	if s.adb != nil && req.AllowADBFallback && s.policy.AllowADBFallback {
-		err := s.adb.Tap(ctx, x, y)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationClick,
-				Strategy:   StrategyADB,
-				X:          &x,
-				Y:          &y,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
-		return InteractionResult{}, err
-	}
-
-	return InteractionResult{}, &Error{Code: INTERACTION_ACTION_UNSUPPORTED, Message: "no coordinate executor available"}
+	return result, nil
 }
 
 func (s *Service) clickVisual(
@@ -372,6 +320,7 @@ func (s *Service) clickVisual(
 	}
 
 	locateReq := VisualLocateRequest{
+		DisplayID:       0,
 		Description:     target.Description,
 		Text:            target.Text,
 		Role:            target.Role,
@@ -392,45 +341,43 @@ func (s *Service) clickVisual(
 		return InteractionResult{}, &Error{Code: INTERACTION_VISUAL_TARGET_AMBIGUOUS, Message: "visual target confidence too low"}
 	}
 
-	x := best.CenterX
-	y := best.CenterY
-
-	if s.coordinate != nil {
-		err := s.coordinate.Tap(ctx, 0, x, y)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationClick,
-				Strategy:   best.Source,
-				X:          &x,
-				Y:          &y,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
+	if validator, ok := s.visual.(VisualCandidateValidator); ok {
+		if err := validator.ValidateCandidate(ctx, best); err != nil {
+			return InteractionResult{}, err
 		}
-		return InteractionResult{}, err
 	}
 
-	return InteractionResult{}, &Error{Code: INTERACTION_ACTION_UNSUPPORTED, Message: "no coordinate executor available for visual click"}
+	x := best.CenterX
+	y := best.CenterY
+	strategy, err := s.executeTapRouted(ctx, best.DisplayID, x, y, true, req.AllowShizukuFallback, req.AllowRootFallback, req.AllowADBFallback)
+	if err != nil {
+		return InteractionResult{}, err
+	}
+	result := InteractionResult{
+		Success:                  true,
+		Operation:                OperationClick,
+		Strategy:                 best.Source + ":" + strategy,
+		DisplayID:                best.DisplayID,
+		X:                        &x,
+		Y:                        &y,
+		DurationMS:               time.Since(startTime).Milliseconds(),
+		BaselineScreenStateToken: best.ScreenStateToken,
+	}
+	if req.Verify {
+		s.verifyResult(ctx, &result)
+	}
+	return result, nil
 }
 
 func (s *Service) LongClick(ctx context.Context, req LongClickRequest) (InteractionResult, error) {
 	startTime := time.Now()
-
 	target := req.Target
-	targetType := target.EffectiveTargetType()
-
-	if targetType != TargetNode {
+	if target.EffectiveTargetType() != TargetNode {
 		return InteractionResult{}, &Error{Code: INTERACTION_INVALID_REQUEST, Message: "long click currently only supports node target"}
 	}
-
 	if s.nodeResolver == nil {
 		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node resolver not available"}
 	}
-
 	node, err := s.nodeResolver.ResolveNode(ctx, target.SnapshotID, target.NodeID)
 	if err != nil {
 		if treeErr, ok := err.(*uitree.Error); ok && treeErr.Code == uitree.UI_NODE_STALE {
@@ -438,7 +385,6 @@ func (s *Service) LongClick(ctx context.Context, req LongClickRequest) (Interact
 		}
 		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found"}
 	}
-
 	durationMS := req.DurationMS
 	if durationMS <= 0 {
 		durationMS = DefaultLongPressDurationMS
@@ -449,95 +395,52 @@ func (s *Service) LongClick(ctx context.Context, req LongClickRequest) (Interact
 	if durationMS > MaxLongPressDurationMS {
 		durationMS = MaxLongPressDurationMS
 	}
-
+	bounds := node.Node.Bounds
+	displayID := s.nodeDisplayID(ctx, node)
+	centerX, centerY := bounds.CenterX(), bounds.CenterY()
+	candidates := make([]providerRouteCandidate, 0, 5)
 	if s.accessibility != nil && s.accessibility.SupportsAction(node, NodeActionLongClick) {
-		err := s.accessibility.PerformNodeAction(ctx, node, NodeActionLongClick, map[string]any{
-			"durationMs": durationMS,
-		})
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationLongClick,
-				Strategy:   StrategyAccessibilityAction,
-				SnapshotID: target.SnapshotID,
-				NodeID:     target.NodeID,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
+		candidates = append(candidates, providerRouteCandidate{name: "accessibility", strategy: StrategyAccessibilityAction, provider: s.accessibility, baseScore: 120, execute: func() error {
+			return s.accessibility.PerformNodeAction(ctx, node, NodeActionLongClick, map[string]any{"durationMs": durationMS})
+		}})
 	}
-
-	if req.AllowCoordinateFallback && s.coordinate != nil {
-		bounds := node.Node.Bounds
-		centerX := bounds.CenterX()
-		centerY := bounds.CenterY()
-		duration := time.Duration(durationMS) * time.Millisecond
-
-		err := s.coordinate.LongPress(ctx, 0, centerX, centerY, duration)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationLongClick,
-				Strategy:   StrategyNodeBounds,
-				SnapshotID: target.SnapshotID,
-				NodeID:     target.NodeID,
-				X:          &centerX,
-				Y:          &centerY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
+	if req.AllowCoordinateFallback && bounds.Width() > 0 && bounds.Height() > 0 && s.coordinate != nil {
+		candidates = append(candidates, providerRouteCandidate{name: "accessibility_gesture", strategy: StrategyNodeBounds, provider: s.coordinate, baseScore: 100, execute: func() error {
+			return s.coordinate.LongPress(ctx, displayID, centerX, centerY, time.Duration(durationMS)*time.Millisecond)
+		}})
+	}
+	if displayID == 0 && req.AllowShizukuFallback && s.policy.AllowShizukuFallback && s.shizuku != nil {
+		candidates = append(candidates, providerRouteCandidate{name: "shizuku", strategy: StrategyShizuku, provider: s.shizuku, baseScore: 95, execute: func() error { return s.shizuku.LongPress(ctx, centerX, centerY, durationMS) }})
+	}
+	if displayID == 0 && req.AllowRootFallback && s.policy.AllowRootFallback && s.root != nil {
+		candidates = append(candidates, providerRouteCandidate{name: "root", strategy: StrategyRoot, provider: s.root, baseScore: 90, execute: func() error { return s.root.Swipe(ctx, centerX, centerY, centerX, centerY, durationMS) }})
+	}
+	if displayID == 0 && req.AllowADBFallback && s.policy.AllowADBFallback && s.adb != nil {
+		candidates = append(candidates, providerRouteCandidate{name: "adb", strategy: StrategyADB, provider: s.adb, baseScore: 80, execute: func() error { return s.adb.Swipe(ctx, centerX, centerY, centerX, centerY, durationMS) }})
+	}
+	strategy, err := s.executeRankedProvider(ctx, candidates)
+	if err != nil {
 		return InteractionResult{}, err
 	}
-
-	if s.shizuku != nil && req.AllowShizukuFallback && s.policy.AllowShizukuFallback {
-		bounds := node.Node.Bounds
-		centerX := bounds.CenterX()
-		centerY := bounds.CenterY()
-
-		err := s.shizuku.LongPress(ctx, centerX, centerY, durationMS)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationLongClick,
-				Strategy:   StrategyShizuku,
-				SnapshotID: target.SnapshotID,
-				NodeID:     target.NodeID,
-				X:          &centerX,
-				Y:          &centerY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
-		return InteractionResult{}, err
+	result := InteractionResult{Success: true, Operation: OperationLongClick, Strategy: strategy, SnapshotID: target.SnapshotID, NodeID: target.NodeID, DisplayID: displayID, DurationMS: time.Since(startTime).Milliseconds()}
+	if strategy != StrategyAccessibilityAction {
+		result.X, result.Y = &centerX, &centerY
 	}
-
-	return InteractionResult{}, &Error{Code: INTERACTION_ACTION_UNSUPPORTED, Message: "long click not supported"}
+	if req.Verify {
+		s.verifyResult(ctx, &result)
+	}
+	return result, nil
 }
 
 func (s *Service) InputText(ctx context.Context, req InputTextRequest) (InteractionResult, error) {
 	startTime := time.Now()
-
 	target := req.Target
-	targetType := target.EffectiveTargetType()
-
-	if targetType != TargetNode {
+	if target.EffectiveTargetType() != TargetNode {
 		return InteractionResult{}, &Error{Code: INTERACTION_INVALID_REQUEST, Message: "input text currently only supports node target"}
 	}
-
 	if s.nodeResolver == nil {
 		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node resolver not available"}
 	}
-
 	node, err := s.nodeResolver.ResolveNode(ctx, target.SnapshotID, target.NodeID)
 	if err != nil {
 		if treeErr, ok := err.(*uitree.Error); ok && treeErr.Code == uitree.UI_NODE_STALE {
@@ -545,77 +448,40 @@ func (s *Service) InputText(ctx context.Context, req InputTextRequest) (Interact
 		}
 		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found"}
 	}
-
 	if node.Node.Password {
 		return InteractionResult{}, &Error{Code: INTERACTION_SENSITIVE_INPUT_DENIED, Message: "password field input denied"}
 	}
-
 	if !node.Node.Editable {
 		return InteractionResult{}, &Error{Code: INTERACTION_TEXT_INPUT_UNSUPPORTED, Message: "node is not editable"}
 	}
-
 	if len([]rune(req.Text)) > MaxInputTextRunes {
 		return InteractionResult{}, &Error{Code: INTERACTION_INVALID_REQUEST, Message: "text too large"}
 	}
 
+	candidates := make([]providerRouteCandidate, 0, 4)
 	if s.accessibility != nil {
-		err := s.accessibility.PerformNodeAction(ctx, node, NodeActionSetText, map[string]any{
-			"text": req.Text,
-		})
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationInputText,
-				Strategy:   StrategyAccessibilityAction,
-				SnapshotID: target.SnapshotID,
-				NodeID:     target.NodeID,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
+		candidates = append(candidates, providerRouteCandidate{name: "accessibility", strategy: StrategyAccessibilityAction, provider: s.accessibility, baseScore: 120, execute: func() error {
+			return s.accessibility.PerformNodeAction(ctx, node, NodeActionSetText, map[string]any{"text": req.Text})
+		}})
 	}
-
-	if s.shizuku != nil && s.policy.AllowShizukuFallback {
-		err := s.shizuku.InputText(ctx, req.Text)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationInputText,
-				Strategy:   StrategyShizuku,
-				SnapshotID: target.SnapshotID,
-				NodeID:     target.NodeID,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
+	if s.policy.AllowShizukuFallback && s.shizuku != nil {
+		candidates = append(candidates, providerRouteCandidate{name: "shizuku", strategy: StrategyShizuku, provider: s.shizuku, baseScore: 100, execute: func() error { return s.shizuku.InputText(ctx, req.Text) }})
 	}
-
-	if req.AllowADBFallback && s.adb != nil && s.policy.AllowADBFallback {
-		err := s.adb.InputText(ctx, req.Text)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationInputText,
-				Strategy:   StrategyADB,
-				SnapshotID: target.SnapshotID,
-				NodeID:     target.NodeID,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
+	if s.policy.AllowRootFallback && s.root != nil {
+		candidates = append(candidates, providerRouteCandidate{name: "root", strategy: StrategyRoot, provider: s.root, baseScore: 90, execute: func() error { return s.root.InputText(ctx, req.Text) }})
+	}
+	if req.AllowADBFallback && s.policy.AllowADBFallback && s.adb != nil {
+		candidates = append(candidates, providerRouteCandidate{name: "adb", strategy: StrategyADB, provider: s.adb, baseScore: 80, execute: func() error { return s.adb.InputText(ctx, req.Text) }})
+	}
+	strategy, err := s.executeRankedProvider(ctx, candidates)
+	if err != nil {
 		return InteractionResult{}, err
 	}
-
-	return InteractionResult{}, &Error{Code: INTERACTION_TEXT_INPUT_UNSUPPORTED, Message: "text input not supported"}
+	result := InteractionResult{Success: true, Operation: OperationInputText, Strategy: strategy, SnapshotID: target.SnapshotID, NodeID: target.NodeID, DurationMS: time.Since(startTime).Milliseconds()}
+	if req.Verify {
+		s.verifyResult(ctx, &result)
+	}
+	return result, nil
 }
 
 func (s *Service) ClearText(ctx context.Context, req ClearTextRequest) (InteractionResult, error) {
@@ -656,7 +522,7 @@ func (s *Service) ClearText(ctx context.Context, req ClearTextRequest) (Interact
 				DurationMS: time.Since(startTime).Milliseconds(),
 			}
 			if req.Verify {
-				s.verifyResult(ctx, result)
+				s.verifyResult(ctx, &result)
 			}
 			return result, nil
 		}
@@ -667,18 +533,13 @@ func (s *Service) ClearText(ctx context.Context, req ClearTextRequest) (Interact
 
 func (s *Service) Scroll(ctx context.Context, req ScrollRequest) (InteractionResult, error) {
 	startTime := time.Now()
-
 	target := req.Target
-	targetType := target.EffectiveTargetType()
-
-	if targetType != TargetNode {
+	if target.EffectiveTargetType() != TargetNode {
 		return InteractionResult{}, &Error{Code: INTERACTION_INVALID_REQUEST, Message: "scroll currently only supports node target"}
 	}
-
 	if s.nodeResolver == nil {
 		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node resolver not available"}
 	}
-
 	node, err := s.nodeResolver.ResolveNode(ctx, target.SnapshotID, target.NodeID)
 	if err != nil {
 		if treeErr, ok := err.(*uitree.Error); ok && treeErr.Code == uitree.UI_NODE_STALE {
@@ -686,159 +547,64 @@ func (s *Service) Scroll(ctx context.Context, req ScrollRequest) (InteractionRes
 		}
 		return InteractionResult{}, &Error{Code: INTERACTION_NODE_NOT_FOUND, Message: "node not found"}
 	}
-
-	var action string
+	action := NodeActionScrollForward
 	switch req.Direction {
-	case DirectionForward, DirectionDown, DirectionRight:
-		action = NodeActionScrollForward
 	case DirectionBackward, DirectionUp, DirectionLeft:
 		action = NodeActionScrollBackward
-	default:
-		action = NodeActionScrollForward
 	}
-
-	if s.accessibility != nil && s.accessibility.SupportsAction(node, action) {
-		err := s.accessibility.PerformNodeAction(ctx, node, action, nil)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationScroll,
-				Strategy:   StrategyAccessibilityAction,
-				SnapshotID: target.SnapshotID,
-				NodeID:     target.NodeID,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
-		}
-	}
-
 	bounds := node.Node.Bounds
-	if bounds.Width() > 0 && bounds.Height() > 0 && s.coordinate != nil {
-		startX := bounds.CenterX()
-		startY := bounds.CenterY()
-		endX := startX
-		endY := startY
-
+	displayID := s.nodeDisplayID(ctx, node)
+	startX, startY, endX, endY := bounds.CenterX(), bounds.CenterY(), bounds.CenterX(), bounds.CenterY()
+	if bounds.Width() > 0 && bounds.Height() > 0 {
 		switch req.Direction {
 		case DirectionForward, DirectionDown:
-			startY = bounds.Bottom - 10
-			endY = bounds.Top + 10
+			startY, endY = bounds.Bottom-10, bounds.Top+10
 		case DirectionBackward, DirectionUp:
-			startY = bounds.Top + 10
-			endY = bounds.Bottom - 10
+			startY, endY = bounds.Top+10, bounds.Bottom-10
 		case DirectionRight:
-			startX = bounds.Right - 10
-			endX = bounds.Left + 10
+			startX, endX = bounds.Right-10, bounds.Left+10
 		case DirectionLeft:
-			startX = bounds.Left + 10
-			endX = bounds.Right - 10
+			startX, endX = bounds.Left+10, bounds.Right-10
 		}
-
-		err := s.coordinate.Swipe(ctx, SwipeRequest{
-			DisplayID:  0,
-			StartX:     startX,
-			StartY:     startY,
-			EndX:       endX,
-			EndY:       endY,
-			DurationMS: DefaultSwipeDurationMS,
-		})
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationScroll,
-				Strategy:   StrategyNodeBounds,
-				SnapshotID: target.SnapshotID,
-				NodeID:     target.NodeID,
-				X:          &startX,
-				Y:          &startY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
+	}
+	candidates := make([]providerRouteCandidate, 0, 5)
+	if s.accessibility != nil && s.accessibility.SupportsAction(node, action) {
+		candidates = append(candidates, providerRouteCandidate{name: "accessibility", strategy: StrategyAccessibilityAction, provider: s.accessibility, baseScore: 120, execute: func() error { return s.accessibility.PerformNodeAction(ctx, node, action, nil) }})
+	}
+	if bounds.Width() > 0 && bounds.Height() > 0 && s.coordinate != nil {
+		swipe := SwipeRequest{DisplayID: displayID, StartX: startX, StartY: startY, EndX: endX, EndY: endY, DurationMS: DefaultSwipeDurationMS}
+		candidates = append(candidates, providerRouteCandidate{name: "accessibility_gesture", strategy: StrategyNodeBounds, provider: s.coordinate, baseScore: 100, execute: func() error { return s.coordinate.Swipe(ctx, swipe) }})
+		if displayID == 0 && s.policy.AllowShizukuFallback && s.shizuku != nil {
+			candidates = append(candidates, providerRouteCandidate{name: "shizuku", strategy: StrategyShizuku, provider: s.shizuku, baseScore: 95, execute: func() error { return s.shizuku.Swipe(ctx, startX, startY, endX, endY, DefaultSwipeDurationMS) }})
 		}
+		if displayID == 0 && s.policy.AllowRootFallback && s.root != nil {
+			candidates = append(candidates, providerRouteCandidate{name: "root", strategy: StrategyRoot, provider: s.root, baseScore: 90, execute: func() error { return s.root.Swipe(ctx, startX, startY, endX, endY, DefaultSwipeDurationMS) }})
+		}
+		if displayID == 0 && s.policy.AllowADBFallback && s.adb != nil {
+			candidates = append(candidates, providerRouteCandidate{name: "adb", strategy: StrategyADB, provider: s.adb, baseScore: 80, execute: func() error { return s.adb.Swipe(ctx, startX, startY, endX, endY, DefaultSwipeDurationMS) }})
+		}
+	}
+	strategy, err := s.executeRankedProvider(ctx, candidates)
+	if err != nil {
 		return InteractionResult{}, err
 	}
-
-	return InteractionResult{}, &Error{Code: INTERACTION_ACTION_UNSUPPORTED, Message: "scroll not supported"}
+	result := InteractionResult{Success: true, Operation: OperationScroll, Strategy: strategy, SnapshotID: target.SnapshotID, NodeID: target.NodeID, DisplayID: displayID, DurationMS: time.Since(startTime).Milliseconds()}
+	if strategy != StrategyAccessibilityAction {
+		result.X, result.Y = &startX, &startY
+	}
+	if req.Verify {
+		s.verifyResult(ctx, &result)
+	}
+	return result, nil
 }
 
 func (s *Service) Swipe(ctx context.Context, req SwipeRequest) (InteractionResult, error) {
 	startTime := time.Now()
-
-	if s.coordinate != nil {
-		err := s.coordinate.Swipe(ctx, req)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationSwipe,
-				Strategy:   StrategyCoordinate,
-				DisplayID:  req.DisplayID,
-				X:          &req.StartX,
-				Y:          &req.StartY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			return result, nil
-		}
+	strategy, err := s.executeSwipeRouted(ctx, req, true, true, true, true)
+	if err != nil {
 		return InteractionResult{}, err
 	}
-
-	if s.shizuku != nil && s.policy.AllowShizukuFallback {
-		err := s.shizuku.Swipe(ctx, req.StartX, req.StartY, req.EndX, req.EndY, req.DurationMS)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationSwipe,
-				Strategy:   StrategyShizuku,
-				DisplayID:  req.DisplayID,
-				X:          &req.StartX,
-				Y:          &req.StartY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			return result, nil
-		}
-		return InteractionResult{}, err
-	}
-
-	if s.root != nil && s.policy.AllowRootFallback {
-		err := s.root.Swipe(ctx, req.StartX, req.StartY, req.EndX, req.EndY, req.DurationMS)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationSwipe,
-				Strategy:   StrategyRoot,
-				DisplayID:  req.DisplayID,
-				X:          &req.StartX,
-				Y:          &req.StartY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			return result, nil
-		}
-		return InteractionResult{}, err
-	}
-
-	if s.adb != nil && s.policy.AllowADBFallback {
-		err := s.adb.Swipe(ctx, req.StartX, req.StartY, req.EndX, req.EndY, req.DurationMS)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationSwipe,
-				Strategy:   StrategyADB,
-				DisplayID:  req.DisplayID,
-				X:          &req.StartX,
-				Y:          &req.StartY,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			return result, nil
-		}
-		return InteractionResult{}, err
-	}
-
-	return InteractionResult{}, &Error{Code: INTERACTION_ACTION_UNSUPPORTED, Message: "swipe not supported"}
+	return InteractionResult{Success: true, Operation: OperationSwipe, Strategy: strategy, DisplayID: req.DisplayID, X: &req.StartX, Y: &req.StartY, DurationMS: time.Since(startTime).Milliseconds()}, nil
 }
 
 func (s *Service) VisualLocate(ctx context.Context, req VisualLocateRequest) ([]VisualCandidate, error) {
@@ -857,11 +623,13 @@ func (s *Service) VisualClick(ctx context.Context, req VisualClickRequest) (Inte
 	}
 
 	locateReq := VisualLocateRequest{
+		DisplayID:       req.DisplayID,
 		Description:     req.Description,
 		Text:            req.Text,
 		Role:            req.Role,
 		ExpectedPackage: req.ExpectedPackage,
 		OCRFirst:        req.OCRFirst,
+		TextMatchMode:   req.TextMatchMode,
 	}
 
 	candidates, err := s.visual.Locate(ctx, locateReq)
@@ -875,8 +643,8 @@ func (s *Service) VisualClick(ctx context.Context, req VisualClickRequest) (Inte
 
 	best := candidates[0]
 
-	if len(candidates) > 1 && len(candidates) >= 2 {
-		if candidates[1].Confidence-best.Confidence < 0.1 {
+	if len(candidates) >= 2 {
+		if best.Confidence-candidates[1].Confidence < 0.1 {
 			return InteractionResult{}, &Error{Code: INTERACTION_VISUAL_TARGET_AMBIGUOUS, Message: "visual target is ambiguous"}
 		}
 	}
@@ -885,43 +653,62 @@ func (s *Service) VisualClick(ctx context.Context, req VisualClickRequest) (Inte
 		return InteractionResult{}, &Error{Code: INTERACTION_VISUAL_TARGET_AMBIGUOUS, Message: "visual target confidence too low"}
 	}
 
-	x := best.CenterX
-	y := best.CenterY
-
-	if s.coordinate != nil {
-		err := s.coordinate.Tap(ctx, 0, x, y)
-		if err == nil {
-			result := InteractionResult{
-				Success:    true,
-				Operation:  OperationVisualClick,
-				Strategy:   best.Source,
-				X:          &x,
-				Y:          &y,
-				DurationMS: time.Since(startTime).Milliseconds(),
-			}
-			if req.Verify {
-				s.verifyResult(ctx, result)
-			}
-			return result, nil
+	if validator, ok := s.visual.(VisualCandidateValidator); ok {
+		if err := validator.ValidateCandidate(ctx, best); err != nil {
+			return InteractionResult{}, err
 		}
-		return InteractionResult{}, err
 	}
 
-	return InteractionResult{}, &Error{Code: INTERACTION_ACTION_UNSUPPORTED, Message: "no coordinate executor available for visual click"}
+	x := best.CenterX
+	y := best.CenterY
+	strategy, err := s.executeTapRouted(ctx, best.DisplayID, x, y, true, true, true, true)
+	if err != nil {
+		return InteractionResult{}, err
+	}
+	result := InteractionResult{
+		Success:                  true,
+		Operation:                OperationVisualClick,
+		Strategy:                 best.Source + ":" + strategy,
+		DisplayID:                best.DisplayID,
+		X:                        &x,
+		Y:                        &y,
+		DurationMS:               time.Since(startTime).Milliseconds(),
+		BaselineScreenStateToken: best.ScreenStateToken,
+	}
+	if req.Verify {
+		s.verifyResult(ctx, &result)
+	}
+	return result, nil
 }
 
-func (s *Service) verifyResult(ctx context.Context, result InteractionResult) {
+func (s *Service) nodeDisplayID(ctx context.Context, node ResolvedUINode) int {
+	if s.snapshotResolver == nil || node.SnapshotID == "" || node.Node.WindowID == "" {
+		return 0
+	}
+	snapshot, err := s.snapshotResolver.GetSnapshot(ctx, node.SnapshotID)
+	if err != nil {
+		return 0
+	}
+	for _, window := range snapshot.Windows {
+		if window.WindowID == node.Node.WindowID {
+			return window.DisplayID
+		}
+	}
+	return 0
+}
+
+func (s *Service) verifyResult(ctx context.Context, result *InteractionResult) {
 	if s.verifier == nil {
 		return
 	}
 
 	before := InteractionContext{
-		ExpectedPackage: "",
+		ExpectedPackage:  "",
 		ExpectedWindowID: result.SnapshotID,
-		Timestamp:       time.Now().Add(-time.Duration(result.DurationMS) * time.Millisecond),
+		Timestamp:        time.Now().Add(-time.Duration(result.DurationMS) * time.Millisecond),
 	}
 
-	verifyResult, err := s.verifier.Verify(ctx, before, result)
+	verifyResult, err := s.verifier.Verify(ctx, before, *result)
 	if err == nil {
 		result.Verified = verifyResult.Verified
 		result.Verification = verifyResult.Method

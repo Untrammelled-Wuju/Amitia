@@ -126,3 +126,35 @@ func (e *ADBExecutor) InputText(
 func formatDuration(ms int) string {
 	return fmt.Sprintf("%dms", ms)
 }
+
+type adbStatusProvider interface {
+	Status(ctx context.Context) adb.ADBStatus
+}
+
+func (e *ADBExecutor) ProbeHealth(ctx context.Context) ProviderCapabilityHealth {
+	if e == nil || e.executor == nil {
+		return newProviderHealth("adb", ProviderStateUnavailable, "adb executor not available", "", true)
+	}
+	if !e.policy.AllowADBFallback {
+		return newProviderHealth("adb", ProviderStateUnavailable, "disabled by interaction policy", "", false)
+	}
+	probe, ok := e.executor.(adbStatusProvider)
+	if !ok {
+		return newProviderHealth("adb", ProviderStateSupported, "status probe not exposed by executor", "", true)
+	}
+	status := probe.Status(ctx)
+	switch status.State {
+	case adb.BackendReady:
+		return newProviderHealth("adb", ProviderStateReady, "", "authorized_device", true)
+	case adb.BackendUnauthorized:
+		return newProviderHealth("adb", ProviderStatePermissionRequired, "adb device authorization required", "adb_authorization", true)
+	case adb.BackendNoServer:
+		return newProviderHealth("adb", ProviderStateStarting, "adb server is not available", "", true)
+	case adb.BackendOffline, adb.BackendAmbiguous:
+		return newProviderHealth("adb", ProviderStateDegraded, status.State, "", true)
+	case adb.BackendNoDevice:
+		return newProviderHealth("adb", ProviderStateUnavailable, "no adb device connected", "", true)
+	default:
+		return newProviderHealth("adb", ProviderStateUnavailable, status.State, "", true)
+	}
+}

@@ -27,9 +27,10 @@ type WorkflowLimits struct {
 }
 
 type WorkflowStepInput struct {
-	Input   json.RawMessage  `json:"input"`
-	When    *json.RawMessage `json:"when,omitempty"`
-	OnError WorkflowOnError  `json:"onError,omitempty"`
+	Input         json.RawMessage  `json:"input"`
+	When          *json.RawMessage `json:"when,omitempty"`
+	Postcondition *json.RawMessage `json:"postcondition,omitempty"`
+	OnError       WorkflowOnError  `json:"onError,omitempty"`
 }
 
 // WorkflowNodeRetryPolicy is the editor-facing retry policy. Durations are
@@ -82,44 +83,63 @@ type WorkflowAgentToolConfig struct {
 	Description string `json:"description,omitempty"`
 }
 
-type WorkflowNode struct {
-	ID              string                    `json:"id"`
-	Type            string                    `json:"type"`
-	DependsOn       []string                  `json:"dependsOn,omitempty"`
+// WorkflowCompensationDefinition declares the reverse action for a successful
+// side-effecting node. Action is a convenience alias for a tool target; callers
+// can use the full Type/TargetID/Runtime form for non-tool compensation.
+type WorkflowCompensationDefinition struct {
+	Action          string                    `json:"action,omitempty"`
+	Type            string                    `json:"type,omitempty"`
 	TargetID        string                    `json:"targetId,omitempty"`
 	Runtime         capability.RuntimeBinding `json:"runtime,omitempty"`
 	ExecutionTarget WorkflowExecutionTarget   `json:"executionTarget,omitempty"`
 	Permissions     []string                  `json:"permissions,omitempty"`
 	Scope           string                    `json:"scope,omitempty"`
-	Position        WorkflowPosition          `json:"position,omitempty"`
-	Label           string                    `json:"label,omitempty"`
+	Input           json.RawMessage           `json:"input,omitempty"`
 	TimeoutMS       int64                     `json:"timeoutMs,omitempty"`
 	Retry           *WorkflowNodeRetryPolicy  `json:"retry,omitempty"`
-	Step            WorkflowStepInput         `json:"step"`
+}
+
+type WorkflowNode struct {
+	ID                   string                          `json:"id"`
+	Type                 string                          `json:"type"`
+	DependsOn            []string                        `json:"dependsOn,omitempty"`
+	TargetID             string                          `json:"targetId,omitempty"`
+	Runtime              capability.RuntimeBinding       `json:"runtime,omitempty"`
+	ExecutionTarget      WorkflowExecutionTarget         `json:"executionTarget,omitempty"`
+	Permissions          []string                        `json:"permissions,omitempty"`
+	RequiredCapabilities []string                        `json:"requiredCapabilities,omitempty"`
+	Scope                string                          `json:"scope,omitempty"`
+	Position             WorkflowPosition                `json:"position,omitempty"`
+	Label                string                          `json:"label,omitempty"`
+	TimeoutMS            int64                           `json:"timeoutMs,omitempty"`
+	Retry                *WorkflowNodeRetryPolicy        `json:"retry,omitempty"`
+	Compensation         *WorkflowCompensationDefinition `json:"compensation,omitempty"`
+	Step                 WorkflowStepInput               `json:"step"`
 }
 
 type WorkflowDefinition struct {
-	SchemaVersion   string                      `json:"schemaVersion"`
-	ID              string                      `json:"id"`
-	ExtensionID     string                      `json:"extensionId,omitempty"`
-	ModuleID        string                      `json:"moduleId,omitempty"`
-	Name            string                      `json:"name"`
-	Description     string                      `json:"description"`
-	InputSchema     json.RawMessage             `json:"inputSchema"`
-	OutputSchema    json.RawMessage             `json:"outputSchema"`
-	Nodes           []WorkflowNode              `json:"nodes"`
-	Edges           []WorkflowEdge              `json:"edges,omitempty"`
-	Triggers        []WorkflowTriggerDefinition `json:"triggers,omitempty"`
-	Permissions     []string                    `json:"permissions,omitempty"`
-	Scope           string                      `json:"scope,omitempty"`
-	CallableByAgent bool                        `json:"callableByAgent"`
-	AgentTool       WorkflowAgentToolConfig     `json:"agentTool,omitempty"`
-	Enabled         bool                        `json:"enabled"`
-	HasSideEffects  bool                        `json:"hasSideEffects,omitempty"`
-	Idempotent      bool                        `json:"idempotent,omitempty"`
-	Limits          WorkflowLimits              `json:"limits,omitempty"`
-	Version         string                      `json:"version,omitempty"`
-	Source          string                      `json:"source,omitempty"`
-	Metadata        map[string]any              `json:"metadata,omitempty"`
-	DefinitionHash  string                      `json:"definitionHash,omitempty"`
+	SchemaVersion     string                      `json:"schemaVersion"`
+	ID                string                      `json:"id"`
+	ExtensionID       string                      `json:"extensionId,omitempty"`
+	ModuleID          string                      `json:"moduleId,omitempty"`
+	Name              string                      `json:"name"`
+	Description       string                      `json:"description"`
+	InputSchema       json.RawMessage             `json:"inputSchema"`
+	OutputSchema      json.RawMessage             `json:"outputSchema"`
+	Nodes             []WorkflowNode              `json:"nodes"`
+	Edges             []WorkflowEdge              `json:"edges,omitempty"`
+	Triggers          []WorkflowTriggerDefinition `json:"triggers,omitempty"`
+	Permissions       []string                    `json:"permissions,omitempty"`
+	Scope             string                      `json:"scope,omitempty"`
+	CallableByAgent   bool                        `json:"callableByAgent"`
+	AgentTool         WorkflowAgentToolConfig     `json:"agentTool,omitempty"`
+	Enabled           bool                        `json:"enabled"`
+	HasSideEffects    bool                        `json:"hasSideEffects,omitempty"`
+	Idempotent        bool                        `json:"idempotent,omitempty"`
+	Limits            WorkflowLimits              `json:"limits,omitempty"`
+	ConcurrencyPolicy WorkflowConcurrencyPolicy   `json:"concurrencyPolicy,omitempty"`
+	Version           string                      `json:"version,omitempty"`
+	Source            string                      `json:"source,omitempty"`
+	Metadata          map[string]any              `json:"metadata,omitempty"`
+	DefinitionHash    string                      `json:"definitionHash,omitempty"`
 }

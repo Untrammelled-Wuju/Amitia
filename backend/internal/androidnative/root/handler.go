@@ -3,6 +3,7 @@ package root
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/androidnative"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -238,6 +239,24 @@ func (h *RootHandler) handleExecute(ctx context.Context, request capability.Andr
 	}
 
 	return mapNativeBridgeResponse(resp, request.RequestID)
+}
+
+func (h *RootHandler) Status(ctx context.Context) (map[string]any, error) {
+	if h == nil || h.bridge == nil {
+		return nil, fmt.Errorf("android native bridge is not available")
+	}
+	resp, err := h.bridge.Execute(ctx, androidnative.NativeBridgeRequest{
+		ProtocolVersion: androidBridgeProtocolVersion,
+		Operation:       OperationStatus,
+		Payload:         map[string]any{},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, fmt.Errorf("%s: %s", resp.Error.Code, resp.Error.Message)
+	}
+	return resp.Result, nil
 }
 
 func (h *RootHandler) InternalExecutor() InternalRootExecutor {

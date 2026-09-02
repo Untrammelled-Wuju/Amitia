@@ -13,6 +13,7 @@ const (
 	OperationStatus  = "virtual_display.status"
 	OperationCreate  = "virtual_display.create"
 	OperationGet     = "virtual_display.get"
+	OperationList    = "virtual_display.list"
 	OperationResize  = "virtual_display.resize"
 	OperationRelease = "virtual_display.release"
 )
@@ -54,6 +55,8 @@ func (h *Handler) Execute(ctx context.Context, request capability.AndroidBridgeR
 		return h.handleCreate(ctx, request)
 	case OperationGet:
 		return h.handleGet(ctx, request)
+	case OperationList:
+		return h.handleList(ctx, request)
 	case OperationResize:
 		return h.handleResize(ctx, request)
 	case OperationRelease:
@@ -81,17 +84,19 @@ func (h *Handler) handleStatus(ctx context.Context, request capability.AndroidBr
 		RequestID:       request.RequestID,
 		Status:          "success",
 		Result: map[string]any{
-			"supported":           result.Supported,
-			"featureSecondaryDisplays": result.FeatureSecondaryDisplays,
-			"canCreate":           result.CanCreate,
-			"active":              result.Active,
-			"display":             result.Display,
-			"frameSourceSupported": result.FrameSourceSupported,
-			"uiTreeSupported":     result.UITreeSupported,
-			"gestureSupported":    result.GestureSupported,
+			"supported":                 result.Supported,
+			"featureSecondaryDisplays":  result.FeatureSecondaryDisplays,
+			"canCreate":                 result.CanCreate,
+			"active":                    result.Active,
+			"activeCount":               result.ActiveCount,
+			"display":                   result.Display,
+			"displays":                  result.Displays,
+			"frameSourceSupported":      result.FrameSourceSupported,
+			"uiTreeSupported":           result.UITreeSupported,
+			"gestureSupported":          result.GestureSupported,
 			"thirdPartyLaunchSupported": result.ThirdPartyLaunchSupported,
-			"state":               result.State,
-			"reason":              result.Reason,
+			"state":                     result.State,
+			"reason":                    result.Reason,
 		},
 	}
 }
@@ -122,11 +127,11 @@ func (h *Handler) handleCreate(ctx context.Context, request capability.AndroidBr
 		RequestID:       request.RequestID,
 		Status:          "success",
 		Result: map[string]any{
-			"display":                 result.Display,
-			"frameSourceReady":        result.FrameSourceReady,
+			"display":                   result.Display,
+			"frameSourceReady":          result.FrameSourceReady,
 			"thirdPartyLaunchSupported": result.ThirdPartyLaunchSupported,
-			"uiTreeSupported":         result.UITreeSupported,
-			"gestureSupported":        result.GestureSupported,
+			"uiTreeSupported":           result.UITreeSupported,
+			"gestureSupported":          result.GestureSupported,
 		},
 	}
 }
@@ -158,6 +163,22 @@ func (h *Handler) handleGet(ctx context.Context, request capability.AndroidBridg
 		Status:          "success",
 		Result: map[string]any{
 			"display": result,
+		},
+	}
+}
+
+func (h *Handler) handleList(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
+	if h.service == nil {
+		return errorResponse(request, ErrVirtualDisplayUnavailable, "service not initialized")
+	}
+	displays := h.service.List(ctx)
+	return capability.AndroidBridgeResponse{
+		ProtocolVersion: request.ProtocolVersion,
+		RequestID:       request.RequestID,
+		Status:          "success",
+		Result: map[string]any{
+			"displays": displays,
+			"count":    len(displays),
 		},
 	}
 }
@@ -238,40 +259,70 @@ func errorResponse(request capability.AndroidBridgeRequest, code, message string
 }
 
 func (s *Service) Status(ctx context.Context) StatusResult {
-	rec := s.store.Get()
-	if rec == nil {
-		return StatusResult{
-			Supported:           true,
-			FeatureSecondaryDisplays: true,
-			CanCreate:           true,
-			Active:              false,
-			FrameSourceSupported: true,
-			UITreeSupported:      true,
-			GestureSupported:    true,
-			ThirdPartyLaunchSupported: true,
-			State:               "none",
-			Reason:              "no active virtual display",
+	result := StatusResult{
+		Supported:                 s.bridge != nil,
+		FeatureSecondaryDisplays:  s.bridge != nil,
+		CanCreate:                 s.bridge != nil,
+		FrameSourceSupported:      s.bridge != nil,
+		UITreeSupported:           s.bridge != nil,
+		GestureSupported:          s.bridge != nil,
+		ThirdPartyLaunchSupported: s.bridge != nil,
+		State:                     "unavailable",
+		Reason:                    "native bridge not configured",
+	}
+	if s.bridge == nil {
+		return result
+	}
+
+	if native, err := s.bridge.Execute(ctx, OperationStatus, map[string]any{}); err == nil {
+		if supported, ok := native["supported"].(bool); ok {
+			result.Supported = supported
+		}
+		if canCreate, ok := native["canCreate"].(bool); ok {
+			result.CanCreate = canCreate
+		}
+		if state, ok := native["state"].(string); ok && state != "" {
+			result.State = state
+		}
+		if reason, ok := native["reason"].(string); ok {
+			result.Reason = reason
+		} else {
+			result.Reason = ""
+		}
+	} else if err != nil {
+		result.State = "failed"
+		result.Reason = err.Error()
+		result.CanCreate = false
+	}
+
+	result.Displays = s.List(ctx)
+	result.ActiveCount = len(result.Displays)
+	result.Active = result.ActiveCount > 0
+	if result.Active {
+		latest := s.store.Get()
+		if latest != nil {
+			info := recordToInfo(latest)
+			result.Display = &info
+		}
+		if result.State == "unavailable" || result.State == "none" {
+			result.State = "ready"
 		}
 	}
-	info := recordToInfo(rec)
-	return StatusResult{
-		Supported:           true,
-		FeatureSecondaryDisplays: true,
-		CanCreate:           false,
-		Active:              true,
-		Display:             &info,
-		FrameSourceSupported: true,
-		UITreeSupported:      true,
-		GestureSupported:    true,
-		ThirdPartyLaunchSupported: true,
-		State:               string(rec.State),
-		Reason:              "",
+	return result
+}
+
+func (s *Service) List(ctx context.Context) []VirtualDisplayInfo {
+	records := s.store.List()
+	out := make([]VirtualDisplayInfo, 0, len(records))
+	for i := range records {
+		out = append(out, recordToInfo(&records[i]))
 	}
+	return out
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*CreateResult, error) {
-	if s.store.HasActive() {
-		return nil, NewError(ErrVirtualDisplayAlreadyExists, "virtual display already exists")
+	if s.bridge == nil {
+		return nil, NewError(ErrVirtualDisplayUnavailable, "native bridge not configured; refusing to fabricate a display ID")
 	}
 	p := s.policy
 	if req.Width == 0 {
@@ -293,157 +344,156 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*CreateResult,
 		return nil, err
 	}
 	bridgeReq := map[string]any{
-		"width":      req.Width,
-		"height":     req.Height,
-		"densityDpi": req.DensityDPI,
+		"name":        "amitia_virtual",
+		"width":       req.Width,
+		"height":      req.Height,
+		"densityDpi":  req.DensityDPI,
 		"refreshRate": req.RefreshRate,
-		"flags": int64(0x00000001 | 0x00000004),
 	}
-	if s.bridge != nil {
-		result, err := s.bridge.Execute(ctx, "create_virtual_display", bridgeReq)
-		if err != nil {
-			return nil, err
-		}
-		displayID, _ := result["displayId"].(float64)
-		rec := &VirtualDisplayRecord{
-			DisplayID:  int(displayID),
-			Name:       "amitia_virtual",
-			Width:      req.Width,
-			Height:     req.Height,
-			DensityDPI: req.DensityDPI,
-			RefreshRate: req.RefreshRate,
-			State:      StateReady,
-			CreatedAt:  time.Now(),
-		}
-		s.store.Insert(rec)
-		info := recordToInfo(rec)
-		return &CreateResult{
-			Display:        info,
-			FrameSourceReady: true,
-			ThirdPartyLaunchSupported: true,
-			UITreeSupported:      true,
-			GestureSupported:     true,
-		}, nil
+	result, err := s.bridge.Execute(ctx, OperationCreate, bridgeReq)
+	if err != nil {
+		return nil, err
+	}
+	displayID := numberAsInt(result["displayId"])
+	if displayID < 0 {
+		return nil, NewError(ErrVirtualDisplayCreate, "native layer did not return a real display ID")
 	}
 	rec := &VirtualDisplayRecord{
-		DisplayID:  9999,
-		Name:       "amitia_virtual",
-		Width:      req.Width,
-		Height:     req.Height,
-		DensityDPI: req.DensityDPI,
-		State:      StateReady,
-		CreatedAt:  time.Now(),
+		DisplayID:       displayID,
+		Name:            stringValue(result["name"], "amitia_virtual"),
+		Width:           positiveInt(result["width"], req.Width),
+		Height:          positiveInt(result["height"], req.Height),
+		DensityDPI:      positiveInt(result["densityDpi"], req.DensityDPI),
+		RefreshRate:     req.RefreshRate,
+		SurfaceAttached: boolValue(result["surfaceAttached"], true),
+		State:           StateReady,
+		CreatedAt:       time.Now(),
 	}
-	s.store.Insert(rec)
-	info := recordToInfo(rec)
+	stored := s.store.Insert(rec)
+	info := recordToInfo(stored)
 	return &CreateResult{
-		Display:        info,
-		FrameSourceReady: true,
+		Display:                   info,
+		FrameSourceReady:          rec.SurfaceAttached,
 		ThirdPartyLaunchSupported: true,
-		UITreeSupported:      true,
-		GestureSupported:     true,
+		UITreeSupported:           true,
+		GestureSupported:          true,
 	}, nil
 }
 
 func (s *Service) Get(ctx context.Context, req GetRequest) (*VirtualDisplayInfo, error) {
-	rec := s.store.Get()
+	rec := s.store.GetByRef(req.Ref)
 	if rec == nil {
-		return nil, NewError(ErrVirtualDisplayNotFound, "no active virtual display")
-	}
-	if !req.Ref.IsEmpty() && req.Ref != rec.Ref {
-		return nil, NewError(ErrVirtualDisplayIdMismatch, "reference mismatch")
+		return nil, NewError(ErrVirtualDisplayNotFound, "virtual display not found")
 	}
 	info := recordToInfo(rec)
 	return &info, nil
 }
 
 func (s *Service) Resize(ctx context.Context, req ResizeRequest) (*VirtualDisplayInfo, error) {
-	rec := s.store.Get()
+	rec := s.store.GetByRef(req.Ref)
 	if rec == nil {
-		return nil, NewError(ErrVirtualDisplayNotFound, "no active virtual display")
+		return nil, NewError(ErrVirtualDisplayNotFound, "virtual display not found")
 	}
-	if !req.Ref.IsEmpty() && req.Ref != rec.Ref {
-		return nil, NewError(ErrVirtualDisplayIdMismatch, "reference mismatch")
+	if s.bridge == nil {
+		return nil, NewError(ErrVirtualDisplayUnavailable, "native bridge not configured")
 	}
 	p := s.policy
 	w, h := p.ClampSize(req.Width, req.Height)
 	dpi := p.ClampDensity(req.DensityDPI)
-	if s.bridge != nil {
-		bridgeReq := map[string]any{
-			"ref":        req.Ref.String(),
-			"width":      w,
-			"height":     h,
-			"densityDpi": dpi,
-		}
-		_, err := s.bridge.Execute(ctx, "resize_virtual_display", bridgeReq)
-		if err != nil {
-			return nil, err
-		}
+	bridgeReq := map[string]any{
+		"displayId":  rec.DisplayID,
+		"width":      w,
+		"height":     h,
+		"densityDpi": dpi,
 	}
-	err := s.store.Update(req.Ref, func(r *VirtualDisplayRecord) error {
+	if _, err := s.bridge.Execute(ctx, OperationResize, bridgeReq); err != nil {
+		return nil, err
+	}
+	if err := s.store.Update(rec.Ref, func(r *VirtualDisplayRecord) error {
 		r.Width = w
 		r.Height = h
 		r.DensityDPI = dpi
 		r.Generation++
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
-	rec = s.store.Get()
+	rec = s.store.GetByRef(rec.Ref)
 	info := recordToInfo(rec)
 	return &info, nil
 }
 
 func (s *Service) Release(ctx context.Context, req ReleaseRequest) (*ReleaseResult, error) {
-	rec := s.store.Get()
+	rec := s.store.GetByRef(req.Ref)
 	if rec == nil {
-		return &ReleaseResult{
-			Released:  false,
-			WasActive: false,
-			State:     string(StateReleased),
-			Status:    "already_released",
-		}, nil
+		return &ReleaseResult{Released: false, WasActive: false, State: string(StateReleased), Status: "already_released"}, nil
 	}
-	if !req.Ref.IsEmpty() && req.Ref != rec.Ref {
-		return nil, NewError(ErrVirtualDisplayIdMismatch, "reference mismatch")
+	if s.bridge == nil {
+		return nil, NewError(ErrVirtualDisplayUnavailable, "native bridge not configured")
 	}
 	wasActive := rec.State.IsActive()
-	if s.bridge != nil {
-		bridgeReq := map[string]any{
-			"ref": req.Ref.String(),
-		}
-		if _, err := s.bridge.Execute(ctx, "release_virtual_display", bridgeReq); err != nil {
-			return nil, err
-		}
-	}
-	removed, err := s.store.Remove(req.Ref)
-	if err != nil {
+	if _, err := s.bridge.Execute(ctx, OperationRelease, map[string]any{"displayId": rec.DisplayID}); err != nil {
 		return nil, err
 	}
-	_ = removed
-	return &ReleaseResult{
-		Released:  true,
-		WasActive: wasActive,
-		State:     string(StateReleased),
-		Status:    "released",
-	}, nil
+	if _, err := s.store.Remove(rec.Ref); err != nil {
+		return nil, err
+	}
+	return &ReleaseResult{Released: true, WasActive: wasActive, State: string(StateReleased), Status: "released"}, nil
+}
+
+func numberAsInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int32:
+		return int(n)
+	case int64:
+		return int(n)
+	case float32:
+		return int(n)
+	case float64:
+		return int(n)
+	default:
+		return -1
+	}
+}
+
+func positiveInt(v any, fallback int) int {
+	n := numberAsInt(v)
+	if n <= 0 {
+		return fallback
+	}
+	return n
+}
+
+func stringValue(v any, fallback string) string {
+	if s, ok := v.(string); ok && s != "" {
+		return s
+	}
+	return fallback
+}
+
+func boolValue(v any, fallback bool) bool {
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	return fallback
 }
 
 func recordToInfo(rec *VirtualDisplayRecord) VirtualDisplayInfo {
 	return VirtualDisplayInfo{
-		Ref:        rec.Ref,
-		DisplayID:  rec.DisplayID,
-		Generation: rec.Generation,
-		Name:       rec.Name,
-		Width:      rec.Width,
-		Height:     rec.Height,
-		DensityDPI: rec.DensityDPI,
-		Rotation:   rec.Rotation,
-		RefreshRate: rec.RefreshRate,
+		Ref:             rec.Ref,
+		DisplayID:       rec.DisplayID,
+		Generation:      rec.Generation,
+		Name:            rec.Name,
+		Width:           rec.Width,
+		Height:          rec.Height,
+		DensityDPI:      rec.DensityDPI,
+		Rotation:        rec.Rotation,
+		RefreshRate:     rec.RefreshRate,
 		SurfaceAttached: rec.SurfaceAttached,
-		State:      string(rec.State),
-		CreatedAt:  rec.CreatedAt.UnixMilli(),
+		State:           string(rec.State),
+		CreatedAt:       rec.CreatedAt.UnixMilli(),
 	}
 }
 

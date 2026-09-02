@@ -297,12 +297,21 @@ func (s *ScheduleService) Resume(ctx context.Context, scheduleID string, expecte
 	now := s.clock.Now()
 	state.Paused = false
 	state.Status = DefinitionStatusEnabled
+	if detection, detectErr := s.misfire.DetectMisfire(ctx, def, state); detectErr == nil && detection != nil && detection.HasMisfire {
+		if action, applyErr := s.misfire.ApplyMisfirePolicy(ctx, def, detection); applyErr != nil {
+			return applyErr
+		} else if action != nil {
+			if action.Reschedule {
+				rescheduled := now.UTC()
+				state.LastScheduledAt = &rescheduled
+			} else if detection.LatestMissed != nil {
+				accounted := detection.LatestMissed.UTC()
+				state.LastScheduledAt = &accounted
+			}
+		}
+	}
 	result, err := s.calc.CalculateNext(def, state)
 	if err == nil && result != nil {
-		detection, _ := s.misfire.DetectMisfire(ctx, def, state)
-		if detection != nil && detection.HasMisfire {
-			s.misfire.ApplyMisfirePolicy(ctx, def, detection)
-		}
 		state.NextScheduledAt = result.NextScheduledAt
 		state.NextEffectiveAt = result.NextEffectiveAt
 	}

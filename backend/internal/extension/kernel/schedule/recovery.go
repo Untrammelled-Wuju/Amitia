@@ -106,7 +106,17 @@ func (r *RecoveryService) recoverSchedule(ctx context.Context, state *ScheduleSt
 	if state.LastScheduledAt != nil {
 		detection, _ := r.misfire.DetectMisfire(ctx, def, state)
 		if detection != nil && detection.HasMisfire {
-			r.misfire.ApplyMisfirePolicy(ctx, def, detection)
+			action, applyErr := r.misfire.ApplyMisfirePolicy(ctx, def, detection)
+			if applyErr != nil {
+				return
+			}
+			if action != nil && action.Reschedule {
+				rescheduled := r.clock.Now().UTC()
+				state.LastScheduledAt = &rescheduled
+			} else if detection.LatestMissed != nil {
+				accounted := detection.LatestMissed.UTC()
+				state.LastScheduledAt = &accounted
+			}
 		}
 	}
 

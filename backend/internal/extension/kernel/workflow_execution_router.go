@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
@@ -26,6 +27,7 @@ type WorkflowExecutionRouter struct {
 	capabilities *capability.CapabilityService
 	tools        *capability.ToolRegistry
 	tasks        *task_runtime.TaskRuntimeService
+	sessions     *deviceruntime.Service
 }
 
 type workflowCapabilityResolutionError struct {
@@ -52,8 +54,12 @@ func capabilityResolutionDeviceOffline(err error) bool {
 	return errors.As(err, &resolutionErr) && resolutionErr.Decision == capability.RoutingDeviceOffline
 }
 
-func NewWorkflowExecutionRouter(capabilities *capability.CapabilityService, tools *capability.ToolRegistry, tasks *task_runtime.TaskRuntimeService) *WorkflowExecutionRouter {
-	return &WorkflowExecutionRouter{capabilities: capabilities, tools: tools, tasks: tasks}
+func NewWorkflowExecutionRouter(capabilities *capability.CapabilityService, tools *capability.ToolRegistry, tasks *task_runtime.TaskRuntimeService, sessions ...*deviceruntime.Service) *WorkflowExecutionRouter {
+	router := &WorkflowExecutionRouter{capabilities: capabilities, tools: tools, tasks: tasks}
+	if len(sessions) > 0 {
+		router.sessions = sessions[0]
+	}
+	return router
 }
 
 // ResolveNode resolves both capability-backed Tool nodes and runtime-backed
@@ -67,7 +73,14 @@ func NewWorkflowExecutionRouter(capabilities *capability.CapabilityService, tool
 func (r *WorkflowExecutionRouter) ResolveNode(ctx context.Context, node workflow.WorkflowNode, execCtx workflow.ExecutionContext) (ResolvedWorkflowExecutionTarget, error) {
 	target := node.ExecutionTarget
 	if target.Placement == "" {
-		return ResolvedWorkflowExecutionTarget{}, nil
+		if len(node.RequiredCapabilities) == 0 {
+			return ResolvedWorkflowExecutionTarget{}, nil
+		}
+		// A node without an explicit execution target runs on the current Core.
+		// Explicit capability requirements must still be enforced instead of
+		// silently disappearing just because placement was omitted in the editor.
+		target.Placement = workflow.WorkflowExecutionLocal
+		node.ExecutionTarget = target
 	}
 	if err := target.Validate(); err != nil {
 		return ResolvedWorkflowExecutionTarget{}, err
@@ -103,8 +116,11 @@ func (r *WorkflowExecutionRouter) resolveToolNode(ctx context.Context, node work
 		}
 	}
 
-	resolution, err := r.resolveCapability(capID, "", target, execCtx)
+	resolution, err := r.resolveCapabilityForNode(ctx, capID, "", target, execCtx, node)
 	if err != nil {
+		return ResolvedWorkflowExecutionTarget{}, r.wrapDeviceUnavailable(target, err)
+	}
+	if err := r.ensureNodeRequiredCapabilities(ctx, node, resolution, execCtx); err != nil {
 		return ResolvedWorkflowExecutionTarget{}, r.wrapDeviceUnavailable(target, err)
 	}
 	return r.resolvedFromCapability(node, resolution, target)
@@ -128,6 +144,9 @@ func (r *WorkflowExecutionRouter) resolveRuntimeNode(ctx context.Context, node w
 	// second runtime-provider lookup. This preserves Task/MCP/JS/WASM runtime
 	// IDs as runtime IDs rather than misinterpreting them as capability IDs.
 	if target.Placement == workflow.WorkflowExecutionLocal || target.Placement == workflow.WorkflowExecutionCloud {
+		if err := r.ensureCoreRequiredCapabilities(ctx, node, target, execCtx); err != nil {
+			return ResolvedWorkflowExecutionTarget{}, err
+		}
 		return ResolvedWorkflowExecutionTarget{
 			InvocationTarget: capability.InvocationExecutionTarget{
 				Placement: string(capability.ProviderPlacementCore),
@@ -169,12 +188,16 @@ func (r *WorkflowExecutionRouter) resolveRuntimeNode(ctx context.Context, node w
 		if provider == nil || provider.CapabilityID == "" || provider.ID == "" {
 			continue
 		}
-		resolution, err := r.resolveCapability(provider.CapabilityID, provider.ID, target, execCtx)
+		resolution, err := r.resolveCapabilityForNode(ctx, provider.CapabilityID, provider.ID, target, execCtx, node)
 		if err != nil {
 			lastErr = err
 			if capabilityResolutionDeviceOffline(err) {
 				offlineErr = err
 			}
+			continue
+		}
+		if err := r.ensureNodeRequiredCapabilities(ctx, node, resolution, execCtx); err != nil {
+			lastErr = err
 			continue
 		}
 
@@ -209,12 +232,29 @@ func (r *WorkflowExecutionRouter) resolveRuntimeNode(ctx context.Context, node w
 	return ResolvedWorkflowExecutionTarget{}, r.wrapDeviceUnavailable(target, lastErr)
 }
 
-func (r *WorkflowExecutionRouter) resolveCapability(capID capability.CapabilityID, requiredProvider capability.ProviderID, target workflow.WorkflowExecutionTarget, execCtx workflow.ExecutionContext) (capability.CapabilityResolution, error) {
+func (r *WorkflowExecutionRouter) resolveCapabilityForNode(ctx context.Context, capID capability.CapabilityID, requiredProvider capability.ProviderID, target workflow.WorkflowExecutionTarget, execCtx workflow.ExecutionContext, node workflow.WorkflowNode) (capability.CapabilityResolution, error) {
+	required := make([]capability.CapabilityID, 0, len(node.RequiredCapabilities))
+	if target.Placement == workflow.WorkflowExecutionAuto || target.Placement == workflow.WorkflowExecutionDevice {
+		for _, raw := range node.RequiredCapabilities {
+			if parsed := capability.ParseCapabilityID(strings.TrimSpace(raw)); parsed != "" {
+				required = append(required, parsed)
+			}
+		}
+	}
+	return r.resolveCapabilityWithDeviceRequirements(ctx, capID, requiredProvider, target, execCtx, required)
+}
+
+func (r *WorkflowExecutionRouter) resolveCapability(ctx context.Context, capID capability.CapabilityID, requiredProvider capability.ProviderID, target workflow.WorkflowExecutionTarget, execCtx workflow.ExecutionContext) (capability.CapabilityResolution, error) {
+	return r.resolveCapabilityWithDeviceRequirements(ctx, capID, requiredProvider, target, execCtx, nil)
+}
+
+func (r *WorkflowExecutionRouter) resolveCapabilityWithDeviceRequirements(ctx context.Context, capID capability.CapabilityID, requiredProvider capability.ProviderID, target workflow.WorkflowExecutionTarget, execCtx workflow.ExecutionContext, requiredDeviceCapabilities []capability.CapabilityID) (capability.CapabilityResolution, error) {
 	request := capability.CapabilityResolutionRequest{
-		CapabilityID: capID,
-		UserID:       runtimeidentity.UserID(execCtx.UserID),
-		AllowCore:    true,
-		AllowDevice:  true,
+		CapabilityID:               capID,
+		UserID:                     runtimeidentity.UserID(execCtx.UserID),
+		AllowCore:                  true,
+		AllowDevice:                true,
+		RequiredDeviceCapabilities: requiredDeviceCapabilities,
 	}
 	if requiredProvider != "" {
 		request.RequiredProviderID = requiredProvider
@@ -260,7 +300,109 @@ func (r *WorkflowExecutionRouter) resolveCapability(capID capability.CapabilityI
 	if target.RuntimeID != "" && resolution.ProviderInstance.RuntimeID != runtimeidentity.RuntimeID(target.RuntimeID) {
 		return capability.CapabilityResolution{}, fmt.Errorf("workflow execution router: requested runtime %s is unavailable", target.RuntimeID)
 	}
+	if err := r.ensureDeviceWorkflowCompatibility(ctx, resolution, execCtx); err != nil {
+		return capability.CapabilityResolution{}, err
+	}
 	return resolution, nil
+}
+
+func (r *WorkflowExecutionRouter) ensureCoreRequiredCapabilities(ctx context.Context, node workflow.WorkflowNode, target workflow.WorkflowExecutionTarget, execCtx workflow.ExecutionContext) error {
+	if len(node.RequiredCapabilities) == 0 {
+		return nil
+	}
+	if r == nil || r.capabilities == nil {
+		return fmt.Errorf("workflow execution router: capability service unavailable for node %s requirements", node.ID)
+	}
+	for _, required := range node.RequiredCapabilities {
+		required = strings.TrimSpace(required)
+		if required == "" {
+			continue
+		}
+		if _, err := r.resolveCapability(ctx, capability.CapabilityID(required), "", target, execCtx); err != nil {
+			return fmt.Errorf("workflow execution router: node %s requires capability %s: %w", node.ID, required, err)
+		}
+	}
+	return nil
+}
+
+func (r *WorkflowExecutionRouter) ensureNodeRequiredCapabilities(ctx context.Context, node workflow.WorkflowNode, resolution capability.CapabilityResolution, execCtx workflow.ExecutionContext) error {
+	if len(node.RequiredCapabilities) == 0 {
+		return nil
+	}
+	if r == nil || r.capabilities == nil {
+		return fmt.Errorf("workflow execution router: capability service unavailable for node %s requirements", node.ID)
+	}
+	target := node.ExecutionTarget
+	if resolution.Provider.Placement == capability.ProviderPlacementDevice {
+		target.Placement = workflow.WorkflowExecutionDevice
+		target.DeviceID = string(resolution.ProviderInstance.DeviceID)
+		target.ProviderID = ""
+		target.ProviderInstanceID = ""
+		target.RuntimeID = ""
+	}
+	for _, required := range node.RequiredCapabilities {
+		required = strings.TrimSpace(required)
+		if required == "" {
+			continue
+		}
+		requiredResolution, err := r.resolveCapability(ctx, capability.CapabilityID(required), "", target, execCtx)
+		if err != nil {
+			return fmt.Errorf("workflow execution router: node %s requires capability %s: %w", node.ID, required, err)
+		}
+		if resolution.Provider.Placement == capability.ProviderPlacementDevice && requiredResolution.ProviderInstance.DeviceID != resolution.ProviderInstance.DeviceID {
+			return fmt.Errorf("workflow execution router: node %s requires capability %s on device %s", node.ID, required, resolution.ProviderInstance.DeviceID)
+		}
+	}
+	return nil
+}
+
+func (r *WorkflowExecutionRouter) ensureDeviceWorkflowCompatibility(ctx context.Context, resolution capability.CapabilityResolution, execCtx workflow.ExecutionContext) error {
+	if r == nil || r.sessions == nil || resolution.Provider.Placement != capability.ProviderPlacementDevice {
+		return nil
+	}
+	userID := runtimeidentity.UserID(execCtx.UserID)
+	deviceID := resolution.ProviderInstance.DeviceID
+	runtimeID := resolution.ProviderInstance.RuntimeID
+	if userID == "" || deviceID == "" {
+		return fmt.Errorf("workflow execution router: resolved device provider is missing session identity")
+	}
+
+	var session deviceruntime.RuntimeSession
+	var err error
+	if runtimeID != "" {
+		session, err = r.sessions.GetActiveSession(ctx, userID, deviceID, runtimeID)
+	} else {
+		var sessions []deviceruntime.RuntimeSession
+		sessions, err = r.sessions.ListActiveSessions(ctx)
+		if err == nil {
+			err = fmt.Errorf("active runtime session not found")
+			for _, candidate := range sessions {
+				if candidate.UserID == userID && candidate.DeviceID == deviceID {
+					session = candidate
+					err = nil
+					break
+				}
+			}
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("workflow execution router: device runtime session unavailable for compatibility check: %w", err)
+	}
+
+	available := make(map[string]struct{}, len(session.Capabilities))
+	for _, item := range session.Capabilities {
+		available[strings.TrimSpace(item)] = struct{}{}
+	}
+	missing := make([]string, 0)
+	for _, required := range workflow.RequiredDeviceRuntimeCapabilities(workflow.UserWorkflowSchemaVersion) {
+		if _, ok := available[required]; !ok {
+			missing = append(missing, required)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("workflow execution router: device %s runtime %s is protocol-incompatible (runtimeVersion=%s, contract=%s, missing=%s)", deviceID, runtimeID, session.RuntimeVersion, session.RuntimeContractVersion, strings.Join(missing, ","))
+	}
+	return nil
 }
 
 func (r *WorkflowExecutionRouter) resolvedFromCapability(node workflow.WorkflowNode, resolution capability.CapabilityResolution, target workflow.WorkflowExecutionTarget) (ResolvedWorkflowExecutionTarget, error) {

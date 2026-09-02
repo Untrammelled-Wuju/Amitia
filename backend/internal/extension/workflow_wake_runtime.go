@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/realtime"
 )
@@ -21,11 +23,14 @@ const (
 )
 
 type workflowWakeRuntimeState struct {
-	mu           sync.Mutex
-	lastRefresh  time.Time
-	detectors    map[string]*workflowWakeDetectorState
-	bindingCount int
-	lastErr      error
+	mu              sync.Mutex
+	lastRefresh     time.Time
+	detectors       map[string]*workflowWakeDetectorState
+	bindingCount    int
+	lastErr         error
+	deviceState     string
+	deviceReason    string
+	deviceUpdatedAt time.Time
 }
 
 type workflowWakeDetectorState struct {
@@ -35,11 +40,14 @@ type workflowWakeDetectorState struct {
 }
 
 type workflowWakeRuntimeStatus struct {
-	Required     bool   `json:"required"`
-	Ready        bool   `json:"ready"`
-	BindingCount int    `json:"bindingCount"`
-	ConfigCount  int    `json:"configCount"`
-	Reason       string `json:"reason,omitempty"`
+	Required        bool      `json:"required"`
+	Ready           bool      `json:"ready"`
+	BindingCount    int       `json:"bindingCount"`
+	ConfigCount     int       `json:"configCount"`
+	Reason          string    `json:"reason,omitempty"`
+	DeviceState     string    `json:"deviceState,omitempty"`
+	DeviceReason    string    `json:"deviceReason,omitempty"`
+	DeviceUpdatedAt time.Time `json:"deviceUpdatedAt,omitempty"`
 }
 
 type workflowWakeConfigCatalogItem struct {
@@ -53,6 +61,16 @@ type workflowWakeTriggerConfig struct {
 	WakeConfigID string `json:"wakeConfigId"`
 }
 
+type workflowWakeConfigCreateRequest struct {
+	Name             string   `json:"name"`
+	Phrases          []string `json:"phrases"`
+	Locale           string   `json:"locale"`
+	Threshold        float64  `json:"threshold"`
+	CooldownMS       int64    `json:"cooldownMs"`
+	Backend          string   `json:"backend"`
+	ModelResourceURI string   `json:"modelResourceUri"`
+}
+
 type workflowWakeConfigRecord struct {
 	ID               string  `gorm:"column:id"`
 	Name             string  `gorm:"column:name"`
@@ -62,10 +80,110 @@ type workflowWakeConfigRecord struct {
 	Phrases          string  `gorm:"column:phrases"`
 	Threshold        float64 `gorm:"column:threshold"`
 	CooldownMS       int64   `gorm:"column:cooldown_ms"`
+	CreatedAt        string  `gorm:"column:created_at"`
 	UpdatedAt        string  `gorm:"column:updated_at"`
 }
 
 func (workflowWakeConfigRecord) TableName() string { return "wake_configs" }
+
+func (r *Runtime) createWorkflowWakeConfig(ctx context.Context, request workflowWakeConfigCreateRequest) (workflowWakeConfigCatalogItem, error) {
+	if r == nil || r.Repository == nil || r.Repository.DB() == nil {
+		return workflowWakeConfigCatalogItem{}, errors.New("wake config database unavailable")
+	}
+	name := strings.TrimSpace(request.Name)
+	if name == "" {
+		return workflowWakeConfigCatalogItem{}, errors.New("wake config name is required")
+	}
+	if len([]rune(name)) > 80 {
+		return workflowWakeConfigCatalogItem{}, errors.New("wake config name is too long")
+	}
+	if len(request.Phrases) == 0 || len(request.Phrases) > 16 {
+		return workflowWakeConfigCatalogItem{}, errors.New("wake config requires 1 to 16 phrases")
+	}
+	locale := strings.TrimSpace(request.Locale)
+	if locale == "" {
+		locale = "zh-CN"
+	}
+	phrases := make([]map[string]string, 0, len(request.Phrases))
+	for index, raw := range request.Phrases {
+		phrase := strings.TrimSpace(raw)
+		if phrase == "" {
+			continue
+		}
+		if len([]rune(phrase)) > 80 {
+			return workflowWakeConfigCatalogItem{}, fmt.Errorf("wake phrase %d is too long", index+1)
+		}
+		phrases = append(phrases, map[string]string{
+			"id":          fmt.Sprintf("wake-%d", len(phrases)+1),
+			"displayText": phrase,
+			"locale":      locale,
+		})
+	}
+	if len(phrases) == 0 {
+		return workflowWakeConfigCatalogItem{}, errors.New("wake config phrases are empty")
+	}
+	backend := normalizeWorkflowWakeBackend(request.Backend)
+	modelResourceURI := strings.TrimSpace(request.ModelResourceURI)
+	switch backend {
+	case workflowLocalKWSWakeBackend:
+		if modelResourceURI == "" {
+			modelResourceURI = "builtin://amitia-kws/default"
+		}
+	case workflowASRWakeBackend:
+		activeASR, err := asr.ActiveRuntimeConfig()
+		if err != nil {
+			return workflowWakeConfigCatalogItem{}, fmt.Errorf("active ASR is required for cloud ASR wake recognition: %w", err)
+		}
+		if !asr.SupportsSegmentPCM(activeASR) {
+			return workflowWakeConfigCatalogItem{}, fmt.Errorf("active ASR provider %q cannot recognize private PCM segments; select an OpenAI-compatible or Azure ASR config first", activeASR.ApiType)
+		}
+		if strings.TrimSpace(activeASR.ApiKey) == "" {
+			return workflowWakeConfigCatalogItem{}, errors.New("active ASR credential is empty")
+		}
+	default:
+		return workflowWakeConfigCatalogItem{}, fmt.Errorf("unsupported wake backend %q", backend)
+	}
+	threshold := request.Threshold
+	if threshold == 0 {
+		threshold = 0.85
+	}
+	if threshold < 0 || threshold > 1 {
+		return workflowWakeConfigCatalogItem{}, errors.New("wake threshold must be between 0 and 1")
+	}
+	cooldownMS := request.CooldownMS
+	if cooldownMS == 0 {
+		cooldownMS = 2000
+	}
+	if cooldownMS < 0 || cooldownMS > 600000 {
+		return workflowWakeConfigCatalogItem{}, errors.New("wake cooldownMs must be between 0 and 600000")
+	}
+	encodedPhrases, err := json.Marshal(phrases)
+	if err != nil {
+		return workflowWakeConfigCatalogItem{}, err
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	record := workflowWakeConfigRecord{
+		ID:               "workflow-wake-" + uuid.NewString(),
+		Name:             name,
+		Enabled:          true,
+		Backend:          backend,
+		ModelResourceURI: modelResourceURI,
+		Phrases:          string(encodedPhrases),
+		Threshold:        threshold,
+		CooldownMS:       cooldownMS,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	if err := r.Repository.DB().WithContext(ctx).Table(record.TableName()).Create(&record).Error; err != nil {
+		return workflowWakeConfigCatalogItem{}, fmt.Errorf("create wake config: %w", err)
+	}
+	if state := r.workflowWakeState(); state != nil {
+		state.mu.Lock()
+		state.lastRefresh = time.Time{}
+		state.mu.Unlock()
+	}
+	return workflowWakeConfigCatalogItem{ID: record.ID, Name: record.Name, Backend: record.Backend}, nil
+}
 
 func (r *Runtime) workflowWakeState() *workflowWakeRuntimeState {
 	if r == nil {
@@ -77,6 +195,17 @@ func (r *Runtime) workflowWakeState() *workflowWakeRuntimeState {
 		r.workflowWakeRuntime = &workflowWakeRuntimeState{detectors: make(map[string]*workflowWakeDetectorState)}
 	}
 	return r.workflowWakeRuntime
+}
+
+func normalizeWorkflowWakeBackend(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "auto", "local", "local_kws", workflowLocalKWSWakeBackend:
+		return workflowLocalKWSWakeBackend
+	case "cloud", "asr", "asr_phrase", workflowASRWakeBackend:
+		return workflowASRWakeBackend
+	default:
+		return strings.TrimSpace(value)
+	}
 }
 
 func workflowWakeBackendUsableForAutomation(backend string) bool {
@@ -130,10 +259,13 @@ func (r *Runtime) workflowWakeStatus(ctx context.Context, force bool) workflowWa
 	defer state.mu.Unlock()
 	state.refreshLocked(ctx, r, force)
 	status := workflowWakeRuntimeStatus{
-		Required:     state.bindingCount > 0,
-		Ready:        state.bindingCount > 0 && len(state.detectors) > 0,
-		BindingCount: state.bindingCount,
-		ConfigCount:  len(state.detectors),
+		Required:        state.bindingCount > 0,
+		Ready:           state.bindingCount > 0 && len(state.detectors) > 0,
+		BindingCount:    state.bindingCount,
+		ConfigCount:     len(state.detectors),
+		DeviceState:     state.deviceState,
+		DeviceReason:    state.deviceReason,
+		DeviceUpdatedAt: state.deviceUpdatedAt,
 	}
 	if state.lastErr != nil {
 		status.Reason = state.lastErr.Error()
@@ -141,6 +273,29 @@ func (r *Runtime) workflowWakeStatus(ctx context.Context, force bool) workflowWa
 		status.Reason = "no usable wake config"
 	}
 	return status
+}
+
+func (r *Runtime) updateWorkflowWakeDeviceStatus(stateValue, reason string) error {
+	stateValue = strings.ToLower(strings.TrimSpace(stateValue))
+	reason = strings.TrimSpace(reason)
+	switch stateValue {
+	case "idle", "wake_required", "wake_active", "wake_suspended", "wake_blocked_by_android", "wake_permission_missing":
+	default:
+		return fmt.Errorf("invalid workflow wake device state %q", stateValue)
+	}
+	if len(reason) > 512 {
+		reason = reason[:512]
+	}
+	state := r.workflowWakeState()
+	if state == nil {
+		return errors.New("workflow wake runtime unavailable")
+	}
+	state.mu.Lock()
+	state.deviceState = stateValue
+	state.deviceReason = reason
+	state.deviceUpdatedAt = time.Now().UTC()
+	state.mu.Unlock()
+	return nil
 }
 
 func (r *Runtime) processWorkflowWakeAudio(ctx context.Context, pcm []byte, deviceID string, sequence uint64, capturedAt time.Time) error {
@@ -335,7 +490,15 @@ func (s *workflowWakeRuntimeState) reconcileDetectors(ctx context.Context, desir
 			delete(s.detectors, configID)
 			continue
 		}
-		if existing.configHash == wakeConfigHash(record) {
+		desiredHash, err := workflowWakeDetectorConfigHash(record)
+		if err != nil {
+			_ = existing.detector.Unload()
+			delete(s.detectors, configID)
+			delete(desired, configID)
+			s.lastErr = errors.Join(s.lastErr, fmt.Errorf("resolve wake detector config %s: %w", configID, err))
+			continue
+		}
+		if existing.configHash == desiredHash {
 			delete(desired, configID)
 			continue
 		}
@@ -343,6 +506,11 @@ func (s *workflowWakeRuntimeState) reconcileDetectors(ctx context.Context, desir
 		delete(s.detectors, configID)
 	}
 	for configID, record := range desired {
+		desiredHash, err := workflowWakeDetectorConfigHash(record)
+		if err != nil {
+			s.lastErr = errors.Join(s.lastErr, fmt.Errorf("resolve wake detector config %s: %w", configID, err))
+			continue
+		}
 		backend := strings.TrimSpace(record.Backend)
 		if backend == "" {
 			backend = "software"
@@ -377,7 +545,7 @@ func (s *workflowWakeRuntimeState) reconcileDetectors(ctx context.Context, desir
 		}
 		s.detectors[configID] = &workflowWakeDetectorState{
 			configID:   configID,
-			configHash: wakeConfigHash(record),
+			configHash: desiredHash,
 			detector:   detector,
 		}
 	}
@@ -414,6 +582,29 @@ func canonicalBindingEventType(value string) string {
 		return workflowWakeEventType
 	}
 	return value
+}
+
+func workflowWakeDetectorConfigHash(record workflowWakeConfigRecord) (string, error) {
+	base := wakeConfigHash(record)
+	if strings.TrimSpace(record.Backend) != workflowASRWakeBackend {
+		return base, nil
+	}
+	active, err := asr.ActiveRuntimeConfig()
+	if err != nil {
+		return "", fmt.Errorf("active ASR unavailable: %w", err)
+	}
+	if !asr.SupportsSegmentPCM(active) {
+		return "", fmt.Errorf("active ASR provider %q does not support private PCM segments", active.ApiType)
+	}
+	// Include credential material only inside the SHA-256 input. The raw key is
+	// never persisted to workflow state or logs, but rotating it must invalidate
+	// an already-loaded detector immediately.
+	raw, _ := json.Marshal(map[string]any{
+		"id": active.ID, "type": active.ApiType, "baseUrl": active.BaseURL,
+		"resourceId": active.ResourceId, "updatedAt": active.UpdatedAt, "apiKey": active.ApiKey,
+	})
+	digest := sha256.Sum256(raw)
+	return base + ":" + hex.EncodeToString(digest[:]), nil
 }
 
 func wakeConfigHash(record workflowWakeConfigRecord) string {

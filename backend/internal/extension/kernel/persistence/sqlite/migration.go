@@ -1505,6 +1505,13 @@ var schemaMigrations = []string{
 		workflow_id TEXT NOT NULL,
 		node_id TEXT NOT NULL,
 		status TEXT NOT NULL,
+		trace_id TEXT NOT NULL DEFAULT '',
+		attempt_id TEXT NOT NULL DEFAULT '',
+		device_id TEXT NOT NULL DEFAULT '',
+		runtime_id TEXT NOT NULL DEFAULT '',
+		tool_call_id TEXT NOT NULL DEFAULT '',
+		fencing_token INTEGER NOT NULL DEFAULT 0,
+		idempotency_key TEXT NOT NULL DEFAULT '',
 		input_json TEXT,
 		output_json TEXT,
 		error_message TEXT,
@@ -1532,10 +1539,20 @@ var schemaMigrations = []string{
 
 	`CREATE TABLE IF NOT EXISTS extension_workflow_compensations (
 		execution_id TEXT NOT NULL,
+		workflow_id TEXT NOT NULL DEFAULT '',
 		node_id TEXT NOT NULL,
+		generation INTEGER NOT NULL DEFAULT 0,
 		status TEXT NOT NULL,
+		attempt INTEGER NOT NULL DEFAULT 0,
+		idempotency_key TEXT NOT NULL DEFAULT '',
+		input_json TEXT,
+		output_json TEXT,
 		error_message TEXT NOT NULL DEFAULT '',
-		executed_at DATETIME NOT NULL,
+		started_at DATETIME NOT NULL DEFAULT '',
+		completed_at DATETIME,
+		updated_at DATETIME NOT NULL DEFAULT '',
+		-- Legacy timestamp retained so existing databases can be upgraded in-place.
+		executed_at DATETIME NOT NULL DEFAULT '',
 		PRIMARY KEY (execution_id, node_id)
 	)`,
 
@@ -2218,6 +2235,9 @@ var schemaMigrations = []string{
 		definition_json TEXT NOT NULL,
 		definition_hash TEXT NOT NULL DEFAULT '',
 		note TEXT NOT NULL DEFAULT '',
+		state TEXT NOT NULL DEFAULT 'published',
+		published_at DATETIME,
+		archived_at DATETIME,
 		created_at DATETIME NOT NULL,
 		UNIQUE(workflow_id, revision_no)
 	)`,
@@ -2240,6 +2260,13 @@ var schemaMigrations = []string{
 		attempt INTEGER NOT NULL,
 		generation INTEGER NOT NULL DEFAULT 0,
 		status TEXT NOT NULL,
+		trace_id TEXT NOT NULL DEFAULT '',
+		attempt_id TEXT NOT NULL DEFAULT '',
+		device_id TEXT NOT NULL DEFAULT '',
+		runtime_id TEXT NOT NULL DEFAULT '',
+		tool_call_id TEXT NOT NULL DEFAULT '',
+		fencing_token INTEGER NOT NULL DEFAULT 0,
+		idempotency_key TEXT NOT NULL DEFAULT '',
 		input_json TEXT,
 		output_json TEXT,
 		error_message TEXT NOT NULL DEFAULT '',
@@ -2251,6 +2278,118 @@ var schemaMigrations = []string{
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_attempts_execution ON extension_workflow_step_attempts(execution_id, node_id, generation, attempt)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_wf_attempts_workflow ON extension_workflow_step_attempts(workflow_id, started_at DESC)`,
+	`CREATE TABLE IF NOT EXISTS extension_workflow_side_effect_journal (
+		journal_id TEXT PRIMARY KEY,
+		execution_id TEXT NOT NULL,
+		workflow_id TEXT NOT NULL,
+		node_id TEXT NOT NULL,
+		attempt INTEGER NOT NULL DEFAULT 0,
+		generation INTEGER NOT NULL DEFAULT 0,
+		device_id TEXT NOT NULL DEFAULT '',
+		kind TEXT NOT NULL,
+		target TEXT NOT NULL DEFAULT '',
+		idempotency_key TEXT NOT NULL DEFAULT '',
+		input_json TEXT,
+		output_json TEXT,
+		error_message TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL,
+		duration_ms INTEGER NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL,
+		completed_at DATETIME
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_side_effect_execution ON extension_workflow_side_effect_journal(execution_id, created_at, node_id, attempt)`,
+	`DROP INDEX IF EXISTS idx_ext_wf_side_effect_idempotency`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_side_effect_idempotency ON extension_workflow_side_effect_journal(execution_id, idempotency_key) WHERE idempotency_key <> ''`,
+	`CREATE TABLE IF NOT EXISTS extension_workflow_execution_leases (
+		execution_id TEXT NOT NULL,
+		node_id TEXT NOT NULL,
+		owner_device_id TEXT NOT NULL DEFAULT '',
+		generation INTEGER NOT NULL DEFAULT 0,
+		fencing_token INTEGER NOT NULL DEFAULT 0,
+		lease_expires_at DATETIME NOT NULL,
+		heartbeat_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY(execution_id, node_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_execution_leases_expiry ON extension_workflow_execution_leases(lease_expires_at)`,
+	`CREATE TABLE IF NOT EXISTS extension_workflow_run_heartbeats (
+		execution_id TEXT PRIMARY KEY,
+		heartbeat_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_run_heartbeats_at ON extension_workflow_run_heartbeats(heartbeat_at)`,
+	`CREATE TABLE IF NOT EXISTS extension_workflow_compensations (
+		execution_id TEXT NOT NULL,
+		workflow_id TEXT NOT NULL,
+		node_id TEXT NOT NULL,
+		generation INTEGER NOT NULL DEFAULT 0,
+		status TEXT NOT NULL,
+		attempt INTEGER NOT NULL DEFAULT 0,
+		idempotency_key TEXT NOT NULL DEFAULT '',
+		input_json TEXT,
+		output_json TEXT,
+		error_message TEXT NOT NULL DEFAULT '',
+		started_at DATETIME NOT NULL,
+		completed_at DATETIME NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY(execution_id, node_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_compensations_execution ON extension_workflow_compensations(execution_id, updated_at, node_id)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_workflow_sync_state (
+		owner_user_id TEXT NOT NULL,
+		workflow_id TEXT NOT NULL,
+		revision INTEGER NOT NULL DEFAULT 0,
+		definition_hash TEXT NOT NULL DEFAULT '',
+		deleted INTEGER NOT NULL DEFAULT 0,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY(owner_user_id, workflow_id)
+	)`,
+	`CREATE TABLE IF NOT EXISTS extension_workflow_sync_outbox (
+		event_id TEXT PRIMARY KEY,
+		owner_user_id TEXT NOT NULL,
+		workflow_id TEXT NOT NULL,
+		revision INTEGER NOT NULL,
+		base_revision INTEGER NOT NULL,
+		event_type TEXT NOT NULL,
+		definition_hash TEXT NOT NULL DEFAULT '',
+		payload_json TEXT NOT NULL DEFAULT '{}',
+		created_at DATETIME NOT NULL,
+		sent_at DATETIME NULL,
+		acked_at DATETIME NULL,
+		retry_count INTEGER NOT NULL DEFAULT 0,
+		next_retry_at DATETIME NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_sync_outbox_pending ON extension_workflow_sync_outbox(owner_user_id, acked_at, next_retry_at, created_at)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_sync_outbox_workflow ON extension_workflow_sync_outbox(owner_user_id, workflow_id, revision)`,
+	`CREATE TABLE IF NOT EXISTS extension_workflow_sync_inbox (
+		event_id TEXT NOT NULL,
+		source_device_id TEXT NOT NULL,
+		owner_user_id TEXT NOT NULL,
+		workflow_id TEXT NOT NULL,
+		revision INTEGER NOT NULL,
+		base_revision INTEGER NOT NULL,
+		event_type TEXT NOT NULL,
+		definition_hash TEXT NOT NULL DEFAULT '',
+		payload_json TEXT NOT NULL DEFAULT '{}',
+		status TEXT NOT NULL,
+		accepted INTEGER NOT NULL DEFAULT 0,
+		canonical_revision INTEGER NOT NULL DEFAULT 0,
+		received_at DATETIME NOT NULL,
+		PRIMARY KEY(event_id, source_device_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_wf_sync_inbox_workflow ON extension_workflow_sync_inbox(owner_user_id, workflow_id, received_at)`,
+	`CREATE TABLE IF NOT EXISTS extension_workflow_sync_canonical (
+		owner_user_id TEXT NOT NULL,
+		workflow_id TEXT NOT NULL,
+		revision INTEGER NOT NULL,
+		definition_hash TEXT NOT NULL DEFAULT '',
+		deleted INTEGER NOT NULL DEFAULT 0,
+		source_device_id TEXT NOT NULL DEFAULT '',
+		payload_json TEXT NOT NULL DEFAULT '{}',
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY(owner_user_id, workflow_id)
+	)`,
 
 	`CREATE TABLE IF NOT EXISTS extension_workflow_installations (
 		installation_id TEXT PRIMARY KEY,
@@ -2448,8 +2587,39 @@ type columnAddition struct {
 }
 
 var schemaColumnAdditions = []columnAddition{
+	{"extension_workflow_step_runs", "trace_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_runs", "attempt_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_runs", "device_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_runs", "runtime_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_runs", "tool_call_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_runs", "fencing_token", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_workflow_step_runs", "idempotency_key", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_attempts", "trace_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_attempts", "attempt_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_attempts", "device_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_attempts", "runtime_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_attempts", "tool_call_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_step_attempts", "fencing_token", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_workflow_step_attempts", "idempotency_key", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_workflow_definitions", "edges_json", "TEXT NOT NULL DEFAULT '[]'"},
+	{"extension_workflow_definitions", "agent_tool_json", "TEXT NOT NULL DEFAULT '{}'"},
+	{"extension_workflow_definitions", "concurrency_policy_json", "TEXT NOT NULL DEFAULT '{}'"},
+	{"extension_workflow_revisions", "state", "TEXT NOT NULL DEFAULT 'published'"},
+	{"extension_workflow_revisions", "published_at", "DATETIME"},
+	{"extension_workflow_revisions", "archived_at", "DATETIME"},
 	{"extension_workflow_trigger_bindings", "config_json", "TEXT NOT NULL DEFAULT '{}'"},
+	// extension_workflow_compensations existed before durable Saga support with
+	// only execution_id/node_id/status/error_message/executed_at. Keep that
+	// table in place and evolve it column-by-column so upgrades are safe.
+	{"extension_workflow_compensations", "workflow_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_compensations", "generation", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_workflow_compensations", "attempt", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_workflow_compensations", "idempotency_key", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_workflow_compensations", "input_json", "TEXT"},
+	{"extension_workflow_compensations", "output_json", "TEXT"},
+	{"extension_workflow_compensations", "started_at", "DATETIME NOT NULL DEFAULT ''"},
+	{"extension_workflow_compensations", "completed_at", "DATETIME"},
+	{"extension_workflow_compensations", "updated_at", "DATETIME NOT NULL DEFAULT ''"},
 	{"extension_workflow_definitions", "triggers_json", "TEXT NOT NULL DEFAULT '[]'"},
 	{"extension_event_deliveries", "subscription_generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_event_deliveries", "target_generation", "INTEGER NOT NULL DEFAULT 0"},
@@ -2583,6 +2753,23 @@ func ensureSchemaColumns(ctx context.Context, db dbExecutor) error {
 				continue
 			}
 			return fmt.Errorf("add column %s.%s: %w", a.table, a.column, err)
+		}
+	}
+	if exists, err := tableExists(ctx, db, "extension_workflow_compensations"); err != nil {
+		return err
+	} else if exists {
+		// Backfill columns introduced by durable Saga support from the legacy
+		// record and owning execution. The predicates make this idempotent.
+		if _, err := db.ExecContext(ctx, `
+			UPDATE extension_workflow_compensations
+			SET workflow_id = COALESCE(NULLIF(workflow_id, ''),
+				(SELECT workflow_id FROM extension_workflow_executions e WHERE e.execution_id = extension_workflow_compensations.execution_id), ''),
+				started_at = COALESCE(NULLIF(started_at, ''), executed_at),
+				updated_at = COALESCE(NULLIF(updated_at, ''), executed_at),
+				completed_at = COALESCE(completed_at, executed_at)
+			WHERE workflow_id = '' OR started_at = '' OR updated_at = '' OR completed_at IS NULL
+		`); err != nil {
+			return fmt.Errorf("backfill durable workflow compensation columns: %w", err)
 		}
 	}
 	return nil

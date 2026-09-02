@@ -104,6 +104,7 @@ func (tm *TriggerManager) HandleEvent(ctx context.Context, eventType string, pay
 }
 
 func (tm *TriggerManager) HandleEventWithContext(ctx context.Context, eventType string, payload json.RawMessage, execution ExecutionContext) error {
+	DefaultWorkflowReliabilityMetrics.Inc(MetricWorkflowTriggerTotal)
 	bindings, err := tm.list(ctx, TriggerTypeEvent, eventType, "")
 	if err != nil {
 		return err
@@ -128,6 +129,7 @@ func (tm *TriggerManager) HandleEventWithContext(ctx context.Context, eventType 
 }
 
 func (tm *TriggerManager) HandleStructuredEvent(ctx context.Context, event WorkflowTriggerEvent, execution ExecutionContext) error {
+	DefaultWorkflowReliabilityMetrics.Inc(MetricWorkflowTriggerTotal)
 	event.EventID = strings.TrimSpace(event.EventID)
 	event.EventType = strings.TrimSpace(event.EventType)
 	if event.EventID == "" || event.EventType == "" {
@@ -182,6 +184,7 @@ func (tm *TriggerManager) HandleStructuredEvent(ctx context.Context, event Workf
 				continue
 			}
 			if !claimed {
+				DefaultWorkflowReliabilityMetrics.Inc(MetricWorkflowTriggerDuplicateTotal)
 				registry.Rollback(bindingEvent, binding)
 				continue
 			}

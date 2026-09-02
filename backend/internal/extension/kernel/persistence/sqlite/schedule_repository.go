@@ -335,6 +335,52 @@ func (r *ScheduleRepository) ListStatesByStatus(ctx context.Context, status sche
 	return out, rows.Err()
 }
 
+func (r *ScheduleRepository) CreateTriggerIfAbsent(ctx context.Context, record *schedule.ScheduleTriggerRecord) (bool, error) {
+	if record == nil {
+		return false, fmt.Errorf("sqlite: create schedule trigger: record is nil")
+	}
+	if record.TriggerID == "" {
+		record.TriggerID = "trigger-" + record.IdempotencyKey
+	}
+	now := time.Now().UTC()
+	createdAt := record.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = now
+	}
+	updatedAt := record.UpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = now
+	}
+	ex := getExecutor(ctx, r.db)
+	result, err := ex.ExecContext(ctx, `
+		INSERT OR IGNORE INTO extension_schedule_triggers
+			(trigger_id, schedule_id, scheduled_at, effective_at, triggered_at, idempotency_key,
+			 status, lease_owner, lease_expires_at, scope_snapshot_id, permission_snapshot_id,
+			 dependency_snapshot_id, operation_id, invocation_id, attempt, generation, manual,
+			 error_code, error_message, jitter_applied_ms, misfire_decision, overlap_decision,
+			 dst_decision, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		record.TriggerID, record.ScheduleID, record.ScheduledAt.UTC(), record.EffectiveAt.UTC(),
+		nullableTime(record.TriggeredAt), record.IdempotencyKey,
+		string(record.Status), nullableString(record.LeaseOwner), nullableTime(record.LeaseExpiresAt),
+		record.ScopeSnapshotID, record.PermissionSnapshotID, record.DependencySnapshotID,
+		nullableString(record.OperationID), nullableString(record.InvocationID),
+		record.Attempt, record.Generation, boolToInt(record.Manual),
+		nullableString(record.ErrorCode), nullableString(record.ErrorMessage),
+		record.JitterApplied.Milliseconds(), record.MisfireDecision, record.OverlapDecision,
+		record.DSTDecision, createdAt, updatedAt,
+	)
+	if err != nil {
+		return false, fmt.Errorf("sqlite: create schedule trigger if absent: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("sqlite: create schedule trigger rows affected: %w", err)
+	}
+	return rows == 1, nil
+}
+
 func (r *ScheduleRepository) PutTrigger(ctx context.Context, record *schedule.ScheduleTriggerRecord) error {
 	if record.TriggerID == "" {
 		record.TriggerID = uuid.New().String()

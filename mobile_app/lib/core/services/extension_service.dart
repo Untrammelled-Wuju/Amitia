@@ -669,6 +669,35 @@ class ExtensionService {
     return items.whereType<Map>().map((e) => e.map((k, v) => MapEntry(k.toString(), v))).toList(growable: false);
   }
 
+  Future<Map<String, dynamic>> createWorkflowWakeConfig({
+    required WorkflowApiTarget target,
+    required String name,
+    required List<String> phrases,
+    String locale = 'zh-CN',
+    double threshold = 0.85,
+    int cooldownMs = 2000,
+    String backend = 'local',
+    String modelResourceUri = '',
+  }) async {
+    if (target.isCloud) throw StateError('Wake config requires a local or device workflow target');
+    final path = target.isLocal
+        ? '/api/local/workflows/trigger-wake-configs'
+        : '/api/extensions/workflow-devices/${Uri.encodeComponent(target.deviceId.trim())}/trigger-wake-configs';
+    return await _api.post<Map<String, dynamic>>(
+          path,
+          data: <String, dynamic>{
+            'name': name.trim(),
+            'phrases': phrases.map((value) => value.trim()).where((value) => value.isNotEmpty).toList(growable: false),
+            'locale': locale.trim(),
+            'threshold': threshold,
+            'cooldownMs': cooldownMs,
+            'backend': backend.trim(),
+            if (modelResourceUri.trim().isNotEmpty) 'modelResourceUri': modelResourceUri.trim(),
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> createWorkflowTaskerSecret({required WorkflowApiTarget target}) async {
     if (target.isCloud) throw StateError('Tasker trigger secret requires a local or device workflow target');
     final path = target.isLocal
@@ -727,8 +756,7 @@ class ExtensionService {
   }
 
   Future<List<Map<String, dynamic>>> workflowCatalog({WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    final value = _kernelWorkflowTarget(target, 'workflow catalog');
-    final resp = await _api.get<Map<String, dynamic>>('${_workflowBase(value)}/catalog');
+    final resp = await _api.get<Map<String, dynamic>>('${_workflowBase(target)}/catalog');
     final items = resp?['items'];
     if (items is! List) return const <Map<String, dynamic>>[];
     return items.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(growable: false);

@@ -241,6 +241,8 @@ type Container struct {
 
 	EventBridgePublisher *eventbridge.Publisher
 
+	AndroidNativeProvider capability.AndroidProvider
+
 	NativeBridgeRelay interface{}
 
 	AcquisitionService *acquisition.AcquisitionService

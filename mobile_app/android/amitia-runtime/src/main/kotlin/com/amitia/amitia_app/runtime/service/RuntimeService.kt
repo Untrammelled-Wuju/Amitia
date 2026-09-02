@@ -18,6 +18,8 @@ import com.amitia.amitia_app.runtime.proot.ProotEvent
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
+import com.amitia.amitia_app.runtime.recovery.AndroidRuntimeDesiredStateStore
+import com.amitia.amitia_app.runtime.recovery.PersistentRuntimeRecoveryScheduler
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -248,9 +250,11 @@ class RuntimeService : Service() {
             RuntimeServiceContract.ACTION_START_HOST -> {
                 val generation = intent.getLongExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 0L)
                 val profile = intent.getStringExtra(RuntimeServiceContract.EXTRA_RUNTIME_PROFILE) ?: "local"
+                if (generation > 0L) persistDesiredRuntimeState(running = true, profile = profile)
                 handleStartHost(generation, profile, startId)
             }
             RuntimeServiceContract.ACTION_STOP_HOST -> {
+                persistDesiredRuntimeState(running = false, profile = null)
                 val targetGeneration = intent.getLongExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, Long.MIN_VALUE)
                 handleStopHost(targetGeneration, startId)
             }
@@ -288,6 +292,20 @@ class RuntimeService : Service() {
         }
 
         return START_NOT_STICKY
+    }
+
+    private fun persistDesiredRuntimeState(running: Boolean, profile: String?) {
+        runCatching {
+            val store = AndroidRuntimeDesiredStateStore(applicationContext)
+            if (running) {
+                store.requestStart(profile?.trim().orEmpty().ifEmpty { "local" })
+            } else {
+                store.requestStop()
+                PersistentRuntimeRecoveryScheduler.cancel(applicationContext)
+            }
+        }.onFailure { error ->
+            Log.w(TAG, "failed to persist desired runtime state", error)
+        }
     }
 
     private fun handleStartHost(generation: Long, profile: String, startId: Int) {
@@ -1190,6 +1208,7 @@ class RuntimeService : Service() {
     }
 
     internal companion object {
+
         private val instanceRef = AtomicReference<RuntimeService?>(null)
 
         const val GRACEFUL_SHUTDOWN_TIMEOUT_MS = 5000L

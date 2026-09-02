@@ -102,6 +102,10 @@ type ToolInvocationContext struct {
 	ApprovalMode   ApprovalMode     `json:"approvalMode,omitempty"`
 	ExpiresAt      time.Time        `json:"expiresAt,omitempty"`
 	IdempotencyKey string           `json:"idempotencyKey,omitempty"`
+	WorkflowRunID  string           `json:"workflowRunId,omitempty"`
+	WorkflowNodeID string           `json:"workflowNodeId,omitempty"`
+	LogicalAttempt int              `json:"logicalAttempt,omitempty"`
+	FencingToken   int64            `json:"fencingToken,omitempty"`
 	TraceID        string           `json:"traceId,omitempty"`
 	OperationID    string           `json:"operationId,omitempty"`
 	CorrelationID  string           `json:"correlationId,omitempty"`
@@ -144,6 +148,10 @@ type ToolInvocationOptions struct {
 	ExpiresAt time.Time
 
 	IdempotencyKey string
+	WorkflowRunID  string
+	WorkflowNodeID string
+	LogicalAttempt int
+	FencingToken   int64
 
 	TraceID     string
 	OperationID string
@@ -193,6 +201,10 @@ func NewToolInvocationContext(opts ToolInvocationOptions) ToolInvocationContext 
 		ApprovalMode:         opts.ApprovalMode,
 		ExpiresAt:            opts.ExpiresAt,
 		IdempotencyKey:       opts.IdempotencyKey,
+		WorkflowRunID:        opts.WorkflowRunID,
+		WorkflowNodeID:       opts.WorkflowNodeID,
+		LogicalAttempt:       opts.LogicalAttempt,
+		FencingToken:         opts.FencingToken,
 		CorrelationID:        opts.CorrelationID,
 		CausationID:          opts.CausationID,
 		ScheduleID:           opts.ScheduleID,

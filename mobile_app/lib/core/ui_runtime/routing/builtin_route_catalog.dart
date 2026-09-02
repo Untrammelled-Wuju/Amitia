@@ -66,6 +66,7 @@ import '../../../features/settings/presentation/pages/long_running_page.dart';
 import '../../../features/settings/presentation/pages/advanced_system_page.dart';
 import '../../../features/settings/presentation/pages/decision_viz_page.dart';
 import '../../../features/permissions/presentation/pages/permissions_page.dart';
+import '../../../features/permissions/presentation/pages/android_automation_page.dart';
 import '../../../features/settings/presentation/pages/backup_page.dart';
 import '../../../features/settings/presentation/pages/ai_config_page.dart';
 import '../../../features/settings/presentation/pages/asr_page.dart';
@@ -607,6 +608,14 @@ GoRoute(
     context: context,
     state: state,
     child: const PermissionsPage(),
+  ),
+),
+GoRoute(
+  path: '/settings/android-automation',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const AndroidAutomationPage(),
   ),
 ),
 GoRoute(

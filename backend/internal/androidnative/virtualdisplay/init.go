@@ -15,7 +15,7 @@ func Register(provider *androidnative.Provider, bridge androidnative.NativeBridg
 	service := NewService(store, virtualBridge, policy, resolver)
 	handler := NewHandler(service)
 
-	registerOps := []string{OperationStatus, OperationCreate, OperationGet, OperationResize, OperationRelease}
+	registerOps := []string{OperationStatus, OperationCreate, OperationGet, OperationList, OperationResize, OperationRelease}
 	for _, op := range registerOps {
 		if err := provider.RegisterHandler(op, handler); err != nil {
 			return nil, err

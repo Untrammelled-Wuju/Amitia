@@ -130,3 +130,25 @@ func (e *RootExecutor) InputText(
 func formatInt(v int) string {
 	return fmt.Sprintf("%d", v)
 }
+
+type rootStatusProvider interface {
+	Status(ctx context.Context) (map[string]any, error)
+}
+
+func (e *RootExecutor) ProbeHealth(ctx context.Context) ProviderCapabilityHealth {
+	if e == nil || e.executor == nil {
+		return newProviderHealth("root", ProviderStateUnavailable, "root executor not available", "", true)
+	}
+	if !e.policy.AllowRootFallback {
+		return newProviderHealth("root", ProviderStateUnavailable, "disabled by interaction policy", "", false)
+	}
+	probe, ok := e.executor.(rootStatusProvider)
+	if !ok {
+		return newProviderHealth("root", ProviderStateSupported, "status probe not exposed by executor", "", true)
+	}
+	result, err := probe.Status(ctx)
+	if err != nil {
+		return newProviderHealth("root", ProviderStateFailed, err.Error(), "", true)
+	}
+	return healthFromBridgeResponse("root", result, nil)
+}

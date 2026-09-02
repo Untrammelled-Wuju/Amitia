@@ -26,25 +26,41 @@ type MisfireDetection struct {
 	MissedTimes    []time.Time
 	EarliestMissed *time.Time
 	LatestMissed   *time.Time
+	Generation     int64
 }
 
 func (m *MisfireService) DetectMisfire(ctx context.Context, def *ScheduleContributionDefinition, state *ScheduleState) (*MisfireDetection, error) {
 	now := m.clock.Now()
-
-	if state.LastScheduledAt == nil {
-		return &MisfireDetection{HasMisfire: false}, nil
-	}
-
-	lastScheduled := *state.LastScheduledAt
-	if !lastScheduled.Before(now) {
+	if def == nil || state == nil {
 		return &MisfireDetection{HasMisfire: false}, nil
 	}
 
 	missed := []time.Time{}
-	current := lastScheduled
+	var current time.Time
+	// next_scheduled_at is the durable cursor for an occurrence that was due
+	// while the scheduler was stopped/paused. This also covers the very first
+	// one-shot occurrence, where LastScheduledAt is intentionally nil.
+	if state.NextScheduledAt != nil && state.NextScheduledAt.Before(now) {
+		current = state.NextScheduledAt.UTC()
+		missed = append(missed, current)
+		if def.Trigger.Type == TriggerTypeOneShot {
+			return &MisfireDetection{
+				HasMisfire: true, MissedCount: 1, MissedTimes: missed,
+				EarliestMissed: &missed[0], LatestMissed: &missed[0], Generation: state.Generation,
+			}, nil
+		}
+	} else if state.LastScheduledAt != nil {
+		lastScheduled := state.LastScheduledAt.UTC()
+		if !lastScheduled.Before(now) {
+			return &MisfireDetection{HasMisfire: false, Generation: state.Generation}, nil
+		}
+		current = lastScheduled
+	} else {
+		return &MisfireDetection{HasMisfire: false, Generation: state.Generation}, nil
+	}
+
 	iterClock := NewFakeClock(current)
 	calc := NewScheduleCalculator(iterClock)
-
 	for i := 0; i < 1000; i++ {
 		iterClock.Set(current)
 		result, err := calc.CalculateNext(def, &ScheduleState{
@@ -54,8 +70,8 @@ func (m *MisfireService) DetectMisfire(ctx context.Context, def *ScheduleContrib
 		if err != nil || result == nil || result.NextScheduledAt == nil {
 			break
 		}
-		next := *result.NextScheduledAt
-		if !next.Before(now) {
+		next := result.NextScheduledAt.UTC()
+		if !next.After(current) || !next.Before(now) {
 			break
 		}
 		if def.EndAt != nil && next.After(*def.EndAt) {
@@ -66,7 +82,7 @@ func (m *MisfireService) DetectMisfire(ctx context.Context, def *ScheduleContrib
 	}
 
 	if len(missed) == 0 {
-		return &MisfireDetection{HasMisfire: false}, nil
+		return &MisfireDetection{HasMisfire: false, Generation: state.Generation}, nil
 	}
 
 	return &MisfireDetection{
@@ -75,6 +91,7 @@ func (m *MisfireService) DetectMisfire(ctx context.Context, def *ScheduleContrib
 		MissedTimes:    missed,
 		EarliestMissed: &missed[0],
 		LatestMissed:   &missed[len(missed)-1],
+		Generation:     state.Generation,
 	}, nil
 }
 
@@ -149,7 +166,43 @@ func (m *MisfireService) ApplyMisfirePolicy(ctx context.Context, def *ScheduleCo
 		m.recordMisfire(ctx, def, detection, "fire_once", "default_fire_once", detection.MissedCount-1)
 	}
 
+	if len(result.FireTimes) > 0 {
+		if err := m.materializeCatchUpTriggers(ctx, def, detection, result); err != nil {
+			return nil, err
+		}
+	}
 	return result, nil
+}
+
+func (m *MisfireService) materializeCatchUpTriggers(ctx context.Context, def *ScheduleContributionDefinition, detection *MisfireDetection, result *MisfireActionResult) error {
+	if m == nil || m.store == nil || def == nil || detection == nil || result == nil {
+		return nil
+	}
+	now := m.clock.Now().UTC()
+	for _, fireAt := range result.FireTimes {
+		scheduledAt := fireAt.UTC()
+		idempotencyKey := GenerateIdempotencyKey(def.ScheduleID, scheduledAt, detection.Generation)
+		// TriggerID is deterministic as a second line of defence against two
+		// recovery workers materializing the same historical occurrence. The
+		// workflow target receives the same idempotency key as well.
+		trigger := &ScheduleTriggerRecord{
+			TriggerID:       "trigger-misfire-" + idempotencyKey,
+			ScheduleID:      def.ScheduleID,
+			ScheduledAt:     scheduledAt,
+			EffectiveAt:     now,
+			IdempotencyKey:  idempotencyKey,
+			Status:          RunStatusWaiting,
+			Generation:      detection.Generation,
+			MisfireDecision: result.Action,
+			OverlapDecision: "misfire_recovery",
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		}
+		if _, err := createTriggerIfAbsent(ctx, m.store, trigger); err != nil {
+			return fmt.Errorf("materialize schedule misfire trigger %s: %w", scheduledAt.Format(time.RFC3339Nano), err)
+		}
+	}
+	return nil
 }
 
 func (m *MisfireService) recordMisfire(ctx context.Context, def *ScheduleContributionDefinition, detection *MisfireDetection, policy, action string, skippedCount int) {

@@ -12,13 +12,18 @@ import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class WorkflowDeviceEventIngress(
     context: Context,
 ) {
-    private val client = WorkflowDeviceEventClient(context.applicationContext)
+    private val appContext = context.applicationContext
+    private val client = WorkflowDeviceEventClient(appContext)
+    private val outbox = WorkflowDeviceEventOutbox(appContext)
+    private val journal = WorkflowDeviceEventJournal(appContext)
 
     fun reportCapabilities(
         items: List<Map<String, Any?>>,
@@ -32,6 +37,27 @@ class WorkflowDeviceEventIngress(
                 array.put(value)
             }
             client.postCapabilityStatus(JSONObject().put("items", array))
+        }
+    }
+
+    fun flushPending(completion: (Result<Int>) -> Unit = {}) {
+        try {
+            reportExecutor.execute {
+                completion(runCatching { outbox.flush(client) })
+            }
+        } catch (_: RejectedExecutionException) {
+            completion(Result.failure(IllegalStateException("workflow device report queue is full")))
+        }
+    }
+
+    fun reportAndroidRuntimeHealth(
+        status: Map<String, Any?>,
+        completion: (Result<Unit>) -> Unit = {},
+    ) {
+        executeReport(completion) {
+            val body = JSONObject()
+            status.forEach { (key, raw) -> body.put(key, raw) }
+            client.postAndroidRuntimeHealth(body)
         }
     }
 
@@ -57,6 +83,7 @@ class WorkflowDeviceEventIngress(
         payload: JSONObject,
         source: String,
         eventID: String = UUID.randomUUID().toString(),
+        dedupeWindowMs: Long = defaultDedupeWindowMs(eventType),
         completion: (Result<Unit>) -> Unit = {},
     ) {
         val normalizedEventType = eventType.trim()
@@ -75,12 +102,35 @@ class WorkflowDeviceEventIngress(
         }
         try {
             eventExecutor.execute {
+                val prepared = journal.prepare(
+                    eventType = normalizedEventType,
+                    source = source,
+                    payload = payload,
+                    dedupeWindowMs = dedupeWindowMs.coerceIn(0L, MAX_DEDUPE_WINDOW_MS),
+                )
+                if (prepared.duplicate) {
+                    completion(Result.success(Unit))
+                    return@execute
+                }
                 val envelope = JSONObject()
                     .put("eventId", normalizedEventID)
+                    .put("eventFingerprint", prepared.fingerprint)
+                    .put("sourceSequence", prepared.sourceSequence)
                     .put("source", source.take(128))
                     .put("occurredAt", timestamp())
                     .put("payload", payload)
-                completion(client.post(normalizedEventType, envelope))
+                outbox.flush(client)
+                val delivered = client.post(normalizedEventType, envelope)
+                if (delivered.isSuccess) {
+                    journal.recordAccepted(prepared.fingerprint, normalizedEventID)
+                    completion(delivered)
+                } else if (outbox.enqueue(normalizedEventType, envelope)) {
+                    journal.recordAccepted(prepared.fingerprint, normalizedEventID)
+                    scheduleRetry()
+                    completion(Result.success(Unit))
+                } else {
+                    completion(delivered)
+                }
             }
         } catch (_: RejectedExecutionException) {
             completion(Result.failure(IllegalStateException("workflow device event queue is full")))
@@ -96,6 +146,18 @@ class WorkflowDeviceEventIngress(
         } catch (_: RejectedExecutionException) {
             completion(Result.failure(IllegalStateException("workflow device report queue is full")))
         }
+    }
+
+    private fun scheduleRetry() {
+        if (!retryScheduled.compareAndSet(false, true)) return
+        retryExecutor.schedule({
+            try {
+                outbox.flush(client)
+            } finally {
+                retryScheduled.set(false)
+                if (outbox.size() > 0) scheduleRetry()
+            }
+        }, retryDelaySeconds, TimeUnit.SECONDS)
     }
 
     companion object {
@@ -117,15 +179,69 @@ class WorkflowDeviceEventIngress(
             { runnable -> Thread(runnable, "amitia-workflow-device-reports").apply { isDaemon = true } },
             ThreadPoolExecutor.AbortPolicy(),
         )
+        private val retryExecutor = ScheduledThreadPoolExecutor(
+            1,
+            { runnable -> Thread(runnable, "amitia-workflow-device-event-retry").apply { isDaemon = true } },
+        ).apply { removeOnCancelPolicy = true }
+        private val retryScheduled = AtomicBoolean(false)
         private val rateWindows = ConcurrentHashMap<String, ArrayDeque<Long>>()
+        private const val retryDelaySeconds = 3L
         private val allowedEventTypes = setOf(
             "device.android.intent",
             "device.android.tasker",
             "voice.wake.detected",
             "voice.asr.final",
             "device.app.foreground",
+            "device.notification.posted",
+            "device.notification.removed",
+            "device.power.battery_changed",
+            "device.power.battery_low",
+            "device.power.battery_okay",
+            "device.power.connected",
+            "device.power.disconnected",
+            "device.screen.on",
+            "device.screen.off",
+            "device.user.present",
+            "device.audio.headset_connected",
+            "device.audio.headset_disconnected",
+            "device.bluetooth.state_changed",
+            "device.bluetooth.connected",
+            "device.bluetooth.disconnected",
+            "device.ble.characteristic_changed",
+            "device.network.available",
+            "device.network.lost",
+            "device.network.changed",
+            "device.wifi.enabled",
+            "device.wifi.disabled",
+            "device.wifi.state_changed",
+            "device.wifi.connected",
+            "device.wifi.disconnected",
+            "device.location.geofence.enter",
+            "device.location.geofence.exit",
+            "device.system.boot_completed",
+            "device.app.installed",
+            "device.app.removed",
+            "device.app.updated",
+            "device.app.self_updated",
+            "device.time.changed",
+            "device.time.timezone_changed",
+            "device.time.date_changed",
         )
         private const val maxEventsPerMinute = 120
+        private const val MAX_DEDUPE_WINDOW_MS = 10L * 60L * 1000L
+
+        private fun defaultDedupeWindowMs(eventType: String): Long = when (eventType.trim()) {
+            "device.system.boot_completed",
+            "device.app.self_updated",
+            "device.app.installed",
+            "device.app.removed",
+            "device.app.updated" -> 10_000L
+            "device.notification.posted",
+            "device.notification.removed",
+            "voice.wake.detected",
+            "voice.asr.final" -> 500L
+            else -> 2_000L
+        }
 
         private fun isEventIDCharacter(value: Char): Boolean =
             value in 'a'..'z' || value in 'A'..'Z' || value in '0'..'9' ||

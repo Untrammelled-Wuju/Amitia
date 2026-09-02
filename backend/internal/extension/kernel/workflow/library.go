@@ -5,31 +5,58 @@ import (
 	"time"
 )
 
+type WorkflowRevisionState string
+
+const (
+	WorkflowRevisionDraft     WorkflowRevisionState = "draft"
+	WorkflowRevisionPublished WorkflowRevisionState = "published"
+	WorkflowRevisionArchived  WorkflowRevisionState = "archived"
+)
+
+func (s WorkflowRevisionState) Valid() bool {
+	switch s {
+	case WorkflowRevisionDraft, WorkflowRevisionPublished, WorkflowRevisionArchived:
+		return true
+	default:
+		return false
+	}
+}
+
 // WorkflowRevision is an immutable local snapshot of a user workflow.
 // Revisions are intentionally local-only and scoped to the owning user.
 type WorkflowRevision struct {
-	RevisionID     string             `json:"revisionId"`
-	WorkflowID     string             `json:"workflowId"`
-	OwnerUserID    string             `json:"-"`
-	RevisionNo     int64              `json:"revisionNo"`
-	Name           string             `json:"name"`
-	Description    string             `json:"description"`
-	Definition     WorkflowDefinition `json:"definition"`
-	DefinitionHash string             `json:"definitionHash"`
-	Note           string             `json:"note,omitempty"`
-	CreatedAt      time.Time          `json:"createdAt"`
+	RevisionID     string                `json:"revisionId"`
+	WorkflowID     string                `json:"workflowId"`
+	OwnerUserID    string                `json:"-"`
+	RevisionNo     int64                 `json:"revisionNo"`
+	Name           string                `json:"name"`
+	Description    string                `json:"description"`
+	Definition     WorkflowDefinition    `json:"definition"`
+	DefinitionHash string                `json:"definitionHash"`
+	Note           string                `json:"note,omitempty"`
+	State          WorkflowRevisionState `json:"state"`
+	PublishedAt    *time.Time            `json:"publishedAt,omitempty"`
+	ArchivedAt     *time.Time            `json:"archivedAt,omitempty"`
+	CreatedAt      time.Time             `json:"createdAt"`
 }
 
 // WorkflowRevisionSummary is the lightweight representation used by history lists.
 type WorkflowRevisionSummary struct {
-	RevisionID     string    `json:"revisionId"`
-	WorkflowID     string    `json:"workflowId"`
-	RevisionNo     int64     `json:"revisionNo"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	DefinitionHash string    `json:"definitionHash"`
-	Note           string    `json:"note,omitempty"`
-	CreatedAt      time.Time `json:"createdAt"`
+	RevisionID     string                `json:"revisionId"`
+	WorkflowID     string                `json:"workflowId"`
+	RevisionNo     int64                 `json:"revisionNo"`
+	Name           string                `json:"name"`
+	Description    string                `json:"description"`
+	DefinitionHash string                `json:"definitionHash"`
+	Note           string                `json:"note,omitempty"`
+	State          WorkflowRevisionState `json:"state"`
+	PublishedAt    *time.Time            `json:"publishedAt,omitempty"`
+	ArchivedAt     *time.Time            `json:"archivedAt,omitempty"`
+	Current        bool                  `json:"current,omitempty"`
+	Installed      bool                  `json:"installed,omitempty"`
+	Running        bool                  `json:"running,omitempty"`
+	EffectiveState string                `json:"effectiveState,omitempty"`
+	CreatedAt      time.Time             `json:"createdAt"`
 }
 
 // WorkflowTemplate stores a reusable local workflow definition. Templates are

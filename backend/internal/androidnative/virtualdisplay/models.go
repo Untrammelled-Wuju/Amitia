@@ -68,12 +68,12 @@ type VirtualDisplayRecord struct {
 }
 
 type DisplayTarget struct {
-	DisplayID   int
-	Generation  uint64
-	Width       int
-	Height      int
-	DPI         int
-	Rotation    int
+	DisplayID  int
+	Generation uint64
+	Width      int
+	Height     int
+	DPI        int
+	Rotation   int
 }
 
 type CreateRequest struct {
@@ -85,11 +85,11 @@ type CreateRequest struct {
 }
 
 type CreateResult struct {
-	Display                 VirtualDisplayInfo `json:"display"`
-	FrameSourceReady        bool               `json:"frameSourceReady"`
-	ThirdPartyLaunchSupported bool             `json:"thirdPartyLaunchSupported"`
-	UITreeSupported         bool               `json:"uiTreeSupported"`
-	GestureSupported        bool               `json:"gestureSupported"`
+	Display                   VirtualDisplayInfo `json:"display"`
+	FrameSourceReady          bool               `json:"frameSourceReady"`
+	ThirdPartyLaunchSupported bool               `json:"thirdPartyLaunchSupported"`
+	UITreeSupported           bool               `json:"uiTreeSupported"`
+	GestureSupported          bool               `json:"gestureSupported"`
 }
 
 type GetRequest struct {
@@ -119,17 +119,19 @@ type ReleaseResult struct {
 }
 
 type StatusResult struct {
-	Supported          bool                `json:"supported"`
-	FeatureSecondaryDisplays bool           `json:"featureSecondaryDisplays"`
-	CanCreate          bool                `json:"canCreate"`
-	Active             bool                `json:"active"`
-	Display            *VirtualDisplayInfo `json:"display,omitempty"`
-	FrameSourceSupported bool              `json:"frameSourceSupported"`
-	UITreeSupported    bool                `json:"uiTreeSupported"`
-	GestureSupported   bool                `json:"gestureSupported"`
-	ThirdPartyLaunchSupported bool         `json:"thirdPartyLaunchSupported"`
-	State              string              `json:"state"`
-	Reason             string              `json:"reason"`
+	Supported                 bool                 `json:"supported"`
+	FeatureSecondaryDisplays  bool                 `json:"featureSecondaryDisplays"`
+	CanCreate                 bool                 `json:"canCreate"`
+	Active                    bool                 `json:"active"`
+	ActiveCount               int                  `json:"activeCount"`
+	Display                   *VirtualDisplayInfo  `json:"display,omitempty"`
+	Displays                  []VirtualDisplayInfo `json:"displays,omitempty"`
+	FrameSourceSupported      bool                 `json:"frameSourceSupported"`
+	UITreeSupported           bool                 `json:"uiTreeSupported"`
+	GestureSupported          bool                 `json:"gestureSupported"`
+	ThirdPartyLaunchSupported bool                 `json:"thirdPartyLaunchSupported"`
+	State                     string               `json:"state"`
+	Reason                    string               `json:"reason"`
 }
 
 type DisplayLaunchTarget struct {

@@ -50,6 +50,19 @@ func NewWorkflowEventMatcherRegistry() *WorkflowEventMatcherRegistry {
 	registry.Register("voice.wake.detected", voiceWakeWorkflowEventMatcher{})
 	registry.Register("voice.asr.final", voicePhraseWorkflowEventMatcher{})
 	registry.Register("device.app.foreground", newAppForegroundWorkflowEventMatcher())
+	for _, eventType := range []string{"device.notification.posted", "device.notification.removed"} {
+		registry.Register(eventType, notificationWorkflowEventMatcher{})
+	}
+	registry.Register("device.power.battery_changed", batteryWorkflowEventMatcher{})
+	for _, eventType := range []string{"device.network.available", "device.network.lost", "device.network.changed"} {
+		registry.Register(eventType, networkWorkflowEventMatcher{})
+	}
+	for _, eventType := range []string{"device.app.installed", "device.app.removed", "device.app.updated", "device.app.self_updated"} {
+		registry.Register(eventType, packageWorkflowEventMatcher{})
+	}
+	registry.Register("device.ble.characteristic_changed", bleCharacteristicWorkflowEventMatcher{})
+	registry.Register("device.location.geofence.enter", geofenceWorkflowEventMatcher{})
+	registry.Register("device.location.geofence.exit", geofenceWorkflowEventMatcher{})
 	return registry
 }
 
@@ -375,6 +388,258 @@ func (m *appForegroundWorkflowEventMatcher) Rollback(event WorkflowTriggerEvent,
 		delete(m.last, binding.BindingID)
 	}
 	m.mu.Unlock()
+}
+
+type notificationWorkflowEventMatcher struct{}
+
+type notificationMatcherConfig struct {
+	Packages      []string `json:"packages"`
+	TitleContains string   `json:"titleContains"`
+	TextContains  string   `json:"textContains"`
+	ChannelIDs    []string `json:"channelIds"`
+	Categories    []string `json:"categories"`
+	Ongoing       *bool    `json:"ongoing"`
+	Clearable     *bool    `json:"clearable"`
+}
+
+func (notificationWorkflowEventMatcher) Match(_ context.Context, event WorkflowTriggerEvent, binding TriggerBinding, _ WorkflowTriggerSecretResolver) (WorkflowEventMatchResult, error) {
+	var cfg notificationMatcherConfig
+	if err := unmarshalTriggerConfig(binding.Config, &cfg); err != nil {
+		return WorkflowEventMatchResult{}, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return WorkflowEventMatchResult{}, fmt.Errorf("workflow notification payload: %w", err)
+	}
+	if len(cfg.Packages) > 0 && !containsExact(cfg.Packages, firstString(payload, "packageName")) {
+		return WorkflowEventMatchResult{}, nil
+	}
+	if len(cfg.ChannelIDs) > 0 && !containsExact(cfg.ChannelIDs, firstString(payload, "channelId")) {
+		return WorkflowEventMatchResult{}, nil
+	}
+	if len(cfg.Categories) > 0 && !containsExact(cfg.Categories, firstString(payload, "category")) {
+		return WorkflowEventMatchResult{}, nil
+	}
+	if needle := strings.TrimSpace(cfg.TitleContains); needle != "" &&
+		!strings.Contains(strings.ToLower(firstString(payload, "title")), strings.ToLower(needle)) {
+		return WorkflowEventMatchResult{}, nil
+	}
+	if needle := strings.TrimSpace(cfg.TextContains); needle != "" {
+		haystack := firstString(payload, "text") + "\n" + firstString(payload, "subText")
+		if !strings.Contains(strings.ToLower(haystack), strings.ToLower(needle)) {
+			return WorkflowEventMatchResult{}, nil
+		}
+	}
+	if cfg.Ongoing != nil {
+		value, _ := payload["ongoing"].(bool)
+		if value != *cfg.Ongoing {
+			return WorkflowEventMatchResult{}, nil
+		}
+	}
+	if cfg.Clearable != nil {
+		value, _ := payload["clearable"].(bool)
+		if value != *cfg.Clearable {
+			return WorkflowEventMatchResult{}, nil
+		}
+	}
+	return WorkflowEventMatchResult{Matched: true, Payload: event.Payload}, nil
+}
+
+type batteryWorkflowEventMatcher struct{}
+
+type batteryMatcherConfig struct {
+	MinPercent *int  `json:"minPercent"`
+	MaxPercent *int  `json:"maxPercent"`
+	Charging   *bool `json:"charging"`
+}
+
+func (batteryWorkflowEventMatcher) Match(_ context.Context, event WorkflowTriggerEvent, binding TriggerBinding, _ WorkflowTriggerSecretResolver) (WorkflowEventMatchResult, error) {
+	var cfg batteryMatcherConfig
+	if err := unmarshalTriggerConfig(binding.Config, &cfg); err != nil {
+		return WorkflowEventMatchResult{}, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return WorkflowEventMatchResult{}, fmt.Errorf("workflow battery payload: %w", err)
+	}
+	percent, hasPercent := numberAsInt(payload["percent"])
+	if cfg.MinPercent != nil && (!hasPercent || percent < *cfg.MinPercent) {
+		return WorkflowEventMatchResult{}, nil
+	}
+	if cfg.MaxPercent != nil && (!hasPercent || percent > *cfg.MaxPercent) {
+		return WorkflowEventMatchResult{}, nil
+	}
+	if cfg.Charging != nil {
+		value, _ := payload["charging"].(bool)
+		if value != *cfg.Charging {
+			return WorkflowEventMatchResult{}, nil
+		}
+	}
+	return WorkflowEventMatchResult{Matched: true, Payload: event.Payload}, nil
+}
+
+type networkWorkflowEventMatcher struct{}
+
+type networkMatcherConfig struct {
+	Transports []string `json:"transports"`
+	Validated  *bool    `json:"validated"`
+	Metered    *bool    `json:"metered"`
+}
+
+func (networkWorkflowEventMatcher) Match(_ context.Context, event WorkflowTriggerEvent, binding TriggerBinding, _ WorkflowTriggerSecretResolver) (WorkflowEventMatchResult, error) {
+	var cfg networkMatcherConfig
+	if err := unmarshalTriggerConfig(binding.Config, &cfg); err != nil {
+		return WorkflowEventMatchResult{}, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return WorkflowEventMatchResult{}, fmt.Errorf("workflow network payload: %w", err)
+	}
+	if len(cfg.Transports) > 0 && !payloadContainsAnyString(payload["transports"], cfg.Transports) {
+		return WorkflowEventMatchResult{}, nil
+	}
+	if cfg.Validated != nil {
+		value, _ := payload["validated"].(bool)
+		if value != *cfg.Validated {
+			return WorkflowEventMatchResult{}, nil
+		}
+	}
+	if cfg.Metered != nil {
+		value, _ := payload["metered"].(bool)
+		if value != *cfg.Metered {
+			return WorkflowEventMatchResult{}, nil
+		}
+	}
+	return WorkflowEventMatchResult{Matched: true, Payload: event.Payload}, nil
+}
+
+type packageWorkflowEventMatcher struct{}
+
+type packageMatcherConfig struct {
+	Packages []string `json:"packages"`
+}
+
+func (packageWorkflowEventMatcher) Match(_ context.Context, event WorkflowTriggerEvent, binding TriggerBinding, _ WorkflowTriggerSecretResolver) (WorkflowEventMatchResult, error) {
+	var cfg packageMatcherConfig
+	if err := unmarshalTriggerConfig(binding.Config, &cfg); err != nil {
+		return WorkflowEventMatchResult{}, err
+	}
+	if len(cfg.Packages) == 0 {
+		return WorkflowEventMatchResult{Matched: true, Payload: event.Payload}, nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return WorkflowEventMatchResult{}, fmt.Errorf("workflow package payload: %w", err)
+	}
+	if !containsExact(cfg.Packages, firstString(payload, "packageName")) {
+		return WorkflowEventMatchResult{}, nil
+	}
+	return WorkflowEventMatchResult{Matched: true, Payload: event.Payload}, nil
+}
+
+type bleCharacteristicWorkflowEventMatcher struct{}
+
+type bleCharacteristicMatcherConfig struct {
+	SessionID          string `json:"sessionId"`
+	Address            string `json:"address"`
+	ServiceUUID        string `json:"serviceUuid"`
+	CharacteristicUUID string `json:"characteristicUuid"`
+}
+
+func (bleCharacteristicWorkflowEventMatcher) Match(_ context.Context, event WorkflowTriggerEvent, binding TriggerBinding, _ WorkflowTriggerSecretResolver) (WorkflowEventMatchResult, error) {
+	var cfg bleCharacteristicMatcherConfig
+	if err := unmarshalTriggerConfig(binding.Config, &cfg); err != nil {
+		return WorkflowEventMatchResult{}, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return WorkflowEventMatchResult{}, fmt.Errorf("workflow BLE characteristic payload: %w", err)
+	}
+	for _, pair := range [][2]string{
+		{strings.TrimSpace(cfg.SessionID), firstString(payload, "sessionId")},
+		{strings.TrimSpace(cfg.Address), firstString(payload, "address")},
+		{strings.TrimSpace(cfg.ServiceUUID), firstString(payload, "serviceUuid")},
+		{strings.TrimSpace(cfg.CharacteristicUUID), firstString(payload, "characteristicUuid")},
+	} {
+		if pair[0] != "" && !strings.EqualFold(pair[0], pair[1]) {
+			return WorkflowEventMatchResult{}, nil
+		}
+	}
+	return WorkflowEventMatchResult{Matched: true, Payload: event.Payload}, nil
+}
+
+type geofenceWorkflowEventMatcher struct{}
+
+type geofenceMatcherConfig struct {
+	FenceIDs []string `json:"fenceIds"`
+}
+
+func (geofenceWorkflowEventMatcher) Match(_ context.Context, event WorkflowTriggerEvent, binding TriggerBinding, _ WorkflowTriggerSecretResolver) (WorkflowEventMatchResult, error) {
+	var cfg geofenceMatcherConfig
+	if err := unmarshalTriggerConfig(binding.Config, &cfg); err != nil {
+		return WorkflowEventMatchResult{}, err
+	}
+	if len(cfg.FenceIDs) == 0 {
+		return WorkflowEventMatchResult{Matched: true, Payload: event.Payload}, nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return WorkflowEventMatchResult{}, fmt.Errorf("workflow geofence payload: %w", err)
+	}
+	if !containsExact(cfg.FenceIDs, firstString(payload, "fenceId")) {
+		return WorkflowEventMatchResult{}, nil
+	}
+	return WorkflowEventMatchResult{Matched: true, Payload: event.Payload}, nil
+}
+
+func numberAsInt(value any) (int, bool) {
+	switch v := value.(type) {
+	case float64:
+		return int(v), true
+	case float32:
+		return int(v), true
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case json.Number:
+		n, err := v.Int64()
+		return int(n), err == nil
+	default:
+		return 0, false
+	}
+}
+
+func payloadContainsAnyString(value any, accepted []string) bool {
+	set := make(map[string]struct{}, len(accepted))
+	for _, item := range accepted {
+		item = strings.ToLower(strings.TrimSpace(item))
+		if item != "" {
+			set[item] = struct{}{}
+		}
+	}
+	switch items := value.(type) {
+	case []any:
+		for _, item := range items {
+			text, ok := item.(string)
+			if !ok {
+				continue
+			}
+			if _, ok := set[strings.ToLower(strings.TrimSpace(text))]; ok {
+				return true
+			}
+		}
+	case []string:
+		for _, item := range items {
+			if _, ok := set[strings.ToLower(strings.TrimSpace(item))]; ok {
+				return true
+			}
+		}
+	case string:
+		_, ok := set[strings.ToLower(strings.TrimSpace(items))]
+		return ok
+	}
+	return false
 }
 
 func unmarshalTriggerConfig(raw json.RawMessage, target any) error {

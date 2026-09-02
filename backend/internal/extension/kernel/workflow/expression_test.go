@@ -18,6 +18,8 @@ func TestParseWorkflowValueRef(t *testing.T) {
 		{"runtime.version", RefSourceRuntime, "", []string{"version"}, false},
 		{"steps.node1.output", RefSourceNodeOutput, "node1", []string{"output"}, false},
 		{"node.n1.data.value", RefSourceNodeOutput, "n1", []string{"data", "value"}, false},
+		{"nodes.charge.output.transactionId", RefSourceNodeOutput, "charge", []string{"transactionId"}, false},
+		{"${nodes.charge.output.transactionId}", RefSourceNodeOutput, "charge", []string{"transactionId"}, false},
 		{"literal:hello world", RefSourceLiteral, "", []string{"hello world"}, false},
 		{"", "", "", nil, true},
 		{"unknown.foo", "", "", nil, true},

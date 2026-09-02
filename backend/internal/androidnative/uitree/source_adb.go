@@ -63,15 +63,21 @@ func (s *ADBSource) Snapshot(ctx context.Context, request SnapshotRequest) (RawS
 		log.Printf("uitree: adb source: cleanup failed: %v", err)
 	}
 
+	parser := UiAutomatorXmlParser{}
+	windows, nodes, err := parser.Parse(readResult.Stdout, SourceTypeADB)
+	if err != nil {
+		return RawSnapshot{}, err
+	}
+
+	now := time.Now().UnixMilli()
 	return RawSnapshot{
-		Source:     SourceTypeADB,
-		Generation: time.Now().UnixMilli(),
-		CapturedAt: time.Now().UnixMilli(),
-		Truncated:  false,
+		Source:      SourceTypeADB,
+		Generation:  now,
+		CapturedAt:  now,
+		Truncated:   false,
 		MultiWindow: false,
-		StableRef:  false,
-		RawNodes: []map[string]any{
-			{"xml": readResult.Stdout},
-		},
+		StableRef:   true,
+		RawWindows:  windows,
+		RawNodes:    nodes,
 	}, nil
 }

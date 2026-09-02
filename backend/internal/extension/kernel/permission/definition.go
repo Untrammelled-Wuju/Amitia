@@ -16,6 +16,7 @@ const (
 	CategoryService    PermissionCategory = "service"
 	CategoryGameHost   PermissionCategory = "gamehost"
 	CategoryMedia      PermissionCategory = "media"
+	CategoryAndroid    PermissionCategory = "android"
 	CategoryIOS        PermissionCategory = "ios"
 	CategoryBrowser    PermissionCategory = "browser"
 )
@@ -210,6 +211,7 @@ func (r *PermissionDefinitionRegistry) registerBuiltin() {
 		{ID: "browser.resources.upload", Name: "Browser Upload", Description: "Upload resources through the browser", Category: CategoryBrowser, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: ChildDeny, DefaultApproval: ApprovalManual},
 		{ID: "browser.resources.screenshot", Name: "Browser Screenshot", Description: "Take page screenshots", Category: CategoryBrowser, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
 	}
+	builtins = append(builtins, builtinAndroidPermissionDefinitions()...)
 	for _, def := range builtins {
 		r.Register(def)
 	}

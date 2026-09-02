@@ -124,3 +124,7 @@ func formatActionArgs(action string, args map[string]any) string {
 	}
 	return fmt.Sprintf("action=%s args=%v", action, args)
 }
+
+func (e *BridgeAccessibilityExecutor) ProbeHealth(ctx context.Context) ProviderCapabilityHealth {
+	return probeNativeStatus(ctx, e.bridge, "accessibility", "accessibility.status")
+}

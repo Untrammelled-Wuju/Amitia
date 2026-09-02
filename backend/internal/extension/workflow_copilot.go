@@ -157,7 +157,7 @@ func (api *WorkflowAPI) generateWorkflowAIProposal(ctx context.Context, mode, in
 		"catalog":     catalog,
 		"rules": map[string]any{
 			"schemaVersion": "workflow-v2",
-			"nodeTypes":     []string{"tool", "mcp", "task", "javascript", "wasm", "trusted_service", "nested_workflow", "condition", "transform", "wait"},
+			"nodeTypes":     []string{"tool", "mcp", "task", "javascript", "wasm", "trusted_service", "nested_workflow", "condition", "logic", "extract", "transform", "wait"},
 			"triggerTypes":  []string{"manual", "event", "cron", "interval", "one_shot"},
 			"valueRefs":     []string{"input.<path>", "steps.<upstreamNodeId>.<path>", "runtime.<path>", "literal:<text>"},
 			"mappingRule":   "steps.* references must point to a transitive upstream dependency; add an edge when a mapping needs a new dependency",
@@ -172,7 +172,7 @@ func (api *WorkflowAPI) generateWorkflowAIProposal(ctx context.Context, mode, in
 	}
 	payload, _ := json.Marshal(request)
 
-	system := `You are Amitia Workflow Copilot for the Extension Kernel. Return exactly one JSON object and no Markdown. The object must contain exactly: definition, summary, changes, warnings. definition must be a complete workflow-v2 WorkflowDefinition, not a patch. summary is a short string. changes and warnings are string arrays. Preserve the user's intent. Never invent plaintext secrets. Use only node types and trigger types supplied by the request. For tool/mcp/task/runtime nodes, prefer catalog IDs that actually exist. Keep the graph acyclic. Every steps.<nodeId>.<path> value reference must reference a transitive upstream node; create the needed edge. Keep constant input fields alongside mapped fields. For retry requests use node.retry (maxAttempts counts the first attempt) and keep step.onError for the post-retry failure policy; use node.timeoutMs for a per-node timeout. In edit/repair mode preserve the workflow id and existing behavior unless the instruction requires a change. Do not emit definitionHash. Do not emit unknown fields.`
+	system := `You are Amitia Workflow Copilot for the Extension Kernel. Return exactly one JSON object and no Markdown. The object must contain exactly: definition, summary, changes, warnings. definition must be a complete workflow-v2 WorkflowDefinition, not a patch. summary is a short string. changes and warnings are string arrays. Preserve the user's intent. Never invent plaintext secrets. Use only node types and trigger types supplied by the request. For tool/mcp/task/runtime nodes, prefer catalog IDs that actually exist. Keep the graph acyclic. Every steps.<nodeId>.<path> value reference must reference a transitive upstream node; create the needed edge. Keep constant input fields alongside mapped fields. Prefer extract for path/field extraction, logic for boolean/comparison composition, and transform for deterministic data shaping. Supported transform ops include pick, omit, rename, set, merge, flatten, array_map, array_filter, array_take, array_sort, to_string, to_number, to_boolean, json_parse, json_stringify, unique, join, split, length, coalesce. For retry requests use node.retry (maxAttempts counts the first attempt) and keep step.onError for the post-retry failure policy; use node.timeoutMs for a per-node timeout. In edit/repair mode preserve the workflow id and existing behavior unless the instruction requires a change. Do not emit definitionHash. Do not emit unknown fields.`
 
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {

@@ -33,8 +33,9 @@ import com.amitia.amitia_app.runtime.proot.internal.DefaultProotArtifactVerifier
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotCommandBuilder
 import com.amitia.amitia_app.runtime.proot.internal.DefaultProotProcessLauncher
 import com.amitia.amitia_app.runtime.recovery.ActiveRuntimeBackedInstalledRuntimeSource
+import com.amitia.amitia_app.runtime.recovery.AndroidRuntimeDesiredStateStore
 import com.amitia.amitia_app.runtime.recovery.DefaultRuntimeCrashRecoveryPolicy
-import com.amitia.amitia_app.runtime.recovery.ExecutorRuntimeRecoveryScheduler
+import com.amitia.amitia_app.runtime.recovery.PersistentRuntimeRecoveryScheduler
 import com.amitia.amitia_app.runtime.recovery.RuntimeCrashRecoveryPolicy
 import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryScheduler
 import com.amitia.amitia_app.runtime.service.internal.AndroidRuntimeServiceHost
@@ -110,10 +111,15 @@ object AndroidRuntimeModule {
             hostAbi = RuntimeAbiPolicy.AMITIA_ANDROID.required64BitAbi,
         )
         val installedRuntimeSource = ActiveRuntimeBackedInstalledRuntimeSource(activeRuntimeManager)
+        val desiredStateStore = AndroidRuntimeDesiredStateStore(appContext)
         val recoveryPolicy: RuntimeCrashRecoveryPolicy = DefaultRuntimeCrashRecoveryPolicy(
-            installedRuntimeSource = installedRuntimeSource
+            installedRuntimeSource = installedRuntimeSource,
+            stateStore = desiredStateStore,
         )
-        val recoveryScheduler: RuntimeRecoveryScheduler = ExecutorRuntimeRecoveryScheduler()
+        val recoveryScheduler: RuntimeRecoveryScheduler = PersistentRuntimeRecoveryScheduler(
+            context = appContext,
+            desiredStateStore = desiredStateStore,
+        )
 
         val installer = createRuntimeInstaller(
             layout = layout,
@@ -146,6 +152,7 @@ object AndroidRuntimeModule {
             recoveryPolicy = recoveryPolicy,
             recoveryScheduler = recoveryScheduler,
             installedRuntimeSource = installedRuntimeSource,
+            desiredStateStore = desiredStateStore,
         )
 
         val backendConnectionProvider = DefaultBackendConnectionProvider(

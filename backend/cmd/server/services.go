@@ -84,6 +84,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
+	"github.com/u-ai/backend/internal/imageintelligence"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
@@ -341,6 +342,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 
+	var androidImageIntelligence imageintelligence.ImageIntelligence
+	if resourceResolver != nil {
+		androidImageIntelligence = imageintelligence.NewImageIntelligenceFactory(visionSvc, imagegenSvc, providerRegistry, resourceResolver).Build()
+	}
+
 	var workspaceRegistry *workspace.Registry
 	var workspaceService *workspace.Service
 	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
@@ -412,7 +418,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
 		kernelBuilder = applyAndroidLinuxProvider(kernelBuilder, bootstrap.RuntimeHost())
 		kernelBuilder = applyIOSNativeProvider(kernelBuilder, bootstrap.IOSNativeProvider())
-		kernelBuilder, _ = applyAndroidNativeProvider(kernelBuilder, bootstrap)
+		kernelBuilder, _ = applyAndroidNativeProvider(kernelBuilder, bootstrap, androidImageIntelligence, resourceResolver, config.AppCfg.Storage.DataDir)
 	}
 
 	kernelContainer, err := kernelBuilder.Build(context.Background())
@@ -428,6 +434,52 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	if err := kernelContainer.Recover(context.Background()); err != nil {
 		log.Warn("kernel recovery warning: ", err)
+	}
+	if kernelContainer.WorkflowExecutor != nil {
+		if _, err := kernelContainer.WorkflowExecutor.ReapStuck(context.Background(), 90*time.Second, 24*time.Hour, 100); err != nil {
+			log.Warn("workflow stuck-run reaper warning: ", err)
+		}
+		reaperCtx := context.Background()
+		if ctx != nil && ctx.Context != nil {
+			reaperCtx = ctx.Context
+		}
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-reaperCtx.Done():
+					return
+				case <-ticker.C:
+					if _, err := kernelContainer.WorkflowExecutor.ReapStuck(reaperCtx, 90*time.Second, 24*time.Hour, 100); err != nil {
+						log.Warn("workflow stuck-run reaper warning: ", err)
+					}
+				}
+			}
+		}()
+	}
+	if kernelContainer.WorkflowExecRepo != nil {
+		if _, err := kernelContainer.WorkflowExecRepo.CollectGarbageDefault(context.Background(), time.Now().UTC()); err != nil {
+			log.Warn("workflow retention/gc warning: ", err)
+		}
+		gcCtx := context.Background()
+		if ctx != nil && ctx.Context != nil {
+			gcCtx = ctx.Context
+		}
+		go func() {
+			ticker := time.NewTicker(6 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-gcCtx.Done():
+					return
+				case now := <-ticker.C:
+					if _, err := kernelContainer.WorkflowExecRepo.CollectGarbageDefault(gcCtx, now.UTC()); err != nil {
+						log.Warn("workflow retention/gc warning: ", err)
+					}
+				}
+			}
+		}()
 	}
 	if kernelContainer.GameHost != nil {
 		if err := kernelContainer.GameHost.Start(context.Background()); err != nil {
@@ -1174,6 +1226,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 						log.Warnf("workflow waiting-device resume failed: userId=%s deviceId=%s err=%v", userID, deviceID, resumeErr)
 					}
 				}()
+				services.Extension.StartWorkflowDeviceSync(userID.String(), deviceID.String())
 			})
 		}
 		if behaviorMeshPublisher != nil {

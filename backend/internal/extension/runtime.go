@@ -33,6 +33,7 @@ type Runtime struct {
 	Kernel                      *kernelruntime.Runtime
 	WorkflowDeviceControl       WorkflowDeviceControlPlane
 	workflowMutationLocks       sync.Map
+	workflowDeviceSyncLoops     sync.Map
 	workflowTriggerCapabilityMu sync.RWMutex
 	workflowTriggerCapabilities map[string]WorkflowTriggerCapabilityStatus
 	workflowTriggerAppCatalogMu sync.RWMutex
@@ -42,6 +43,8 @@ type Runtime struct {
 	workflowTriggerIngress      map[string]workflowTriggerIngressWindow
 	workflowWakeRuntimeMu       sync.Mutex
 	workflowWakeRuntime         *workflowWakeRuntimeState
+	workflowAndroidHealthMu     sync.RWMutex
+	workflowAndroidHealth       WorkflowAndroidRuntimeHealthStatus
 }
 
 func (r *Runtime) AttachKernel(root string) error {

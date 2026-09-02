@@ -6,31 +6,68 @@ import (
 	"time"
 )
 
+// Store tracks multiple live VirtualDisplay instances. Get() remains as a
+// backwards-compatible view of the most recently created active display.
 type Store struct {
 	mu      sync.RWMutex
-	active  *VirtualDisplayRecord
+	records map[VirtualDisplayRef]*VirtualDisplayRecord
 	counter uint64
+}
+
+func (s *Store) ensureLocked() {
+	if s.records == nil {
+		s.records = make(map[VirtualDisplayRef]*VirtualDisplayRecord)
+	}
 }
 
 func (s *Store) Get() *VirtualDisplayRecord {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.active == nil {
+	return latestRecord(s.records)
+}
+
+func (s *Store) GetByRef(ref VirtualDisplayRef) *VirtualDisplayRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if ref.IsEmpty() {
+		return latestRecord(s.records)
+	}
+	rec := s.records[ref]
+	if rec == nil {
 		return nil
 	}
-	cp := *s.active
+	cp := *rec
 	return &cp
+}
+
+func (s *Store) List() []VirtualDisplayRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]VirtualDisplayRecord, 0, len(s.records))
+	for _, rec := range s.records {
+		if rec == nil || !rec.State.IsActive() {
+			continue
+		}
+		out = append(out, *rec)
+	}
+	return out
 }
 
 func (s *Store) HasActive() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.active != nil && s.active.State.IsActive()
+	for _, rec := range s.records {
+		if rec != nil && rec.State.IsActive() {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) Insert(rec *VirtualDisplayRecord) *VirtualDisplayRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.ensureLocked()
 	s.counter++
 	if rec.Ref.IsEmpty() {
 		rec.Ref = newVirtualDisplayRef(s.counter)
@@ -38,42 +75,48 @@ func (s *Store) Insert(rec *VirtualDisplayRecord) *VirtualDisplayRecord {
 	if rec.CreatedAt.IsZero() {
 		rec.CreatedAt = time.Now()
 	}
-	rec.Generation = s.counter
+	if rec.Generation == 0 {
+		rec.Generation = s.counter
+	}
 	cp := *rec
-	s.active = &cp
-	return s.active
+	s.records[rec.Ref] = &cp
+	return cloneRecord(&cp)
 }
 
 func (s *Store) Update(ref VirtualDisplayRef, fn func(*VirtualDisplayRecord) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.active == nil {
-		return NewError(ErrVirtualDisplayNotFound, "no active display")
+	resolved := ref
+	if resolved.IsEmpty() {
+		latest := latestRecordRef(s.records)
+		resolved = latest
 	}
-	if s.active.Ref != ref {
-		return NewError(ErrVirtualDisplayIdMismatch, "reference mismatch")
+	rec := s.records[resolved]
+	if rec == nil {
+		return NewError(ErrVirtualDisplayNotFound, "virtual display not found")
 	}
-	return fn(s.active)
+	return fn(rec)
 }
 
 func (s *Store) Remove(ref VirtualDisplayRef) (*VirtualDisplayRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.active == nil {
-		return nil, NewError(ErrVirtualDisplayNotFound, "no active display")
+	resolved := ref
+	if resolved.IsEmpty() {
+		resolved = latestRecordRef(s.records)
 	}
-	if s.active.Ref != ref {
-		return nil, NewError(ErrVirtualDisplayIdMismatch, "reference mismatch")
+	rec := s.records[resolved]
+	if rec == nil {
+		return nil, NewError(ErrVirtualDisplayNotFound, "virtual display not found")
 	}
-	removed := s.active
-	s.active = nil
-	return removed, nil
+	delete(s.records, resolved)
+	return cloneRecord(rec), nil
 }
 
 func (s *Store) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.active = nil
+	s.records = make(map[VirtualDisplayRef]*VirtualDisplayRecord)
 }
 
 func (s *Store) BumpGeneration(ref VirtualDisplayRef) error {
@@ -81,6 +124,37 @@ func (s *Store) BumpGeneration(ref VirtualDisplayRef) error {
 		rec.Generation++
 		return nil
 	})
+}
+
+func latestRecord(records map[VirtualDisplayRef]*VirtualDisplayRecord) *VirtualDisplayRecord {
+	ref := latestRecordRef(records)
+	if ref.IsEmpty() {
+		return nil
+	}
+	return cloneRecord(records[ref])
+}
+
+func latestRecordRef(records map[VirtualDisplayRef]*VirtualDisplayRecord) VirtualDisplayRef {
+	var chosen VirtualDisplayRef
+	var generation uint64
+	for ref, rec := range records {
+		if rec == nil || !rec.State.IsActive() {
+			continue
+		}
+		if chosen.IsEmpty() || rec.Generation > generation {
+			chosen = ref
+			generation = rec.Generation
+		}
+	}
+	return chosen
+}
+
+func cloneRecord(rec *VirtualDisplayRecord) *VirtualDisplayRecord {
+	if rec == nil {
+		return nil
+	}
+	cp := *rec
+	return &cp
 }
 
 func newVirtualDisplayRef(counter uint64) VirtualDisplayRef {

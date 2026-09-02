@@ -12,6 +12,13 @@ export interface WorkflowRuntimeBinding {
 export type WorkflowLocation = "local" | "cloud" | "device";
 export type WorkflowExecutionPlacement = "auto" | "local" | "cloud" | "device";
 export type WorkflowOfflinePolicy = "fail" | "wait";
+export type WorkflowExecutionMode = "live" | "dry_run" | "mocked" | "controlled_live";
+export interface WorkflowMockBehavior { nodeId: string; output?: unknown; error?: string }
+export interface WorkflowRunOptions {
+  mode?: WorkflowExecutionMode;
+  mocks?: WorkflowMockBehavior[];
+  approvedSideEffects?: string[];
+}
 export interface WorkflowTarget { location: WorkflowLocation; deviceId?: string }
 export interface WorkflowExecutionTarget {
   placement?: WorkflowExecutionPlacement;
@@ -20,6 +27,25 @@ export interface WorkflowExecutionTarget {
   providerId?: string;
   providerInstanceId?: string;
   offlinePolicy?: WorkflowOfflinePolicy;
+}
+export type WorkflowConcurrencyMode = "ALLOW" | "SINGLETON" | "QUEUE" | "REPLACE" | "DROP" | "MAX_N";
+export interface WorkflowConcurrencyPolicy { mode?: WorkflowConcurrencyMode; maxN?: number }
+export type WorkflowPreflightStatus = "PASS" | "WARNING" | "BLOCKED";
+export interface WorkflowPreflightCheck {
+  code: string;
+  status: WorkflowPreflightStatus;
+  message: string;
+  nodeId?: string;
+  details?: Record<string, unknown>;
+}
+export interface WorkflowPreflightReport {
+  status: WorkflowPreflightStatus;
+  runnable: boolean;
+  workflowId: string;
+  definitionHash?: string;
+  schemaVersion?: string;
+  topologicalOrder?: string[];
+  checks: WorkflowPreflightCheck[];
 }
 export interface WorkflowInstallation {
   installationId: string;
@@ -54,10 +80,24 @@ export interface WorkflowTriggerCapabilityStatus {
 }
 export interface WorkflowTriggerAppCatalogItem { packageName: string; label: string }
 export interface WorkflowTriggerWakeConfigItem { id: string; name: string; backend: string }
+export interface WorkflowWakeConfigCreateRequest { name: string; phrases: string[]; locale?: string; threshold?: number; cooldownMs?: number; backend?: "local" | "cloud" | "auto" | string; modelResourceUri?: string }
 export interface WorkflowTaskerSecret { secretRef: string; secret: string }
 export interface WorkflowOnError { mode?: string; default?: unknown }
 export interface WorkflowNodeRetryPolicy { maxAttempts?: number; initialBackoffMs?: number; maxBackoffMs?: number; multiplier?: number; jitter?: number }
-export interface WorkflowStepInput { input?: unknown; when?: unknown; onError: WorkflowOnError }
+export interface WorkflowStepInput { input?: unknown; when?: unknown; postcondition?: unknown; onError: WorkflowOnError }
+export interface WorkflowCompensationDefinition {
+  action?: string;
+  type?: string;
+  targetId?: string;
+  runtime?: WorkflowRuntimeBinding;
+  executionTarget?: WorkflowExecutionTarget;
+  permissions?: string[];
+  requiredCapabilities?: string[];
+  scope?: string;
+  input?: unknown;
+  timeoutMs?: number;
+  retry?: WorkflowNodeRetryPolicy;
+}
 export interface WorkflowNode {
   id: string;
   type: string;
@@ -71,6 +111,7 @@ export interface WorkflowNode {
   label?: string;
   timeoutMs?: number;
   retry?: WorkflowNodeRetryPolicy;
+  compensation?: WorkflowCompensationDefinition;
   step: WorkflowStepInput;
 }
 export interface WorkflowEdge {
@@ -92,8 +133,10 @@ export interface WorkflowTrigger {
   enabled: boolean;
 }
 export interface WorkflowAgentToolConfig { name?: string; description?: string }
+export interface WorkflowCatalogPermission { capability: string; description?: string; risk?: string }
 export interface WorkflowCatalogItem {
   id: string; modelName?: string; name: string; description?: string; source?: string; inputSchema?: unknown; outputSchema?: unknown; runtime?: WorkflowRuntimeBinding;
+  permissions?: WorkflowCatalogPermission[]; riskLevel?: string; sideEffect?: string; hasSideEffects?: boolean; idempotent?: boolean; retryable?: boolean; timeoutMs?: number; metadata?: Record<string, unknown>;
 }
 export interface WorkflowAIProposal { definition: WorkflowDefinition; summary: string; changes: string[]; warnings: string[] }
 export interface WorkflowAIExplanation { summary: string; flow: string[]; issues: string[]; suggestions: string[] }
@@ -127,6 +170,7 @@ export interface WorkflowDefinition {
   hasSideEffects?: boolean;
   idempotent?: boolean;
   limits?: Record<string, unknown>;
+  concurrencyPolicy?: WorkflowConcurrencyPolicy;
   version?: string;
   source?: string;
   metadata?: Record<string, unknown>;
@@ -135,6 +179,7 @@ export interface WorkflowDefinition {
   cached?: boolean;
   offline?: boolean;
 }
+export interface WorkflowErrorDiagnostic { code: string; category: string; message: string; recoverable: boolean; recommendedAction?: string; nodeId?: string; deviceId?: string }
 export interface WorkflowRun {
   executionId: string;
   workflowId: string;
@@ -146,11 +191,27 @@ export interface WorkflowRun {
   startedAt?: string;
   finishedAt?: string;
   updatedAt?: string;
+  context?: { executionOptions?: WorkflowRunOptions; revisionId?: string; definitionHash?: string; [key: string]: unknown };
+}
+export interface WorkflowRunStartResult {
+  accepted?: boolean;
+  executionId: string;
+  workflowId?: string;
+  status?: string;
+  executionMode?: WorkflowExecutionMode;
+  requiredConfirmations?: string[];
 }
 export interface WorkflowStepRun {
   executionId: string;
   workflowId: string;
   nodeId: string;
+  traceId?: string;
+  attemptId?: string;
+  deviceId?: string;
+  runtimeId?: string;
+  toolCallId?: string;
+  fencingToken?: number;
+  idempotencyKey?: string;
   status: string;
   input?: unknown;
   output?: unknown;
@@ -163,6 +224,13 @@ export interface WorkflowStepAttempt {
   executionId: string;
   workflowId: string;
   nodeId: string;
+  traceId?: string;
+  attemptId?: string;
+  deviceId?: string;
+  runtimeId?: string;
+  toolCallId?: string;
+  fencingToken?: number;
+  idempotencyKey?: string;
   attempt: number;
   generation: number;
   status: string;
@@ -172,6 +240,50 @@ export interface WorkflowStepAttempt {
   nextBackoffMs?: number;
   startedAt: string;
   finishedAt: string;
+}
+export interface WorkflowDistributedTraceAttempt {
+  attemptId: string;
+  attempt: number;
+  generation: number;
+  status: string;
+  deviceId?: string;
+  runtimeId?: string;
+  toolCallId?: string;
+  fencingToken?: number;
+  idempotencyKey?: string;
+  error?: string;
+}
+export interface WorkflowDistributedTraceNode {
+  nodeId: string;
+  status?: string;
+  deviceId?: string;
+  runtimeId?: string;
+  toolCallId?: string;
+  idempotencyKey?: string;
+  attempts: WorkflowDistributedTraceAttempt[];
+}
+export interface WorkflowDistributedTrace {
+  traceId: string;
+  runId: string;
+  workflowId: string;
+  deviceId?: string;
+  status: string;
+  nodes: WorkflowDistributedTraceNode[];
+}
+export interface WorkflowRunLogEntry {
+  at: string;
+  kind: string;
+  traceId?: string;
+  runId: string;
+  nodeId?: string;
+  attemptId?: string;
+  deviceId?: string;
+  runtimeId?: string;
+  toolCallId?: string;
+  fencingToken?: number;
+  idempotencyKey?: string;
+  status?: string;
+  message?: string;
 }
 export interface WorkflowCheckpoint { workflowId: string; executionId: string; nodeId: string; input?: unknown; output?: unknown; completedAt: string }
 export interface WorkflowNodeStat { nodeId: string; runCount: number; succeeded: number; failed: number; timedOut: number; averageStepMs: number; averageAttempts: number }
@@ -189,6 +301,20 @@ export interface WorkflowSyncEvent {
   payload?: unknown;
 }
 export interface WorkflowSyncPage { cursor: number; items: WorkflowSyncEvent[] }
+export interface WorkflowSyncConflict {
+  eventId: string;
+  sourceDeviceId: string;
+  ownerUserId: string;
+  workflowId: string;
+  revision: number;
+  baseRevision: number;
+  eventType: "upsert" | "delete";
+  definitionHash?: string;
+  status: "CONFLICT" | "DIVERGED" | "CLOUD_AHEAD" | string;
+  canonicalRevision: number;
+  payload?: unknown;
+  receivedAt: string;
+}
 
 const CLOUD_TARGET: WorkflowTarget = { location: "cloud" };
 
@@ -210,7 +336,7 @@ function workflowBase(target?: WorkflowTarget): string {
 function workflowRunBase(target?: WorkflowTarget): string {
   const value = normalizeTarget(target);
   if (value.location === "local") return "/api/local/workflow-runs";
-  if (value.location === "device") throw new Error("remote device workflow run details are only available on that device");
+  if (value.location === "device") return `/api/extensions/workflow-devices/${encodeURIComponent(String(value.deviceId))}/runs`;
   return "/api/extensions/workflow-runs";
 }
 
@@ -280,6 +406,15 @@ export async function getWorkflowTriggerWakeConfigs(target: WorkflowTarget): Pro
   return res.data.items ?? [];
 }
 
+export async function createWorkflowWakeConfig(target: WorkflowTarget, request: WorkflowWakeConfigCreateRequest): Promise<WorkflowTriggerWakeConfigItem> {
+  const value = normalizeTarget(target);
+  let url = "";
+  if (value.location === "local") url = "/api/local/workflows/trigger-wake-configs";
+  else if (value.location === "device") url = `/api/extensions/workflow-devices/${encodeURIComponent(String(value.deviceId))}/trigger-wake-configs`;
+  else throw new Error("Wake config requires a local or device workflow target");
+  return (await apiClient.post<WorkflowTriggerWakeConfigItem>(url, request)).data;
+}
+
 export async function createWorkflowTaskerSecret(target: WorkflowTarget): Promise<WorkflowTaskerSecret> {
   const value = normalizeTarget(target);
   let url = "";
@@ -296,6 +431,11 @@ export async function listWorkflowSyncEvents(target: WorkflowTarget = CLOUD_TARG
     cursor: Number(res.data?.cursor ?? afterCursor ?? 0),
     items: Array.isArray(res.data?.items) ? res.data.items : [],
   };
+}
+
+export async function listWorkflowSyncConflicts(limit = 100): Promise<WorkflowSyncConflict[]> {
+  const res = await apiClient.get<{ items: WorkflowSyncConflict[] }>("/api/extensions/workflows/sync-conflicts", { params: { limit } });
+  return Array.isArray(res.data?.items) ? res.data.items : [];
 }
 
 export async function listWorkflows(target: WorkflowTarget = CLOUD_TARGET): Promise<WorkflowDefinition[]> {
@@ -319,7 +459,7 @@ export async function listWorkflows(target: WorkflowTarget = CLOUD_TARGET): Prom
   }));
 }
 export async function getWorkflowCatalog(target: WorkflowTarget = CLOUD_TARGET): Promise<WorkflowCatalogItem[]> {
-  const value = ensureKernelTarget(target, "workflow catalog");
+  const value = normalizeTarget(target);
   const res = await apiClient.get<{ items: WorkflowCatalogItem[] }>(`${workflowBase(value)}/catalog`);
   return res.data.items ?? [];
 }
@@ -364,13 +504,17 @@ export async function setWorkflowEnabled(id: string, enabled: boolean, target: W
   const res = await apiClient.post(`${workflowBase(target)}/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`, undefined, { params: revisionParams(expectedRevision) });
   return (res.data as any)?.installation ?? res.data;
 }
-export async function validateWorkflow(def: WorkflowDefinition, target: WorkflowTarget = CLOUD_TARGET): Promise<{ valid: boolean; error?: string; topologicalOrder?: string[] }> {
+export async function validateWorkflow(def: WorkflowDefinition, target: WorkflowTarget = CLOUD_TARGET): Promise<{ valid: boolean; error?: string; topologicalOrder?: string[]; preflight?: WorkflowPreflightReport }> {
   const value = ensureKernelTarget(target, "workflow validation");
   return (await apiClient.post(`${workflowBase(value)}/validate`, def)).data;
 }
-export async function runWorkflow(id: string, input: unknown = {}, wait = false, target: WorkflowTarget = CLOUD_TARGET): Promise<{ accepted?: boolean; executionId: string; status?: string }> {
+export async function preflightWorkflow(id: string, target: WorkflowTarget = CLOUD_TARGET): Promise<WorkflowPreflightReport> {
+  const value = ensureKernelTarget(target, "workflow preflight");
+  return (await apiClient.post<WorkflowPreflightReport>(`${workflowBase(value)}/${encodeURIComponent(id)}/preflight`)).data;
+}
+export async function runWorkflow(id: string, input: unknown = {}, wait = false, target: WorkflowTarget = CLOUD_TARGET, options: WorkflowRunOptions = {}): Promise<WorkflowRunStartResult> {
   const value = normalizeTarget(target);
-  const payload = value.location === "device" ? { input } : { input, wait };
+  const payload = { input, ...(value.location === "device" ? {} : { wait }), ...options };
   return (await apiClient.post(`${workflowBase(value)}/${encodeURIComponent(id)}/run`, payload)).data;
 }
 export async function dispatchWorkflowEvent(eventType: string, payload: unknown = {}, target: WorkflowTarget = CLOUD_TARGET): Promise<{ accepted: boolean; eventType: string }> {
@@ -378,11 +522,14 @@ export async function dispatchWorkflowEvent(eventType: string, payload: unknown 
   return (await apiClient.post(`${workflowBase(value)}/events/${encodeURIComponent(eventType)}`, payload)).data;
 }
 export async function listWorkflowRuns(id: string, limit = 50, target: WorkflowTarget = CLOUD_TARGET): Promise<{ items: WorkflowRun[]; total: number }> {
-  const value = ensureKernelTarget(target, "workflow run history");
+  const value = normalizeTarget(target);
   return (await apiClient.get(`${workflowBase(value)}/${encodeURIComponent(id)}/runs`, { params: { limit } })).data;
 }
-export async function getWorkflowRun(runId: string, target: WorkflowTarget = CLOUD_TARGET): Promise<{ run: WorkflowRun; stepRuns: WorkflowStepRun[]; attempts: WorkflowStepAttempt[]; checkpoints: WorkflowCheckpoint[]; workflow: WorkflowDefinition }> {
+export async function getWorkflowRun(runId: string, target: WorkflowTarget = CLOUD_TARGET): Promise<{ run: WorkflowRun; classifiedError?: WorkflowErrorDiagnostic | null; stepRuns: WorkflowStepRun[]; attempts: WorkflowStepAttempt[]; checkpoints: WorkflowCheckpoint[]; workflow: WorkflowDefinition; trace?: WorkflowDistributedTrace; requiredConfirmations?: string[] }> {
   return (await apiClient.get(`${workflowRunBase(target)}/${encodeURIComponent(runId)}`)).data;
+}
+export async function getWorkflowRunLogs(runId: string, target: WorkflowTarget = CLOUD_TARGET): Promise<{ items: WorkflowRunLogEntry[] }> {
+  return (await apiClient.get(`${workflowRunBase(target)}/${encodeURIComponent(runId)}/logs`)).data;
 }
 export async function getWorkflowStats(id: string, target: WorkflowTarget = CLOUD_TARGET): Promise<WorkflowExecutionStats> {
   const value = ensureKernelTarget(target, "workflow statistics");
@@ -401,7 +548,10 @@ export async function pauseWorkflowRun(runId: string, reason = "Paused from Crea
 export async function resumeWorkflowRun(runId: string, target: WorkflowTarget = CLOUD_TARGET): Promise<void> {
   await apiClient.post(`${workflowRunBase(target)}/${encodeURIComponent(runId)}/resume`);
 }
-export async function rerunWorkflowRun(runId: string, wait = false, target: WorkflowTarget = CLOUD_TARGET): Promise<{ accepted?: boolean; executionId: string; workflowId?: string; status?: string; sourceExecutionId?: string }> {
+export async function confirmWorkflowRun(runId: string, nodeIds: string[], target: WorkflowTarget = CLOUD_TARGET): Promise<{ accepted: boolean; run?: WorkflowRun; missingConfirmations?: string[] }> {
+  return (await apiClient.post(`${workflowRunBase(target)}/${encodeURIComponent(runId)}/confirm`, { nodeIds })).data;
+}
+export async function rerunWorkflowRun(runId: string, wait = false, target: WorkflowTarget = CLOUD_TARGET): Promise<{ accepted?: boolean; executionId: string; workflowId?: string; status?: string; executionMode?: WorkflowExecutionMode; requiredConfirmations?: string[]; sourceExecutionId?: string }> {
   return (await apiClient.post(`${workflowRunBase(target)}/${encodeURIComponent(runId)}/rerun`, { wait })).data;
 }
 export async function recoverWorkflowRun(runId: string, target: WorkflowTarget = CLOUD_TARGET): Promise<{ accepted: boolean; executionId: string; workflowId: string; status: string; generation: number; checkpointCount: number }> {
