@@ -38,12 +38,23 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 		}
 	}
 
+	var layerFiltered map[MemoryLayer]bool
+	if len(req.Layers) > 0 {
+		layerFiltered = make(map[MemoryLayer]bool, len(req.Layers))
+		for _, layer := range req.Layers {
+			if IsValidLayer(string(layer)) {
+				layerFiltered[MemoryLayer(strings.ToLower(strings.TrimSpace(string(layer))))] = true
+			}
+		}
+	}
+
 	var timeScopedIDs map[string]bool
 	if req.Time != nil && s.temporalRepo != nil {
 		scopedIDs, err := s.queryTimeScopedMemoryIDs(req)
-		if err == nil && len(scopedIDs) > 0 {
-			timeScopedIDs = scopedIDs
+		if err != nil {
+			return nil, err
 		}
+		timeScopedIDs = scopedIDs
 	}
 
 	items, err := s.repo.Search(req.Keyword, req.CharacterID, req.UserID, fetchLimit)
@@ -66,6 +77,12 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 		}
 		if typeFiltered != nil && !typeFiltered[m.MemoryType] {
 			continue
+		}
+		if layerFiltered != nil {
+			layer := CanonicalLayer(collectionKeyFromCollectionName(collectionNameForMemoryType(m.MemoryType)))
+			if !layerFiltered[layer] {
+				continue
+			}
 		}
 		if timeScopedIDs != nil && !timeScopedIDs[m.ID] {
 			continue

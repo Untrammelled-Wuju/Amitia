@@ -167,6 +167,8 @@ type service struct {
 	artifactResolver    ArtifactResolver
 	localModelMu        sync.Mutex
 	localModels         map[string]LocalModelInfer
+	cleanupMu           sync.Mutex
+	cleanupPlans        map[string]cleanupPlan
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -416,5 +418,5 @@ func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPo
 	if len(recorder) > 0 {
 		r = recorder[0]
 	}
-	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer)}
+	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
 }

@@ -38,6 +38,12 @@ type messageChangeScopedService interface {
 	DeleteSingleMessageForUser(id string, userID string) error
 }
 
+type cleanupCapableService interface {
+	PreviewCleanup(req CleanupRequest, userID string) (*CleanupPreview, error)
+	ConfirmCleanup(previewID, confirmText, userID string) (*CleanupResult, error)
+	VacuumCleanup() error
+}
+
 func NewHandler(srv Service) *Handler {
 	return &Handler{service: srv}
 }
@@ -524,9 +530,59 @@ func (h *Handler) GenerateSummary(c *gin.Context) {
 	}
 	util.SuccessResponse(c, summary)
 }
-func (h *Handler) CleanupPreview(c *gin.Context) { util.SuccessResponse(c, gin.H{"deletable": 0}) }
-func (h *Handler) CleanupConfirm(c *gin.Context) { util.SuccessResponse(c, gin.H{"cleaned": 0}) }
-func (h *Handler) CleanupVacuum(c *gin.Context)  { util.SuccessResponse(c, gin.H{"vacuumed": true}) }
+func (h *Handler) CleanupPreview(c *gin.Context) {
+	var req CleanupRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	cleanup, ok := h.service.(cleanupCapableService)
+	if !ok {
+		util.ErrorResponse(c, response.InternalError, "聊天清理服务不可用", nil)
+		return
+	}
+	result, err := cleanup.PreviewCleanup(req, requestidentity.ResolveGin(c, ""))
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) CleanupConfirm(c *gin.Context) {
+	var req struct {
+		PreviewID   string `json:"previewId"`
+		ConfirmText string `json:"confirmText"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	cleanup, ok := h.service.(cleanupCapableService)
+	if !ok {
+		util.ErrorResponse(c, response.InternalError, "聊天清理服务不可用", nil)
+		return
+	}
+	result, err := cleanup.ConfirmCleanup(req.PreviewID, req.ConfirmText, requestidentity.ResolveGin(c, ""))
+	if err != nil {
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) CleanupVacuum(c *gin.Context) {
+	cleanup, ok := h.service.(cleanupCapableService)
+	if !ok {
+		util.ErrorResponse(c, response.InternalError, "聊天清理服务不可用", nil)
+		return
+	}
+	if err := cleanup.VacuumCleanup(); err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"vacuumed": true})
+}
 func (h *Handler) Export(c *gin.Context) {
 	var body struct {
 		Format          string   `json:"format"`

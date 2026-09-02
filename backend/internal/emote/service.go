@@ -147,7 +147,11 @@ func (s *Service) Update(id string, req UpdateRequest) (*Emote, error) {
 	if req.RoleScope != nil {
 		item.RoleScope = *req.RoleScope
 	}
-	if err := s.validateScope(item.RoleScope, req.CharacterIDs); err != nil {
+	effectiveCharacterIDs := req.CharacterIDs
+	if effectiveCharacterIDs == nil && item.RoleScope == RoleScopeSelected {
+		effectiveCharacterIDs = item.CharacterIDs
+	}
+	if err := s.validateScope(item.RoleScope, effectiveCharacterIDs); err != nil {
 		return nil, err
 	}
 	item.UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
