@@ -160,6 +160,47 @@
           </aside>
         </div>
       </section>
+
+      <section class="security-card session-card">
+        <div class="section-heading session-heading">
+          <span class="section-icon"><el-icon><Monitor /></el-icon></span>
+          <div class="session-heading-copy">
+            <h3>登录设备与 Session</h3>
+            <p>查看当前账户的全部登录会话，并可撤销指定设备或批量退出。</p>
+          </div>
+          <div class="session-actions">
+            <el-button size="small" :loading="sessionsLoading" @click="loadSessions">刷新</el-button>
+            <el-button size="small" :disabled="sessionBusy" @click="handleRevokeOthers">退出其他设备</el-button>
+            <el-button size="small" type="danger" plain :disabled="sessionBusy" @click="handleLogoutAll">退出全部设备</el-button>
+          </div>
+        </div>
+
+        <el-empty v-if="!sessionsLoading && sessions.length === 0" description="暂无有效登录 Session" :image-size="64" />
+        <el-table v-else v-loading="sessionsLoading" :data="sessions" class="session-table" size="small">
+          <el-table-column label="设备" min-width="180">
+            <template #default="{ row }">
+              <div class="session-device">
+                <strong>{{ row.deviceName || "未知设备" }}</strong>
+                <el-tag v-if="row.current" size="small" type="success">当前设备</el-tag>
+              </div>
+              <small>{{ row.userAgent || "未记录 User-Agent" }}</small>
+            </template>
+          </el-table-column>
+          <el-table-column prop="ipAddress" label="IP" min-width="130" />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }"><el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status || "unknown" }}</el-tag></template>
+          </el-table-column>
+          <el-table-column label="最近活动" min-width="150">
+            <template #default="{ row }">{{ formatDate(row.lastActiveAt || row.lastRefreshedAt || row.createdAt) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="110" align="right">
+            <template #default="{ row }">
+              <el-button v-if="!row.current" link type="danger" :loading="sessionBusy === row.sessionId" @click="handleRevokeSession(row)">撤销</el-button>
+              <span v-else class="muted-action">本机</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
     </div>
   </div>
 </template>
@@ -179,11 +220,19 @@ import {
   Clock,
   Key,
   Lock,
+  Monitor,
   SwitchButton,
   UserFilled,
 } from "@element-plus/icons-vue";
 import { apiClient } from "@/composables/useApi";
 import { forceCleanupSession } from "@/stores/refresh-coordinator";
+import {
+  listSessions,
+  logoutAll,
+  revokeOtherSessions,
+  revokeSession,
+  type SessionInfo,
+} from "@/stores/session-client";
 import { useAppStore } from "@/stores/app";
 
 type UserInfo = {
@@ -198,6 +247,9 @@ const loading = ref(false);
 const saving = ref(false);
 const logoutLoading = ref(false);
 const avatarUpdating = ref(false);
+const sessionsLoading = ref(false);
+const sessionBusy = ref<string | boolean>(false);
+const sessions = ref<SessionInfo[]>([]);
 const avatarFileInput = ref<HTMLInputElement>();
 const passwordFormRef = ref<FormInstance>();
 const appStore = useAppStore();
@@ -347,6 +399,85 @@ async function loadUserInfo() {
   }
 }
 
+async function loadSessions() {
+  sessionsLoading.value = true;
+  try {
+    sessions.value = await listSessions();
+  } catch (error: any) {
+    ElMessage.error(error?.message || "登录 Session 加载失败");
+  } finally {
+    sessionsLoading.value = false;
+  }
+}
+
+async function handleRevokeSession(session: SessionInfo) {
+  if (!session.sessionId || session.current) return;
+  try {
+    await ElMessageBox.confirm(`确定撤销「${session.deviceName || "未知设备"}」的登录 Session 吗？`, "撤销 Session", {
+      confirmButtonText: "撤销",
+      cancelButtonText: "取消",
+      type: "warning",
+    });
+  } catch {
+    return;
+  }
+  sessionBusy.value = session.sessionId;
+  try {
+    await revokeSession(session.sessionId);
+    ElMessage.success("Session 已撤销");
+    await loadSessions();
+  } catch (error: any) {
+    ElMessage.error(error?.message || "Session 撤销失败");
+  } finally {
+    sessionBusy.value = false;
+  }
+}
+
+async function handleRevokeOthers() {
+  try {
+    await ElMessageBox.confirm("确定退出当前设备之外的全部登录 Session 吗？", "退出其他设备", {
+      confirmButtonText: "退出其他设备",
+      cancelButtonText: "取消",
+      type: "warning",
+    });
+  } catch {
+    return;
+  }
+  sessionBusy.value = true;
+  try {
+    const result = await revokeOtherSessions();
+    ElMessage.success(`已撤销 ${result?.revokedCount ?? 0} 个 Session`);
+    await loadSessions();
+  } catch (error: any) {
+    ElMessage.error(error?.message || "退出其他设备失败");
+  } finally {
+    sessionBusy.value = false;
+  }
+}
+
+async function handleLogoutAll() {
+  try {
+    await ElMessageBox.confirm("这会撤销当前账户的全部 Session，并立即回到登录页。确定继续吗？", "退出全部设备", {
+      confirmButtonText: "全部退出",
+      cancelButtonText: "取消",
+      type: "warning",
+      confirmButtonClass: "el-button--danger",
+    });
+  } catch {
+    return;
+  }
+  sessionBusy.value = true;
+  try {
+    await logoutAll();
+  } catch (error: any) {
+    ElMessage.error(error?.message || "退出全部设备失败");
+    sessionBusy.value = false;
+    return;
+  }
+  forceCleanupSession();
+  await router.replace("/login");
+}
+
 async function submitPassword() {
   if (!passwordFormRef.value) return;
   const valid = await passwordFormRef.value.validate().catch(() => false);
@@ -369,7 +500,9 @@ async function submitPassword() {
   }
 }
 
-onMounted(loadUserInfo);
+onMounted(() => {
+  void Promise.all([loadUserInfo(), loadSessions()]);
+});
 </script>
 
 <style scoped>
@@ -643,6 +776,15 @@ onMounted(loadUserInfo);
   justify-content: flex-start;
   padding-top: 4px;
 }
+
+.session-heading { align-items: flex-start; }
+.session-heading-copy { flex: 1; min-width: 0; }
+.session-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.session-table { width: 100%; }
+.session-device { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.session-device strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-table small { display: block; margin-top: 4px; color: var(--console-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.muted-action { color: var(--console-text-muted); font-size: 12px; }
 
 @media (max-width: 820px) {
   .account-meta,

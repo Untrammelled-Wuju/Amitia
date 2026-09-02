@@ -1,5 +1,5 @@
 <template>
-  <div class="ob-stage-inner">
+  <div class="ob-stage-inner ob-flow-stage-inner">
     <div class="ob-model-page-experience">
       <div class="ob-model-page-group">
         <div class="ob-model-page-heading">
@@ -297,13 +297,6 @@
               <span v-else class="ob-model-settings-link"
                 >使用本地 Ollama 服务</span
               >
-              <button
-                class="ob-model-setup-next"
-                @click="emit('next')"
-                :disabled="!isFormValid"
-              >
-                继续
-              </button>
             </div>
           </div>
         </div>
@@ -317,7 +310,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from "vue";
+import { ref, watch, onMounted } from "vue";
 import { useApi } from "../../../composables/useApi";
 
 const showApiKey = ref(false);
@@ -346,13 +339,6 @@ function onProviderSelect(providerId: string) {
   }
 }
 
-const isFormValid = computed(() => {
-  if (!props.baseUrl.trim()) return false;
-  if (props.modelType !== "local" && !props.apiKey.trim()) return false;
-  if (!props.modelName.trim()) return false;
-  return true;
-});
-
 const props = defineProps<{
   detecting: boolean;
   modelReady: boolean;
@@ -367,7 +353,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  next: [];
   detect: [];
   "update:baseUrl": [value: string];
   "update:apiKey": [value: string];

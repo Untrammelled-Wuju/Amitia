@@ -246,6 +246,42 @@ SPDX-License-Identifier: AGPL-3.0-only
           <template #title>主动推送须知</template>
           添加微信好友后，必须主动给机器人发一条消息，系统才能记录你的用户ID用于主动推送。用户ID每7天自动刷新，届时需重新发送一条消息。
         </el-alert>
+
+        <div v-if="!compact" class="ops-grid">
+          <el-card shadow="never" class="section-card">
+            <template #header>
+              <div class="card-header-row">
+                <span class="card-header-title">Bridge 恢复与最近事件</span>
+                <div class="header-actions">
+                  <el-button size="small" :loading="bridgeRecovering" @click="recoverBridge">Bridge Recover</el-button>
+                  <el-button size="small" :loading="opsLoading" @click="loadWechatOps">刷新事件</el-button>
+                </div>
+              </div>
+            </template>
+            <el-empty v-if="!wechatEvents.length" description="暂无最近事件" :image-size="42" />
+            <div v-else class="ops-event-list">
+              <div v-for="(event, idx) in wechatEvents.slice(0, 12)" :key="event.id || event.eventId || idx" class="ops-event-item">
+                <div class="ops-event-title">{{ event.type || event.eventType || event.name || 'event' }}</div>
+                <div class="ops-event-meta">{{ event.status || event.state || '' }} {{ formatOpsTime(event.createdAt || event.timestamp || event.time) }}</div>
+                <pre>{{ compactJson(event) }}</pre>
+              </div>
+            </div>
+          </el-card>
+
+          <el-card shadow="never" class="section-card">
+            <template #header>
+              <div class="card-header-row">
+                <span class="card-header-title">Cloud Check 风险摘要</span>
+                <div class="header-actions">
+                  <el-button size="small" type="primary" :loading="cloudChecking" @click="runCloudCheck">主动检查</el-button>
+                  <el-button size="small" :loading="opsLoading" @click="loadWechatOps">刷新摘要</el-button>
+                </div>
+              </div>
+            </template>
+            <el-empty v-if="!cloudRiskSummary" description="暂无 Cloud Check 结果" :image-size="42" />
+            <pre v-else class="ops-json">{{ prettyJson(cloudRiskSummary) }}</pre>
+          </el-card>
+        </div>
       </template>
     </template>
   </div>
@@ -287,6 +323,11 @@ const loginError = ref("");
 const pageReady = ref(false);
 
 const reconnecting = ref(false);
+const bridgeRecovering = ref(false);
+const cloudChecking = ref(false);
+const opsLoading = ref(false);
+const wechatEvents = ref<any[]>([]);
+const cloudRiskSummary = ref<any>(null);
 
 const isConnected = computed(() => detail.value?.status === "connected");
 
@@ -424,6 +465,92 @@ async function reconnectBot() {
   }
 }
 
+function unwrap<T = any>(resp: any): T {
+  return (resp?.data ?? resp) as T;
+}
+
+function normalizeEventList(raw: any): any[] {
+  const value = unwrap<any>(raw);
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.items)) return value.items;
+  if (Array.isArray(value?.events)) return value.events;
+  if (Array.isArray(value?.data)) return value.data;
+  return [];
+}
+
+function prettyJson(value: any): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value ?? "");
+  }
+}
+
+function compactJson(value: any): string {
+  const text = prettyJson(value);
+  return text.length > 900 ? text.slice(0, 900) + "\n…" : text;
+}
+
+function formatOpsTime(value: any): string {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return String(value);
+  }
+}
+
+async function loadWechatOps() {
+  opsLoading.value = true;
+  try {
+    const [eventsResp, bridgeEventsResp, riskResp] = await Promise.allSettled([
+      get<any>("/api/wechat/events"),
+      get<any>("/api/wechat/bridge/events"),
+      get<any>("/api/wechat/cloud-check/risk-summary"),
+    ]);
+    const merged: any[] = [];
+    if (eventsResp.status === "fulfilled") merged.push(...normalizeEventList(eventsResp.value));
+    if (bridgeEventsResp.status === "fulfilled") merged.push(...normalizeEventList(bridgeEventsResp.value));
+    wechatEvents.value = merged
+      .filter((item, index, all) => {
+        const key = item?.id || item?.eventId;
+        return !key || all.findIndex((other) => (other?.id || other?.eventId) === key) === index;
+      })
+      .slice(0, 30);
+    if (riskResp.status === "fulfilled") {
+      cloudRiskSummary.value = unwrap(riskResp.value);
+    }
+  } finally {
+    opsLoading.value = false;
+  }
+}
+
+async function recoverBridge() {
+  bridgeRecovering.value = true;
+  try {
+    const result = unwrap<any>(await post<any>("/api/wechat/bridge/recover"));
+    ElMessage.success(result?.message || "Bridge 恢复操作已执行");
+    await Promise.all([refreshStatus(), loadWechatOps()]);
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Bridge Recover 失败");
+  } finally {
+    bridgeRecovering.value = false;
+  }
+}
+
+async function runCloudCheck() {
+  cloudChecking.value = true;
+  try {
+    const result = unwrap<any>(await post<any>("/api/wechat/cloud-check/run"));
+    ElMessage.success(result?.message || "Cloud Check 已完成");
+    await loadWechatOps();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Cloud Check 失败");
+  } finally {
+    cloudChecking.value = false;
+  }
+}
+
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 function startPolling() {
@@ -463,7 +590,7 @@ function stopPolling() {
 let statusTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
-  refreshStatus();
+  await Promise.allSettled([refreshStatus(), loadWechatOps()]);
   statusTimer = setInterval(() => {
     refreshStatus();
   }, 10000);
@@ -758,5 +885,49 @@ onUnmounted(() => {
 .wechat-compact-disconnect:hover {
   color: var(--ac-color-danger);
   border-color: var(--ac-color-danger);
+}
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+.ops-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+.ops-event-item {
+  padding: 9px 10px;
+  border: 1px solid var(--ac-color-border);
+  border-radius: 6px;
+  background: var(--ac-color-bg-secondary);
+}
+.ops-event-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ac-color-text);
+}
+.ops-event-meta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ac-color-text-muted);
+}
+.ops-event-item pre,
+.ops-json {
+  margin: 7px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ac-color-text-secondary);
+}
+.ops-json {
+  max-height: 420px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--ac-color-bg-secondary);
 }
 </style>

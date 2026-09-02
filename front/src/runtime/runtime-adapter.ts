@@ -15,6 +15,7 @@ export const DEVICE_LOCAL_ROUTE_PREFIXES = [
   "/api/desktop-pet",
   "/api/local/workflows",
   "/api/local/workflow-runs",
+  "/internal/device-mesh",
 ] as const;
 
 // Kept as an alias for callers that still use the old Desktop-Pet-specific
