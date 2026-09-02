@@ -24,6 +24,8 @@ func (d *MediaToolDispatcher) Dispatch(ctx context.Context, handlerName string, 
 		return d.handleMetadata(ctx, input)
 	case "media.convert":
 		return d.handleConvert(ctx, input)
+	case "media.ffmpeg.execute":
+		return d.handleFFmpegExecute(ctx, input)
 	default:
 		return nil, fmt.Errorf("unknown media tool: %s", handlerName)
 	}
@@ -78,4 +80,16 @@ func (d *MediaToolDispatcher) handleConvert(ctx context.Context, input json.RawM
 		return nil, err
 	}
 	return json.Marshal(map[string]any{"resource": result.ResourceURI})
+}
+
+func (d *MediaToolDispatcher) handleFFmpegExecute(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+	var req media.FFmpegExecuteRequest
+	if err := json.Unmarshal(input, &req); err != nil {
+		return nil, err
+	}
+	result, err := d.service.ExecuteFFmpeg(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(result)
 }

@@ -458,7 +458,7 @@ func (api *WorkflowAPI) workflowSyncConflicts(c *gin.Context) {
 		return
 	}
 	if items == nil {
-		items = []workflowdb.WorkflowSyncConflict{}
+		items = []workflowdb.WorkflowSyncConflictRecord{}
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{"items": items})
@@ -696,7 +696,7 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 		return items[i].Name < items[j].Name
 	})
 	total := len(items)
-	limit, offset := parsePagination(c)
+	limit, offset := parseWorkflowPagination(c)
 	if offset >= total {
 		items = []workflowAPIResponse{}
 	} else {
@@ -1829,7 +1829,7 @@ func (api *WorkflowAPI) run(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "executionId": executionID, "workflowId": def.ID, "status": workflow.RunStatusRunning, "executionMode": opts.Mode})
 }
 
-func parsePagination(c *gin.Context) (int, int) {
+func parseWorkflowPagination(c *gin.Context) (int, int) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	if limit <= 0 || limit > 200 {
@@ -1871,7 +1871,7 @@ func (api *WorkflowAPI) listRuns(c *gin.Context) {
 		return
 	}
 	kc := api.runtime.Kernel.Container()
-	limit, offset := parsePagination(c)
+	limit, offset := parseWorkflowPagination(c)
 	items, total, err := kc.WorkflowExecRepo.ListRuns(c.Request.Context(), c.Param("id"), workflow.RunStatus(c.Query("status")), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

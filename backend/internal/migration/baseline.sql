@@ -5434,6 +5434,11 @@ CREATE INDEX IF NOT EXISTS idx_dpmc_write_op ON desktop_pet_write_cutovers(opera
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dprc_operation_step_unique ON desktop_pet_read_cutovers(operation_id, step_name);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dpwc_operation_step_unique ON desktop_pet_write_cutovers(operation_id, step_name);
 
+INSERT OR IGNORE INTO desktop_pet_migration_operations (id, kind, status, started_at, updated_at, completed_at, error, metadata) VALUES ('baseline-desktop-pet-v2', 'desktop-pet-v2-cutover', 'completed', '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z', '', '{"planId":"desktop-pet-v2-cutover","sourceVersion":"baseline","targetVersion":"v2"}');
+INSERT OR IGNORE INTO desktop_pet_read_cutovers (id, operation_id, step_name, cutover_at, verified) VALUES ('baseline-desktop-pet-v2-read', 'baseline-desktop-pet-v2', 'v2_read_path', '2026-09-03T00:00:00Z', 1);
+INSERT OR IGNORE INTO desktop_pet_write_cutovers (id, operation_id, step_name, cutover_at, verified) VALUES ('baseline-desktop-pet-v2-write-installation', 'baseline-desktop-pet-v2', 'installation', '2026-09-03T00:00:00Z', 1);
+INSERT OR IGNORE INTO desktop_pet_write_cutovers (id, operation_id, step_name, cutover_at, verified) VALUES ('baseline-desktop-pet-v2-write-editing', 'baseline-desktop-pet-v2', 'editing', '2026-09-03T00:00:00Z', 1);
+
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_attempts (
   attempt_id TEXT PRIMARY KEY,
@@ -5884,6 +5889,7 @@ CREATE TABLE IF NOT EXISTS sync_sequence (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     seq INTEGER NOT NULL DEFAULT 0
 );
+INSERT OR IGNORE INTO sync_sequence (id, seq) VALUES (1, 0);
 
 CREATE TABLE IF NOT EXISTS execution_resumes (
     resume_id TEXT PRIMARY KEY,

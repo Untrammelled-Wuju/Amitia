@@ -135,7 +135,8 @@ type ContainerBuilder struct {
 
 	workshopModelGenerator WorkshopModelGenerator
 
-	channelStore capability.ChannelStore
+	channelStore         capability.ChannelStore
+	agentAdminController AgentAdminToolController
 }
 
 type WorkshopModelGenerator interface {
@@ -306,6 +307,11 @@ func (b *ContainerBuilder) WithChannelStore(store capability.ChannelStore) *Cont
 	return b
 }
 
+func (b *ContainerBuilder) WithAgentAdminController(controller AgentAdminToolController) *ContainerBuilder {
+	b.agentAdminController = controller
+	return b
+}
+
 func (b *ContainerBuilder) WithMCPRepository(repo *mcp.Repository) *ContainerBuilder {
 	b.mcpRepository = repo
 	return b
@@ -326,6 +332,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if nodeResolver == nil {
 		nodeResolver = script_host.UnavailableNodeResolver()
 	}
+	tool.SetSandboxNodePathResolver(func(resolveCtx context.Context) (string, error) {
+		environment, err := nodeResolver.Resolve(resolveCtx)
+		if err != nil {
+			return "", err
+		}
+		if environment.NodeBinary == "" {
+			return "", fmt.Errorf("managed Node.js runtime is unavailable")
+		}
+		return environment.NodeBinary, nil
+	})
 	artifactResolver := b.hostArtifactResolver
 	if artifactResolver == nil {
 		artifactResolver = script_host.UnavailableArtifactResolver()
@@ -1086,7 +1102,21 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, nodeResolver, artifactResolver)
 	_ = supervisor.RegisterFactory(jsSupervisorFactory)
 
+	agentAdminTools := newAgentAdminToolService(b.agentAdminController, workflowRegistry, workflowExecutor, toolRegistry)
+	builtinUtilityTools := NewBuiltinUtilityService(BuiltinUtilityDeps{
+		Workspace:    b.workspaceService,
+		Browser:      b.browserProvider,
+		Android:      b.androidNativeProvider,
+		AndroidLinux: b.androidLinuxProvider,
+	})
+
 	builtinDispatcher := func(ctx context.Context, handlerName string, input json.RawMessage, invocation capability.ToolInvocationContext) (json.RawMessage, error) {
+		if agentAdminTools.CanHandle(handlerName) {
+			return agentAdminTools.Dispatch(ctx, handlerName, input, invocation)
+		}
+		if builtinUtilityTools.CanHandle(handlerName) {
+			return builtinUtilityTools.Dispatch(ctx, handlerName, input, invocation)
+		}
 		execCtx := tool.ToolExecutionContext{
 			Context:        ctx,
 			ConversationID: invocation.ConversationID,
@@ -1137,29 +1167,31 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
-		JSGlobalFactory:        jsFactory,
-		WASMFactory:            wasmFactory,
-		WASMModuleMgr:          wasmModuleMgr,
-		Supervisor:             supervisor,
-		TaskService:            taskRuntimeService,
-		WorkflowCaller:         makeWorkflowCallFunc(workflowExecutor),
-		WorkflowCancel:         makeWorkflowCancelFunc(workflowExecutor),
-		BuiltinDispatcher:      builtinDispatcher,
-		BuiltinHandlerVerifier: tool.HasHandler,
-		AndroidLinuxProvider:   b.androidLinuxProvider,
-		AndroidNativeProvider:  b.androidNativeProvider,
-		SearchCaller:           makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
-		SearchHealth:           makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
-		InternalDispatcher:     internalDispatcher,
-		MediaCaller:            mediaCaller,
-		MediaHealth:            mediaHealth,
-		WorkspaceCaller:        workspaceCaller,
-		WorkspaceHealth:        workspaceHealth,
-		BrowserCaller:          makeBrowserCallFunc(b.browserProvider),
-		BrowserHealth:          makeBrowserHealthFunc(b.browserProvider),
-		DeviceRuntimePort:      deviceRuntimePort,
-		BackgroundRemoval:      bgRegistry,
-		ChannelStore:           b.channelStore,
+		JSGlobalFactory:   jsFactory,
+		WASMFactory:       wasmFactory,
+		WASMModuleMgr:     wasmModuleMgr,
+		Supervisor:        supervisor,
+		TaskService:       taskRuntimeService,
+		WorkflowCaller:    makeWorkflowCallFunc(workflowExecutor),
+		WorkflowCancel:    makeWorkflowCancelFunc(workflowExecutor),
+		BuiltinDispatcher: builtinDispatcher,
+		BuiltinHandlerVerifier: func(name string) bool {
+			return tool.HasHandler(name) || agentAdminTools.CanHandle(name) || builtinUtilityTools.CanHandle(name)
+		},
+		AndroidLinuxProvider:  b.androidLinuxProvider,
+		AndroidNativeProvider: b.androidNativeProvider,
+		SearchCaller:          makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
+		SearchHealth:          makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
+		InternalDispatcher:    internalDispatcher,
+		MediaCaller:           mediaCaller,
+		MediaHealth:           mediaHealth,
+		WorkspaceCaller:       workspaceCaller,
+		WorkspaceHealth:       workspaceHealth,
+		BrowserCaller:         makeBrowserCallFunc(b.browserProvider),
+		BrowserHealth:         makeBrowserHealthFunc(b.browserProvider),
+		DeviceRuntimePort:     deviceRuntimePort,
+		BackgroundRemoval:     bgRegistry,
+		ChannelStore:          b.channelStore,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
@@ -1179,6 +1211,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	if err := registerBrowserAgentTool(ctx, toolRegistry); err != nil {
 		return nil, fmt.Errorf("kernel: register browser agent tool: %w", err)
+	}
+	if err := registerAgentAdminTools(ctx, toolRegistry, agentAdminTools); err != nil {
+		return nil, fmt.Errorf("kernel: register agent admin tools: %w", err)
+	}
+	if err := registerBuiltinMemorySandboxTools(ctx, toolRegistry); err != nil {
+		return nil, fmt.Errorf("kernel: register builtin memory/sandbox tools: %w", err)
+	}
+	if err := RegisterBuiltinUtilityTools(ctx, toolRegistry, builtinUtilityTools); err != nil {
+		return nil, fmt.Errorf("kernel: register builtin utility tools: %w", err)
 	}
 	if err := registerDeepSearchSystemTask(ctx, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
 		return nil, fmt.Errorf("kernel: register deep search system task: %w", err)

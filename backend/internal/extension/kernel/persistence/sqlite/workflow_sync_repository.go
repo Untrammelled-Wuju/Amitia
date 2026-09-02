@@ -79,7 +79,7 @@ type WorkflowSyncApplyResult struct {
 	CanonicalHash     string             `json:"canonicalHash,omitempty"`
 }
 
-type WorkflowSyncConflict struct {
+type WorkflowSyncConflictRecord struct {
 	EventID           string                `json:"eventId"`
 	SourceDeviceID    string                `json:"sourceDeviceId"`
 	OwnerUserID       string                `json:"ownerUserId"`
@@ -414,7 +414,7 @@ func (r *WorkflowDefinitionRepository) ApplyWorkflowSyncEvent(ctx context.Contex
 	return result, nil
 }
 
-func (r *WorkflowDefinitionRepository) ListWorkflowSyncConflicts(ctx context.Context, ownerUserID string, limit int) ([]WorkflowSyncConflict, error) {
+func (r *WorkflowDefinitionRepository) ListWorkflowSyncConflicts(ctx context.Context, ownerUserID string, limit int) ([]WorkflowSyncConflictRecord, error) {
 	ownerUserID = strings.TrimSpace(ownerUserID)
 	if ownerUserID == "" {
 		return nil, errors.New("workflow sync owner is required")
@@ -434,9 +434,9 @@ func (r *WorkflowDefinitionRepository) ListWorkflowSyncConflicts(ctx context.Con
 		return nil, fmt.Errorf("list workflow sync conflicts: %w", err)
 	}
 	defer rows.Close()
-	items := make([]WorkflowSyncConflict, 0)
+	items := make([]WorkflowSyncConflictRecord, 0)
 	for rows.Next() {
-		var item WorkflowSyncConflict
+		var item WorkflowSyncConflictRecord
 		var eventType, status, payload string
 		if err := rows.Scan(&item.EventID, &item.SourceDeviceID, &item.OwnerUserID, &item.WorkflowID,
 			&item.Revision, &item.BaseRevision, &eventType, &item.DefinitionHash, &status,

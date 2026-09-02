@@ -212,6 +212,9 @@ func (f *ToolFacade) ModelTools(ctx context.Context, scope LegacyScope) ([]tool.
 			tools = append(tools, buildActivateSkillTool(names))
 		}
 	}
+	if f.agentSkillBackend != nil || f.acquisitionBridge != nil {
+		tools = append(tools, buildUsePackageTool())
+	}
 	if f.runSkillScriptHandler != nil {
 		scriptNames, scriptErr := f.resolveScriptCapableSkillNames(ctx, scope)
 		if scriptErr == nil && len(scriptNames) > 0 {
@@ -280,6 +283,10 @@ func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, inp
 	f.counters.IncExecuteModelTool()
 	if modelName == ActivateSkillToolName && f.agentSkillBackend != nil {
 		result, _ := f.handleActivateSkill(ctx, input, scope)
+		return result, true
+	}
+	if modelName == UsePackageToolName && (f.agentSkillBackend != nil || f.acquisitionBridge != nil) {
+		result, _ := f.handleUsePackage(ctx, input, scope)
 		return result, true
 	}
 	if modelName == RunSkillScriptToolName && f.runSkillScriptHandler != nil {

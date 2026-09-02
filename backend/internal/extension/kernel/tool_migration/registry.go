@@ -186,6 +186,18 @@ func DefaultToolSpecs() []*ToolContributionSpec {
 			Permissions:    memReadPerms,
 		},
 		{
+			ToolID:         "builtin/memory/get_by_title",
+			LegacyToolID:   "get_memory_by_title",
+			ModelToolName:  "get_memory_by_title",
+			Module:         ModuleMemoryTools,
+			Namespace:      "memory",
+			Title:          "按标题读取记忆",
+			Description:    "按精确标题或记忆键读取当前角色记忆内容",
+			RuntimeBinding: "host_internal",
+			RiskLevel:      "medium",
+			Permissions:    memReadPerms,
+		},
+		{
 			ToolID:         "builtin/memory/summary",
 			LegacyToolID:   "memory_summary",
 			ModelToolName:  "memory_summary",

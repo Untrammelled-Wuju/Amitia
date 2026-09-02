@@ -97,6 +97,26 @@ func dispatchBrowserCall(ctx context.Context, provider browser.BrowserProvider, 
 		return execUpload(ctx, provider, input)
 	case "browser.resource.screenshot":
 		return execScreenshot(ctx, provider, input)
+	case "browser.devtools.console_messages":
+		return execDevTools(ctx, provider, "console_messages", input)
+	case "browser.devtools.evaluate":
+		return execDevTools(ctx, provider, "evaluate", input)
+	case "browser.devtools.network_requests":
+		return execDevTools(ctx, provider, "network_requests", input)
+	case "browser.devtools.handle_dialog":
+		return execDevTools(ctx, provider, "handle_dialog", input)
+	case "browser.devtools.resize":
+		return execDevTools(ctx, provider, "resize", input)
+	case "browser.devtools.run_code":
+		return execDevTools(ctx, provider, "run_code", input)
+	case "browser.devtools.wait_for":
+		return execDevTools(ctx, provider, "wait_for", input)
+	case "browser.devtools.cookies":
+		return execDevTools(ctx, provider, "cookies", input)
+	case "browser.devtools.drag":
+		return execDevTools(ctx, provider, "drag", input)
+	case "browser.devtools.press_key":
+		return execDevTools(ctx, provider, "press_key", input)
 	}
 	return nil, &browser.BrowserError{
 		Code:    browser.ErrCodeUnsupportedAction,
@@ -175,6 +195,24 @@ type screenshotInput struct {
 	Format    string `json:"format,omitempty"`
 	Quality   int    `json:"quality,omitempty"`
 	FullPage  bool   `json:"fullPage,omitempty"`
+}
+
+func execDevTools(ctx context.Context, provider browser.BrowserProvider, operation string, input json.RawMessage) (json.RawMessage, error) {
+	var ids struct {
+		SessionID string `json:"sessionId"`
+		TabID     string `json:"tabId"`
+	}
+	if err := json.Unmarshal(input, &ids); err != nil {
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
+	}
+	if ids.SessionID == "" || ids.TabID == "" {
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "sessionId and tabId are required"}
+	}
+	devToolsProvider, ok := provider.(browser.BrowserDevToolsProvider)
+	if !ok || devToolsProvider.DevTools() == nil {
+		return nil, &browser.BrowserError{Code: browser.ErrCodeUnsupportedAction, Message: "browser provider does not expose DevTools support"}
+	}
+	return devToolsProvider.DevTools().Execute(ctx, operation, browser.BrowserSessionID(ids.SessionID), browser.BrowserTabID(ids.TabID), input)
 }
 
 func execSessionCreate(ctx context.Context, provider browser.BrowserProvider, _ json.RawMessage) (json.RawMessage, error) {

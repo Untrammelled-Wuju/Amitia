@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
@@ -320,19 +321,35 @@ func (s *MCPPackageSource) buildCandidate(item interface{}, request AcquisitionR
 	}
 
 	if inst, ok := item.(mcpInstallInterface); ok {
+		state := strings.TrimSpace(inst.GetInstallState())
 		providedCaps := inst.GetProvidedCapabilities()
+		// Disabled/installed MCP bindings are intentionally not executable yet, so
+		// their runtime-derived capability list can be empty. Keep them discoverable
+		// by package/server name with the canonical MCP capability so use_package can
+		// enable the existing binding instead of treating it as missing.
+		if len(providedCaps) == 0 && mcpStateCanEnableExisting(state) {
+			serverName := strings.TrimSpace(inst.GetServerName())
+			if serverName == "" {
+				serverName = strings.TrimSpace(inst.GetBindingID())
+			}
+			if serverName != "" {
+				canonical := serverName
+				if !strings.HasPrefix(strings.ToLower(canonical), "mcp.server.") {
+					canonical = "mcp.server." + canonical
+				}
+				providedCaps = []string{canonical}
+			}
+		}
 		if len(providedCaps) == 0 {
 			return nil
 		}
 
 		capID := string(request.CapabilityID)
-		matchesQuery := capID == "" || containsCapability(providedCaps, capID)
+		matchesQuery := capID == "" ||
+			containsCapability(providedCaps, capID) ||
+			containsString(inst.GetServerName(), capID) ||
+			containsString(inst.GetBindingID(), capID)
 		if !matchesQuery {
-			return nil
-		}
-
-		state := inst.GetInstallState()
-		if state == "connected" {
 			return nil
 		}
 
@@ -341,6 +358,15 @@ func (s *MCPPackageSource) buildCandidate(item interface{}, request AcquisitionR
 			caps = append(caps, capability.CapabilityID(c))
 		}
 
+		method := InstallMCP
+		if mcpStateCanEnableExisting(state) {
+			method = InstallEnableExisting
+		}
+
+		serverRef := strings.TrimSpace(inst.GetBindingID())
+		if serverRef == "" {
+			serverRef = strings.TrimSpace(inst.GetServerName())
+		}
 		return &CapabilityCandidate{
 			ID:           inst.GetBindingID(),
 			Kind:         CandidateMCP,
@@ -348,17 +374,34 @@ func (s *MCPPackageSource) buildCandidate(item interface{}, request AcquisitionR
 			Description:  fmt.Sprintf("MCP server: %s (state: %s)", inst.GetServerName(), state),
 			Capabilities: caps,
 			Install: CandidateInstallDescriptor{
-				Method: InstallMCP,
+				Method: method,
 				MCP: &MCPInstallDescriptor{
-					ServerName: inst.GetServerName(),
+					// Local MCP enablement is keyed by binding/server ID. Keep the
+					// human-facing server name in Candidate.Name, but pass the stable
+					// binding reference to EnableExistingPort.
+					ServerName: serverRef,
 				},
 			},
 			Trust: CandidateTrust{
 				Level: TrustVerified,
 			},
+			Metadata: map[string]any{
+				"installState": state,
+				"bindingId":    inst.GetBindingID(),
+				"serverName":   inst.GetServerName(),
+			},
 		}
 	}
 	return nil
+}
+
+func mcpStateCanEnableExisting(state string) bool {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "installed", "ready", "connected", "running", "enabled", "disabled", "stopped":
+		return true
+	default:
+		return false
+	}
 }
 
 // ExtensionCatalogSource 从 Extension 目录中搜索候选
@@ -432,6 +475,11 @@ func (s *ExtensionCatalogSource) matchesRequest(card extension_center.ExtensionC
 	if containsString(card.ExtensionID, capID) {
 		return true
 	}
+	for _, provided := range card.ProvidedCapabilities {
+		if strings.EqualFold(strings.TrimSpace(provided), strings.TrimSpace(capID)) {
+			return true
+		}
+	}
 	for _, tag := range card.ContributionTags {
 		if containsString(string(tag), capID) {
 			return true
@@ -442,7 +490,7 @@ func (s *ExtensionCatalogSource) matchesRequest(card extension_center.ExtensionC
 
 func (s *ExtensionCatalogSource) buildCandidate(card extension_center.ExtensionCard) CapabilityCandidate {
 	method := InstallExtension
-	if card.Status == extension_center.ExtensionStatusInstalledDisabled {
+	if card.Status == extension_center.ExtensionStatusInstalledDisabled || card.Status == extension_center.ExtensionStatusInstalledEnabled {
 		method = InstallEnableExisting
 	}
 
@@ -549,7 +597,6 @@ func (s *GeneratedSkillSource) Search(ctx context.Context, request AcquisitionRe
 		},
 	}, nil
 }
-
 
 // NewSkillSource 从远程 Skill 仓库搜索可安装的 Skill 候选
 type NewSkillSource struct {
@@ -687,8 +734,8 @@ func containsCapability(caps []string, capID string) bool {
 
 // RemoteSkillCatalog HTTP 实现，从远程 Skill 仓库获取 Skill 列表
 type RemoteSkillCatalog struct {
-	client  *http.Client
-	apiURL  string
+	client *http.Client
+	apiURL string
 }
 
 // NewRemoteSkillCatalog 创建 RemoteSkillCatalog 实例
