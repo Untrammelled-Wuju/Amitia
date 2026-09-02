@@ -1,6 +1,9 @@
 package browser
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 type BrowserCapabilities struct {
 	SupportsNavigation  bool     `json:"supportsNavigation"`
@@ -9,6 +12,7 @@ type BrowserCapabilities struct {
 	SupportsDownload    bool     `json:"supportsDownload"`
 	SupportsUpload      bool     `json:"supportsUpload"`
 	SupportsScreenshot  bool     `json:"supportsScreenshot"`
+	SupportsDevTools    bool     `json:"supportsDevTools"`
 	RiskLevels          []string `json:"riskLevels,omitempty"`
 }
 
@@ -64,4 +68,18 @@ type BrowserResourceTransfer interface {
 	Download(ctx context.Context, request BrowserDownloadRequest) (*BrowserDownloadResult, *BrowserError)
 	Upload(ctx context.Context, request BrowserUploadRequest) (*BrowserUploadResult, *BrowserError)
 	Screenshot(ctx context.Context, request BrowserScreenshotRequest) (*BrowserScreenshotResult, *BrowserError)
+}
+
+// BrowserDevToolsProvider is an optional provider extension. Keeping DevTools
+// outside BrowserProvider preserves compatibility with test/alternate providers
+// that only implement the stable browser automation contract.
+type BrowserDevToolsProvider interface {
+	DevTools() BrowserDevTools
+}
+
+// BrowserDevTools provides bounded Chromium DevTools operations for one Amitia
+// browser tab. The kernel keeps the raw operation surface narrow and validates
+// model inputs through ToolDefinition schemas before reaching this interface.
+type BrowserDevTools interface {
+	Execute(ctx context.Context, operation string, sessionID BrowserSessionID, tabID BrowserTabID, input json.RawMessage) (json.RawMessage, *BrowserError)
 }
