@@ -43,6 +43,7 @@ func BuildNetworkTools() []capability.ToolDefinition {
 	pingID := capability.BuildToolID(capability.ToolSourceBuiltin, providerID, ns+".ping")
 	tcpProbeID := capability.BuildToolID(capability.ToolSourceBuiltin, providerID, ns+".tcp.probe")
 	httpRequestID := capability.BuildToolID(capability.ToolSourceBuiltin, providerID, ns+".http.request")
+	multipartRequestID := capability.BuildToolID(capability.ToolSourceBuiltin, providerID, ns+".http.multipart")
 	downloadID := capability.BuildToolID(capability.ToolSourceBuiltin, providerID, ns+".download")
 
 	inspectPerm := []capability.PermissionRequirement{
@@ -193,6 +194,26 @@ func BuildNetworkTools() []capability.ToolDefinition {
 			TimeoutMS:      30000,
 			Runtime:        capability.RuntimeBinding{RuntimeType: runtime.RuntimeType, RuntimeID: runtime.RuntimeID, HandlerName: "network.http.request"},
 			ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b20.2"},
+			Enabled:        true,
+		},
+		{
+			ID:             string(multipartRequestID),
+			ModelName:      "multipart_request",
+			Source:         capability.ToolSourceBuiltin,
+			Name:           "Multipart HTTP Request",
+			Description:    "Send a bounded multipart/form-data HTTP request with text or base64 file parts using the Android Linux network policy.",
+			InputSchema:    json.RawMessage(`{"type":"object","required":["url","parts"],"properties":{"method":{"type":"string","enum":["POST","PUT","PATCH"]},"url":{"type":"string","minLength":1,"maxLength":8192},"headers":{"type":"object","maxProperties":64,"additionalProperties":{"type":"string"}},"parts":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":256},"value":{"type":"string"},"filename":{"type":"string","maxLength":512},"contentType":{"type":"string","maxLength":256},"dataBase64":{"type":"string"}},"additionalProperties":false}},"timeoutMs":{"type":"integer","minimum":100,"maximum":120000},"followRedirects":{"type":"boolean"},"maxResponseBytes":{"type":"integer","minimum":1,"maximum":16777216}},"additionalProperties":false}`),
+			OutputSchema:   json.RawMessage(`{"type":"object","properties":{"statusCode":{"type":"integer"},"status":{"type":"string"},"headers":{"type":"object"},"body":{"type":"string"},"bodyBase64":{"type":"string"},"bytesRead":{"type":"integer"},"truncated":{"type":"boolean"},"finalUrl":{"type":"string"},"durationMs":{"type":"integer"}}}`),
+			Permissions:    publicPerm,
+			RiskLevel:      capability.RiskMedium,
+			SideEffect:     capability.SideEffectExternal,
+			HasSideEffects: true,
+			Idempotent:     false,
+			Retryable:      false,
+			TimeoutMS:      120000,
+			Runtime:        capability.RuntimeBinding{RuntimeType: runtime.RuntimeType, RuntimeID: runtime.RuntimeID, HandlerName: "network.http.multipart"},
+			ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "amitia-multipart-v1"},
+			ModelExposure:  capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"network", "http"}, Priority: 45},
 			Enabled:        true,
 		},
 		{
