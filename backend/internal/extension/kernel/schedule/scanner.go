@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type ScheduleScanner struct {
@@ -233,7 +231,7 @@ func (p *TriggerPlanner) PlanTrigger(def *ScheduleContributionDefinition, state 
 	}
 
 	trigger := &ScheduleTriggerRecord{
-		TriggerID:       "trigger-" + uuid.NewString(),
+		TriggerID:       "trigger-" + idempotencyKey,
 		ScheduleID:      def.ScheduleID,
 		ScheduledAt:     scheduledAt.UTC(),
 		EffectiveAt:     effectiveAt.UTC(),
@@ -248,8 +246,12 @@ func (p *TriggerPlanner) PlanTrigger(def *ScheduleContributionDefinition, state 
 		UpdatedAt:       now.UTC(),
 	}
 
-	if err := p.store.PutTrigger(p.ctx(), trigger); err != nil {
+	created, err := createTriggerIfAbsent(p.ctx(), p.store, trigger)
+	if err != nil {
 		return nil, err
+	}
+	if !created {
+		return nil, ErrIdempotencyConflict
 	}
 
 	newState := *state

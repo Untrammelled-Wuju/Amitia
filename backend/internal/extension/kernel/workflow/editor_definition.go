@@ -12,6 +12,11 @@ const UserWorkflowSchemaVersion = "workflow-v2"
 // executor-friendly DependsOn model in sync. Existing v1 definitions without
 // edges remain valid; v2 definitions use edges as the source of truth.
 func NormalizeDefinition(def WorkflowDefinition) (WorkflowDefinition, error) {
+	var migrateErr error
+	def, migrateErr = MigrateDefinition(def)
+	if migrateErr != nil {
+		return def, migrateErr
+	}
 	// Registry values are returned by value, but slices still share backing arrays.
 	// Clone editor-owned collections before normalizing so enable/update/compile
 	// operations never mutate a definition that is already visible to readers.
@@ -49,11 +54,8 @@ func NormalizeDefinition(def WorkflowDefinition) (WorkflowDefinition, error) {
 	}
 
 	// workflow-v2 uses explicit edges as the source of truth even when the
-	// edge list is empty. Legacy definitions without explicit edges continue
-	// to derive them from DependsOn for backwards compatibility.
-	if def.SchemaVersion != UserWorkflowSchemaVersion && len(def.Edges) == 0 {
-		def.Edges = DeriveEdges(def.Nodes)
-	} else {
+	// edge list is empty. Legacy definitions have already been migrated above.
+	{
 		ids := make(map[string]struct{}, len(def.Nodes))
 		for i := range def.Nodes {
 			ids[def.Nodes[i].ID] = struct{}{}

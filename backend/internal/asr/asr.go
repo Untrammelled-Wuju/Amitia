@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -155,6 +156,35 @@ func fetchAudioData(audioURL string) ([]byte, string, error) {
 			return nil, "", fmt.Errorf("读取本地音频失败: %w", err)
 		}
 		return data, filename, nil
+	}
+
+	// Segment/continuous voice runtimes can pass a private temporary WAV through
+	// the file:// form. This path is deliberately constrained to files generated
+	// by SegmentASRAdapter under os.TempDir(); never turn the public ASR submit
+	// surface into a generic local-file reader.
+	if strings.HasPrefix(audioURL, "file://") {
+		localPath := filepath.Clean(strings.TrimPrefix(audioURL, "file://"))
+		tempRoot := filepath.Clean(os.TempDir())
+		base := filepath.Base(localPath)
+		if filepath.Dir(localPath) != tempRoot || !strings.HasPrefix(base, "amitia_segment_") || !strings.EqualFold(filepath.Ext(base), ".wav") {
+			return nil, "", fmt.Errorf("拒绝读取非 Segment ASR 临时音频")
+		}
+		info, err := os.Lstat(localPath)
+		if err != nil {
+			return nil, "", fmt.Errorf("检查 Segment ASR 临时音频失败: %w", err)
+		}
+		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return nil, "", fmt.Errorf("拒绝读取非普通 Segment ASR 临时音频")
+		}
+		const maxSegmentBytes int64 = 32 << 20
+		if info.Size() < 0 || info.Size() > maxSegmentBytes {
+			return nil, "", fmt.Errorf("Segment ASR 临时音频超过大小限制")
+		}
+		data, err := os.ReadFile(localPath)
+		if err != nil {
+			return nil, "", fmt.Errorf("读取 Segment ASR 临时音频失败: %w", err)
+		}
+		return data, base, nil
 	}
 
 	resp, err := http.Get(audioURL)
@@ -307,29 +337,60 @@ func submitOpenAI(cfg *AsrConfig, audioURL string, language string) (string, err
 	return taskID, nil
 }
 
+func buildAzureShortAudioURL(baseURL string, language string) (string, error) {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return "", fmt.Errorf("Azure Speech BaseURL 必须包含 region 或 resource hostname")
+	}
+
+	parsed, err := url.Parse(baseURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("Azure Speech BaseURL 无效")
+	}
+	if strings.EqualFold(parsed.Hostname(), "stt.speech.microsoft.com") {
+		return "", fmt.Errorf("Azure Speech BaseURL 必须包含 region，例如 https://eastus.stt.speech.microsoft.com")
+	}
+
+	path := strings.TrimRight(parsed.Path, "/")
+	const shortAudioPath = "/speech/recognition/conversation/cognitiveservices"
+	switch {
+	case path == "":
+		path = shortAudioPath + "/v1"
+	case strings.HasSuffix(path, shortAudioPath):
+		path += "/v1"
+	case strings.HasSuffix(path, shortAudioPath+"/v1"):
+	default:
+		path += shortAudioPath + "/v1"
+	}
+	parsed.Path = path
+
+	lang := strings.TrimSpace(language)
+	if lang == "" {
+		lang = "zh-CN"
+	}
+	query := parsed.Query()
+	query.Set("language", lang)
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
+}
+
 func submitAzure(cfg *AsrConfig, audioURL string, language string) (string, error) {
 	audioData, _, err := fetchAudioData(audioURL)
 	if err != nil {
 		return "", err
 	}
 
-	baseURL := cfg.BaseURL
-	if baseURL == "" {
-		baseURL = "https://stt.speech.microsoft.com"
+	endpoint, err := buildAzureShortAudioURL(cfg.BaseURL, language)
+	if err != nil {
+		return "", err
 	}
-	baseURL = strings.TrimRight(baseURL, "/")
-
-	lang := language
-	if lang == "" {
-		lang = "zh-CN"
-	}
-
-	url := fmt.Sprintf("%s/speech/recognition/conversation/cognitiveservices?language=%s", baseURL, lang)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(audioData))
+	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(audioData))
 	if err != nil {
 		return "", fmt.Errorf("创建请求失败: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+	// Azure resource keys use Ocp-Apim-Subscription-Key. Authorization: Bearer
+	// is reserved for an STS access token and cannot be populated with the raw key.
+	req.Header.Set("Ocp-Apim-Subscription-Key", cfg.ApiKey)
 	req.Header.Set("Content-Type", "audio/wav; codecs=audio/pcm; samplerate=16000")
 	req.Header.Set("Accept", "application/json")
 

@@ -20,6 +20,8 @@ type CapabilityResolutionRequest struct {
 
 	PreferredRuntimeID runtimeidentity.RuntimeID
 
+	RequiredDeviceCapabilities []CapabilityID
+
 	Platform runtimeidentity.Platform
 
 	ExtensionID string

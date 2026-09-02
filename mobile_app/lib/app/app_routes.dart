@@ -44,6 +44,7 @@ abstract final class AppRoutes {
   static const settingsAdvanced = '/settings/advanced';
   static const settingsDecisionViz = '/settings/decision-viz';
   static const settingsPermissions = '/settings/permissions';
+  static const settingsAndroidAutomation = '/settings/android-automation';
   static const settingsBackup = '/settings/backup';
   static const settingsAi = '/settings/ai';
   static const settingsAsr = '/settings/asr';

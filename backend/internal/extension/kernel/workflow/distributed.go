@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // WorkflowCallFrame is transported across Core/Device boundaries so nested
@@ -85,4 +86,51 @@ func (e *WorkflowDeviceUnavailableError) Unwrap() error {
 		return nil
 	}
 	return e.Cause
+}
+
+const DefaultExecutionLeaseTTL = 2 * time.Minute
+
+type ExecutionLease struct {
+	ExecutionID    string    `json:"executionId"`
+	NodeID         string    `json:"nodeId"`
+	OwnerDeviceID  string    `json:"ownerDeviceId,omitempty"`
+	Generation     int64     `json:"generation"`
+	FencingToken   int64     `json:"fencingToken"`
+	LeaseExpiresAt time.Time `json:"leaseExpiresAt"`
+	HeartbeatAt    time.Time `json:"heartbeatAt"`
+}
+
+type ExecutionLeaseStore interface {
+	AcquireExecutionLease(ctx context.Context, executionID, nodeID, ownerDeviceID string, generation int64, ttl time.Duration) (ExecutionLease, error)
+	RenewExecutionLease(ctx context.Context, lease ExecutionLease, ttl time.Duration) (ExecutionLease, error)
+	ReleaseExecutionLease(ctx context.Context, lease ExecutionLease) error
+	ValidateExecutionFence(ctx context.Context, executionID, nodeID string, fencingToken int64) error
+}
+
+type ExecutionLeaseBusyError struct {
+	ExecutionID   string
+	NodeID        string
+	OwnerDeviceID string
+	ExpiresAt     time.Time
+}
+
+func (e *ExecutionLeaseBusyError) Error() string {
+	if e == nil {
+		return "workflow execution lease is busy"
+	}
+	return fmt.Sprintf("workflow execution lease busy: run=%s node=%s owner=%s expires=%s", e.ExecutionID, e.NodeID, e.OwnerDeviceID, e.ExpiresAt.UTC().Format(time.RFC3339Nano))
+}
+
+type StaleFencingTokenError struct {
+	ExecutionID string
+	NodeID      string
+	Expected    int64
+	Received    int64
+}
+
+func (e *StaleFencingTokenError) Error() string {
+	if e == nil {
+		return "workflow stale fencing token"
+	}
+	return fmt.Sprintf("workflow stale fencing token: run=%s node=%s current=%d received=%d", e.ExecutionID, e.NodeID, e.Expected, e.Received)
 }

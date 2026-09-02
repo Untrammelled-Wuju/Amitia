@@ -32,12 +32,14 @@ func (h workflowToolStepHandler) Execute(ctx context.Context, node workflow.Work
 		return nil, fmt.Errorf("workflow tool target missing")
 	}
 	invocationID := fmt.Sprintf("%s/%s", execCtx.InvocationID, node.ID)
+	workflow.UpdateExecutionTraceMetadata(ctx, node.ExecutionTarget.DeviceID, node.ExecutionTarget.RuntimeID, invocationID)
 	invocation := workflowInvocation(execCtx, invocationID)
 	if node.ExecutionTarget.Placement != "" {
 		resolved, err := h.router.ResolveNode(ctx, node, execCtx)
 		if err != nil {
 			return nil, err
 		}
+		workflow.UpdateExecutionTraceMetadata(ctx, string(resolved.InvocationTarget.DeviceID), string(resolved.InvocationTarget.RuntimeID), invocationID)
 		invocation.ExecutionTarget = resolved.InvocationTarget
 	}
 	result := h.kernel.Execute(ctx, execution.ToolExecutionRequest{
@@ -70,12 +72,14 @@ func (h workflowRuntimeStepHandler) Execute(ctx context.Context, node workflow.W
 		binding.RuntimeID = node.TargetID
 	}
 	invocationID := fmt.Sprintf("%s/%s", execCtx.InvocationID, node.ID)
+	workflow.UpdateExecutionTraceMetadata(ctx, node.ExecutionTarget.DeviceID, binding.RuntimeID, invocationID)
 	invocation := workflowInvocation(execCtx, invocationID)
 	if node.ExecutionTarget.Placement != "" {
 		resolved, err := h.router.ResolveNode(ctx, node, execCtx)
 		if err != nil {
 			return nil, err
 		}
+		workflow.UpdateExecutionTraceMetadata(ctx, string(resolved.InvocationTarget.DeviceID), string(resolved.InvocationTarget.RuntimeID), invocationID)
 		invocation.ExecutionTarget = resolved.InvocationTarget
 		adapter, ok := h.registry.ResolveRoute(resolved.Route)
 		if !ok {
@@ -123,7 +127,11 @@ func workflowInvocation(execCtx workflow.ExecutionContext, invocationID string) 
 		ModuleID:             execCtx.ModuleID,
 		Generation:           execCtx.Generation,
 		Source:               source,
-		IdempotencyKey:       fmt.Sprintf("%s/%s", execCtx.IdempotencyKey, invocationID),
+		IdempotencyKey:       execCtx.IdempotencyKey,
+		WorkflowRunID:        execCtx.InvocationID,
+		WorkflowNodeID:       execCtx.NodeID,
+		LogicalAttempt:       execCtx.LogicalAttempt,
+		FencingToken:         execCtx.FencingToken,
 		TraceID:              execCtx.TraceID,
 		ScheduleID:           execCtx.ScheduleID,
 		TriggerID:            execCtx.TriggerID,
@@ -177,7 +185,9 @@ func registerWorkflowStepHandlers(executor *workflow.WorkflowExecutor, execution
 	}
 	executor.RegisterHandler("nested_workflow", workflow.NestedWorkflowHandler{Executor: executor})
 	executor.RegisterHandler("nested workflow", workflow.NestedWorkflowHandler{Executor: executor})
-	executor.RegisterHandler("condition", workflow.PassthroughHandler{})
+	executor.RegisterHandler("condition", workflow.ConditionHandler{})
+	executor.RegisterHandler("logic", workflow.LogicHandler{})
+	executor.RegisterHandler("extract", workflow.ExtractHandler{})
 	executor.RegisterHandler("transform", workflow.TransformHandler{})
 	executor.RegisterHandler("wait", workflow.WaitHandler{})
 }

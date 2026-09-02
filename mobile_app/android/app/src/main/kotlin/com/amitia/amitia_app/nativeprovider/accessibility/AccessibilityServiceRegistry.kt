@@ -1,6 +1,7 @@
 package com.amitia.amitia_app.nativeprovider.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import com.amitia.amitia_app.nativeprovider.uitree.AccessibilityNodeReferenceRegistry
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
@@ -11,11 +12,17 @@ internal object AccessibilityServiceRegistry {
 
     fun attach(service: AccessibilityService) {
         current.set(service)
-        generationRef.incrementAndGet()
+        AccessibilityNodeReferenceRegistry.invalidateAll()
+        val healthGeneration = AccessibilityHealthMonitor.onConnected(service)
+        generationRef.set(maxOf(generationRef.incrementAndGet(), healthGeneration))
     }
 
     fun detach(service: AccessibilityService) {
-        current.compareAndSet(service, null)
+        if (current.compareAndSet(service, null)) {
+            AccessibilityNodeReferenceRegistry.invalidateAll()
+            val healthGeneration = AccessibilityHealthMonitor.onDisconnected(service)
+            generationRef.set(maxOf(generationRef.incrementAndGet(), healthGeneration))
+        }
     }
 
     fun current(): AccessibilityService? = current.get()

@@ -19,6 +19,7 @@ class AmitiaAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        AccessibilityHealthMonitor.onEvent(this)
         val transition = event?.let(ForegroundStateTracker::update) ?: return
         val payload = JSONObject()
             .put("previousPackageName", transition.previousPackage)

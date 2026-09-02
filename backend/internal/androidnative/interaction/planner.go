@@ -7,9 +7,9 @@ import (
 )
 
 type Planner struct {
-	nodeResolver uitree.NodeResolver
+	nodeResolver  uitree.NodeResolver
 	visualLocator VisualLocator
-	policy       Policy
+	policy        Policy
 }
 
 func NewPlanner(
@@ -124,7 +124,7 @@ func (p *Planner) planCoordinateAction(
 	target InteractionTarget,
 	operation string,
 ) InteractionPlan {
-	displayID := 0
+	displayID := target.DisplayID
 	x := 0
 	y := 0
 	if target.X != nil {
@@ -152,4 +152,3 @@ func (p *Planner) planVisualAction(
 		Strategy:  StrategyVisualUnderstand,
 	}
 }
-

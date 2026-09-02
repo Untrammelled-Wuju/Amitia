@@ -89,6 +89,11 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		RuntimeID:            route.RuntimeID,
 		RuntimeSessionID:     sessionID,
 		ConnectionGeneration: generation,
+		IdempotencyKey:       request.Invocation.IdempotencyKey,
+		WorkflowRunID:        request.Invocation.WorkflowRunID,
+		WorkflowNodeID:       request.Invocation.WorkflowNodeID,
+		LogicalAttempt:       request.Invocation.LogicalAttempt,
+		FencingToken:         request.Invocation.FencingToken,
 		DeadlineMs:           deadline.Milliseconds(),
 		SentAt:               time.Now().UTC(),
 	}

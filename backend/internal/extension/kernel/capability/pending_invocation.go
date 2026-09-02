@@ -8,18 +8,20 @@ import (
 )
 
 type PendingInvocation struct {
-	InvocationID string
-	CommandID    string
-	UserID       string
-	DeviceID     string
-	RuntimeID    string
-	SessionID    string
-	Generation   int64
-	HandlerName  string
-	CreatedAt    time.Time
-	DeadlineAt   time.Time
-	ResultCh     chan UnifiedToolResult
-	CancelFunc   context.CancelFunc
+	InvocationID   string
+	CommandID      string
+	UserID         string
+	DeviceID       string
+	RuntimeID      string
+	SessionID      string
+	Generation     int64
+	HandlerName    string
+	IdempotencyKey string
+	FencingToken   int64
+	CreatedAt      time.Time
+	DeadlineAt     time.Time
+	ResultCh       chan UnifiedToolResult
+	CancelFunc     context.CancelFunc
 }
 
 type PendingInvocationManager struct {
@@ -42,18 +44,20 @@ func (m *PendingInvocationManager) Register(req DeviceRuntimeInvocationRequest, 
 	invocationID := req.Invocation.InvocationID
 	deadlineCtx, cancel := context.WithTimeout(context.Background(), deadline)
 	pi := &PendingInvocation{
-		InvocationID: invocationID,
-		CommandID:    commandID,
-		UserID:       string(req.Route.UserID),
-		DeviceID:     string(req.Route.DeviceID),
-		RuntimeID:    string(req.Route.RuntimeID),
-		SessionID:    sessionID,
-		Generation:   generation,
-		HandlerName:  req.Route.Binding.HandlerName,
-		CreatedAt:    time.Now().UTC(),
-		DeadlineAt:   time.Now().UTC().Add(deadline),
-		ResultCh:     make(chan UnifiedToolResult, 1),
-		CancelFunc:   cancel,
+		InvocationID:   invocationID,
+		CommandID:      commandID,
+		UserID:         string(req.Route.UserID),
+		DeviceID:       string(req.Route.DeviceID),
+		RuntimeID:      string(req.Route.RuntimeID),
+		SessionID:      sessionID,
+		Generation:     generation,
+		HandlerName:    req.Route.Binding.HandlerName,
+		IdempotencyKey: req.Invocation.IdempotencyKey,
+		FencingToken:   req.Invocation.FencingToken,
+		CreatedAt:      time.Now().UTC(),
+		DeadlineAt:     time.Now().UTC().Add(deadline),
+		ResultCh:       make(chan UnifiedToolResult, 1),
+		CancelFunc:     cancel,
 	}
 	m.mu.Lock()
 	if existing, exists := m.pending[invocationID]; exists && existing != nil {
@@ -91,6 +95,9 @@ func (m *PendingInvocationManager) Complete(invocationID string, result UnifiedT
 	if result.RuntimeID != "" && pi.RuntimeID != "" && result.RuntimeID != pi.RuntimeID {
 		return false
 	}
+	if !pendingReliabilityMatches(pi, result) {
+		return false
+	}
 	delete(m.pending, invocationID)
 	pi.CancelFunc()
 	select {
@@ -119,11 +126,49 @@ func (m *PendingInvocationManager) Fail(invocationID string, errResult UnifiedTo
 	if errResult.RuntimeID != "" && pi.RuntimeID != "" && errResult.RuntimeID != pi.RuntimeID {
 		return false
 	}
+	if !pendingReliabilityMatches(pi, errResult) {
+		return false
+	}
 	delete(m.pending, invocationID)
 	pi.CancelFunc()
 	select {
 	case pi.ResultCh <- errResult:
 	default:
+	}
+	return true
+}
+
+func pendingReliabilityMatches(pi *PendingInvocation, result UnifiedToolResult) bool {
+	if pi == nil {
+		return false
+	}
+	if pi.IdempotencyKey != "" {
+		if result.Metadata == nil || fmt.Sprint(result.Metadata["idempotencyKey"]) != pi.IdempotencyKey {
+			return false
+		}
+	}
+	if pi.FencingToken != 0 {
+		if result.Metadata == nil {
+			return false
+		}
+		value, ok := result.Metadata["fencingToken"]
+		if !ok {
+			return false
+		}
+		var received int64
+		switch typed := value.(type) {
+		case int64:
+			received = typed
+		case int:
+			received = int64(typed)
+		case float64:
+			received = int64(typed)
+		default:
+			_, _ = fmt.Sscan(fmt.Sprint(value), &received)
+		}
+		if received != pi.FencingToken {
+			return false
+		}
 	}
 	return true
 }

@@ -431,7 +431,7 @@ func (s *service) loadWakeDetector(ctx context.Context, sess *ContinuousVoiceSes
 	wakeConfigID := strings.TrimSpace(profile.WakeConfigID)
 	if profileErr != nil || wakeConfigID == "" {
 		var fallback WakeConfig
-		if err := dbInstance.WithContext(ctx).Table("wake_configs").Where("enabled = 1").Order("updated_at DESC").First(&fallback).Error; err != nil {
+		if err := dbInstance.WithContext(ctx).Table("wake_configs").Where("enabled = 1").Where("id NOT LIKE ?", "workflow-wake-%").Order("updated_at DESC").First(&fallback).Error; err != nil {
 			if profileErr != nil {
 				return fmt.Errorf("load voice profile wake config: %w", profileErr)
 			}

@@ -138,3 +138,7 @@ func validateCoordinate(x, y, minX, minY, maxX, maxY int) error {
 	}
 	return nil
 }
+
+func (e *BridgeCoordinateExecutor) ProbeHealth(ctx context.Context) ProviderCapabilityHealth {
+	return probeNativeStatus(ctx, e.bridge, "accessibility_gesture", "interaction.status")
+}

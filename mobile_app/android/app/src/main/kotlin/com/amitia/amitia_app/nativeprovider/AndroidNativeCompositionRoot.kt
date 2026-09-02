@@ -8,12 +8,14 @@ import com.amitia.amitia_app.nativeprovider.clipboard.ClipboardNativeHandler
 import com.amitia.amitia_app.nativeprovider.clipboard.ClipboardNativeHandlerAdapter
 import com.amitia.amitia_app.nativeprovider.display.DisplayNativeHandler
 import com.amitia.amitia_app.nativeprovider.desktoppet.DesktopPetRendererNativeHandler
+import com.amitia.amitia_app.nativeprovider.devicecontrol.DeviceAutomationNativeHandler
 import com.amitia.amitia_app.nativeprovider.externalautomation.ExternalAutomationNativeHandler
 import com.amitia.amitia_app.nativeprovider.interaction.InteractionNativeHandler
 import com.amitia.amitia_app.nativeprovider.notification.NotificationNativeHandler
 import com.amitia.amitia_app.nativeprovider.notification.NotificationNativeHandlerAdapter
 import com.amitia.amitia_app.nativeprovider.overlay.OverlayNativeHandler
 import com.amitia.amitia_app.nativeprovider.root.RootNativeHandler
+import com.amitia.amitia_app.nativeprovider.screencapture.ScreenCaptureNativeHandler
 import com.amitia.amitia_app.nativeprovider.share.ShareNativeHandler
 import com.amitia.amitia_app.nativeprovider.share.ShareNativeHandlerAdapter
 import com.amitia.amitia_app.nativeprovider.shizuku.ShizukuNativeHandler
@@ -52,6 +54,7 @@ internal object AndroidNativeCompositionRoot {
             buildNotificationHandler(context),
             RootNativeHandler(context),
             ShizukuNativeHandler(context),
+            ScreenCaptureNativeHandler(),
             UITreeNativeHandler(context),
             InteractionNativeHandler(context),
             DisplayNativeHandler(context),
@@ -60,6 +63,7 @@ internal object AndroidNativeCompositionRoot {
             OverlayNativeHandler(context),
             DesktopPetRendererNativeHandler(context),
             ExternalAutomationNativeHandler(context),
+            DeviceAutomationNativeHandler(context),
         )
     }
 

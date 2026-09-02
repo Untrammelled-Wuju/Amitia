@@ -32,22 +32,26 @@ type DependencyRequirement struct {
 }
 
 type CompiledWorkflowNode struct {
-	ID             string                  `json:"id"`
-	Type           string                  `json:"type"`
-	DependsOn      []string                `json:"dependsOn"`
-	Index          int                     `json:"index"`
-	TargetID       string                  `json:"targetId,omitempty"`
-	Runtime        json.RawMessage         `json:"runtime,omitempty"`
-	Permissions    []string                `json:"permissions,omitempty"`
-	Scope          string                  `json:"scope,omitempty"`
-	Input          map[string]any          `json:"input,omitempty"`
-	When           *WorkflowExpression     `json:"when,omitempty"`
-	Timeout        *time.Duration          `json:"timeout,omitempty"`
-	Retry          *WorkflowRetryPolicy    `json:"retry,omitempty"`
-	OnError        WorkflowNodeErrorPolicy `json:"onError,omitempty"`
-	DataRefs       []*WorkflowValueRef     `json:"dataRefs,omitempty"`
-	Purity         NodePurity              `json:"purity"`
-	HasSideEffects bool                    `json:"hasSideEffects"`
+	ID                   string                          `json:"id"`
+	Type                 string                          `json:"type"`
+	DependsOn            []string                        `json:"dependsOn"`
+	Index                int                             `json:"index"`
+	TargetID             string                          `json:"targetId,omitempty"`
+	Runtime              json.RawMessage                 `json:"runtime,omitempty"`
+	ExecutionTarget      WorkflowExecutionTarget         `json:"executionTarget,omitempty"`
+	Permissions          []string                        `json:"permissions,omitempty"`
+	RequiredCapabilities []string                        `json:"requiredCapabilities,omitempty"`
+	Scope                string                          `json:"scope,omitempty"`
+	Input                map[string]any                  `json:"input,omitempty"`
+	When                 *WorkflowExpression             `json:"when,omitempty"`
+	Postcondition        *WorkflowExpression             `json:"postcondition,omitempty"`
+	Timeout              *time.Duration                  `json:"timeout,omitempty"`
+	Retry                *WorkflowRetryPolicy            `json:"retry,omitempty"`
+	OnError              WorkflowNodeErrorPolicy         `json:"onError,omitempty"`
+	DataRefs             []*WorkflowValueRef             `json:"dataRefs,omitempty"`
+	Purity               NodePurity                      `json:"purity"`
+	HasSideEffects       bool                            `json:"hasSideEffects"`
+	Compensation         *WorkflowCompensationDefinition `json:"compensation,omitempty"`
 }
 
 type NodePurity string
@@ -76,6 +80,7 @@ type CompiledWorkflowDAG struct {
 	PermissionClosure []PermissionRequirement         `json:"permissionClosure"`
 	DependencyClosure []DependencyRequirement         `json:"dependencyClosure"`
 	Limits            WorkflowLimits                  `json:"limits"`
+	ConcurrencyPolicy WorkflowConcurrencyPolicy       `json:"concurrencyPolicy,omitempty"`
 	DefinitionHash    string                          `json:"definitionHash"`
 	Output            any                             `json:"output,omitempty"`
 }
@@ -130,6 +135,9 @@ func (c *Compiler) Compile(def WorkflowDefinition, opts CompileOptions) (*Compil
 	}
 	if def.ID == "" {
 		return nil, fmt.Errorf("workflow: missing id")
+	}
+	if err := def.ConcurrencyPolicy.Validate(); err != nil {
+		return nil, err
 	}
 	if def.SchemaVersion == "" {
 		def.SchemaVersion = CompiledSchemaVersion
@@ -186,20 +194,21 @@ func (c *Compiler) Compile(def WorkflowDefinition, opts CompileOptions) (*Compil
 	sort.Strings(exitNodes)
 
 	compiled := &CompiledWorkflowDAG{
-		WorkflowID:       def.ID,
-		SchemaVersion:    CompiledSchemaVersion,
-		CompilerVersion:  CompilerVersion,
-		WorkflowChecksum: ComputeDefinitionHash(def),
-		InputSchema:      CompiledSchema{Raw: def.InputSchema},
-		OutputSchema:     CompiledSchema{Raw: def.OutputSchema},
-		Nodes:            make(map[string]CompiledWorkflowNode),
-		TopologicalOrder: topo,
-		Dependents:       dependents,
-		DependedOnBy:     dependedOnBy,
-		EntryNodes:       entryNodes,
-		ExitNodes:        exitNodes,
-		Limits:           def.Limits,
-		DefinitionHash:   ComputeDefinitionHash(def),
+		WorkflowID:        def.ID,
+		SchemaVersion:     CompiledSchemaVersion,
+		CompilerVersion:   CompilerVersion,
+		WorkflowChecksum:  ComputeDefinitionHash(def),
+		InputSchema:       CompiledSchema{Raw: def.InputSchema},
+		OutputSchema:      CompiledSchema{Raw: def.OutputSchema},
+		Nodes:             make(map[string]CompiledWorkflowNode),
+		TopologicalOrder:  topo,
+		Dependents:        dependents,
+		DependedOnBy:      dependedOnBy,
+		EntryNodes:        entryNodes,
+		ExitNodes:         exitNodes,
+		Limits:            def.Limits,
+		ConcurrencyPolicy: def.ConcurrencyPolicy.Normalize(),
+		DefinitionHash:    ComputeDefinitionHash(def),
 	}
 
 	permMap := make(map[string]*PermissionRequirement)
@@ -207,16 +216,19 @@ func (c *Compiler) Compile(def WorkflowDefinition, opts CompileOptions) (*Compil
 
 	for i, n := range canonicalNodes {
 		cn := CompiledWorkflowNode{
-			ID:          n.ID,
-			Type:        n.Type,
-			DependsOn:   n.DependsOn,
-			Index:       i,
-			TargetID:    n.TargetID,
-			Permissions: n.Permissions,
-			Scope:       n.Scope,
-			Input:       make(map[string]any),
-			OnError:     WorkflowNodeErrorPolicy{Mode: WorkflowErrorModeFail},
-			Purity:      classifyPurity(n.Type),
+			ID:                   n.ID,
+			Type:                 n.Type,
+			DependsOn:            n.DependsOn,
+			Index:                i,
+			TargetID:             n.TargetID,
+			ExecutionTarget:      n.ExecutionTarget,
+			Permissions:          n.Permissions,
+			RequiredCapabilities: append([]string(nil), n.RequiredCapabilities...),
+			Scope:                n.Scope,
+			Input:                make(map[string]any),
+			OnError:              WorkflowNodeErrorPolicy{Mode: WorkflowErrorModeFail},
+			Purity:               classifyPurity(n.Type),
+			Compensation:         n.Compensation,
 		}
 
 		if n.Runtime.RuntimeID != "" {
@@ -229,6 +241,14 @@ func (c *Compiler) Compile(def WorkflowDefinition, opts CompileOptions) (*Compil
 				return nil, fmt.Errorf("workflow %s node %s when: %w", def.ID, n.ID, err)
 			}
 			cn.When = expr
+		}
+
+		if n.Step.Postcondition != nil {
+			expr, err := CompileExpression(*n.Step.Postcondition)
+			if err != nil {
+				return nil, fmt.Errorf("workflow %s node %s postcondition: %w", def.ID, n.ID, err)
+			}
+			cn.Postcondition = expr
 		}
 
 		if len(n.Step.Input) > 0 {
@@ -250,6 +270,19 @@ func (c *Compiler) Compile(def WorkflowDefinition, opts CompileOptions) (*Compil
 				return nil, fmt.Errorf("workflow %s node %s retry: %w", def.ID, n.ID, err)
 			}
 			cn.Retry = retryPolicy
+		}
+
+		if n.Compensation != nil {
+			compNode, err := BuildCompensationNode(n)
+			if err != nil {
+				return nil, fmt.Errorf("workflow %s node %s compensation: %w", def.ID, n.ID, err)
+			}
+			if _, err := c.compileRetry(compNode); err != nil {
+				return nil, fmt.Errorf("workflow %s node %s compensation retry: %w", def.ID, n.ID, err)
+			}
+			if def.Limits.MaxStepDurationMS > 0 && compNode.TimeoutMS > def.Limits.MaxStepDurationMS {
+				return nil, fmt.Errorf("workflow %s node %s compensation timeout %dms exceeds workflow max step duration %dms", def.ID, n.ID, compNode.TimeoutMS, def.Limits.MaxStepDurationMS)
+			}
 		}
 
 		if opts.EnableTimeout && n.TimeoutMS > 0 {
@@ -409,12 +442,15 @@ func normalizeNode(n WorkflowNode) WorkflowNode {
 	if n.Permissions == nil {
 		n.Permissions = []string{}
 	}
+	if n.RequiredCapabilities == nil {
+		n.RequiredCapabilities = []string{}
+	}
 	return n
 }
 
 func classifyPurity(nodeType string) NodePurity {
 	switch nodeType {
-	case "transform", "template", "condition":
+	case "transform", "extract", "logic", "template", "condition":
 		return NodePurityPure
 	case "tool", "skill", "runtime_handler", "http", "call_skill":
 		return NodePuritySideEffecting

@@ -45,7 +45,8 @@ internal class AndroidNativeHost private constructor(
                 }
                 handlers[op] = handler
             }
-            capabilityCache.set(emptyMap())
+            capabilityCache.set(handlers.keys.associateWith { true })
+            hostGeneration.incrementAndGet()
         }
     }
 
@@ -117,11 +118,14 @@ internal class AndroidNativeHost private constructor(
     }
 
     fun health(): NativeBridgeHealth {
-        val capabilities = buildCapabilities()
-        val hasHandlers = handlers.isNotEmpty()
-        val status = when {
-            !hasHandlers -> NativeBridgeProtocol.HEALTH_UNKNOWN
-            else -> NativeBridgeProtocol.HEALTH_READY
+        // registerHandler publishes an immutable capability snapshot while the
+        // handler mutex is held. Health reads only that atomic snapshot, so it
+        // never iterates the mutable handler map concurrently with registration.
+        val capabilities = capabilityCache.get()
+        val status = if (capabilities.isEmpty()) {
+            NativeBridgeProtocol.HEALTH_UNKNOWN
+        } else {
+            NativeBridgeProtocol.HEALTH_READY
         }
         return NativeBridgeHealth(
             status = status,
@@ -131,20 +135,6 @@ internal class AndroidNativeHost private constructor(
             foreground = foregroundRef.get(),
             capabilities = capabilities,
         )
-    }
-
-    private fun buildCapabilities(): Map<String, Boolean> {
-        capabilityCache.get()?.let { return it }
-        val snapshot = LinkedHashMap<String, Boolean>()
-        for (op in handlers.keys) {
-            snapshot[op] = false
-        }
-        val capabilities = linkedMapOf<String, Boolean>()
-        for ((op, _) in snapshot) {
-            capabilities[op] = true
-        }
-        capabilityCache.compareAndSet(capabilities, capabilities)
-        return capabilities
     }
 
     fun didEnterBackground() {

@@ -69,7 +69,16 @@ func (e *shizukuExecutor) executeInteraction(ctx context.Context, operation stri
 
 	resp, err := e.bridge.Execute(ctx, req)
 	if err != nil {
-		return &Error{Code: INTERACTION_SHIZUKU_UNAVAILABLE, Message: fmt.Sprintf("shizuku execute error: %v", err)}
+		if ctx.Err() != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				return &Error{Code: INTERACTION_TIMEOUT, Message: fmt.Sprintf("shizuku execution timed out: %v", err)}
+			}
+			return &Error{Code: INTERACTION_CANCELLED, Message: fmt.Sprintf("shizuku execution cancelled: %v", err)}
+		}
+		// A relay/transport failure after dispatch cannot prove the Android input
+		// command did not execute. Mark the result unknown so the router must not
+		// repeat the same side effect through ADB/Root.
+		return &Error{Code: INTERACTION_OUTCOME_UNKNOWN, Message: fmt.Sprintf("shizuku execution outcome unknown: %v", err)}
 	}
 
 	if resp.Status != "success" {
@@ -90,4 +99,11 @@ var shizukuRequestCounter uint64
 func generateShizukuRequestID() string {
 	shizukuRequestCounter++
 	return fmt.Sprintf("shizuku-%d", shizukuRequestCounter)
+}
+
+func (e *shizukuExecutor) ProbeHealth(ctx context.Context) ProviderCapabilityHealth {
+	if !e.policy.AllowShizukuFallback {
+		return newProviderHealth("shizuku", ProviderStateUnavailable, "disabled by interaction policy", "", false)
+	}
+	return probeNativeStatus(ctx, e.bridge, "shizuku", "shizuku.status")
 }

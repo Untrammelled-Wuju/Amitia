@@ -63,7 +63,7 @@
         </div>
         <div class="card-actions">
           <el-button type="primary" plain @click="edit(item)">打开编辑器</el-button>
-          <el-button :disabled="!item.enabled || item.offline" @click="runNow(item)"><el-icon><VideoPlay /></el-icon>运行</el-button>
+          <el-button :disabled="!item.enabled || item.offline" @click="openRunDialog(item)"><el-icon><VideoPlay /></el-icon>运行</el-button>
           <el-dropdown trigger="click">
             <el-button><el-icon><MoreFilled /></el-icon></el-button>
             <template #dropdown>
@@ -89,6 +89,24 @@
         <el-button type="primary" :disabled="currentTarget.location === 'device' && !deviceId" @click="createNew">手动创建</el-button>
       </div>
     </section>
+
+    <el-dialog v-model="runDialogVisible" :title="`运行 · ${runWorkflowItem?.name || '工作流'}`" width="540px" append-to-body destroy-on-close>
+      <div class="run-dialog-body">
+        <label>执行模式
+          <el-select v-model="runMode" style="width:100%">
+            <el-option label="Live · 正式执行" value="live" />
+            <el-option label="Dry Run · 只验证/规划" value="dry_run" />
+            <el-option label="Mocked · 使用显式 Mock" value="mocked" />
+            <el-option label="Controlled Live · 副作用前确认" value="controlled_live" />
+          </el-select>
+        </label>
+        <p class="run-mode-help">{{ executionModeDescription(runMode) }}</p>
+        <label>Workflow Input (JSON)<el-input v-model="runInputEditor" type="textarea" :rows="6" spellcheck="false" /></label>
+        <label v-if="runMode === 'mocked'">Mocks (JSON Array)<el-input v-model="runMocksEditor" type="textarea" :rows="7" spellcheck="false" /></label>
+        <p v-if="runMode === 'controlled_live'" class="controlled-warning">运行会在副作用节点前持久化进入 waiting_confirmation；随后会打开运行详情完成确认。</p>
+      </div>
+      <template #footer><el-button @click="runDialogVisible=false">取消</el-button><el-button type="primary" :loading="runningWorkflow" @click="runNow">开始运行</el-button></template>
+    </el-dialog>
 
     <el-drawer v-model="templateDrawer" title="我的工作流模板" size="min(520px, 92vw)">
       <div class="template-help">模板保存在当前 Amitia 数据库并按用户隔离，不会公开发布。由模板创建的新工作流默认停用自动触发和 Agent 调用，打开编辑器检查后再启用。</div>
@@ -131,6 +149,8 @@ import {
   setWorkflowEnabled,
   type WorkflowDefinition,
   type WorkflowDeviceDescriptor,
+  type WorkflowExecutionMode,
+  type WorkflowMockBehavior,
   type WorkflowTarget,
   type WorkflowTemplateSummary,
   workflowTargetQuery,
@@ -152,6 +172,12 @@ const importInput = ref<HTMLInputElement | null>(null);
 const search = ref("");
 const statusFilter = ref<"all" | "enabled" | "disabled" | "agent">("all");
 const selectedIds = ref(new Set<string>());
+const runDialogVisible = ref(false);
+const runningWorkflow = ref(false);
+const runWorkflowItem = ref<WorkflowDefinition | null>(null);
+const runMode = ref<WorkflowExecutionMode>("live");
+const runInputEditor = ref("{}");
+const runMocksEditor = ref("[]");
 let reconcileTimer: ReturnType<typeof setInterval> | null = null;
 let syncCursor: number | null = null;
 let syncTargetKey = "";
@@ -218,8 +244,8 @@ async function pollSyncEvents() {
     if (page.items.length > 0) await load();
     deviceRefreshTicks += 1;
     if (target.location !== "local" && deviceRefreshTicks % 5 === 0) await loadDevices();
-    // Device-local changes performed directly on another device cannot yet push
-    // into Cloud Core's outbox, so keep a low-frequency catalog reconciliation.
+    // Keep a low-frequency catalog reconciliation only as a recovery path for
+    // missed/outbox-corruption scenarios; normal synchronization is durable push/pull.
     if (target.location === "device" && deviceRefreshTicks % 8 === 0 && page.items.length === 0) await load();
   } catch {
     // Keep the current list usable during transient sync failures. The cursor is
@@ -285,14 +311,34 @@ async function toggle(item: WorkflowDefinition, enabled: boolean) {
     await load();
   }
 }
-async function runNow(item: WorkflowDefinition) {
+function executionModeDescription(mode: WorkflowExecutionMode) {
+  if (mode === "dry_run") return "只执行校验、路由、依赖和条件规划，不调用真实节点 Handler。";
+  if (mode === "mocked") return "按显式 Mock 输出运行；副作用节点没有 Mock 时直接阻断。";
+  if (mode === "controlled_live") return "真实执行，但副作用节点必须逐 Run 确认后才会继续。";
+  return "按正式运行语义执行节点和副作用。";
+}
+function openRunDialog(item: WorkflowDefinition) {
   if (!item.enabled || item.offline) { if (item.offline) ElMessage.warning("设备离线：不能运行本地工作流"); return; }
+  runWorkflowItem.value = item; runMode.value = "live"; runInputEditor.value = "{}"; runMocksEditor.value = "[]"; runDialogVisible.value = true;
+}
+function parseRunJSON<T>(text: string, label: string): T { try { return JSON.parse(text || "null") as T; } catch (e: any) { throw new Error(`${label} JSON 无效：${e?.message || e}`); } }
+async function runNow() {
+  const item = runWorkflowItem.value; if (!item || runningWorkflow.value) return;
+  runningWorkflow.value = true;
   try {
-    const result = await runWorkflow(item.id, {}, false, currentTarget.value);
-    ElMessage.success(`已开始运行：${result.executionId}`);
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.error || e?.message || "运行失败");
-  }
+    const input = parseRunJSON<unknown>(runInputEditor.value, "Input");
+    let mocks: WorkflowMockBehavior[] | undefined;
+    if (runMode.value === "mocked") { const parsed = parseRunJSON<unknown>(runMocksEditor.value, "Mocks"); if (!Array.isArray(parsed)) throw new Error("Mocks 必须是 JSON Array"); mocks = parsed as WorkflowMockBehavior[]; }
+    const result = await runWorkflow(item.id, input, false, currentTarget.value, { mode: runMode.value, mocks });
+    runDialogVisible.value = false;
+    if (result.status === "waiting_confirmation") {
+      ElMessage.warning(`运行等待副作用确认：${result.executionId}`);
+      await router.push({ path: `/creative-workshop/workflows/${encodeURIComponent(item.id)}`, query: { ...workflowTargetQuery(currentTarget.value), runId: result.executionId } });
+      return;
+    }
+    ElMessage.success(`${runMode.value === "dry_run" ? "Dry Run 已完成" : "已开始运行"}：${result.executionId}`);
+  } catch (e: any) { ElMessage.error(e?.response?.data?.error || e?.message || "运行失败"); }
+  finally { runningWorkflow.value = false; }
 }
 async function duplicate(item: WorkflowDefinition) {
   const created = await duplicateWorkflow(item.id, currentTarget.value);
@@ -376,4 +422,5 @@ onBeforeUnmount(() => { if (reconcileTimer) clearInterval(reconcileTimer); recon
 .empty-card{min-height:310px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px}.empty-card>.el-icon{font-size:42px;color:var(--el-color-primary)}.empty-card h2{margin:0;font-size:18px}.empty-card p{margin:0 0 8px;color:var(--console-text-muted);max-width:420px}.empty-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 .template-help{font-size:12px;line-height:1.6;color:var(--console-text-muted);padding:10px 12px;background:var(--ac-color-surface-soft);border-radius:10px;margin-bottom:12px}.template-card{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--console-border)}.template-card p{margin:5px 0;color:var(--console-text-muted);font-size:12px}.template-card small{color:var(--console-text-muted);font-size:11px}.template-actions{display:flex;gap:5px;flex-shrink:0}
 @media(max-width:720px){.page-header{flex-direction:column}.header-actions{width:100%;justify-content:flex-start}.workflow-grid{grid-template-columns:1fr}.card-actions{flex-wrap:wrap}.management-bar{align-items:stretch}.search-box,.status-filter{width:100%}.batch-actions{margin-left:0}.card-top{grid-template-columns:auto auto 1fr}.card-top>.el-switch{grid-column:3;justify-self:start}}
+.run-dialog-body{display:flex;flex-direction:column;gap:12px}.run-dialog-body label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--console-text-muted)}.run-mode-help{margin:0;color:var(--console-text-muted);font-size:11px;line-height:1.5}.controlled-warning{margin:0;padding:10px;border:1px solid var(--el-color-warning-light-5);border-radius:8px;background:var(--el-color-warning-light-9);font-size:11px;line-height:1.55;color:var(--console-text-muted)}
 </style>

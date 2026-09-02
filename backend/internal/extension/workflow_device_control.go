@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,10 +42,13 @@ func (api *WorkflowAPI) registerDeviceWorkflowRoutes(group *gin.RouterGroup) {
 	g := group.Group("/workflow-devices")
 	g.GET("", api.listWorkflowDevices)
 	g.GET("/:deviceId/trigger-capabilities", api.getDeviceWorkflowTriggerCapabilities)
+	g.GET("/:deviceId/runtime-health", api.getDeviceWorkflowRuntimeHealth)
 	g.GET("/:deviceId/trigger-app-catalog", api.getDeviceWorkflowTriggerAppCatalog)
 	g.GET("/:deviceId/trigger-wake-configs", api.getDeviceWorkflowTriggerWakeConfigs)
+	g.POST("/:deviceId/trigger-wake-configs", api.createDeviceWorkflowTriggerWakeConfig)
 	g.POST("/:deviceId/trigger-secrets/tasker", api.createDeviceTaskerTriggerSecret)
 	g.GET("/:deviceId/workflows", api.listDeviceWorkflows)
+	g.GET("/:deviceId/workflows/catalog", api.getDeviceWorkflowCatalog)
 	g.GET("/:deviceId/workflows/:workflowId", api.getDeviceWorkflow)
 	g.POST("/:deviceId/workflows", api.createDeviceWorkflow)
 	g.PUT("/:deviceId/workflows/:workflowId", api.updateDeviceWorkflow)
@@ -52,6 +56,18 @@ func (api *WorkflowAPI) registerDeviceWorkflowRoutes(group *gin.RouterGroup) {
 	g.POST("/:deviceId/workflows/:workflowId/enable", func(c *gin.Context) { api.setDeviceWorkflowEnabled(c, true) })
 	g.POST("/:deviceId/workflows/:workflowId/disable", func(c *gin.Context) { api.setDeviceWorkflowEnabled(c, false) })
 	g.POST("/:deviceId/workflows/:workflowId/run", api.runDeviceWorkflow)
+	g.GET("/:deviceId/workflows/:workflowId/runs", api.listDeviceWorkflowRuns)
+	g.GET("/:deviceId/runs/:runId", api.getDeviceWorkflowRun)
+	g.GET("/:deviceId/runs/:runId/steps", api.getDeviceWorkflowRunSteps)
+	g.GET("/:deviceId/runs/:runId/attempts", api.getDeviceWorkflowRunAttempts)
+	g.GET("/:deviceId/runs/:runId/checkpoints", api.getDeviceWorkflowRunCheckpoints)
+	g.GET("/:deviceId/runs/:runId/logs", api.getDeviceWorkflowRunLogs)
+	g.POST("/:deviceId/runs/:runId/pause", api.pauseDeviceWorkflowRun)
+	g.POST("/:deviceId/runs/:runId/resume", api.resumeDeviceWorkflowRun)
+	g.POST("/:deviceId/runs/:runId/confirm", api.confirmDeviceWorkflowRun)
+	g.POST("/:deviceId/runs/:runId/cancel", api.cancelDeviceWorkflowRun)
+	g.POST("/:deviceId/runs/:runId/recover", api.recoverDeviceWorkflowRun)
+	g.POST("/:deviceId/runs/:runId/rerun", api.rerunDeviceWorkflowRun)
 }
 
 func (api *WorkflowAPI) workflowDeviceControl(c *gin.Context) (WorkflowDeviceControlPlane, bool) {
@@ -109,6 +125,15 @@ func (api *WorkflowAPI) invokeDeviceWorkflow(c *gin.Context, operation string, p
 	return result, true
 }
 
+func (api *WorkflowAPI) getDeviceWorkflowRuntimeHealth(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshAndroidRuntimeHealth, map[string]any{})
+	if !ok {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/json", result)
+}
+
 func (api *WorkflowAPI) getDeviceWorkflowTriggerCapabilities(c *gin.Context) {
 	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshTriggerCapabilities, map[string]any{})
 	if !ok {
@@ -136,6 +161,20 @@ func (api *WorkflowAPI) getDeviceWorkflowTriggerWakeConfigs(c *gin.Context) {
 	c.Data(http.StatusOK, "application/json", result)
 }
 
+func (api *WorkflowAPI) createDeviceWorkflowTriggerWakeConfig(c *gin.Context) {
+	var request workflowWakeConfigCreateRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid wake config: " + err.Error()})
+		return
+	}
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshCreateWakeConfig, request)
+	if !ok {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusCreated, "application/json", result)
+}
+
 func (api *WorkflowAPI) createDeviceTaskerTriggerSecret(c *gin.Context) {
 	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshCreateTriggerSecret, map[string]any{"kind": "tasker"})
 	if !ok {
@@ -143,6 +182,15 @@ func (api *WorkflowAPI) createDeviceTaskerTriggerSecret(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.Data(http.StatusCreated, "application/json", result)
+}
+
+func (api *WorkflowAPI) getDeviceWorkflowCatalog(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshToolCatalog, map[string]any{})
+	if !ok {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/json", result)
 }
 
 func (api *WorkflowAPI) listDeviceWorkflows(c *gin.Context) {
@@ -313,7 +361,11 @@ func (api *WorkflowAPI) setDeviceWorkflowEnabled(c *gin.Context, enabled bool) {
 
 func (api *WorkflowAPI) runDeviceWorkflow(c *gin.Context) {
 	var body struct {
-		Input json.RawMessage `json:"input"`
+		Input               json.RawMessage         `json:"input"`
+		Wait                bool                    `json:"wait"`
+		Mode                workflow.ExecutionMode  `json:"mode"`
+		Mocks               []workflow.MockBehavior `json:"mocks"`
+		ApprovedSideEffects []string                `json:"approvedSideEffects"`
 	}
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&body); err != nil && !errors.Is(err, context.Canceled) {
@@ -324,9 +376,192 @@ func (api *WorkflowAPI) runDeviceWorkflow(c *gin.Context) {
 	if len(body.Input) == 0 {
 		body.Input = json.RawMessage(`{}`)
 	}
-	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRun, map[string]any{"workflowId": c.Param("workflowId"), "input": body.Input})
+	operation := WorkflowMeshRunStart
+	if body.Wait {
+		operation = WorkflowMeshRun
+	}
+	result, ok := api.invokeDeviceWorkflow(c, operation, map[string]any{
+		"workflowId": c.Param("workflowId"), "input": body.Input,
+		"options": workflow.ExecutionOptions{Mode: body.Mode, Mocks: body.Mocks, ApprovedSideEffects: body.ApprovedSideEffects},
+	})
+	if !ok {
+		return
+	}
+	status := http.StatusAccepted
+	if body.Wait {
+		status = http.StatusOK
+	}
+	c.Data(status, "application/json", result)
+}
+
+func (api *WorkflowAPI) resolveRemoteWorkflowRun(ctx context.Context, userID, runID, operation string, payload map[string]any) (json.RawMessage, string, error) {
+	if api == nil || api.runtime == nil || api.runtime.WorkflowDeviceControl == nil {
+		return nil, "", errors.New("workflow device control plane unavailable")
+	}
+	userID = strings.TrimSpace(userID)
+	runID = strings.TrimSpace(runID)
+	if userID == "" || runID == "" {
+		return nil, "", errors.New("workflow run owner resolution requires userId and runId")
+	}
+	devices, err := api.runtime.WorkflowDeviceControl.ListDevices(ctx, userID)
+	if err != nil {
+		return nil, "", err
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payload["runId"] = runID
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, "", err
+	}
+	var lastErr error
+	for _, device := range devices {
+		deviceID := strings.TrimSpace(device.DeviceID)
+		if deviceID == "" || !device.Online {
+			continue
+		}
+		result, invokeErr := api.runtime.WorkflowDeviceControl.Invoke(ctx, userID, deviceID, operation, raw)
+		if invokeErr == nil {
+			if len(result) == 0 {
+				result = json.RawMessage(`{}`)
+			}
+			return result, deviceID, nil
+		}
+		lastErr = invokeErr
+	}
+	if lastErr != nil {
+		return nil, "", lastErr
+	}
+	return nil, "", errors.New("workflow run not found on online devices")
+}
+
+func (api *WorkflowAPI) listDeviceWorkflowRuns(c *gin.Context) {
+	limit := 50
+	offset := 0
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if raw := strings.TrimSpace(c.Query("offset")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunList, map[string]any{
+		"workflowId": c.Param("workflowId"),
+		"limit":      limit,
+		"offset":     offset,
+	})
+	if !ok {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) getDeviceWorkflowRun(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunGet, map[string]any{"runId": c.Param("runId")})
 	if !ok {
 		return
 	}
 	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) getDeviceWorkflowRunSteps(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunSteps, map[string]any{"runId": c.Param("runId")})
+	if !ok {
+		return
+	}
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) getDeviceWorkflowRunAttempts(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunAttempts, map[string]any{"runId": c.Param("runId")})
+	if !ok {
+		return
+	}
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) getDeviceWorkflowRunCheckpoints(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunCheckpoints, map[string]any{"runId": c.Param("runId")})
+	if !ok {
+		return
+	}
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) getDeviceWorkflowRunLogs(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunLogs, map[string]any{"runId": c.Param("runId")})
+	if !ok {
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) pauseDeviceWorkflowRun(c *gin.Context) {
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunPause, map[string]any{"runId": c.Param("runId"), "reason": body.Reason})
+	if !ok {
+		return
+	}
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) resumeDeviceWorkflowRun(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunResume, map[string]any{"runId": c.Param("runId")})
+	if !ok {
+		return
+	}
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) confirmDeviceWorkflowRun(c *gin.Context) {
+	var body struct {
+		NodeIDs []string `json:"nodeIds"`
+	}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunConfirm, map[string]any{"runId": c.Param("runId"), "nodeIds": body.NodeIDs})
+	if !ok {
+		return
+	}
+	c.Data(http.StatusAccepted, "application/json", result)
+}
+
+func (api *WorkflowAPI) cancelDeviceWorkflowRun(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunCancel, map[string]any{"runId": c.Param("runId")})
+	if !ok {
+		return
+	}
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) recoverDeviceWorkflowRun(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunRecover, map[string]any{"runId": c.Param("runId")})
+	if !ok {
+		return
+	}
+	c.Data(http.StatusAccepted, "application/json", result)
+}
+
+func (api *WorkflowAPI) rerunDeviceWorkflowRun(c *gin.Context) {
+	result, ok := api.invokeDeviceWorkflow(c, WorkflowMeshRunRerun, map[string]any{"runId": c.Param("runId")})
+	if !ok {
+		return
+	}
+	c.Data(http.StatusAccepted, "application/json", result)
 }

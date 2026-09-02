@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/androidnative/uitree"
 	"github.com/u-ai/backend/internal/androidnative/virtualdisplay"
 	"github.com/u-ai/backend/internal/androidsystem/clipboard"
+	"github.com/u-ai/backend/internal/androidsystem/devicecontrol"
 	"github.com/u-ai/backend/internal/androidsystem/externalautomation"
 	"github.com/u-ai/backend/internal/androidsystem/notification"
 	"github.com/u-ai/backend/internal/androidsystem/overlay"
@@ -54,6 +55,7 @@ func collectAndroidNativeToolDefinitions() []capability.ToolDefinition {
 	defs = append(defs, externalautomation.BuildExternalAutomationTools()...)
 	defs = append(defs, notification.BuildNotificationTools()...)
 	defs = append(defs, clipboard.BuildClipboardTools()...)
+	defs = append(defs, devicecontrol.BuildTools()...)
 	defs = append(defs, share.BuildShareTools()...)
 
 	cameraTools, err := camera.BuildCameraTools()

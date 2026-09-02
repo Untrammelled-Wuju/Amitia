@@ -152,6 +152,9 @@ func (c *MeshClient) connectAndServe() error {
 	c.mu.Unlock()
 
 	defer func() {
+		if dispatcher, ok := c.conf.RuntimeDispatcher.(RuntimeDisconnectDispatcher); ok && dispatcher != nil {
+			dispatcher.CancelAllInvocations("device mesh disconnected")
+		}
 		gen := c.connectionGen
 		c.closeSocketWithGen(websocket.CloseGoingAway, "", gen)
 	}()
@@ -199,7 +202,12 @@ func deviceWorkflowRuntimeCapabilities() []string {
 	// official Flutter and Electron clients both forward final realtime ASR into
 	// the local Device Agent. Android-only native producers are advertised only
 	// when the backend is running inside the Android runtime.
-	capabilities := []string{"workflow.trigger.voice_phrase.v1"}
+	capabilities := []string{
+		protocol.WorkflowProtocolCapability(),
+		protocol.WorkflowSchemaCapability(protocol.WorkflowSchemaVersion),
+		protocol.ToolProtocolCapability(),
+		"workflow.trigger.voice_phrase.v1",
+	}
 	if strings.TrimSpace(os.Getenv("ANDROID_ROOT")) == "" {
 		return capabilities
 	}
@@ -543,9 +551,15 @@ func (c *MeshClient) handleRuntimeInvoke(env *protocol.Envelope) {
 				ErrorCode:            "invoke_execution_failed",
 				Message:              err.Error(),
 				Retryable:            true,
+				IdempotencyKey:       invoke.IdempotencyKey,
+				FencingToken:         invoke.FencingToken,
 				FailedAt:             time.Now().UTC(),
 			})
 			return
+		}
+		if result != nil {
+			result.IdempotencyKey = invoke.IdempotencyKey
+			result.FencingToken = invoke.FencingToken
 		}
 		c.sendRuntimeResult(result)
 	}()

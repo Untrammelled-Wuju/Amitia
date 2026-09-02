@@ -61,8 +61,12 @@ internal class WorkflowWakeAudioMonitor(
     @Volatile
     private var lastCapabilityState: String = ""
 
+    @Volatile
+    private var lastWakeMonitorState: String = ""
+
     fun start() {
         if (!running.compareAndSet(false, true)) return
+        reportWakeMonitorState("idle")
         senderExecutor.execute(::senderLoop)
         statusExecutor.scheduleWithFixedDelay(
             ::refreshStatus,
@@ -75,6 +79,7 @@ internal class WorkflowWakeAudioMonitor(
     fun stop() {
         if (!running.getAndSet(false)) return
         stopCapture()
+        reportWakeMonitorState("idle")
         clearQueuedAudio()
         statusExecutor.shutdownNow()
         captureExecutor.shutdownNow()
@@ -85,6 +90,7 @@ internal class WorkflowWakeAudioMonitor(
         if (!running.get()) return
         if (WorkflowMicrophoneArbiter.isRealtimeCaptureActive()) {
             stopCapture()
+            reportWakeMonitorState("wake_suspended", "Realtime voice capture has microphone priority")
             return
         }
         val hasPermission = ContextCompat.checkSelfPermission(
@@ -93,6 +99,7 @@ internal class WorkflowWakeAudioMonitor(
         ) == PackageManager.PERMISSION_GRANTED
         if (!hasPermission) {
             stopCapture()
+            reportWakeMonitorState("wake_permission_missing", "Microphone permission is not granted")
             reportWakeCapability(
                 available = false,
                 reason = "Microphone permission is not granted",
@@ -102,6 +109,7 @@ internal class WorkflowWakeAudioMonitor(
         val status = client.getWakeRuntimeStatus().getOrNull()
         if (status == null) {
             stopCapture()
+            reportWakeMonitorState("wake_required", "Device Agent wake runtime is unavailable")
             reportWakeCapability(
                 available = false,
                 reason = "Device Agent wake runtime is unavailable",
@@ -110,6 +118,7 @@ internal class WorkflowWakeAudioMonitor(
         }
         if (!status.required) {
             stopCapture()
+            reportWakeMonitorState("idle")
             // With microphone permission granted and the local Device Agent
             // reachable, the Android side is available. The backend capability
             // snapshot separately checks whether a real wake-word recognizer
@@ -122,12 +131,14 @@ internal class WorkflowWakeAudioMonitor(
         }
         if (!status.ready) {
             stopCapture()
+            reportWakeMonitorState("wake_required", status.reason.ifBlank { "Wake-word runtime is not ready" })
             reportWakeCapability(
                 available = false,
                 reason = status.reason.ifBlank { "Wake-word runtime is not ready" },
             )
             return
         }
+        reportWakeMonitorState("wake_required")
         startCapture()
     }
 
@@ -135,6 +146,7 @@ internal class WorkflowWakeAudioMonitor(
         synchronized(lock) {
             if (!running.get() || capturing.get()) return
             if (!beforeCapture()) {
+                reportWakeMonitorState("wake_blocked_by_android", "Android blocked microphone foreground activation")
                 reportWakeCapability(
                     available = false,
                     reason = "Android blocked microphone foreground activation; open Amitia to activate wake listening",
@@ -143,6 +155,7 @@ internal class WorkflowWakeAudioMonitor(
             }
             if (!WorkflowMicrophoneArbiter.tryAcquireWakeCapture()) {
                 afterCapture()
+                reportWakeMonitorState("wake_suspended", "Microphone is in use by a higher-priority capture")
                 return
             }
             wakeCaptureLeaseHeld.set(true)
@@ -155,6 +168,7 @@ internal class WorkflowWakeAudioMonitor(
             if (minimum <= 0) {
                 releaseWakeCaptureLease()
                 afterCapture()
+                reportWakeMonitorState("wake_blocked_by_android", "Microphone recorder is unavailable")
                 reportWakeCapability(false, "Microphone recorder is unavailable")
                 return
             }
@@ -169,6 +183,7 @@ internal class WorkflowWakeAudioMonitor(
             } catch (_: Throwable) {
                 releaseWakeCaptureLease()
                 afterCapture()
+                reportWakeMonitorState("wake_blocked_by_android", "Microphone recorder initialization failed")
                 reportWakeCapability(false, "Microphone recorder initialization failed")
                 return
             }
@@ -176,6 +191,7 @@ internal class WorkflowWakeAudioMonitor(
                 recorder.release()
                 releaseWakeCaptureLease()
                 afterCapture()
+                reportWakeMonitorState("wake_blocked_by_android", "Microphone recorder failed to initialize")
                 reportWakeCapability(false, "Microphone recorder failed to initialize")
                 return
             }
@@ -185,11 +201,13 @@ internal class WorkflowWakeAudioMonitor(
                 recorder.release()
                 releaseWakeCaptureLease()
                 afterCapture()
+                reportWakeMonitorState("wake_blocked_by_android", "Microphone recording could not start")
                 reportWakeCapability(false, "Microphone recording could not start")
                 return
             }
             audioRecord = recorder
             capturing.set(true)
+            reportWakeMonitorState("wake_active")
             reportWakeCapability(true, "")
             captureExecutor.execute { captureLoop(recorder) }
         }
@@ -225,6 +243,9 @@ internal class WorkflowWakeAudioMonitor(
         } finally {
             buffer.fill(0)
             stopCapture(recorder)
+            if (running.get() && !WorkflowMicrophoneArbiter.isRealtimeCaptureActive()) {
+                reportWakeMonitorState("wake_required", "Wake audio capture stopped; retrying")
+            }
         }
     }
 
@@ -250,6 +271,15 @@ internal class WorkflowWakeAudioMonitor(
                 chunk.pcm.fill(0)
             }
         }
+    }
+
+    private fun reportWakeMonitorState(state: String, reason: String = "") {
+        val normalizedState = state.trim().lowercase()
+        val normalizedReason = reason.trim().take(512)
+        val fingerprint = "$normalizedState:$normalizedReason"
+        if (fingerprint == lastWakeMonitorState) return
+        lastWakeMonitorState = fingerprint
+        client.postWakeDeviceStatus(normalizedState, normalizedReason)
     }
 
     private fun reportWakeCapability(available: Boolean, reason: String) {

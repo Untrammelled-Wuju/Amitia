@@ -14,6 +14,119 @@ import '../../../../core/services/extension_service.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
+class _SimpleConditionDraft {
+  String source;
+  String nodeId;
+  String path;
+  String op;
+  String value;
+  bool not;
+
+  _SimpleConditionDraft({
+    this.source = 'input',
+    this.nodeId = '',
+    this.path = '',
+    this.op = 'eq',
+    this.value = 'true',
+    this.not = false,
+  });
+
+  static _SimpleConditionDraft? fromExpression(dynamic raw) {
+    if (raw is! Map) return null;
+    var expr = Map<String, dynamic>.from(raw);
+    var not = false;
+    if ((expr['op'] ?? '').toString() == 'not' && expr['right'] is Map) {
+      not = true;
+      expr = Map<String, dynamic>.from(expr['right'] as Map);
+    }
+    final op = (expr['op'] ?? '').toString();
+    const supported = <String>{'eq', 'ne', 'contains', 'gt', 'gte', 'lt', 'lte', 'exists', 'is_null'};
+    if (!supported.contains(op)) return null;
+    final unary = op == 'exists' || op == 'is_null';
+    final refRaw = unary ? expr['ref'] : (expr['left'] is Map ? (expr['left'] as Map)['ref'] : null);
+    if (refRaw is! Map) return null;
+    final ref = Map<String, dynamic>.from(refRaw);
+    final source = (ref['source'] ?? '').toString();
+    if (source != 'input' && source != 'node_output') return null;
+    final pathRaw = ref['path'];
+    final path = pathRaw is List ? pathRaw.map((item) => item.toString()).join('.') : '';
+    var value = '';
+    if (!unary) {
+      if (expr['right'] is! Map || !(expr['right'] as Map).containsKey('value')) return null;
+      final right = Map<String, dynamic>.from(expr['right'] as Map);
+      final rawValue = right['value'];
+      value = rawValue is String ? rawValue : jsonEncode(rawValue);
+    }
+    return _SimpleConditionDraft(
+      source: source,
+      nodeId: (ref['nodeId'] ?? '').toString(),
+      path: path,
+      op: op,
+      value: value,
+      not: not,
+    );
+  }
+
+  dynamic _literal() {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    try {
+      return jsonDecode(trimmed);
+    } catch (_) {
+      return value;
+    }
+  }
+
+  Map<String, dynamic> toExpression() {
+    final ref = <String, dynamic>{
+      'source': source,
+      'path': path.split('.').map((item) => item.trim()).where((item) => item.isNotEmpty).toList(growable: false),
+      if (source == 'node_output' && nodeId.trim().isNotEmpty) 'nodeId': nodeId.trim(),
+    };
+    final unary = op == 'exists' || op == 'is_null';
+    Map<String, dynamic> expr = unary
+        ? <String, dynamic>{'op': op, 'ref': ref}
+        : <String, dynamic>{'op': op, 'left': <String, dynamic>{'ref': ref}, 'right': <String, dynamic>{'value': _literal()}};
+    if (not) expr = <String, dynamic>{'op': 'not', 'right': expr};
+    return expr;
+  }
+}
+
+class _SimpleWhenDraft {
+  bool enabled;
+  bool compatible;
+  String join;
+  List<_SimpleConditionDraft> conditions;
+
+  _SimpleWhenDraft({required this.enabled, required this.compatible, required this.join, required this.conditions});
+
+  factory _SimpleWhenDraft.fromExpression(dynamic raw) {
+    if (raw == null) {
+      return _SimpleWhenDraft(enabled: false, compatible: true, join: 'and', conditions: <_SimpleConditionDraft>[_SimpleConditionDraft()]);
+    }
+    var join = 'and';
+    var rows = <dynamic>[raw];
+    if (raw is Map && <String>{'and', 'or'}.contains((raw['op'] ?? '').toString()) && raw['args'] is List) {
+      join = (raw['op'] ?? 'and').toString();
+      rows = List<dynamic>.from(raw['args'] as List);
+    }
+    final parsed = rows.map(_SimpleConditionDraft.fromExpression).toList(growable: false);
+    if (parsed.any((item) => item == null) || parsed.isEmpty) {
+      return _SimpleWhenDraft(enabled: true, compatible: false, join: 'and', conditions: <_SimpleConditionDraft>[_SimpleConditionDraft()]);
+    }
+    return _SimpleWhenDraft(enabled: true, compatible: true, join: join, conditions: parsed.cast<_SimpleConditionDraft>().toList(growable: true));
+  }
+
+  dynamic build(dynamic original) {
+    if (!compatible) return original;
+    if (!enabled) return null;
+    if (conditions.isEmpty) conditions.add(_SimpleConditionDraft());
+    final args = conditions.map((item) => item.toExpression()).toList(growable: false);
+    if (args.length == 1) return args.first;
+    return <String, dynamic>{'op': join, 'args': args};
+  }
+}
+
 class WorkflowEditorPage extends ConsumerStatefulWidget {
   final String workflowId;
   final String location;
@@ -60,6 +173,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   bool _loading = true;
   bool _saving = false;
   bool _aiWorking = false;
+  bool _advancedMode = false;
   bool _dirty = false;
   bool _disposed = false;
   Timer? _pollTimer;
@@ -108,14 +222,10 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       final service = ref.read(extensionServiceProvider);
       final workflow = await service.getWorkflow(widget.workflowId, target: _target);
       _normalize(workflow);
-      if (_isDevice) {
+      try {
+        _catalog = await service.workflowCatalog(target: _target);
+      } catch (_) {
         _catalog = <Map<String, dynamic>>[];
-      } else {
-        try {
-          _catalog = await service.workflowCatalog(target: _target);
-        } catch (_) {
-          _catalog = <Map<String, dynamic>>[];
-        }
       }
       try {
         _ownedWorkflows = (await service.workflows(limit: 200, target: _target))
@@ -344,17 +454,10 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   bool _hasEnabledDeviceTrigger() {
     final workflowEnabled = _workflow?['enabled'] != false;
     if (!workflowEnabled) return false;
-    const deviceEvents = <String>{
-      'device.android.intent',
-      'device.android.tasker',
-      'voice.wake.detected',
-      'voice.asr.final',
-      'device.app.foreground',
-    };
     return _triggers.any((trigger) =>
         trigger['enabled'] != false &&
         trigger['type'] == 'event' &&
-        deviceEvents.contains((trigger['eventType'] ?? '').toString()));
+        _deviceWorkflowEventTypes.contains((trigger['eventType'] ?? '').toString()));
   }
 
   bool _hasHighImpactWorkflowNodes() {
@@ -425,6 +528,80 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       }
     } catch (error) {
       _show('校验失败：${_message(error)}');
+    }
+  }
+
+  Future<void> _showPreflight() async {
+    if (_isDevice) {
+      _show('远程设备工作流由目标设备本地 Kernel 执行预检');
+      return;
+    }
+    try {
+      final result = await ref.read(extensionServiceProvider).validateWorkflow(_definition(), target: _target);
+      final report = _asMap(result['preflight']);
+      final checks = _asMapList(report['checks']);
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text('工作流预检', style: Theme.of(sheetContext).textTheme.titleMedium)),
+                      _PreflightStatusBadge(status: (report['status'] ?? (result['valid'] == true ? 'PASS' : 'BLOCKED')).toString()),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(report['runnable'] == true ? '可以运行；警告项可按建议处理。' : '存在阻断项，修复后才能稳定运行。'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: checks.isEmpty
+                      ? Center(child: Text(result['valid'] == true ? '✓ 工作流结构有效' : (result['error'] ?? '预检失败').toString()))
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: checks.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final check = checks[index];
+                            final nodeId = (check['nodeId'] ?? '').toString();
+                            return ListTile(
+                              leading: _PreflightStatusBadge(status: (check['status'] ?? '').toString()),
+                              title: Text((check['message'] ?? check['code'] ?? '').toString()),
+                              subtitle: Text('${check['code'] ?? ''}${nodeId.isEmpty ? '' : '\n节点：$nodeId'}'),
+                              trailing: nodeId.isEmpty
+                                  ? null
+                                  : TextButton(
+                                      onPressed: () {
+                                        Navigator.pop(sheetContext);
+                                        final node = _nodes.cast<Map<String, dynamic>?>().firstWhere((item) => (item?['id'] ?? '').toString() == nodeId, orElse: () => null);
+                                        if (node != null) unawaited(_editNode(node));
+                                      },
+                                      child: const Text('定位'),
+                                    ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (error) {
+      _show('预检失败：${_message(error)}');
     }
   }
 
@@ -672,7 +849,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       'permissions': <dynamic>[],
       'position': <String, dynamic>{'x': 220.0 + (index % 5) * 80, 'y': 180.0 + (index % 6) * 80},
       'step': <String, dynamic>{
-        'input': <String, dynamic>{},
+        'input': _defaultNodeInput(type),
         'onError': <String, dynamic>{'mode': 'fail'},
       },
     };
@@ -684,6 +861,276 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       _dirty = true;
     });
     await _editNode(node);
+  }
+
+  Map<String, dynamic> _defaultNodeInput(String type) => switch (type) {
+        'logic' => <String, dynamic>{'op': 'eq', 'left': true, 'right': true},
+        'extract' => <String, dynamic>{'path': 'value', 'required': false, 'unwrap': true},
+        'transform' => <String, dynamic>{'op': 'pick', 'fields': <dynamic>[]},
+        _ => <String, dynamic>{},
+      };
+
+  bool _isAndroidCatalogItem(Map<String, dynamic> item) {
+    final id = (item['id'] ?? '').toString();
+    final runtime = _asMap(item['runtime']);
+    final metadata = _asMap(item['metadata']);
+    return id.startsWith('android.') || (runtime['runtimeType'] ?? '').toString().toLowerCase() == 'android_native' || (metadata['bridgeProtocol'] ?? '').toString() == 'android_native';
+  }
+
+  String _toolCatalogLabel(Map<String, dynamic> item) {
+    final id = (item['id'] ?? '').toString();
+    final name = (item['name'] ?? id).toString();
+    if (_isAndroidCatalogItem(item)) {
+      final parts = id.split('.');
+      final group = parts.length > 1 ? parts[1] : 'native';
+      return 'Android · $group · $name';
+    }
+    return '$name · $id';
+  }
+
+  List<String> _toolCatalogPermissions(Map<String, dynamic>? item) {
+    if (item == null || item['permissions'] is! List) return <String>[];
+    return (item['permissions'] as List)
+        .whereType<Map>()
+        .map((value) => (value['capability'] ?? '').toString().trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Map<String, dynamic> _toolInputTemplate(Map<String, dynamic>? item) {
+    if (item == null) return <String, dynamic>{};
+    final schema = _asMap(item['inputSchema']);
+    final properties = _asMap(schema['properties']);
+    final required = ((schema['required'] as List?) ?? const <dynamic>[]).map((value) => value.toString()).toSet();
+    final result = <String, dynamic>{};
+    for (final entry in properties.entries.take(64)) {
+      final field = _asMap(entry.value);
+      if (!required.contains(entry.key) && !field.containsKey('default')) continue;
+      if (field.containsKey('default')) {
+        result[entry.key] = field['default'];
+        continue;
+      }
+      final values = field['enum'];
+      if (values is List && values.isNotEmpty) {
+        result[entry.key] = values.first;
+        continue;
+      }
+      final type = (field['type'] ?? '').toString();
+      if (type == 'boolean') {
+        result[entry.key] = false;
+      } else if (type == 'integer' || type == 'number') {
+        result[entry.key] = 0;
+      } else if (type == 'array') {
+        result[entry.key] = <dynamic>[];
+      } else if (type == 'object') {
+        result[entry.key] = <String, dynamic>{};
+      } else {
+        result[entry.key] = '';
+      }
+    }
+    return result;
+  }
+
+  void _applyToolInputTemplate(TextEditingController controller, Map<String, dynamic>? item) {
+    final template = _toolInputTemplate(item);
+    Map<String, dynamic> current = <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(controller.text.trim().isEmpty ? '{}' : controller.text);
+      if (decoded is Map) current = decoded.map((key, value) => MapEntry(key.toString(), value));
+    } catch (_) {}
+    controller.text = _pretty(<String, dynamic>{...template, ...current});
+  }
+
+  Map<String, dynamic> _toolInputObject(TextEditingController controller) {
+    try {
+      final decoded = jsonDecode(controller.text.trim().isEmpty ? '{}' : controller.text);
+      if (decoded is Map) return decoded.map((key, value) => MapEntry(key.toString(), value));
+    } catch (_) {}
+    return <String, dynamic>{};
+  }
+
+  dynamic _schemaPathValue(Map<String, dynamic> input, List<String> path) {
+    dynamic current = input;
+    for (final part in path) {
+      if (current is! Map) return null;
+      current = current[part];
+    }
+    return current;
+  }
+
+  void _setSchemaPathValue(TextEditingController controller, List<String> path, dynamic value) {
+    final root = _toolInputObject(controller);
+    Map<String, dynamic> current = root;
+    for (var i = 0; i < path.length - 1; i += 1) {
+      final key = path[i];
+      final next = current[key];
+      if (next is Map) {
+        current = next.map((k, v) => MapEntry(k.toString(), v));
+        rootPathWrite(root, path.take(i + 1).toList(growable: false), current);
+      } else {
+        final created = <String, dynamic>{};
+        current[key] = created;
+        current = created;
+      }
+    }
+    if (path.isNotEmpty) current[path.last] = value;
+    controller.text = _pretty(root);
+  }
+
+  void rootPathWrite(Map<String, dynamic> root, List<String> path, Map<String, dynamic> value) {
+    if (path.isEmpty) return;
+    Map<String, dynamic> current = root;
+    for (var i = 0; i < path.length - 1; i += 1) {
+      final key = path[i];
+      final next = current[key];
+      if (next is Map<String, dynamic>) {
+        current = next;
+      } else if (next is Map) {
+        final normalized = next.map((k, v) => MapEntry(k.toString(), v));
+        current[key] = normalized;
+        current = normalized;
+      } else {
+        final created = <String, dynamic>{};
+        current[key] = created;
+        current = created;
+      }
+    }
+    current[path.last] = value;
+  }
+
+  List<Widget> _toolSchemaFields(
+    Map<String, dynamic>? item,
+    TextEditingController controller,
+    VoidCallback refresh, {
+    List<String> path = const <String>[],
+    int depth = 0,
+  }) {
+    if (item == null || depth > 4) return const <Widget>[];
+    final schema = depth == 0 ? _asMap(item['inputSchema']) : item;
+    final properties = _asMap(schema['properties']);
+    if (properties.isEmpty) return const <Widget>[];
+    final required = ((schema['required'] as List?) ?? const <dynamic>[]).map((value) => value.toString()).toSet();
+    final input = _toolInputObject(controller);
+    final widgets = <Widget>[];
+    for (final entry in properties.entries.take(48)) {
+      final fieldName = entry.key;
+      final field = _asMap(entry.value);
+      final fieldPath = <String>[...path, fieldName];
+      final current = _schemaPathValue(input, fieldPath);
+      final type = (field['type'] ?? (field.containsKey('properties') ? 'object' : 'string')).toString();
+      final label = '${(field['title'] ?? fieldName).toString()}${required.contains(fieldName) ? ' *' : ''}';
+      final description = (field['description'] ?? '').toString().trim();
+      final enumValues = field['enum'] is List ? (field['enum'] as List).toList(growable: false) : const <dynamic>[];
+      final format = (field['format'] ?? field['x-ui-widget'] ?? '').toString().toLowerCase();
+
+      if (type == 'object' && _asMap(field['properties']).isNotEmpty) {
+        widgets.add(Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                if (description.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4, bottom: 8), child: Text(description, style: const TextStyle(fontSize: 11))),
+                ..._toolSchemaFields(field, controller, refresh, path: fieldPath, depth: depth + 1),
+              ],
+            ),
+          ),
+        ));
+        continue;
+      }
+
+      Widget widget;
+      if (enumValues.isNotEmpty) {
+        final selected = enumValues.any((value) => value == current) ? current : null;
+        widget = DropdownButtonFormField<dynamic>(
+          key: ValueKey<String>('schema-${fieldPath.join('.')}-$selected'),
+          initialValue: selected,
+          decoration: InputDecoration(labelText: label, helperText: description.isEmpty ? null : description),
+          items: enumValues.map((value) => DropdownMenuItem<dynamic>(value: value, child: Text(value.toString()))).toList(growable: false),
+          onChanged: (value) {
+            _setSchemaPathValue(controller, fieldPath, value);
+            refresh();
+          },
+        );
+      } else if (type == 'boolean') {
+        widget = SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: Text(label),
+          subtitle: description.isEmpty ? null : Text(description),
+          value: current == true,
+          onChanged: (value) {
+            _setSchemaPathValue(controller, fieldPath, value);
+            refresh();
+          },
+        );
+      } else if (format == 'device' || format == 'device_id') {
+        final deviceIds = _devices.map((item) => (item['deviceId'] ?? '').toString()).where((id) => id.isNotEmpty).toSet();
+        widget = DropdownButtonFormField<String>(
+          key: ValueKey<String>('schema-device-${fieldPath.join('.')}-$current'),
+          initialValue: deviceIds.contains(current?.toString()) ? current.toString() : null,
+          decoration: InputDecoration(labelText: label, helperText: description.isEmpty ? null : description),
+          items: _devices.map((device) {
+            final id = (device['deviceId'] ?? '').toString();
+            final name = (device['label'] ?? device['name'] ?? id).toString();
+            return DropdownMenuItem<String>(value: id, child: Text(name, overflow: TextOverflow.ellipsis));
+          }).where((item) => item.value?.isNotEmpty == true).toList(growable: false),
+          onChanged: (value) {
+            _setSchemaPathValue(controller, fieldPath, value ?? '');
+            refresh();
+          },
+        );
+      } else if (format == 'app' || format == 'package' || format == 'package_name') {
+        final packages = _triggerAppCatalog.map((app) => (app['packageName'] ?? '').toString()).where((id) => id.isNotEmpty).toSet();
+        widget = DropdownButtonFormField<String>(
+          key: ValueKey<String>('schema-app-${fieldPath.join('.')}-$current'),
+          initialValue: packages.contains(current?.toString()) ? current.toString() : null,
+          decoration: InputDecoration(labelText: label, helperText: description.isEmpty ? null : description),
+          items: _triggerAppCatalog.map((app) {
+            final packageName = (app['packageName'] ?? '').toString();
+            final name = (app['label'] ?? app['name'] ?? packageName).toString();
+            return DropdownMenuItem<String>(value: packageName, child: Text(name, overflow: TextOverflow.ellipsis));
+          }).where((item) => item.value?.isNotEmpty == true).toList(growable: false),
+          onChanged: (value) {
+            _setSchemaPathValue(controller, fieldPath, value ?? '');
+            refresh();
+          },
+        );
+      } else if (type == 'array' || type == 'object') {
+        widget = TextFormField(
+          key: ValueKey<String>('schema-json-${fieldPath.join('.')}'),
+          initialValue: current == null ? '' : _pretty(current),
+          minLines: 2,
+          maxLines: 5,
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+          decoration: InputDecoration(labelText: label, helperText: description.isEmpty ? 'JSON' : '$description · JSON', alignLabelWithHint: true),
+          onChanged: (value) {
+            try {
+              _setSchemaPathValue(controller, fieldPath, jsonDecode(value));
+            } catch (_) {}
+          },
+        );
+      } else {
+        final numeric = type == 'integer' || type == 'number';
+        final secret = format == 'password' || format == 'secret';
+        widget = TextFormField(
+          key: ValueKey<String>('schema-text-${fieldPath.join('.')}'),
+          initialValue: current?.toString() ?? '',
+          obscureText: secret,
+          keyboardType: numeric ? const TextInputType.numberWithOptions(decimal: true, signed: true) : TextInputType.text,
+          decoration: InputDecoration(labelText: label, helperText: description.isEmpty ? null : description),
+          onChanged: (value) {
+            dynamic next = value;
+            if (type == 'integer') next = int.tryParse(value) ?? value;
+            if (type == 'number') next = double.tryParse(value) ?? value;
+            _setSchemaPathValue(controller, fieldPath, next);
+          },
+        );
+      }
+      widgets.add(Padding(padding: const EdgeInsets.only(bottom: 10), child: widget));
+    }
+    return widgets;
   }
 
   bool _hasPath(String from, String to) {
@@ -1300,6 +1747,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     final step = _asMap(node['step']);
     final input = TextEditingController(text: _pretty(step['input'] ?? <String, dynamic>{}));
     final when = TextEditingController(text: step['when'] == null ? '' : _pretty(step['when']));
+    final simpleWhen = _SimpleWhenDraft.fromExpression(step['when']);
     final permissions = TextEditingController(text: ((node['permissions'] as List?) ?? const <dynamic>[]).join(', '));
     final onErrorConfig = _asMap(step['onError']);
     var onError = (onErrorConfig['mode'] ?? 'fail').toString();
@@ -1332,6 +1780,23 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         nestedWorkflows = <Map<String, dynamic>>[];
       }
     }
+    var toolCatalog = List<Map<String, dynamic>>.from(_catalog);
+    if (_isCloud && nodeType == 'tool' && executionPlacement == 'device' && executionDeviceId.isNotEmpty) {
+      try {
+        toolCatalog = await ref.read(extensionServiceProvider).workflowCatalog(target: WorkflowApiTarget.device(executionDeviceId));
+      } catch (_) {
+        toolCatalog = <Map<String, dynamic>>[];
+      }
+    }
+    Map<String, dynamic>? findToolCatalogItem(String targetId) {
+      final id = targetId.trim();
+      if (id.isEmpty) return null;
+      for (final item in toolCatalog) {
+        if ((item['id'] ?? '').toString() == id || (item['modelName'] ?? '').toString() == id) return item;
+      }
+      return null;
+    }
+    Map<String, dynamic>? selectedCatalogItem = nodeType == 'tool' ? findToolCatalogItem(target.text) : null;
     var delete = false;
     final applied = await showModalBottomSheet<bool>(
       context: context,
@@ -1347,7 +1812,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Text('节点 · ${node['type']}', style: Theme.of(context).textTheme.titleMedium)),
+                      Expanded(child: Text('节点 · ${node['type']} · ${_advancedMode ? '高级' : '简单'}', style: Theme.of(context).textTheme.titleMedium)),
                       IconButton(
                         tooltip: '删除节点',
                         onPressed: () {
@@ -1383,6 +1848,10 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                                   nestedWorkflows = List<Map<String, dynamic>>.from(_ownedWorkflows);
                                   target.text = '';
                                 }
+                                if (nodeType == 'tool' && next != 'device') {
+                                  toolCatalog = List<Map<String, dynamic>>.from(_catalog);
+                                  selectedCatalogItem = findToolCatalogItem(target.text);
+                                }
                               });
                             },
                           ),
@@ -1416,6 +1885,27 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                                     if (context.mounted) setSheetState(() => nestedWorkflows = items);
                                   } catch (_) {
                                     if (context.mounted) setSheetState(() => nestedWorkflows = <Map<String, dynamic>>[]);
+                                  }
+                                }
+                                if (nodeType == 'tool') {
+                                  if (next.isEmpty) {
+                                    if (context.mounted) setSheetState(() {
+                                      toolCatalog = <Map<String, dynamic>>[];
+                                      selectedCatalogItem = null;
+                                    });
+                                  } else {
+                                    try {
+                                      final items = await ref.read(extensionServiceProvider).workflowCatalog(target: WorkflowApiTarget.device(next));
+                                      if (context.mounted) setSheetState(() {
+                                        toolCatalog = items;
+                                        selectedCatalogItem = findToolCatalogItem(target.text);
+                                      });
+                                    } catch (_) {
+                                      if (context.mounted) setSheetState(() {
+                                        toolCatalog = <Map<String, dynamic>>[];
+                                        selectedCatalogItem = null;
+                                      });
+                                    }
                                   }
                                 }
                               },
@@ -1455,10 +1945,59 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                                 .toList(growable: false),
                             onChanged: (value) => setSheetState(() => target.text = value ?? ''),
                           )
-                        else
+                        else if (nodeType == 'tool') ...[
+                          DropdownButtonFormField<String>(
+                            key: ValueKey<String>('tool-${(selectedCatalogItem?["id"] ?? "").toString()}-${toolCatalog.length}-$executionDeviceId'),
+                            initialValue: selectedCatalogItem == null ? null : (selectedCatalogItem!['id'] ?? '').toString(),
+                            isExpanded: true,
+                            decoration: const InputDecoration(labelText: 'Android Action / Tool'),
+                            hint: const Text('从 Kernel Catalog 选择'),
+                            items: (List<Map<String, dynamic>>.from(toolCatalog)..sort((a, b) {
+                              final aa = _isAndroidCatalogItem(a) ? 0 : 1;
+                              final bb = _isAndroidCatalogItem(b) ? 0 : 1;
+                              if (aa != bb) return aa.compareTo(bb);
+                              return _toolCatalogLabel(a).compareTo(_toolCatalogLabel(b));
+                            })).map((item) {
+                              final id = (item['id'] ?? '').toString();
+                              return DropdownMenuItem<String>(value: id, child: Text(_toolCatalogLabel(item), overflow: TextOverflow.ellipsis));
+                            }).where((item) => item.value?.isNotEmpty == true).toList(growable: false),
+                            onChanged: (value) {
+                              setSheetState(() {
+                                target.text = value ?? '';
+                                selectedCatalogItem = findToolCatalogItem(target.text);
+                                final required = _toolCatalogPermissions(selectedCatalogItem);
+                                if (required.isNotEmpty) permissions.text = required.join(', ');
+                                final catalogTimeout = int.tryParse((selectedCatalogItem?['timeoutMs'] ?? '').toString()) ?? 0;
+                                if ((int.tryParse(timeoutMs.text.trim()) ?? 0) <= 0 && catalogTimeout > 0) timeoutMs.text = catalogTimeout.toString();
+                              });
+                            },
+                          ),
+                          if (selectedCatalogItem != null) ...[
+                            const SizedBox(height: 6),
+                            Card(
+                              margin: EdgeInsets.zero,
+                              child: Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text((selectedCatalogItem!['description'] ?? selectedCatalogItem!['id']).toString(), style: Theme.of(context).textTheme.bodySmall),
+                                  const SizedBox(height: 6),
+                                  Text('风险 ${(selectedCatalogItem!['riskLevel'] ?? 'unknown')} · 副作用 ${(selectedCatalogItem!['sideEffect'] ?? 'none')} · ${(selectedCatalogItem!['retryable'] == true) ? '可重试' : '不可重试'}', style: Theme.of(context).textTheme.labelSmall),
+                                  const SizedBox(height: 8),
+                                  OutlinedButton.icon(
+                                    onPressed: () => setSheetState(() => _applyToolInputTemplate(input, selectedCatalogItem)),
+                                    icon: const Icon(Icons.data_object_outlined, size: 16),
+                                    label: const Text('按 Input Schema 生成参数模板'),
+                                  ),
+                                ]),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          if (_advancedMode) TextField(controller: target, decoration: const InputDecoration(labelText: '高级：手动 Tool ID')),
+                        ] else
                           TextField(controller: target, decoration: const InputDecoration(labelText: 'Target ID')),
                         const SizedBox(height: 10),
-                        if (runtimeConfigurable && (!_isCloud || executionPlacement == 'cloud')) ...[
+                        if (_advancedMode && runtimeConfigurable && (!_isCloud || executionPlacement == 'cloud')) ...[
                           TextField(controller: runtimeType, decoration: const InputDecoration(labelText: 'Runtime Type')),
                           const SizedBox(height: 10),
                           TextField(controller: runtimeId, decoration: const InputDecoration(labelText: 'Runtime ID')),
@@ -1474,9 +2013,10 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                           ),
                           const SizedBox(height: 10),
                         ],
-                        Text('执行可靠性', style: Theme.of(context).textTheme.titleSmall),
-                        const SizedBox(height: 8),
-                        TextField(
+                        if (_advancedMode) ...[
+                          Text('执行可靠性', style: Theme.of(context).textTheme.titleSmall),
+                          const SizedBox(height: 8),
+                          TextField(
                           controller: timeoutMs,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(labelText: '节点超时（毫秒，0=继承工作流上限）'),
@@ -1501,6 +2041,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                           TextField(controller: retryJitter, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: '随机抖动（0~1）')),
                           const SizedBox(height: 10),
                         ],
+                        ],
                         DropdownButtonFormField<String>(
                           initialValue: <String>{'fail', 'continue', 'use_default'}.contains(onError) ? onError : 'fail',
                           decoration: const InputDecoration(labelText: '失败策略'),
@@ -1520,15 +2061,25 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                           decoration: const InputDecoration(labelText: '失败默认值 JSON（仅 Use default）', alignLabelWithHint: true),
                         ),
                         const SizedBox(height: 10),
-                        TextField(controller: permissions, decoration: const InputDecoration(labelText: '权限（逗号分隔）')),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: input,
-                          minLines: 4,
-                          maxLines: 8,
-                          style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                          decoration: const InputDecoration(labelText: 'Input JSON', alignLabelWithHint: true),
-                        ),
+                        if (_advancedMode) ...[
+                          TextField(controller: permissions, decoration: const InputDecoration(labelText: '权限（逗号分隔）')),
+                          const SizedBox(height: 10),
+                        ],
+                        if (!_advancedMode && nodeType == 'tool' && selectedCatalogItem != null && _asMap(_asMap(selectedCatalogItem!['inputSchema'])['properties']).isNotEmpty) ...[
+                          Text('参数', style: Theme.of(context).textTheme.titleSmall),
+                          const SizedBox(height: 8),
+                          ..._toolSchemaFields(selectedCatalogItem, input, () => setSheetState(() {})),
+                        ] else
+                          TextField(
+                            controller: input,
+                            minLines: 4,
+                            maxLines: 8,
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                            decoration: InputDecoration(labelText: _advancedMode ? 'Input JSON' : '参数', alignLabelWithHint: true),
+                          ),
+                        if (nodeType == 'logic') const Padding(padding: EdgeInsets.only(top: 6), child: Text('Logic：eq/ne/gt/gte/lt/lte、and/or/not/xor、contains/in/matches、exists/empty/truthy。输出 {result:boolean}。', style: TextStyle(fontSize: 11))),
+                        if (nodeType == 'extract') const Padding(padding: EdgeInsets.only(top: 6), child: Text('Extract：支持 a.b、items[0].name、items[*].id，以及 path/paths/aliases/required/default/unwrap。', style: TextStyle(fontSize: 11))),
+                        if (nodeType == 'transform') const Padding(padding: EdgeInsets.only(top: 6), child: Text('Transform：支持 pick/omit/rename/set/merge/flatten、array_map/filter/take/sort、JSON 与集合转换。', style: TextStyle(fontSize: 11))),
                         const SizedBox(height: 8),
                         OutlinedButton.icon(
                           onPressed: () => _showDataMappingDialog(context, node, input),
@@ -1536,14 +2087,130 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                           label: const Text('可视化数据映射'),
                         ),
                         const SizedBox(height: 10),
-                        TextField(
-                          controller: when,
-                          minLines: 3,
-                          maxLines: 6,
-                          style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                          decoration: const InputDecoration(labelText: 'When / Condition JSON（可空）', alignLabelWithHint: true),
-                        ),
-                        const SizedBox(height: 16),
+                        if (_advancedMode) ...[
+                          TextField(
+                            controller: when,
+                            minLines: 3,
+                            maxLines: 6,
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                            decoration: const InputDecoration(labelText: 'When / Condition JSON（可空）', alignLabelWithHint: true),
+                          ),
+                          const SizedBox(height: 16),
+                        ] else ...[
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('执行条件'),
+                            subtitle: const Text('使用可视化条件生成 When 表达式'),
+                            value: simpleWhen.enabled,
+                            onChanged: (value) => setSheetState(() => simpleWhen.enabled = value),
+                          ),
+                          if (simpleWhen.enabled && !simpleWhen.compatible) ...[
+                            const Text('当前节点使用了高级 When 表达式，简单模式会保留原配置。', style: TextStyle(fontSize: 12)),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () => setSheetState(() {
+                                  simpleWhen.compatible = true;
+                                  simpleWhen.join = 'and';
+                                  simpleWhen.conditions = <_SimpleConditionDraft>[_SimpleConditionDraft()];
+                                }),
+                                icon: const Icon(Icons.swap_horiz_outlined),
+                                label: const Text('用简单条件替换'),
+                              ),
+                            ),
+                          ],
+                          if (simpleWhen.enabled && simpleWhen.compatible) ...[
+                            if (simpleWhen.conditions.length > 1)
+                              DropdownButtonFormField<String>(
+                                initialValue: simpleWhen.join,
+                                decoration: const InputDecoration(labelText: '条件关系'),
+                                items: const [
+                                  DropdownMenuItem(value: 'and', child: Text('全部满足 AND')),
+                                  DropdownMenuItem(value: 'or', child: Text('任一满足 OR')),
+                                ],
+                                onChanged: (value) => setSheetState(() => simpleWhen.join = value ?? 'and'),
+                              ),
+                            ...List<Widget>.generate(simpleWhen.conditions.length, (index) {
+                              final condition = simpleWhen.conditions[index];
+                              final nodeOptions = _nodes.where((item) => (item['id'] ?? '').toString() != (node['id'] ?? '').toString()).toList(growable: false);
+                              return Card(
+                                margin: const EdgeInsets.only(top: 10),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Row(children: [
+                                        Expanded(child: Text('条件 ${index + 1}', style: Theme.of(context).textTheme.titleSmall)),
+                                        Checkbox(value: condition.not, onChanged: (value) => setSheetState(() => condition.not = value == true)),
+                                        const Text('NOT'),
+                                        if (simpleWhen.conditions.length > 1)
+                                          IconButton(
+                                            tooltip: '删除条件',
+                                            onPressed: () => setSheetState(() => simpleWhen.conditions.removeAt(index)),
+                                            icon: const Icon(Icons.close, size: 18),
+                                          ),
+                                      ]),
+                                      DropdownButtonFormField<String>(
+                                        key: ValueKey('source-$index-${condition.source}'),
+                                        initialValue: condition.source,
+                                        decoration: const InputDecoration(labelText: '数据来源'),
+                                        items: const [DropdownMenuItem(value: 'input', child: Text('工作流输入')), DropdownMenuItem(value: 'node_output', child: Text('节点输出'))],
+                                        onChanged: (value) => setSheetState(() {
+                                          condition.source = value ?? 'input';
+                                          if (condition.source != 'node_output') condition.nodeId = '';
+                                        }),
+                                      ),
+                                      if (condition.source == 'node_output') ...[
+                                        const SizedBox(height: 8),
+                                        DropdownButtonFormField<String>(
+                                          key: ValueKey('node-$index-${condition.nodeId}'),
+                                          initialValue: nodeOptions.any((item) => (item['id'] ?? '').toString() == condition.nodeId) ? condition.nodeId : null,
+                                          decoration: const InputDecoration(labelText: '节点'),
+                                          items: nodeOptions.map((item) => DropdownMenuItem<String>(value: (item['id'] ?? '').toString(), child: Text((item['label'] ?? item['id'] ?? '').toString()))).toList(growable: false),
+                                          onChanged: (value) => setSheetState(() => condition.nodeId = value ?? ''),
+                                        ),
+                                      ],
+                                      const SizedBox(height: 8),
+                                      TextFormField(initialValue: condition.path, decoration: const InputDecoration(labelText: '字段路径', hintText: '例如 enabled / data.status'), onChanged: (value) => condition.path = value),
+                                      const SizedBox(height: 8),
+                                      DropdownButtonFormField<String>(
+                                        key: ValueKey('op-$index-${condition.op}'),
+                                        initialValue: condition.op,
+                                        decoration: const InputDecoration(labelText: '判断'),
+                                        items: const [
+                                          DropdownMenuItem(value: 'eq', child: Text('等于')),
+                                          DropdownMenuItem(value: 'ne', child: Text('不等于')),
+                                          DropdownMenuItem(value: 'contains', child: Text('包含')),
+                                          DropdownMenuItem(value: 'gt', child: Text('大于')),
+                                          DropdownMenuItem(value: 'gte', child: Text('大于等于')),
+                                          DropdownMenuItem(value: 'lt', child: Text('小于')),
+                                          DropdownMenuItem(value: 'lte', child: Text('小于等于')),
+                                          DropdownMenuItem(value: 'exists', child: Text('存在')),
+                                          DropdownMenuItem(value: 'is_null', child: Text('为空')),
+                                        ],
+                                        onChanged: (value) => setSheetState(() => condition.op = value ?? 'eq'),
+                                      ),
+                                      if (condition.op != 'exists' && condition.op != 'is_null') ...[
+                                        const SizedBox(height: 8),
+                                        TextFormField(initialValue: condition.value, decoration: const InputDecoration(labelText: '比较值', hintText: 'true / 123 / 文本'), onChanged: (value) => condition.value = value),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () => setSheetState(() => simpleWhen.conditions.add(_SimpleConditionDraft())),
+                                icon: const Icon(Icons.add),
+                                label: const Text('增加条件'),
+                              ),
+                            ),
+                          ],
+                          const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('简单模式隐藏 Runtime、Retry 和权限；高级条件会保留，只有明确替换时才改写。', style: TextStyle(fontSize: 11))),
+                        ],
                         _NodeTraceCard(
                           stepRun: _stepRuns[(node['id'] ?? '').toString()],
                           attempts: _stepAttempts.where((item) => (item['nodeId'] ?? '').toString() == (node['id'] ?? '').toString()).toList(growable: false),
@@ -1572,7 +2239,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       } else {
         try {
           final parsedInput = _decodeJson(input.text, empty: <String, dynamic>{});
-          final parsedWhen = when.text.trim().isEmpty ? null : _decodeJson(when.text);
+          final parsedWhen = _advancedMode ? (when.text.trim().isEmpty ? null : _decodeJson(when.text)) : simpleWhen.build(step['when']);
           final parsedRuntimeMetadata = runtimeMetadata.text.trim().isEmpty ? <String, dynamic>{} : _decodeJson(runtimeMetadata.text);
           if (parsedRuntimeMetadata is! Map) {
             throw const FormatException('Runtime Metadata 必须是 JSON object');
@@ -1908,6 +2575,11 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       'voice_wake' => 'workflow.trigger.voice_wake.v1',
       'voice_phrase' => 'workflow.trigger.voice_phrase.v1',
       'app_foreground' => 'workflow.trigger.app_foreground.v1',
+      'notification' => 'workflow.trigger.notification.v1',
+      'battery' || 'package_event' || 'system_event' => 'workflow.trigger.system_event.v1',
+      'network' => 'workflow.trigger.network.v1',
+      'bluetooth' => 'workflow.trigger.bluetooth.v1',
+      'geofence' => 'workflow.trigger.location.v1',
       _ => '',
     };
   }
@@ -1938,6 +2610,93 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     if (reason.isNotEmpty) return reason;
     if (permission.isNotEmpty) return '需要权限：$permission';
     return '目标设备当前不可用';
+  }
+
+  Future<void> _createWakeConfig(TextEditingController controller) async {
+    if (!_canUseDeviceTrigger('voice_wake')) {
+      _show(_triggerCapabilityLabel('voice_wake'));
+      return;
+    }
+    final phrase = TextEditingController();
+    final name = TextEditingController();
+    var backend = 'local';
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('创建 Wake Config'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('VAD 只负责语音切段。默认本地 KWS 不需要 API Key；只有模型识别到配置短语时才触发工作流。'),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: backend,
+                  decoration: const InputDecoration(labelText: '语音引擎'),
+                  items: const [
+                    DropdownMenuItem(value: 'local', child: Text('本地唤醒（推荐）')),
+                    DropdownMenuItem(value: 'cloud', child: Text('云 ASR')),
+                  ],
+                  onChanged: (value) => setDialogState(() => backend = value ?? 'local'),
+                ),
+                const SizedBox(height: 10),
+                TextField(controller: phrase, decoration: const InputDecoration(labelText: '唤醒短语', hintText: '你好 Amitia')),
+                const SizedBox(height: 10),
+                TextField(controller: name, decoration: const InputDecoration(labelText: '配置名称', hintText: 'Amitia 唤醒')),
+                if (backend == 'local') ...[
+                  const SizedBox(height: 10),
+                  const Text('本地模式会使用设备 Runtime 已安装的 KWS 模型；未安装时预检会提示模型不可用。'),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('创建')),
+          ],
+        ),
+      ),
+    );
+    if (accepted != true) {
+      phrase.dispose();
+      name.dispose();
+      return;
+    }
+    final phraseValue = phrase.text.trim();
+    final nameValue = name.text.trim().isEmpty ? phraseValue : name.text.trim();
+    phrase.dispose();
+    name.dispose();
+    if (phraseValue.isEmpty) {
+      _show('唤醒短语不能为空');
+      return;
+    }
+    try {
+      final item = await ref.read(extensionServiceProvider).createWorkflowWakeConfig(
+            target: _target,
+            name: nameValue,
+            phrases: <String>[phraseValue],
+            backend: backend,
+          );
+      final id = (item['id'] ?? '').toString().trim();
+      if (id.isEmpty) throw StateError('Wake Config 返回 ID 为空');
+      setState(() {
+        _triggerWakeConfigs = <Map<String, dynamic>>[
+          ..._triggerWakeConfigs.where((existing) => (existing['id'] ?? '').toString() != id),
+          item,
+        ];
+      });
+      controller.text = id;
+      try {
+        final capabilities = await ref.read(extensionServiceProvider).workflowTriggerCapabilities(target: _target);
+        if (mounted) {
+          setState(() => _triggerCapabilities = capabilities);
+        }
+      } catch (_) {}
+      _show('${backend == 'local' ? '本地' : '云 ASR'} Wake Config 已创建并绑定');
+    } catch (error) {
+      _show('Wake Config 创建失败：${_message(error)}');
+    }
   }
 
   Future<void> _chooseWakeConfig(TextEditingController controller) async {
@@ -2045,6 +2804,16 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     final timezone = TextEditingController(text: (config['timezone'] ?? '').toString());
     final interval = TextEditingController(text: (config['intervalSeconds'] ?? config['seconds'] ?? '').toString());
     final runAt = TextEditingController(text: (config['runAt'] ?? '').toString());
+    TimeOfDay parseSimpleCronTime(String raw) {
+      final match = RegExp(r'^(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*$').firstMatch(raw.trim());
+      final minute = int.tryParse(match?.group(1) ?? '') ?? 0;
+      final hour = int.tryParse(match?.group(2) ?? '') ?? 8;
+      return TimeOfDay(hour: hour.clamp(0, 23), minute: minute.clamp(0, 59));
+    }
+    var simpleCronTime = parseSimpleCronTime(cron.text);
+    if (cron.text.trim().isEmpty && (type == 'cron' || type == 'schedule')) {
+      cron.text = '${simpleCronTime.minute} ${simpleCronTime.hour} * * *';
+    }
     final actions = TextEditingController(text: _stringList(config['actions']).join(', '));
     final categories = TextEditingController(text: _stringList(config['categories']).join(', '));
     final dataSchemes = TextEditingController(text: _stringList(config['dataSchemes']).join(', '));
@@ -2057,15 +2826,32 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
     final phrases = TextEditingController(text: _stringList(config['phrases']).join('\n'));
     final packages = TextEditingController(text: _stringList(config['packages']).join(', '));
     final cooldownMs = TextEditingController(text: (config['cooldownMs'] ?? 30000).toString());
+    final titleContains = TextEditingController(text: (config['titleContains'] ?? '').toString());
+    final textContains = TextEditingController(text: (config['textContains'] ?? '').toString());
+    final channelIds = TextEditingController(text: _stringList(config['channelIds']).join(', '));
+    final minPercent = TextEditingController(text: (config['minPercent'] ?? '').toString());
+    final maxPercent = TextEditingController(text: (config['maxPercent'] ?? '').toString());
+    final transports = TextEditingController(text: _stringList(config['transports']).join(', '));
+    final bleSessionId = TextEditingController(text: (config['sessionId'] ?? '').toString());
+    final bleAddress = TextEditingController(text: (config['address'] ?? '').toString());
+    final bleServiceUuid = TextEditingController(text: (config['serviceUuid'] ?? '').toString());
+    final bleCharacteristicUuid = TextEditingController(text: (config['characteristicUuid'] ?? '').toString());
+    final fenceIds = TextEditingController(text: _stringList(config['fenceIds']).join(', '));
+    String triState(dynamic value) => value == true ? 'true' : value == false ? 'false' : 'any';
     var preset = type == 'event' ? _deviceEventPresetFor(eventType.text) : 'advanced';
     var phraseMatchMode = <String>{'exact', 'normalized'}.contains((config['matchMode'] ?? '').toString()) ? config['matchMode'].toString() : 'normalized';
+    var notificationOngoing = triState(config['ongoing']);
+    var notificationClearable = triState(config['clearable']);
+    var batteryCharging = triState(config['charging']);
+    var networkValidated = triState(config['validated']);
+    var networkMetered = triState(config['metered']);
     final applied = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text(_triggerLabel(type)),
           content: SizedBox(
-            width: 520,
+            width: 560,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -2082,6 +2868,13 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                         DropdownMenuItem(value: 'voice_wake', enabled: _canUseDeviceTrigger('voice_wake'), child: const Text('Voice / Wake')),
                         DropdownMenuItem(value: 'voice_phrase', enabled: _canUseDeviceTrigger('voice_phrase'), child: const Text('Voice Phrase')),
                         DropdownMenuItem(value: 'app_foreground', enabled: _canUseDeviceTrigger('app_foreground'), child: const Text('App Launch / Foreground')),
+                        DropdownMenuItem(value: 'notification', enabled: _canUseDeviceTrigger('notification'), child: const Text('通知')),
+                        DropdownMenuItem(value: 'battery', enabled: _canUseDeviceTrigger('battery'), child: const Text('电量 / 充电')),
+                        DropdownMenuItem(value: 'network', enabled: _canUseDeviceTrigger('network'), child: const Text('网络')),
+                        DropdownMenuItem(value: 'package_event', enabled: _canUseDeviceTrigger('package_event'), child: const Text('应用安装 / 更新 / 卸载')),
+                        DropdownMenuItem(value: 'bluetooth', enabled: _canUseDeviceTrigger('bluetooth'), child: const Text('Bluetooth / BLE')),
+                        DropdownMenuItem(value: 'geofence', enabled: _canUseDeviceTrigger('geofence'), child: const Text('Geofence')),
+                        DropdownMenuItem(value: 'system_event', enabled: _canUseDeviceTrigger('system_event'), child: const Text('Android 系统事件')),
                       ],
                       onChanged: (value) {
                         final next = value ?? 'advanced';
@@ -2097,6 +2890,13 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                             'voice_wake' => 'voice.wake.detected',
                             'voice_phrase' => 'voice.asr.final',
                             'app_foreground' => 'device.app.foreground',
+                            'notification' => 'device.notification.posted',
+                            'battery' => 'device.power.battery_changed',
+                            'network' => 'device.network.changed',
+                            'package_event' => 'device.app.installed',
+                            'bluetooth' => 'device.bluetooth.state_changed',
+                            'geofence' => 'device.location.geofence.enter',
+                            'system_event' => _androidSystemTriggerEvents.first.$2,
                             _ => eventType.text,
                           };
                         });
@@ -2140,11 +2940,24 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                     if (preset == 'voice_wake') ...[
                       TextField(controller: wakeConfigId, readOnly: true, decoration: const InputDecoration(labelText: 'Wake Config', hintText: '必须选择已启用配置')),
                       const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: () => _chooseWakeConfig(wakeConfigId),
-                        icon: const Icon(Icons.record_voice_over_outlined),
-                        label: Text(_triggerWakeConfigs.isEmpty ? '没有可用 Wake Config' : '选择 Wake Config（${_triggerWakeConfigs.length}）'),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => _chooseWakeConfig(wakeConfigId),
+                            icon: const Icon(Icons.record_voice_over_outlined),
+                            label: Text(_triggerWakeConfigs.isEmpty ? '没有可用 Wake Config' : '选择 Wake Config（${_triggerWakeConfigs.length}）'),
+                          ),
+                          FilledButton.tonalIcon(
+                            onPressed: _canUseDeviceTrigger('voice_wake') ? () => _createWakeConfig(wakeConfigId) : null,
+                            icon: const Icon(Icons.add_circle_outline),
+                            label: const Text('创建 Wake'),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 8),
+                      const Text('默认使用本地 KWS：无需 API Key，模型在设备 Runtime 内识别；也可在创建时显式选择云 ASR。VAD 只做切段，响声本身不会触发。'),
                     ],
                     if (preset == 'voice_phrase') ...[
                       TextField(controller: phrases, minLines: 2, maxLines: 5, decoration: const InputDecoration(labelText: '短语（每行一个）', hintText: '开始回家模式')),
@@ -2172,12 +2985,175 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                       const SizedBox(height: 8),
                       const Text('语义为 package becomes foreground；同一 Package 内 Activity 切换不会重复触发。'),
                     ],
+                    if (preset == 'notification') ...[
+                      DropdownButtonFormField<String>(
+                        initialValue: <String>{'device.notification.posted', 'device.notification.removed'}.contains(eventType.text) ? eventType.text : 'device.notification.posted',
+                        decoration: const InputDecoration(labelText: '通知事件'),
+                        items: const [
+                          DropdownMenuItem(value: 'device.notification.posted', child: Text('收到通知')),
+                          DropdownMenuItem(value: 'device.notification.removed', child: Text('通知移除')),
+                        ],
+                        onChanged: (value) => setDialogState(() => eventType.text = value ?? 'device.notification.posted'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(controller: packages, decoration: const InputDecoration(labelText: 'Package Names', hintText: '留空表示全部应用')),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => _appendAppPackageFromCatalog(packages),
+                        icon: const Icon(Icons.apps_outlined),
+                        label: Text(_triggerAppCatalog.isEmpty ? '设备应用目录未就绪' : '从设备应用选择（${_triggerAppCatalog.length}）'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(controller: titleContains, decoration: const InputDecoration(labelText: '标题包含')),
+                      const SizedBox(height: 10),
+                      TextField(controller: textContains, decoration: const InputDecoration(labelText: '正文包含')),
+                      const SizedBox(height: 10),
+                      TextField(controller: channelIds, decoration: const InputDecoration(labelText: 'Channel IDs（逗号分隔）')),
+                      const SizedBox(height: 10),
+                      TextField(controller: categories, decoration: const InputDecoration(labelText: 'Categories（逗号分隔）')),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: notificationOngoing,
+                        decoration: const InputDecoration(labelText: 'Ongoing'),
+                        items: const [DropdownMenuItem(value: 'any', child: Text('不限')), DropdownMenuItem(value: 'true', child: Text('是')), DropdownMenuItem(value: 'false', child: Text('否'))],
+                        onChanged: (value) => setDialogState(() => notificationOngoing = value ?? 'any'),
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: notificationClearable,
+                        decoration: const InputDecoration(labelText: '可清除'),
+                        items: const [DropdownMenuItem(value: 'any', child: Text('不限')), DropdownMenuItem(value: 'true', child: Text('是')), DropdownMenuItem(value: 'false', child: Text('否'))],
+                        onChanged: (value) => setDialogState(() => notificationClearable = value ?? 'any'),
+                      ),
+                    ],
+                    if (preset == 'battery') ...[
+                      TextField(controller: minPercent, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最低电量 %', hintText: '留空不限')),
+                      const SizedBox(height: 10),
+                      TextField(controller: maxPercent, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最高电量 %', hintText: '留空不限')),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: batteryCharging,
+                        decoration: const InputDecoration(labelText: '充电状态'),
+                        items: const [DropdownMenuItem(value: 'any', child: Text('不限')), DropdownMenuItem(value: 'true', child: Text('正在充电')), DropdownMenuItem(value: 'false', child: Text('未充电'))],
+                        onChanged: (value) => setDialogState(() => batteryCharging = value ?? 'any'),
+                      ),
+                    ],
+                    if (preset == 'network') ...[
+                      DropdownButtonFormField<String>(
+                        initialValue: <String>{'device.network.changed', 'device.network.available', 'device.network.lost'}.contains(eventType.text) ? eventType.text : 'device.network.changed',
+                        decoration: const InputDecoration(labelText: '网络事件'),
+                        items: const [
+                          DropdownMenuItem(value: 'device.network.changed', child: Text('网络变化')),
+                          DropdownMenuItem(value: 'device.network.available', child: Text('网络可用')),
+                          DropdownMenuItem(value: 'device.network.lost', child: Text('网络丢失')),
+                        ],
+                        onChanged: (value) => setDialogState(() => eventType.text = value ?? 'device.network.changed'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(controller: transports, decoration: const InputDecoration(labelText: '传输类型（逗号分隔）', hintText: 'wifi, cellular, ethernet, vpn')),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: networkValidated,
+                        decoration: const InputDecoration(labelText: 'Validated'),
+                        items: const [DropdownMenuItem(value: 'any', child: Text('不限')), DropdownMenuItem(value: 'true', child: Text('是')), DropdownMenuItem(value: 'false', child: Text('否'))],
+                        onChanged: (value) => setDialogState(() => networkValidated = value ?? 'any'),
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: networkMetered,
+                        decoration: const InputDecoration(labelText: 'Metered'),
+                        items: const [DropdownMenuItem(value: 'any', child: Text('不限')), DropdownMenuItem(value: 'true', child: Text('计费网络')), DropdownMenuItem(value: 'false', child: Text('非计费网络'))],
+                        onChanged: (value) => setDialogState(() => networkMetered = value ?? 'any'),
+                      ),
+                    ],
+                    if (preset == 'package_event') ...[
+                      DropdownButtonFormField<String>(
+                        initialValue: <String>{'device.app.installed', 'device.app.updated', 'device.app.removed', 'device.app.self_updated'}.contains(eventType.text) ? eventType.text : 'device.app.installed',
+                        decoration: const InputDecoration(labelText: '应用事件'),
+                        items: const [
+                          DropdownMenuItem(value: 'device.app.installed', child: Text('安装')),
+                          DropdownMenuItem(value: 'device.app.updated', child: Text('更新')),
+                          DropdownMenuItem(value: 'device.app.removed', child: Text('卸载')),
+                          DropdownMenuItem(value: 'device.app.self_updated', child: Text('Amitia 自身更新')),
+                        ],
+                        onChanged: (value) => setDialogState(() => eventType.text = value ?? 'device.app.installed'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(controller: packages, decoration: const InputDecoration(labelText: 'Package Names', hintText: '留空表示全部应用')),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () => _appendAppPackageFromCatalog(packages),
+                        icon: const Icon(Icons.apps_outlined),
+                        label: Text(_triggerAppCatalog.isEmpty ? '设备应用目录未就绪' : '从设备应用选择（${_triggerAppCatalog.length}）'),
+                      ),
+                    ],
+                    if (preset == 'bluetooth') ...[
+                      DropdownButtonFormField<String>(
+                        initialValue: <String>{'device.bluetooth.state_changed', 'device.bluetooth.connected', 'device.bluetooth.disconnected', 'device.ble.characteristic_changed'}.contains(eventType.text) ? eventType.text : 'device.bluetooth.state_changed',
+                        decoration: const InputDecoration(labelText: 'Bluetooth 事件'),
+                        items: const [
+                          DropdownMenuItem(value: 'device.bluetooth.state_changed', child: Text('状态变化')),
+                          DropdownMenuItem(value: 'device.bluetooth.connected', child: Text('设备连接')),
+                          DropdownMenuItem(value: 'device.bluetooth.disconnected', child: Text('设备断开')),
+                          DropdownMenuItem(value: 'device.ble.characteristic_changed', child: Text('BLE Characteristic Changed')),
+                        ],
+                        onChanged: (value) => setDialogState(() => eventType.text = value ?? 'device.bluetooth.state_changed'),
+                      ),
+                      if (eventType.text == 'device.ble.characteristic_changed') ...[
+                        const SizedBox(height: 10),
+                        TextField(controller: bleSessionId, decoration: const InputDecoration(labelText: 'Session ID')),
+                        const SizedBox(height: 10),
+                        TextField(controller: bleAddress, decoration: const InputDecoration(labelText: 'Address', hintText: 'AA:BB:CC:DD:EE:FF')),
+                        const SizedBox(height: 10),
+                        TextField(controller: bleServiceUuid, decoration: const InputDecoration(labelText: 'Service UUID')),
+                        const SizedBox(height: 10),
+                        TextField(controller: bleCharacteristicUuid, decoration: const InputDecoration(labelText: 'Characteristic UUID')),
+                      ],
+                    ],
+                    if (preset == 'geofence') ...[
+                      DropdownButtonFormField<String>(
+                        initialValue: <String>{'device.location.geofence.enter', 'device.location.geofence.exit'}.contains(eventType.text) ? eventType.text : 'device.location.geofence.enter',
+                        decoration: const InputDecoration(labelText: 'Geofence 事件'),
+                        items: const [
+                          DropdownMenuItem(value: 'device.location.geofence.enter', child: Text('进入')),
+                          DropdownMenuItem(value: 'device.location.geofence.exit', child: Text('离开')),
+                        ],
+                        onChanged: (value) => setDialogState(() => eventType.text = value ?? 'device.location.geofence.enter'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(controller: fenceIds, decoration: const InputDecoration(labelText: 'Fence IDs（逗号分隔）', hintText: '留空表示全部已注册围栏')),
+                    ],
+                    if (preset == 'system_event') ...[
+                      DropdownButtonFormField<String>(
+                        initialValue: _androidSystemTriggerEvents.any((item) => item.$2 == eventType.text) ? eventType.text : _androidSystemTriggerEvents.first.$2,
+                        decoration: const InputDecoration(labelText: 'Android 系统事件'),
+                        items: _androidSystemTriggerEvents.map((item) => DropdownMenuItem(value: item.$2, child: Text(item.$1))).toList(growable: false),
+                        onChanged: (value) => setDialogState(() => eventType.text = value ?? _androidSystemTriggerEvents.first.$2),
+                      ),
+                    ],
                   ] else if (!<String>{'manual', 'schedule', 'cron', 'interval', 'one_shot'}.contains(type))
                     TextField(controller: eventType, decoration: const InputDecoration(labelText: 'Event Type')),
                   if (type == 'cron' || type == 'schedule') ...[
-                    TextField(controller: cron, decoration: const InputDecoration(labelText: 'Cron Expression', hintText: '0 8 * * *')),
-                    const SizedBox(height: 10),
-                    TextField(controller: timezone, decoration: const InputDecoration(labelText: 'Timezone', hintText: 'Asia/Shanghai')),
+                    if (!_advancedMode)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('每天执行时间'),
+                        subtitle: const Text('简单模式会自动生成 Cron 表达式'),
+                        trailing: Text(simpleCronTime.format(context), style: Theme.of(context).textTheme.titleMedium),
+                        onTap: () async {
+                          final picked = await showTimePicker(context: context, initialTime: simpleCronTime);
+                          if (picked == null) return;
+                          setDialogState(() {
+                            simpleCronTime = picked;
+                            cron.text = '${picked.minute} ${picked.hour} * * *';
+                          });
+                        },
+                      )
+                    else ...[
+                      TextField(controller: cron, decoration: const InputDecoration(labelText: 'Cron Expression', hintText: '0 8 * * *')),
+                      const SizedBox(height: 10),
+                      TextField(controller: timezone, decoration: const InputDecoration(labelText: 'Timezone', hintText: 'Asia/Shanghai')),
+                    ],
                   ],
                   if (type == 'interval')
                     TextField(controller: interval, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Interval Seconds')),
@@ -2217,6 +3193,36 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                 'packages': _splitValues(packages.text),
                 'cooldownMs': (int.tryParse(cooldownMs.text.trim()) ?? 30000).clamp(0, 86400000).toInt(),
               },
+            'notification' => <String, dynamic>{
+                'packages': _splitValues(packages.text),
+                if (titleContains.text.trim().isNotEmpty) 'titleContains': titleContains.text.trim(),
+                if (textContains.text.trim().isNotEmpty) 'textContains': textContains.text.trim(),
+                'channelIds': _splitValues(channelIds.text),
+                'categories': _splitValues(categories.text),
+                if (notificationOngoing != 'any') 'ongoing': notificationOngoing == 'true',
+                if (notificationClearable != 'any') 'clearable': notificationClearable == 'true',
+              },
+            'battery' => <String, dynamic>{
+                if (int.tryParse(minPercent.text.trim()) != null) 'minPercent': int.parse(minPercent.text.trim()).clamp(0, 100),
+                if (int.tryParse(maxPercent.text.trim()) != null) 'maxPercent': int.parse(maxPercent.text.trim()).clamp(0, 100),
+                if (batteryCharging != 'any') 'charging': batteryCharging == 'true',
+              },
+            'network' => <String, dynamic>{
+                'transports': _splitValues(transports.text).map((item) => item.toLowerCase()).toList(growable: false),
+                if (networkValidated != 'any') 'validated': networkValidated == 'true',
+                if (networkMetered != 'any') 'metered': networkMetered == 'true',
+              },
+            'package_event' => <String, dynamic>{'packages': _splitValues(packages.text)},
+            'bluetooth' => eventType.text.trim() == 'device.ble.characteristic_changed'
+                ? <String, dynamic>{
+                    if (bleSessionId.text.trim().isNotEmpty) 'sessionId': bleSessionId.text.trim(),
+                    if (bleAddress.text.trim().isNotEmpty) 'address': bleAddress.text.trim(),
+                    if (bleServiceUuid.text.trim().isNotEmpty) 'serviceUuid': bleServiceUuid.text.trim(),
+                    if (bleCharacteristicUuid.text.trim().isNotEmpty) 'characteristicUuid': bleCharacteristicUuid.text.trim(),
+                  }
+                : <String, dynamic>{},
+            'geofence' => <String, dynamic>{'fenceIds': _splitValues(fenceIds.text)},
+            'system_event' => <String, dynamic>{},
             _ => config,
           };
         } else {
@@ -2249,6 +3255,17 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
       phrases,
       packages,
       cooldownMs,
+      titleContains,
+      textContains,
+      channelIds,
+      minPercent,
+      maxPercent,
+      transports,
+      bleSessionId,
+      bleAddress,
+      bleServiceUuid,
+      bleCharacteristicUuid,
+      fenceIds,
     ]) {
       c.dispose();
     }
@@ -2260,6 +3277,13 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         'voice.wake.detected' => 'voice_wake',
         'voice.asr.final' => 'voice_phrase',
         'device.app.foreground' => 'app_foreground',
+        'device.notification.posted' || 'device.notification.removed' => 'notification',
+        'device.power.battery_changed' => 'battery',
+        'device.network.changed' || 'device.network.available' || 'device.network.lost' => 'network',
+        'device.app.installed' || 'device.app.updated' || 'device.app.removed' || 'device.app.self_updated' => 'package_event',
+        'device.bluetooth.state_changed' || 'device.bluetooth.connected' || 'device.bluetooth.disconnected' || 'device.ble.characteristic_changed' => 'bluetooth',
+        'device.location.geofence.enter' || 'device.location.geofence.exit' => 'geofence',
+        _ when _androidSystemTriggerEvents.any((item) => item.$2 == eventType.trim()) => 'system_event',
         _ => 'advanced',
       };
 
@@ -2468,6 +3492,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         actions: [
           if (_aiWorking) const Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
           IconButton(tooltip: '校验', onPressed: _workflow == null ? null : _validate, icon: const Icon(Icons.fact_check_outlined)),
+          IconButton(tooltip: '预检', onPressed: _workflow == null ? null : _showPreflight, icon: const Icon(Icons.health_and_safety_outlined)),
           IconButton(tooltip: '保存', onPressed: _workflow == null || _saving ? null : _save, icon: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined)),
           IconButton(tooltip: '运行', onPressed: _workflow == null ? null : _run, icon: const Icon(Icons.play_arrow)),
           PopupMenuButton<String>(
@@ -2503,12 +3528,16 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
                 case 'layout':
                   _autoLayout();
                   break;
+                case 'editor_mode':
+                  setState(() => _advancedMode = !_advancedMode);
+                  break;
               }
             },
             itemBuilder: (context) => <PopupMenuEntry<String>>[
               if (!_isDevice) const PopupMenuItem(value: 'ai_edit', child: ListTile(leading: Icon(Icons.auto_awesome_outlined), title: Text('AI 修改工作流'))),
               if (!_isDevice) const PopupMenuItem(value: 'ai_repair', child: ListTile(leading: Icon(Icons.build_circle_outlined), title: Text('AI 修复工作流'))),
               if (!_isDevice) const PopupMenuItem(value: 'ai_explain', child: ListTile(leading: Icon(Icons.psychology_alt_outlined), title: Text('AI 解释工作流'))),
+              PopupMenuItem(value: 'editor_mode', child: ListTile(leading: Icon(_advancedMode ? Icons.tune_outlined : Icons.view_agenda_outlined), title: Text(_advancedMode ? '切换简单模式' : '切换高级模式'), subtitle: Text(_advancedMode ? '当前显示 Runtime / Retry / When / Capability' : '当前只显示常用配置'))),
               const PopupMenuItem(value: 'settings', child: ListTile(leading: Icon(Icons.settings_outlined), title: Text('工作流设置'))),
               const PopupMenuItem(value: 'triggers', child: ListTile(leading: Icon(Icons.bolt_outlined), title: Text('Trigger Center'))),
               const PopupMenuItem(value: 'edges', child: ListTile(leading: Icon(Icons.route_outlined), title: Text('连线配置'))),
@@ -2887,6 +3916,23 @@ class _SafetySection extends StatelessWidget {
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: Theme.of(context).textTheme.titleSmall), const SizedBox(height: 6), if (items.isEmpty) Text(emptyText, style: AppTypography.caption(context)) else ...items.map((item) => Padding(padding: const EdgeInsets.only(bottom: 4), child: SelectableText(item, style: const TextStyle(fontFamily: 'monospace', fontSize: 11))))]);
 }
 
+class _PreflightStatusBadge extends StatelessWidget {
+  final String status;
+  const _PreflightStatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = status.toUpperCase();
+    final color = normalized == 'PASS' ? context.success : normalized == 'WARNING' ? context.warning : context.error;
+    final label = normalized == 'PASS' ? '✓' : normalized == 'WARNING' ? '!' : '×';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999)),
+      child: Text('$label $normalized', style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
 class _RunStatusIcon extends StatelessWidget {
   final String status;
   const _RunStatusIcon({required this.status});
@@ -2931,8 +3977,10 @@ const _nodeTypes = <_NodeType>[
   _NodeType('wasm', 'WASM', 'WASM Runtime 节点', Icons.memory_outlined),
   _NodeType('trusted_service', 'Trusted Service', '可信服务处理器', Icons.verified_user_outlined),
   _NodeType('nested_workflow', 'Nested Workflow', '复用另一个工作流', Icons.account_tree_outlined),
-  _NodeType('condition', 'Condition', '条件判断与分支', Icons.call_split_outlined),
-  _NodeType('transform', 'Transform', '结构化数据转换', Icons.transform_outlined),
+  _NodeType('condition', 'Condition', '兼容条件锚点 / 条件结果', Icons.call_split_outlined),
+  _NodeType('logic', 'Logic', 'AND / OR / 比较 / 正则 / 集合判断', Icons.rule_outlined),
+  _NodeType('extract', 'Extract', '路径、数组下标与通配符数据提取', Icons.data_object_outlined),
+  _NodeType('transform', 'Transform', 'Pick / Merge / Map / Filter / Sort', Icons.transform_outlined),
   _NodeType('wait', 'Wait', '暂停一段时间再继续', Icons.hourglass_bottom_outlined),
 ];
 
@@ -2943,3 +3991,66 @@ const _triggerTypes = <String>[
   'interval',
   'one_shot',
 ];
+
+const _androidSystemTriggerEvents = <(String, String)>[
+  ('低电量', 'device.power.battery_low'),
+  ('电量恢复', 'device.power.battery_okay'),
+  ('接入电源', 'device.power.connected'),
+  ('断开电源', 'device.power.disconnected'),
+  ('屏幕点亮', 'device.screen.on'),
+  ('屏幕关闭', 'device.screen.off'),
+  ('用户解锁', 'device.user.present'),
+  ('耳机连接', 'device.audio.headset_connected'),
+  ('耳机断开', 'device.audio.headset_disconnected'),
+  ('Wi-Fi 状态变化', 'device.wifi.state_changed'),
+  ('Wi-Fi 已启用', 'device.wifi.enabled'),
+  ('Wi-Fi 已禁用', 'device.wifi.disabled'),
+  ('Wi-Fi 已连接', 'device.wifi.connected'),
+  ('Wi-Fi 已断开', 'device.wifi.disconnected'),
+  ('设备启动完成', 'device.system.boot_completed'),
+  ('系统时间变化', 'device.time.changed'),
+  ('时区变化', 'device.time.timezone_changed'),
+  ('日期变化', 'device.time.date_changed'),
+];
+
+const _deviceWorkflowEventTypes = <String>{
+  'device.android.intent',
+  'device.android.tasker',
+  'voice.wake.detected',
+  'voice.asr.final',
+  'device.app.foreground',
+  'device.notification.posted',
+  'device.notification.removed',
+  'device.power.battery_changed',
+  'device.network.changed',
+  'device.network.available',
+  'device.network.lost',
+  'device.app.installed',
+  'device.app.updated',
+  'device.app.removed',
+  'device.app.self_updated',
+  'device.bluetooth.state_changed',
+  'device.bluetooth.connected',
+  'device.bluetooth.disconnected',
+  'device.ble.characteristic_changed',
+  'device.location.geofence.enter',
+  'device.location.geofence.exit',
+  'device.power.battery_low',
+  'device.power.battery_okay',
+  'device.power.connected',
+  'device.power.disconnected',
+  'device.screen.on',
+  'device.screen.off',
+  'device.user.present',
+  'device.audio.headset_connected',
+  'device.audio.headset_disconnected',
+  'device.wifi.state_changed',
+  'device.wifi.enabled',
+  'device.wifi.disabled',
+  'device.wifi.connected',
+  'device.wifi.disconnected',
+  'device.system.boot_completed',
+  'device.time.changed',
+  'device.time.timezone_changed',
+  'device.time.date_changed',
+};

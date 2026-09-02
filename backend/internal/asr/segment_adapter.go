@@ -88,7 +88,7 @@ func (a *SegmentASRAdapter) Recognize(ctx context.Context) (string, error) {
 	}
 	defer os.Remove(tmpFile)
 
-	taskID, err := SubmitTask(config, tmpFile, lang)
+	taskID, err := SubmitTask(config, "file://"+tmpFile, lang)
 	if err != nil {
 		return "", fmt.Errorf("segment asr: submit failed: %w", err)
 	}

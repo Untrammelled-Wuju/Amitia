@@ -32,7 +32,7 @@ func TestExternalTextEntrypointsUseUnifiedEntry(t *testing.T) {
 	serverRouter := readGuardFile(t, "..", "..", "cmd", "server", "router.go")
 	chatRouter := readGuardFile(t, "..", "chat", "router.go")
 	chatHandler := readGuardFile(t, "..", "chat", "handler.go")
-	if !strings.Contains(serverRouter, "agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry)") {
+	if !strings.Contains(serverRouter, "agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)") {
 		t.Fatal("Agent router must be registered with services.UnifiedEntry")
 	}
 	if !strings.Contains(serverRouter, "system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry") {

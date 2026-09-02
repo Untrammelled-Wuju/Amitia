@@ -25,6 +25,10 @@ internal class AccessibilityNativeHandler(context: Context) {
 
     private fun handleStatus(request: NativeAccessibilityRequest): NativeAccessibilityResponse {
         val state = stateReader.readState()
+        val health = AccessibilityHealthMonitor.snapshot(
+            configured = state.serviceDeclared,
+            enabled = state.enabledInSettings,
+        )
         val result = mapOf(
             "platformSupported" to state.platformSupported,
             "serviceDeclared" to state.serviceDeclared,
@@ -35,6 +39,10 @@ internal class AccessibilityNativeHandler(context: Context) {
             "userActionRequired" to state.userActionRequired,
             "state" to state.state,
             "generation" to AccessibilityServiceRegistry.generation(),
+            "lastConnectedAt" to health.lastConnectedAt,
+            "lastEventAt" to health.lastEventAt,
+            "lastDisconnectAt" to health.lastDisconnectAt,
+            "healthGeneration" to health.generation,
         )
         return NativeAccessibilityResponse(
             requestId = request.requestId,

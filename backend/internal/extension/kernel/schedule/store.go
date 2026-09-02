@@ -5,6 +5,31 @@ import (
 	"time"
 )
 
+// TriggerCreateStore is an optional stronger persistence contract used by
+// planners/recovery workers to atomically claim a durable trigger. Stores that
+// implement it must never mutate an already-existing trigger when created=false.
+type TriggerCreateStore interface {
+	CreateTriggerIfAbsent(ctx context.Context, record *ScheduleTriggerRecord) (created bool, err error)
+}
+
+func createTriggerIfAbsent(ctx context.Context, store ScheduleStore, record *ScheduleTriggerRecord) (bool, error) {
+	if strong, ok := store.(TriggerCreateStore); ok {
+		return strong.CreateTriggerIfAbsent(ctx, record)
+	}
+	if existing, err := store.GetTriggerByIdempotencyKey(ctx, record.IdempotencyKey); err == nil && existing != nil {
+		return false, nil
+	}
+	if err := store.PutTrigger(ctx, record); err != nil {
+		// A store may enforce uniqueness even if it does not implement the stronger
+		// interface. Resolve a concurrent winner before surfacing the write error.
+		if existing, getErr := store.GetTriggerByIdempotencyKey(ctx, record.IdempotencyKey); getErr == nil && existing != nil {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 type ScheduleStore interface {
 	PutDefinition(ctx context.Context, def *ScheduleContributionDefinition) error
 	GetDefinition(ctx context.Context, scheduleID string) (*ScheduleContributionDefinition, error)

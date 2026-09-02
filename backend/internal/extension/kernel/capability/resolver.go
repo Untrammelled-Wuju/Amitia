@@ -324,11 +324,52 @@ func (r *Resolver) collectExecutableInstances(defs []CapabilityProviderDefinitio
 				}
 			}
 
+			if inst.Placement == ProviderPlacementDevice && len(request.RequiredDeviceCapabilities) > 0 && !r.deviceInstanceSupportsAll(inst, request.RequiredDeviceCapabilities) {
+				rejections = append(rejections, CandidateRejection{ProviderID: def.ID, Reason: RejectionCapabilityMismatch})
+				seen[inst.ID] = true
+				continue
+			}
+
 			seen[inst.ID] = true
 			instances = append(instances, inst)
 		}
 	}
 	return instances, rejections
+}
+
+func (r *Resolver) deviceInstanceSupportsAll(primary CapabilityProviderInstance, required []CapabilityID) bool {
+	for _, capabilityID := range required {
+		capabilityID = ParseCapabilityID(string(capabilityID))
+		if capabilityID == "" || capabilityID == primary.CapabilityID {
+			continue
+		}
+		found := false
+		for _, def := range r.catalog.ListDefinitionsByCapability(capabilityID) {
+			if def.Placement != ProviderPlacementDevice {
+				continue
+			}
+			for _, candidate := range r.catalog.ListInstancesByProvider(def.ID) {
+				if candidate.UserID != primary.UserID || candidate.DeviceID != primary.DeviceID || !candidate.IsExecutable() {
+					continue
+				}
+				if candidate.RuntimeID != "" && r.availability != nil {
+					online, err := r.availability.IsRuntimeOnline(context.Background(), candidate.RuntimeID)
+					if err != nil || !online {
+						continue
+					}
+				}
+				found = true
+				break
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *Resolver) classifyRejection(rejections []CandidateRejection) RoutingDecision {

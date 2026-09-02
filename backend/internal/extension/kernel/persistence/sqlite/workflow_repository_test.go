@@ -184,6 +184,54 @@ func TestWorkflowLocalRevisionAndTemplatePersistence(t *testing.T) {
 	}
 }
 
+func TestWorkflowRevisionLifecycleDraftPublishArchiveRestore(t *testing.T) {
+	db := openWorkflowTestDB(t)
+	repo := NewWorkflowDefinitionRepository(db)
+	ctx := context.Background()
+	def := workflow.WorkflowDefinition{
+		SchemaVersion: workflow.UserWorkflowSchemaVersion,
+		ID:            "wf-revision-lifecycle",
+		Name:          "Lifecycle",
+		Nodes:         []workflow.WorkflowNode{{ID: "one", Type: "wait", Step: workflow.WorkflowStepInput{Input: json.RawMessage(`{}`)}}},
+		Enabled:       true,
+		Source:        "user",
+	}
+	draft, err := repo.SaveDraftRevision(ctx, "user-a", def, "draft")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if draft.State != workflow.WorkflowRevisionDraft || draft.PublishedAt != nil || draft.ArchivedAt != nil {
+		t.Fatalf("unexpected draft lifecycle: %+v", draft)
+	}
+
+	published, err := repo.EnsurePublishedRevision(ctx, "user-a", def, "publish")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if published.RevisionID != draft.RevisionID {
+		t.Fatalf("publishing identical draft must promote in place: draft=%s published=%s", draft.RevisionID, published.RevisionID)
+	}
+	if published.State != workflow.WorkflowRevisionPublished || published.PublishedAt == nil || published.ArchivedAt != nil {
+		t.Fatalf("unexpected published lifecycle: %+v", published)
+	}
+
+	archived, err := repo.ArchiveRevision(ctx, "user-a", def.ID, published.RevisionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if archived.State != workflow.WorkflowRevisionArchived || archived.ArchivedAt == nil {
+		t.Fatalf("unexpected archived lifecycle: %+v", archived)
+	}
+
+	restored, err := repo.RestoreRevisionLifecycle(ctx, "user-a", def.ID, published.RevisionID, workflow.WorkflowRevisionDraft, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.State != workflow.WorkflowRevisionDraft || restored.PublishedAt != nil || restored.ArchivedAt != nil {
+		t.Fatalf("unexpected restored lifecycle: %+v", restored)
+	}
+}
+
 func TestWorkflowDefinitionDeleteCleansHistoryAndRuns(t *testing.T) {
 	db := openWorkflowTestDB(t)
 	ctx := context.Background()

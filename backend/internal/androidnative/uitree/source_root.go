@@ -83,15 +83,21 @@ func (s *RootSource) Snapshot(ctx context.Context, request SnapshotRequest) (Raw
 		log.Printf("uitree: root source: cleanup failed: %v", err)
 	}
 
+	parser := UiAutomatorXmlParser{}
+	windows, nodes, err := parser.Parse(readResult.Stdout, SourceTypeRoot)
+	if err != nil {
+		return RawSnapshot{}, err
+	}
+
+	now := time.Now().UnixMilli()
 	return RawSnapshot{
-		Source:     SourceTypeRoot,
-		Generation: time.Now().UnixMilli(),
-		CapturedAt: time.Now().UnixMilli(),
-		Truncated:  false,
+		Source:      SourceTypeRoot,
+		Generation:  now,
+		CapturedAt:  now,
+		Truncated:   false,
 		MultiWindow: false,
-		StableRef:  false,
-		RawNodes: []map[string]any{
-			{"xml": readResult.Stdout},
-		},
+		StableRef:   true,
+		RawWindows:  windows,
+		RawNodes:    nodes,
 	}, nil
 }

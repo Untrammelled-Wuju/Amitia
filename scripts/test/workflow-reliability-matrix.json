@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "androidApiLevels": [26, 29, 31, 33, 35, 36],
+  "oems": ["pixel_aosp", "samsung", "xiaomi_hyperos", "oppo_coloros", "vivo"],
+  "runtimeChaos": [
+    "kill_backend",
+    "kill_runtime_service",
+    "kill_app_process",
+    "sigkill_child",
+    "backend_port_occupied",
+    "socket_broken",
+    "health_probe_timeout",
+    "runtime_startup_timeout",
+    "low_memory"
+  ],
+  "deviceMeshChaos": [
+    "dispatch_device_a_then_offline_then_reconnect",
+    "device_a_offline_auto_select_device_b",
+    "two_devices_race_same_execution_fencing_rejects_stale_result"
+  ],
+  "durableExecution": [
+    "checkpoint_crash_resume",
+    "completed_side_effect_not_repeated_after_resume",
+    "compensation_crash_resume",
+    "retry_attempt_two_crash_resumes_attempt_three"
+  ],
+  "triggers": [
+    "manual", "cron", "interval", "one_shot", "tasker", "intent", "voice",
+    "app_foreground", "notification", "battery", "network", "bluetooth",
+    "geofence", "package_install", "package_remove", "package_update", "boot",
+    "time_changed", "timezone_changed"
+  ],
+  "androidLifecycle": [
+    "app_foreground", "app_background", "screen_off", "screen_on", "locked", "unlocked",
+    "battery_saver", "doze", "wifi_to_cellular", "cellular_to_wifi", "bluetooth_off_on",
+    "permission_revoke", "accessibility_restart", "device_reboot", "app_update"
+  ],
+  "uiAgentCorpus": {
+    "surfaces": ["system_settings", "browser", "complex_list", "shopping", "maps", "webview", "flutter", "compose", "view", "canvas", "dynamic_loading"],
+    "targets": {"simpleSuccessRate": 0.95, "mediumSuccessRate": 0.90, "complexVisualSuccessRate": 0.85}
+  },
+  "voiceWakeCorpus": {
+    "conditions": ["male", "female", "far_field", "near_field", "zh_cn", "en_us", "light_noise", "street_noise", "music", "near_keyword", "no_keyword"],
+    "targets": {"quietRecall": 0.95, "normalNoiseRecall": 0.90, "maxFalseWakePer8h": 1, "maxWakeLatencyMs": 500}
+  },
+  "soak": {"qualificationSeconds": 259200, "releaseSeconds": 604800},
+  "requiredMetrics": [
+    "workflow_trigger_total", "workflow_trigger_duplicate_total", "workflow_run_total",
+    "workflow_run_success_total", "workflow_run_failed_total", "workflow_node_retry_total",
+    "workflow_node_timeout_total", "workflow_checkpoint_resume_total", "workflow_compensation_total",
+    "workflow_device_wait_total", "workflow_device_reconnect_total", "runtime_crash_total",
+    "runtime_recovery_total", "runtime_recovery_exhausted_total", "android_accessibility_disconnect_total",
+    "ui_agent_action_total", "ui_agent_fallback_total", "ui_agent_no_effect_total", "ui_agent_loop_total",
+    "wake_detection_total", "wake_false_or_rejected_total"
+  ]
+}

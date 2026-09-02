@@ -18,6 +18,11 @@ type RuntimeInvokePayload struct {
 	RuntimeID            runtimeidentity.RuntimeID        `json:"runtimeId"`
 	RuntimeSessionID     runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`
 	ConnectionGeneration int64                            `json:"connectionGeneration"`
+	IdempotencyKey       string                           `json:"idempotencyKey,omitempty"`
+	WorkflowRunID        string                           `json:"workflowRunId,omitempty"`
+	WorkflowNodeID       string                           `json:"workflowNodeId,omitempty"`
+	LogicalAttempt       int                              `json:"logicalAttempt,omitempty"`
+	FencingToken         int64                            `json:"fencingToken,omitempty"`
 	DeadlineMs           int64                            `json:"deadlineMs,omitempty"`
 	SentAt               time.Time                        `json:"sentAt"`
 }
@@ -29,6 +34,8 @@ type RuntimeResultPayload struct {
 	DeviceID             runtimeidentity.DeviceID         `json:"deviceId"`
 	RuntimeID            runtimeidentity.RuntimeID        `json:"runtimeId"`
 	Status               string                           `json:"status"`
+	IdempotencyKey       string                           `json:"idempotencyKey,omitempty"`
+	FencingToken         int64                            `json:"fencingToken,omitempty"`
 	Result               json.RawMessage                  `json:"result,omitempty"`
 	CompletedAt          time.Time                        `json:"completedAt"`
 }
@@ -42,6 +49,8 @@ type RuntimeErrorPayload struct {
 	ErrorCode            string                           `json:"errorCode"`
 	Message              string                           `json:"message"`
 	Retryable            bool                             `json:"retryable"`
+	IdempotencyKey       string                           `json:"idempotencyKey,omitempty"`
+	FencingToken         int64                            `json:"fencingToken,omitempty"`
 	FailedAt             time.Time                        `json:"failedAt"`
 }
 

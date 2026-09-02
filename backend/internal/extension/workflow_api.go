@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	workflowdb "github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/middleware/security"
@@ -63,16 +64,20 @@ func (api *WorkflowAPI) registerWorkflowManagementRoutes(group *gin.RouterGroup)
 	g.GET("", api.list)
 	g.POST("", api.create)
 	g.GET("/catalog", api.catalog)
+	g.GET("/reliability-metrics", api.reliabilityMetrics)
 	g.GET("/templates", api.listTemplates)
 	g.POST("/templates/:templateId/instantiate", api.instantiateTemplate)
 	g.DELETE("/templates/:templateId", api.deleteTemplate)
 	g.POST("/import", api.importWorkflow)
 	g.POST("/validate", api.validate)
+	g.POST("/:id/preflight", api.preflight)
 	g.POST("/ai/generate", api.aiGenerate)
 	g.GET("/sync-events", api.workflowSyncEvents)
+	g.GET("/sync-conflicts", api.workflowSyncConflicts)
 	g.GET("/trigger-capabilities", api.getTriggerCapabilities)
 	g.GET("/trigger-app-catalog", api.getTriggerAppCatalog)
 	g.GET("/trigger-wake-configs", api.getTriggerWakeConfigs)
+	g.POST("/trigger-wake-configs", api.createTriggerWakeConfig)
 	g.POST("/trigger-secrets/tasker", api.createTaskerTriggerSecret)
 	g.GET("/:id", api.get)
 	g.GET("/:id/analysis", api.analysis)
@@ -81,6 +86,8 @@ func (api *WorkflowAPI) registerWorkflowManagementRoutes(group *gin.RouterGroup)
 	g.POST("/:id/templates", api.saveTemplate)
 	g.GET("/:id/revisions", api.listRevisions)
 	g.POST("/:id/revisions", api.createRevision)
+	g.POST("/:id/revisions/:revisionId/publish", api.publishRevision)
+	g.POST("/:id/revisions/:revisionId/archive", api.archiveRevision)
 	g.POST("/:id/revisions/:revisionId/rollback", api.rollbackRevision)
 	g.POST("/:id/ai/edit", api.aiEdit)
 	g.POST("/:id/ai/repair", api.aiRepair)
@@ -96,9 +103,11 @@ func (api *WorkflowAPI) registerWorkflowManagementRoutes(group *gin.RouterGroup)
 
 	runs := group.Group("/workflow-runs")
 	runs.GET("/:runId", api.getRun)
+	runs.GET("/:runId/logs", api.getRunLogs)
 	runs.POST("/:runId/cancel", api.cancelRun)
 	runs.POST("/:runId/pause", api.pauseRun)
 	runs.POST("/:runId/resume", api.resumeRun)
+	runs.POST("/:runId/confirm", api.confirmRun)
 	runs.POST("/:runId/rerun", api.rerunRun)
 	runs.POST("/:runId/recover", api.recoverRun)
 }
@@ -120,6 +129,9 @@ func (api *WorkflowAPI) registerWorkflowRuntimeProducerRoutes(group *gin.RouterG
 	g.POST("/trigger-app-catalog/status", api.updateTriggerAppCatalog)
 	g.GET("/wake-runtime/status", api.getWakeRuntimeStatus)
 	g.POST("/wake-runtime/audio", api.ingestWakeRuntimeAudio)
+	g.POST("/wake-runtime/device-status", api.updateWakeRuntimeDeviceStatus)
+	g.GET("/android-runtime-health/status", api.getAndroidRuntimeHealth)
+	g.POST("/android-runtime-health/status", api.updateAndroidRuntimeHealth)
 }
 
 func (api *WorkflowAPI) getWakeRuntimeStatus(c *gin.Context) {
@@ -132,6 +144,31 @@ func (api *WorkflowAPI) getWakeRuntimeStatus(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, api.runtime.workflowWakeStatus(c.Request.Context(), true))
+}
+
+func (api *WorkflowAPI) updateWakeRuntimeDeviceStatus(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow wake runtime unavailable"})
+		return
+	}
+	if !requireWorkflowRuntimeReporter(c) {
+		return
+	}
+	var request struct {
+		State  string `json:"state"`
+		Reason string `json:"reason"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 4096))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid wake device status"})
+		return
+	}
+	if err := api.runtime.updateWorkflowWakeDeviceStatus(request.State, request.Reason); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (api *WorkflowAPI) ingestWakeRuntimeAudio(c *gin.Context) {
@@ -223,6 +260,25 @@ func (api *WorkflowAPI) getTriggerWakeConfigs(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func (api *WorkflowAPI) createTriggerWakeConfig(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.effectiveLocation() != workflow.WorkflowLocationLocal {
+		c.JSON(http.StatusNotFound, gin.H{"error": "local workflow trigger wake config endpoint unavailable"})
+		return
+	}
+	var request workflowWakeConfigCreateRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid wake config: " + err.Error()})
+		return
+	}
+	item, err := api.runtime.createWorkflowWakeConfig(c.Request.Context(), request)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusCreated, item)
 }
 
 func requireWorkflowRuntimeReporter(c *gin.Context) bool {
@@ -348,6 +404,11 @@ func (api *WorkflowAPI) updateTriggerCapabilityStatus(c *gin.Context) {
 		"workflow.trigger.voice_wake.v1":     {},
 		"workflow.trigger.voice_phrase.v1":   {},
 		"workflow.trigger.app_foreground.v1": {},
+		"workflow.trigger.notification.v1":   {},
+		"workflow.trigger.system_event.v1":   {},
+		"workflow.trigger.network.v1":        {},
+		"workflow.trigger.bluetooth.v1":      {},
+		"workflow.trigger.location.v1":       {},
 	}
 	filtered := make([]WorkflowTriggerCapabilityStatus, 0, len(request.Items))
 	for _, item := range request.Items {
@@ -367,6 +428,40 @@ func (api *WorkflowAPI) updateTriggerCapabilityStatus(c *gin.Context) {
 	}
 	api.runtime.SetWorkflowTriggerCapabilityStatuses(filtered)
 	c.JSON(http.StatusOK, gin.H{"updated": len(filtered)})
+}
+
+func (api *WorkflowAPI) workflowSyncConflicts(c *gin.Context) {
+	if api == nil || api.runtime == nil || api.runtime.Kernel == nil || api.runtime.Kernel.Container() == nil || api.runtime.Kernel.Container().WorkflowDefRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "workflow sync repository unavailable"})
+		return
+	}
+	userID := strings.TrimSpace(workflowUserID(c))
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "workflow user is required"})
+		return
+	}
+	limit := 100
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be a positive integer"})
+			return
+		}
+		if parsed > 500 {
+			parsed = 500
+		}
+		limit = parsed
+	}
+	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListWorkflowSyncConflicts(c.Request.Context(), userID, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if items == nil {
+		items = []workflowdb.WorkflowSyncConflict{}
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
 func (api *WorkflowAPI) workflowSyncEvents(c *gin.Context) {
@@ -568,6 +663,10 @@ func validateUserWorkflowTriggers(def workflow.WorkflowDefinition, userID string
 	return nil
 }
 
+func (api *WorkflowAPI) reliabilityMetrics(c *gin.Context) {
+	c.JSON(http.StatusOK, workflow.DefaultWorkflowReliabilityMetrics.Snapshot())
+}
+
 func (api *WorkflowAPI) list(c *gin.Context) {
 	registry, _, err := api.kernelContainer()
 	if err != nil {
@@ -610,37 +709,79 @@ func (api *WorkflowAPI) list(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "limit": limit, "offset": offset, "location": api.effectiveLocation()})
 }
 
-func (api *WorkflowAPI) catalog(c *gin.Context) {
+func (api *WorkflowAPI) workflowToolCatalogSnapshot(ctx context.Context, userID string) ([]map[string]any, error) {
 	if _, _, err := api.kernelContainer(); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
-		return
+		return nil, err
 	}
 	kc := api.runtime.Kernel.Container()
 	if kc.ToolRegistry == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "tool registry unavailable"})
-		return
+		return nil, errors.New("tool registry unavailable")
 	}
-	userID := workflowUserID(c)
-	items := make([]gin.H, 0)
-	for _, def := range kc.ToolRegistry.List(c.Request.Context(), capability.ToolFilter{Enabled: boolPtrWorkflow(true)}) {
+	items := make([]map[string]any, 0)
+	for _, def := range kc.ToolRegistry.List(ctx, capability.ToolFilter{Enabled: boolPtrWorkflow(true)}) {
 		if def.Source == capability.ToolSourceWorkflow && def.Metadata != nil {
 			if flag, ok := def.Metadata["userWorkflow"].(bool); ok && flag {
 				owner := strings.TrimSpace(fmt.Sprint(def.Metadata["ownerUserId"]))
-				if owner == "" || owner != userID {
+				if owner == "" || owner != strings.TrimSpace(userID) {
 					continue
 				}
 			}
 		}
-		items = append(items, gin.H{
-			"id":           def.ID,
-			"modelName":    def.ModelName,
-			"name":         def.Name,
-			"description":  def.Description,
-			"source":       def.Source,
-			"inputSchema":  json.RawMessage(def.InputSchema),
-			"outputSchema": json.RawMessage(def.OutputSchema),
-			"runtime":      def.Runtime,
+		items = append(items, map[string]any{
+			"id":             def.ID,
+			"modelName":      def.ModelName,
+			"name":           def.Name,
+			"description":    def.Description,
+			"source":         def.Source,
+			"inputSchema":    json.RawMessage(def.InputSchema),
+			"outputSchema":   json.RawMessage(def.OutputSchema),
+			"runtime":        def.Runtime,
+			"permissions":    def.Permissions,
+			"riskLevel":      def.RiskLevel,
+			"sideEffect":     def.SideEffect,
+			"hasSideEffects": def.HasSideEffects,
+			"idempotent":     def.Idempotent,
+			"retryable":      def.Retryable,
+			"timeoutMs":      def.TimeoutMS,
+			"metadata":       workflowCatalogSafeMetadata(def.Metadata),
 		})
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		left := strings.TrimSpace(fmt.Sprint(items[i]["name"]))
+		right := strings.TrimSpace(fmt.Sprint(items[j]["name"]))
+		if left == right {
+			return fmt.Sprint(items[i]["id"]) < fmt.Sprint(items[j]["id"])
+		}
+		return left < right
+	})
+	return items, nil
+}
+
+func workflowCatalogSafeMetadata(metadata map[string]any) map[string]any {
+	if len(metadata) == 0 {
+		return nil
+	}
+	// Catalog metadata is user-facing. Do not mirror arbitrary provider/plugin
+	// metadata because it may contain internal paths or configuration details.
+	// Only expose keys used for discovery/grouping and UX hints.
+	allowed := []string{"androidNativeOperation", "bridgeProtocol", "category", "platform", "tags", "icon", "deprecated"}
+	out := make(map[string]any, len(allowed))
+	for _, key := range allowed {
+		if value, ok := metadata[key]; ok {
+			out[key] = value
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (api *WorkflowAPI) catalog(c *gin.Context) {
+	items, err := api.workflowToolCatalogSnapshot(c.Request.Context(), workflowUserID(c))
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
@@ -704,7 +845,22 @@ func (api *WorkflowAPI) validate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"valid": false, "error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"valid": true, "topologicalOrder": compiled.TopologicalOrder, "entryNodes": compiled.EntryNodes, "exitNodes": compiled.ExitNodes, "definitionHash": prepared.DefinitionHash})
+	report := api.preflightDefinition(c.Request.Context(), prepared, workflowUserID(c))
+	c.JSON(http.StatusOK, gin.H{"valid": report.Runnable, "topologicalOrder": compiled.TopologicalOrder, "entryNodes": compiled.EntryNodes, "exitNodes": compiled.ExitNodes, "definitionHash": prepared.DefinitionHash, "preflight": report})
+}
+
+func (api *WorkflowAPI) preflight(c *gin.Context) {
+	def, ok := api.owned(c)
+	if !ok {
+		return
+	}
+	report := api.preflightDefinition(c.Request.Context(), def, workflowUserID(c))
+	status := http.StatusOK
+	if !report.Runnable {
+		status = http.StatusConflict
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(status, report)
 }
 
 func (api *WorkflowAPI) owned(c *gin.Context) (workflow.WorkflowDefinition, bool) {
@@ -795,13 +951,13 @@ func (api *WorkflowAPI) update(c *gin.Context) {
 			return
 		}
 	}
-	if err := registry.Upsert(def); err != nil {
+	if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), def); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	rollback := func() {
 		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
-		_ = registry.Upsert(old)
+		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
 	}
 	if err := api.syncTriggers(c.Request.Context(), old, def, userID); err != nil {
 		rollback()
@@ -895,13 +1051,13 @@ func (api *WorkflowAPI) patch(c *gin.Context) {
 			return
 		}
 	}
-	if err := registry.Upsert(def); err != nil {
+	if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), def); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	rollback := func() {
 		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
-		_ = registry.Upsert(old)
+		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
 	}
 	if err := api.syncTriggers(c.Request.Context(), old, def, userID); err != nil {
 		rollback()
@@ -1002,12 +1158,12 @@ func (api *WorkflowAPI) registerNewUserWorkflow(ctx context.Context, registry *w
 	if err := api.validateExecutionTargets(def); err != nil {
 		return err
 	}
-	if err := registry.Upsert(def); err != nil {
+	if err := registry.UpsertContext(api.workflowDefinitionMutationContext(ctx), def); err != nil {
 		return err
 	}
 	rollback := func() {
 		_ = api.syncTriggers(ctx, def, workflow.WorkflowDefinition{}, userID)
-		_ = registry.Unregister(def.ID)
+		_ = registry.UnregisterContext(api.workflowDefinitionMutationContext(ctx), def.ID)
 	}
 	if err := api.syncTriggers(ctx, workflow.WorkflowDefinition{}, def, userID); err != nil {
 		rollback()
@@ -1239,14 +1395,42 @@ func (api *WorkflowAPI) deleteTemplate(c *gin.Context) {
 }
 
 func (api *WorkflowAPI) listRevisions(c *gin.Context) {
-	if _, ok := api.owned(c); !ok {
+	def, ok := api.owned(c)
+	if !ok {
 		return
 	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-	items, err := api.runtime.Kernel.Container().WorkflowDefRepo.ListRevisions(c.Request.Context(), workflowUserID(c), c.Param("id"), limit)
+	userID := workflowUserID(c)
+	kc := api.runtime.Kernel.Container()
+	items, err := kc.WorkflowDefRepo.ListRevisions(c.Request.Context(), userID, c.Param("id"), limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	inst, _ := api.installationFor(c.Request.Context(), def, userID)
+	runs, _, _ := kc.WorkflowExecRepo.ListRuns(c.Request.Context(), def.ID, "", 200, 0)
+	for i := range items {
+		item := &items[i]
+		item.Current = item.DefinitionHash == def.DefinitionHash
+		item.Installed = item.Current && inst != nil
+		for _, run := range runs {
+			if run.Status.IsTerminal() {
+				continue
+			}
+			if (run.Context.RevisionID != "" && run.Context.RevisionID == item.RevisionID) ||
+				(run.Context.RevisionID == "" && run.Context.DefinitionHash != "" && run.Context.DefinitionHash == item.DefinitionHash) {
+				item.Running = true
+				break
+			}
+		}
+		switch {
+		case item.Running:
+			item.EffectiveState = "running"
+		case item.Installed:
+			item.EffectiveState = "installed"
+		default:
+			item.EffectiveState = string(item.State)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
@@ -1260,12 +1444,148 @@ func (api *WorkflowAPI) createRevision(c *gin.Context) {
 		Note string `json:"note"`
 	}
 	_ = c.ShouldBindJSON(&body)
-	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), workflowUserID(c), def, body.Note)
+	item, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveDraftRevision(c.Request.Context(), workflowUserID(c), def, body.Note)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, item)
+}
+
+func (api *WorkflowAPI) publishRevision(c *gin.Context) {
+	registry, _, err := api.kernelContainer()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+	userID := workflowUserID(c)
+	workflowID := c.Param("id")
+	unlock := api.lockWorkflowMutation(userID, workflowID)
+	defer unlock()
+
+	current, ok := api.owned(c)
+	if !ok {
+		return
+	}
+	inst, err := api.installationFor(c.Request.Context(), current, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	expectedRevision, err := api.expectedRevision(c, inst.Revision)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := requireWorkflowRevision(expectedRevision, inst.Revision); err != nil {
+		writeWorkflowRevisionConflict(c)
+		return
+	}
+
+	revision, err := api.runtime.Kernel.Container().WorkflowDefRepo.GetRevision(c.Request.Context(), userID, workflowID, c.Param("revisionId"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow revision not found"})
+		return
+	}
+	previousState := revision.State
+	previousPublishedAt := revision.PublishedAt
+	previousArchivedAt := revision.ArchivedAt
+	published, err := api.runtime.Kernel.Container().WorkflowDefRepo.PublishRevision(c.Request.Context(), userID, workflowID, revision.RevisionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	restoreLifecycle := func() {
+		if previousState == published.State && previousPublishedAt == published.PublishedAt && previousArchivedAt == published.ArchivedAt {
+			return
+		}
+		_, _ = api.runtime.Kernel.Container().WorkflowDefRepo.RestoreRevisionLifecycle(
+			context.Background(), userID, workflowID, revision.RevisionID,
+			previousState, previousPublishedAt, previousArchivedAt,
+		)
+	}
+	target, err := workflow.CloneDefinition(revision.Definition)
+	if err != nil {
+		restoreLifecycle()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	target, err = api.prepareValidatedUserWorkflow(target, userID, current.ID)
+	if err != nil {
+		restoreLifecycle()
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := api.validateExecutionTargets(target); err != nil {
+		restoreLifecycle()
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updatedInst := inst
+	if current.DefinitionHash != target.DefinitionHash {
+		if _, err := api.runtime.Kernel.Container().WorkflowDefRepo.SaveRevision(c.Request.Context(), userID, current, "发布新 Revision 前自动快照"); err != nil {
+			restoreLifecycle()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), target); err != nil {
+			restoreLifecycle()
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		rollback := func() {
+			_ = api.syncTriggers(c.Request.Context(), target, current, userID)
+			_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), current)
+			restoreLifecycle()
+		}
+		if err := api.syncTriggers(c.Request.Context(), current, target, userID); err != nil {
+			rollback()
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		updatedInst, err = api.updateInstallationCAS(c.Request.Context(), target, userID, inst, expectedRevision)
+		if err != nil {
+			rollback()
+			if isWorkflowRevisionConflict(err) {
+				writeWorkflowRevisionConflict(c)
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"revision": published,
+		"workflow": workflowResponse(target, updatedInst),
+	})
+}
+
+func (api *WorkflowAPI) archiveRevision(c *gin.Context) {
+	userID := workflowUserID(c)
+	workflowID := c.Param("id")
+	unlock := api.lockWorkflowMutation(userID, workflowID)
+	defer unlock()
+	current, ok := api.owned(c)
+	if !ok {
+		return
+	}
+	repo := api.runtime.Kernel.Container().WorkflowDefRepo
+	revision, err := repo.GetRevision(c.Request.Context(), userID, workflowID, c.Param("revisionId"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow revision not found"})
+		return
+	}
+	if revision.DefinitionHash == current.DefinitionHash {
+		c.JSON(http.StatusConflict, gin.H{"error": "active workflow revision cannot be archived; publish or roll back another revision first"})
+		return
+	}
+	archived, err := repo.ArchiveRevision(c.Request.Context(), userID, workflowID, revision.RevisionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, archived)
 }
 
 func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
@@ -1322,13 +1642,13 @@ func (api *WorkflowAPI) rollbackRevision(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if err := registry.Upsert(target); err != nil {
+	if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), target); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	rollback := func() {
 		_ = api.syncTriggers(c.Request.Context(), target, current, userID)
-		_ = registry.Upsert(current)
+		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), current)
 	}
 	if err := api.syncTriggers(c.Request.Context(), current, target, userID); err != nil {
 		rollback()
@@ -1370,7 +1690,7 @@ func (api *WorkflowAPI) delete(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := registry.Unregister(old.ID); err != nil {
+	if err := registry.UnregisterContext(api.workflowDefinitionMutationContext(c.Request.Context()), old.ID); err != nil {
 		_ = api.syncTriggers(c.Request.Context(), workflow.WorkflowDefinition{}, old, userID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1408,20 +1728,20 @@ func (api *WorkflowAPI) setEnabled(c *gin.Context, enabled bool) {
 	}
 	def := old
 	def.Enabled = enabled
-	if err := registry.Upsert(def); err != nil {
+	if err := registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), def); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if err := api.syncTriggers(c.Request.Context(), old, def, userID); err != nil {
 		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
-		_ = registry.Upsert(old)
+		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	updatedInst, err := api.updateInstallationCAS(c.Request.Context(), def, userID, currentInst, expectedRevision)
 	if err != nil {
 		_ = api.syncTriggers(c.Request.Context(), def, old, userID)
-		_ = registry.Upsert(old)
+		_ = registry.UpsertContext(api.workflowDefinitionMutationContext(c.Request.Context()), old)
 		if isWorkflowRevisionConflict(err) {
 			writeWorkflowRevisionConflict(c)
 			return
@@ -1454,8 +1774,11 @@ func (api *WorkflowAPI) run(c *gin.Context) {
 		return
 	}
 	var body struct {
-		Input json.RawMessage `json:"input"`
-		Wait  bool            `json:"wait"`
+		Input               json.RawMessage         `json:"input"`
+		Wait                bool                    `json:"wait"`
+		Mode                workflow.ExecutionMode  `json:"mode"`
+		Mocks               []workflow.MockBehavior `json:"mocks"`
+		ApprovedSideEffects []string                `json:"approvedSideEffects"`
 	}
 	if c.Request.ContentLength > 0 {
 		if err := c.ShouldBindJSON(&body); err != nil {
@@ -1466,24 +1789,44 @@ func (api *WorkflowAPI) run(c *gin.Context) {
 	if len(body.Input) == 0 {
 		body.Input = json.RawMessage(`{}`)
 	}
+	opts, err := (workflow.ExecutionOptions{Mode: body.Mode, Mocks: body.Mocks, ApprovedSideEffects: body.ApprovedSideEffects}).Normalize()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	report := api.preflightDefinition(c.Request.Context(), def, workflowUserID(c))
+	if err := workflowPreflightBlockedError(report); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "WORKFLOW_PREFLIGHT_BLOCKED", "code": "WORKFLOW_PREFLIGHT_BLOCKED", "detail": err.Error(), "preflight": report})
+		return
+	}
 	inst, err := api.installationFor(c.Request.Context(), def, workflowUserID(c))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	publishedRevision, err := api.runtime.Kernel.Container().WorkflowDefRepo.EnsurePublishedRevision(c.Request.Context(), workflowUserID(c), def, "运行时发布绑定")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	executionID := "wf-run-" + uuid.NewString()
-	req := workflow.ExecuteRequest{WorkflowID: def.ID, Input: body.Input, Context: workflow.ExecutionContext{UserID: workflowUserID(c), WorkflowID: def.ID, InstallationID: inst.InstallationID, RootID: executionID, InvocationID: executionID, OperationID: "wf-op-" + uuid.NewString(), TraceID: "trace-" + uuid.NewString()}}
-	if body.Wait {
+	req := workflow.ExecuteRequest{WorkflowID: def.ID, Input: body.Input, Context: workflow.ExecutionContext{UserID: workflowUserID(c), WorkflowID: def.ID, InstallationID: inst.InstallationID, RevisionID: publishedRevision.RevisionID, RootID: executionID, InvocationID: executionID, OperationID: "wf-op-" + uuid.NewString(), TraceID: "trace-" + uuid.NewString()}, Options: opts}
+	mustReturnInitialResult := body.Wait || opts.IsDryRun() || (opts.Mode == workflow.ExecutionModeControlled && len(opts.MissingControlledApprovals(def.Nodes)) > 0)
+	if mustReturnInitialResult {
 		result, err := executor.Execute(c.Request.Context(), req)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "executionId": executionID})
 			return
 		}
-		c.JSON(http.StatusOK, result)
+		status := http.StatusOK
+		if result.Status == workflow.RunStatusWaitingConfirmation {
+			status = http.StatusAccepted
+		}
+		c.JSON(status, result)
 		return
 	}
 	go func() { _, _ = executor.Execute(context.Background(), req) }()
-	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "executionId": executionID, "workflowId": def.ID, "status": workflow.RunStatusRunning})
+	c.JSON(http.StatusAccepted, gin.H{"accepted": true, "executionId": executionID, "workflowId": def.ID, "status": workflow.RunStatusRunning, "executionMode": opts.Mode})
 }
 
 func parsePagination(c *gin.Context) (int, int) {
@@ -1542,52 +1885,131 @@ func (api *WorkflowAPI) getRun(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
+	ctx := c.Request.Context()
+	userID := workflowUserID(c)
+	runID := strings.TrimSpace(c.Param("runId"))
 	kc := api.runtime.Kernel.Container()
-	run, err := kc.WorkflowExecRepo.Get(c.Request.Context(), c.Param("runId"))
-	if err != nil {
+	if run, _, localErr := api.localRunOwned(ctx, userID, runID); localErr == nil && run != nil {
+		steps, listErr := kc.WorkflowExecRepo.ListStepRuns(ctx, run.ExecutionID)
+		if listErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": listErr.Error()})
+			return
+		}
+		attempts, listErr := kc.WorkflowExecRepo.ListStepAttempts(ctx, run.ExecutionID)
+		if listErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": listErr.Error()})
+			return
+		}
+		compensations, listErr := kc.WorkflowExecRepo.ListCompensations(ctx, run.ExecutionID)
+		if listErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": listErr.Error()})
+			return
+		}
+		checkpoints := []workflow.Checkpoint{}
+		if store := kc.WorkflowExecutor.CheckpointStore(); store != nil {
+			checkpoints, listErr = store.List(ctx, run.ExecutionID)
+			if listErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": listErr.Error()})
+				return
+			}
+		}
+		def, ok := kc.WorkflowRegistry.Get(run.WorkflowID)
+		if !ok && len(run.Context.DefinitionSnapshot) > 0 {
+			_ = json.Unmarshal(run.Context.DefinitionSnapshot, &def)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"run":                   run,
+			"classifiedError":       classifyWorkflowRunError(run, steps),
+			"stepRuns":              steps,
+			"attempts":              attempts,
+			"trace":                 workflow.BuildDistributedTrace(run, steps, attempts),
+			"checkpoints":           checkpoints,
+			"compensations":         compensations,
+			"workflow":              def,
+			"requiredConfirmations": workflow.MissingControlledApprovalsForRun(run),
+			"executionOwner": gin.H{
+				"kind": "local",
+			},
+		})
+		return
+	}
+
+	result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunGet, nil)
+	if remoteErr != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return
 	}
-	def, ok := kc.WorkflowRegistry.Get(run.WorkflowID)
-	if !ok || !workflowOwnedBy(def, workflowUserID(c)) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) getRunLogs(c *gin.Context) {
+	if _, _, err := api.kernelContainer(); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	steps, err := kc.WorkflowExecRepo.ListStepRuns(c.Request.Context(), run.ExecutionID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	attempts, err := kc.WorkflowExecRepo.ListStepAttempts(c.Request.Context(), run.ExecutionID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	checkpoints := []workflow.Checkpoint{}
-	if store := kc.WorkflowExecutor.CheckpointStore(); store != nil {
-		checkpoints, err = store.List(c.Request.Context(), run.ExecutionID)
+	ctx := c.Request.Context()
+	userID := workflowUserID(c)
+	runID := strings.TrimSpace(c.Param("runId"))
+	kc := api.runtime.Kernel.Container()
+	if run, _, localErr := api.localRunOwned(ctx, userID, runID); localErr == nil && run != nil {
+		steps, err := kc.WorkflowExecRepo.ListStepRuns(ctx, run.ExecutionID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		attempts, err := kc.WorkflowExecRepo.ListStepAttempts(ctx, run.ExecutionID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		compensations, err := kc.WorkflowExecRepo.ListCompensations(ctx, run.ExecutionID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"items": workflow.BuildWorkflowRunLogs(run, steps, attempts, compensations)})
+		return
 	}
-	c.JSON(http.StatusOK, gin.H{"run": run, "stepRuns": steps, "attempts": attempts, "checkpoints": checkpoints, "workflow": def})
+	result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunLogs, nil)
+	if remoteErr != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) localRunOwned(ctx context.Context, userID, runID string) (*workflow.WorkflowRun, *workflow.WorkflowExecutor, error) {
+	_, executor, err := api.kernelContainer()
+	if err != nil {
+		return nil, nil, err
+	}
+	kc := api.runtime.Kernel.Container()
+	run, err := kc.WorkflowExecRepo.Get(ctx, strings.TrimSpace(runID))
+	if err != nil || run == nil {
+		return nil, nil, errors.New("workflow run not found")
+	}
+	ownerID := strings.TrimSpace(run.Context.UserID)
+	requestedUserID := strings.TrimSpace(userID)
+	if ownerID != "" {
+		if requestedUserID == "" || ownerID != requestedUserID {
+			return nil, nil, errors.New("workflow run not found")
+		}
+		return run, executor, nil
+	}
+	// Legacy runs created before the execution context persisted UserID must
+	// still resolve through the current definition ownership metadata.
+	def, ok := kc.WorkflowRegistry.Get(run.WorkflowID)
+	if !ok || !workflowOwnedBy(def, requestedUserID) {
+		return nil, nil, errors.New("workflow run not found")
+	}
+	return run, executor, nil
 }
 
 func (api *WorkflowAPI) runOwned(c *gin.Context) (*workflow.WorkflowRun, *workflow.WorkflowExecutor, bool) {
-	_, executor, err := api.kernelContainer()
+	run, executor, err := api.localRunOwned(c.Request.Context(), workflowUserID(c), c.Param("runId"))
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
-		return nil, nil, false
-	}
-	kc := api.runtime.Kernel.Container()
-	run, err := kc.WorkflowExecRepo.Get(c.Request.Context(), c.Param("runId"))
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
-		return nil, nil, false
-	}
-	def, ok := kc.WorkflowRegistry.Get(run.WorkflowID)
-	if !ok || !workflowOwnedBy(def, workflowUserID(c)) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return nil, nil, false
 	}
@@ -1595,79 +2017,161 @@ func (api *WorkflowAPI) runOwned(c *gin.Context) (*workflow.WorkflowRun, *workfl
 }
 
 func (api *WorkflowAPI) cancelRun(c *gin.Context) {
-	_, executor, ok := api.runOwned(c)
-	if !ok {
+	ctx := c.Request.Context()
+	userID := workflowUserID(c)
+	runID := c.Param("runId")
+	if _, executor, err := api.localRunOwned(ctx, userID, runID); err == nil {
+		cancelled, cancelErr := executor.CancelRun(ctx, runID)
+		if cancelErr != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": cancelErr.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"cancelled": cancelled})
 		return
 	}
-	cancelled, err := executor.CancelRun(c.Request.Context(), c.Param("runId"))
+	result, _, err := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunCancel, nil)
 	if err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"cancelled": cancelled})
+	c.Data(http.StatusOK, "application/json", result)
 }
+
 func (api *WorkflowAPI) pauseRun(c *gin.Context) {
-	_, executor, ok := api.runOwned(c)
-	if !ok {
-		return
-	}
 	var body struct {
 		Reason string `json:"reason"`
 	}
 	_ = c.ShouldBindJSON(&body)
-	run, err := executor.Pause(c.Request.Context(), c.Param("runId"), body.Reason)
-	if err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	ctx := c.Request.Context()
+	userID := workflowUserID(c)
+	runID := c.Param("runId")
+	if _, executor, err := api.localRunOwned(ctx, userID, runID); err == nil {
+		run, pauseErr := executor.Pause(ctx, runID, body.Reason)
+		if pauseErr != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": pauseErr.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, run)
 		return
 	}
-	c.JSON(http.StatusOK, run)
+	result, _, err := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunPause, map[string]any{"reason": body.Reason})
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+		return
+	}
+	c.Data(http.StatusOK, "application/json", result)
 }
+
 func (api *WorkflowAPI) resumeRun(c *gin.Context) {
-	_, executor, ok := api.runOwned(c)
-	if !ok {
+	ctx := c.Request.Context()
+	userID := workflowUserID(c)
+	runID := c.Param("runId")
+	if _, executor, err := api.localRunOwned(ctx, userID, runID); err == nil {
+		run, resumeErr := executor.Resume(ctx, runID)
+		if resumeErr != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": resumeErr.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, run)
 		return
 	}
-	run, err := executor.Resume(c.Request.Context(), c.Param("runId"))
+	result, _, err := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunResume, nil)
 	if err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
 		return
 	}
-	c.JSON(http.StatusOK, run)
+	c.Data(http.StatusOK, "application/json", result)
+}
+
+func (api *WorkflowAPI) confirmRun(c *gin.Context) {
+	var body struct {
+		NodeIDs []string `json:"nodeIds"`
+	}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	ctx := c.Request.Context()
+	userID := workflowUserID(c)
+	runID := c.Param("runId")
+	if _, executor, err := api.localRunOwned(ctx, userID, runID); err == nil {
+		run, missing, confirmErr := executor.ConfirmControlledRun(ctx, runID, body.NodeIDs)
+		if confirmErr != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": confirmErr.Error()})
+			return
+		}
+		status := http.StatusAccepted
+		if len(missing) > 0 {
+			status = http.StatusConflict
+		}
+		c.JSON(status, gin.H{"accepted": len(missing) == 0, "run": run, "missingConfirmations": missing})
+		return
+	}
+	result, _, err := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunConfirm, map[string]any{"nodeIds": body.NodeIDs})
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+		return
+	}
+	c.Data(http.StatusAccepted, "application/json", result)
 }
 
 func (api *WorkflowAPI) recoverRun(c *gin.Context) {
-	run, executor, ok := api.runOwned(c)
-	if !ok {
+	ctx := c.Request.Context()
+	userID := workflowUserID(c)
+	runID := c.Param("runId")
+	run, executor, localErr := api.localRunOwned(ctx, userID, runID)
+	if localErr != nil {
+		result, _, remoteErr := api.resolveRemoteWorkflowRun(ctx, userID, runID, WorkflowMeshRunRecover, nil)
+		if remoteErr != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "workflow run not found"})
+			return
+		}
+		c.Data(http.StatusAccepted, "application/json", result)
 		return
 	}
 	if run.Status != workflow.RunStatusFailed && run.Status != workflow.RunStatusCancelled {
 		c.JSON(http.StatusConflict, gin.H{"error": "only failed or cancelled runs can recover from checkpoints"})
 		return
 	}
-	def, exists := api.runtime.Kernel.Container().WorkflowRegistry.Get(run.WorkflowID)
-	if !exists || !workflowOwnedBy(def, workflowUserID(c)) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "workflow not found"})
-		return
-	}
-	if !def.Enabled {
-		c.JSON(http.StatusConflict, gin.H{"error": "workflow is disabled"})
-		return
-	}
-	currentHash := workflow.ComputeDefinitionHash(def)
 	if strings.TrimSpace(run.Context.DefinitionHash) == "" {
 		c.JSON(http.StatusConflict, gin.H{"error": "run predates safe checkpoint recovery; rerun the workflow instead"})
 		return
 	}
-	if run.Context.DefinitionHash != currentHash {
-		c.JSON(http.StatusConflict, gin.H{"error": "workflow definition changed since this run; checkpoint recovery is unsafe, rerun instead"})
-		return
+	if len(run.Context.DefinitionSnapshot) > 0 {
+		var snapshot workflow.WorkflowDefinition
+		if err := json.Unmarshal(run.Context.DefinitionSnapshot, &snapshot); err != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "run definition snapshot is invalid; checkpoint recovery is unsafe"})
+			return
+		}
+		if snapshot.ID != run.WorkflowID || workflow.ComputeDefinitionHash(snapshot) != run.Context.DefinitionHash {
+			c.JSON(http.StatusConflict, gin.H{"error": "run definition snapshot integrity check failed; checkpoint recovery is unsafe"})
+			return
+		}
+	} else {
+		// Legacy runs without immutable snapshots can only recover when the
+		// currently installed definition still matches exactly.
+		def, exists := api.runtime.Kernel.Container().WorkflowRegistry.Get(run.WorkflowID)
+		if !exists || !workflowOwnedBy(def, userID) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "workflow not found"})
+			return
+		}
+		if !def.Enabled {
+			c.JSON(http.StatusConflict, gin.H{"error": "workflow is disabled"})
+			return
+		}
+		if workflow.ComputeDefinitionHash(def) != run.Context.DefinitionHash {
+			c.JSON(http.StatusConflict, gin.H{"error": "workflow definition changed since this legacy run; checkpoint recovery is unsafe, rerun instead"})
+			return
+		}
 	}
 	store := executor.CheckpointStore()
 	if store == nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "checkpoint store unavailable"})
 		return
 	}
-	checkpoints, err := store.List(c.Request.Context(), run.ExecutionID)
+	checkpoints, err := store.List(ctx, run.ExecutionID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1677,7 +2181,7 @@ func (api *WorkflowAPI) recoverRun(c *gin.Context) {
 		return
 	}
 	execution := run.Context
-	execution.UserID = workflowUserID(c)
+	execution.UserID = userID
 	execution.InvocationID = run.ExecutionID
 	execution.Recovery = true
 	execution.Generation = run.Generation + 1
@@ -1726,6 +2230,7 @@ func (api *WorkflowAPI) rerunRun(c *gin.Context) {
 		return
 	}
 	executionID := "wf-run-" + uuid.NewString()
+	opts := workflow.ExecutionOptionsForRerun(previous)
 	req := workflow.ExecuteRequest{
 		WorkflowID: def.ID,
 		Input:      input,
@@ -1739,23 +2244,31 @@ func (api *WorkflowAPI) rerunRun(c *gin.Context) {
 			TraceID:        "trace-" + uuid.NewString(),
 			IdempotencyKey: executionID,
 		},
+		Options: opts,
 	}
-	if body.Wait {
+	materializeInitialState := body.Wait || opts.Mode == workflow.ExecutionModeDryRun || (opts.Mode == workflow.ExecutionModeControlled && len(opts.MissingControlledApprovals(def.Nodes)) > 0)
+	if materializeInitialState {
 		result, err := executor.Execute(c.Request.Context(), req)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "executionId": executionID})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"executionId":       result.ExecutionID,
-			"workflowId":        result.WorkflowID,
-			"status":            result.Status,
-			"success":           result.Success,
-			"output":            result.Output,
-			"steps":             result.Steps,
-			"error":             result.Error,
-			"duration":          result.Duration,
-			"sourceExecutionId": previous.ExecutionID,
+		status := http.StatusOK
+		if result.Status == workflow.RunStatusWaitingConfirmation {
+			status = http.StatusAccepted
+		}
+		c.JSON(status, gin.H{
+			"executionId":           result.ExecutionID,
+			"workflowId":            result.WorkflowID,
+			"status":                result.Status,
+			"success":               result.Success,
+			"output":                result.Output,
+			"steps":                 result.Steps,
+			"error":                 result.Error,
+			"duration":              result.Duration,
+			"executionMode":         result.ExecutionMode,
+			"requiredConfirmations": result.RequiredConfirmations,
+			"sourceExecutionId":     previous.ExecutionID,
 		})
 		return
 	}
@@ -1765,6 +2278,7 @@ func (api *WorkflowAPI) rerunRun(c *gin.Context) {
 		"executionId":       executionID,
 		"workflowId":        def.ID,
 		"status":            workflow.RunStatusRunning,
+		"executionMode":     opts.Mode,
 		"sourceExecutionId": previous.ExecutionID,
 	})
 }
@@ -1887,10 +2401,12 @@ func (api *WorkflowAPI) dispatchEvent(c *gin.Context) {
 func validateWorkflowEventTriggerConfig(trigger workflow.WorkflowTriggerDefinition, userID string) error {
 	eventType := strings.TrimSpace(trigger.EventType)
 	if len(trigger.Config) == 0 {
-		if isDeviceWorkflowEventType(eventType) {
+		switch eventType {
+		case "device.android.intent", "device.android.tasker", "voice.wake.detected", "voice.asr.final", "device.app.foreground":
 			return errors.New("device event trigger config is required")
+		default:
+			return nil
 		}
-		return nil
 	}
 	if len(trigger.Config) > 32*1024 {
 		return errors.New("workflow trigger config exceeds 32 KiB")
@@ -2009,6 +2525,101 @@ func validateWorkflowEventTriggerConfig(trigger workflow.WorkflowTriggerDefiniti
 		if cfg.CooldownMS < 0 || cfg.CooldownMS > 24*60*60*1000 {
 			return errors.New("app foreground cooldownMs must be between 0 and 86400000")
 		}
+	case "device.notification.posted", "device.notification.removed":
+		var cfg struct {
+			Packages      []string `json:"packages"`
+			TitleContains string   `json:"titleContains"`
+			TextContains  string   `json:"textContains"`
+			ChannelIDs    []string `json:"channelIds"`
+			Categories    []string `json:"categories"`
+			Ongoing       *bool    `json:"ongoing"`
+			Clearable     *bool    `json:"clearable"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		if err := validateTriggerStringList("notification packages", cfg.Packages, 64, 255); err != nil {
+			return err
+		}
+		if err := validateTriggerStringList("notification channelIds", cfg.ChannelIDs, 64, 255); err != nil {
+			return err
+		}
+		if err := validateTriggerStringList("notification categories", cfg.Categories, 32, 128); err != nil {
+			return err
+		}
+		if len(cfg.TitleContains) > 512 || len(cfg.TextContains) > 1024 {
+			return errors.New("notification text filter exceeds limits")
+		}
+	case "device.power.battery_changed":
+		var cfg struct {
+			MinPercent *int  `json:"minPercent"`
+			MaxPercent *int  `json:"maxPercent"`
+			Charging   *bool `json:"charging"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		if cfg.MinPercent != nil && (*cfg.MinPercent < 0 || *cfg.MinPercent > 100) {
+			return errors.New("battery minPercent must be between 0 and 100")
+		}
+		if cfg.MaxPercent != nil && (*cfg.MaxPercent < 0 || *cfg.MaxPercent > 100) {
+			return errors.New("battery maxPercent must be between 0 and 100")
+		}
+		if cfg.MinPercent != nil && cfg.MaxPercent != nil && *cfg.MinPercent > *cfg.MaxPercent {
+			return errors.New("battery minPercent must not exceed maxPercent")
+		}
+	case "device.network.available", "device.network.lost", "device.network.changed":
+		var cfg struct {
+			Transports []string `json:"transports"`
+			Validated  *bool    `json:"validated"`
+			Metered    *bool    `json:"metered"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		if err := validateTriggerStringList("network transports", cfg.Transports, 8, 32); err != nil {
+			return err
+		}
+		for _, transport := range cfg.Transports {
+			switch strings.ToLower(strings.TrimSpace(transport)) {
+			case "wifi", "cellular", "ethernet", "vpn", "bluetooth", "other":
+			default:
+				return fmt.Errorf("unsupported network transport %q", transport)
+			}
+		}
+	case "device.app.installed", "device.app.removed", "device.app.updated", "device.app.self_updated":
+		var cfg struct {
+			Packages []string `json:"packages"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		if err := validateTriggerStringList("package event packages", cfg.Packages, 64, 255); err != nil {
+			return err
+		}
+	case "device.ble.characteristic_changed":
+		var cfg struct {
+			SessionID          string `json:"sessionId"`
+			Address            string `json:"address"`
+			ServiceUUID        string `json:"serviceUuid"`
+			CharacteristicUUID string `json:"characteristicUuid"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		if len(cfg.SessionID) > 256 || len(cfg.Address) > 64 || len(cfg.ServiceUUID) > 128 || len(cfg.CharacteristicUUID) > 128 {
+			return errors.New("BLE characteristic trigger filter exceeds limits")
+		}
+	case "device.location.geofence.enter", "device.location.geofence.exit":
+		var cfg struct {
+			FenceIDs []string `json:"fenceIds"`
+		}
+		if err := decodeWorkflowTriggerConfig(trigger.Config, &cfg); err != nil {
+			return err
+		}
+		if err := validateTriggerStringList("geofence ids", cfg.FenceIDs, 64, 128); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -2045,7 +2656,16 @@ func validateTriggerStringList(name string, values []string, maxItems, maxLength
 
 func isDeviceWorkflowEventType(eventType string) bool {
 	switch strings.TrimSpace(eventType) {
-	case "device.android.intent", "device.android.tasker", "voice.wake.detected", "voice.asr.final", "device.app.foreground":
+	case "device.android.intent", "device.android.tasker", "voice.wake.detected", "voice.asr.final",
+		"device.app.foreground", "device.notification.posted", "device.notification.removed", "device.power.battery_changed",
+		"device.power.battery_low", "device.power.battery_okay", "device.power.connected", "device.power.disconnected",
+		"device.screen.on", "device.screen.off", "device.user.present", "device.audio.headset_connected",
+		"device.audio.headset_disconnected", "device.bluetooth.state_changed", "device.bluetooth.connected", "device.bluetooth.disconnected",
+		"device.ble.characteristic_changed", "device.network.available", "device.network.lost", "device.network.changed",
+		"device.wifi.enabled", "device.wifi.disabled", "device.wifi.state_changed", "device.wifi.connected",
+		"device.wifi.disconnected", "device.system.boot_completed", "device.app.installed", "device.app.removed",
+		"device.app.updated", "device.app.self_updated", "device.time.changed", "device.time.timezone_changed",
+		"device.time.date_changed", "device.location.geofence.enter", "device.location.geofence.exit":
 		return true
 	default:
 		return false
@@ -2131,6 +2751,11 @@ func buildWorkflowSchedule(def workflow.WorkflowDefinition, trigger workflow.Wor
 		IntervalSeconds int64  `json:"intervalSeconds"`
 		RunAt           string `json:"runAt"`
 		Timezone        string `json:"timezone"`
+		MisfirePolicy   string `json:"misfirePolicy"`
+		MaxCatchUp      int    `json:"maxCatchUp"`
+		OverlapPolicy   string `json:"overlapPolicy"`
+		DSTSpringPolicy string `json:"dstSpringPolicy"`
+		DSTFallPolicy   string `json:"dstFallPolicy"`
 	}
 	raw := trigger.Config
 	if len(trigger.Schedule) > 0 {
@@ -2177,5 +2802,59 @@ func buildWorkflowSchedule(def workflow.WorkflowDefinition, trigger workflow.Wor
 	if len(input) == 0 {
 		input = json.RawMessage(`{}`)
 	}
-	return &schedule.ScheduleContributionDefinition{ContributionID: scheduleIDFor(def.ID, trigger.ID), ExtensionID: "", ScheduleID: scheduleIDFor(def.ID, trigger.ID), Name: def.Name + " / " + trigger.ID, Description: "Creative Workshop workflow trigger", Trigger: td, Target: schedule.ScheduleTargetDefinition{Type: schedule.TargetTypeWorkflow, TargetID: def.ID, InputTemplate: input, IdempotencyMode: schedule.IdempotencyModeIdempotent}, Timezone: tz, EnabledByDefault: true, ExecutionOwner: schedule.ExecutionOwnerBackend}, nil
+	misfirePolicy := schedule.DefaultMisfirePolicy()
+	if rawPolicy := strings.ToLower(strings.TrimSpace(cfg.MisfirePolicy)); rawPolicy != "" {
+		if rawPolicy == "catch_up" {
+			rawPolicy = string(schedule.MisfirePolicyCatchUpLimited)
+		}
+		switch schedule.MisfirePolicy(rawPolicy) {
+		case schedule.MisfirePolicySkip, schedule.MisfirePolicyFireOnce, schedule.MisfirePolicyCatchUpLimited, schedule.MisfirePolicyRescheduleFromNow:
+			misfirePolicy.Policy = schedule.MisfirePolicy(rawPolicy)
+		default:
+			return nil, fmt.Errorf("trigger %s unsupported misfirePolicy %s", trigger.ID, cfg.MisfirePolicy)
+		}
+	}
+	if cfg.MaxCatchUp < 0 || cfg.MaxCatchUp > 1000 {
+		return nil, fmt.Errorf("trigger %s maxCatchUp must be between 0 and 1000", trigger.ID)
+	}
+	if cfg.MaxCatchUp > 0 {
+		misfirePolicy.MaxCatchUp = cfg.MaxCatchUp
+	}
+	overlapPolicy := schedule.DefaultOverlapPolicy()
+	if rawOverlap := strings.ToLower(strings.TrimSpace(cfg.OverlapPolicy)); rawOverlap != "" {
+		switch schedule.OverlapPolicy(rawOverlap) {
+		case schedule.OverlapPolicyForbid, schedule.OverlapPolicyAllow, schedule.OverlapPolicyReplace, schedule.OverlapPolicyQueueOne, schedule.OverlapPolicySkipIfRunning:
+			overlapPolicy.Policy = schedule.OverlapPolicy(rawOverlap)
+		default:
+			return nil, fmt.Errorf("trigger %s unsupported overlapPolicy %s", trigger.ID, cfg.OverlapPolicy)
+		}
+	}
+	springPolicy := schedule.DefaultDSTSpringPolicy()
+	if rawSpring := strings.ToLower(strings.TrimSpace(cfg.DSTSpringPolicy)); rawSpring != "" {
+		switch schedule.DSTSpringPolicy(rawSpring) {
+		case schedule.DSTSpringSkip, schedule.DSTSpringFireOnceAfterGap, schedule.DSTSpringNextValidTime:
+			springPolicy = schedule.DSTSpringPolicy(rawSpring)
+		default:
+			return nil, fmt.Errorf("trigger %s unsupported dstSpringPolicy %s", trigger.ID, cfg.DSTSpringPolicy)
+		}
+	}
+	fallPolicy := schedule.DefaultDSTFallPolicy()
+	if rawFall := strings.ToLower(strings.TrimSpace(cfg.DSTFallPolicy)); rawFall != "" {
+		switch schedule.DSTFallPolicy(rawFall) {
+		case schedule.DSTFallFireOnceFirst, schedule.DSTFallFireOnceSecond, schedule.DSTFallFireTwice:
+			fallPolicy = schedule.DSTFallPolicy(rawFall)
+		default:
+			return nil, fmt.Errorf("trigger %s unsupported dstFallPolicy %s", trigger.ID, cfg.DSTFallPolicy)
+		}
+	}
+	if _, err := time.LoadLocation(tz); err != nil {
+		return nil, fmt.Errorf("trigger %s invalid timezone %s: %w", trigger.ID, tz, err)
+	}
+	return &schedule.ScheduleContributionDefinition{
+		ContributionID: scheduleIDFor(def.ID, trigger.ID), ExtensionID: "", ScheduleID: scheduleIDFor(def.ID, trigger.ID),
+		Name: def.Name + " / " + trigger.ID, Description: "Creative Workshop workflow trigger", Trigger: td,
+		Target:   schedule.ScheduleTargetDefinition{Type: schedule.TargetTypeWorkflow, TargetID: def.ID, InputTemplate: input, IdempotencyMode: schedule.IdempotencyModeIdempotent},
+		Timezone: tz, EnabledByDefault: true, MisfirePolicy: misfirePolicy, OverlapPolicy: overlapPolicy,
+		DSTSpringPolicy: springPolicy, DSTFallPolicy: fallPolicy, ExecutionOwner: schedule.ExecutionOwnerBackend,
+	}, nil
 }

@@ -44,9 +44,17 @@ func (r *WorkflowRegistry) LoadFromStore(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("load workflow definitions from store: %w", err)
 	}
+	normalizedDefs := make([]WorkflowDefinition, 0, len(defs))
+	for _, def := range defs {
+		normalized, normalizeErr := NormalizeDefinition(def)
+		if normalizeErr != nil {
+			return fmt.Errorf("load workflow %s: %w", def.ID, normalizeErr)
+		}
+		normalizedDefs = append(normalizedDefs, normalized)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, def := range defs {
+	for _, def := range normalizedDefs {
 		r.items[def.ID] = def
 	}
 	return nil
@@ -75,6 +83,13 @@ func (r *WorkflowRegistry) Register(definition WorkflowDefinition) error {
 }
 
 func (r *WorkflowRegistry) Upsert(definition WorkflowDefinition) error {
+	return r.UpsertContext(context.Background(), definition)
+}
+
+func (r *WorkflowRegistry) UpsertContext(ctx context.Context, definition WorkflowDefinition) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	normalized, err := NormalizeDefinition(definition)
 	if err != nil {
 		return err
@@ -84,7 +99,6 @@ func (r *WorkflowRegistry) Upsert(definition WorkflowDefinition) error {
 	previous, existed := r.items[normalized.ID]
 	r.items[normalized.ID] = normalized
 	if r.store != nil {
-		ctx := context.Background()
 		if err := r.store.Save(ctx, normalized); err != nil {
 			if existed {
 				r.items[normalized.ID] = previous
@@ -98,6 +112,13 @@ func (r *WorkflowRegistry) Upsert(definition WorkflowDefinition) error {
 }
 
 func (r *WorkflowRegistry) Unregister(id string) error {
+	return r.UnregisterContext(context.Background(), id)
+}
+
+func (r *WorkflowRegistry) UnregisterContext(ctx context.Context, id string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	item, ok := r.items[id]
@@ -106,7 +127,6 @@ func (r *WorkflowRegistry) Unregister(id string) error {
 	}
 	delete(r.items, id)
 	if r.store != nil {
-		ctx := context.Background()
 		if err := r.store.Delete(ctx, id); err != nil {
 			r.items[id] = item
 			return fmt.Errorf("persist workflow unregister: %w", err)

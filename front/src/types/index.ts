@@ -656,6 +656,9 @@ export interface WorkflowNode {
   };
 }
 
+export type WorkflowConcurrencyMode = "ALLOW" | "SINGLETON" | "QUEUE" | "REPLACE" | "DROP" | "MAX_N";
+export interface WorkflowConcurrencyPolicy { mode?: WorkflowConcurrencyMode; maxN?: number }
+
 export interface WorkflowLimits {
   maxSteps: number;
   maxExecutionDurationMs: number;
@@ -692,6 +695,7 @@ export interface WorkflowDefinition {
   hasSideEffects?: boolean;
   idempotent?: boolean;
   limits?: WorkflowLimits;
+  concurrencyPolicy?: WorkflowConcurrencyPolicy;
   version?: string;
   source?: string;
   metadata?: Record<string, unknown>;

@@ -26,11 +26,14 @@ type WorkflowValueRef struct {
 
 func ParseWorkflowValueRef(s string) (*WorkflowValueRef, error) {
 	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "${") && strings.HasSuffix(s, "}") && len(s) > 3 {
+		s = strings.TrimSpace(s[2 : len(s)-1])
+	}
 	if s == "" {
 		return nil, fmt.Errorf("empty value ref")
 	}
 
-	knownPrefixes := []string{"input.", "config.", "runtime.", "steps.", "node.", "literal:"}
+	knownPrefixes := []string{"input.", "config.", "runtime.", "steps.", "node.", "nodes.", "literal:"}
 	for _, prefix := range knownPrefixes {
 		if strings.HasPrefix(s, prefix) {
 			rest := s[len(prefix):]
@@ -42,12 +45,19 @@ func ParseWorkflowValueRef(s string) (*WorkflowValueRef, error) {
 					return nil, fmt.Errorf("value ref has no path: %s", s)
 				}
 				return &WorkflowValueRef{Source: src, Path: path}, nil
-			case "steps.", "node.":
+			case "steps.", "node.", "nodes.":
 				parts := splitRefPath(rest)
 				if len(parts) < 2 {
 					return nil, fmt.Errorf("node output ref must include node id and path: %s", s)
 				}
-				return &WorkflowValueRef{Source: RefSourceNodeOutput, NodeID: parts[0], Path: parts[1:]}, nil
+				path := parts[1:]
+				// User-facing Saga examples commonly use nodes.<id>.output.<path>.
+				// Step outputs are already stored as the output payload itself, so the
+				// explicit output segment is semantic decoration rather than a JSON key.
+				if len(path) > 1 && path[0] == "output" {
+					path = path[1:]
+				}
+				return &WorkflowValueRef{Source: RefSourceNodeOutput, NodeID: parts[0], Path: path}, nil
 			case "literal:":
 				return &WorkflowValueRef{Source: RefSourceLiteral, Path: []string{rest}}, nil
 			}

@@ -30,6 +30,7 @@ final _settingsGroups = <SettingGroup>[
     SettingItem(title: '高级系统', icon: Icons.admin_panel_settings_outlined, subtitle: '账号、审计、Usage、Bridge 与 Voice Session', route: AppRoutes.settingsAdvanced),
     SettingItem(title: 'BDI 决策可视化', icon: Icons.account_tree_outlined, subtitle: 'BehaviorPlan、ExpressionPlan 与降级状态', route: AppRoutes.settingsDecisionViz),
     SettingItem(title: '系统权限', icon: Icons.lock_outlined, route: AppRoutes.settingsPermissions),
+    SettingItem(title: 'Android Automation', icon: Icons.smartphone_outlined, subtitle: '执行通道、视觉能力与 Virtual Display 健康状态', route: AppRoutes.settingsAndroidAutomation),
     SettingItem(title: '存储管理', icon: Icons.storage_outlined, route: AppRoutes.settingsStorage),
     SettingItem(title: '安全设置', icon: Icons.security_outlined, route: AppRoutes.settingsSafety),
     SettingItem(title: '维护工具', icon: Icons.build_circle_outlined, route: AppRoutes.settingsMaintenance),

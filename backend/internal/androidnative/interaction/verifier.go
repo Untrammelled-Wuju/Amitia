@@ -2,6 +2,7 @@ package interaction
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/androidnative/uitree"
@@ -60,30 +61,32 @@ func (v *DefaultVerifier) verifyByUITree(
 	if v.snapshotResolver == nil {
 		return VerificationResult{Verified: false, Reason: "snapshot resolver not available"}, nil
 	}
-
 	if result.SnapshotID == "" {
-		return VerificationResult{Verified: false, Reason: "no snapshot ID in result"}, nil
+		return VerificationResult{Verified: false, Reason: "no baseline snapshot ID in result"}, nil
 	}
 
-	afterSnapshot, err := v.snapshotResolver.GetSnapshot(ctx, result.SnapshotID)
+	baseline, err := v.snapshotResolver.GetSnapshot(ctx, result.SnapshotID)
 	if err != nil {
-		return VerificationResult{Verified: false, Reason: "failed to get after snapshot: " + err.Error()}, nil
+		return VerificationResult{Verified: false, Reason: "failed to get baseline snapshot: " + err.Error()}, nil
 	}
-
-	if afterSnapshot.Generation > result.SnapshotIDGeneration() {
+	after, err := v.snapshotResolver.Latest(ctx)
+	if err != nil {
+		return VerificationResult{Verified: false, Reason: "failed to get latest snapshot: " + err.Error()}, nil
+	}
+	changed := after.SnapshotID != baseline.SnapshotID || after.Generation > baseline.Generation
+	if changed {
 		return VerificationResult{
 			Verified: true,
-			Method:   "ui_tree_generation_changed",
+			Method:   "ui_tree_changed",
 			Changed:  true,
-			Reason:   "UI tree generation changed after action",
+			Reason:   "UI tree snapshot changed after action",
 		}, nil
 	}
-
 	return VerificationResult{
 		Verified: false,
-		Method:   "ui_tree_generation_unchanged",
+		Method:   "ui_tree_unchanged",
 		Changed:  false,
-		Reason:   "UI tree generation unchanged",
+		Reason:   "UI tree snapshot unchanged after action",
 	}, nil
 }
 
@@ -95,29 +98,16 @@ func (v *DefaultVerifier) verifyByScreenshot(
 	if v.screenshot == nil {
 		return VerificationResult{Verified: false, Reason: "screenshot provider not available"}, nil
 	}
-
-	afterScreenshot, err := v.screenshot.Capture(ctx, result.DisplayID)
+	after, err := v.screenshot.Capture(ctx, result.DisplayID)
 	if err != nil {
 		return VerificationResult{Verified: false, Reason: "failed to capture after screenshot: " + err.Error()}, nil
 	}
-
-	if afterScreenshot.CapturedAt > time.Now().Add(-v.policy.MaxScreenshotAge).UnixMilli() {
-		return VerificationResult{
-			Verified: true,
-			Method:   "screenshot_captured",
-			Changed:  true,
-			Reason:   "new screenshot captured after action",
-		}, nil
+	if strings.TrimSpace(result.BaselineScreenStateToken) == "" {
+		return VerificationResult{Verified: false, Method: "screen_state_baseline_missing", Reason: "no pre-action screen state token"}, nil
 	}
-
-	return VerificationResult{
-		Verified: false,
-		Method:   "screenshot_stale",
-		Changed:  false,
-		Reason:   "screenshot too old for verification",
-	}, nil
-}
-
-func (r *InteractionResult) SnapshotIDGeneration() int64 {
-	return 0
+	changed := strings.TrimSpace(after.StateToken) != "" && after.StateToken != result.BaselineScreenStateToken
+	if changed {
+		return VerificationResult{Verified: true, Method: "screen_state_changed", Changed: true, Reason: "screen state changed after action"}, nil
+	}
+	return VerificationResult{Verified: false, Method: "screen_state_unchanged", Changed: false, Reason: "screen state unchanged after action"}, nil
 }

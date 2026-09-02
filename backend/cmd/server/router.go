@@ -472,6 +472,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		AccountSessions:  accountSessionRuntime.Validator,
 	}))
 	{
+		registerAndroidAutomationStatusRoute(apiGroup, services)
 		accountsession.RegisterAuthenticatedRoutes(apiGroup, accountSessionRuntime.Handler)
 		if services.MCPCompatibility != nil {
 			mcpapi.RegisterRouter(apiGroup, ctx, services.MCPCompatibility.API)
@@ -495,7 +496,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
-		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry)
+		var agentToolFacade *extensionkernel.ToolFacade
+		if services.KernelContainer != nil {
+			agentToolFacade = services.KernelContainer.ToolFacade
+		}
+		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)
 		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service)
 		companion.RegisterCompanionRouter(apiGroup, services.Companion)
 		qq.RegisterQQRouter(apiGroup, ctx)
@@ -727,6 +732,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					unifiedResult.RuntimeID = string(result.RuntimeID)
 					unifiedResult.Generation = result.ConnectionGeneration
 					unifiedResult.Structured = result.Result
+					unifiedResult.Metadata = map[string]any{
+						"idempotencyKey": result.IdempotencyKey,
+						"fencingToken":   result.FencingToken,
+					}
 					services.DeviceMesh.PendingInvocations.Complete(result.InvocationID, unifiedResult)
 				}),
 				InvocationErrorHandler: devicemeshserver.InvocationErrorHandler(func(errResult protocol.RuntimeErrorPayload) {
@@ -742,6 +751,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					unifiedResult.DeviceID = string(errResult.DeviceID)
 					unifiedResult.RuntimeID = string(errResult.RuntimeID)
 					unifiedResult.Generation = errResult.ConnectionGeneration
+					unifiedResult.Metadata = map[string]any{
+						"idempotencyKey": errResult.IdempotencyKey,
+						"fencingToken":   errResult.FencingToken,
+					}
 					services.DeviceMesh.PendingInvocations.Fail(errResult.InvocationID, unifiedResult)
 				}),
 				TaskClaimPayloadHandler: devicemeshserver.TaskClaimPayloadAdapter(func(claim protocol.TaskClaimPayload) bool {

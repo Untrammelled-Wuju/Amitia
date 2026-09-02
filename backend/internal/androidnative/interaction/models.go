@@ -8,6 +8,7 @@ import (
 
 type InteractionTarget struct {
 	SnapshotID string `json:"snapshotId,omitempty"`
+	DisplayID  int    `json:"displayId,omitempty"`
 	NodeID     string `json:"nodeId,omitempty"`
 
 	X *int `json:"x,omitempty"`
@@ -42,6 +43,10 @@ type InteractionResult struct {
 	DurationMS int64 `json:"durationMs"`
 
 	Warning string `json:"warning,omitempty"`
+
+	// BaselineScreenStateToken is internal verification state captured before a
+	// visual action. It is intentionally excluded from API responses.
+	BaselineScreenStateToken string `json:"-"`
 }
 
 type InteractionPlan struct {
@@ -67,6 +72,10 @@ type InteractionPlan struct {
 type VisualCandidate struct {
 	Source string `json:"source"`
 
+	DisplayID            int    `json:"displayId,omitempty"`
+	ScreenshotGeneration int64  `json:"screenshotGeneration,omitempty"`
+	ScreenStateToken     string `json:"screenStateToken,omitempty"`
+
 	Text        string `json:"text,omitempty"`
 	Description string `json:"description,omitempty"`
 
@@ -91,15 +100,18 @@ type CapabilityState struct {
 	TextInput     bool `json:"textInput"`
 	Scroll        bool `json:"scroll"`
 
-	VisualLocate            bool `json:"visualLocate"`
-	OCRAvailable            bool `json:"ocrAvailable"`
+	VisualLocate             bool `json:"visualLocate"`
+	OCRAvailable             bool `json:"ocrAvailable"`
 	ImageUnderstandAvailable bool `json:"imageUnderstandAvailable"`
 
 	RootFallback bool `json:"rootFallback"`
 	ADBFallback  bool `json:"adbFallback"`
 
-	State  string `json:"state"`
-	Reason string `json:"reason,omitempty"`
+	State       string              `json:"state"`
+	HealthState ProviderHealthState `json:"healthState"`
+	Reason      string              `json:"reason,omitempty"`
+
+	Providers map[string]ProviderCapabilityHealth `json:"providers,omitempty"`
 }
 
 type ClickRequest struct {
@@ -167,6 +179,8 @@ type SwipeRequest struct {
 }
 
 type VisualLocateRequest struct {
+	DisplayID int `json:"displayId,omitempty"`
+
 	Description string `json:"description,omitempty"`
 
 	Text string `json:"text,omitempty"`
@@ -176,9 +190,12 @@ type VisualLocateRequest struct {
 	ExpectedPackage string `json:"expectedPackage,omitempty"`
 
 	OCRFirst bool `json:"ocrFirst,omitempty"`
+
+	TextMatchMode string `json:"textMatchMode,omitempty"`
 }
 
 type VisualClickRequest struct {
+	DisplayID   int    `json:"displayId,omitempty"`
 	Description string `json:"description,omitempty"`
 
 	Text string `json:"text,omitempty"`
@@ -188,14 +205,16 @@ type VisualClickRequest struct {
 	ExpectedPackage string `json:"expectedPackage,omitempty"`
 
 	OCRFirst bool `json:"ocrFirst,omitempty"`
+
+	TextMatchMode string `json:"textMatchMode,omitempty"`
 
 	Verify bool `json:"verify,omitempty"`
 }
 
 type InteractionContext struct {
-	ExpectedPackage string
+	ExpectedPackage  string
 	ExpectedWindowID string
-	Timestamp       time.Time
+	Timestamp        time.Time
 }
 
 type VerificationResult struct {

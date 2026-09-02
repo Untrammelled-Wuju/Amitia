@@ -414,6 +414,20 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		}
 	}
 	workflowExecutor := workflow.NewWorkflowExecutor(workflowRegistry)
+	workflowExecutor.SetRevisionBinder(func(ctx context.Context, ownerUserID string, def workflow.WorkflowDefinition) (string, error) {
+		ownerUserID = strings.TrimSpace(ownerUserID)
+		if ownerUserID == "" {
+			// System/internal workflows can legitimately have no user owner. Their
+			// immutable definition snapshot/hash is still persisted on the run, but
+			// there is no user-scoped revision row to bind.
+			return "", nil
+		}
+		revision, err := workflowDefRepo.EnsurePublishedRevision(ctx, ownerUserID, def, "执行时自动绑定")
+		if err != nil {
+			return "", err
+		}
+		return revision.RevisionID, nil
+	})
 	workflowExecutor.SetCheckpointStore(sqlite.NewSQLiteCheckpointStore(db))
 	workflowExecutor.SetCompensationManager(workflow.NewCompensationManager())
 	workflowExecRepo := sqlite.NewWorkflowExecutionRepository(db)
@@ -1160,10 +1174,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := registerAndroidNativeToolsIfPresent(ctx, toolRegistry, b.androidNativeProvider); err != nil {
 		return nil, fmt.Errorf("kernel: register android native tools: %w", err)
 	}
+	if err := registerAndroidUIAgentTool(ctx, toolRegistry); err != nil {
+		return nil, fmt.Errorf("kernel: register android ui agent tool: %w", err)
+	}
+	if err := registerBrowserAgentTool(ctx, toolRegistry); err != nil {
+		return nil, fmt.Errorf("kernel: register browser agent tool: %w", err)
+	}
 	if err := registerDeepSearchSystemTask(ctx, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
 		return nil, fmt.Errorf("kernel: register deep search system task: %w", err)
 	}
-	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry, NewWorkflowExecutionRouter(capabilityService, toolRegistry, taskRuntimeService))
+	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry, NewWorkflowExecutionRouter(capabilityService, toolRegistry, taskRuntimeService, sessionService))
 
 	if b.host != nil && b.androidLinuxProvider != nil {
 		if err := registerTerminalTools(b.host, b.androidLinuxProvider, toolRegistry); err != nil {
@@ -1583,6 +1603,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		WorkflowDeviceCatalogRepo: workflowDeviceCatalogRepo,
 		WorkflowExecRepo:          workflowExecRepo,
 		WorkflowModelGenerator:    b.workshopModelGenerator,
+		AndroidNativeProvider:     b.androidNativeProvider,
 		EnablementService:         enablementService,
 		EnablementResolver:        enablementResolver,
 

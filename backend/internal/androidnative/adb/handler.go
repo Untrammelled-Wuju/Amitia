@@ -250,6 +250,13 @@ func mapPolicyErrorToAndroidError(policyErr *PolicyError) string {
 	}
 }
 
+func (h *ADBHandler) Status(ctx context.Context) ADBStatus {
+	if h == nil || h.client == nil {
+		return ADBStatus{State: BackendUnavailable}
+	}
+	return h.client.GetStatus(ctx)
+}
+
 func (h *ADBHandler) InternalExecutor() InternalADBExecutor {
 	return h
 }

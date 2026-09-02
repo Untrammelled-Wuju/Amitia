@@ -15,6 +15,8 @@ internal data class WorkflowWakeRuntimeStatus(
     val bindingCount: Int,
     val configCount: Int,
     val reason: String,
+    val deviceState: String,
+    val deviceReason: String,
 )
 
 internal class WorkflowDeviceEventClient(
@@ -43,6 +45,13 @@ internal class WorkflowDeviceEventClient(
         errorLabel = "workflow trigger app catalog",
     )
 
+    fun postAndroidRuntimeHealth(body: JSONObject): Result<Unit> = postJSON(
+        path = "/api/local/workflows/android-runtime-health/status",
+        body = body,
+        maxBytes = 16 * 1024,
+        errorLabel = "Android workflow runtime health",
+    )
+
     fun getWakeRuntimeStatus(): Result<WorkflowWakeRuntimeStatus> = runCatching {
         val connection = openLocalConnection(
             path = "/api/local/workflows/wake-runtime/status",
@@ -66,11 +75,20 @@ internal class WorkflowDeviceEventClient(
                 bindingCount = json.optInt("bindingCount", 0),
                 configCount = json.optInt("configCount", 0),
                 reason = json.optString("reason", "").trim(),
+                deviceState = json.optString("deviceState", "").trim(),
+                deviceReason = json.optString("deviceReason", "").trim(),
             )
         } finally {
             connection.disconnect()
         }
     }
+
+    fun postWakeDeviceStatus(state: String, reason: String = ""): Result<Unit> = postJSON(
+        path = "/api/local/workflows/wake-runtime/device-status",
+        body = JSONObject().put("state", state.trim()).put("reason", reason.trim().take(512)),
+        maxBytes = 4 * 1024,
+        errorLabel = "workflow wake device status",
+    )
 
     fun postWakeAudio(
         pcm: ByteArray,

@@ -82,7 +82,9 @@ func (h *Handler) handleStatus(ctx context.Context, request capability.AndroidBr
 			"rootFallback":             status.RootFallback,
 			"adbFallback":              status.ADBFallback,
 			"state":                    status.State,
+			"healthState":              status.HealthState,
 			"reason":                   status.Reason,
+			"providers":                status.Providers,
 		},
 	}
 }

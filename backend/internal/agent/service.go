@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat"
+	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/prompt"
 	"github.com/u-ai/backend/internal/requestidentity"
@@ -62,10 +63,15 @@ const systemNoEmojiInstruction = "【系统指令】回复中不要使用任何e
 type service struct {
 	db           *gorm.DB
 	unifiedEntry *interaction.UnifiedEntry
+	toolFacade   *extensionkernel.ToolFacade
 }
 
-func NewService(ctx *app.AppContext, unifiedEntry *interaction.UnifiedEntry) Service {
-	return &service{db: ctx.DB, unifiedEntry: unifiedEntry}
+func NewService(ctx *app.AppContext, unifiedEntry *interaction.UnifiedEntry, facades ...*extensionkernel.ToolFacade) Service {
+	var facade *extensionkernel.ToolFacade
+	if len(facades) > 0 {
+		facade = facades[0]
+	}
+	return &service{db: ctx.DB, unifiedEntry: unifiedEntry, toolFacade: facade}
 }
 
 // Test is a diagnostic character-preview path.

@@ -498,7 +498,7 @@ func buildBrowserContributions(extID domain.ExtensionID, modID domain.ModuleID) 
 			description:  "Scroll the page",
 			modelName:    "browser_interact_scroll",
 			handlerName:  "browser.interact.scroll",
-			inputSchema:  `{"type":"object","additionalProperties":false,"required":["sessionId","tabId","scroll"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"scroll":{"type":"object"}}}`,
+			inputSchema:  `{"type":"object","additionalProperties":false,"required":["sessionId","tabId","direction"],"properties":{"sessionId":{"type":"string"},"tabId":{"type":"string"},"direction":{"type":"string","enum":["up","down","left","right"]}}}`,
 			outputSchema: `{"type":"object","additionalProperties":false,"properties":{"success":{"type":"boolean"},"action":{"type":"string"}}}`,
 			riskLevel:    "low",
 			sideEffect:   "write",

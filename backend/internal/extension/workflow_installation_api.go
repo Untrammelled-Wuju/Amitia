@@ -36,6 +36,13 @@ type workflowAPIResponse struct {
 	Installation workflow.WorkflowInstallation `json:"installation"`
 }
 
+func (api *WorkflowAPI) workflowDefinitionMutationContext(ctx context.Context) context.Context {
+	if api != nil && api.effectiveLocation() == workflow.WorkflowLocationCloud {
+		return sqlite.SuppressWorkflowSync(ctx)
+	}
+	return ctx
+}
+
 func (api *WorkflowAPI) effectiveLocation() workflow.WorkflowLocation {
 	if api.location.Valid() {
 		return api.location
