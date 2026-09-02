@@ -32,6 +32,8 @@ func (h *Handler) Handle(ctx context.Context, operation string, payload map[stri
 		return h.handleTCPProbe(ctx, payload)
 	case OpHTTPRequest:
 		return h.handleHTTPRequest(ctx, payload)
+	case OpMultipartRequest:
+		return h.handleMultipartRequest(ctx, payload)
 	case OpDownload:
 		return h.handleDownload(ctx, payload)
 	default:
@@ -130,6 +132,39 @@ func (h *Handler) handleHTTPRequest(ctx context.Context, payload map[string]any)
 		req.FollowRedirects = &fr
 	}
 	result, err := h.service.HTTPRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return httpResponseToMap(result), nil
+}
+
+func (h *Handler) handleMultipartRequest(ctx context.Context, payload map[string]any) (map[string]any, error) {
+	req := MultipartRequest{
+		Method:    getStringKey(payload, "method", "POST"),
+		URL:       getStringKey(payload, "url"),
+		Headers:   getStringMapKey(payload, "headers"),
+		TimeoutMS: getIntKey(payload, "timeoutMs", 0),
+	}
+	if mr, ok := payload["maxResponseBytes"].(float64); ok {
+		req.MaxResponseBytes = int64(mr)
+	}
+	if fr, ok := payload["followRedirects"].(bool); ok {
+		req.FollowRedirects = &fr
+	}
+	if rawParts, ok := payload["parts"].([]any); ok {
+		for _, rawPart := range rawParts {
+			partMap, ok := rawPart.(map[string]any)
+			if !ok {
+				continue
+			}
+			req.Parts = append(req.Parts, MultipartPart{
+				Name: getStringKey(partMap, "name"), Value: getStringKey(partMap, "value"),
+				Filename: getStringKey(partMap, "filename"), ContentType: getStringKey(partMap, "contentType"),
+				DataBase64: getStringKey(partMap, "dataBase64"),
+			})
+		}
+	}
+	result, err := h.service.MultipartRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}

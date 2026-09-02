@@ -26,10 +26,10 @@ func (w *fileOpsWriter) Write(ctx context.Context, path string, data []byte, opt
 }
 
 type Service struct {
-	host       runtimehost.RuntimeHost
-	paths      util.RuntimePaths
-	policy     Policy
-	fileWriter FileWriter
+	host        runtimehost.RuntimeHost
+	paths       util.RuntimePaths
+	policy      Policy
+	fileWriter  FileWriter
 	pingBackend PingBackend
 }
 
@@ -165,6 +165,13 @@ func (s *Service) HTTPRequest(ctx context.Context, req HTTPRequest) (HTTPRespons
 		return HTTPResponse{}, ErrInvalidURL("", "URL is required")
 	}
 	return performHTTPRequest(ctx, req, s.policy)
+}
+
+func (s *Service) MultipartRequest(ctx context.Context, req MultipartRequest) (HTTPResponse, error) {
+	if req.URL == "" {
+		return HTTPResponse{}, ErrInvalidURL("", "URL is required")
+	}
+	return performMultipartRequest(ctx, req, s.policy)
 }
 
 func (s *Service) Download(ctx context.Context, req DownloadRequest) (DownloadResult, error) {
