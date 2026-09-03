@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,10 +17,11 @@ import (
 var ErrMemoryVersionConflict = errors.New("memory version conflict")
 
 type canonicalCreateRequest struct {
-	CharacterID string
-	MemoryType  MemoryType
-	Source      string
-	Scope       string
+	CharacterID   string
+	MemoryType    MemoryType
+	MemorySubtype string
+	Source        string
+	Scope         string
 
 	Key   string
 	Value string
@@ -40,6 +42,15 @@ type canonicalCreateRequest struct {
 	SensitivityLevel      string
 	AllowProactiveMention bool
 	RequiresConfirmation  bool
+
+	RetentionLevel    int
+	MemoryStrength    float64
+	StrengthUpdatedAt *string
+	LastReinforcedAt  *string
+	ReinforceCount    int
+	DecayState        string
+	Pinned            bool
+	ArchivedAt        *string
 
 	DerivationKey string
 
@@ -101,9 +112,10 @@ type MemoryEventRecord struct {
 type memorySemanticSnapshot struct {
 	CharacterID string `json:"characterId"`
 
-	MemoryType string `json:"memoryType"`
-	Source     string `json:"source"`
-	Scope      string `json:"scope"`
+	MemoryType    string `json:"memoryType"`
+	MemorySubtype string `json:"memorySubtype"`
+	Source        string `json:"source"`
+	Scope         string `json:"scope"`
 
 	Key   string `json:"key"`
 	Value string `json:"value"`
@@ -126,6 +138,13 @@ type memorySemanticSnapshot struct {
 	AllowProactiveMention bool `json:"allowProactiveMention"`
 
 	RequiresConfirmation bool `json:"requiresConfirmation"`
+
+	RetentionLevel   int     `json:"retentionLevel"`
+	MemoryStrength   float64 `json:"memoryStrength"`
+	LastReinforcedAt *string `json:"lastReinforcedAt,omitempty"`
+	ReinforceCount   int     `json:"reinforceCount"`
+	DecayState       string  `json:"decayState"`
+	Pinned           bool    `json:"pinned"`
 }
 
 func (s *service) createCanonicalMemory(req canonicalCreateRequest) (*Memory, error) {
@@ -153,6 +172,17 @@ func (s *service) createCanonicalMemory(req canonicalCreateRequest) (*Memory, er
 		confidence = 50
 	}
 
+	assignment := AssignRetention(string(memoryType), req.MemorySubtype, importance, req.Pinned)
+	retentionLevel := req.RetentionLevel
+	if retentionLevel < RetentionL1 || retentionLevel > RetentionL5 {
+		retentionLevel = assignment.Level
+	}
+	memoryStrength := req.MemoryStrength
+	if memoryStrength <= 0 || memoryStrength > 1 {
+		memoryStrength = assignment.Strength
+	}
+	pinned := req.Pinned || assignment.Pinned
+
 	verifiedStatus := req.VerifiedStatus
 	if verifiedStatus == "" {
 		verifiedStatus = "unverified"
@@ -179,6 +209,28 @@ func (s *service) createCanonicalMemory(req canonicalCreateRequest) (*Memory, er
 	}
 
 	now := time.Now().Format("2006-01-02 15:04:05")
+	strengthUpdatedAt := req.StrengthUpdatedAt
+	if strengthUpdatedAt == nil || strings.TrimSpace(*strengthUpdatedAt) == "" {
+		strengthUpdatedAt = &now
+	}
+	lastReinforcedAt := req.LastReinforcedAt
+	if lastReinforcedAt == nil || strings.TrimSpace(*lastReinforcedAt) == "" {
+		lastReinforcedAt = &now
+	}
+	decayState := strings.TrimSpace(req.DecayState)
+	if decayState != DecayStateActive && decayState != DecayStateFading && decayState != DecayStateArchived {
+		decayState = DecayStateActive
+	}
+	archivedAt := req.ArchivedAt
+	if decayState != DecayStateArchived {
+		archivedAt = nil
+	} else if archivedAt == nil || strings.TrimSpace(*archivedAt) == "" {
+		archivedAt = &now
+	}
+	reinforceCount := req.ReinforceCount
+	if reinforceCount < 0 {
+		reinforceCount = 0
+	}
 	memoryID := uuid.New().String()
 	snapshotHash := ""
 
@@ -202,6 +254,7 @@ func (s *service) createCanonicalMemory(req canonicalCreateRequest) (*Memory, er
 			ID:                    memoryID,
 			CharacterID:           req.CharacterID,
 			MemoryType:            string(memoryType),
+			MemorySubtype:         strings.TrimSpace(req.MemorySubtype),
 			Source:                source,
 			Scope:                 scope,
 			Key:                   req.Key,
@@ -217,6 +270,14 @@ func (s *service) createCanonicalMemory(req canonicalCreateRequest) (*Memory, er
 			SensitivityLevel:      req.SensitivityLevel,
 			AllowProactiveMention: req.AllowProactiveMention,
 			RequiresConfirmation:  req.RequiresConfirmation,
+			RetentionLevel:        retentionLevel,
+			MemoryStrength:        memoryStrength,
+			StrengthUpdatedAt:     strengthUpdatedAt,
+			LastReinforcedAt:      lastReinforcedAt,
+			ReinforceCount:        reinforceCount,
+			DecayState:            decayState,
+			Pinned:                pinned,
+			ArchivedAt:            archivedAt,
 			Version:               1,
 			DerivationKey:         req.DerivationKey,
 		}
@@ -262,7 +323,11 @@ func (s *service) createCanonicalMemory(req canonicalCreateRequest) (*Memory, er
 		return nil, err
 	}
 
-	return s.repo.FindByID(memoryID)
+	created, findErr := s.repo.FindByID(memoryID)
+	if findErr == nil && created != nil {
+		s.syncProfileProjection(created)
+	}
+	return created, findErr
 }
 
 func (s *service) updateCanonicalMemory(id string, req canonicalUpdateRequest) (*Memory, error) {
@@ -346,6 +411,9 @@ func (s *service) updateCanonicalMemory(id string, req canonicalUpdateRequest) (
 		return nil, err
 	}
 
+	if result != nil {
+		s.syncProfileProjection(result)
+	}
 	return result, nil
 }
 
@@ -358,7 +426,7 @@ func (s *service) deleteCanonicalMemory(id string, req canonicalDeleteRequest) e
 	eventType := "memory_deleted"
 	now := time.Now().Format("2006-01-02 15:04:05")
 
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var current Memory
 		if err := tx.Where("id = ?", id).First(&current).Error; err != nil {
 			return err
@@ -406,13 +474,17 @@ func (s *service) deleteCanonicalMemory(id string, req canonicalDeleteRequest) e
 
 		return insertMemoryEvent(tx, event)
 	})
+	if err == nil {
+		s.invalidateProfileProjection(id)
+	}
+	return err
 }
 
 func insertMemoryEvent(tx *gorm.DB, event MemoryEventRecord) error {
 	return tx.Exec(
-		`INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at, version, operation_id, snapshot_hash, event_reason)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		event.ID, event.MemoryID, event.EventType, event.Key, event.Value, event.MemoryType, event.Importance, event.Source, event.CharacterID, event.CreatedAt, event.Version, event.OperationID, event.SnapshotHash, event.EventReason,
+		`INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, confidence, source, character_id, created_at, version, operation_id, snapshot_hash, event_reason)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		event.ID, event.MemoryID, event.EventType, event.Key, event.Value, event.MemoryType, event.Importance, event.Confidence, event.Source, event.CharacterID, event.CreatedAt, event.Version, event.OperationID, event.SnapshotHash, event.EventReason,
 	).Error
 }
 
@@ -423,6 +495,7 @@ func computeMemorySnapshotHashCanonical(m *Memory) string {
 	snapshot := memorySemanticSnapshot{
 		CharacterID:           m.CharacterID,
 		MemoryType:            m.MemoryType,
+		MemorySubtype:         m.MemorySubtype,
 		Source:                m.Source,
 		Scope:                 m.Scope,
 		Key:                   m.Key,
@@ -438,6 +511,12 @@ func computeMemorySnapshotHashCanonical(m *Memory) string {
 		SensitivityLevel:      m.SensitivityLevel,
 		AllowProactiveMention: m.AllowProactiveMention,
 		RequiresConfirmation:  m.RequiresConfirmation,
+		RetentionLevel:        m.RetentionLevel,
+		MemoryStrength:        m.MemoryStrength,
+		LastReinforcedAt:      m.LastReinforcedAt,
+		ReinforceCount:        m.ReinforceCount,
+		DecayState:            m.DecayState,
+		Pinned:                m.Pinned,
 	}
 	payload, err := json.Marshal(snapshot)
 	if err != nil {

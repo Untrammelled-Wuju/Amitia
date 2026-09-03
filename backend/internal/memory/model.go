@@ -6,6 +6,7 @@ type Memory struct {
 	ID                    string  `gorm:"column:id;primaryKey" json:"id"`
 	CharacterID           string  `gorm:"column:character_id" json:"characterId"`
 	MemoryType            string  `gorm:"column:memory_type;default:custom" json:"memoryType"`
+	MemorySubtype         string  `gorm:"column:memory_subtype;default:''" json:"memorySubtype"`
 	Source                string  `gorm:"column:source;default:manual" json:"source"`
 	Scope                 string  `gorm:"column:scope;default:character" json:"scope"`
 	Key                   string  `gorm:"column:key;not null" json:"key"`
@@ -21,6 +22,17 @@ type Memory struct {
 	LastVerifiedAt        *string `gorm:"column:last_verified_at" json:"lastVerifiedAt"`
 	UseCount              int     `gorm:"column:use_count;default:0" json:"useCount"`
 	LastUsedAt            *string `gorm:"column:last_used_at" json:"lastUsedAt"`
+	RetentionLevel        int     `gorm:"column:retention_level;default:3" json:"retentionLevel"`
+	MemoryStrength        float64 `gorm:"column:memory_strength;default:0.68" json:"memoryStrength"`
+	StrengthUpdatedAt     *string `gorm:"column:strength_updated_at" json:"strengthUpdatedAt"`
+	LastReinforcedAt      *string `gorm:"column:last_reinforced_at" json:"lastReinforcedAt"`
+	ReinforceCount        int     `gorm:"column:reinforce_count;default:0" json:"reinforceCount"`
+	RetrievedCount        int     `gorm:"column:retrieved_count;default:0" json:"retrievedCount"`
+	InjectedCount         int     `gorm:"column:injected_count;default:0" json:"injectedCount"`
+	DecayState            string  `gorm:"column:decay_state;default:active" json:"decayState"`
+	Pinned                bool    `gorm:"column:pinned;default:0" json:"pinned"`
+	ArchivedAt            *string `gorm:"column:archived_at" json:"archivedAt"`
+	SupersededBy          string  `gorm:"column:superseded_by;default:''" json:"supersededBy"`
 	SensitivityLevel      string  `gorm:"column:sensitivity_level;default:internal" json:"sensitivityLevel"`
 	AllowProactiveMention bool    `gorm:"column:allow_proactive_mention;default:1" json:"allowProactiveMention"`
 	RequiresConfirmation  bool    `gorm:"column:requires_confirmation;default:0" json:"requiresConfirmation"`
@@ -33,40 +45,48 @@ type Memory struct {
 func (Memory) TableName() string { return "memories" }
 
 type CreateMemoryRequest struct {
-	CharacterID           string `json:"characterId"`
-	MemoryType            string `json:"memoryType"`
-	Key                   string `json:"key" binding:"required"`
-	Value                 string `json:"value" binding:"required"`
-	Importance            int    `json:"importance"`
-	Confidence            int    `json:"confidence"`
-	ExpiresAt             string `json:"expiresAt"`
-	EntityID              string `json:"entityId"`
-	EntityType            string `json:"entityType"`
-	SourceMsgID           string `json:"sourceMsgId"`
-	SourceConvID          string `json:"sourceConvId"`
-	VerifiedStatus        string `json:"verifiedStatus"`
-	Source                string `json:"source"`
-	SensitivityLevel      string `json:"sensitivityLevel"`
-	AllowProactiveMention bool   `json:"allowProactiveMention"`
-	RequiresConfirmation  bool   `json:"requiresConfirmation"`
-	Scope                 string `json:"scope"`
+	CharacterID           string  `json:"characterId"`
+	MemoryType            string  `json:"memoryType"`
+	MemorySubtype         string  `json:"memorySubtype"`
+	Key                   string  `json:"key" binding:"required"`
+	Value                 string  `json:"value" binding:"required"`
+	Importance            int     `json:"importance"`
+	Confidence            int     `json:"confidence"`
+	ExpiresAt             string  `json:"expiresAt"`
+	EntityID              string  `json:"entityId"`
+	EntityType            string  `json:"entityType"`
+	SourceMsgID           string  `json:"sourceMsgId"`
+	SourceConvID          string  `json:"sourceConvId"`
+	VerifiedStatus        string  `json:"verifiedStatus"`
+	Source                string  `json:"source"`
+	SensitivityLevel      string  `json:"sensitivityLevel"`
+	AllowProactiveMention bool    `json:"allowProactiveMention"`
+	RequiresConfirmation  bool    `json:"requiresConfirmation"`
+	Scope                 string  `json:"scope"`
+	RetentionLevel        int     `json:"retentionLevel"`
+	MemoryStrength        float64 `json:"memoryStrength"`
+	Pinned                bool    `json:"pinned"`
 }
 
 type UpdateMemoryRequest struct {
-	Key                   *string `json:"key"`
-	Value                 *string `json:"value"`
-	MemoryType            *string `json:"memoryType"`
-	CharacterID           *string `json:"characterId"`
-	Importance            *int    `json:"importance"`
-	Confidence            *int    `json:"confidence"`
-	ExpiresAt             *string `json:"expiresAt"`
-	EntityID              *string `json:"entityId"`
-	EntityType            *string `json:"entityType"`
-	VerifiedStatus        *string `json:"verifiedStatus"`
-	SensitivityLevel      *string `json:"sensitivityLevel"`
-	AllowProactiveMention *bool   `json:"allowProactiveMention"`
-	RequiresConfirmation  *bool   `json:"requiresConfirmation"`
-	Scope                 *string `json:"scope"`
+	Key                   *string  `json:"key"`
+	Value                 *string  `json:"value"`
+	MemoryType            *string  `json:"memoryType"`
+	MemorySubtype         *string  `json:"memorySubtype"`
+	CharacterID           *string  `json:"characterId"`
+	Importance            *int     `json:"importance"`
+	Confidence            *int     `json:"confidence"`
+	ExpiresAt             *string  `json:"expiresAt"`
+	EntityID              *string  `json:"entityId"`
+	EntityType            *string  `json:"entityType"`
+	VerifiedStatus        *string  `json:"verifiedStatus"`
+	SensitivityLevel      *string  `json:"sensitivityLevel"`
+	AllowProactiveMention *bool    `json:"allowProactiveMention"`
+	RequiresConfirmation  *bool    `json:"requiresConfirmation"`
+	Scope                 *string  `json:"scope"`
+	RetentionLevel        *int     `json:"retentionLevel"`
+	MemoryStrength        *float64 `json:"memoryStrength"`
+	Pinned                *bool    `json:"pinned"`
 }
 
 type SearchMemoryRequest struct {
@@ -129,6 +149,10 @@ type MemoryListQuery struct {
 	Sort           string `form:"sort"`
 	VerifiedStatus string `form:"verifiedStatus"`
 	MinConfidence  int    `form:"minConfidence"`
+	RetentionLevel int    `form:"retentionLevel"`
+	DecayState     string `form:"decayState"`
+	Pinned         *bool  `form:"pinned"`
+	ScopeType      string `form:"scopeType"`
 }
 
 type MemoryListResponse struct {
@@ -143,7 +167,17 @@ type MemoryCandidateModel struct {
 	Key                   string  `gorm:"column:key" json:"key"`
 	Value                 string  `gorm:"column:value" json:"value"`
 	MemoryType            string  `gorm:"column:memory_type;default:custom" json:"memoryType"`
+	MemorySubtype         string  `gorm:"column:memory_subtype;default:''" json:"memorySubtype"`
 	Importance            int     `gorm:"column:importance;default:5" json:"importance"`
+	RetentionLevel        int     `gorm:"column:retention_level;default:0" json:"retentionLevel"`
+	MemoryStrength        float64 `gorm:"column:memory_strength;default:0" json:"memoryStrength"`
+	StrengthUpdatedAt     *string `gorm:"column:strength_updated_at" json:"strengthUpdatedAt,omitempty"`
+	LastReinforcedAt      *string `gorm:"column:last_reinforced_at" json:"lastReinforcedAt,omitempty"`
+	ReinforceCount        int     `gorm:"column:reinforce_count;default:0" json:"reinforceCount"`
+	DecayState            string  `gorm:"column:decay_state;default:''" json:"decayState"`
+	Pinned                bool    `gorm:"column:pinned;default:0" json:"pinned"`
+	ArchivedAt            *string `gorm:"column:archived_at" json:"archivedAt,omitempty"`
+	Scope                 string  `gorm:"column:scope;default:character" json:"scope"`
 	SensitivityLevel      string  `gorm:"column:sensitivity_level;default:internal" json:"sensitivityLevel"`
 	AllowProactiveMention bool    `gorm:"column:allow_proactive_mention;default:1" json:"allowProactiveMention"`
 	RequiresConfirmation  bool    `gorm:"column:requires_confirmation;default:0" json:"requiresConfirmation"`
@@ -262,6 +296,7 @@ type ConsolidationCandidateProposal struct {
 	Key             string   `json:"key"`
 	Value           string   `json:"value"`
 	MemoryType      string   `json:"memoryType"`
+	MemorySubtype   string   `json:"memorySubtype"`
 	Importance      int      `json:"importance"`
 	Confidence      float64  `json:"confidence"`
 	ProposedAction  string   `json:"proposedAction"`
@@ -287,6 +322,7 @@ type MemoryRecordV1 struct {
 	Value                 string  `json:"value"`
 	MemoryLayer           string  `json:"memoryLayer"`
 	MemoryType            string  `json:"memoryType"`
+	MemorySubtype         string  `json:"memorySubtype,omitempty"`
 	Importance            int     `json:"importance"`
 	Confidence            int     `json:"confidence"`
 	Source                string  `json:"source"`
@@ -307,6 +343,17 @@ type MemoryRecordV1 struct {
 	UpdatedAt             string  `json:"updatedAt"`
 	UseCount              int     `json:"useCount,omitempty"`
 	LastUsedAt            *string `json:"lastUsedAt,omitempty"`
+	RetentionLevel        int     `json:"retentionLevel,omitempty"`
+	MemoryStrength        float64 `json:"memoryStrength,omitempty"`
+	StrengthUpdatedAt     *string `json:"strengthUpdatedAt,omitempty"`
+	LastReinforcedAt      *string `json:"lastReinforcedAt,omitempty"`
+	ReinforceCount        int     `json:"reinforceCount,omitempty"`
+	RetrievedCount        int     `json:"retrievedCount,omitempty"`
+	InjectedCount         int     `json:"injectedCount,omitempty"`
+	DecayState            string  `json:"decayState,omitempty"`
+	Pinned                bool    `json:"pinned,omitempty"`
+	ArchivedAt            *string `json:"archivedAt,omitempty"`
+	SupersededBy          string  `json:"supersededBy,omitempty"`
 	DerivationKey         string  `json:"derivationKey,omitempty"`
 }
 

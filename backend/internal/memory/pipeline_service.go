@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,34 +31,45 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	if err != nil {
 		return err
 	}
-	existingKeys := make(map[string]bool)
+	existingByExact := make(map[string]string)
 	var existingMemories []struct {
+		ID    string
 		Key   string
 		Value string
 	}
-	s.db.Table("memories").Select("key, value").Find(&existingMemories)
+	s.db.Table("memories").Select("id, key, value").Where("verified_status NOT IN (?, ?)", "replaced", "tombstone").Find(&existingMemories)
 	for _, m := range existingMemories {
-		existingKeys[m.Key+"|"+m.Value] = true
+		existingByExact[m.Key+"|"+m.Value] = m.ID
 	}
 
 	acceptedCount := 0
-	for _, c := range candidates {
-		if c.Importance < 7 {
+	for i := range candidates {
+		c := candidates[i]
+		if strings.TrimSpace(c.Key) == "" || strings.TrimSpace(c.Value) == "" || c.Importance <= 0 {
 			continue
 		}
-		if existingKeys[c.Key+"|"+c.Value] {
+		exactKey := c.Key + "|" + c.Value
+		if existingID := existingByExact[exactKey]; existingID != "" {
+			if _, err := s.reinforceCanonicalMemory(existingID, &c); err == nil {
+				_ = s.repo.DeleteCandidate(c.ID)
+				acceptedCount++
+			}
 			continue
 		}
 
-		autoRes, err := s.AutoResolveConflict(c.Key, c.Value, c.CharacterID, 50)
+		confidence := c.Confidence
+		if confidence <= 0 {
+			confidence = 50
+		}
+		autoRes, err := s.AutoResolveConflict(c.Key, c.Value, c.CharacterID, confidence)
 		if err == nil && autoRes.Resolved {
+			_ = s.repo.DeleteCandidate(c.ID)
 			continue
 		}
 
-		existingKeys[c.Key+"|"+c.Value] = true
 		mem, err := s.AcceptCandidate(c.ID)
 		if err == nil && mem != nil {
-			s.SyncEmbedding(mem.ID, mem.Key, mem.Value, mem.CharacterID, mem.MemoryType)
+			existingByExact[exactKey] = mem.ID
 			acceptedCount++
 		}
 	}
@@ -71,56 +83,53 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 
 func (s *service) consolidationNeeded(convID string) {
 	var charID string
-	if err := s.db.Table("conversations").Select("character_id").Where("id = ?", convID).Row().Scan(&charID); err != nil {
+	if err := s.db.Table("conversations").Select("character_id").Where("id = ?", convID).Row().Scan(&charID); err != nil || strings.TrimSpace(charID) == "" {
 		return
 	}
 	var count int64
-	s.db.Table("memories").Where("character_id = ? AND verified_status != 'replaced' AND verified_status != 'tombstone'", charID).Count(&count)
-	if count < 20 {
-		return
-	}
-
-	var lastConsolidation string
-	s.db.Table("memory_events").Select("created_at").
-		Where("character_id = ? AND event_type = 'consolidation'", charID).
-		Order("created_at DESC").Limit(1).Row().Scan(&lastConsolidation)
-
-	if lastConsolidation != "" {
-		lastT, err := time.Parse("2006-01-02 15:04:05", lastConsolidation)
-		if err == nil && time.Since(lastT) < 2*time.Hour {
-			return
-		}
-	}
-
-	go s.runConsolidation(charID)
-}
-
-func (s *service) runConsolidation(charID string) {
-	var count int64
-	s.db.Table("memories").Where("character_id = ? AND verified_status != 'replaced' AND verified_status != 'tombstone'", charID).Count(&count)
+	s.db.Table("memories").Where("character_id = ? AND verified_status NOT IN (?, ?)", charID, "replaced", "tombstone").Count(&count)
 	if count < 10 {
 		return
 	}
 
-	var lastConsolidation string
+	var lastMarker string
 	s.db.Table("memory_events").Select("created_at").
-		Where("character_id = ? AND event_type IN ('memory_created', 'memory_reinforced', 'memory_merged')", charID).
-		Order("created_at DESC").Limit(1).Row().Scan(&lastConsolidation)
-
-	if lastConsolidation != "" {
-		lastT, err := time.Parse("2006-01-02 15:04:05", lastConsolidation)
-		if err == nil && time.Since(lastT) < 2*time.Hour {
+		Where("character_id = ? AND event_type = 'memory_consolidated'", charID).
+		Order("created_at DESC").Limit(1).Row().Scan(&lastMarker)
+	if lastMarker != "" {
+		if lastT, err := time.Parse("2006-01-02 15:04:05", lastMarker); err == nil && time.Since(lastT) < 2*time.Hour {
 			return
 		}
 	}
 
-	_, err := s.RunConsolidation(&ConsolidationRequest{
+	var pendingCount int64
+	q := s.db.Table("memory_events").Where("character_id = ? AND event_type IN (?, ?)", charID, "memory_created", "memory_reinforced")
+	if lastMarker != "" {
+		q = q.Where("created_at > ?", lastMarker)
+	}
+	q.Count(&pendingCount)
+	if pendingCount < 5 {
+		return
+	}
+	go s.runConsolidation(charID)
+}
+
+func (s *service) runConsolidation(charID string) {
+	result, err := s.RunConsolidation(&ConsolidationRequest{
 		CharacterID: charID,
 		Source:      "auto",
 	})
 	if err != nil {
 		log.Warn("Pipeline consolidation failed:", err)
+		return
 	}
+	if result == nil {
+		return
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	_ = s.db.Exec(`INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, confidence, source, character_id, created_at, version, operation_id, snapshot_hash, event_reason)
+		VALUES (?, '', 'memory_consolidated', '', '', '', 0, 0, 'auto', ?, ?, 1, ?, '', 'consolidation_cycle')`,
+		uuid.New().String(), charID, now, result.OperationID).Error
 }
 
 func (s *service) logRetrieval(conversationID, characterID, requestID, channel, queryText string, memoryIDs []string, results []HybridSearchResult) {
