@@ -195,6 +195,9 @@ func DefaultMigrations() []Migration {
 		SyncSequenceSeedMigration(),
 		SandboxEnvironmentMigration(),
 		DesktopPetCutoverBaselineBackfillMigration(),
+		ConversationWorkspaceBindingsMigration(),
+		WorkspaceMountLastUsedMigration(),
+		MemoryDynamicRecallRetentionMigration(),
 	}
 }
 
