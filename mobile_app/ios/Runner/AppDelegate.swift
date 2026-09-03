@@ -41,6 +41,7 @@ import UIKit
       let nativeRegistrar = self.registrar(forPlugin: "IOSNativeBridgePlugin")!
       let nativeMessenger = nativeRegistrar.messenger()
       AudioRecorderAdapter.shared.registerRealtimeChannels(messenger: nativeMessenger)
+      RealtimeVisualAdapter.shared.registerRealtimeChannels(messenger: nativeMessenger)
       IOSNativeBridgePlugin.register(
         messenger: nativeMessenger,
         host: host

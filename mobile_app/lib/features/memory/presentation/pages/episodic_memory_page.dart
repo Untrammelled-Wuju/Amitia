@@ -11,11 +11,19 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
-class EpisodicMemoryPage extends ConsumerWidget {
+class EpisodicMemoryPage extends ConsumerStatefulWidget {
   const EpisodicMemoryPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EpisodicMemoryPage> createState() => _EpisodicMemoryPageState();
+}
+
+class _EpisodicMemoryPageState extends ConsumerState<EpisodicMemoryPage> {
+  int _retentionFilter = 0;
+  String _decayFilter = '';
+
+  @override
+  Widget build(BuildContext context) {
     final memoriesAsync = ref.watch(episodicListProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -39,14 +47,43 @@ class EpisodicMemoryPage extends ConsumerWidget {
                 subtitle: '对话中识别到完整场景后会自动记录',
               );
             }
-            return RefreshIndicator(
-              onRefresh: () async => ref.invalidate(episodicListProvider),
-              child: ListView.separated(
-                padding: EdgeInsets.all(AppSpacing.pagePadding),
-                itemCount: memories.length,
-                separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                itemBuilder: (context, index) => _buildCard(context, ref, memories[index]),
-              ),
+            final filtered = memories.where((memory) {
+              if (_retentionFilter != 0 && memory.retentionLevel != _retentionFilter) return false;
+              if (_decayFilter.isNotEmpty && memory.decayState != _decayFilter) return false;
+              return true;
+            }).toList(growable: false);
+            return Column(
+              children: [
+                _buildFilterBar(context),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () async => ref.invalidate(episodicListProvider),
+                    child: filtered.isEmpty
+                        ? ListView(
+                            padding: EdgeInsets.all(AppSpacing.pagePadding),
+                            children: const [
+                              SizedBox(height: 96),
+                              AmitiaEmptyState(
+                                icon: Icons.filter_alt_off_outlined,
+                                title: '没有符合筛选条件的情景记忆',
+                                subtitle: '调整 L1–L5 或状态筛选后重试',
+                              ),
+                            ],
+                          )
+                        : ListView.separated(
+                            padding: EdgeInsets.fromLTRB(
+                              AppSpacing.pagePadding,
+                              AppSpacing.sm,
+                              AppSpacing.pagePadding,
+                              AppSpacing.pagePadding,
+                            ),
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+                            itemBuilder: (context, index) => _buildCard(context, filtered[index]),
+                          ),
+                  ),
+                ),
+              ],
             );
           },
         ),
@@ -54,7 +91,57 @@ class EpisodicMemoryPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildCard(BuildContext context, WidgetRef ref, EpisodicDto memory) {
+  Widget _buildFilterBar(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xs,
+      ),
+      child: Wrap(
+        spacing: AppSpacing.xs,
+        runSpacing: AppSpacing.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          ChoiceChip(
+            label: const Text('全部层级'),
+            selected: _retentionFilter == 0,
+            onSelected: (_) => setState(() => _retentionFilter = 0),
+          ),
+          for (var level = 1; level <= 5; level++)
+            ChoiceChip(
+              label: Text('L$level'),
+              selected: _retentionFilter == level,
+              onSelected: (_) => setState(() => _retentionFilter = level),
+            ),
+          const SizedBox(width: 4),
+          ChoiceChip(
+            label: const Text('全部状态'),
+            selected: _decayFilter.isEmpty,
+            onSelected: (_) => setState(() => _decayFilter = ''),
+          ),
+          ChoiceChip(
+            label: const Text('活跃'),
+            selected: _decayFilter == 'active',
+            onSelected: (_) => setState(() => _decayFilter = 'active'),
+          ),
+          ChoiceChip(
+            label: const Text('淡化中'),
+            selected: _decayFilter == 'fading',
+            onSelected: (_) => setState(() => _decayFilter = 'fading'),
+          ),
+          ChoiceChip(
+            label: const Text('已归档'),
+            selected: _decayFilter == 'archived',
+            onSelected: (_) => setState(() => _decayFilter = 'archived'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCard(BuildContext context, EpisodicDto memory) {
     final sentiment = _sentiment(memory.sentimentScore);
     final sentimentType = memory.sentimentScore >= 40
         ? BadgeType.success
@@ -81,7 +168,10 @@ class EpisodicMemoryPage extends ConsumerWidget {
                   children: [
                     Text(memory.title.isEmpty ? '未命名情景' : memory.title, style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 2),
-                    Text(_formatTime(memory.messageTimeStart.isNotEmpty ? memory.messageTimeStart : memory.createdAt), style: AppTypography.caption(context)),
+                    Text(
+                      _formatTime(memory.messageTimeStart.isNotEmpty ? memory.messageTimeStart : memory.createdAt),
+                      style: AppTypography.caption(context),
+                    ),
                   ],
                 ),
               ),
@@ -93,19 +183,52 @@ class EpisodicMemoryPage extends ConsumerWidget {
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.xs,
             children: [
+              AmitiaStatusBadge(
+                label: 'L${_retention(memory.retentionLevel)} · ${(memory.memoryStrength.clamp(0.0, 1.0) * 100).round()}%',
+                type: _retentionBadge(memory.retentionLevel),
+              ),
+              if (memory.decayState == 'archived') const AmitiaStatusBadge(label: '已归档', type: BadgeType.neutral),
+              if (memory.decayState == 'fading') const AmitiaStatusBadge(label: '淡化中', type: BadgeType.warning),
               if (memory.sceneType.isNotEmpty) AmitiaStatusBadge(label: memory.sceneType, type: BadgeType.info),
               if (memory.triggerKeywords.isNotEmpty) AmitiaStatusBadge(label: memory.triggerKeywords, type: BadgeType.neutral),
             ],
           ),
           SizedBox(height: AppSpacing.sm),
           Text(memory.content, style: AppTypography.bodySmall(context), maxLines: 3, overflow: TextOverflow.ellipsis),
+          SizedBox(height: AppSpacing.xs),
+          Text(
+            '强化 ${memory.reinforceCount} 次${memory.lastReinforcedAt.isEmpty ? '' : ' · 上次 ${_formatTime(memory.lastReinforcedAt)}'}',
+            style: AppTypography.caption(context),
+          ),
           SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              TextButton.icon(onPressed: () => _showDetail(context, memory), icon: const Icon(Icons.visibility_outlined, size: 16), label: const Text('详情')),
+              TextButton.icon(
+                onPressed: () => _showDetail(context, memory),
+                icon: const Icon(Icons.visibility_outlined, size: 16),
+                label: const Text('详情'),
+              ),
+              PopupMenuButton<int>(
+                tooltip: '调整 L1–L5',
+                onSelected: (level) => _updateRetention(context, memory, level),
+                itemBuilder: (_) => [
+                  for (var level = 1; level <= 5; level++)
+                    PopupMenuItem<int>(value: level, child: Text('L$level${level == memory.retentionLevel ? ' · 当前' : ''}')),
+                ],
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: Text('调整层级'),
+                ),
+              ),
+              if (memory.decayState == 'archived')
+                TextButton.icon(
+                  onPressed: () => _restore(context, memory),
+                  icon: const Icon(Icons.restore_outlined, size: 16),
+                  label: const Text('恢复'),
+                ),
               const Spacer(),
               TextButton.icon(
-                onPressed: () => _delete(context, ref, memory),
+                onPressed: () => _delete(context, memory),
                 icon: Icon(Icons.delete_outline, size: 16, color: context.error),
                 label: Text('删除', style: TextStyle(color: context.error)),
               ),
@@ -132,6 +255,11 @@ class EpisodicMemoryPage extends ConsumerWidget {
             children: [
               Text(memory.title.isEmpty ? '情景详情' : memory.title, style: AppTypography.sectionTitle(context)),
               SizedBox(height: AppSpacing.lg),
+              _row(context, '记忆层级', 'L${_retention(memory.retentionLevel)}'),
+              _row(context, '当前强度', '${(memory.memoryStrength.clamp(0.0, 1.0) * 100).round()}%'),
+              _row(context, '遗忘状态', _decayLabel(memory.decayState)),
+              _row(context, '强化次数', '${memory.reinforceCount}'),
+              _row(context, '上次强化', memory.lastReinforcedAt),
               _row(context, '场景类型', memory.sceneType),
               _row(context, '情感分值', '${memory.sentimentScore}（${_sentiment(memory.sentimentScore)}）'),
               _row(context, '触发关键词', memory.triggerKeywords),
@@ -173,7 +301,25 @@ class EpisodicMemoryPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _delete(BuildContext context, WidgetRef ref, EpisodicDto memory) async {
+  Future<void> _updateRetention(BuildContext context, EpisodicDto memory, int level) async {
+    try {
+      await ref.read(episodicServiceProvider).updateRetention(memory.id, level);
+      ref.invalidate(episodicListProvider);
+    } catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('调整层级失败：$error')));
+    }
+  }
+
+  Future<void> _restore(BuildContext context, EpisodicDto memory) async {
+    try {
+      await ref.read(episodicServiceProvider).restore(memory.id);
+      ref.invalidate(episodicListProvider);
+    } catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('恢复失败：$error')));
+    }
+  }
+
+  Future<void> _delete(BuildContext context, EpisodicDto memory) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -191,6 +337,27 @@ class EpisodicMemoryPage extends ConsumerWidget {
       ref.invalidate(episodicListProvider);
     } catch (error) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('删除失败：$error')));
+    }
+  }
+
+  static int _retention(int level) => level < 1 || level > 5 ? 4 : level;
+
+  static BadgeType _retentionBadge(int level) {
+    final normalized = _retention(level);
+    if (normalized <= 2) return BadgeType.success;
+    if (normalized == 3) return BadgeType.accent;
+    if (normalized == 4) return BadgeType.warning;
+    return BadgeType.neutral;
+  }
+
+  static String _decayLabel(String state) {
+    switch (state) {
+      case 'fading':
+        return '正在淡化';
+      case 'archived':
+        return '已归档';
+      default:
+        return '活跃';
     }
   }
 

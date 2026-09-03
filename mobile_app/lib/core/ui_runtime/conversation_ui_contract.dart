@@ -18,6 +18,10 @@ abstract final class ConversationUIAction {
   static const sendCode = 'conversation.sendCode';
   static const sendVoice = 'conversation.sendVoice';
   static const sendEmote = 'conversation.sendEmote';
+  static const chooseWorkspace = 'conversation.workspace.choose';
+  static const selectWorkspace = 'conversation.workspace.select';
+  static const clearWorkspace = 'conversation.workspace.clear';
+  static const refreshWorkspaces = 'conversation.workspace.refresh';
 }
 
 typedef UIActionHandler = FutureOr<dynamic> Function(dynamic input);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -24,15 +25,28 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
   int _selectedSegment = 0;
   bool _loading = true;
   String? _error;
+  Timer? _refreshTimer;
+  bool _refreshing = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_refreshing && mounted) unawaited(_load(showLoading: false));
+    });
   }
 
-  Future<void> _load() async {
-    if (mounted) setState(() { _loading = true; _error = null; });
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool showLoading = true}) async {
+    if (_refreshing) return;
+    _refreshing = true;
+    if (showLoading && mounted) setState(() { _loading = true; _error = null; });
     try {
       final service = ref.read(reminderServiceProvider);
       final values = await Future.wait<dynamic>([service.list(), service.status()]);
@@ -41,9 +55,12 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         _reminders = values[0] as List<ReminderDto>;
         _status = values[1] as Map<String, dynamic>;
         _loading = false;
+        _error = null;
       });
     } catch (error) {
-      if (mounted) setState(() { _error = error.toString(); _loading = false; });
+      if (showLoading && mounted) setState(() { _error = error.toString(); _loading = false; });
+    } finally {
+      _refreshing = false;
     }
   }
 

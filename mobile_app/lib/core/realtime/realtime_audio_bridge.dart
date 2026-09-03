@@ -47,6 +47,8 @@ class RealtimeAudioBridge {
     required String eventId,
     String? sessionId,
     String? conversationId,
+    String? visualContext,
+    String? visualSource,
   }) async {
     final normalized = transcript.trim();
     if (normalized.isEmpty || eventId.trim().isEmpty) return;
@@ -57,6 +59,10 @@ class RealtimeAudioBridge {
         if ((sessionId ?? '').trim().isNotEmpty) 'sessionId': sessionId!.trim(),
         if ((conversationId ?? '').trim().isNotEmpty)
           'conversationId': conversationId!.trim(),
+        if ((visualContext ?? '').trim().isNotEmpty)
+          'visualContext': visualContext!.trim(),
+        if ((visualSource ?? '').trim().isNotEmpty)
+          'visualSource': visualSource!.trim(),
       });
     } on MissingPluginException {
       // Device workflow triggers are Android-only for this bridge.

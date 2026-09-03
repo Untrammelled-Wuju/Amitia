@@ -8,6 +8,9 @@ class WorkspaceMountDto {
   final bool readOnly;
   final bool available;
   final String status;
+  final String statusReason;
+  final DateTime? updatedAt;
+  final DateTime? lastUsedAt;
 
   WorkspaceMountDto({
     required this.id,
@@ -17,6 +20,9 @@ class WorkspaceMountDto {
     required this.readOnly,
     required this.available,
     required this.status,
+    this.statusReason = '',
+    this.updatedAt,
+    this.lastUsedAt,
   });
 
   factory WorkspaceMountDto.fromJson(Map<String, dynamic> json) {
@@ -28,6 +34,9 @@ class WorkspaceMountDto {
       readOnly: json['readOnly'] as bool? ?? false,
       available: json['available'] as bool? ?? false,
       status: json['status'] as String? ?? 'unavailable',
+      statusReason: json['statusReason'] as String? ?? '',
+      updatedAt: DateTime.tryParse((json['updatedAt'] ?? '').toString()),
+      lastUsedAt: DateTime.tryParse((json['lastUsedAt'] ?? json['updatedAt'] ?? '').toString()),
     );
   }
 }
@@ -44,6 +53,78 @@ class WorkspaceService {
         .whereType<Map>()
         .map((e) => WorkspaceMountDto.fromJson(Map<String, dynamic>.from(e)))
         .toList();
+  }
+
+  Future<List<WorkspaceMountDto>> listLocal() async {
+    final resp = await _api.get<List<dynamic>>('/api/local/workspaces');
+    if (resp == null) return const [];
+    final mounts = resp
+        .whereType<Map>()
+        .map((e) => WorkspaceMountDto.fromJson(Map<String, dynamic>.from(e)))
+        .where((mount) => mount.kind == 'local' || mount.kind == 'saf')
+        .toList(growable: true);
+    for (var i = 0; i < mounts.length; i++) {
+      final mount = mounts[i];
+      if (mount.kind != 'saf' || mount.available) continue;
+      try {
+        final refreshed = await _api.post<Map<String, dynamic>>(
+          '/api/local/workspaces/${Uri.encodeComponent(mount.id)}/refresh',
+          fromJson: (e) => Map<String, dynamic>.from(e as Map),
+        );
+        if (refreshed != null) mounts[i] = WorkspaceMountDto.fromJson(refreshed);
+      } catch (_) {
+        // The native relay can still be connecting during app startup. The
+        // next dropdown refresh will retry without losing the persisted mount.
+      }
+    }
+    mounts.sort((a, b) {
+      final at = a.lastUsedAt?.millisecondsSinceEpoch ?? 0;
+      final bt = b.lastUsedAt?.millisecondsSinceEpoch ?? 0;
+      return bt.compareTo(at);
+    });
+    return mounts;
+  }
+
+  Future<WorkspaceMountDto> registerLocal({
+    required String name,
+    required String localRoot,
+    bool readOnly = false,
+  }) async {
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/local/workspaces/local',
+      data: <String, dynamic>{
+        'name': name.trim().isEmpty ? '工作目录' : name.trim(),
+        'localRoot': localRoot.trim(),
+        'readOnly': readOnly,
+      },
+      fromJson: (e) => Map<String, dynamic>.from(e as Map),
+    );
+    if (resp == null) throw StateError('工作目录注册失败：后端未返回结果');
+    return WorkspaceMountDto.fromJson(resp);
+  }
+
+  Future<WorkspaceMountDto> registerSaf({
+    required String name,
+    required String grantId,
+    bool readOnly = false,
+  }) async {
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/local/workspaces/saf',
+      data: <String, dynamic>{
+        'name': name.trim().isEmpty ? '工作目录' : name.trim(),
+        'grantId': grantId.trim(),
+        'readOnly': readOnly,
+      },
+      fromJson: (e) => Map<String, dynamic>.from(e as Map),
+    );
+    if (resp == null) throw StateError('工作目录授权注册失败：后端未返回结果');
+    return WorkspaceMountDto.fromJson(resp);
+  }
+
+  Future<void> touchLocal(String id) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/local/workspaces/${Uri.encodeComponent(id)}/touch',
+    );
   }
 
   Future<WorkspaceMountDto?> getById(String id) async {

@@ -4,9 +4,13 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
+import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/extension_service.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/ui_runtime/mobile_extension_slot.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 final installedExtensionViewProvider = FutureProvider.autoDispose<ExtensionCenterView>((ref) async {
   final svc = ref.read(extensionServiceProvider);
@@ -20,28 +24,42 @@ class ExtensionCenterPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final viewAsync = ref.watch(installedExtensionViewProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('扩展中心'),
+    return AmitiaScaffold(
+      appBar: AmitiaAppBar(
+        title: '扩展中心',
+        navigation: AmitiaAppBarNavigation.back,
+        actions: [
+          const ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 180),
+            child: MobileExtensionSlot(
+              slotId: 'extension.center.header.action',
+              context: {'surface': 'extension-center'},
+            ),
+          ),
+          AmitiaIconButton(
+            icon: Icons.refresh_rounded,
+            tooltip: '刷新',
+            onPressed: () => ref.invalidate(installedExtensionViewProvider),
+          ),
+        ],
       ),
       body: viewAsync.when(
         data: (view) => _buildContent(context, ref, view),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(child: Text('加载失败: $err')),
+        loading: () => const AmitiaLoadingState(message: '正在加载扩展能力…'),
+        error: (err, _) => AmitiaErrorState(
+          message: '扩展中心加载失败：$err',
+          onRetry: () => ref.invalidate(installedExtensionViewProvider),
+        ),
       ),
     );
   }
 
   Widget _buildContent(BuildContext context, WidgetRef ref, ExtensionCenterView view) {
-    if (view.all.isEmpty) {
-      return const Center(child: Text('暂无扩展'));
-    }
-
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
         Text('扩展能力', style: AppTypography.pageTitle(context).copyWith(fontSize: 16)),
-        const SizedBox(height: 8),
+        SizedBox(height: AppSpacing.sm),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -54,11 +72,20 @@ class ExtensionCenterPage extends ConsumerWidget {
             _CenterEntry(label: '执行记录', icon: Icons.receipt_long_outlined, onTap: () => context.push(AppRoutes.extensionsRuns)),
           ],
         ),
+        if (view.all.isEmpty) ...[
+          SizedBox(height: AppSpacing.sectionGap),
+          const AmitiaEmptyState(
+            icon: Icons.extension_off_outlined,
+            title: '暂无已发现扩展',
+            subtitle: '上方入口仍可用于安装扩展包、连接 MCP 或管理 Skill',
+          ),
+        ],
         if (view.updates.isNotEmpty) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: AppSpacing.lg),
           Text('可更新 (${view.updates.length})', style: AppTypography.pageTitle(context).copyWith(fontSize: 16)),
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpacing.sm),
           ...view.updates.map((card) => AmitiaExtensionCard(
+                extensionId: card.extensionId,
                 name: card.displayName,
                 description: card.description,
                 icon: Icons.system_update_alt,
@@ -73,10 +100,11 @@ class ExtensionCenterPage extends ConsumerWidget {
               )),
         ],
         if (view.needsAction.isNotEmpty) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: AppSpacing.lg),
           Text('需要处理 (${view.needsAction.length})', style: AppTypography.pageTitle(context).copyWith(fontSize: 16)),
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpacing.sm),
           ...view.needsAction.map((card) => AmitiaExtensionCard(
+                extensionId: card.extensionId,
                 name: card.displayName,
                 description: card.description,
                 icon: Icons.warning_amber_outlined,
@@ -92,8 +120,9 @@ class ExtensionCenterPage extends ConsumerWidget {
         ],
         if (view.installed.isNotEmpty) ...[
           Text('已安装', style: AppTypography.pageTitle(context).copyWith(fontSize: 16)),
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpacing.sm),
           ...view.installed.map((card) => AmitiaExtensionCard(
+                extensionId: card.extensionId,
                 name: card.displayName,
                 description: card.description,
                 icon: Icons.extension_outlined,
@@ -109,10 +138,11 @@ class ExtensionCenterPage extends ConsumerWidget {
               )),
         ],
         if (view.discover.isNotEmpty) ...[
-          const SizedBox(height: 16),
+          SizedBox(height: AppSpacing.lg),
           Text('发现', style: AppTypography.pageTitle(context).copyWith(fontSize: 16)),
-          const SizedBox(height: 8),
+          SizedBox(height: AppSpacing.sm),
           ...view.discover.map((card) => AmitiaExtensionCard(
+                extensionId: card.extensionId,
                 name: card.displayName,
                 description: card.description,
                 icon: Icons.extension_outlined,
@@ -120,11 +150,8 @@ class ExtensionCenterPage extends ConsumerWidget {
                 isInstalled: false,
                 isEnabled: false,
                 isRecommended: card.contributionTags.contains('recommended'),
-                onAction: () async {
-                  final svc = ref.read(extensionServiceProvider);
-                  await svc.installKernelExtensionUpdate(card.extensionId, 'latest');
-                  ref.invalidate(installedExtensionViewProvider);
-                },
+                actionLabel: '管理',
+                onAction: () => context.push(AppRoutes.extensionsPackages),
               )),
         ],
       ],
@@ -167,6 +194,7 @@ class _CenterEntry extends StatelessWidget {
 }
 
 class AmitiaExtensionCard extends StatelessWidget {
+  final String extensionId;
   final String name;
   final String description;
   final IconData icon;
@@ -174,11 +202,13 @@ class AmitiaExtensionCard extends StatelessWidget {
   final bool isInstalled;
   final bool isEnabled;
   final bool isRecommended;
+  final String actionLabel;
   final VoidCallback? onAction;
   final ValueChanged<bool>? onToggle;
 
   const AmitiaExtensionCard({
     super.key,
+    required this.extensionId,
     required this.name,
     required this.description,
     required this.icon,
@@ -186,6 +216,7 @@ class AmitiaExtensionCard extends StatelessWidget {
     required this.isInstalled,
     required this.isEnabled,
     this.isRecommended = false,
+    this.actionLabel = '安装',
     this.onAction,
     this.onToggle,
   });
@@ -266,6 +297,20 @@ class AmitiaExtensionCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                const SizedBox(height: 4),
+                MobileExtensionSlot(
+                  slotId: 'extension.center.card.badge',
+                  context: {
+                    'extensionId': extensionId,
+                    'extension': {
+                      'id': extensionId,
+                      'name': name,
+                      'status': typeLabel,
+                      'installed': isInstalled,
+                      'enabled': isEnabled,
+                    },
+                  },
+                ),
               ],
             ),
           ),
@@ -292,7 +337,7 @@ class AmitiaExtensionCard extends StatelessWidget {
                   borderRadius: AppRadius.brTag,
                 ),
                 child: Text(
-                  '安装',
+                  actionLabel,
                   style: TextStyle(
                     fontSize: 13,
                     color: Colors.white,

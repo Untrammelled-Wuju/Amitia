@@ -21,19 +21,38 @@ class ConversationRuntimeController extends ChangeNotifier {
   final List<ChatMessage> _messages = <ChatMessage>[];
   String? _conversationId;
   String? _characterId;
+  ConversationWorkspaceDto? _workspace;
   bool _sending = false;
   Object? _lastError;
   int _generationEpoch = 0;
+  Timer? _liveSyncTimer;
+  bool _syncingMessages = false;
+  bool _disposed = false;
+
+  static const Duration _liveSyncInterval = Duration(seconds: 4);
 
   UnmodifiableListView<ChatMessage> get messages =>
       UnmodifiableListView<ChatMessage>(_messages);
   String? get conversationId => _conversationId;
+  ConversationWorkspaceDto? get workspace => _workspace;
   bool get sending => _sending;
   Object? get lastError => _lastError;
   String get state => _sending ? 'sending' : 'idle';
 
   void setCharacterId(String? characterId) {
     _characterId = characterId?.trim().isEmpty == true ? null : characterId;
+  }
+
+  void setWorkspace(ConversationWorkspaceDto? workspace) {
+    final previous = _workspace;
+    if (previous?.workspaceId == workspace?.workspaceId &&
+        previous?.deviceId == workspace?.deviceId &&
+        previous?.workspaceName == workspace?.workspaceName &&
+        previous?.rootUri == workspace?.rootUri) {
+      return;
+    }
+    _workspace = workspace;
+    notifyListeners();
   }
 
   ChatMessage _copy(
@@ -260,10 +279,24 @@ class ConversationRuntimeController extends ChangeNotifier {
         audioDuration: audioDuration,
         videoUrl: videoUrl,
         replyToMessageId: replyToMessageId,
+        workspace: _workspace,
       );
       if (epoch != _generationEpoch) return;
       if (result.conversationId.isNotEmpty) {
         _conversationId = result.conversationId;
+        _restartLiveSync();
+        final workspace = _workspace;
+        if (workspace != null) {
+          try {
+            _workspace = await _chatService.setConversationWorkspace(
+              result.conversationId,
+              workspace,
+            );
+          } catch (_) {
+            // The submit request already carries the workspace binding; this
+            // explicit save only closes the first-message persistence race.
+          }
+        }
       }
       final localIndex = _messages.indexWhere((m) => m.id == localMessage.id);
       if (localIndex >= 0) {
@@ -324,10 +357,11 @@ class ConversationRuntimeController extends ChangeNotifier {
     await _syncMessages();
   }
 
-  Future<void> _syncMessages() async {
+  Future<void> _syncMessages({bool background = false}) async {
     final conv = _conversationId;
     if (conv == null || conv.isEmpty) return;
     final persisted = await _chatService.getMessages(conv);
+    if (_disposed || _conversationId != conv || (background && _sending)) return;
     if (persisted.isEmpty) return;
 
     final localById = <String, ChatMessage>{
@@ -353,17 +387,92 @@ class ConversationRuntimeController extends ChangeNotifier {
         durationMs: dto.audioDuration > 0
             ? (dto.audioDuration * 1000).round()
             : existing?.durationMs,
+        toolName: existing?.toolName,
+        toolResult: existing?.toolResult,
         replyToMessageId: dto.replyToMessageId ?? existing?.replyToMessageId,
         replyToExcerpt: dto.replyToExcerpt ?? existing?.replyToExcerpt,
       );
     }).toList(growable: false);
+    if (_sameMessageList(_messages, mapped)) return;
     _messages
       ..clear()
       ..addAll(mapped);
     notifyListeners();
   }
 
+  void _restartLiveSync() {
+    _liveSyncTimer?.cancel();
+    final conv = _conversationId?.trim() ?? '';
+    if (_disposed || conv.isEmpty) return;
+    _liveSyncTimer = Timer.periodic(_liveSyncInterval, (_) {
+      if (_disposed || _sending || _syncingMessages) return;
+      unawaited(_pollPersistedMessages());
+    });
+  }
+
+  Future<void> _pollPersistedMessages() async {
+    if (_syncingMessages) return;
+    _syncingMessages = true;
+    try {
+      await _syncMessages(background: true);
+    } catch (_) {
+      // Proactive/reminder reconciliation is a background fallback. A transient
+      // transport failure must not replace the current conversation with an
+      // error state; explicit user actions still surface their own failures.
+    } finally {
+      _syncingMessages = false;
+    }
+  }
+
+  bool _sameMessageList(List<ChatMessage> current, List<ChatMessage> next) {
+    if (current.length != next.length) return false;
+    for (var i = 0; i < current.length; i++) {
+      final a = current[i];
+      final b = next[i];
+      if (a.id != b.id ||
+          a.role != b.role ||
+          a.type != b.type ||
+          a.content != b.content ||
+          a.status != b.status ||
+          a.time != b.time ||
+          a.resourceUri != b.resourceUri ||
+          a.durationMs != b.durationMs ||
+          a.replyToMessageId != b.replyToMessageId ||
+          a.replyToExcerpt != b.replyToExcerpt) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   MessageType _typeForDto(MessageDto dto, ChatMessage? existing) {
+    final rawType = dto.msgType.trim().toLowerCase().replaceAll('-', '_');
+    switch (rawType) {
+      case 'image':
+        return MessageType.image;
+      case 'video':
+        return MessageType.video;
+      case 'audio':
+      case 'voice':
+        return MessageType.audio;
+      case 'emote':
+      case 'emoji':
+        return MessageType.emote;
+      case 'code':
+        return MessageType.code;
+      case 'file':
+        return MessageType.file;
+      case 'agent_task':
+      case 'agenttask':
+        return MessageType.agentTask;
+      case 'tool_call':
+      case 'toolcall':
+      case 'tool':
+        return MessageType.toolCall;
+      case 'system_notice':
+      case 'systemnotice':
+        return MessageType.systemNotice;
+    }
     if (existing != null && existing.type != MessageType.text) {
       return existing.type;
     }
@@ -510,6 +619,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _messages.clear();
     _lastError = null;
     _sending = false;
+    _restartLiveSync();
     notifyListeners();
     try {
       await _syncMessages();
@@ -526,6 +636,7 @@ class ConversationRuntimeController extends ChangeNotifier {
     _characterId = characterId;
     _messages.clear();
     _lastError = null;
+    _restartLiveSync();
     notifyListeners();
     return true;
   }
@@ -544,6 +655,14 @@ class ConversationRuntimeController extends ChangeNotifier {
       );
     }
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _liveSyncTimer?.cancel();
+    _liveSyncTimer = null;
+    super.dispose();
   }
 
   String _localId(String prefix) =>

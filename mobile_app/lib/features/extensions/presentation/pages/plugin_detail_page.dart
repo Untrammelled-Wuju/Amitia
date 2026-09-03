@@ -9,6 +9,7 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 
 class PluginDetailPage extends ConsumerStatefulWidget {
   final String pluginId;
@@ -69,8 +70,27 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
     final isInstalled = (plugin['isInstalled'] as bool?) ?? ((plugin['installed'] as int?) == 1);
     final isEnabled = (plugin['isEnabled'] as bool?) ?? ((plugin['enabled'] as int?) == 1);
 
+    final slotContext = <String, dynamic>{
+      'extensionId': widget.pluginId,
+      'extension': plugin,
+      'surface': 'extension-detail',
+    };
+
     return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: name, showBackButton: true, fallbackRoute: AppRoutes.extensions),
+      appBar: AmitiaAppBar(
+        title: name,
+        showBackButton: true,
+        fallbackRoute: AppRoutes.extensions,
+        actions: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: MobileExtensionSlot(
+              slotId: 'extension.detail.action',
+              context: slotContext,
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         top: false,
         child: ListView(
@@ -106,6 +126,19 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
                   _InfoRow(label: '启用', value: isEnabled ? '已启用' : '已禁用'),
                 ],
               ),
+            ),
+            SizedBox(height: AppSpacing.md),
+            MobileExtensionSlot(
+              slotId: 'extension.detail.tab',
+              context: slotContext,
+            ),
+            MobileExtensionSlot(
+              slotId: 'extension.settings.page',
+              context: {...slotContext, 'surface': 'extension-settings-page'},
+            ),
+            MobileExtensionSlot(
+              slotId: 'extension.settings.section',
+              context: {...slotContext, 'surface': 'extension-settings-section'},
             ),
             SizedBox(height: AppSpacing.md),
             AmitiaButton(

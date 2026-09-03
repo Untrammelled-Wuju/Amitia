@@ -13,6 +13,7 @@ import '../../runtime/runtime_bridge_provider.dart';
 import '../../runtime/runtime_bridge_state.dart';
 import '../../runtime/backend/mobile_backend_providers.dart';
 import '../../runtime/backend/mobile_deployment_mode.dart';
+import '../../runtime/backend/backend_topology_resolver.dart';
 
 final accountSessionProvider = Provider<AccountSessionStore>((ref) {
   return FlutterSecureAccountSessionStore();
@@ -169,16 +170,8 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
       );
     }
     try {
-      final parsed = Uri.parse(uri.trim());
+      final parsed = normalizeRemoteCoreUri(uri);
       final scheme = parsed.scheme.toLowerCase();
-      if (scheme != 'http' && scheme != 'https') {
-        return const BackendConnectionUnavailable(
-          BackendConnectionError(
-            BackendConnectionErrorCode.ENDPOINT_INVALID,
-            'remote core URI must use http or https',
-          ),
-        );
-      }
       final host = parsed.host;
       if (host.isEmpty) {
         return const BackendConnectionUnavailable(

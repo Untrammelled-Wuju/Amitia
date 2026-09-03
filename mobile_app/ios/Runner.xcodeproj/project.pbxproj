@@ -56,6 +56,8 @@
 		A1B2C3D4E5F60060 /* AmitiaAppShortcutsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60061 /* AmitiaAppShortcutsProvider.swift */; };
 		A1B2C3D4E5F60062 /* ShortcutActionGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60063 /* ShortcutActionGateway.swift */; };
 		A1B2C3D4E5F60064 /* IOSNativeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60065 /* IOSNativeTransport.swift */; };
+		A1B2C3D4E5F60066 /* RealtimeVisualAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60067 /* RealtimeVisualAdapter.swift */; };
+		A1B2C3D4E5F6001C /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6002C /* ReplayKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -108,6 +110,7 @@
 		A1B2C3D4E5F60029 /* Intents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Intents.framework; path = System/Library/Frameworks/Intents.framework; sourceTree = SDKROOT; };
 		A1B2C3D4E5F6002A /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
 		A1B2C3D4E5F6002B /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F6002C /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = System/Library/Frameworks/ReplayKit.framework; sourceTree = SDKROOT; };
 		A1B2C3D4E5F60040 /* IOSNativeHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSNativeHost.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60041 /* HealthKitNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitNativeHandler.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60042 /* CalendarNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarNativeHandler.swift; sourceTree = "<group>"; };
@@ -135,6 +138,7 @@
 		A1B2C3D4E5F60061 /* AmitiaAppShortcutsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmitiaAppShortcutsProvider.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60063 /* ShortcutActionGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutActionGateway.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60065 /* IOSNativeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSNativeTransport.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60067 /* RealtimeVisualAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealtimeVisualAdapter.swift; sourceTree = "<group>"; };
 		97C146FB1CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -161,6 +165,7 @@
 				A1B2C3D4E5F60019 /* Intents.framework in Frameworks */,
 				A1B2C3D4E5F6001A /* UniformTypeIdentifiers.framework in Frameworks */,
 				A1B2C3D4E5F6001B /* UserNotifications.framework in Frameworks */,
+				A1B2C3D4E5F6001C /* ReplayKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -231,6 +236,7 @@
 				A1B2C3D4E5F60029 /* Intents.framework */,
 				A1B2C3D4E5F6002A /* UniformTypeIdentifiers.framework */,
 				A1B2C3D4E5F6002B /* UserNotifications.framework */,
+				A1B2C3D4E5F6002C /* ReplayKit.framework */,
 				A1B2C3D4E5F60070 /* NativeProvider */,
 			);
 			path = Runner;
@@ -316,6 +322,7 @@
 				A1B2C3D4E5F60053 /* AudioRecorderAdapter.swift */,
 				A1B2C3D4E5F60055 /* CameraAdapter.swift */,
 				A1B2C3D4E5F60057 /* PhotoLibraryAdapter.swift */,
+				A1B2C3D4E5F60067 /* RealtimeVisualAdapter.swift */,
 			);
 			path = Media;
 			sourceTree = "<group>";
@@ -542,6 +549,7 @@
 				A1B2C3D4E5F60060 /* AmitiaAppShortcutsProvider.swift in Sources */,
 				A1B2C3D4E5F60062 /* ShortcutActionGateway.swift in Sources */,
 				A1B2C3D4E5F60064 /* IOSNativeTransport.swift in Sources */,
+				A1B2C3D4E5F60066 /* RealtimeVisualAdapter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

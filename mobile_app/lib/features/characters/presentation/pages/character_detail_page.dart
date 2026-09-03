@@ -17,6 +17,8 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/memory.dart';
+import '../../../../core/ui_runtime/mobile_extension_slot.dart';
+import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 
 class CharacterDetailPage extends ConsumerStatefulWidget {
   final String characterId;
@@ -44,6 +46,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     final characterAsync = ref.watch(characterListProvider);
     final memoriesAsync = ref.watch(memoryListProvider);
     final isDevMode = ref.watch(isDeveloperModeProvider);
+    final uiSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    final hasExtensionTab =
+        uiSnapshot?.contributionsForSlot('character.detail.tab').isNotEmpty ?? false;
 
     return characterAsync.when(
       loading: () => const AmitiaScaffold(
@@ -68,20 +73,52 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           loading: () => const AmitiaScaffold(
             body: Center(child: CircularProgressIndicator()),
           ),
-          error: (_, __) => _buildScaffold(context, character, [], isDevMode),
-          data: (memories) => _buildScaffold(context, character, memories.take(5).toList(), isDevMode),
+          error: (_, __) => _buildScaffold(context, character, [], isDevMode, hasExtensionTab),
+          data: (memories) => _buildScaffold(
+            context,
+            character,
+            memories.take(5).toList(),
+            isDevMode,
+            hasExtensionTab,
+          ),
         );
       },
     );
   }
 
-  Widget _buildScaffold(BuildContext context, CharacterDto character, List<MemoryDto> memories, bool isDevMode) {
+  Map<String, dynamic> _characterSlotContext(CharacterDto character) => {
+        'characterId': character.id,
+        'character': {
+          'id': character.id,
+          'name': character.name,
+          'status': character.status,
+          'identity': character.identity,
+        },
+      };
+
+  Widget _buildScaffold(
+    BuildContext context,
+    CharacterDto character,
+    List<MemoryDto> memories,
+    bool isDevMode,
+    bool hasExtensionTab,
+  ) {
+    final tabs = <String>[..._tabs, if (hasExtensionTab) '扩展'];
+    final selectedTab = _selectedTab < tabs.length ? _selectedTab : 0;
+    final slotContext = _characterSlotContext(character);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: character.name,
         showBackButton: true,
         fallbackRoute: AppRoutes.characters,
         actions: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: MobileExtensionSlot(
+              slotId: 'character.detail.action',
+              context: slotContext,
+            ),
+          ),
           AmitiaIconButton(
             icon: Icons.more_horiz,
             onPressed: () => _showCharacterActionsSheet(context, character),
@@ -94,6 +131,13 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           children: [
             _buildInfoSection(context, character),
             Padding(
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              child: MobileExtensionSlot(
+                slotId: 'character.sidebar.card',
+                context: slotContext,
+              ),
+            ),
+            Padding(
               padding: EdgeInsets.fromLTRB(
                 AppSpacing.pagePadding,
                 AppSpacing.md,
@@ -101,8 +145,8 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 AppSpacing.sm,
               ),
               child: AmitiaSegmentedControl(
-                segments: _tabs,
-                selectedIndex: _selectedTab,
+                segments: tabs,
+                selectedIndex: selectedTab,
                 onChanged: (index) {
                   setState(() {
                     _selectedTab = index;
@@ -111,7 +155,13 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               ),
             ),
             Expanded(
-              child: _buildTabContent(context, character, memories, isDevMode),
+              child: _buildTabContent(
+                context,
+                character,
+                memories,
+                isDevMode,
+                hasExtensionTab,
+              ),
             ),
           ],
         ),
@@ -206,7 +256,13 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  Widget _buildTabContent(BuildContext context, CharacterDto character, List<MemoryDto> memories, bool isDevMode) {
+  Widget _buildTabContent(
+    BuildContext context,
+    CharacterDto character,
+    List<MemoryDto> memories,
+    bool isDevMode,
+    bool hasExtensionTab,
+  ) {
     switch (_selectedTab) {
       case 0:
         return _buildOverviewTab(context, character, memories, isDevMode);
@@ -220,6 +276,19 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         return _buildAbilityTab(context, character);
       case 5:
         return _buildLifeTab(context, character);
+      case 6:
+        if (hasExtensionTab) {
+          return ListView(
+            padding: EdgeInsets.all(AppSpacing.pagePadding),
+            children: [
+              MobileExtensionSlot(
+                slotId: 'character.detail.tab',
+                context: _characterSlotContext(character),
+              ),
+            ],
+          );
+        }
+        return const SizedBox.shrink();
       default:
         return const SizedBox.shrink();
     }

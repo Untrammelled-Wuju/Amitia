@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../app/app_routes.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -25,10 +28,20 @@ class DevicesPage extends ConsumerWidget {
         title: '我的设备',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
-          IconButton(
+          AmitiaIconButton(
+            icon: Icons.add_link_outlined,
+            tooltip: '添加当前设备',
+            onPressed: () => context.push(AppRoutes.settingsDeviceAdd),
+          ),
+          AmitiaIconButton(
+            icon: Icons.tune_outlined,
+            tooltip: '设备设置',
+            onPressed: () => context.push(AppRoutes.settingsDeviceSettings),
+          ),
+          AmitiaIconButton(
+            icon: Icons.refresh,
             tooltip: '刷新',
             onPressed: () => ref.invalidate(_devicesProvider),
-            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
@@ -65,7 +78,23 @@ class DevicesPage extends ConsumerWidget {
                     const SizedBox(height: 14),
                     Text('暂无已绑定设备', style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 6),
-                    Text('云端设备完成绑定后会显示在这里。', style: AppTypography.caption(context)),
+                    Text(
+                      '可将当前设备加入 Cloud Core 的 Device Mesh，设备本地 Runtime / Device Agent 会继续保留。',
+                      style: AppTypography.caption(context),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 18),
+                    AmitiaButton(
+                      label: '添加当前设备',
+                      icon: Icons.add_link_outlined,
+                      onPressed: () => context.push(AppRoutes.settingsDeviceAdd),
+                    ),
+                    const SizedBox(height: 8),
+                    AmitiaButton(
+                      label: '设备设置',
+                      isSecondary: true,
+                      onPressed: () => context.push(AppRoutes.settingsDeviceSettings),
+                    ),
                   ],
                 ),
               ),

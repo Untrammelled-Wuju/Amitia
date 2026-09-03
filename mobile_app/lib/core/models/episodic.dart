@@ -15,6 +15,13 @@ class EpisodicDto {
   final String sourceConvId;
   final String createdAt;
   final String updatedAt;
+  final int retentionLevel;
+  final double memoryStrength;
+  final String strengthUpdatedAt;
+  final String lastReinforcedAt;
+  final int reinforceCount;
+  final String decayState;
+  final String archivedAt;
 
   const EpisodicDto({
     required this.id,
@@ -33,6 +40,13 @@ class EpisodicDto {
     this.sourceConvId = '',
     this.createdAt = '',
     this.updatedAt = '',
+    this.retentionLevel = 4,
+    this.memoryStrength = 0.5,
+    this.strengthUpdatedAt = '',
+    this.lastReinforcedAt = '',
+    this.reinforceCount = 0,
+    this.decayState = 'active',
+    this.archivedAt = '',
   });
 
   factory EpisodicDto.fromJson(Map<String, dynamic> json) => EpisodicDto(
@@ -52,6 +66,13 @@ class EpisodicDto {
         sourceConvId: (json['sourceConvId'] ?? '').toString(),
         createdAt: (json['createdAt'] ?? '').toString(),
         updatedAt: (json['updatedAt'] ?? '').toString(),
+        retentionLevel: (json['retentionLevel'] as num?)?.toInt() ?? 4,
+        memoryStrength: (json['memoryStrength'] as num?)?.toDouble() ?? 0.5,
+        strengthUpdatedAt: (json['strengthUpdatedAt'] ?? '').toString(),
+        lastReinforcedAt: (json['lastReinforcedAt'] ?? '').toString(),
+        reinforceCount: (json['reinforceCount'] as num?)?.toInt() ?? 0,
+        decayState: (json['decayState'] ?? 'active').toString(),
+        archivedAt: (json['archivedAt'] ?? '').toString(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -71,5 +92,12 @@ class EpisodicDto {
         'sourceConvId': sourceConvId,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
+        'retentionLevel': retentionLevel,
+        'memoryStrength': memoryStrength,
+        'strengthUpdatedAt': strengthUpdatedAt,
+        'lastReinforcedAt': lastReinforcedAt,
+        'reinforceCount': reinforceCount,
+        'decayState': decayState,
+        'archivedAt': archivedAt,
       };
 }

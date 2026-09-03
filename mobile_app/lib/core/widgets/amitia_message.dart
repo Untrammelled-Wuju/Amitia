@@ -70,6 +70,7 @@ class AmitiaMessageBubble extends StatelessWidget {
   final bool showThinking;
   final VoidCallback? onRetry;
   final VoidCallback? onReply;
+  final VoidCallback? onCopy;
   final VoidCallback? onAgentTaskTap;
   final VoidCallback? onPauseAgentTask;
   final VoidCallback? onResumeAgentTask;
@@ -89,6 +90,7 @@ class AmitiaMessageBubble extends StatelessWidget {
     this.showThinking = false,
     this.onRetry,
     this.onReply,
+    this.onCopy,
     this.onAgentTaskTap,
     this.onPauseAgentTask,
     this.onResumeAgentTask,
@@ -191,6 +193,17 @@ class AmitiaMessageBubble extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                         child: Icon(Icons.reply_rounded, size: 14, color: context.textTertiary),
+                      ),
+                    ),
+                  ],
+                  if (onCopy != null) ...[
+                    const SizedBox(width: 7),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onCopy,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                        child: Icon(Icons.copy_outlined, size: 13, color: context.textTertiary),
                       ),
                     ),
                   ],
@@ -1241,8 +1254,6 @@ const List<String> _codeLanguages = [
 class AmitiaChatInput extends StatefulWidget {
   final ValueChanged<String> onSend;
   final String? recipientName;
-  final bool isAgentMode;
-  final ValueChanged<bool>? onAgentModeChanged;
   final FutureOr<void> Function()? onPickFile;
   final FutureOr<void> Function(bool camera)? onPickImage;
   final FutureOr<void> Function(bool camera)? onPickVideo;
@@ -1258,8 +1269,6 @@ class AmitiaChatInput extends StatefulWidget {
     super.key,
     required this.onSend,
     this.recipientName,
-    this.isAgentMode = false,
-    this.onAgentModeChanged,
     this.onPickFile,
     this.onPickImage,
     this.onPickVideo,
@@ -1830,12 +1839,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                         tooltip: '添加内容',
                         onTap: _showComposerTools,
                       ),
-                      const SizedBox(width: 6),
-                      _ClaudeStyleAgentChip(
-                        isEnabled: widget.isAgentMode,
-                        onTap: () =>
-                            widget.onAgentModeChanged?.call(!widget.isAgentMode),
-                      ),
                       const Spacer(),
                       _ComposerRoundButton(
                         icon: Icons.mic_none_outlined,
@@ -1913,50 +1916,6 @@ class _ComposerRoundButton extends StatelessWidget {
     );
   }
 }
-class _ClaudeStyleAgentChip extends StatelessWidget {
-  final bool isEnabled;
-  final VoidCallback onTap;
-
-  const _ClaudeStyleAgentChip({required this.isEnabled, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        height: 31,
-        padding: const EdgeInsets.symmetric(horizontal: 9),
-        decoration: BoxDecoration(
-          color: isEnabled ? context.accentSoft : context.surfaceSecondary,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isEnabled ? context.accentPrimary : context.borderPrimary,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.auto_awesome_outlined,
-              size: 14,
-              color: isEnabled ? context.accentPrimary : context.textSecondary,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              'Agent',
-              style: AppTypography.label(context).copyWith(
-                color: isEnabled ? context.accentPrimary : context.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ComposerTool extends StatelessWidget {
   final IconData icon;
   final String label;

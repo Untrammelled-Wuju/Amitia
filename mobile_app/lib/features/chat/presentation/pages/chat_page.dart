@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../app/app_routes.dart';
@@ -15,6 +17,11 @@ import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/chat_service.dart';
+import '../../../../core/services/workspace_service.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
+import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/artifact/artifact_model.dart';
 import '../../../../core/artifact/artifact_providers.dart';
@@ -30,7 +37,6 @@ import '../../../../core/ui_runtime/mobile_dynamic_runtime.dart';
 import '../../runtime/conversation_runtime_controller.dart';
 import '../../../../shared/models/models.dart';
 import 'realtime_voice_call_sheet.dart';
-import 'call_placeholder_page.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key, this.initialConversationId, this.initialCharacterId});
@@ -50,6 +56,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Map<String, FutureOr<dynamic> Function(dynamic)>? _cachedProviderActions;
   Timer? _conversationEventRefreshTimer;
   ChatMessage? _replyTarget;
+  List<WorkspaceMountDto> _recentWorkspaces = const <WorkspaceMountDto>[];
+  bool _workspaceBusy = false;
 
   @override
   void initState() {
@@ -61,7 +69,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _openInitialConversation() async {
     final conversationId = widget.initialConversationId?.trim() ?? '';
-    if (!mounted || conversationId.isEmpty) return;
+    if (!mounted) return;
+    if (conversationId.isEmpty) {
+      await _refreshRecentWorkspaces();
+      return;
+    }
     final characterId = widget.initialCharacterId?.trim() ?? '';
     if (characterId.isNotEmpty) {
       ref.read(currentCharacterIdProvider.notifier).state = characterId;
@@ -70,6 +82,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       conversationId,
       characterId: characterId.isEmpty ? null : characterId,
     );
+    await Future.wait<void>([
+      _loadConversationWorkspace(conversationId),
+      _refreshRecentWorkspaces(),
+    ]);
   }
 
   void _onRuntimeChanged() {
@@ -103,6 +119,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (same) return _cachedProviderContext!;
     }
     final messagesMap = currentMessages.map(_providerMessage).toList(growable: false);
+    final workspace = _runtime.workspace;
     _cachedMessagesForContext = List<ChatMessage>.from(currentMessages);
     _cachedProviderContext = <String, dynamic>{
       'route': '/chat',
@@ -113,6 +130,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         'avatarColor': avatarColor,
       },
       'messages': messagesMap,
+      'workspace': workspace == null
+          ? null
+          : <String, dynamic>{
+              'workspaceId': workspace.workspaceId,
+              'deviceId': workspace.deviceId,
+              'name': workspace.workspaceName,
+              'kind': workspace.workspaceKind,
+              'rootUri': workspace.rootUri,
+            },
+      'recentWorkspaces': _recentWorkspaces
+          .map((mount) => <String, dynamic>{
+                'workspaceId': mount.id,
+                'name': mount.name,
+                'kind': mount.kind,
+                'rootUri': mount.rootUri,
+                'available': mount.available,
+                'status': mount.status,
+                'statusReason': mount.statusReason,
+              })
+          .toList(growable: false),
     };
     return _cachedProviderContext!;
   }
@@ -160,6 +197,316 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
 
 
+
+  Future<void> _refreshRecentWorkspaces() async {
+    try {
+      final items = await ref.read(workspaceServiceProvider).listLocal();
+      if (!mounted) return;
+      _cachedProviderContext = null;
+      setState(() {
+        _recentWorkspaces = items.take(10).toList(growable: false);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      _cachedProviderContext = null;
+      setState(() => _recentWorkspaces = const <WorkspaceMountDto>[]);
+    }
+  }
+
+  Future<void> _loadConversationWorkspace(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) {
+      _runtime.setWorkspace(null);
+      return;
+    }
+    try {
+      final binding = await ref.read(chatServiceProvider).conversationWorkspace(id);
+      if (!mounted || _runtime.conversationId?.trim() != id) return;
+      _runtime.setWorkspace(binding);
+    } catch (_) {
+      if (!mounted || _runtime.conversationId?.trim() != id) return;
+      _runtime.setWorkspace(null);
+    }
+  }
+
+  Future<ConversationWorkspaceDto> _workspaceBindingForMount(
+    WorkspaceMountDto mount,
+  ) async {
+    var deviceId = '';
+    final deployment = ref.read(mobileDeploymentConfigProvider);
+    if (deployment.mode == MobileDeploymentMode.cloud) {
+      final localMesh = ref.read(deviceMeshLocalServiceProvider);
+      if (localMesh == null) {
+        throw StateError('本机 Device Agent 尚未就绪，云端模式无法绑定本地工作目录');
+      }
+      final identity = await localMesh.identity();
+      deviceId = (identity['deviceId'] ?? '').toString().trim();
+      if (deviceId.isEmpty) {
+        throw StateError('无法读取本机 Device Mesh 身份');
+      }
+    }
+    return ConversationWorkspaceDto(
+      conversationId: _runtime.conversationId?.trim() ?? '',
+      workspaceId: mount.id,
+      deviceId: deviceId,
+      workspaceName: mount.name,
+      workspaceKind: mount.kind,
+      rootUri: mount.rootUri.isEmpty
+          ? 'amitia://workspace/@${mount.id}/'
+          : mount.rootUri,
+    );
+  }
+
+  Future<void> _selectWorkspaceMount(WorkspaceMountDto mount) async {
+    if (_workspaceBusy) return;
+    if (!mount.available) {
+      if (mounted) {
+        amitiaSnackBar(
+          context,
+          mount.statusReason.isNotEmpty ? mount.statusReason : '该工作目录当前不可用',
+        );
+      }
+      return;
+    }
+    setState(() => _workspaceBusy = true);
+    try {
+      var binding = await _workspaceBindingForMount(mount);
+      final conversationId = _runtime.conversationId?.trim() ?? '';
+      if (conversationId.isNotEmpty) {
+        binding = await ref
+            .read(chatServiceProvider)
+            .setConversationWorkspace(conversationId, binding);
+      }
+      _runtime.setWorkspace(binding);
+      try {
+        await ref.read(workspaceServiceProvider).touchLocal(mount.id);
+      } catch (_) {}
+      await _refreshRecentWorkspaces();
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '切换工作目录失败：$error');
+    } finally {
+      if (mounted) setState(() => _workspaceBusy = false);
+    }
+  }
+
+  Future<WorkspaceMountDto?> _pickWorkspaceMount() async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
+      final response = await dispatcher.execute(<String, dynamic>{
+        'protocolVersion': 1,
+        'requestId': 'workspace-picker-${DateTime.now().microsecondsSinceEpoch}',
+        'platform': 'android',
+        'operation': 'workspace.saf.pick_tree',
+        'payload': const <String, dynamic>{},
+      });
+      if ((response['status'] ?? '').toString() != 'success') {
+        final rawError = response['error'];
+        final error = rawError is Map ? Map<String, dynamic>.from(rawError) : const <String, dynamic>{};
+        throw StateError((error['message'] ?? '系统目录授权失败').toString());
+      }
+      final rawResult = response['result'];
+      final result = rawResult is Map ? Map<String, dynamic>.from(rawResult) : const <String, dynamic>{};
+      if (result['cancelled'] == true) return null;
+      final grantId = (result['grantId'] ?? '').toString().trim();
+      if (grantId.isEmpty) throw StateError('系统目录授权未返回 grantId');
+      return ref.read(workspaceServiceProvider).registerSaf(
+            name: (result['name'] ?? '工作目录').toString(),
+            grantId: grantId,
+            readOnly: result['readOnly'] == true,
+          );
+    }
+
+    final path = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: '选择工作目录',
+    );
+    final localRoot = path?.trim() ?? '';
+    if (localRoot.isEmpty) return null;
+    final normalized = localRoot.replaceAll('\\', '/');
+    final segments = normalized
+        .split('/')
+        .where((segment) => segment.trim().isNotEmpty)
+        .toList(growable: false);
+    final name = segments.isEmpty ? '工作目录' : segments.last;
+    return ref.read(workspaceServiceProvider).registerLocal(
+          name: name,
+          localRoot: localRoot,
+        );
+  }
+
+  Future<void> _chooseWorkspaceDirectory() async {
+    if (_workspaceBusy) return;
+    setState(() => _workspaceBusy = true);
+    try {
+      final mount = await _pickWorkspaceMount();
+      if (mount == null) return;
+      var binding = await _workspaceBindingForMount(mount);
+      final conversationId = _runtime.conversationId?.trim() ?? '';
+      if (conversationId.isNotEmpty) {
+        binding = await ref
+            .read(chatServiceProvider)
+            .setConversationWorkspace(conversationId, binding);
+      }
+      _runtime.setWorkspace(binding);
+      await _refreshRecentWorkspaces();
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '选择工作目录失败：$error');
+    } finally {
+      if (mounted) setState(() => _workspaceBusy = false);
+    }
+  }
+
+  Future<void> _clearWorkspace() async {
+    if (_workspaceBusy) return;
+    setState(() => _workspaceBusy = true);
+    try {
+      final conversationId = _runtime.conversationId?.trim() ?? '';
+      if (conversationId.isNotEmpty) {
+        await ref.read(chatServiceProvider).clearConversationWorkspace(conversationId);
+      }
+      _runtime.setWorkspace(null);
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '清除工作目录失败：$error');
+    } finally {
+      if (mounted) setState(() => _workspaceBusy = false);
+    }
+  }
+
+  Future<void> _showWorkspacePicker() async {
+    await _refreshRecentWorkspaces();
+    if (!mounted) return;
+    final selectedId = _runtime.workspace?.workspaceId ?? '';
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: context.surfacePrimary,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 2, 20, 10),
+                child: Text(
+                  '工作目录',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (_recentWorkspaces.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                  child: Text('暂无最近使用的工作目录'),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: _recentWorkspaces.length,
+                    itemBuilder: (_, index) {
+                      final mount = _recentWorkspaces[index];
+                      return ListTile(
+                        leading: const Icon(Icons.folder_outlined),
+                        title: Text(
+                          mount.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          mount.available
+                              ? (mount.kind == 'saf' ? '系统授权目录' : '本机目录')
+                              : (mount.statusReason.isNotEmpty
+                                  ? mount.statusReason
+                                  : '目录不可用'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        enabled: mount.available && !_workspaceBusy,
+                        trailing: mount.id == selectedId
+                            ? const Icon(Icons.check_rounded)
+                            : null,
+                        onTap: () {
+                          Navigator.of(sheetContext).pop();
+                          _selectWorkspaceMount(mount);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.create_new_folder_outlined),
+                title: const Text('选择其他目录…'),
+                enabled: !_workspaceBusy,
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _chooseWorkspaceDirectory();
+                },
+              ),
+              if (_runtime.workspace != null)
+                ListTile(
+                  leading: const Icon(Icons.close_rounded),
+                  title: const Text('清除工作目录'),
+                  enabled: !_workspaceBusy,
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    _clearWorkspace();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkspaceBar(BuildContext context) {
+    final workspace = _runtime.workspace;
+    final label = workspace?.workspaceName.trim().isNotEmpty == true
+        ? workspace!.workspaceName.trim()
+        : '选择工作目录';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _workspaceBusy ? null : _showWorkspacePicker,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.folder_outlined, size: 16),
+                  const SizedBox(width: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 230),
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  if (_workspaceBusy)
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 1.5),
+                    )
+                  else
+                    const Icon(Icons.keyboard_arrow_down_rounded, size: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   void _onSend(String text) {
     final reply = _replyTarget;
@@ -414,23 +761,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (!mounted || mode == null) return;
     switch (mode) {
       case 'voice':
-        await _startRealtimeCall(characterId, characterName);
+        await _startRealtimeCall(characterId, characterName, mode: RealtimeCallMode.voice);
       case 'video':
-        await showPlaceholderCallPage(
-          context,
-          mode: PlaceholderCallMode.video,
-          characterName: characterName,
-        );
+        await _startRealtimeCall(characterId, characterName, mode: RealtimeCallMode.video);
       case 'screen':
-        await showPlaceholderCallPage(
-          context,
-          mode: PlaceholderCallMode.screen,
-          characterName: characterName,
-        );
+        await _startRealtimeCall(characterId, characterName, mode: RealtimeCallMode.screen);
     }
   }
 
-  Future<void> _startRealtimeCall(String characterId, String characterName) async {
+  Future<void> _startRealtimeCall(
+    String characterId,
+    String characterName, {
+    RealtimeCallMode mode = RealtimeCallMode.voice,
+  }) async {
     var conversationId = _runtime.conversationId;
     if (conversationId == null || conversationId.isEmpty) {
       try {
@@ -457,6 +800,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       builder: (_) => RealtimeVoiceCallSheet(
         conversationId: conversationId!,
         characterName: characterName,
+        initialMode: mode,
       ),
     );
   }
@@ -479,6 +823,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         );
       },
     );
+  }
+
+  Future<void> _copyMessage(ChatMessage message) async {
+    final text = message.content.trim();
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) amitiaSnackBar(context, '消息已复制');
   }
 
   Future<void> _clearCurrentConversation() async {
@@ -557,18 +908,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           value: 1,
         ),
         AmitiaActionSheetItem(
+          icon: Icons.refresh_rounded,
+          label: '重新生成',
+          value: 2,
+        ),
+        AmitiaActionSheetItem(
           icon: Icons.file_download_outlined,
           label: '导出聊天记录',
-          value: 2,
+          value: 3,
         ),
         AmitiaActionSheetItem(
           icon: Icons.cleaning_services_outlined,
           label: '清空聊天记录',
-          value: 3,
+          value: 4,
           isDestructive: true,
         ),
       ],
-    ).then((result) {
+    ).then((result) async {
       if (result == null || !mounted) return;
       switch (result) {
         case 0:
@@ -577,8 +933,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         case 1:
           _showMessageSearch(context);
         case 2:
-          _showExportSheet(context);
+          final conversationId = _runtime.conversationId?.trim() ?? '';
+          if (conversationId.isEmpty) {
+            amitiaSnackBar(context, '当前还没有可重新生成的会话');
+            return;
+          }
+          await _runtime.regenerate();
+          if (!mounted) return;
+          final error = _runtime.lastError;
+          if (error != null) {
+            amitiaSnackBar(context, '重新生成失败：$error');
+          }
         case 3:
+          _showExportSheet(context);
+        case 4:
           showAmitiaConfirmDialog(
             context,
             title: '清空聊天记录',
@@ -630,7 +998,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         if (id != null && id.isNotEmpty) await _runtime.deleteMessage(id);
         return null;
       },
-      ConversationUIAction.newConversation: (_) => _runtime.createConversation(characterId),
+      ConversationUIAction.newConversation: (_) async {
+        _runtime.setWorkspace(null);
+        return _runtime.createConversation(characterId);
+      },
       ConversationUIAction.openDrawer: (_) => _openDrawer(context),
       ConversationUIAction.clear: (_) => _clearCurrentConversation(),
       ConversationUIAction.reply: (input) {
@@ -660,12 +1031,29 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         if (emoteId.isNotEmpty) _runtime.sendEmote(emoteId, displayText);
         return null;
       },
+      ConversationUIAction.chooseWorkspace: (_) => _showWorkspacePicker(),
+      ConversationUIAction.selectWorkspace: (input) async {
+        final rawWorkspaceId = input is Map ? input['workspaceId'] : input;
+        final workspaceId = rawWorkspaceId?.toString().trim() ?? '';
+        if (workspaceId.isEmpty) {
+          await _showWorkspacePicker();
+          return null;
+        }
+        WorkspaceMountDto? mount = _recentWorkspaces.where((item) => item.id == workspaceId).firstOrNull;
+        if (mount == null) {
+          await _refreshRecentWorkspaces();
+          mount = _recentWorkspaces.where((item) => item.id == workspaceId).firstOrNull;
+        }
+        if (mount != null) await _selectWorkspaceMount(mount);
+        return null;
+      },
+      ConversationUIAction.clearWorkspace: (_) => _clearWorkspace(),
+      ConversationUIAction.refreshWorkspaces: (_) => _refreshRecentWorkspaces(),
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    final isAgentMode = ref.watch(isAgentModeProvider);
     final selectedCharacterId = ref.watch(currentCharacterIdProvider);
     final characters = ref.watch(characterListProvider).valueOrNull ?? const <CharacterDto>[];
     CharacterDto? character = characters.where((item) => item.id == selectedCharacterId).firstOrNull;
@@ -698,21 +1086,33 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       'avatarInitial': userInitial,
       'avatarColor': userAvatarColor,
     };
-    providerContext['agentMode'] = isAgentMode;
     providerContext['conversationState'] = _runtime.state;
     providerContext['sending'] = _runtime.sending;
     providerContext['conversationId'] = _runtime.conversationId;
     final providerActions = _providerActions(characterId);
 
     final uiSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    final conversationId = _runtime.conversationId?.trim() ?? '';
+    final runtimeSessionState = conversationId.isEmpty
+        ? null
+        : ref.watch(clientRuntimeSessionStateProvider(conversationId)).valueOrNull;
+    bool hasExtensionSlot(String slotId) {
+      if (uiSnapshot == null) return false;
+      if (uiSnapshot.contributionsForSlot(slotId).isNotEmpty) return true;
+      return MobileDynamicRuntime.slotContributions(
+        snapshot: uiSnapshot,
+        sessionState: runtimeSessionState,
+        slotId: slotId,
+      ).isNotEmpty;
+    }
     bool externalProvider(String capability) {
       final provider = uiSnapshot?.resolve(capability);
       return provider != null && provider.enabled && !provider.builtin;
     }
     final hasSidebarProvider = externalProvider(UICapability.conversationSidebar);
+    final hasSidebarExtensions = hasExtensionSlot('chat.sidebar.panel');
     final hasOverlayProvider = externalProvider(UICapability.conversationOverlay);
 
-    final conversationId = _runtime.conversationId?.trim() ?? '';
     final serializedMessages = _runtime.messages.map(_providerMessage).toList(growable: false);
     final durableConversationRecords = ref
             .watch(conversationUIEventWindowProvider(conversationId))
@@ -741,9 +1141,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
     final showLiveAgentProcess = _runtime.sending && !hasAssistantAfterLastUser;
 
-    final runtimeSessionState = conversationId.isEmpty
-        ? null
-        : ref.watch(clientRuntimeSessionStateProvider(conversationId)).valueOrNull;
     final projectionContributions = uiSnapshot == null
         ? const <UIContributionSnapshotEntry>[]
         : <UIContributionSnapshotEntry>[
@@ -781,6 +1178,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return left.key.compareTo(right.key);
     });
 
+    final emptyStateSlotCount = flowItems.isEmpty ? 1 : 0;
+
     final builtinConversation = AmitiaScaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
@@ -801,9 +1200,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.symmetric(vertical: 32),
-                          itemCount: flowItems.length + (showLiveAgentProcess ? 1 : 0),
+                          itemCount: emptyStateSlotCount + flowItems.length + (showLiveAgentProcess ? 1 : 0),
                           itemBuilder: (context, flowIndex) {
-                            if (flowIndex >= flowItems.length) {
+                            if (emptyStateSlotCount == 1 && flowIndex == 0) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                child: MobileExtensionSlot(
+                                  slotId: 'chat.empty_state.card',
+                                  context: {...providerContext, 'surface': 'empty-state'},
+                                  actions: providerActions,
+                                ),
+                              );
+                            }
+                            final contentIndex = flowIndex - emptyStateSlotCount;
+                            if (contentIndex >= flowItems.length) {
                               return RepaintBoundary(
                                 child: AmitiaMessageBubble(
                                   message: ChatMessage(
@@ -825,7 +1235,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 ),
                               );
                             }
-                            final item = flowItems[flowIndex];
+                            final item = flowItems[contentIndex];
                             if (!item.isMessage) {
                               final node = item.node!;
                               return MobileExtensionSlot(
@@ -861,6 +1271,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 onReply: message.type == MessageType.systemNotice
                                     ? null
                                     : () => _setReplyTarget(message),
+                                onCopy: message.type == MessageType.systemNotice || message.content.trim().isEmpty
+                                    ? null
+                                    : () => _copyMessage(message),
                                 onAgentTaskTap: isAgentTask
                                     ? () => context.push(AppRoutes.agent)
                                     : null,
@@ -878,17 +1291,58 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               context: { ...providerContext, 'message': _providerMessage(message), 'messageIndex': index },
                               actions: providerActions,
                             );
-                            return MobileExtensionSlot(
+                            final messageContext = <String, dynamic>{
+                              ...providerContext,
+                              'messageId': message.id,
+                              'messageType': message.type.name,
+                              'message': _providerMessage(message),
+                              'messageIndex': index,
+                            };
+                            final standardRendered = MobileExtensionSlot(
                               slotId: 'chat.message.renderer',
-                              context: {
-                                ...providerContext,
-                                'messageId': message.id,
-                                'messageType': message.type.name,
-                                'message': _providerMessage(message),
-                                'messageIndex': index,
-                              },
+                              context: messageContext,
                               actions: providerActions,
                               fallback: providerMessage,
+                            );
+                            final customRendered = MobileExtensionSlot(
+                              slotId: 'chat.message.custom_renderer',
+                              context: messageContext,
+                              actions: providerActions,
+                              fallback: standardRendered,
+                            );
+                            final hasAttachment = (message.resourceUri ?? '').trim().isNotEmpty ||
+                                (message.fileName ?? '').trim().isNotEmpty;
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                customRendered,
+                                if (hasAttachment)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(52, 2, 12, 2),
+                                    child: MobileExtensionSlot(
+                                      slotId: 'chat.message.attachment_renderer',
+                                      context: messageContext,
+                                      actions: providerActions,
+                                    ),
+                                  ),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(52, 0, 12, 2),
+                                  child: MobileExtensionSlot(
+                                    slotId: 'chat.message.badge',
+                                    context: messageContext,
+                                    actions: providerActions,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(52, 0, 12, 6),
+                                  child: MobileExtensionSlot(
+                                    slotId: 'chat.message.action',
+                                    context: messageContext,
+                                    actions: providerActions,
+                                  ),
+                                ),
+                              ],
                             );
                           },
                         ),
@@ -913,24 +1367,60 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     capability: UICapability.conversationComposer,
                     context: providerContext,
                     actions: providerActions,
-                    fallback: AmitiaChatInput(
-                    onSend: _onSend,
-                    recipientName: characterName,
-                    isAgentMode: isAgentMode,
-                    onAgentModeChanged: (value) {
-                      ref.read(isAgentModeProvider.notifier).state = value;
-                    },
-                    onPickFile: _pickAndSendFile,
-                    onPickImage: _pickAndSendImage,
-                    onPickVideo: _pickAndSendVideo,
-                    onPickAudio: _pickAndSendAudio,
-                    onSendCode: _onSendCode,
-                    onLoadEmotes: () => ref.read(emoteServiceProvider).listEmotes(),
-                    onSendEmote: _onSendEmote,
-                    onLoadAgentSkills: () => _loadAgentSkills(characterId),
-                    replyPreview: _replyTarget == null ? null : _replyExcerpt(_replyTarget!),
-                    onCancelReply: () => _setReplyTarget(null),
+                    fallback: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        MobileExtensionSlot(
+                          slotId: 'chat.composer.hint',
+                          context: {...providerContext, 'surface': 'composer-hint'},
+                          actions: providerActions,
+                        ),
+                        _buildWorkspaceBar(context),
+                        AmitiaChatInput(
+                          onSend: _onSend,
+                          recipientName: characterName,
+                          onPickFile: _pickAndSendFile,
+                          onPickImage: _pickAndSendImage,
+                          onPickVideo: _pickAndSendVideo,
+                          onPickAudio: _pickAndSendAudio,
+                          onSendCode: _onSendCode,
+                          onLoadEmotes: () => ref.read(emoteServiceProvider).listEmotes(),
+                          onSendEmote: _onSendEmote,
+                          onLoadAgentSkills: () => _loadAgentSkills(characterId),
+                          replyPreview: _replyTarget == null ? null : _replyExcerpt(_replyTarget!),
+                          onCancelReply: () => _setReplyTarget(null),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: MobileExtensionSlot(
+                                  slotId: 'chat.composer.action',
+                                  context: {...providerContext, 'surface': 'composer-action'},
+                                  actions: providerActions,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: MobileExtensionSlot(
+                                  slotId: 'chat.composer.attachment',
+                                  context: {...providerContext, 'surface': 'composer-attachment'},
+                                  actions: providerActions,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                  MobileExtensionSlot(
+                    slotId: 'chat.status.item',
+                    context: {...providerContext, 'surface': 'status'},
+                    actions: providerActions,
                   ),
                 ],
               ),
@@ -948,10 +1438,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 onOpenDrawer: () => _openDrawer(context),
                 onCall: () => _showCallOptions(characterId, characterName),
                 onMore: () => _showChatActionsSheet(context),
+                extensionActions: MobileExtensionSlot(
+                  slotId: 'chat.header.action',
+                  context: {...providerContext, 'surface': 'header'},
+                  actions: providerActions,
+                ),
               ),
             ),
           ),
-          if (hasSidebarProvider)
+          if (hasSidebarProvider || hasSidebarExtensions)
             Positioned(
               top: _chatTopBarHeight,
               right: 0,
@@ -962,7 +1457,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   capability: UICapability.conversationSidebar,
                   context: {...providerContext, 'surface': 'sidebar'},
                   actions: providerActions,
-                  fallback: const SizedBox.shrink(),
+                  fallback: MobileExtensionSlot(
+                    slotId: 'chat.sidebar.panel',
+                    context: {...providerContext, 'surface': 'sidebar'},
+                    actions: providerActions,
+                  ),
                 ),
               ),
             ),
@@ -1032,11 +1531,13 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenDrawer;
   final VoidCallback onCall;
   final VoidCallback onMore;
+  final Widget? extensionActions;
 
   const _ChatTopBar({
     required this.onOpenDrawer,
     required this.onCall,
     required this.onMore,
+    this.extensionActions,
   });
 
   @override
@@ -1064,6 +1565,13 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
               onTap: onOpenDrawer,
             ),
             const Spacer(),
+            if (extensionActions != null) ...[
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 180),
+                child: extensionActions!,
+              ),
+              const SizedBox(width: 8),
+            ],
             _ChatTopBarButton(
               icon: Icons.call_outlined,
               size: 44,

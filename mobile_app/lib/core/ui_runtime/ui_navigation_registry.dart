@@ -42,6 +42,15 @@ class UINavigationItem {
 abstract final class UINavigationRegistry {
   static const List<UINavigationItem> builtinItems = <UINavigationItem>[
     UINavigationItem(
+      id: 'builtin.dashboard',
+      label: '概览',
+      route: AppRoutes.dashboard,
+      icon: Icons.dashboard_outlined,
+      panel: UINavigationPanel.main,
+      order: 5,
+      builtin: true,
+    ),
+    UINavigationItem(
       id: 'builtin.chat',
       label: '对话',
       route: AppRoutes.chat,
@@ -118,6 +127,8 @@ abstract final class UINavigationRegistry {
         return priority != 0 ? priority : a.providerId.compareTo(b.providerId);
       });
 
+    final effectiveProviderRoutes = effectiveProviderRouteKeys(snapshot);
+    final effectiveExtensionRoutes = effectiveExtensionRouteKeys(snapshot);
     final seenIds = <String>{};
     for (final provider in sources) {
       final raw = provider.metadata['navigationItems'];
@@ -132,10 +143,18 @@ abstract final class UINavigationRegistry {
         if (id.isEmpty ||
             label.isEmpty ||
             !route.startsWith('/') ||
-            route == '/' ||
-            !seenIds.add(compositeId)) {
+            route == '/') {
           continue;
         }
+        if (provider.capability == UICapability.routeRegistry) {
+          if (!effectiveProviderRoutes.contains('${provider.providerId}\u0000$route')) {
+            continue;
+          }
+        } else if (!isProtectedProviderRoutePath(route) &&
+            !effectiveExtensionRoutes.contains('${provider.extensionId}\u0000$route')) {
+          continue;
+        }
+        if (!seenIds.add(compositeId)) continue;
         final rawOrder = row['order'];
         final rawPrefixes = row['routePrefixes'] ?? row['match'];
         final baseIcon = UIIconRegistry.iconFromName((row['icon'] ?? 'extension').toString());

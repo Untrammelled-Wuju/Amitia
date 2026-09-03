@@ -307,6 +307,10 @@ class UIContributionSnapshotEntry {
   final Map<String, dynamic> visibility;
   final int ordering;
   final int priority;
+  final String entryKey;
+  final String cellId;
+  final dynamic matched;
+  final List<Map<String, dynamic>> matchRules;
 
   const UIContributionSnapshotEntry({
     required this.contributionId,
@@ -326,35 +330,94 @@ class UIContributionSnapshotEntry {
     required this.visibility,
     required this.ordering,
     required this.priority,
+    this.entryKey = '',
+    this.cellId = '',
+    this.matched,
+    this.matchRules = const <Map<String, dynamic>>[],
   });
 
   factory UIContributionSnapshotEntry.fromJson(Map<String, dynamic> json) {
-    final slot = (json['slot'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-    final entry = (json['entry'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-    final ordering = (json['ordering'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final slot =
+        (json['slot'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final entry =
+        (json['entry'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final ordering =
+        (json['ordering'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final dispatch =
+        (json['dispatch'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final contributionId =
+        (json['contribution_id'] ?? json['contributionId'] ?? '').toString();
+    final sortKey =
+        (ordering['sort_key'] ?? ordering['sortKey'] ?? '').toString().trim();
     final permissions = ((json['permissions'] as List?) ?? const [])
         .whereType<Map>()
         .map((item) => (item['name'] ?? item['permission'] ?? '').toString())
         .where((item) => item.isNotEmpty)
         .toList(growable: false);
+    final rawMatch = json['match'] ?? dispatch['match'];
     return UIContributionSnapshotEntry(
-      contributionId: (json['contribution_id'] ?? json['contributionId'] ?? '').toString(),
-      sourceContributionId: (json['source_contribution_id'] ?? json['sourceContributionId'])?.toString(),
-      runtimePackageId: (json['runtime_package_id'] ?? json['runtimePackageId'])?.toString(),
-      runtimePackageVersion: (json['runtime_package_version'] ?? json['runtimePackageVersion'])?.toString(),
-      extensionId: (json['extension_id'] ?? json['extensionId'] ?? '').toString(),
+      contributionId: contributionId,
+      sourceContributionId:
+          (json['source_contribution_id'] ?? json['sourceContributionId'])
+              ?.toString(),
+      runtimePackageId:
+          (json['runtime_package_id'] ?? json['runtimePackageId'])?.toString(),
+      runtimePackageVersion:
+          (json['runtime_package_version'] ?? json['runtimePackageVersion'])
+              ?.toString(),
+      extensionId:
+          (json['extension_id'] ?? json['extensionId'] ?? '').toString(),
       moduleId: (json['module_id'] ?? json['moduleId'] ?? '').toString(),
       kind: (json['kind'] ?? '').toString(),
       slotId: (slot['slot_id'] ?? slot['slotId'] ?? '').toString(),
-      contractVersion: (json['contract_version'] as num?)?.toInt() ?? (json['contractVersion'] as num?)?.toInt() ?? 1,
+      contractVersion:
+          (json['contract_version'] as num?)?.toInt() ??
+          (json['contractVersion'] as num?)?.toInt() ??
+          1,
       entryType: (entry['type'] ?? '').toString(),
       entryPath: (entry['path'] ?? '').toString(),
       schemaPath: (entry['schema_path'] ?? entry['schemaPath'])?.toString(),
       permissions: permissions,
-      dataContract: (json['data_contract'] as Map?)?.cast<String, dynamic>() ?? (json['dataContract'] as Map?)?.cast<String, dynamic>() ?? const {},
-      visibility: (json['visibility'] as Map?)?.cast<String, dynamic>() ?? const {},
-      ordering: (ordering['priority'] as num?)?.toInt() ?? 0,
+      dataContract:
+          (json['data_contract'] as Map?)?.cast<String, dynamic>() ??
+          (json['dataContract'] as Map?)?.cast<String, dynamic>() ??
+          const {},
+      visibility:
+          (json['visibility'] as Map?)?.cast<String, dynamic>() ?? const {},
+      ordering:
+          (ordering['ordering'] as num?)?.toInt() ??
+          (ordering['priority'] as num?)?.toInt() ??
+          0,
       priority: (ordering['priority'] as num?)?.toInt() ?? 0,
+      entryKey:
+          (dispatch['entry_key'] ?? dispatch['entryKey'] ?? sortKey)
+                  .toString()
+                  .trim()
+                  .isNotEmpty
+              ? (dispatch['entry_key'] ?? dispatch['entryKey'] ?? sortKey)
+                  .toString()
+                  .trim()
+              : contributionId,
+      cellId:
+          (dispatch['cell_id'] ?? dispatch['cellId'] ?? sortKey)
+                  .toString()
+                  .trim()
+                  .isNotEmpty
+              ? (dispatch['cell_id'] ?? dispatch['cellId'] ?? sortKey)
+                  .toString()
+                  .trim()
+              : contributionId,
+      matched: dispatch['matched'],
+      matchRules: rawMatch is List
+          ? rawMatch
+              .whereType<Map>()
+              .map((item) => item.cast<String, dynamic>())
+              .toList(growable: false)
+          : const <Map<String, dynamic>>[],
     );
   }
 }
@@ -362,6 +425,8 @@ class UIContributionSnapshotEntry {
 class UISlotSnapshotEntry {
   final String slotId;
   final int contractVersion;
+  final List<String> supportedKinds;
+  final String? kind;
   final String multiplicity;
   final String layout;
   final String fallbackPolicy;
@@ -375,6 +440,8 @@ class UISlotSnapshotEntry {
   const UISlotSnapshotEntry({
     required this.slotId,
     required this.contractVersion,
+    this.supportedKinds = const <String>[],
+    this.kind,
     required this.multiplicity,
     required this.layout,
     required this.fallbackPolicy,
@@ -386,22 +453,50 @@ class UISlotSnapshotEntry {
     required this.contributions,
   });
 
-  factory UISlotSnapshotEntry.fromJson(Map<String, dynamic> json) => UISlotSnapshotEntry(
-    slotId: (json['slotId'] ?? '').toString(),
-    contractVersion: (json['contractVersion'] as num?)?.toInt() ?? 1,
-    multiplicity: (json['multiplicity'] ?? 'ordered_multiple').toString(),
-    layout: (json['layout'] ?? 'stack').toString(),
-    fallbackPolicy: (json['fallbackPolicy'] ?? 'empty').toString(),
-    ownerExtension: json['ownerExtension']?.toString(),
-    parentSlotId: json['parentSlotId']?.toString(),
-    declarationEpoch: (json['declarationEpoch'] as num?)?.toInt() ?? 0,
-    scope: (json['scope'] ?? 'root').toString(),
-    dynamicSlot: json['dynamic'] == true,
-    contributions: ((json['contributions'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((item) => UIContributionSnapshotEntry.fromJson(item.cast<String, dynamic>()))
-        .toList(growable: false),
-  );
+  factory UISlotSnapshotEntry.fromJson(Map<String, dynamic> json) =>
+      UISlotSnapshotEntry(
+        slotId: (json['slotId'] ?? json['slot_id'] ?? '').toString(),
+        contractVersion:
+            (json['contractVersion'] as num?)?.toInt() ??
+            (json['contract_version'] as num?)?.toInt() ??
+            1,
+        supportedKinds:
+            ((json['supportedKinds'] ?? json['supported_kinds']) as List? ??
+                    const <dynamic>[])
+                .map((item) => item.toString().trim())
+                .where((item) => item.isNotEmpty)
+                .toList(growable: false),
+        kind: _nullableText(json['kind']),
+        multiplicity:
+            (json['multiplicity'] ?? 'ordered_multiple').toString(),
+        layout: (json['layout'] ?? 'stack').toString(),
+        fallbackPolicy:
+            (json['fallbackPolicy'] ?? json['fallback_policy'] ?? 'empty')
+                .toString(),
+        ownerExtension:
+            (json['ownerExtension'] ?? json['owner_extension'])?.toString(),
+        parentSlotId:
+            (json['parentSlotId'] ?? json['parent_slot_id'])?.toString(),
+        declarationEpoch:
+            (json['declarationEpoch'] as num?)?.toInt() ??
+            (json['declaration_epoch'] as num?)?.toInt() ??
+            0,
+        scope: (json['scope'] ?? 'root').toString(),
+        dynamicSlot: json['dynamic'] == true || json['dynamicSlot'] == true,
+        contributions: ((json['contributions'] as List?) ?? const [])
+            .whereType<Map>()
+            .map(
+              (item) => UIContributionSnapshotEntry.fromJson(
+                item.cast<String, dynamic>(),
+              ),
+            )
+            .toList(growable: false),
+      );
+}
+
+String? _nullableText(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? null : text;
 }
 
 class UIProviderSnapshot {

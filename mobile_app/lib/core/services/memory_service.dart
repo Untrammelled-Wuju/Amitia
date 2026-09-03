@@ -11,6 +11,9 @@ class MemoryService {
     String? keyword,
     String? memoryType,
     String? verifiedStatus,
+    int? retentionLevel,
+    String? decayState,
+    bool? pinned,
     int page = 1,
     int pageSize = 200,
   }) async {
@@ -23,6 +26,9 @@ class MemoryService {
         if (keyword != null && keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
         if (memoryType != null && memoryType.isNotEmpty) 'memoryType': memoryType,
         if (verifiedStatus != null && verifiedStatus.isNotEmpty) 'verifiedStatus': verifiedStatus,
+        if (retentionLevel != null && retentionLevel >= 1 && retentionLevel <= 5) 'retentionLevel': retentionLevel,
+        if (decayState != null && decayState.isNotEmpty) 'decayState': decayState,
+        if (pinned != null) 'pinned': pinned,
       },
     );
     return _memoryList(resp);
@@ -38,6 +44,12 @@ class MemoryService {
   Future<MemoryDto?> update(String id, Map<String, dynamic> data) async {
     final normalized = _normalizeWritePayload(data, isCreate: false);
     final resp = await _api.put<Map<String, dynamic>>('/api/memories/$id', data: normalized);
+    if (resp == null) return null;
+    return MemoryDto.fromJson(resp);
+  }
+
+  Future<MemoryDto?> restore(String id) async {
+    final resp = await _api.post<Map<String, dynamic>>('/api/memories/$id/restore');
     if (resp == null) return null;
     return MemoryDto.fromJson(resp);
   }
