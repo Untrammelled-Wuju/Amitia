@@ -30,8 +30,8 @@ func DefaultArchivePolicy() ArchivePolicy {
 		MaxDirectoryDepth:         32,
 		AllowSymlink:              false,
 		AllowHardlink:             false,
-		AllowNestedArchive:        false,
-		AllowExecutable:           false,
+		AllowNestedArchive:        true,
+		AllowExecutable:           true,
 		AllowDeclaredExecutable:   true,
 	}
 }
