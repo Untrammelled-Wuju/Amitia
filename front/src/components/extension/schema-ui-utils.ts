@@ -30,8 +30,7 @@ export type SchemaUINodeType =
   | "runtime_status"
   | "extension_slot"
   | "tab_item"
-  | "column"
-  | "input";
+  | "column";
 
 export interface UICondition {
   field: string;
@@ -147,7 +146,6 @@ export const ALLOWED_NODE_TYPES = new Set<string>([
   "extension_slot",
   "tab_item",
   "column",
-  "input",
 ]);
 
 export const FORBIDDEN_NODE_TYPES = new Set<string>([
@@ -202,20 +200,58 @@ export function setPath(data: Record<string, unknown>, path: string, value: unkn
 }
 
 export function evaluateCondition(value: unknown, op: string, expected: unknown): boolean {
+  const compare = (left: unknown, right: unknown): number | null => {
+    if (typeof left === "number" && typeof right === "number") return left === right ? 0 : left < right ? -1 : 1;
+    if (typeof left === "string" && typeof right === "string") return left.localeCompare(right);
+    return null;
+  };
   switch (op) {
     case "==":
     case "eq":
-      return value === expected;
+      return Object.is(value, expected);
     case "!=":
     case "ne":
-      return value !== expected;
-    case "in": {
-      if (Array.isArray(expected)) return expected.includes(value);
-      if (typeof expected === "string" && typeof value === "string") {
-        return expected.split(",").map((s) => s.trim()).includes(value);
-      }
-      return false;
+      return !Object.is(value, expected);
+    case ">":
+    case "gt": {
+      const result = compare(value, expected);
+      return result !== null && result > 0;
     }
+    case "<":
+    case "lt": {
+      const result = compare(value, expected);
+      return result !== null && result < 0;
+    }
+    case ">=":
+    case "gte": {
+      const result = compare(value, expected);
+      return result !== null && result >= 0;
+    }
+    case "<=":
+    case "lte": {
+      const result = compare(value, expected);
+      return result !== null && result <= 0;
+    }
+    case "in":
+    case "not_in": {
+      let found = false;
+      if (Array.isArray(expected)) found = expected.some((item) => Object.is(item, value));
+      else if (typeof expected === "string" && typeof value === "string") {
+        found = expected.split(",").map((item) => item.trim()).includes(value);
+      }
+      return op === "not_in" ? !found : found;
+    }
+    case "contains":
+      if (typeof value === "string" && typeof expected === "string") return value.includes(expected);
+      if (Array.isArray(value)) return value.some((item) => Object.is(item, expected));
+      return false;
+    case "regex":
+      if (typeof value !== "string" || typeof expected !== "string") return false;
+      try {
+        return new RegExp(expected).test(value);
+      } catch {
+        return false;
+      }
     case "not_null":
       return value !== null && value !== undefined;
     case "is_null":
@@ -254,11 +290,19 @@ export function resolveBinding(
       resolved = lookupPath(formState, path);
       break;
     case "state":
+      resolved = lookupPath(context.localState ?? context.local_state ?? context.state, path) ?? lookupPath(context, path);
+      break;
     case "query":
+      resolved = lookupPath(context.query, path) ?? lookupPath(context, path);
+      break;
     case "input":
+      resolved = lookupPath(context.input, path) ?? lookupPath(context, path);
+      break;
     case "runtime":
+      resolved = lookupPath(context.runtime, path) ?? lookupPath(context, path);
+      break;
     case "host":
-      resolved = lookupPath(context, path);
+      resolved = lookupPath(context.host, path) ?? lookupPath(context, path);
       break;
     case "storage": {
       try {

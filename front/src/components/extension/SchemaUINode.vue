@@ -63,7 +63,10 @@ const visible = computed(() => {
   return evaluateVisibility(cond, props.context);
 });
 
-const disabled = computed(() => evaluateVisibility(props.node.disabledWhen, props.context));
+const disabled = computed(() => {
+  const conditions = props.node.disabledWhen;
+  return Boolean(conditions?.length) && evaluateVisibility(conditions, props.context);
+});
 
 const children = computed<SchemaUINode[]>(() => props.node.children ?? []);
 
