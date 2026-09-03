@@ -20,7 +20,7 @@ func (s *service) syncGraph(m *Memory) {
 	if s.graphSvc == nil || m == nil {
 		return
 	}
-	if !memoryAllowedForDerivedContent(*m, time.Now()) {
+	if !memoryAllowedForDerivedContent(*m, time.Now()) || strings.EqualFold(m.DecayState, DecayStateArchived) {
 		s.deleteGraph(m)
 		return
 	}
@@ -36,21 +36,25 @@ func (s *service) syncGraph(m *Memory) {
 		label = strings.TrimSpace(m.Value)
 	}
 	_ = s.graphSvc.SyncNode("memory", m.ID, label, map[string]interface{}{
-		"key":             m.Key,
-		"value":           m.Value,
-		"memory_type":     m.MemoryType,
-		"source":          m.Source,
-		"scope":           m.Scope,
-		"importance":      m.Importance,
-		"confidence":      m.Confidence,
-		"character_id":    m.CharacterID,
-		"user_id":         userID,
-		"entity_type":     m.EntityType,
-		"source_msg_id":   m.SourceMsgID,
-		"source_conv_id":  m.SourceConvID,
-		"verified_status": m.VerifiedStatus,
-		"created_at":      m.CreatedAt,
-		"updated_at":      m.UpdatedAt,
+		"key":              m.Key,
+		"value":            m.Value,
+		"memory_type":      m.MemoryType,
+		"source":           m.Source,
+		"scope":            m.Scope,
+		"importance":       m.Importance,
+		"confidence":       m.Confidence,
+		"character_id":     m.CharacterID,
+		"user_id":          userID,
+		"entity_type":      m.EntityType,
+		"source_msg_id":    m.SourceMsgID,
+		"source_conv_id":   m.SourceConvID,
+		"verified_status":  m.VerifiedStatus,
+		"retention_level":  m.RetentionLevel,
+		"memory_strength":  m.MemoryStrength,
+		"decay_state":      m.DecayState,
+		"source_memory_id": m.ID,
+		"created_at":       m.CreatedAt,
+		"updated_at":       m.UpdatedAt,
 	})
 	_ = s.graphSvc.SyncNode("user", userID, userID, map[string]interface{}{"user_id": userID})
 	if m.CharacterID != "" {
@@ -62,6 +66,11 @@ func (s *service) syncGraph(m *Memory) {
 			entityType = "entity"
 		}
 		_ = s.graphSvc.SyncNode(entityType, m.EntityID, m.EntityID, map[string]interface{}{"user_id": userID})
+		_ = s.graphSvc.SyncEdge(entityType+":"+m.EntityID, "memory:"+m.ID, "described_by", float64(m.Confidence)/100.0)
+	}
+	_ = s.graphSvc.SyncEdge("user:"+userID, "memory:"+m.ID, "has_memory", float64(m.Confidence)/100.0)
+	if m.CharacterID != "" {
+		_ = s.graphSvc.SyncEdge("character:"+m.CharacterID, "memory:"+m.ID, "context_memory", float64(m.Confidence)/100.0)
 	}
 }
 

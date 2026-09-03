@@ -17,6 +17,7 @@ func RegisterMemoryRouter(r *gin.RouterGroup, ctx *app.AppContext, graphSvc grap
 	r.GET("/memories", handler.List)
 	r.POST("/memories", handler.Create)
 	r.PUT("/memories/:id", handler.Update)
+	r.POST("/memories/:id/restore", handler.Restore)
 	r.DELETE("/memories/:id", handler.Delete)
 	r.POST("/memories/search", handler.Search)
 	r.POST("/memories/vector-search", handler.VectorSearch)

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
 package memory
 
 import (
@@ -120,32 +122,63 @@ func (s *service) consolidateSelectCandidates(req *ConsolidationRequest, maxOutp
 	}
 
 	content = extractJSONObject(content)
+	type consolidationInsight struct {
+		Subcategory     string   `json:"subcategory"`
+		Subject         string   `json:"subject"`
+		Summary         string   `json:"summary"`
+		SourceMemoryIDs []string `json:"sourceMemoryIds"`
+		Confidence      float64  `json:"confidence"`
+	}
 	var llmResult struct {
-		Insights []ConsolidationCandidateProposal `json:"insights"`
+		Insights []consolidationInsight `json:"insights"`
 	}
 	if err := json.Unmarshal([]byte(content), &llmResult); err != nil {
 		return s.consolidateDeterministic(mems, maxOutputs)
 	}
 
+	memByID := make(map[string]Memory, len(mems))
+	for _, m := range mems {
+		memByID[m.ID] = m
+	}
 	var valid []ConsolidationCandidateProposal
-	for i := range llmResult.Insights {
-		c := &llmResult.Insights[i]
-		if strings.TrimSpace(c.Key) == "" || strings.TrimSpace(c.Value) == "" {
+	for _, insight := range llmResult.Insights {
+		if strings.TrimSpace(insight.Subject) == "" || strings.TrimSpace(insight.Summary) == "" || len(insight.SourceMemoryIDs) < 2 {
 			continue
 		}
-		if !req.IncludeConflict && c.CandidateKind == string(CandidateKindConflictResolution) {
+		sourceIDs := make([]string, 0, len(insight.SourceMemoryIDs))
+		sourceVersions := make([]int, 0, len(insight.SourceMemoryIDs))
+		for _, id := range insight.SourceMemoryIDs {
+			if m, ok := memByID[id]; ok {
+				sourceIDs = append(sourceIDs, id)
+				sourceVersions = append(sourceVersions, m.Version)
+			}
+		}
+		if len(sourceIDs) < 2 {
 			continue
 		}
-		if c.ProposedAction == "" {
-			c.ProposedAction = string(ProposedActionCreate)
+		confidence := insight.Confidence
+		if confidence <= 0 {
+			confidence = 0.75
 		}
-		c.DerivationKey = s.computeDerivationKey(req, c.SourceMemoryIDs, c.SourceVersions, c.ProposedAction)
-		valid = append(valid, *c)
+		if confidence > 1 {
+			confidence /= 100
+		}
+		proposal := ConsolidationCandidateProposal{
+			CandidateKind: string(CandidateKindConsolidated),
+			Key:           strings.TrimSpace(insight.Subject), Value: strings.TrimSpace(insight.Summary), MemoryType: memoryTypeForSubtype(insight.Subcategory),
+			MemorySubtype: strings.ToUpper(strings.TrimSpace(insight.Subcategory)), Importance: derivedInsightImportance(sourceIDs, memByID),
+			Confidence: clamp01(confidence), ProposedAction: string(ProposedActionCreate), SourceMemoryIDs: sourceIDs, SourceVersions: sourceVersions,
+			Reason: "cross-memory semantic consolidation",
+		}
+		proposal.DerivationKey = s.computeDerivationKey(req, proposal.SourceMemoryIDs, proposal.SourceVersions, proposal.ProposedAction)
+		valid = append(valid, proposal)
 		if len(valid) >= maxOutputs {
 			break
 		}
 	}
-
+	if len(valid) == 0 {
+		return s.consolidateDeterministic(mems, maxOutputs)
+	}
 	return valid
 }
 
@@ -184,9 +217,11 @@ func (s *service) consolidateDeterministic(mems []Memory, maxOutputs int) []Cons
 			Key:             best.Key,
 			Value:           best.Value,
 			MemoryType:      best.MemoryType,
+			MemorySubtype:   best.MemorySubtype,
 			Importance:      importance,
 			Confidence:      confidence,
 			ProposedAction:  string(ProposedActionReinforce),
+			TargetMemoryID:  best.ID,
 			SourceMemoryIDs: sourceIDs,
 			SourceVersions:  sourceVersions,
 			Reason:          fmt.Sprintf("duplicate key normalized merge (%d sources)", len(groupMem)),
@@ -222,6 +257,7 @@ func (s *service) consolidateFromReflection(req *ConsolidationRequest, maxOutput
 			Key:             c.Key,
 			Value:           c.Value,
 			MemoryType:      c.MemoryType,
+			MemorySubtype:   c.MemorySubtype,
 			Importance:      c.Importance,
 			Confidence:      c.ConfidenceReal,
 			ProposedAction:  proposed,
@@ -328,6 +364,7 @@ func (s *service) commitDerivedMemory(c ConsolidationCandidateProposal, req *Con
 	m, err := s.createCanonicalMemory(canonicalCreateRequest{
 		CharacterID:           characterID,
 		MemoryType:            memoryType,
+		MemorySubtype:         c.MemorySubtype,
 		Source:                source,
 		Scope:                 scope,
 		Key:                   c.Key,
@@ -338,7 +375,7 @@ func (s *service) commitDerivedMemory(c ConsolidationCandidateProposal, req *Con
 		SensitivityLevel:      sensitivity.level,
 		AllowProactiveMention: proactive,
 		RequiresConfirmation:  requiresConf,
-		SourceConvID:          req.Scope,
+		SourceConvID:          "",
 		OperationID:           operationID,
 		EventType:             "memory_created",
 		EventReason:           "consolidation_create",
@@ -359,10 +396,23 @@ func (s *service) commitReinforceOrMerge(c ConsolidationCandidateProposal, opera
 		return err
 	}
 
+	now := time.Now().Format("2006-01-02 15:04:05")
+	strength := reinforcementStrength(memoryEffectiveStrength(*existing, time.Now()), existing.ReinforceCount)
 	updates := map[string]interface{}{
-		"importance":       maxInt(existing.Importance, c.Importance),
-		"confidence":       maxInt(existing.Confidence, int(c.Confidence*100+0.5)),
-		"last_verified_at": time.Now().Format("2006-01-02 15:04:05"),
+		"importance":          maxInt(existing.Importance, c.Importance),
+		"confidence":          maxInt(existing.Confidence, int(c.Confidence*100+0.5)),
+		"last_verified_at":    now,
+		"last_reinforced_at":  now,
+		"strength_updated_at": now,
+		"reinforce_count":     existing.ReinforceCount + 1,
+		"memory_strength":     strength,
+		"retention_level":     suggestedRetentionAfterReinforce(existing.RetentionLevel, strength, existing.ReinforceCount+1),
+		"decay_state":         DecayStateActive,
+		"archived_at":         nil,
+	}
+
+	if strings.TrimSpace(c.MemorySubtype) != "" {
+		updates["memory_subtype"] = strings.TrimSpace(c.MemorySubtype)
 	}
 
 	if c.ProposedAction == string(ProposedActionMerge) && c.Value != "" {
@@ -387,6 +437,36 @@ func (s *service) commitReinforceOrMerge(c ConsolidationCandidateProposal, opera
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
 	s.syncGraph(m)
 	return nil
+}
+
+func memoryTypeForSubtype(subtype string) string {
+	switch strings.ToUpper(strings.TrimSpace(subtype)) {
+	case "TASTES", "LIFESTYLE":
+		return string(MemoryTypePreference)
+	case "ROUTINES", "PROCEDURES":
+		return string(MemoryTypeHabit)
+	case "OUR_BOND", "FAMILY", "FRIENDS", "PARTNER":
+		return string(MemoryTypeRelationship)
+	case "GOALS", "PLANS", "COMMITMENTS":
+		return string(MemoryTypePlan)
+	case "BASIC_PROFILE":
+		return string(MemoryTypePersonalInfo)
+	default:
+		return string(MemoryTypeFact)
+	}
+}
+
+func derivedInsightImportance(sourceIDs []string, byID map[string]Memory) int {
+	importance := 5
+	for _, id := range sourceIDs {
+		if m, ok := byID[id]; ok && m.Importance > importance {
+			importance = m.Importance
+		}
+	}
+	if importance < 7 {
+		importance = 7
+	}
+	return importance
 }
 
 func (s *service) computeDerivationKey(req *ConsolidationRequest, sourceIDs []string, sourceVersions []int, proposedAction string) string {
@@ -461,12 +541,9 @@ func (s *service) ListConsolidationCandidates(kind string) ([]MemoryCandidate, e
 	result := make([]MemoryCandidate, 0)
 	for _, m := range all {
 		if kind == "" || m.CandidateKind == kind {
-			result = append(result, MemoryCandidate{
-				ID: m.ID, Key: m.Key, Value: m.Value,
-				MemoryType: m.MemoryType, Importance: m.Importance,
-				SourceText: m.SourceText, ConversationID: m.ConversationID,
-				CharacterID: m.CharacterID, CreatedAt: m.CreatedAt,
-			})
+			if candidate := candidateModelToDTO(&m); candidate != nil {
+				result = append(result, *candidate)
+			}
 		}
 	}
 	return result, nil

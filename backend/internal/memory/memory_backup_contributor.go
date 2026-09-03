@@ -466,6 +466,10 @@ func (c *MemoryBackupContributor) RestoreMemories(ctx context.Context, in datapo
 	if opts.IdentityMap == nil {
 		return dataportability.ErrImportIdentityMapMissing
 	}
+	repo := c.getRepository()
+	if repo == nil {
+		return fmt.Errorf("import: memory repository unavailable")
+	}
 	idMap := opts.IdentityMap
 	charPolicy := string(opts.CharacterPolicy)
 
@@ -474,14 +478,6 @@ func (c *MemoryBackupContributor) RestoreMemories(ctx context.Context, in datapo
 		return fmt.Errorf("import: records component missing: %w", err)
 	}
 	defer recRC.Close()
-
-	type importStats struct {
-		imported   int
-		deduped    int
-		remapped   int
-		collisions int
-	}
-	stats := importStats{}
 
 	charIDMap := make(map[string]string)
 	for oldCID := range c.extractTargetCharacters(opts) {
@@ -517,27 +513,22 @@ func (c *MemoryBackupContributor) RestoreMemories(ctx context.Context, in datapo
 			targetChar = newChar
 		}
 
-		isNew, err := c.getRepository().IsNewID(rec.ID)
+		isNew, err := repo.IsNewID(rec.ID)
 		if err != nil {
 			return fmt.Errorf("import: check id %s: %w", rec.ID, err)
 		}
 
 		newID := rec.ID
 		if !isNew {
-			existing, err := c.getRepository().FindByID(rec.ID)
+			existing, err := repo.FindByID(rec.ID)
 			if err != nil {
 				return fmt.Errorf("import: fetch existing %s: %w", rec.ID, err)
 			}
 			if existing != nil && sameMemorySnapshot(existing, &rec) {
-				stats.deduped++
-				stats.imported++
+				idMap.AddMemory(rec.ID, existing.ID)
 				continue
 			}
 			newID = uuid.New().String()
-			stats.remapped++
-			idMap.AddMemory(rec.ID, newID)
-		} else {
-			stats.imported++
 		}
 
 		memory := rec.toMemory()
@@ -545,22 +536,152 @@ func (c *MemoryBackupContributor) RestoreMemories(ctx context.Context, in datapo
 		memory.ID = newID
 		memory.SourceMsgID = idMap.RemapMessageRef(rec.SourceMessageID)
 		memory.SourceConvID = idMap.RemapConversationRef(rec.SourceConversationID)
-
-		_, err = c.svc.SubmitCandidate(&SubmitCandidateRequest{
-			Key:           memory.Key,
-			Value:         memory.Value,
-			MemoryType:    memory.MemoryType,
-			Importance:    memory.Importance,
-			SourceText:    "portable_import",
-			CharacterID:   memory.CharacterID,
-			CandidateKind: string(CandidateKindExtracted),
-			Reason:        "portable_import",
-		})
-		if err != nil {
-			return fmt.Errorf("import: submit candidate for memory %s: %w", newID, err)
+		if err := repo.Create(&memory); err != nil {
+			return fmt.Errorf("import: create memory %s: %w", newID, err)
+		}
+		idMap.AddMemory(rec.ID, newID)
+		if svc, ok := c.svc.(*service); ok {
+			svc.syncProfileProjection(&memory)
+			svc.syncGraph(&memory)
+			go svc.SyncEmbedding(memory.ID, memory.Key, memory.Value, memory.CharacterID, memory.MemoryType)
 		}
 	}
-	_ = stats
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("import: scan records: %w", err)
+	}
+	if err := c.restoreMemoryEvents(in, idMap); err != nil {
+		return err
+	}
+	if err := c.restoreMemoryTemporal(in, idMap); err != nil {
+		return err
+	}
+	if err := c.restoreMemoryDerivations(in, idMap); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *MemoryBackupContributor) restoreMemoryEvents(in dataportability.BackupReader, idMap *dataportability.ImportIdentityMap) error {
+	rc, err := in.ReadComponent(ComponentIDMemoryEvents + ".v1")
+	if err != nil {
+		return nil
+	}
+	defer rc.Close()
+	repo := c.getRepository()
+	if repo == nil {
+		return fmt.Errorf("import: memory repository unavailable")
+	}
+	var events []MemoryEventV1
+	scanner := bufio.NewScanner(rc)
+	buf := make([]byte, 128*1024)
+	scanner.Buffer(buf, RecordSizeLimit)
+	for scanner.Scan() {
+		if len(scanner.Bytes()) == 0 {
+			continue
+		}
+		var event MemoryEventV1
+		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+			return fmt.Errorf("import: decode memory event: %w", err)
+		}
+		mappedID, ok := idMap.GetMemory(event.MemoryID)
+		if !ok || mappedID == "" {
+			continue
+		}
+		if mappedID != event.MemoryID {
+			event.ID = uuid.New().String()
+		}
+		event.MemoryID = mappedID
+		events = append(events, event)
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("import: scan memory events: %w", err)
+	}
+	if err := repo.AppendRestoredEvents(events); err != nil {
+		return fmt.Errorf("import: restore memory events: %w", err)
+	}
+	return nil
+}
+
+func (c *MemoryBackupContributor) restoreMemoryTemporal(in dataportability.BackupReader, idMap *dataportability.ImportIdentityMap) error {
+	rc, err := in.ReadComponent(ComponentIDMemoryTemporal + ".v1")
+	if err != nil {
+		return nil
+	}
+	defer rc.Close()
+	svc, ok := c.svc.(*service)
+	if !ok || svc.db == nil {
+		return nil
+	}
+	scanner := bufio.NewScanner(rc)
+	buf := make([]byte, 128*1024)
+	scanner.Buffer(buf, RecordSizeLimit)
+	for scanner.Scan() {
+		if len(scanner.Bytes()) == 0 {
+			continue
+		}
+		var item MemoryTemporalV1
+		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
+			return fmt.Errorf("import: decode memory temporal: %w", err)
+		}
+		mappedID, ok := idMap.GetMemory(item.MemoryID)
+		if !ok || mappedID == "" {
+			continue
+		}
+		anchors, _ := json.Marshal(item.AnchorIDs)
+		if err := svc.db.Exec(`INSERT OR REPLACE INTO memory_temporal_metadata
+			(memory_id, occurred_at_utc, ended_at_utc, timezone, local_date, daypart, temporal_precision, valid_from_utc, valid_to_utc, anchor_ids_json, source_time_text, created_at_utc, updated_at_utc)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			mappedID, item.OccurredAtUTC, item.EndedAtUTC, item.Timezone, item.LocalDate, item.Daypart, item.TemporalPrecision,
+			item.ValidFromUTC, item.ValidToUTC, string(anchors), item.SourceTimeText, item.CreatedAtUTC, item.UpdatedAtUTC).Error; err != nil {
+			return fmt.Errorf("import: restore memory temporal %s: %w", mappedID, err)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("import: scan memory temporal: %w", err)
+	}
+	return nil
+}
+
+func (c *MemoryBackupContributor) restoreMemoryDerivations(in dataportability.BackupReader, idMap *dataportability.ImportIdentityMap) error {
+	rc, err := in.ReadComponent(ComponentIDMemoryDerivations + ".v1")
+	if err != nil {
+		return nil
+	}
+	defer rc.Close()
+	svc, ok := c.svc.(*service)
+	if !ok || svc.db == nil {
+		return nil
+	}
+	scanner := bufio.NewScanner(rc)
+	buf := make([]byte, 128*1024)
+	scanner.Buffer(buf, RecordSizeLimit)
+	for scanner.Scan() {
+		if len(scanner.Bytes()) == 0 {
+			continue
+		}
+		var item MemoryDerivationV1
+		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
+			return fmt.Errorf("import: decode memory derivation: %w", err)
+		}
+		outputID, outputOK := idMap.GetMemory(item.OutputMemoryID)
+		inputID, inputOK := idMap.GetMemory(item.InputMemoryID)
+		if !outputOK || !inputOK || outputID == "" || inputID == "" {
+			continue
+		}
+		derivationID := item.ID
+		if outputID != item.OutputMemoryID || inputID != item.InputMemoryID {
+			derivationID = uuid.New().String()
+		}
+		if err := svc.db.Exec(`INSERT OR IGNORE INTO memory_derivations
+			(id, output_memory_id, input_memory_id, input_version, input_snapshot_hash, derivation_kind, ordinal, operation_id, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			derivationID, outputID, inputID, item.InputVersion, item.InputSnapshotHash, item.DerivationKind, item.Ordinal, item.OperationID, item.CreatedAt).Error; err != nil {
+			return fmt.Errorf("import: restore memory derivation %s: %w", derivationID, err)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("import: scan memory derivations: %w", err)
+	}
 	return nil
 }
 
@@ -610,6 +731,36 @@ func normalizeMemoryRecord(rec *MemoryRecordV1) error {
 	if rec.Confidence < 0 || rec.Confidence > 100 {
 		rec.Confidence = 50
 	}
+	rec.MemorySubtype = strings.TrimSpace(rec.MemorySubtype)
+	if rec.RetentionLevel < RetentionL1 || rec.RetentionLevel > RetentionL5 {
+		assignment := AssignRetention(rec.MemoryType, rec.MemorySubtype, rec.Importance, rec.Pinned)
+		rec.RetentionLevel = assignment.Level
+		if rec.MemoryStrength <= 0 || rec.MemoryStrength > 1 {
+			rec.MemoryStrength = assignment.Strength
+		}
+	}
+	if rec.MemoryStrength <= 0 || rec.MemoryStrength > 1 {
+		rec.MemoryStrength = defaultStrengthForLevel(rec.RetentionLevel)
+	}
+	if rec.DecayState != DecayStateActive && rec.DecayState != DecayStateFading && rec.DecayState != DecayStateArchived {
+		rec.DecayState = DecayStateActive
+	}
+	anchor := strings.TrimSpace(rec.UpdatedAt)
+	if anchor == "" {
+		anchor = strings.TrimSpace(rec.CreatedAt)
+	}
+	if anchor == "" {
+		anchor = time.Now().Format("2006-01-02 15:04:05")
+	}
+	if rec.StrengthUpdatedAt == nil || strings.TrimSpace(*rec.StrengthUpdatedAt) == "" {
+		rec.StrengthUpdatedAt = &anchor
+	}
+	if rec.LastReinforcedAt == nil || strings.TrimSpace(*rec.LastReinforcedAt) == "" {
+		rec.LastReinforcedAt = &anchor
+	}
+	if rec.DecayState == DecayStateArchived && (rec.ArchivedAt == nil || strings.TrimSpace(*rec.ArchivedAt) == "") {
+		rec.ArchivedAt = &anchor
+	}
 	return nil
 }
 
@@ -643,6 +794,7 @@ func (m *Memory) toV1() MemoryRecordV1 {
 		Value:                 m.Value,
 		MemoryLayer:           layer,
 		MemoryType:            m.MemoryType,
+		MemorySubtype:         m.MemorySubtype,
 		Importance:            m.Importance,
 		Confidence:            m.Confidence,
 		Source:                m.Source,
@@ -663,6 +815,17 @@ func (m *Memory) toV1() MemoryRecordV1 {
 		UpdatedAt:             m.UpdatedAt,
 		UseCount:              m.UseCount,
 		LastUsedAt:            m.LastUsedAt,
+		RetentionLevel:        m.RetentionLevel,
+		MemoryStrength:        m.MemoryStrength,
+		StrengthUpdatedAt:     m.StrengthUpdatedAt,
+		LastReinforcedAt:      m.LastReinforcedAt,
+		ReinforceCount:        m.ReinforceCount,
+		RetrievedCount:        m.RetrievedCount,
+		InjectedCount:         m.InjectedCount,
+		DecayState:            m.DecayState,
+		Pinned:                m.Pinned,
+		ArchivedAt:            m.ArchivedAt,
+		SupersededBy:          m.SupersededBy,
 		DerivationKey:         m.DerivationKey,
 	}
 }
@@ -672,6 +835,7 @@ func (r MemoryRecordV1) toMemory() Memory {
 		ID:                    r.ID,
 		CharacterID:           r.CharacterID,
 		MemoryType:            r.MemoryType,
+		MemorySubtype:         r.MemorySubtype,
 		Source:                r.Source,
 		Scope:                 r.Scope,
 		Key:                   r.Key,
@@ -687,6 +851,17 @@ func (r MemoryRecordV1) toMemory() Memory {
 		LastVerifiedAt:        r.LastVerifiedAt,
 		UseCount:              r.UseCount,
 		LastUsedAt:            r.LastUsedAt,
+		RetentionLevel:        r.RetentionLevel,
+		MemoryStrength:        r.MemoryStrength,
+		StrengthUpdatedAt:     r.StrengthUpdatedAt,
+		LastReinforcedAt:      r.LastReinforcedAt,
+		ReinforceCount:        r.ReinforceCount,
+		RetrievedCount:        r.RetrievedCount,
+		InjectedCount:         r.InjectedCount,
+		DecayState:            r.DecayState,
+		Pinned:                r.Pinned,
+		ArchivedAt:            r.ArchivedAt,
+		SupersededBy:          r.SupersededBy,
 		SensitivityLevel:      r.SensitivityLevel,
 		AllowProactiveMention: r.AllowProactiveMention,
 		RequiresConfirmation:  r.RequiresConfirmation,

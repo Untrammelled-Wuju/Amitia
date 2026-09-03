@@ -59,6 +59,16 @@ func (h *Handler) Update(c *gin.Context) {
 	util.SuccessMsgResponse(c, "记忆更新成功", m)
 }
 
+func (h *Handler) Restore(c *gin.Context) {
+	id := c.Param("id")
+	m, err := h.service.Restore(id)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "记忆已恢复", m)
+}
+
 func (h *Handler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(id); err != nil {
