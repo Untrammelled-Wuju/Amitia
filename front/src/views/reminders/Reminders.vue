@@ -355,7 +355,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { request } from "../../composables/request";
-import { resolveApiUrl } from "../../runtime/runtime-adapter";
 import type { ReminderGroup } from "../../types";
 import ProspectivePanel from "./components/ProspectivePanel.vue";
 import TriggerHistoryPanel from "./components/TriggerHistoryPanel.vue";
@@ -655,39 +654,29 @@ async function clearBackpressure() {
   }
 }
 
-let reminderSSE: EventSource | null = null;
+let reminderRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let reminderRefreshBusy = false;
 
-async function connectReminderSSE() {
+async function refreshReminderRuntime() {
+  if (reminderRefreshBusy) return;
+  reminderRefreshBusy = true;
   try {
-    const url = await resolveApiUrl("/api/reminders/stream");
-    reminderSSE = new EventSource(url);
-    reminderSSE.onmessage = (e) => {
-      if (e.data) {
-        fetchReminders();
-        fetchStatus();
-      }
-    };
-    reminderSSE.addEventListener("changed", () => {
-      fetchReminders();
-      fetchStatus();
-    });
-    reminderSSE.onerror = () => {
-      reminderSSE?.close();
-      setTimeout(() => void connectReminderSSE(), 5000);
-    };
-  } catch {}
+    await Promise.all([fetchReminders(), fetchStatus()]);
+  } finally {
+    reminderRefreshBusy = false;
+  }
 }
 
 onMounted(async () => {
-  await fetchReminders();
-  await fetchStatus();
-  void connectReminderSSE();
+  await refreshReminderRuntime();
+  reminderRefreshTimer = setInterval(() => void refreshReminderRuntime(), 5000);
   await fetchCleanupConfig();
   await fetchCharacterOptions();
 });
 
 onUnmounted(() => {
-  if (reminderSSE) reminderSSE.close();
+  if (reminderRefreshTimer) clearInterval(reminderRefreshTimer);
+  reminderRefreshTimer = null;
 });
 </script>
 <style scoped>

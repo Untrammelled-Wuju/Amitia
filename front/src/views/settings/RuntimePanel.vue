@@ -31,13 +31,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import axios from "axios";
-import { getApiBaseURL } from "../../runtime/runtime-adapter";
+import { apiClient } from "@/composables/useApi";
 import StatusPanel from "../long-running/components/StatusPanel.vue";
 import ManualActionsPanel from "../long-running/components/ManualActionsPanel.vue";
 import ConfigPanel from "../long-running/components/ConfigPanel.vue";
 
-const apiBaseUrl = ref("");
 const statusPanelRef = ref<InstanceType<typeof StatusPanel> | null>(null);
 const timingOverview = ref<any>({
   schedulerRunning: false,
@@ -51,16 +49,13 @@ function refreshStatus() {
 
 async function loadTimingOverview() {
   try {
-    const { data } = await axios.get(
-      apiBaseUrl.value + "/api/proactive/status",
-    );
-    if (data?.data) timingOverview.value = data.data;
+    const { data } = await apiClient.get("/api/proactive/status");
+    if (data) timingOverview.value = data;
   } catch {}
 }
 
-onMounted(async () => {
-  apiBaseUrl.value = await getApiBaseURL();
-  loadTimingOverview();
+onMounted(() => {
+  void loadTimingOverview();
 });
 </script>
 

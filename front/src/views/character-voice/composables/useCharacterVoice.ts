@@ -170,17 +170,12 @@ export function useCharacterVoice() {
       }
       const url =
         "/api/tts/voice-clone?apiKey=" + encodeURIComponent(globalApiKey.value);
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {},
-        body: formData,
-      });
-      const json = await resp.json();
-      if (json.code !== 200) {
-        ElMessage.error(json.message || "复刻失败");
+      const resp = await apiClient.post(url, formData);
+      const data: any = resp.data?.data || resp.data;
+      if (!data?.speakerId) {
+        ElMessage.error((resp.data as any)?.message || "复刻失败");
         return;
       }
-      const data = json.data;
       const newVoice = {
         speakerId: data.speakerId,
         name: data.name || cloneForm.name,

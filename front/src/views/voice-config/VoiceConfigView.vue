@@ -373,7 +373,7 @@ import {
   type FormInstance,
   type FormRules,
 } from "element-plus";
-import { useApi } from "../../composables/useApi";
+import { apiClient, useApi } from "../../composables/useApi";
 import type { TtsConfig, VoicePreset } from "@/types";
 
 const { get, post, put, del } = useApi();
@@ -589,17 +589,12 @@ async function submitClone() {
       "/api/tts/voice-clone" +
       (apiKey ? "?apiKey=" + encodeURIComponent(apiKey) : "");
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {},
-      body: formData,
-    });
-    const json = await resp.json();
-    if (json.code !== 200) {
-      ElMessage.error(json.message || "复刻失败");
+    const resp = await apiClient.post(url, formData);
+    const data: any = resp.data?.data || resp.data;
+    if (!data?.speakerId) {
+      ElMessage.error((resp.data as any)?.message || "复刻失败");
       return;
     }
-    const data = json.data;
     clonedVoices.value.unshift({
       speakerId: data.speakerId,
       name: data.name || cloneForm.name,

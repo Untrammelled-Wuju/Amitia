@@ -228,11 +228,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, onMounted, onUnmounted, inject } from "vue";
 import { Loading } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import axios from "axios";
 import { getQQApiBaseURL } from "../../runtime/runtime-adapter";
-import { useApi } from "../../composables/useApi";
+import { createAuthenticatedFetchInit } from "../../runtime/request-auth";
 
-const { get } = useApi();
 
 const props = withDefaults(
   defineProps<{ embedded?: boolean; compact?: boolean }>(),
@@ -285,6 +283,28 @@ async function ensureApiBaseUrl() {
   }
 }
 
+async function qqRequest<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  await ensureApiBaseUrl();
+  const requestPath = `/api/qq${path.startsWith("/") ? path : `/${path}`}`;
+  const authenticated = await createAuthenticatedFetchInit(requestPath, init);
+  const headers = new Headers(authenticated.headers ?? undefined);
+  if (typeof authenticated.body === "string" && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  const response = await fetch(`${qqApiBaseUrl.value}${path}`, {
+    ...authenticated,
+    headers,
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body?.error || body?.message || `HTTP ${response.status}`);
+  }
+  return (body?.data ?? body) as T;
+}
+
 function formatStartedAt(iso: string): string {
   if (!iso) return "";
   try {
@@ -302,10 +322,13 @@ async function doConnect() {
   connecting.value = true;
   loginStatus.value = "";
   try {
-    await axios.post(qqApiBaseUrl.value + "/connect", {
-      appId: appId.value,
-      token: token.value,
-      sandbox: sandbox.value,
+    await qqRequest("/connect", {
+      method: "POST",
+      body: JSON.stringify({
+        appId: appId.value,
+        token: token.value,
+        sandbox: sandbox.value,
+      }),
     });
     loginStatus.value = "connecting";
     stopConnectPoll();
@@ -328,7 +351,7 @@ async function doConnect() {
       }
     }, 2000);
   } catch (e: any) {
-    const msg = e?.response?.data?.error || "连接失败，请检查AppID和Secret";
+    const msg = e?.message || "连接失败，请检查AppID和Secret";
     ElMessage.error(msg);
     connecting.value = false;
   }
@@ -338,18 +361,21 @@ async function doReconnect() {
   await ensureApiBaseUrl();
   reconnecting.value = true;
   try {
-    const cfg = await axios.get(qqApiBaseUrl.value + "/config");
-    if (!cfg.data?.appId || !cfg.data?.token) {
+    const cfg = await qqRequest<any>("/config");
+    if (!cfg?.appId || !cfg?.token) {
       ElMessage.warning("未找到已保存的凭证，请手动重新连接");
       reconnecting.value = false;
       return;
     }
-    await axios.post(qqApiBaseUrl.value + "/disconnect");
+    await qqRequest("/disconnect", { method: "POST" });
     await new Promise((r) => setTimeout(r, 1000));
-    await axios.post(qqApiBaseUrl.value + "/connect", {
-      appId: cfg.data.appId,
-      token: cfg.data.token,
-      sandbox: cfg.data.sandbox || false,
+    await qqRequest("/connect", {
+      method: "POST",
+      body: JSON.stringify({
+        appId: cfg.appId,
+        token: cfg.token,
+        sandbox: cfg.sandbox || false,
+      }),
     });
     loginStatus.value = "connecting";
     stopConnectPoll();
@@ -381,7 +407,7 @@ async function doDisconnect() {
   await ensureApiBaseUrl();
   disconnecting.value = true;
   try {
-    await axios.post(qqApiBaseUrl.value + "/disconnect");
+    await qqRequest("/disconnect", { method: "POST" });
     qqOnline.value = false;
     accountId.value = null;
     startedAt.value = "";
@@ -395,8 +421,7 @@ async function doDisconnect() {
 async function refreshStatus() {
   await ensureApiBaseUrl();
   try {
-    const res = await axios.get(qqApiBaseUrl.value + "/status");
-    const data = res.data?.data || res.data;
+    const data = await qqRequest<any>("/status");
     qqOnline.value = !!data?.qqOnline;
     emit("connectionChanged", qqOnline.value);
     accountId.value = data?.accountId || null;
@@ -427,11 +452,11 @@ async function refreshStatus() {
     }
     if (!qqOnline.value) {
       try {
-        const cfg = await axios.get(qqApiBaseUrl.value + "/config");
-        if (cfg.data?.appId) {
-          appId.value = cfg.data.appId;
-          token.value = cfg.data.token || "";
-          sandbox.value = cfg.data.sandbox || false;
+        const cfg = await qqRequest<any>("/config");
+        if (cfg?.appId) {
+          appId.value = cfg.appId;
+          token.value = cfg.token || "";
+          sandbox.value = cfg.sandbox || false;
         }
       } catch {}
     }

@@ -24,6 +24,26 @@
         }}</el-tag>
       </template>
     </el-table-column>
+    <el-table-column label="记忆保持" width="165" sortable prop="retentionLevel">
+      <template #default="{ row }">
+        <div class="retention-cell">
+          <el-tag size="small" :type="retentionTagType(row)">L{{ retentionLevel(row) }}</el-tag>
+          <span>{{ retentionStrength(row) }}%</span>
+          <el-tag v-if="row.pinned" size="small" type="danger">固定</el-tag>
+          <el-tag v-else-if="row.decayState === 'archived'" size="small" type="info">归档</el-tag>
+          <el-tag v-else-if="row.decayState === 'fading'" size="small" type="warning">淡化</el-tag>
+        </div>
+      </template>
+    </el-table-column>
+    <el-table-column label="记忆活动" width="155">
+      <template #default="{ row }">
+        <div class="activity-cell">
+          <span>强化 {{ Number(row.reinforceCount ?? row.reinforce_count ?? 0) }} 次</span>
+          <span>召回 {{ Number(row.retrievedCount ?? row.retrieved_count ?? 0) }} · 注入 {{ Number(row.injectedCount ?? row.injected_count ?? 0) }}</span>
+          <span v-if="row.lastReinforcedAt || row.last_reinforced_at" class="activity-time">上次 {{ fmtDate(row.lastReinforcedAt || row.last_reinforced_at) }}</span>
+        </div>
+      </template>
+    </el-table-column>
     <el-table-column label="来源" width="80">
       <template #default="{ row }">
         <span class="source-badge" :class="row.source">{{
@@ -145,9 +165,24 @@
         </div>
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="140">
+    <el-table-column label="操作" width="245" fixed="right">
       <template #default="{ row }">
         <el-button text size="small" @click="emit('edit', row)">编辑</el-button>
+        <el-button
+          text
+          size="small"
+          :type="row.pinned ? 'info' : 'warning'"
+          @click="emit('toggle-pin', row)"
+          >{{ row.pinned ? "取消固定" : "固定" }}</el-button
+        >
+        <el-button
+          v-if="row.decayState === 'archived' || row.decay_state === 'archived'"
+          text
+          size="small"
+          type="success"
+          @click="emit('restore', row)"
+          >恢复</el-button
+        >
         <el-button
           text
           size="small"
@@ -185,6 +220,8 @@ const emit = defineEmits<{
   "selection-change": [rows: any[]];
   edit: [row: any];
   delete: [id: string];
+  restore: [row: any];
+  "toggle-pin": [row: any];
   "toggle-scope": [row: any];
   "page-change": [page: number];
 }>();
@@ -192,14 +229,14 @@ const emit = defineEmits<{
 const tableRef = ref<any>(null);
 
 const TYPES = [
-  { value: "custom", label: "\u81ea\u5b9a\u4e49" },
-  { value: "fact", label: "\u4e8b\u5b9e" },
-  { value: "preference", label: "\u504f\u597d" },
-  { value: "experience", label: "\u7ecf\u5386" },
-  { value: "rule", label: "\u89c4\u5219" },
-  { value: "belief", label: "\u4fe1\u5ff5" },
-  { value: "emotion", label: "\u60c5\u611f" },
-  { value: "skill", label: "\u6280\u80fd" },
+  { value: "personal_info", label: "个人信息" },
+  { value: "hobby", label: "爱好" },
+  { value: "preference", label: "偏好" },
+  { value: "fact", label: "事实" },
+  { value: "plan", label: "计划" },
+  { value: "habit", label: "习惯" },
+  { value: "relationship", label: "关系" },
+  { value: "custom", label: "自定义" },
 ];
 const SOURCES = [
   { value: "manual", label: "\u624b\u52a8" },
@@ -215,11 +252,24 @@ const SCOPE_TYPES = [
   { value: "character_self", label: "\u89d2\u8272\u81ea\u8bc6" },
 ];
 const SENSITIVITY_OPTIONS = [
-  { value: "normal", label: "\u666e\u901a" },
-  { value: "sensitive", label: "\u8f83\u654f\u611f" },
-  { value: "high", label: "\u9ad8\u5ea6\u654f\u611f" },
+  { value: "public", label: "公开" },
+  { value: "internal", label: "内部" },
+  { value: "private", label: "私密" },
+  { value: "secret", label: "高度敏感" },
 ];
 
+function retentionLevel(row: any) {
+  const level = Number(row?.retentionLevel ?? row?.retention_level ?? 3);
+  return Math.min(5, Math.max(1, Number.isFinite(level) ? level : 3));
+}
+function retentionStrength(row: any) {
+  const raw = Number(row?.memoryStrength ?? row?.memory_strength ?? 0.68);
+  return Math.round(Math.min(1, Math.max(0, Number.isFinite(raw) ? raw : 0.68)) * 100);
+}
+function retentionTagType(row: any) {
+  const level = retentionLevel(row);
+  return level <= 2 ? "success" : level === 3 ? "primary" : level === 4 ? "warning" : "info";
+}
 function typeLabel(t: string) {
   return TYPES.find((x) => x.value === t)?.label || t;
 }
@@ -254,14 +304,14 @@ function scopeTypeLabel(row: any) {
 }
 function rowSensitivity(row: any) {
   return (
-    row.sensitivity || row.sensitivityLevel || row.sensitivity_level || "normal"
+    row.sensitivity || row.sensitivityLevel || row.sensitivity_level || "internal"
   );
 }
 function sensitivityLabel(v: string) {
   return SENSITIVITY_OPTIONS.find((x) => x.value === v)?.label || v;
 }
 function sensitivityTagType(v: string) {
-  return v === "high" ? "danger" : v === "sensitive" ? "warning" : "info";
+  return v === "secret" ? "danger" : v === "private" ? "warning" : v === "public" ? "success" : "info";
 }
 function readBooleanFlag(row: any, keys: string[], def: boolean): boolean {
   for (const key of keys) {
@@ -325,6 +375,23 @@ function fmtDate(d: string) {
 .scope-toggle-btn {
   margin-left: 4px !important;
   text-decoration: underline !important;
+}
+.retention-cell {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+}
+.activity-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--ac-color-text-secondary);
+}
+.activity-time {
+  color: var(--ac-color-text-muted);
 }
 .permission-tags {
   display: flex;

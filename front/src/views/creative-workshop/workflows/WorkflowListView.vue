@@ -1,19 +1,20 @@
 <template>
   <main class="workflow-list-page" v-loading="loading">
-    <header class="page-header">
-      <div>
-        <div class="crumb"><router-link to="/creative-workshop">创意工坊</router-link><span>/</span><span>工作流</span></div>
-        <h1>工作流</h1>
-        <p>统一管理当前设备、云端以及其他已绑定设备上的 workflow-v2。</p>
-      </div>
-      <div class="header-actions">
+    <ExtensionPageHeader
+      class="page-header"
+      title="工作流"
+      description="统一管理当前设备、云端以及其他已绑定设备上的 workflow-v2。"
+      parent-title="创意工坊"
+      parent-path="/creative-workshop"
+    >
+      <template #actions>
         <input ref="importInput" class="hidden-input" type="file" accept="application/json,.json" @change="handleImport" />
         <el-button :disabled="currentTarget.location === 'device'" @click="importInput?.click()">导入 JSON</el-button>
         <el-button :disabled="currentTarget.location === 'device'" @click="openTemplates">我的模板</el-button>
         <el-button :disabled="currentTarget.location === 'device'" :loading="aiCreating" @click="createWithAI">AI 创建</el-button>
         <el-button type="primary" :disabled="currentTarget.location === 'device' && !deviceId" @click="createNew"><el-icon><Plus /></el-icon>新建</el-button>
-      </div>
-    </header>
+      </template>
+    </ExtensionPageHeader>
 
     <section class="management-bar">
       <el-radio-group v-model="location" size="small" @change="handleTargetChange">
@@ -131,6 +132,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { MoreFilled, Plus, Share, VideoPlay } from "@element-plus/icons-vue";
+import ExtensionPageHeader from "@/views/extensions/components/ExtensionPageHeader.vue";
 import {
   createWorkflow,
   deleteWorkflow,
@@ -410,17 +412,14 @@ onBeforeUnmount(() => { if (reconcileTimer) clearInterval(reconcileTimer); recon
 </script>
 
 <style scoped>
-.workflow-list-page { height:100%; overflow:auto; padding:4px 2px 32px; color:var(--console-text); }
-.page-header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-bottom:16px; }
-.crumb { display:flex; gap:8px; align-items:center; color:var(--console-text-muted); font-size:12px; margin-bottom:8px; }
-.crumb a { color:var(--el-color-primary); text-decoration:none; } h1{margin:0;font-size:24px}.page-header p{margin:6px 0 0;color:var(--console-text-muted);font-size:13px}
-.header-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.hidden-input{display:none}
+.workflow-list-page { height:100%; overflow:auto; color:var(--console-text); }
+.page-header{margin-bottom:16px}.hidden-input{display:none}
 .management-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;padding:10px;border:1px solid var(--console-border);border-radius:12px;background:var(--ac-color-surface)}
 .search-box{width:min(340px,100%)}.status-filter{width:140px}.device-filter{width:220px}.count-text{font-size:12px;color:var(--console-text-muted)}.batch-actions{margin-left:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px}
 .workflow-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}.workflow-card,.empty-card{border:1px solid var(--console-border);background:var(--ac-color-surface);border-radius:14px}.workflow-card{padding:18px;display:flex;flex-direction:column;gap:16px}.workflow-card.selected{border-color:var(--el-color-primary)}
 .card-top{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:start}.workflow-icon{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:var(--ac-color-surface-soft);color:var(--el-color-primary);font-size:20px}.title-wrap{min-width:0}.title-wrap h2{margin:1px 0 4px;font-size:16px}.title-wrap p{margin:0;color:var(--console-text-muted);font-size:12px;line-height:1.5;min-height:36px}.stats{display:flex;gap:8px;flex-wrap:wrap}.stats span{padding:5px 8px;border-radius:7px;background:var(--ac-color-surface-soft);color:var(--console-text-muted);font-size:11px}.card-actions{display:flex;gap:8px;align-items:center}
 .empty-card{min-height:310px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px}.empty-card>.el-icon{font-size:42px;color:var(--el-color-primary)}.empty-card h2{margin:0;font-size:18px}.empty-card p{margin:0 0 8px;color:var(--console-text-muted);max-width:420px}.empty-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 .template-help{font-size:12px;line-height:1.6;color:var(--console-text-muted);padding:10px 12px;background:var(--ac-color-surface-soft);border-radius:10px;margin-bottom:12px}.template-card{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--console-border)}.template-card p{margin:5px 0;color:var(--console-text-muted);font-size:12px}.template-card small{color:var(--console-text-muted);font-size:11px}.template-actions{display:flex;gap:5px;flex-shrink:0}
-@media(max-width:720px){.page-header{flex-direction:column}.header-actions{width:100%;justify-content:flex-start}.workflow-grid{grid-template-columns:1fr}.card-actions{flex-wrap:wrap}.management-bar{align-items:stretch}.search-box,.status-filter{width:100%}.batch-actions{margin-left:0}.card-top{grid-template-columns:auto auto 1fr}.card-top>.el-switch{grid-column:3;justify-self:start}}
+@media(max-width:720px){.workflow-grid{grid-template-columns:1fr}.card-actions{flex-wrap:wrap}.management-bar{align-items:stretch}.search-box,.status-filter{width:100%}.batch-actions{margin-left:0}.card-top{grid-template-columns:auto auto 1fr}.card-top>.el-switch{grid-column:3;justify-self:start}}
 .run-dialog-body{display:flex;flex-direction:column;gap:12px}.run-dialog-body label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--console-text-muted)}.run-mode-help{margin:0;color:var(--console-text-muted);font-size:11px;line-height:1.5}.controlled-warning{margin:0;padding:10px;border:1px solid var(--el-color-warning-light-5);border-radius:8px;background:var(--el-color-warning-light-9);font-size:11px;line-height:1.55;color:var(--console-text-muted)}
 </style>

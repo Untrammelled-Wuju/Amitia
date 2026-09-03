@@ -7,8 +7,16 @@ import axios, {
 } from "axios";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { ERR, type ApiResponse } from "@/types";
-import { getRuntimeConnection } from "@/runtime/runtime-adapter";
-import { forceCleanupSession, getAccessToken } from "@/stores/refresh-coordinator";
+import {
+  getRuntimeConnection,
+  getDeploymentConfig,
+  getBackendAuthHeaders,
+  isDeviceLocalApiPath,
+  LOCAL_DEVICE_RUNTIME_BASE_URL,
+} from "@/runtime/runtime-adapter";
+import { ensureValidToken, forceCleanupSession } from "@/stores/refresh-coordinator";
+import { getDeviceTimezone } from "@/utils/requestEnvelope";
+import { resolveUIHostDeviceId } from "@/ui-runtime/deviceIdentity";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
 
@@ -155,11 +163,64 @@ export const request: AxiosInstance = axios.create({
   timeout: 30000,
 });
 
+function isGameCenterApiPath(path: string): boolean {
+  const normalized = String(path || "").split("?", 1)[0];
+  return normalized === "/api/game-center" || normalized.startsWith("/api/game-center/");
+}
+
 request.interceptors.request.use(async (config) => {
   const runtime = await getRuntimeConnection();
-  config.baseURL = runtime.apiBaseURL;
-  const token = getAccessToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const deployment = await getDeploymentConfig();
+  const requestPath = String(config.url ?? "");
+  config.headers = config.headers ?? {};
+
+  const managementTarget = String(
+    (config.headers as any)?.["X-Amitia-Management-Target"] ??
+      (config.headers as any)?.get?.("X-Amitia-Management-Target") ??
+      "",
+  ).toLowerCase();
+  const gamePackageLocal =
+    Boolean(window.amitiaDesktop) &&
+    managementTarget === "game-center" &&
+    (requestPath === "/api/extensions/packages" ||
+      requestPath.startsWith("/api/extensions/packages/") ||
+      requestPath === "/api/extensions/kernel/extensions/uninstall" ||
+      requestPath.startsWith("/api/extensions/kernel/extensions/uninstall/"));
+  const deviceLocal =
+    Boolean(window.amitiaDesktop) &&
+    (isDeviceLocalApiPath(requestPath) || gamePackageLocal);
+
+  config.baseURL = deviceLocal ? LOCAL_DEVICE_RUNTIME_BASE_URL : runtime.apiBaseURL;
+  delete (config.headers as any)["X-Amitia-Management-Target"];
+  (config.headers as any)?.delete?.("X-Amitia-Management-Target");
+  (config as any).__amitiaDeviceLocal = deviceLocal;
+
+  if ((deployment.mode === "local" || deviceLocal) && window.amitiaDesktop) {
+    const desktopHeaders = await getBackendAuthHeaders();
+    for (const [key, value] of Object.entries(desktopHeaders)) {
+      if (value) (config.headers as any)[key] = value;
+    }
+  }
+
+  (config.headers as any)["X-Amitia-Client-Type"] = "desktop";
+  const deviceId = await resolveUIHostDeviceId();
+  if (deviceId) {
+    (config.headers as any)["X-Amitia-Device-ID"] = deviceId;
+    if (deployment.mode === "cloud" && isGameCenterApiPath(requestPath)) {
+      (config.headers as any)["X-Amitia-Target-Device-ID"] = deviceId;
+    }
+  }
+
+  if (deviceLocal) {
+    delete (config.headers as any).Authorization;
+    (config.headers as any)?.delete?.("Authorization");
+  } else if (!(deployment.mode === "local" && window.amitiaDesktop)) {
+    const token = await ensureValidToken();
+    if (token) (config.headers as any).Authorization = `Bearer ${token}`;
+  }
+
+  const timezone = getDeviceTimezone();
+  if (timezone) (config.headers as any)["X-Device-Timezone"] = timezone;
   return config;
 });
 
@@ -177,7 +238,7 @@ request.interceptors.response.use(
     return response.data;
   },
   (error: AxiosError) => {
-    if (error?.response?.status === 401) {
+    if (error?.response?.status === 401 && !(error.config as any)?.__amitiaDeviceLocal) {
       forceCleanupSession();
     }
     const body = (error.response?.data as ApiResponse) || null;

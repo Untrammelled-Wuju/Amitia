@@ -11,6 +11,7 @@ import {
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
 import { notifyDesktopPetChatState } from "@/runtime/desktop-pet-chat-state";
+import { useConversationWorkspace } from "./useConversationWorkspace";
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -33,6 +34,8 @@ export function useWebChatSend(
   replyTarget?: Ref<any>,
 ) {
   const { post, del, get } = useApi();
+  const { getWorkspaceRequestFields, bindCurrentWorkspaceToConversation } =
+    useConversationWorkspace();
   let lastPolledMsgId: string | null = null;
   const isSubmitting = ref(false);
   const generating = ref(false);
@@ -299,6 +302,7 @@ export function useWebChatSend(
         voiceMessage: !!finalAudioUrl,
         videoUrl: finalVideoUrl || "",
         replyToMessageId: replyTarget?.value?.id || undefined,
+        ...getWorkspaceRequestFields(),
       };
       const [url, init] = await Promise.all([
         resolveApiUrl("/api/web-chat/messages"),
@@ -332,8 +336,10 @@ export function useWebChatSend(
       if (convId.value) { try { sessionStorage.removeItem(`uai-pending-msg:${convId.value}`) } catch {} }
       if (result.conversationId && !convId.value)
         convId.value = result.conversationId;
-      if (result.conversationId)
+      if (result.conversationId) {
         localStorage.setItem("webchat-conv-id", result.conversationId);
+        bindCurrentWorkspaceToConversation(result.conversationId).catch(() => {});
+      }
       if (replyTarget) replyTarget.value = null;
       startGenerationPhaseTracking(result.mergeWindowMs);
       startSendingTimeout(result.userMessageId || userMsgLocalId);

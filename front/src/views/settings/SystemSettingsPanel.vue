@@ -197,7 +197,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import axios from "axios";
+import { apiClient } from "@/composables/useApi";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Brush,
@@ -258,15 +258,33 @@ function goStorage() {
   router.push("/storage");
 }
 
+async function downloadExportFile(file: string) {
+  const name = String(file || "").trim();
+  if (!name) throw new Error("后端未返回导出文件");
+  const res = await apiClient.get(
+    "/api/storage/export-download/" + encodeURIComponent(name),
+    { responseType: "blob" },
+  );
+  const blob = res.data instanceof Blob ? res.data : new Blob([res.data]);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 async function loadStorageInfo() {
   storageLoading.value = true;
   try {
-    const { data } = await axios.get(apiBaseUrl.value + "/api/storage/info");
-    if (data?.data) storageInfo.value = data.data;
+    const { data } = await apiClient.get("/api/storage/info");
+    storageInfo.value = data ?? {};
   } catch {}
   try {
-    const { data } = await axios.get(apiBaseUrl.value + "/api/storage/backups");
-    const payload = data?.data || data || {};
+    const { data } = await apiClient.get("/api/storage/backups");
+    const payload = data || {};
     backupList.value = Array.isArray(payload.backups) ? payload.backups : [];
   } catch {}
   storageLoading.value = false;
@@ -275,7 +293,7 @@ async function loadStorageInfo() {
 async function createBackup() {
   backupCreating.value = true;
   try {
-    await axios.post(apiBaseUrl.value + "/api/storage/backups");
+    await apiClient.post("/api/storage/backups");
     ElMessage.success("备份创建成功");
     await loadStorageInfo();
   } catch (err: any) {
@@ -290,15 +308,12 @@ async function createBackup() {
 async function exportUserData() {
   exportingData.value = true;
   try {
-    const res = await axios.post(apiBaseUrl.value + "/api/storage/export-amitia", { scope: "all" });
-    const data = res.data?.data || res.data;
+    const res = await apiClient.post("/api/storage/export-amitia", { scope: "all" });
+    const data = res.data;
     if (!data?.exported || !data?.file) {
       throw new Error(data?.error || "后端未返回导出文件");
     }
-    window.open(
-      apiBaseUrl.value + "/api/storage/export-download/" + encodeURIComponent(data.file),
-      "_blank",
-    );
+    await downloadExportFile(data.file);
     ElMessage.success("用户数据已导出");
   } catch (err: any) {
     ElMessage.error("导出失败: " + (err?.response?.data?.msg || err.message));
@@ -310,21 +325,16 @@ async function exportUserData() {
 async function exportAmitiaData(scope: string) {
   exportingAmitia.value = true;
   try {
-    const res = await axios.post(
-      apiBaseUrl.value + "/api/storage/export-amitia",
+    const res = await apiClient.post(
+      "/api/storage/export-amitia",
       {
         scope,
         characterId: scope === "character" ? exportCharId.value : "",
       },
     );
-    const data = res.data?.data || res.data;
+    const data = res.data;
     if (data?.file) {
-      window.open(
-        apiBaseUrl.value +
-          "/api/storage/export-download/" +
-          encodeURIComponent(data.file),
-        "_blank",
-      );
+      await downloadExportFile(data.file);
     }
     ElMessage.success(data?.message || "导出成功");
   } catch (err: any) {
@@ -336,8 +346,8 @@ async function exportAmitiaData(scope: string) {
 
 async function loadAbout() {
   try {
-    const { data } = await axios.get(apiBaseUrl.value + "/api/about");
-    const about = data?.data;
+    const { data } = await apiClient.get("/api/about");
+    const about = data;
     if (!about) return;
     aboutInfo.name = about.name || aboutInfo.name;
     aboutInfo.displayName = about.displayName || aboutInfo.displayName;
@@ -361,16 +371,16 @@ async function loadAbout() {
 
 async function loadExportCharacters() {
   try {
-    const { data } = await axios.get(apiBaseUrl.value + "/api/characters");
-    if (Array.isArray(data?.data)) exportCharacters.value = data.data;
+    const { data } = await apiClient.get("/api/characters");
+    if (Array.isArray(data)) exportCharacters.value = data;
   } catch {}
 }
 
 async function exportConfig() {
   configBusy.value = true;
   try {
-    const res = await axios.post(apiBaseUrl.value + "/api/config/export");
-    const data = res.data?.data || res.data;
+    const res = await apiClient.post("/api/config/export");
+    const data = res.data;
     if (!data?.exported) throw new Error(data?.error || "配置导出失败");
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -391,16 +401,16 @@ async function handleConfigImport(file: any) {
   configBusy.value = true;
   try {
     const raw = await file.raw.text();
-    const previewRes = await axios.post(apiBaseUrl.value + "/api/config/import/preview", { raw });
-    const preview = previewRes.data?.data || previewRes.data;
+    const previewRes = await apiClient.post("/api/config/import/preview", { raw });
+    const preview = previewRes.data;
     if (!preview?.valid) throw new Error(preview?.error || "配置文件无效");
     await ElMessageBox.confirm(
       `共 ${preview.itemCount ?? 0} 项配置；新增 ${preview.newCount ?? 0} 项，修改 ${preview.changed ?? 0} 项，未变化 ${preview.unchanged ?? 0} 项。继续后会覆盖同名设置。`,
       "确认导入配置",
       { type: "warning", confirmButtonText: "导入", cancelButtonText: "取消" },
     );
-    const confirmRes = await axios.post(apiBaseUrl.value + "/api/config/import/confirm", { raw });
-    const result = confirmRes.data?.data || confirmRes.data;
+    const confirmRes = await apiClient.post("/api/config/import/confirm", { raw });
+    const result = confirmRes.data;
     if (!result?.imported) throw new Error(result?.error || "配置导入失败");
     ElMessage.success(`已导入 ${result.importedCount ?? 0} 项配置`);
   } catch (err: any) {
@@ -417,11 +427,11 @@ async function handleImportFile(file: any) {
   try {
     const formData = new FormData();
     formData.append("file", file.raw);
-    const res = await axios.post(
-      apiBaseUrl.value + "/api/storage/import-amitia",
+    const res = await apiClient.post(
+      "/api/storage/import-amitia",
       formData,
     );
-    const data = res.data?.data || res.data;
+    const data = res.data;
     if (data?.imported) {
       const stats = data.stats || {};
       const tableCount = Object.keys(stats).length;
