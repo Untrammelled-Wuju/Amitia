@@ -8,6 +8,7 @@ import type {
   RuntimeStatus,
   SaveExtensionPackageRequest,
   LocalVoiceASRFinalEvent,
+  WorkspaceDirectorySelection,
 } from "../shared/types";
 
 const api = {
@@ -33,6 +34,9 @@ const api = {
   },
   selectMCPRoot(): Promise<{ path: string; name: string } | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.selectMCPRoot);
+  },
+  selectWorkspaceDirectory(): Promise<WorkspaceDirectorySelection | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.selectWorkspaceDirectory);
   },
   selectExtensionPackage(): Promise<ExtensionPackageSelection | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.selectExtensionPackage);

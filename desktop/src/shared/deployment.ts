@@ -8,39 +8,32 @@ export class DeploymentConfigError extends Error {
 }
 
 function isPrivateHost(hostname: string): boolean {
-  if (hostname === "127.0.0.1" || hostname === "localhost") return true;
-  if (hostname.startsWith("10.")) return true;
-  if (hostname.startsWith("192.168.")) return true;
-  const parts = hostname.split(".");
-  if (parts.length === 4 && parts[0] === "172") {
-    const second = parseInt(parts[1], 10);
-    if (second >= 16 && second <= 31) return true;
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost")) return true;
+  if (host === "::1" || host === "0:0:0:0:0:0:0:1") return true;
+  if (/^(fc|fd)[0-9a-f]{2}:/i.test(host) || host.startsWith("fe80:")) return true;
+
+  const parts = host.split(".");
+  if (parts.length !== 4) return false;
+  const octets = parts.map((part) => Number.parseInt(part, 10));
+  if (octets.some((part, index) => !/^\d+$/.test(parts[index]) || part < 0 || part > 255)) {
+    return false;
   }
+  const [a, b] = octets;
+  if (a === 127 || a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 169 && b === 254) return true;
   return false;
 }
 
 function normalizeServerURL(raw: string): string {
-  let url = raw.trim().replace(/\/+$/, "");
+  let url = raw.trim();
+  if (url.startsWith("//")) url = url.slice(2);
 
   if (!/^https?:\/\//i.test(url)) {
-    let hostPart = url;
-    const slashIdx = hostPart.indexOf("/");
-    if (slashIdx !== -1) hostPart = hostPart.slice(0, slashIdx);
-
-    const colonIdx = hostPart.lastIndexOf(":");
-    let hostname = hostPart;
-    if (colonIdx !== -1) {
-      const portStr = hostPart.slice(colonIdx + 1);
-      if (/^\d+$/.test(portStr)) {
-        hostname = hostPart.slice(0, colonIdx);
-      }
-    }
-
-    if (isPrivateHost(hostname)) {
-      url = "http://" + url;
-    } else {
-      url = "https://" + url;
-    }
+    const probe = new URL(`http://${url}`);
+    url = `${isPrivateHost(probe.hostname) ? "http" : "https"}://${url}`;
   }
 
   const parsed = new URL(url);
@@ -57,14 +50,14 @@ function normalizeServerURL(raw: string): string {
     throw new DeploymentConfigError("服务器地址不允许包含查询参数");
   }
 
+  if (parsed.hash) {
+    throw new DeploymentConfigError("服务器地址不允许包含片段标识");
+  }
+
   const pathname = parsed.pathname.replace(/\/+$/, "");
   if (pathname && pathname !== "/") {
     throw new DeploymentConfigError("当前版本仅支持远程Core根地址，不支持子路径部署");
   }
-
-  parsed.hash = "";
-  parsed.search = "";
-  parsed.pathname = "";
 
   return parsed.origin;
 }

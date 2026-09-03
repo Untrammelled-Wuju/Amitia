@@ -144,6 +144,44 @@ export function registerIpcHandlers(
     return { path: selected, name: path.basename(selected) };
   });
 
+  ipcMain.handle(IPC_CHANNELS.selectWorkspaceDirectory, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const options = { properties: ["openDirectory"] as Array<"openDirectory"> };
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) return null;
+
+    const selected = path.resolve(result.filePaths[0]);
+    const home = path.resolve(app.getPath("home"));
+    const blocked = [
+      app.getPath("userData"),
+      app.getPath("appData"),
+      path.join(home, ".ssh"),
+      path.join(home, ".gnupg"),
+      path.join(home, ".aws"),
+      path.join(home, ".azure"),
+      path.join(home, ".config", "gcloud"),
+      path.join(home, ".config", "google-chrome"),
+      path.join(home, ".config", "chromium"),
+    ].map((value) => path.resolve(value).toLowerCase());
+    const normalized = selected.toLowerCase();
+    if (
+      normalized === home.toLowerCase() ||
+      blocked.some(
+        (value) =>
+          normalized === value || normalized.startsWith(value + path.sep),
+      )
+    ) {
+      throw new Error("该目录包含敏感的应用或账户数据，不能作为聊天工作目录");
+    }
+    const stat = await fs.lstat(selected);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error("只能选择真实本地目录作为聊天工作目录");
+    }
+    return { path: selected, name: path.basename(selected) || selected };
+  });
+
   ipcMain.handle(IPC_CHANNELS.selectExtensionPackage, async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     const options = {

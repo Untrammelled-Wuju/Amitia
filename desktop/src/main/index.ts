@@ -23,6 +23,7 @@ import { DesktopPetManager } from "./pet/manager";
 import { registerPetIpcHandlers } from "./pet-ipc";
 import { ClipboardBridge } from "./clipboard-bridge";
 import { DesktopDeploymentLifecycle } from "./deployment-lifecycle";
+import { registerRealtimeMediaHandlers } from "./realtime-media";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -99,6 +100,7 @@ if (!lock) {
         mainWindow.show();
       } else {
         mainWindow = createMainWindow();
+        registerRealtimeMediaHandlers(() => mainWindow);
       }
     }
   });
@@ -139,6 +141,7 @@ async function enterMainApp(): Promise<void> {
   }
 
   mainWindow = createMainWindow();
+  registerRealtimeMediaHandlers(() => mainWindow);
   const trayResult = createAppTray(
     mainWindow,
     () => currentConfig,

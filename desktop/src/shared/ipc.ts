@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   runtimeStatusChanged: "amitia:runtime:status-changed",
   selectAgentSkillDirectory: "amitia:agent-skill:select-directory",
   selectMCPRoot: "amitia:mcp:select-root",
+  selectWorkspaceDirectory: "amitia:workspace:select-directory",
   selectExtensionPackage: "amitia:extension-package:select-file",
   saveExtensionPackage: "amitia:extension-package:save",
   getAutoLaunch: "amitia:auto-launch:get",

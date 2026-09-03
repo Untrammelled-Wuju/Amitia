@@ -135,6 +135,7 @@ export async function deleteMeshCredential(): Promise<void> {
 const MAX_VOICE_ASR_TRANSCRIPT_CHARS = 16_384;
 const MAX_WORKFLOW_EVENT_ID_LENGTH = 200;
 const MAX_CONTEXT_ID_LENGTH = 256;
+const MAX_VISUAL_CONTEXT_CHARS = 6_000;
 const WORKFLOW_EVENT_ID_RE = /^[A-Za-z0-9._:-]+$/;
 
 function assertOptionalContextID(value: unknown, field: string): string {
@@ -170,6 +171,11 @@ export async function publishLocalVoiceASRFinal(
   const sessionId = assertOptionalContextID(event.sessionId, "sessionId");
   const conversationId = assertOptionalContextID(event.conversationId, "conversationId");
   const characterId = assertOptionalContextID(event.characterId, "characterId");
+  const visualContext = typeof event.visualContext === "string" ? event.visualContext.trim() : "";
+  if ([...visualContext].length > MAX_VISUAL_CONTEXT_CHARS) {
+    throw new Error(`visualContext exceeds ${MAX_VISUAL_CONTEXT_CHARS} characters`);
+  }
+  const visualSource = event.visualSource === "camera" || event.visualSource === "screen" ? event.visualSource : "";
   let occurredAt = new Date().toISOString();
   if (event.occurredAt) {
     if (typeof event.occurredAt !== "string") throw new Error("occurredAt must be a string");
@@ -193,6 +199,8 @@ export async function publishLocalVoiceASRFinal(
         sessionId,
         conversationId,
         characterId,
+        visualContext,
+        visualSource,
         final: true,
       },
     },
