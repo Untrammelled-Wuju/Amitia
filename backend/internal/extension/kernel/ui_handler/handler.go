@@ -504,6 +504,7 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 		GrantedPerms:    sess.GrantedPerms,
 		CreatedAt:       sess.CreatedAt,
 		ExpiresAt:       sess.ExpiresAt,
+		Token:           sess.Token,
 	})
 }
 
@@ -533,6 +534,9 @@ func (h *HTTPHandler) handleSessionItem(w http.ResponseWriter, r *http.Request) 
 			ContributionID  string          `json:"contributionId"`
 			Origin          string          `json:"origin"`
 			ContractVersion int             `json:"contractVersion"`
+			Token           string          `json:"token"`
+			Generation      int64           `json:"generation"`
+			Nonce           string          `json:"nonce"`
 			Payload         json.RawMessage `json:"payload"`
 		}
 		if err := decodeJSON(r, &req); err != nil {
@@ -545,6 +549,9 @@ func (h *HTTPHandler) handleSessionItem(w http.ResponseWriter, r *http.Request) 
 			ContributionID:  req.ContributionID,
 			Origin:          req.Origin,
 			ContractVersion: req.ContractVersion,
+			Token:           req.Token,
+			Generation:      req.Generation,
+			Nonce:           req.Nonce,
 			Payload:         req.Payload,
 		}
 		resp := h.uiHost.Bridge().Handle(r.Context(), msg)
@@ -1381,6 +1388,17 @@ func (h *HTTPHandler) invokeAction(r *http.Request, contributionID, actionID str
 	case int:
 		contractVersion = v
 	}
+	token, _ := ctxMap["token"].(string)
+	nonce, _ := ctxMap["nonce"].(string)
+	var generation int64
+	switch v := ctxMap["generation"].(type) {
+	case float64:
+		generation = int64(v)
+	case int:
+		generation = int64(v)
+	case int64:
+		generation = v
+	}
 	payload, _ := json.Marshal(map[string]any{
 		"action_id": actionID,
 		"input":     input,
@@ -1391,6 +1409,9 @@ func (h *HTTPHandler) invokeAction(r *http.Request, contributionID, actionID str
 		ContributionID:  contributionID,
 		Origin:          origin,
 		ContractVersion: contractVersion,
+		Token:           token,
+		Generation:      generation,
+		Nonce:           nonce,
 		Payload:         payload,
 	}
 	return h.uiHost.Bridge().Handle(r.Context(), msg)
@@ -1408,6 +1429,7 @@ type bridgeSessionResponse struct {
 	GrantedPerms    []string  `json:"grantedPerms"`
 	CreatedAt       time.Time `json:"createdAt"`
 	ExpiresAt       time.Time `json:"expiresAt"`
+	Token           string    `json:"token"`
 }
 
 func contributionActionIDs(def *ui_contribution.UIContributionDefinition) []string {
