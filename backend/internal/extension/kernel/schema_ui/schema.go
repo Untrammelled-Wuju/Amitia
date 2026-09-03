@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -581,10 +583,7 @@ func (r *Renderer) evaluateVisibility(conditions []UICondition, data map[string]
 		return true
 	}
 	for _, c := range conditions {
-		val, ok := lookupPath(data, c.Field)
-		if !ok {
-			return false
-		}
+		val, _ := lookupPath(data, c.Field)
 		if !evaluateCondition(val, c.Operator, c.Value) {
 			return false
 		}
@@ -593,18 +592,96 @@ func (r *Renderer) evaluateVisibility(conditions []UICondition, data map[string]
 }
 
 func (r *Renderer) resolveBinding(binding SchemaUIBinding, data map[string]any) any {
-	switch binding.Source {
-	case SourceInput, SourceForm, SourceState, SourceQuery:
-		if val, ok := lookupPath(data, binding.Path); ok {
-			return val
+	lookup := func(root any, path string) (any, bool) {
+		if path == "" || root == nil {
+			return nil, false
 		}
-		if len(binding.Default) > 0 {
-			var v any
-			_ = json.Unmarshal(binding.Default, &v)
-			return v
+		parts := strings.Split(path, ".")
+		current := root
+		for _, p := range parts {
+			switch typed := current.(type) {
+			case map[string]any:
+				var ok bool
+				current, ok = typed[p]
+				if !ok {
+					return nil, false
+				}
+			case []any:
+				idx, err := strconv.Atoi(p)
+				if err != nil || idx < 0 || idx >= len(typed) {
+					return nil, false
+				}
+				current = typed[idx]
+			default:
+				return nil, false
+			}
+		}
+		return current, true
+	}
+	rootFor := func(keys ...string) any {
+		for _, key := range keys {
+			if value, ok := data[key]; ok {
+				return value
+			}
+		}
+		return nil
+	}
+
+	var (
+		value any
+		ok    bool
+	)
+	switch binding.Source {
+	case SourceStatic:
+		return decodeBindingDefault(binding.Default)
+	case SourceInput:
+		value, ok = lookup(rootFor("input"), binding.Path)
+	case SourceForm:
+		value, ok = lookup(rootFor("form", "formState", "form_state"), binding.Path)
+	case SourceState:
+		value, ok = lookup(rootFor("state", "localState", "local_state"), binding.Path)
+	case SourceQuery:
+		value, ok = lookup(rootFor("query"), binding.Path)
+	case SourceRuntime:
+		value, ok = lookup(rootFor("runtime"), binding.Path)
+	case SourceHost:
+		value, ok = lookup(rootFor("host"), binding.Path)
+	case SourceStorage:
+		storage := rootFor("storage")
+		if storageMap, isMap := storage.(map[string]any); isMap {
+			value, ok = storageMap[binding.Path]
+		}
+		if !ok {
+			value, ok = lookup(storage, binding.Path)
+		}
+	case SourceRuntimeStatus:
+		value, ok = lookup(rootFor("runtimeStatus", "runtime_status"), binding.Path)
+	case SourceResourceList:
+		value, ok = lookup(rootFor("resourceList", "resource_list"), binding.Path)
+	}
+	if !ok {
+		// Preserve schema-ui/1 compatibility: input/form/state/query historically
+		// resolved against a flat render context.
+		switch binding.Source {
+		case SourceInput, SourceForm, SourceState, SourceQuery:
+			value, ok = lookup(data, binding.Path)
 		}
 	}
-	return nil
+	if ok {
+		return value
+	}
+	return decodeBindingDefault(binding.Default)
+}
+
+func decodeBindingDefault(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil
+	}
+	return value
 }
 
 func lookupPath(data map[string]any, path string) (any, bool) {
@@ -614,12 +691,20 @@ func lookupPath(data map[string]any, path string) (any, bool) {
 	parts := strings.Split(path, ".")
 	var current any = data
 	for _, p := range parts {
-		m, ok := current.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		current, ok = m[p]
-		if !ok {
+		switch typed := current.(type) {
+		case map[string]any:
+			var ok bool
+			current, ok = typed[p]
+			if !ok {
+				return nil, false
+			}
+		case []any:
+			idx, err := strconv.Atoi(p)
+			if err != nil || idx < 0 || idx >= len(typed) {
+				return nil, false
+			}
+			current = typed[idx]
+		default:
 			return nil, false
 		}
 	}
@@ -627,20 +712,120 @@ func lookupPath(data map[string]any, path string) (any, bool) {
 }
 
 func evaluateCondition(value any, op string, expected any) bool {
+	equal := func(left, right any) bool { return reflect.DeepEqual(left, right) }
+	compare := func(left, right any) (int, bool) {
+		toFloat := func(v any) (float64, bool) {
+			switch n := v.(type) {
+			case int:
+				return float64(n), true
+			case int8:
+				return float64(n), true
+			case int16:
+				return float64(n), true
+			case int32:
+				return float64(n), true
+			case int64:
+				return float64(n), true
+			case uint:
+				return float64(n), true
+			case uint8:
+				return float64(n), true
+			case uint16:
+				return float64(n), true
+			case uint32:
+				return float64(n), true
+			case uint64:
+				return float64(n), true
+			case float32:
+				return float64(n), true
+			case float64:
+				return n, true
+			default:
+				return 0, false
+			}
+		}
+		if l, ok := toFloat(left); ok {
+			if r, ok := toFloat(right); ok {
+				switch {
+				case l < r:
+					return -1, true
+				case l > r:
+					return 1, true
+				default:
+					return 0, true
+				}
+			}
+		}
+		ls, lok := left.(string)
+		rs, rok := right.(string)
+		if lok && rok {
+			return strings.Compare(ls, rs), true
+		}
+		return 0, false
+	}
+
 	switch op {
 	case "==", "eq":
-		return value == expected
+		return equal(value, expected)
 	case "!=", "ne":
-		return value != expected
-	case "in":
-		if arr, ok := expected.([]any); ok {
+		return !equal(value, expected)
+	case ">", "gt":
+		cmp, ok := compare(value, expected)
+		return ok && cmp > 0
+	case "<", "lt":
+		cmp, ok := compare(value, expected)
+		return ok && cmp < 0
+	case ">=", "gte":
+		cmp, ok := compare(value, expected)
+		return ok && cmp >= 0
+	case "<=", "lte":
+		cmp, ok := compare(value, expected)
+		return ok && cmp <= 0
+	case "in", "not_in":
+		found := false
+		switch arr := expected.(type) {
+		case []any:
 			for _, item := range arr {
-				if item == value {
+				if equal(item, value) {
+					found = true
+					break
+				}
+			}
+		case string:
+			if text, ok := value.(string); ok {
+				for _, item := range strings.Split(arr, ",") {
+					if strings.TrimSpace(item) == text {
+						found = true
+						break
+					}
+				}
+			}
+		}
+		if op == "not_in" {
+			return !found
+		}
+		return found
+	case "contains":
+		switch container := value.(type) {
+		case string:
+			text, ok := expected.(string)
+			return ok && strings.Contains(container, text)
+		case []any:
+			for _, item := range container {
+				if equal(item, expected) {
 					return true
 				}
 			}
 		}
 		return false
+	case "regex":
+		text, okText := value.(string)
+		pattern, okPattern := expected.(string)
+		if !okText || !okPattern {
+			return false
+		}
+		re, err := regexp.Compile(pattern)
+		return err == nil && re.MatchString(text)
 	case "not_null":
 		return value != nil
 	case "is_null":

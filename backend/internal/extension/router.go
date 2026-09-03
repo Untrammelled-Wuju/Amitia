@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/user"
 	"github.com/u-ai/backend/pkg/app"
 )
@@ -120,6 +121,11 @@ func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtim
 
 func extensionAuth(service user.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if actor := security.GetActor(c); actor != nil && actor.UserID != "" && actor.IsLocalTrusted {
+			c.Set(authenticatedUserKey, string(actor.UserID))
+			c.Next()
+			return
+		}
 		auth := c.GetHeader("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
 			writeAuthProblem(c, "Authentication required")
