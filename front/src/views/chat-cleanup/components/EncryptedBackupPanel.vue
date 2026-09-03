@@ -30,7 +30,16 @@ SPDX-License-Identifier: AGPL-3.0-only
                 {{ formatCreatedAt(b) }} · {{ formatSize(b) }}
               </div>
             </div>
-            <el-button size="small" @click="openRestore(b)">恢复</el-button>
+            <div class="backup-actions">
+              <el-button size="small" @click="openRestore(b)">恢复</el-button>
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                :loading="deletingBackup === String(b.name || '')"
+                @click="deleteBackup(b)"
+              >删除</el-button>
+            </div>
           </div>
         </div>
       </div>
@@ -41,7 +50,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { apiClient } from "../../../composables/useApi";
 
 const emit = defineEmits<{
@@ -51,6 +60,7 @@ const emit = defineEmits<{
 const backupCreating = ref(false);
 const backupList = ref<any[]>([]);
 const backupListLoaded = ref(false);
+const deletingBackup = ref("");
 
 onMounted(loadBackups);
 
@@ -82,6 +92,40 @@ async function createBackup() {
     ElMessage.error("创建失败: " + (err.response?.data?.message || err.response?.data?.error || err.message));
   } finally {
     backupCreating.value = false;
+  }
+}
+
+
+async function deleteBackup(backup: any) {
+  const name = String(backup?.name || "").trim();
+  if (!name || deletingBackup.value) return;
+  try {
+    await ElMessageBox.confirm(
+      `确定删除备份「${name}」？删除后无法恢复。`,
+      "删除备份",
+      {
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        type: "warning",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+  } catch {
+    return;
+  }
+
+  deletingBackup.value = name;
+  try {
+    await apiClient.delete(`/api/storage/backups/${encodeURIComponent(name)}`);
+    ElMessage.success("备份已删除");
+    await loadBackups();
+  } catch (err: any) {
+    ElMessage.error(
+      "删除失败: " +
+        (err.response?.data?.message || err.response?.data?.error || err.message),
+    );
+  } finally {
+    deletingBackup.value = "";
   }
 }
 
@@ -149,6 +193,12 @@ function openRestore(backup: any) {
 .backup-meta {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+.backup-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 @media (max-width: 600px) {
   .backup-create-row {
