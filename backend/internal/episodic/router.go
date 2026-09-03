@@ -12,6 +12,8 @@ func RegisterEpisodicRouter(r *gin.RouterGroup, svc Service) {
 	r.GET("/episodic", handler.List)
 	r.POST("/episodic", handler.Create)
 	r.DELETE("/episodic/:id", handler.Delete)
+	r.PUT("/episodic/:id/retention", handler.UpdateRetention)
+	r.POST("/episodic/:id/restore", handler.Restore)
 	r.GET("/episodic/by-user", handler.GetByUserID)
 	r.GET("/episodic/:id/detail", handler.GetDetail)
 	r.POST("/episodic/extract", handler.Extract)

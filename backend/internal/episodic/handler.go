@@ -50,6 +50,31 @@ func (h *Handler) Delete(c *gin.Context) {
 	util.SuccessMsgResponse(c, "删除成功", nil)
 }
 
+func (h *Handler) UpdateRetention(c *gin.Context) {
+	var body struct {
+		RetentionLevel int `json:"retentionLevel"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		return
+	}
+	memory, err := h.service.UpdateRetention(c.Param("id"), body.RetentionLevel)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "记忆层级已更新", memory)
+}
+
+func (h *Handler) Restore(c *gin.Context) {
+	memory, err := h.service.Restore(c.Param("id"))
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "情景记忆已恢复", memory)
+}
+
 func (h *Handler) GetByUserID(c *gin.Context) {
 	userID := c.Query("userId")
 	memories, err := h.service.GetByUserID(userID, c.Query("characterId"))

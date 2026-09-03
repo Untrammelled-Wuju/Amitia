@@ -32,22 +32,29 @@ func (c *EpisodicBackupContributor) Dependencies() []string {
 }
 
 type episodicRecordV1 struct {
-	ID               string `json:"id"`
-	UserID           string `json:"userId"`
-	SceneType        string `json:"sceneType"`
-	Title            string `json:"title"`
-	Content          string `json:"content"`
-	ContextBefore    string `json:"contextBefore"`
-	ContextAfter     string `json:"contextAfter"`
-	TriggerKeywords  string `json:"triggerKeywords"`
-	SentimentScore   int    `json:"sentimentScore"`
-	MessageIDStart   string `json:"messageIdStart"`
-	MessageIDEnd     string `json:"messageIdEnd"`
-	MessageTimeStart string `json:"messageTimeStart"`
-	MessageTimeEnd   string `json:"messageTimeEnd"`
-	SourceConvID     string `json:"sourceConvId"`
-	CreatedAt        string `json:"createdAt"`
-	UpdatedAt        string `json:"updatedAt"`
+	ID                string  `json:"id"`
+	UserID            string  `json:"userId"`
+	SceneType         string  `json:"sceneType"`
+	Title             string  `json:"title"`
+	Content           string  `json:"content"`
+	ContextBefore     string  `json:"contextBefore"`
+	ContextAfter      string  `json:"contextAfter"`
+	TriggerKeywords   string  `json:"triggerKeywords"`
+	SentimentScore    int     `json:"sentimentScore"`
+	MessageIDStart    string  `json:"messageIdStart"`
+	MessageIDEnd      string  `json:"messageIdEnd"`
+	MessageTimeStart  string  `json:"messageTimeStart"`
+	MessageTimeEnd    string  `json:"messageTimeEnd"`
+	SourceConvID      string  `json:"sourceConvId"`
+	CreatedAt         string  `json:"createdAt"`
+	UpdatedAt         string  `json:"updatedAt"`
+	RetentionLevel    int     `json:"retentionLevel,omitempty"`
+	MemoryStrength    float64 `json:"memoryStrength,omitempty"`
+	StrengthUpdatedAt *string `json:"strengthUpdatedAt,omitempty"`
+	LastReinforcedAt  *string `json:"lastReinforcedAt,omitempty"`
+	ReinforceCount    int     `json:"reinforceCount,omitempty"`
+	DecayState        string  `json:"decayState,omitempty"`
+	ArchivedAt        *string `json:"archivedAt,omitempty"`
 }
 
 func (c *EpisodicBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
@@ -74,7 +81,7 @@ func (c *EpisodicBackupContributor) Export(ctx context.Context, req dataportabil
 	defer compW.Close()
 
 	query := c.DB.WithContext(ctx).Table("episodic_memories").Select(
-		"id, user_id, scene_type, title, content, context_before, context_after, trigger_keywords, sentiment_score, message_id_start, message_id_end, message_time_start, message_time_end, source_conv_id, created_at, updated_at",
+		"id, user_id, scene_type, title, content, context_before, context_after, trigger_keywords, sentiment_score, message_id_start, message_id_end, message_time_start, message_time_end, source_conv_id, created_at, updated_at, retention_level, memory_strength, strength_updated_at, last_reinforced_at, reinforce_count, decay_state, archived_at",
 	)
 
 	rows, err := query.Rows()
@@ -178,22 +185,29 @@ func (c *EpisodicBackupContributor) RestoreEpisodic(ctx context.Context, in data
 		}
 
 		m := EpisodicMemory{
-			ID:               rec.ID,
-			UserID:           rec.UserID,
-			SceneType:        rec.SceneType,
-			Title:            rec.Title,
-			Content:          rec.Content,
-			ContextBefore:    rec.ContextBefore,
-			ContextAfter:     rec.ContextAfter,
-			TriggerKeywords:  rec.TriggerKeywords,
-			SentimentScore:   rec.SentimentScore,
-			MessageIDStart:   rec.MessageIDStart,
-			MessageIDEnd:     rec.MessageIDEnd,
-			MessageTimeStart: rec.MessageTimeStart,
-			MessageTimeEnd:   rec.MessageTimeEnd,
-			SourceConvID:     rec.SourceConvID,
-			CreatedAt:        rec.CreatedAt,
-			UpdatedAt:        rec.UpdatedAt,
+			ID:                rec.ID,
+			UserID:            rec.UserID,
+			SceneType:         rec.SceneType,
+			Title:             rec.Title,
+			Content:           rec.Content,
+			ContextBefore:     rec.ContextBefore,
+			ContextAfter:      rec.ContextAfter,
+			TriggerKeywords:   rec.TriggerKeywords,
+			SentimentScore:    rec.SentimentScore,
+			MessageIDStart:    rec.MessageIDStart,
+			MessageIDEnd:      rec.MessageIDEnd,
+			MessageTimeStart:  rec.MessageTimeStart,
+			MessageTimeEnd:    rec.MessageTimeEnd,
+			SourceConvID:      rec.SourceConvID,
+			CreatedAt:         rec.CreatedAt,
+			UpdatedAt:         rec.UpdatedAt,
+			RetentionLevel:    rec.RetentionLevel,
+			MemoryStrength:    rec.MemoryStrength,
+			StrengthUpdatedAt: rec.StrengthUpdatedAt,
+			LastReinforcedAt:  rec.LastReinforcedAt,
+			ReinforceCount:    rec.ReinforceCount,
+			DecayState:        rec.DecayState,
+			ArchivedAt:        rec.ArchivedAt,
 		}
 
 		var existing struct{ ID string }

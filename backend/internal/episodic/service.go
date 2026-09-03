@@ -25,6 +25,8 @@ type Service interface {
 	List(q EpisodicListQuery) (*EpisodicListResponse, error)
 	Create(req *CreateEpisodicRequest) (*EpisodicMemory, error)
 	Delete(id string) error
+	UpdateRetention(id string, level int) (*EpisodicMemory, error)
+	Restore(id string) (*EpisodicMemory, error)
 	GetByUserID(userID string, characterID ...string) ([]EpisodicMemory, error)
 	GetDetail(id string) (*EpisodicMemory, []map[string]interface{}, error)
 	ExtractFromConversation(userID, convID string, messages []map[string]string, characterID ...string) error
@@ -58,6 +60,10 @@ func (s *service) List(q EpisodicListQuery) (*EpisodicListResponse, error) {
 	items, total, err := s.repo.List(q)
 	if err != nil {
 		return nil, err
+	}
+	now := time.Now()
+	for i := range items {
+		s.maintainRetention(&items[i], now)
 	}
 	page := q.Page
 	pageSize := q.PageSize
@@ -116,6 +122,67 @@ func (s *service) Delete(id string) error {
 		}
 	}
 	return nil
+}
+
+func (s *service) UpdateRetention(id string, level int) (*EpisodicMemory, error) {
+	if level < 1 || level > 5 {
+		return nil, fmt.Errorf("retentionLevel必须在1到5之间")
+	}
+	m, err := s.repo.FindByID(id)
+	if err != nil || m == nil {
+		return nil, err
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	strength := m.MemoryStrength
+	minimum := episodicDefaultStrength(level)
+	if strength <= 0 || strength < minimum*0.65 {
+		strength = minimum
+	}
+	updates := map[string]interface{}{
+		"retention_level":     level,
+		"memory_strength":     clampEpisodicStrength(strength),
+		"strength_updated_at": now,
+		"last_reinforced_at":  now,
+		"decay_state":         episodicDecayActive,
+		"archived_at":         nil,
+		"updated_at":          now,
+	}
+	if err := s.db.Table("episodic_memories").Where("id = ?", id).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	updated, err := s.repo.FindByID(id)
+	if err == nil && updated != nil {
+		s.syncGraph(updated)
+	}
+	return updated, err
+}
+
+func (s *service) Restore(id string) (*EpisodicMemory, error) {
+	m, err := s.repo.FindByID(id)
+	if err != nil || m == nil {
+		return nil, err
+	}
+	level := normalizeEpisodicRetentionLevel(m.RetentionLevel)
+	now := time.Now().Format("2006-01-02 15:04:05")
+	strength := m.MemoryStrength
+	if strength < 0.18 {
+		strength = episodicDefaultStrength(level)
+	}
+	if err := s.db.Table("episodic_memories").Where("id = ?", id).Updates(map[string]interface{}{
+		"memory_strength":     clampEpisodicStrength(strength),
+		"strength_updated_at": now,
+		"last_reinforced_at":  now,
+		"decay_state":         episodicDecayActive,
+		"archived_at":         nil,
+		"updated_at":          now,
+	}).Error; err != nil {
+		return nil, err
+	}
+	updated, err := s.repo.FindByID(id)
+	if err == nil && updated != nil {
+		s.syncGraph(updated)
+	}
+	return updated, err
 }
 
 func (s *service) GetByUserID(userID string, characterID ...string) ([]EpisodicMemory, error) {
@@ -436,6 +503,10 @@ func (s *service) syncGraph(m *EpisodicMemory) {
 	if s.graphSvc == nil || m == nil {
 		return
 	}
+	if strings.EqualFold(strings.TrimSpace(m.DecayState), episodicDecayArchived) {
+		_ = s.graphSvc.DeleteNode("episodic:" + m.ID)
+		return
+	}
 	if m.UserID == "" {
 		return
 	}
@@ -445,6 +516,9 @@ func (s *service) syncGraph(m *EpisodicMemory) {
 		"sentimentScore":  m.SentimentScore,
 		"sourceConvID":    m.SourceConvID,
 		"triggerKeywords": m.TriggerKeywords,
+		"retention_level": m.RetentionLevel,
+		"memory_strength": m.MemoryStrength,
+		"decay_state":     m.DecayState,
 		"user_id":         m.UserID,
 	})
 	_ = s.graphSvc.SyncEdge("user:"+m.UserID, "episodic:"+m.ID, "experienced", 1.0)
