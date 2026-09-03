@@ -563,6 +563,7 @@ CREATE TABLE IF NOT EXISTS memories (
     key TEXT DEFAULT '',
     value TEXT DEFAULT '',
     memory_type TEXT DEFAULT 'fact',
+    memory_subtype TEXT NOT NULL DEFAULT '',
     importance INTEGER DEFAULT 0,
     confidence INTEGER DEFAULT 50,
     source TEXT DEFAULT 'manual',
@@ -580,6 +581,17 @@ CREATE TABLE IF NOT EXISTS memories (
     updated_at TEXT DEFAULT '',
     use_count INTEGER DEFAULT 0,
     last_used_at TEXT,
+    retention_level INTEGER NOT NULL DEFAULT 3,
+    memory_strength REAL NOT NULL DEFAULT 0.68,
+    strength_updated_at TEXT,
+    last_reinforced_at TEXT,
+    reinforce_count INTEGER NOT NULL DEFAULT 0,
+    retrieved_count INTEGER NOT NULL DEFAULT 0,
+    injected_count INTEGER NOT NULL DEFAULT 0,
+    decay_state TEXT NOT NULL DEFAULT 'active',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    archived_at TEXT,
+    superseded_by TEXT NOT NULL DEFAULT '',
     sensitivity_level TEXT DEFAULT 'internal',
     allow_proactive_mention INTEGER DEFAULT 1,
     requires_confirmation INTEGER DEFAULT 0,
@@ -617,7 +629,17 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     key TEXT NOT NULL DEFAULT '',
     value TEXT NOT NULL DEFAULT '',
     memory_type TEXT DEFAULT 'custom',
+    memory_subtype TEXT NOT NULL DEFAULT '',
     importance INTEGER DEFAULT 5,
+    retention_level INTEGER NOT NULL DEFAULT 0,
+    memory_strength REAL NOT NULL DEFAULT 0,
+    strength_updated_at TEXT,
+    last_reinforced_at TEXT,
+    reinforce_count INTEGER NOT NULL DEFAULT 0,
+    decay_state TEXT NOT NULL DEFAULT '',
+    pinned INTEGER NOT NULL DEFAULT 0,
+    archived_at TEXT,
+    scope TEXT NOT NULL DEFAULT 'character',
     source_text TEXT DEFAULT '',
     conversation_id TEXT DEFAULT '',
     character_id TEXT DEFAULT '',
@@ -659,6 +681,8 @@ CREATE INDEX IF NOT EXISTS idx_memories_importance_conf ON memories(character_id
 CREATE INDEX IF NOT EXISTS idx_memories_scope_type ON memories(scope_type);
 CREATE INDEX IF NOT EXISTS idx_memories_character_type ON memories(character_id, memory_type);
 CREATE INDEX IF NOT EXISTS idx_memories_derivation_key ON memories(derivation_key);
+CREATE INDEX IF NOT EXISTS idx_memories_retention_state ON memories(character_id, decay_state, retention_level);
+CREATE INDEX IF NOT EXISTS idx_memories_subtype ON memories(character_id, memory_subtype);
 
 CREATE TABLE IF NOT EXISTS memory_embeddings (
     memory_id TEXT PRIMARY KEY,
@@ -681,12 +705,20 @@ CREATE TABLE IF NOT EXISTS episodic_memories (
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
     message_time_start TEXT NOT NULL DEFAULT '',
-    message_time_end TEXT NOT NULL DEFAULT ''
+    message_time_end TEXT NOT NULL DEFAULT '',
+    retention_level INTEGER NOT NULL DEFAULT 4,
+    memory_strength REAL NOT NULL DEFAULT 0.50,
+    strength_updated_at TEXT,
+    last_reinforced_at TEXT,
+    reinforce_count INTEGER NOT NULL DEFAULT 0,
+    decay_state TEXT NOT NULL DEFAULT 'active',
+    archived_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_episodic_user_id ON episodic_memories(user_id);
 CREATE INDEX IF NOT EXISTS idx_episodic_scene_type ON episodic_memories(user_id, scene_type);
 CREATE INDEX IF NOT EXISTS idx_episodic_created ON episodic_memories(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_episodic_retention_state ON episodic_memories(user_id, decay_state, retention_level);
 
 CREATE TABLE IF NOT EXISTS user_profiles (
     id TEXT PRIMARY KEY,
@@ -700,12 +732,16 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     source_conv_id TEXT DEFAULT '',
     verified_at TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
+    updated_at TEXT DEFAULT '',
+    source_memory_id TEXT NOT NULL DEFAULT '',
+    projection_status TEXT NOT NULL DEFAULT 'active'
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_uid_cat_attr ON user_profiles(user_id, character_id, category, attribute_name);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_confidence ON user_profiles(user_id, confidence);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_source_memory ON user_profiles(source_memory_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_projection_status ON user_profiles(user_id, character_id, projection_status);
 
 CREATE TABLE IF NOT EXISTS world_book (
     id TEXT PRIMARY KEY,
