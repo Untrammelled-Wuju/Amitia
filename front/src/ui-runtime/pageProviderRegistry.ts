@@ -2,6 +2,7 @@ import type { UIProviderCapability, UIProviderDefinition, UIProviderResolveConte
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import { isProviderCompatible } from "./providerRuntime";
 import { providerHasRouteSelectors } from "./providerCollection";
+import { canonicalUISurfaceId, uiRouteAliases } from "./uiSurfaceCatalog";
 
 function matchesPattern(path: string, pattern: string): boolean {
   const clean = pattern.trim();
@@ -19,15 +20,38 @@ function matchesPattern(path: string, pattern: string): boolean {
   return patternParts.every((part, index) => part.startsWith(":") || part === "*" || part === routeParts[index]);
 }
 
+function matchesSurfacePattern(surfaceId: string, pattern: string): boolean {
+  const clean = pattern.trim();
+  if (!clean) return false;
+  if (clean === "*" || clean === surfaceId) return true;
+  if (clean.endsWith(".*")) {
+    const prefix = clean.slice(0, -2);
+    return surfaceId === prefix || surfaceId.startsWith(`${prefix}.`);
+  }
+  return false;
+}
+
 function providerMatchesRoute(provider: UIProviderDefinition, path: string): boolean {
   const metadata = provider.metadata ?? {};
   const routes = Array.isArray(metadata.routes) ? metadata.routes : [];
   const routePatterns = Array.isArray(metadata.routePatterns) ? metadata.routePatterns : [];
-  const selectors = [...routes, ...routePatterns]
+  const routeSelectors = [...routes, ...routePatterns]
     .filter((item) => typeof item === "string")
     .map((item) => String(item ?? "").trim())
     .filter(Boolean);
-  return selectors.length > 0 && selectors.some((pattern) => matchesPattern(path, pattern));
+  const aliases = uiRouteAliases(path);
+  if (routeSelectors.some((pattern) => aliases.some((candidate) => matchesPattern(candidate, pattern)))) {
+    return true;
+  }
+
+  const surfaces = Array.isArray(metadata.surfaces) ? metadata.surfaces : [];
+  const surfacePatterns = Array.isArray(metadata.surfacePatterns) ? metadata.surfacePatterns : [];
+  const surfaceSelectors = [...surfaces, ...surfacePatterns]
+    .filter((item) => typeof item === "string")
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+  const surfaceId = canonicalUISurfaceId(path);
+  return surfaceSelectors.some((pattern) => matchesSurfacePattern(surfaceId, pattern));
 }
 
 /**
