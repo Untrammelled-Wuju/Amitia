@@ -26,6 +26,7 @@ $excludes = @(
     "--exclude=*.tar.xz"
     "--exclude=*.apk"
     "--exclude=*.aab"
+    "--exclude=*.amitiax"
     "--exclude=*.dex"
     "--exclude=*.class"
     "--exclude=*.jar"
