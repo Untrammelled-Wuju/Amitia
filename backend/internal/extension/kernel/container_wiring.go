@@ -691,7 +691,7 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 	})
 	if err != nil || securityReport == nil || !securityReport.Passed {
 		if err == nil {
-			err = fmt.Errorf("archive security rejected package")
+			err = fmt.Errorf("archive security rejected package (%s)", securityRejectionDetail(securityReport))
 		}
 		result.Status = "failed"
 		result.Error = err.Error()

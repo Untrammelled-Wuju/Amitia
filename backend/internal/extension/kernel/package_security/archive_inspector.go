@@ -216,7 +216,7 @@ func (i *ArchiveInspector) ReadEntry(raw []byte, entry ArchiveEntryInfo) ([]byte
 				return nil, openErr
 			}
 			defer rc.Close()
-			return io.ReadAll(io.LimitReader(rc, i.policy.MaxSingleEntryBytes+1))
+			return io.ReadAll(limitReader(rc, i.policy.MaxSingleEntryBytes))
 		}
 	}
 

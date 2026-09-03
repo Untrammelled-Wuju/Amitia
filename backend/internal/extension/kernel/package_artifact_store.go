@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -48,7 +49,11 @@ func (s *PackageArtifactStore) PutArchive(ctx context.Context, reader io.Reader,
 		}
 	}()
 	hash := sha256.New()
-	written, err := io.Copy(io.MultiWriter(temp, hash), io.LimitReader(reader, limit+1))
+	var source io.Reader = reader
+	if limit < math.MaxInt64 {
+		source = io.LimitReader(reader, limit+1)
+	}
+	written, err := io.Copy(io.MultiWriter(temp, hash), source)
 	if err != nil {
 		return PackageArtifact{}, err
 	}

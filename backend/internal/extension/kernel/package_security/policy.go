@@ -1,5 +1,7 @@
 package package_security
 
+import "math"
+
 type ArchivePolicy struct {
 	MaxArchiveBytes           int64    `json:"max_archive_bytes"`
 	MaxEntryCount             int      `json:"max_entry_count"`
@@ -19,10 +21,10 @@ type ArchivePolicy struct {
 
 func DefaultArchivePolicy() ArchivePolicy {
 	return ArchivePolicy{
-		MaxArchiveBytes:           100 * 1024 * 1024,
-		MaxEntryCount:             2000,
-		MaxSingleEntryBytes:       50 * 1024 * 1024,
-		MaxTotalUncompressedBytes: 200 * 1024 * 1024,
+		MaxArchiveBytes:           math.MaxInt64,
+		MaxEntryCount:             math.MaxInt,
+		MaxSingleEntryBytes:       math.MaxInt64,
+		MaxTotalUncompressedBytes: math.MaxInt64,
 		MaxCompressionRatio:       100,
 		MaxPathLength:             512,
 		MaxDirectoryDepth:         32,

@@ -16,7 +16,7 @@ func (r *Runtime) VerifyStoredPackage(ctx context.Context, artifact PackageArtif
 	report, err := r.container.PackageSecurity.InspectFile(ctx, artifact.ArchivePath, package_security.PackageSource{SourceType: package_security.SourceLocalFile, LocalPath: artifact.ArchivePath})
 	if err != nil || report == nil || !report.Passed {
 		if err == nil {
-			err = fmt.Errorf("archive security rejected package")
+			err = fmt.Errorf("archive security rejected package (%s)", securityRejectionDetail(report))
 		}
 		return nil, err
 	}

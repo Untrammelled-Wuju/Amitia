@@ -24,7 +24,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 )
 
-const packagePolicyVersion = "2026-08-27-v4"
+const packagePolicyVersion = "2026-09-04-v5"
 
 func CurrentPackagePolicyVersion() string {
 	return packagePolicyVersion
@@ -41,6 +41,34 @@ func computeSecurityPolicyHash() string {
 func packageDevelopmentModeEnabled() bool {
 	enabled, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("AMITIA_EXTENSION_DEV_MODE")))
 	return err == nil && enabled
+}
+
+func securityRejectionDetail(report *package_security.PackageSecurityReport) string {
+	if report == nil {
+		return "no security report"
+	}
+	detail := ""
+	if report.EntryCount > 0 {
+		detail += fmt.Sprintf("entries=%d ", report.EntryCount)
+	}
+	if report.TotalUncompressed > 0 {
+		detail += fmt.Sprintf("totalUncompressed=%.1fMB ", float64(report.TotalUncompressed)/(1024*1024))
+	}
+	issues := make([]string, 0, len(report.BlockingIssues))
+	for _, issue := range report.BlockingIssues {
+		msg := issue.Description
+		if issue.Path != "" {
+			msg = issue.Path + ": " + issue.Description
+		}
+		issues = append(issues, msg)
+	}
+	if len(issues) > 5 {
+		issues = append(issues[:5], fmt.Sprintf("...(%d more)", len(report.BlockingIssues)-5))
+	}
+	if len(issues) > 0 {
+		detail += strings.Join(issues, "; ")
+	}
+	return strings.TrimSpace(detail)
 }
 
 func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequest, reader io.Reader) (InstallPreview, error) {
@@ -60,7 +88,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		return InstallPreview{}, fmt.Errorf("kernel: security inspect: %w", err)
 	}
 	if !securityReport.Passed {
-		return InstallPreview{}, fmt.Errorf("kernel: archive security rejected package")
+		return InstallPreview{}, fmt.Errorf("kernel: archive security rejected package (%s)", securityRejectionDetail(securityReport))
 	}
 	pkg, err := amitiax.OpenArchive(artifact.ArchivePath)
 	if err != nil {
