@@ -5,12 +5,14 @@ class BindingContext {
   final Map<String, dynamic> localState;
   final Map<String, dynamic> runtime;
   final Map<String, dynamic> host;
+  final Map<String, dynamic> storage;
 
   const BindingContext({
     this.formState = const {},
     this.localState = const {},
     this.runtime = const {},
     this.host = const {},
+    this.storage = const {},
   });
 
   BindingContext copyWith({
@@ -18,12 +20,14 @@ class BindingContext {
     Map<String, dynamic>? localState,
     Map<String, dynamic>? runtime,
     Map<String, dynamic>? host,
+    Map<String, dynamic>? storage,
   }) {
     return BindingContext(
       formState: formState ?? this.formState,
       localState: localState ?? this.localState,
       runtime: runtime ?? this.runtime,
       host: host ?? this.host,
+      storage: storage ?? this.storage,
     );
   }
 }
@@ -154,6 +158,11 @@ class BindingEngine {
         break;
       case 'host':
         resolved = _lookupPath(context.host, path);
+        break;
+      case 'storage':
+        // Storage bindings use the exact key (matching web localStorage), with
+        // nested lookup as a compatibility fallback for structured host data.
+        resolved = context.storage[path] ?? _lookupPath(context.storage, path);
         break;
       case 'runtime_status':
         final rt = context.runtime;
