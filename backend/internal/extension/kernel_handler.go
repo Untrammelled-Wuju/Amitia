@@ -2,6 +2,7 @@ package extension
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 
@@ -63,7 +64,11 @@ func createPackageArtifactPreview(c *gin.Context, runtime *Runtime) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "extension package service unavailable"})
 		return
 	}
-	maxBody := package_security.DefaultArchivePolicy().MaxArchiveBytes + (1 << 20)
+	policy := package_security.DefaultArchivePolicy()
+	maxBody := policy.MaxArchiveBytes
+	if maxBody < math.MaxInt64-(1<<20) {
+		maxBody += 1 << 20
+	}
 	if c.Request.ContentLength > maxBody {
 		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "package upload exceeds limit"})
 		return

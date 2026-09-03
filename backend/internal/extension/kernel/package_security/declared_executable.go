@@ -45,7 +45,7 @@ func discoverDeclaredServiceExecutables(reader *zip.Reader, policy ArchivePolicy
 	if err != nil {
 		return allowed
 	}
-	data, err := io.ReadAll(io.LimitReader(rc, policy.MaxSingleEntryBytes+1))
+	data, err := io.ReadAll(limitReader(rc, policy.MaxSingleEntryBytes))
 	rc.Close()
 	if err != nil || int64(len(data)) > policy.MaxSingleEntryBytes {
 		return allowed
