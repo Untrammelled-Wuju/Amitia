@@ -15,6 +15,7 @@ import 'ui_client_info.dart';
 import 'ui_device_identity.dart';
 import 'ui_provider.dart';
 import 'ui_snapshot_cache.dart';
+import 'ui_runtime_invalidation.dart';
 
 final uiRuntimeUsingLastKnownGoodProvider = StateProvider<bool>((ref) => false);
 
@@ -29,9 +30,16 @@ class UIRuntimeController
        _meshDeviceId = meshDeviceId,
        _onLastKnownGood = onLastKnownGood,
        super(const AsyncValue.data(null)) {
-    // Mobile does not depend on the web SSE transport. Periodic reconciliation
-    // keeps cloud profile/provider changes convergent while app is alive.
-    _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+    _invalidationSubscription = UIRuntimeInvalidationBus.changes.listen((_) {
+      _invalidationDebounce?.cancel();
+      _invalidationDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (!_loading) unawaited(ensureLoaded(force: true));
+      });
+    });
+    // Event-driven invalidation is primary. A short periodic reconciliation is
+    // retained as a cloud/offline recovery fallback for mutations that happen
+    // on another device while this app is open.
+    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (state.valueOrNull != null && !_loading) {
         unawaited(ensureLoaded(force: true));
       }
@@ -45,6 +53,8 @@ class UIRuntimeController
   final UIDeviceIdentity _identity = UIDeviceIdentity();
   final UISnapshotCache _cache = UISnapshotCache();
   late final Timer _syncTimer;
+  late final StreamSubscription<void> _invalidationSubscription;
+  Timer? _invalidationDebounce;
   bool _loading = false;
 
   Future<String> get deviceId async {
@@ -176,6 +186,8 @@ class UIRuntimeController
 
   @override
   void dispose() {
+    _invalidationDebounce?.cancel();
+    _invalidationSubscription.cancel();
     _syncTimer.cancel();
     super.dispose();
   }

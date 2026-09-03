@@ -10,6 +10,7 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 
 class MaintenancePage extends ConsumerStatefulWidget {
   const MaintenancePage({super.key});
@@ -160,6 +161,17 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
               ),
             );
           }),
+        SizedBox(height: AppSpacing.sectionGap),
+        AmitiaSectionHeader(title: '扩展诊断'),
+        SizedBox(height: AppSpacing.sm),
+        MobileExtensionSlot(
+          slotId: 'system.diagnostics.tab',
+          context: {
+            'route': '/settings/maintenance',
+            'status': _status ?? const <String, dynamic>{},
+            'diagnosis': _diagnosis ?? const <String, dynamic>{},
+          },
+        ),
         SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(title: '真实维护操作'),
         SizedBox(height: AppSpacing.sm),

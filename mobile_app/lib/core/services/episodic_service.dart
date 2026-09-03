@@ -10,6 +10,8 @@ class EpisodicService {
     String userId = '',
     String characterId = '',
     String sceneType = '',
+    int retentionLevel = 0,
+    String decayState = '',
     int page = 1,
     int pageSize = 100,
   }) async {
@@ -19,6 +21,8 @@ class EpisodicService {
         if (userId.isNotEmpty) 'userId': userId,
         if (characterId.isNotEmpty) 'characterId': characterId,
         if (sceneType.isNotEmpty) 'sceneType': sceneType,
+        if (retentionLevel >= 1 && retentionLevel <= 5) 'retentionLevel': retentionLevel,
+        if (decayState.isNotEmpty) 'decayState': decayState,
         'page': page,
         'pageSize': pageSize,
       },
@@ -41,6 +45,19 @@ class EpisodicService {
     return true;
   }
 
+  Future<EpisodicDto?> updateRetention(String id, int retentionLevel) async {
+    final resp = await _api.put<Map<String, dynamic>>(
+      '/api/episodic/$id/retention',
+      data: {'retentionLevel': retentionLevel},
+    );
+    return resp == null ? null : EpisodicDto.fromJson(resp);
+  }
+
+  Future<EpisodicDto?> restore(String id) async {
+    final resp = await _api.post<Map<String, dynamic>>('/api/episodic/$id/restore');
+    return resp == null ? null : EpisodicDto.fromJson(resp);
+  }
+
   Future<List<EpisodicDto>> getByUser({
     String userId = 'default',
     String characterId = '',
@@ -60,7 +77,7 @@ class EpisodicService {
   }
 
   Future<Map<String, dynamic>?> getDetail(String id) {
-    return _api.get<Map<String, dynamic>>('/api/episodic/$id');
+    return _api.get<Map<String, dynamic>>('/api/episodic/$id/detail');
   }
 
   Future<bool> extract({

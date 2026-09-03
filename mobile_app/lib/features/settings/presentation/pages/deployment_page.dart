@@ -13,6 +13,7 @@ import '../../../../core/backend_connection/providers/backend_connection_provide
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/runtime/backend/mobile_backend_lifecycle.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
+import '../../../../core/runtime/backend/backend_topology_resolver.dart';
 
 class DeploymentPage extends ConsumerStatefulWidget {
   const DeploymentPage({super.key});
@@ -46,6 +47,8 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   Future<void> _loadConfig() async {
     await Future.delayed(Duration.zero);
     await ref.read(mobileDeploymentConfigProvider.notifier).init();
+    final config = ref.read(mobileDeploymentConfigProvider);
+    _remoteUriController.text = config.remoteCoreUri ?? '';
     if (mounted) {
       setState(() => _loading = false);
     }
@@ -84,30 +87,41 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                     ),
                   ),
                 ),
-                if (currentConfig.mode == MobileDeploymentMode.cloud) ...[
-                  SizedBox(height: AppSpacing.sm),
-                  _SectionLabel(text: '远程核心地址'),
-                  SizedBox(height: AppSpacing.sm),
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: AppSpacing.pagePadding,
-                    ),
-                    child: TextField(
-                      controller: _remoteUriController,
-                      decoration: InputDecoration(
-                        hintText: 'https://example.com:18899',
-                        border: OutlineInputBorder(
-                          borderRadius: AppRadius.brSmall,
-                        ),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: AppSpacing.md,
-                          vertical: AppSpacing.sm,
+                SizedBox(height: AppSpacing.sm),
+                _SectionLabel(text: '远程核心地址'),
+                SizedBox(height: AppSpacing.sm),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: _remoteUriController,
+                        keyboardType: TextInputType.url,
+                        autocorrect: false,
+                        decoration: InputDecoration(
+                          hintText: 'cloud.example.com 或 192.168.1.10:18899',
+                          helperText: currentConfig.mode == MobileDeploymentMode.cloud
+                              ? '云端业务请求将连接此 Cloud Core；设备 Runtime 仍保留在本机'
+                              : '可先配置地址再切换云端模式；局域网地址默认使用 http',
+                          border: OutlineInputBorder(borderRadius: AppRadius.brSmall),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: AppSpacing.md,
+                            vertical: AppSpacing.sm,
+                          ),
                         ),
                       ),
-                      onChanged: _onRemoteUriChanged,
-                    ),
+                      SizedBox(height: AppSpacing.sm),
+                      AmitiaButton(
+                        label: '保存云端地址',
+                        icon: Icons.save_outlined,
+                        isFullWidth: true,
+                        isSecondary: true,
+                        onPressed: _saveRemoteUri,
+                      ),
+                    ],
                   ),
-                ],
+                ),
                 SizedBox(height: AppSpacing.sm),
                 _SectionLabel(text: '当前配置'),
                 SizedBox(height: AppSpacing.sm),
@@ -196,41 +210,72 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     }
   }
 
-  void _onRemoteUriChanged(String value) {
-    final current = ref.read(mobileDeploymentConfigProvider);
-    ref
-        .read(mobileDeploymentConfigProvider.notifier)
-        .update(
-          MobileDeploymentConfig(
-            mode: current.mode,
-            remoteCoreUri: value.trim().isEmpty ? null : value.trim(),
-          ),
+  String? _normalizedRemoteUri({bool showError = true}) {
+    final raw = _remoteUriController.text.trim();
+    if (raw.isEmpty) {
+      if (showError && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请输入远程核心地址')),
         );
+      }
+      return null;
+    }
+    try {
+      return normalizeRemoteCoreUri(raw).toString();
+    } on DeploymentConfigValidationError catch (error) {
+      if (showError && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('远程核心地址无效：${error.message}')),
+        );
+      }
+      return null;
+    } catch (error) {
+      if (showError && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('远程核心地址无效：$error')),
+        );
+      }
+      return null;
+    }
+  }
+
+  Future<void> _saveRemoteUri() async {
+    final normalized = _normalizedRemoteUri();
+    if (normalized == null) return;
+    final current = ref.read(mobileDeploymentConfigProvider);
+    final next = MobileDeploymentConfig(
+      mode: current.mode,
+      remoteCoreUri: normalized,
+    );
+    await ref.read(mobileDeploymentConfigProvider.notifier).update(next);
+    _remoteUriController.text = normalized;
+    if (current.mode == MobileDeploymentMode.cloud) {
+      await ref.read(mobileBackendLifecycleProvider).reconcile(next);
+      ref.invalidate(backendConnectionProvider);
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('云端地址已保存')),
+      );
+    }
   }
 
   void _confirmSwitch(MobileDeploymentMode newMode) {
     final current = ref.read(mobileDeploymentConfigProvider);
     if (newMode == current.mode) return;
 
-    if (newMode == MobileDeploymentMode.cloud &&
-        (current.remoteCoreUri == null ||
-            current.remoteCoreUri!.trim().isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('请先输入远程核心地址'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
+    final remoteUri = newMode == MobileDeploymentMode.cloud
+        ? _normalizedRemoteUri()
+        : current.remoteCoreUri;
+    if (newMode == MobileDeploymentMode.cloud && remoteUri == null) return;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
         title: Text('切换部署模式', style: AppTypography.cardTitle(context)),
         content: Text(
-          '确定要将部署模式切换为「${_modeDisplayName(newMode)}」吗？切换后服务将重新连接。',
+          '确定要将部署模式切换为「${_modeDisplayName(newMode)}」吗？切换后业务 Core 会重新连接，本地 Device Agent/Runtime 仍会按模式保留。',
           style: AppTypography.body(context),
         ),
         actions: [
@@ -239,9 +284,9 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
             child: const Text('取消'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              _applyModeChange(newMode);
+              await _applyModeChange(newMode, remoteUri: remoteUri);
             },
             child: Text('确定', style: TextStyle(color: context.accentPrimary)),
           ),
@@ -250,16 +295,22 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     );
   }
 
-  void _applyModeChange(MobileDeploymentMode newMode) {
+  Future<void> _applyModeChange(
+    MobileDeploymentMode newMode, {
+    String? remoteUri,
+  }) async {
     final lifecycle = ref.read(mobileBackendLifecycleProvider);
     final config = ref.read(mobileDeploymentConfigProvider);
     final newConfig = MobileDeploymentConfig(
       mode: newMode,
-      remoteCoreUri: config.remoteCoreUri,
+      remoteCoreUri: remoteUri ?? config.remoteCoreUri,
     );
-    ref.read(mobileDeploymentConfigProvider.notifier).update(newConfig);
-    lifecycle.reconcile(newConfig);
+    await ref.read(mobileDeploymentConfigProvider.notifier).update(newConfig);
+    await lifecycle.reconcile(newConfig);
+    ref.invalidate(backendConnectionProvider);
+    if (!mounted) return;
     setState(() => _testState = false);
+    _remoteUriController.text = newConfig.remoteCoreUri ?? '';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('已切换为${_modeDisplayName(newMode)}模式'),

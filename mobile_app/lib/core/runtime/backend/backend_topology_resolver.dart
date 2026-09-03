@@ -1,7 +1,6 @@
 import 'mobile_deployment_mode.dart';
 import 'backend_topology.dart';
 
-export 'mobile_deployment_mode.dart' show DeploymentConfigValidationError;
 
 abstract interface class BackendTopologyResolver {
   MobileBackendTopology resolve(MobileDeploymentConfig config);
@@ -81,14 +80,21 @@ Uri normalizeRemoteCoreUri(String raw) {
   if (trimmed.isEmpty) {
     throw DeploymentConfigValidationError('remote core URI is empty');
   }
-  var parsed = Uri.tryParse(trimmed);
-  if (parsed == null || !parsed.hasScheme) {
-    if (trimmed.startsWith('//')) {
-      parsed = Uri.tryParse('https:$trimmed');
-    } else {
-      parsed = Uri.tryParse('https://$trimmed');
+
+  final candidate = trimmed.startsWith('//') ? trimmed.substring(2) : trimmed;
+  Uri? parsed;
+  if (_hasHttpScheme(candidate)) {
+    parsed = Uri.tryParse(candidate);
+  } else {
+    final probe = Uri.tryParse('http://$candidate');
+    final host = probe?.host.trim().toLowerCase() ?? '';
+    if (host.isEmpty) {
+      throw DeploymentConfigValidationError('invalid remote core URI: $raw');
     }
+    final scheme = _isPrivateOrLoopbackHost(host) ? 'http' : 'https';
+    parsed = Uri.tryParse('$scheme://$candidate');
   }
+
   if (parsed == null || !parsed.hasScheme) {
     throw DeploymentConfigValidationError('invalid remote core URI: $raw');
   }
@@ -113,18 +119,52 @@ Uri normalizeRemoteCoreUri(String raw) {
       'remote core URI must not contain query: $raw',
     );
   }
-  final host = parsed.host;
+  final normalizedPath = parsed.path.replaceAll(RegExp(r'/+$'), '');
+  if (normalizedPath.isNotEmpty) {
+    throw DeploymentConfigValidationError(
+      'remote core URI must point to the core root, subpaths are not supported: $raw',
+    );
+  }
+  final host = parsed.host.toLowerCase();
   if (host.isEmpty) {
     throw DeploymentConfigValidationError(
       'remote core URI must contain a host: $raw',
     );
   }
-  var port = parsed.port;
-  if (port == 0) {
-    port = scheme == 'https' ? 443 : 80;
+
+  final explicitPort = parsed.hasPort ? parsed.port : null;
+  final canonicalPort = (scheme == 'https' && explicitPort == 443) ||
+          (scheme == 'http' && explicitPort == 80)
+      ? null
+      : explicitPort;
+  return Uri(
+    scheme: scheme,
+    host: host,
+    port: canonicalPort,
+  );
+}
+
+bool _hasHttpScheme(String raw) => RegExp(r'^https?://', caseSensitive: false).hasMatch(raw);
+
+bool _isPrivateOrLoopbackHost(String hostname) {
+  final host = hostname.toLowerCase();
+  if (host == 'localhost' || host.endsWith('.localhost')) return true;
+  if (host == '::1' || host == '0:0:0:0:0:0:0:1') return true;
+  if (RegExp(r'^(fc|fd)[0-9a-f]{2}:', caseSensitive: false).hasMatch(host) ||
+      host.startsWith('fe80:')) {
+    return true;
   }
-  final resolved = Uri(scheme: scheme, host: host, port: port);
-  return resolved;
+  final parts = host.split('.');
+  if (parts.length != 4) return false;
+  final octets = parts.map(int.tryParse).toList(growable: false);
+  if (octets.any((part) => part == null || part < 0 || part > 255)) return false;
+  final a = octets[0]!;
+  final b = octets[1]!;
+  if (a == 127 || a == 10) return true;
+  if (a == 192 && b == 168) return true;
+  if (a == 172 && b >= 16 && b <= 31) return true;
+  if (a == 169 && b == 254) return true;
+  return false;
 }
 
 Uri toWebSocketUri(Uri httpUri) {

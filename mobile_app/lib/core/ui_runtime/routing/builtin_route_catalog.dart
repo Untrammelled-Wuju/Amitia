@@ -5,6 +5,7 @@ import '../../../app/app_routes.dart';
 import '../../../app/route_transitions.dart';
 import '../../../features/chat/presentation/pages/chat_page.dart';
 import '../../../features/conversations/presentation/pages/conversation_list_page.dart';
+import '../../../features/agent/presentation/pages/agent_page.dart';
 import '../../../features/agent/presentation/pages/agent_task_detail_page.dart';
 import '../../../features/characters/presentation/pages/character_list_page.dart';
 import '../../../features/characters/presentation/pages/character_detail_page.dart';
@@ -161,7 +162,10 @@ GoRoute(
 ),
 GoRoute(
   path: '/agent',
-  redirect: (context, state) => AppRoutes.chat,
+  pageBuilder: (context, state) => drawerSlideFadePage(
+    state: state,
+    child: const AgentPage(),
+  ),
 ),
 GoRoute(
   path: '/agent/task/:id',

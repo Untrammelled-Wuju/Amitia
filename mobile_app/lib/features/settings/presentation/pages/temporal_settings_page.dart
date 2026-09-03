@@ -142,8 +142,6 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   late String _timezone;
   late String _locale;
   late bool _autoDetectTimezone;
-  late bool _travelMode;
-  late int _awarenessLevel;
   late bool _holidayAwareness;
   late bool _daypartAwareness;
   late bool _anniversaryAwareness;
@@ -208,10 +206,6 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     _locale = (config?['locale'] ?? 'zh-CN').toString();
     if (!_localeLabels.containsKey(_locale)) _locale = 'zh-CN';
     _autoDetectTimezone = config?['autoDetectTimezone'] as bool? ?? true;
-    _travelMode = config?['travelMode'] as bool? ?? false;
-    _awarenessLevel = ((config?['awarenessLevel'] as num?)?.toInt() ?? 70)
-        .clamp(0, 100)
-        .toInt();
     _holidayAwareness = config?['holidayAwareness'] as bool? ?? true;
     _daypartAwareness = config?['daypartAwareness'] as bool? ?? true;
     _anniversaryAwareness =
@@ -305,8 +299,6 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
         'timezone': _timezone.trim(),
         'locale': _locale,
         'autoDetectTimezone': _autoDetectTimezone,
-        'travelMode': _travelMode,
-        'awarenessLevel': _awarenessLevel,
         'holidayAwareness': _holidayAwareness,
         'daypartAwareness': _daypartAwareness,
         'anniversaryAwareness': _anniversaryAwareness,
@@ -418,21 +410,12 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             onChanged: (value) => setState(() => _locale = value),
           ),
           _divider(),
-          _buildAwarenessLevelTile(),
-          _divider(),
           AmitiaSwitchTile(
             title: '自动检测设备时区',
             subtitle: '后端收到设备时区时优先使用设备时区',
             value: _autoDetectTimezone,
             onChanged: (value) =>
                 setState(() => _autoDetectTimezone = value),
-          ),
-          _divider(),
-          AmitiaSwitchTile(
-            title: '旅行模式',
-            subtitle: '允许时间上下文随旅行位置变化',
-            value: _travelMode,
-            onChanged: (value) => setState(() => _travelMode = value),
           ),
         ]),
         SizedBox(height: AppSpacing.sectionGap),
@@ -644,39 +627,6 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     if (selected != null && selected.isNotEmpty && mounted) {
       setState(() => _timezone = selected);
     }
-  }
-
-  Widget _buildAwarenessLevelTile() {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        12,
-        AppSpacing.lg,
-        8,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text('时间感知强度', style: AppTypography.body(context)),
-              ),
-              Text('$_awarenessLevel', style: AppTypography.caption(context)),
-            ],
-          ),
-          Slider(
-            value: _awarenessLevel.toDouble(),
-            min: 0,
-            max: 100,
-            divisions: 20,
-            label: '$_awarenessLevel',
-            onChanged: (value) =>
-                setState(() => _awarenessLevel = value.round()),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildCard(List<Widget> children) {

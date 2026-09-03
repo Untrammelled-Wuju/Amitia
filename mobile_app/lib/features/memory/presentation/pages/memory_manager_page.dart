@@ -25,6 +25,8 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
   String _typeFilter = '';
   String _importanceFilter = '全部';
   String _scopeFilter = '';
+  int _retentionFilter = 0;
+  String _decayFilter = '';
   Map<String, dynamic>? _pipelineStatus;
   bool _searchVisible = false;
   final _searchController = TextEditingController();
@@ -47,6 +49,8 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
   final _types = const ['', 'personal_info', 'hobby', 'preference', 'fact', 'plan', 'habit', 'relationship', 'custom'];
   final _importances = ['全部', '高', '较高', '中', '低'];
   static const _scopes = <String, String>{'': '全部', 'character': '角色', 'user': '用户全局', 'world': '世界'};
+  static const _retentions = <int, String>{0: '全部', 1: 'L1 核心', 2: 'L2 稳定', 3: 'L3 普通', 4: 'L4 弱记忆', 5: 'L5 短暂'};
+  static const _decayStates = <String, String>{'': '全部', 'active': '活跃', 'fading': '淡化', 'archived': '已归档'};
 
   @override
   void initState() {
@@ -229,6 +233,8 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     return source.where((m) {
       if (_typeFilter.isNotEmpty && m.type != _typeFilter) return false;
       if (_scopeFilter.isNotEmpty && m.scope != _scopeFilter) return false;
+      if (_retentionFilter != 0 && m.retentionLevel != _retentionFilter) return false;
+      if (_decayFilter.isNotEmpty && m.decayState != _decayFilter) return false;
       if (_importanceFilter != '全部') {
         final impStr = _importanceIntToString(m.importance);
         if (impStr != _importanceFilter) return false;
@@ -290,6 +296,22 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
               _scopes.keys.toList(growable: false),
               (v) => setState(() => _scopeFilter = v),
               optionLabel: (value) => _scopes[value] ?? value,
+            ),
+            SizedBox(width: AppSpacing.sm),
+            _buildFilterChip(
+              context,
+              '层级: ${_retentions[_retentionFilter] ?? '全部'}',
+              _retentions.keys.map((e) => e.toString()).toList(growable: false),
+              (v) => setState(() => _retentionFilter = int.tryParse(v) ?? 0),
+              optionLabel: (value) => _retentions[int.tryParse(value) ?? 0] ?? value,
+            ),
+            SizedBox(width: AppSpacing.sm),
+            _buildFilterChip(
+              context,
+              '状态: ${_decayStates[_decayFilter] ?? '全部'}',
+              _decayStates.keys.toList(growable: false),
+              (v) => setState(() => _decayFilter = v),
+              optionLabel: (value) => _decayStates[value] ?? value,
             ),
             SizedBox(width: AppSpacing.sm),
           ],
@@ -562,7 +584,15 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     }
   }
 
-  Future<bool> _createWithConflictCheck(MemoryService svc, {required String content, required String type, required int importance, required String scope}) async {
+  Future<bool> _createWithConflictCheck(
+    MemoryService svc, {
+    required String content,
+    required String type,
+    required int importance,
+    required String scope,
+    required int retentionLevel,
+    required bool pinned,
+  }) async {
     final key = content.replaceAll(RegExp(r'\s+'), ' ').trim();
     final normalizedKey = key.length <= 60 ? key : key.substring(0, 60);
     final check = await svc.checkConflict(key: normalizedKey, value: content, memoryType: type, importance: importance);
@@ -570,7 +600,16 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     final conflictsRaw = check['conflicts'];
     final conflicts = conflictsRaw is List ? conflictsRaw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : <Map<String, dynamic>>[];
     if (!hasConflict || conflicts.isEmpty) {
-      await svc.create({'key': normalizedKey, 'value': content, 'memoryType': type, 'importance': importance, 'verifiedStatus': 'user_verified', 'scope': scope});
+      await svc.create({
+        'key': normalizedKey,
+        'value': content,
+        'memoryType': type,
+        'importance': importance,
+        'verifiedStatus': 'user_verified',
+        'scope': scope,
+        if (retentionLevel > 0) 'retentionLevel': retentionLevel,
+        'pinned': pinned,
+      });
       return true;
     }
     if (!mounted) return false;
@@ -601,8 +640,12 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       characterId: (memory['characterId'] ?? '').toString(),
     );
     final resolvedId = (resolved['memoryId'] ?? resolved['memoryID'] ?? '').toString().trim();
-    if (resolvedId.isNotEmpty && scope != 'character') {
-      await svc.update(resolvedId, {'scope': scope});
+    if (resolvedId.isNotEmpty) {
+      await svc.update(resolvedId, {
+        if (scope != 'character') 'scope': scope,
+        if (retentionLevel > 0) 'retentionLevel': retentionLevel,
+        'pinned': pinned,
+      });
     }
     return true;
   }
@@ -723,28 +766,46 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                   ],
                 ),
                 SizedBox(height: AppSpacing.sm),
-                Row(
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     AmitiaStatusBadge(label: _importanceIntToString(memory.importance), type: _importanceToBadgeType(memory.importance)),
-                    SizedBox(width: AppSpacing.sm),
                     AmitiaStatusBadge(label: _memoryTypeLabel(memory.type), type: BadgeType.neutral),
-                    SizedBox(width: AppSpacing.sm),
+                    AmitiaStatusBadge(
+                      label: 'L${memory.retentionLevel} · ${(memory.memoryStrength * 100).round()}%${memory.pinned ? ' · 固定' : memory.decayState == 'archived' ? ' · 归档' : memory.decayState == 'fading' ? ' · 淡化' : ''}',
+                      type: memory.decayState == 'archived' ? BadgeType.neutral : memory.retentionLevel <= 2 ? BadgeType.success : BadgeType.neutral,
+                    ),
                     AmitiaStatusBadge(label: _scopeLabel(memory.scope), type: memory.scope == 'world' || memory.scope == 'user' ? BadgeType.success : BadgeType.neutral),
-                    SizedBox(width: AppSpacing.sm),
                     Text(memory.status, style: AppTypography.label(context)),
-                    const Spacer(),
                     Text(_formatTimeString(memory.createdAt), style: AppTypography.label(context)),
                   ],
                 ),
+                SizedBox(height: AppSpacing.xs),
+                Text(
+                  '强化 ${memory.reinforceCount} 次 · 召回 ${memory.retrievedCount} · 注入 ${memory.injectedCount}${memory.lastReinforcedAt != null && memory.lastReinforcedAt!.isNotEmpty ? ' · 上次强化 ${_formatTimeString(memory.lastReinforcedAt!)}' : ''}',
+                  style: AppTypography.caption(context).copyWith(color: context.textTertiary),
+                ),
                 if (!_batchMode) ...[
                   SizedBox(height: AppSpacing.sm),
-                  Row(
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.xs,
                     children: [
                       GestureDetector(
                         onTap: () => _showMemoryEditor(context, memory),
                         child: _buildMiniButton(context, '编辑', context.accentPrimary),
                       ),
-                      SizedBox(width: AppSpacing.sm),
+                      GestureDetector(
+                        onTap: () => _togglePinned(memory),
+                        child: _buildMiniButton(context, memory.pinned ? '取消固定' : '固定', context.accentPrimary),
+                      ),
+                      if (memory.decayState == 'archived')
+                        GestureDetector(
+                          onTap: () => _restoreMemory(memory),
+                          child: _buildMiniButton(context, '恢复', context.success),
+                        ),
                       GestureDetector(
                         onTap: () => _showDeleteConfirm(context, memory),
                         child: _buildMiniButton(context, '删除', context.error),
@@ -777,6 +838,8 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     String importance = existing != null ? _importanceIntToString(existing.importance) : '中';
     String type = _memoryTypeLabels.containsKey(existing?.type) ? (existing?.type ?? 'fact') : 'fact';
     String scope = _scopes.containsKey(existing?.scope) ? (existing?.scope ?? 'character') : 'character';
+    int retentionLevel = existing?.retentionLevel ?? 3;
+    bool pinned = existing?.pinned ?? false;
 
     showModalBottomSheet(
       context: context,
@@ -784,10 +847,11 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
               SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑记忆' : '新建记忆', style: AppTypography.sectionTitle(context)),
@@ -837,6 +901,66 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                 }).toList(),
               ),
               SizedBox(height: AppSpacing.md),
+              Text('自然遗忘层级', style: AppTypography.label(context)),
+              SizedBox(height: AppSpacing.xs),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.xs,
+                children: _retentions.entries.where((entry) => entry.key != 0).map((entry) {
+                  final selected = retentionLevel == entry.key;
+                  return ChoiceChip(
+                    label: Text(entry.value),
+                    selected: selected,
+                    onSelected: (_) => setSheetState(() => retentionLevel = entry.key),
+                  );
+                }).toList(growable: false),
+              ),
+              SizedBox(height: AppSpacing.sm),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text('固定记忆'),
+                subtitle: Text(
+                  pinned ? '固定后不会参与自然遗忘归档' : '未固定时按 L1-L5 规则自然衰减',
+                  style: AppTypography.caption(context).copyWith(color: context.textTertiary),
+                ),
+                value: pinned,
+                onChanged: (value) => setSheetState(() => pinned = value),
+              ),
+              if (existing != null) ...[
+                SizedBox(height: AppSpacing.sm),
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: context.surfaceSecondary,
+                    borderRadius: AppRadius.brCard,
+                    border: Border.all(color: context.borderPrimary, width: 0.5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '当前强度 ${(existing.memoryStrength * 100).round()}% · ${_decayStates[existing.decayState] ?? existing.decayState}',
+                        style: AppTypography.bodySmall(context),
+                      ),
+                      SizedBox(height: AppSpacing.xs),
+                      Text(
+                        '强化 ${existing.reinforceCount} 次 · 召回 ${existing.retrievedCount} · 注入 ${existing.injectedCount}',
+                        style: AppTypography.caption(context).copyWith(color: context.textTertiary),
+                      ),
+                      if (existing.lastReinforcedAt != null && existing.lastReinforcedAt!.isNotEmpty) ...[
+                        SizedBox(height: AppSpacing.xs),
+                        Text(
+                          '上次强化：${_formatTimeString(existing.lastReinforcedAt!)}',
+                          style: AppTypography.caption(context).copyWith(color: context.textTertiary),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+              SizedBox(height: AppSpacing.md),
               Text('记忆范围', style: AppTypography.label(context)),
               SizedBox(height: AppSpacing.xs),
               Wrap(
@@ -867,6 +991,8 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     'importance': _importanceStringToInt(importance),
                     'verifiedStatus': 'user_verified',
                     'scope': scope,
+                    'retentionLevel': retentionLevel,
+                    'pinned': pinned,
                   };
                   try {
                     if (isEdit) {
@@ -878,6 +1004,8 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                         type: type,
                         importance: _importanceStringToInt(importance),
                         scope: scope,
+                        retentionLevel: retentionLevel,
+                        pinned: pinned,
                       );
                       if (!handled) return;
                     }
@@ -892,11 +1020,48 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                   }
                 },
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _togglePinned(MemoryDto memory) async {
+    try {
+      await ref.read(memoryServiceProvider).update(memory.id, {'pinned': !memory.pinned});
+      ref.invalidate(memoryListProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(memory.pinned ? '已取消固定' : '记忆已固定'), duration: const Duration(seconds: 1)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreMemory(MemoryDto memory) async {
+    try {
+      await ref.read(memoryServiceProvider).restore(memory.id);
+      ref.invalidate(memoryListProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('记忆已恢复'), duration: Duration(seconds: 1)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('恢复失败: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
+      }
+    }
   }
 
   void _showDeleteConfirm(BuildContext context, MemoryDto memory) {

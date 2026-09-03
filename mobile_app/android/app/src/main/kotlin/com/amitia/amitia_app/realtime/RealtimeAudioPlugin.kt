@@ -170,6 +170,12 @@ class RealtimeAudioPlugin : FlutterPlugin,
         arguments?.get("conversationId")?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let {
             payload.put("conversationId", it.take(MAX_CONTEXT_ID_CHARS))
         }
+        arguments?.get("visualContext")?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            payload.put("visualContext", it.take(MAX_VISUAL_CONTEXT_CHARS))
+        }
+        arguments?.get("visualSource")?.toString()?.trim()?.takeIf { it == "camera" || it == "screen" }?.let {
+            payload.put("visualSource", it)
+        }
 
         WorkflowDeviceEventIngress(context).emit(
             eventType = "voice.asr.final",
@@ -455,6 +461,7 @@ class RealtimeAudioPlugin : FlutterPlugin,
         private const val CAPTURE_CHUNK_BYTES = 3_200
         private const val PLAYBACK_BUFFER_BYTES = 9_600
         private const val MAX_ASR_TRANSCRIPT_CHARS = 16_384
+        private const val MAX_VISUAL_CONTEXT_CHARS = 6000
         private const val MAX_CONTEXT_ID_CHARS = 200
         private const val REALTIME_WAKE_HANDOFF_TIMEOUT_MS = 600L
         private val EVENT_ID_PATTERN = Regex("^[A-Za-z0-9._:-]{1,200}$")

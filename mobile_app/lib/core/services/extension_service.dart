@@ -1,5 +1,6 @@
 import '../backend_transport/backend_service_api.dart';
 import '../ui_runtime/ui_client_info.dart';
+import '../ui_runtime/ui_runtime_invalidation.dart';
 
 class ExtensionCenterCard {
   final String extensionId;
@@ -222,6 +223,65 @@ class ExtensionService {
     throw StateError('UI schema document missing');
   }
 
+  Future<Map<String, dynamic>> createSchemaUISession({
+    required String contributionId,
+    String characterId = '',
+    String conversationId = '',
+    String surface = 'mobile',
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/ui/sessions',
+          data: {
+            'contributionId': contributionId,
+            'surface': surface,
+            if (characterId.trim().isNotEmpty) 'characterId': characterId.trim(),
+            if (conversationId.trim().isNotEmpty) 'conversationId': conversationId.trim(),
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> invokeSchemaUIBridge(
+    String sessionId, {
+    required String contributionId,
+    required String origin,
+    required int contractVersion,
+    required String actionId,
+    Map<String, dynamic> input = const <String, dynamic>{},
+  }) async {
+    final response = await _api.post<Map<String, dynamic>>(
+          '/api/extensions/ui/sessions/${Uri.encodeComponent(sessionId)}/bridge',
+          data: {
+            'method': 'ui.action.invoke',
+            'contributionId': contributionId,
+            'origin': origin,
+            'contractVersion': contractVersion,
+            'payload': {
+              'action_id': actionId,
+              'input': input,
+            },
+          },
+        ) ??
+        <String, dynamic>{};
+    if (response['ok'] == false) {
+      final error = response['error'];
+      final message = error is Map
+          ? (error['message'] ?? error['code'] ?? 'UI action failed').toString()
+          : (error ?? 'UI action failed').toString();
+      throw StateError(message);
+    }
+    final result = response['result'];
+    if (result is Map<String, dynamic>) return result;
+    if (result is Map) return result.cast<String, dynamic>();
+    return <String, dynamic>{};
+  }
+
+  Future<void> revokeSchemaUISession(String sessionId) async {
+    final id = sessionId.trim();
+    if (id.isEmpty) return;
+    await _api.delete('/api/extensions/ui/sessions/${Uri.encodeComponent(id)}');
+  }
+
   Future<Map<String, dynamic>> createWebUISession(Map<String, dynamic> request) async {
     return await _api.post<Map<String, dynamic>>('/api/extension/webui/session', data: request) ?? <String, dynamic>{};
   }
@@ -387,11 +447,13 @@ class ExtensionService {
   }
 
   Future<Map<String, dynamic>> installKernelExtensionUpdate(String extensionId, String operationId) async {
-    return await _api.post<Map<String, dynamic>>(
+    final result = await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/install',
           data: {'operationId': operationId},
         ) ??
         <String, dynamic>{};
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
   }
 
   Future<Map<String, dynamic>> cancelKernelExtensionUpdate(String extensionId, String operationId) async {
@@ -403,19 +465,23 @@ class ExtensionService {
   }
 
   Future<Map<String, dynamic>> retryKernelExtensionUpdate(String extensionId, String operationId) async {
-    return await _api.post<Map<String, dynamic>>(
+    final result = await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/retry',
           data: {'operationId': operationId},
         ) ??
         <String, dynamic>{};
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
   }
 
   Future<Map<String, dynamic>> rollbackKernelExtensionUpdate(String extensionId, String operationId) async {
-    return await _api.post<Map<String, dynamic>>(
+    final result = await _api.post<Map<String, dynamic>>(
           '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/rollback',
           data: {'operationId': operationId},
         ) ??
         <String, dynamic>{};
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
   }
 
   Future<Map<String, dynamic>> kernelUpdateOperation(String operationId) async {
@@ -448,6 +514,7 @@ class ExtensionService {
       enabled ? '/api/extensions/kernel/extensions/enable' : '/api/extensions/kernel/extensions/disable',
       data: {'id': id},
     );
+    UIRuntimeInvalidationBus.notifyChanged();
   }
 
   Future<Map<String, dynamic>> previewKernelUninstall(String id, {String scopeType = 'global', String scopeId = ''}) async {
@@ -482,7 +549,7 @@ class ExtensionService {
     String scopeType = 'global',
     String scopeId = '',
   }) async {
-    return await _api.post<Map<String, dynamic>>(
+    final result = await _api.post<Map<String, dynamic>>(
           '/api/extensions/kernel/extensions/uninstall',
           data: {
             'extensionId': id,
@@ -492,6 +559,8 @@ class ExtensionService {
           },
         ) ??
         <String, dynamic>{};
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
   }
 
   Future<List<Map<String, dynamic>>> plugins({int page = 1, int pageSize = 100}) async {
@@ -506,16 +575,19 @@ class ExtensionService {
 
   Future<bool> enablePlugin(String id) async {
     await _api.post('/api/extensions/plugins/$id/enable');
+    UIRuntimeInvalidationBus.notifyChanged();
     return true;
   }
 
   Future<bool> disablePlugin(String id) async {
     await _api.post('/api/extensions/plugins/$id/disable');
+    UIRuntimeInvalidationBus.notifyChanged();
     return true;
   }
 
   Future<bool> reloadPlugin(String id) async {
     await _api.post('/api/extensions/plugins/$id/reload');
+    UIRuntimeInvalidationBus.notifyChanged();
     return true;
   }
 
@@ -526,6 +598,7 @@ class ExtensionService {
 
   Future<bool> updatePluginConfig(String id, Map<String, dynamic> data) async {
     await _api.put('/api/extensions/plugins/$id/config', data: data);
+    UIRuntimeInvalidationBus.notifyChanged();
     return true;
   }
 
@@ -818,10 +891,12 @@ class ExtensionService {
   Future<Map<String, dynamic>?> installWorkshopRevision(
     String id,
     int revision,
-  ) {
-    return _api.post<Map<String, dynamic>>(
+  ) async {
+    final result = await _api.post<Map<String, dynamic>>(
       '/api/extensions/workshop/sessions/${Uri.encodeComponent(id)}/revisions/$revision/install',
     );
+    UIRuntimeInvalidationBus.notifyChanged();
+    return result;
   }
 
   Future<List<Map<String, dynamic>>> workshopTests(String id) async {

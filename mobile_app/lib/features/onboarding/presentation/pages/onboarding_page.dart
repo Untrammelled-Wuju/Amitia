@@ -918,7 +918,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     final boundaries = [
       '我已了解 Amitia 将在本地处理我的数据，并拥有相应的访问权限。',
       '我同意 Amitia 在使用过程中调用 AI 模型进行推理，相关数据将发送至模型服务商。',
-      '我理解 Agent 模式下 Amitia 可能执行文件操作、系统命令等高风险操作，需我逐一确认。',
+      '我理解在对话中让 Amitia 执行任务时，可能涉及文件操作、系统命令等高风险操作，并按权限策略要求确认。',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1472,7 +1472,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               SizedBox(height: AppSpacing.md),
               ...[
                 '在对话页面与角色聊天',
-                '通过 Agent 模式执行任务',
+                '直接在对话中让 AI 调用工具并执行任务',
                 '在设置中管理模型和权限',
                 '在角色页面自定义角色属性',
               ].map((item) => Padding(

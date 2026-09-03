@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart' hide ActionDispatcher;
+import 'package:flutter/services.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -21,6 +22,7 @@ class SchemaUIRenderer extends StatefulWidget {
   final Map<String, dynamic>? initialContext;
   final DataSourceLoader? dataSourceLoader;
   final FutureOr<dynamic> Function(ActionInvocation invocation)? onActionDispatch;
+  final FutureOr<void> Function()? onReloadSchema;
   final Widget Function(String slotId, String? contributionId, Map<String, dynamic> context)? slotBuilder;
   final bool embedded;
 
@@ -34,6 +36,7 @@ class SchemaUIRenderer extends StatefulWidget {
     this.initialContext,
     this.dataSourceLoader,
     this.onActionDispatch,
+    this.onReloadSchema,
     this.slotBuilder,
     this.embedded = false,
   });
@@ -69,27 +72,100 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     );
   }
 
-  void _handleAction(SchemaUIActionBinding action) {
-    if (!mounted) return;
-    ActionDispatcher(
-      onDispatch: (invocation) {
-        final dispatcher = widget.onActionDispatch;
-        if (dispatcher != null) {
-          Future.sync(() => dispatcher(invocation)).catchError((Object error, StackTrace stack) {
-            debugPrint('SchemaUI host action failed: $error');
-            return null;
-          });
-        } else {
-          debugPrint('SchemaUI action: ${invocation.toJson()}');
-        }
+  Future<void> _handleAction(
+    SchemaUIActionBinding action, {
+    String nodeId = '',
+  }) async {
+    if (!mounted || action.actionId.trim().isEmpty) return;
+    if (!ActionDispatcher.allowedActions.contains(action.target)) {
+      debugPrint('SchemaUI rejected unsupported action target: ${action.target}');
+      return;
+    }
+    final confirmation = action.confirmation?.trim() ?? '';
+    if (confirmation.isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('确认操作'),
+              content: Text(confirmation),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('确定'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!confirmed || !mounted) return;
+    }
+
+    final invocation = ActionInvocation(
+      actionId: action.actionId,
+      target: action.target,
+      input: <String, dynamic>{
+        ...?action.input,
+        if (nodeId.isNotEmpty) 'node_id': nodeId,
+        'form_state': Map<String, dynamic>.from(_formState),
+        'local_state': Map<String, dynamic>.from(_localState),
       },
-    ).dispatch(
-      action: action,
       extensionId: widget.extensionId,
       contributionId: widget.contributionId,
-      moduleId: widget.moduleId,
-      permissions: widget.permissions,
+      ownerIdentity: <String, dynamic>{
+        'extensionId': widget.extensionId,
+        'contributionId': widget.contributionId,
+        if (widget.moduleId != null) 'moduleId': widget.moduleId,
+        if (widget.permissions != null) 'permissions': widget.permissions,
+      },
     );
+
+    final dispatcher = widget.onActionDispatch;
+    if (dispatcher == null) {
+      debugPrint('SchemaUI action: ${invocation.toJson()}');
+      return;
+    }
+    try {
+      final result = await Future.sync(() => dispatcher(invocation));
+      if (!mounted || result is! Map) return;
+      final data = result.cast<dynamic, dynamic>();
+      final formState = data['form_state'] ?? data['formState'];
+      final localState = data['local_state'] ?? data['localState'];
+      final contextUpdate = data['context_update'] ?? data['contextUpdate'];
+      if (data['clientExecute'] == true && data['text'] is String) {
+        await Clipboard.setData(ClipboardData(text: data['text'] as String));
+      }
+      if (!mounted) return;
+      setState(() {
+        if (formState is Map) {
+          _formState.addAll(formState.cast<String, dynamic>());
+        }
+        if (localState is Map) {
+          _localState.addAll(localState.cast<String, dynamic>());
+        }
+        if (contextUpdate is Map) {
+          _localState.addAll(contextUpdate.cast<String, dynamic>());
+        }
+      });
+      final message = data['message']?.toString().trim() ?? '';
+      if (message.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+      final reloadSchema = data['reload_schema'] == true || data['reloadSchema'] == true;
+      if (reloadSchema) {
+        await Future.sync(() => widget.onReloadSchema?.call());
+      }
+    } catch (error) {
+      debugPrint('SchemaUI host action failed: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败：${error.toString().replaceFirst('Bad state: ', '')}')),
+        );
+      }
+    }
   }
 
   void _updateFormState(String path, dynamic value) {
@@ -233,9 +309,14 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final slotId = (node.props?['slotId'] ?? node.props?['slot_id'] ?? '').toString().trim();
     if (slotId.isEmpty) return _buildErrorWidget(context, 'extension_slot requires slotId');
     final contributionId = (node.props?['contributionId'] ?? node.props?['contribution_id'])?.toString();
+    final props = node.props ?? const <String, dynamic>{};
+    final dispatchKey = props['dispatchKey'] ?? props['dispatch_key'] ?? props['entryKey'] ?? props['entry_key'];
+    final dispatchOnly = props['dispatchOnly'] ?? props['dispatch_only'] ?? props['only'] ?? props['cellId'] ?? props['cell_id'];
     return builder(slotId, contributionId, {
       ...?widget.initialContext,
       'schemaNodeId': node.id,
+      if (dispatchKey != null) 'dispatchKey': dispatchKey,
+      if (dispatchOnly != null) 'dispatchOnly': dispatchOnly,
     });
   }
 
@@ -586,7 +667,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     return AmitiaButton(
       label: label,
       isSecondary: isSecondary,
-      onPressed: action != null ? () => _handleAction(action) : () {},
+      onPressed: action != null ? () => _handleAction(action, nodeId: node.id) : () {},
     );
   }
 

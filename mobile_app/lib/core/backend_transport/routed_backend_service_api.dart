@@ -7,6 +7,8 @@ const List<String> _deviceLocalApiPrefixes = <String>[
   '/api/desktop-pet',
   '/api/local/workflows',
   '/api/local/workflow-runs',
+  '/api/local/workspaces',
+  '/internal/device-mesh',
 ];
 
 bool isDeviceLocalApiPath(String path) {

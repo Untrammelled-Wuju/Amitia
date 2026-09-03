@@ -63,12 +63,10 @@ class _DeviceAddPageState extends ConsumerState<DeviceAddPage> {
           SizedBox(height: AppSpacing.lg),
           Text('设备名称', style: AppTypography.caption(context)),
           SizedBox(height: AppSpacing.sm),
-          TextField(
+          AmitiaTextField(
             controller: _labelController,
-            decoration: const InputDecoration(
-              hintText: '例如：我的 Android 手机',
-              prefixIcon: Icon(Icons.edit_outlined),
-            ),
+            hintText: '例如：我的 Android 手机',
+            prefixIcon: const Icon(Icons.edit_outlined),
           ),
           SizedBox(height: AppSpacing.lg),
           _ConnectionCard(

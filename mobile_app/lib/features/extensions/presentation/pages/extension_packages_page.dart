@@ -13,6 +13,7 @@ import '../../../../core/backend_connection/backend_connection_availability.dart
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/services/error_utils.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/ui_runtime/ui_runtime_invalidation.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -501,6 +502,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
       dynamic operation = operationResponse.data;
       if (operation is Map && operation['data'] is Map) operation = operation['data'];
       final operationId = operation is Map ? (operation['operationId'] ?? '').toString() : '';
+      UIRuntimeInvalidationBus.notifyChanged();
       await _loadPackages();
       _toast(operationId.isEmpty ? '扩展包操作已提交' : '扩展包操作已提交 · $operationId');
     } catch (e) {

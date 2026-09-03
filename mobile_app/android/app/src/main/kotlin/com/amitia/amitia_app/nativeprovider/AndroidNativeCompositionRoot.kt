@@ -23,6 +23,7 @@ import com.amitia.amitia_app.nativeprovider.shizuku.ShizukuNativeHandler
 import com.amitia.amitia_app.nativeprovider.time.DeviceTimeNativeHandler
 import com.amitia.amitia_app.nativeprovider.uitree.UITreeNativeHandler
 import com.amitia.amitia_app.nativeprovider.virtualdisplay.VirtualDisplayNativeHandler
+import com.amitia.amitia_app.nativeprovider.workspace.WorkspaceSafNativeHandler
 import kotlinx.coroutines.runBlocking
 
 internal object AndroidNativeCompositionRoot {
@@ -68,6 +69,7 @@ internal object AndroidNativeCompositionRoot {
             DesktopPetRendererNativeHandler(context),
             ExternalAutomationNativeHandler(context),
             DeviceAutomationNativeHandler(context),
+            WorkspaceSafNativeHandler(context),
         )
     }
 

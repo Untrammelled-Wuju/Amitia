@@ -11,6 +11,7 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
+import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 
 class SystemSettingsPage extends ConsumerStatefulWidget {
   const SystemSettingsPage({super.key});
@@ -218,6 +219,17 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
             _buildNavTile(icon: Icons.cleaning_services_outlined, title: '存储清理', onTap: () => context.push(AppRoutes.settingsStorage)),
           ]),
           SizedBox(height: AppSpacing.sectionGap),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            child: MobileExtensionSlot(
+              slotId: 'system.settings.section',
+              context: {
+                'route': '/settings/system',
+                'health': _healthData ?? const <String, dynamic>{},
+              },
+            ),
+          ),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '高级'),
           SizedBox(height: AppSpacing.sm),
           _buildCard([
@@ -334,6 +346,14 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
                 ],
               );
             }).toList(),
+          ),
+          MobileExtensionSlot(
+            slotId: 'system.status.item',
+            context: {
+              'route': '/settings/system',
+              'health': health,
+              'ready': ready,
+            },
           ),
           if ((health['deployMode'] ?? '').toString().isNotEmpty) ...[
             SizedBox(height: AppSpacing.sm),

@@ -20,7 +20,6 @@ import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_misc.dart';
 
 final currentCharacterIdProvider = StateProvider<String>((ref) => '');
-final isAgentModeProvider = StateProvider<bool>((ref) => false);
 final isDeveloperModeProvider = StateProvider<bool>((ref) => false);
 final _installedExtensionViewProvider =
     FutureProvider.autoDispose<ExtensionCenterView>((ref) async {
@@ -216,6 +215,24 @@ class _DrawerMainPanel extends StatelessWidget {
                       onTap: () => onNavigate(item.route),
                     ),
                   ),
+              if (navigationItems.any((item) => item.panel == UINavigationPanel.more)) ...[
+                const SizedBox(height: 14),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text('更多', style: AppTypography.label(context)),
+                ),
+                const SizedBox(height: 4),
+                ...navigationItems
+                    .where((item) => item.panel == UINavigationPanel.more)
+                    .map(
+                      (item) => _MainMenuItem(
+                        icon: item.icon,
+                        label: item.label,
+                        isSelected: item.matches(currentRoute),
+                        onTap: () => onNavigate(item.route),
+                      ),
+                    ),
+              ],
               installedExtensions.when(
                 data: (view) => _buildInstalledExtensions(context, view),
                 loading: () => const Padding(

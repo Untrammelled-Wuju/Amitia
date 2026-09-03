@@ -138,6 +138,13 @@ void main() {
       expect(businessApi.calls.length, 0);
     });
 
+    test('device mesh internal API routes to device agent', () async {
+      await proxy.get('/internal/device-mesh/status');
+      expect(deviceLocalApi.calls.length, 1);
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.first.path, '/internal/device-mesh/status');
+    });
+
     test('similar prefix does not mis-route', () async {
       await proxy.get('/api/desktop-petfoo');
       expect(businessApi.calls.length, 1);
