@@ -16,6 +16,7 @@
         :disabled="disabled"
         title="发送表情"
         aria-label="发送表情"
+        class="emote-btn"
     /></template>
     <div class="picker">
       <div class="picker-head">
@@ -122,6 +123,27 @@ function choose(item: any) {
 </script>
 
 <style scoped>
+.emote-btn {
+  width: 30px;
+  height: 30px;
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--ac-color-text-muted) !important;
+  font-size: 16px;
+  box-shadow: none !important;
+}
+
+.emote-btn:hover,
+.emote-btn:focus-visible {
+  border-color: var(--ac-color-border) !important;
+  background: var(--ac-color-bg-secondary) !important;
+  color: var(--ac-color-text) !important;
+}
+
+.emote-btn:disabled {
+  opacity: 0.55;
+}
+
 .picker {
   display: flex;
   flex-direction: column;

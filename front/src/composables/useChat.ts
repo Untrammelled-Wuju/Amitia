@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed } from "vue";
 import { useApi } from "./useApi";
-import { getAccessToken } from "../stores/refresh-coordinator";
-import type { ApiResponse } from "@/types";
 import { resolveApiUrl } from "../runtime/runtime-adapter";
 import { createRequestEnvelope } from "../utils/requestEnvelope";
+import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 
 /**
  * Composable for WebChat state management.
@@ -125,26 +124,22 @@ export function useChat() {
       // Determine base URL for direct fetch (bypass axios for SSE)
       const url = await resolveApiUrl("/api/web-chat/send-stream");
 
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      const token = getAccessToken();
-      if (token) {
-        headers["Authorization"] = "Bearer " + token;
-      }
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          ...createRequestEnvelope(),
-          conversationId: convId.value || undefined,
-          characterId: charId.value || undefined,
-          content: text,
-          useMemory: true,
-        }),
-        signal: abortController.signal,
-      });
+      const init = await createAuthenticatedFetchInit(
+        "/api/web-chat/send-stream",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...createRequestEnvelope(),
+            conversationId: convId.value || undefined,
+            characterId: charId.value || undefined,
+            content: text,
+            useMemory: true,
+          }),
+          signal: abortController.signal,
+        },
+      );
+      const response = await fetch(url, init);
 
       if (!response.ok) {
         throw new Error("HTTP " + response.status);

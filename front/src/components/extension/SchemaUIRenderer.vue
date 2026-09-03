@@ -289,33 +289,25 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
       if (token !== restartToken) return;
     }
     if (!sessionId.value || !sessionReady.value) return;
-    const res = await fetch(`/api/extensions/ui/sessions/${sessionId.value}/bridge`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        method: "ui.action.invoke",
-        contributionId: props.contribution.contributionId,
-        origin: sessionOrigin.value,
-        contractVersion: sessionContractVersion.value,
-        payload: {
-          action_id: action.action_id,
-          input: {
-            ...(action.input ?? {}),
-            node_id: node.id,
-            form_state: { ...formState },
-          },
-        },
-      }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`操作调用失败: ${res.status} ${text}`);
-    }
-    const envelope = (await res.json().catch(() => ({}))) as {
+    const bridgeResponse = await apiClient.post<{
       ok?: boolean;
       result?: Record<string, unknown>;
-      error: { message?: string } | string;
-    };
+      error?: { message?: string } | string;
+    }>(`/api/extensions/ui/sessions/${sessionId.value}/bridge`, {
+      method: "ui.action.invoke",
+      contributionId: props.contribution.contributionId,
+      origin: sessionOrigin.value,
+      contractVersion: sessionContractVersion.value,
+      payload: {
+        action_id: action.action_id,
+        input: {
+          ...(action.input ?? {}),
+          node_id: node.id,
+          form_state: { ...formState },
+        },
+      },
+    });
+    const envelope = bridgeResponse.data ?? {};
     if (envelope.ok === false) {
       const detail = typeof envelope.error === "string" ? envelope.error : envelope.error?.message;
       throw new Error(detail || "操作执行失败");

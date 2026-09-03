@@ -194,6 +194,7 @@ export interface Memory {
   id: string;
   characterId: string;
   memoryType: string;
+  memorySubtype?: string;
   key: string;
   value: string;
   importance: number;
@@ -204,6 +205,17 @@ export interface Memory {
   verifiedStatus: string;
   useCount: number;
   lastUsedAt?: string | null;
+  retentionLevel?: number;
+  memoryStrength?: number;
+  strengthUpdatedAt?: string | null;
+  lastReinforcedAt?: string | null;
+  reinforceCount?: number;
+  retrievedCount?: number;
+  injectedCount?: number;
+  decayState?: "active" | "fading" | "archived" | string;
+  pinned?: boolean;
+  archivedAt?: string | null;
+  supersededBy?: string;
   expiresAt?: string | null;
   createdAt: string;
   updatedAt: string;

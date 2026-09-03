@@ -4,56 +4,59 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="realtime-widget" v-if="visible">
+    <div v-if="media.camera || media.screen" class="rw-previews">
+      <video v-show="media.screen" ref="screenPreview" class="rw-preview rw-preview-screen" autoplay muted playsinline />
+      <video v-show="media.camera" ref="cameraPreview" class="rw-preview rw-preview-camera" autoplay muted playsinline />
+    </div>
+
     <div class="rw-bar" :class="{ active: callState === 'connected' }">
       <div class="rw-left">
-        <div class="rw-icon" :class="callState">
-          <span class="rw-dot"></span>
-        </div>
+        <div class="rw-icon" :class="callState"><span class="rw-dot"></span></div>
         <span class="rw-status">{{ statusLabel }}</span>
-        <span class="rw-duration" v-if="callState === 'connected'">{{
-          formatDuration(callDuration)
-        }}</span>
+        <span class="rw-duration" v-if="callState === 'connected'">{{ formatDuration(callDuration) }}</span>
+        <span class="rw-vision" v-if="visionStatus">{{ visionStatus }}</span>
       </div>
+
       <div class="rw-right">
-        <span class="rw-error" v-if="callState === 'error'" :title="errorMsg">{{
-          errorMsg
-        }}</span>
+        <span class="rw-error" v-if="callState === 'error'" :title="errorMsg">{{ errorMsg }}</span>
+        <template v-if="callState === 'connected'">
+          <el-button size="small" :type="media.muted ? 'warning' : 'default'" @click="toggleMute">
+            {{ media.muted ? "取消静音" : "静音" }}
+          </el-button>
+          <el-button size="small" :type="media.camera ? 'primary' : 'default'" @click="toggleCamera">
+            {{ media.camera ? "关闭视频" : "视频" }}
+          </el-button>
+          <el-button size="small" :type="media.screen ? 'primary' : 'default'" @click="toggleScreen">
+            {{ media.screen ? "停止共享" : "共享屏幕" }}
+          </el-button>
+          <el-button type="danger" size="small" @click="stop">挂断</el-button>
+        </template>
         <el-button
-          v-if="callState === 'idle' || callState === 'error'"
+          v-else-if="callState === 'idle' || callState === 'error'"
           type="primary"
           size="small"
           :icon="Phone"
           @click="start"
         >
-          语音通话
+          实时通话
         </el-button>
-        <el-button
-          v-else-if="callState === 'connected'"
-          type="danger"
-          size="small"
-          @click="stop"
-        >
-          挂断
-        </el-button>
-        <el-button
-          v-else-if="callState === 'connecting'"
-          type="warning"
-          size="small"
-          loading
-        >
-          连接中
-        </el-button>
+        <el-button v-else type="warning" size="small" loading>连接中</el-button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { Phone } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
-import { publishLocalVoiceASRFinal, resolveWebSocketUrl } from "../runtime/runtime-adapter";
+import { publishLocalVoiceASRFinal } from "../runtime/runtime-adapter";
 import { notifyDesktopPetChatState } from "../runtime/desktop-pet-chat-state";
+import {
+  RealtimeCallController,
+  type RealtimeCallState,
+  type RealtimeMediaState,
+} from "../realtime/realtime-call-controller";
 
 const props = defineProps<{
   visible: boolean;
@@ -69,411 +72,170 @@ const emit = defineEmits<{
   stateChange: [state: string];
 }>();
 
-type CallState = "idle" | "connecting" | "connected" | "error";
-
-const callState = ref<CallState>("idle");
+const callState = ref<RealtimeCallState>("idle");
 const callDuration = ref(0);
 const errorMsg = ref("");
-let ws: WebSocket | null = null;
-let audioCtx: AudioContext | null = null;
-let playCtx: AudioContext | null = null;
-let mediaStream: MediaStream | null = null;
-let scriptNode: ScriptProcessorNode | null = null;
+const visionStatus = ref("");
+const media = ref<RealtimeMediaState>({ audio: false, camera: false, screen: false, muted: false });
+const cameraPreview = ref<HTMLVideoElement | null>(null);
+const screenPreview = ref<HTMLVideoElement | null>(null);
 let durationTimer: ReturnType<typeof setInterval> | null = null;
-let nextPlayTime = 0;
-let isAiSpeaking = false;
-let petSpeakingDrainTimer: ReturnType<typeof setTimeout> | null = null;
-const statusLabel = computed(() => {
-  const map: Record<string, string> = {
-    idle: "未连接",
-    connecting: "连接中...",
-    connected: "通话中",
-    error: "连接失败",
-  };
-  return map[callState.value] || "";
-});
+let controller: RealtimeCallController | null = null;
+
+const statusLabel = computed(() => ({
+  idle: "未连接",
+  connecting: "连接中...",
+  connected: media.value.screen ? "屏幕通话中" : media.value.camera ? "视频通话中" : "语音通话中",
+  error: "连接失败",
+}[callState.value]));
 
 watch(
   () => props.visible,
   (visible) => {
-    if (visible && callState.value === "idle") {
-      void start();
-      return;
-    }
-    if (!visible && callState.value !== "idle") {
-      stop();
-    }
+    if (visible && callState.value === "idle") void start();
+    if (!visible && callState.value !== "idle") void stop();
   },
   { immediate: true },
 );
 
-function formatDuration(s: number): string {
-  const m = Math.floor(s / 60)
-    .toString()
-    .padStart(2, "0");
-  const sec = (s % 60).toString().padStart(2, "0");
-  return m + ":" + sec;
+function createController(): RealtimeCallController {
+  return new RealtimeCallController({
+    conversationId: props.conversationId,
+    dialogId: props.dialogId,
+    voiceType: props.voiceType,
+    resourceId: props.resourceId,
+    onState: (state, error) => {
+      callState.value = state;
+      errorMsg.value = error || "";
+      emit("stateChange", state);
+      if (state === "connected") {
+        startDurationTimer();
+        notifyDesktopPetChatState("assistant_listening", props.conversationId || undefined);
+      } else if (state === "error") {
+        notifyDesktopPetChatState("assistant_error", props.conversationId || undefined);
+      } else if (state === "idle") {
+        stopDurationTimer();
+        notifyDesktopPetChatState("assistant_finished", props.conversationId || undefined);
+      }
+    },
+    onAssistantText: (text) => emit("message", { role: "assistant", text }),
+    onASRFinal: (data) => void forwardASRFinalToLocalWorkflow(data),
+    onVision: (data) => {
+      const context = typeof data.context === "string" ? data.context.trim() : "";
+      if (context) visionStatus.value = "视觉已更新";
+      else if (data.available === false) visionStatus.value = "视觉模型不可用";
+    },
+    onMediaState: (state) => { media.value = state; },
+    onCameraPreview: (stream) => void assignPreview(cameraPreview, stream),
+    onScreenPreview: (stream) => void assignPreview(screenPreview, stream),
+  });
 }
 
 async function start() {
-  if (!props.apiKey) {
-    ElMessage.warning("请先在模型配置中设置语音API Key");
-    return;
-  }
-
-  callState.value = "connecting";
-  errorMsg.value = "";
-  emit("stateChange", "connecting");
-
+  if (controller) await controller.stop().catch(() => undefined);
+  controller = createController();
+  callDuration.value = 0;
+  visionStatus.value = "";
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        sampleRate: 16000,
-        echoCancellation: true,
-        noiseSuppression: true,
-      },
-    });
-  } catch (err: any) {
-    errorMsg.value = "麦克风访问失败";
-    callState.value = "error";
-    emit("stateChange", "error");
-    notifyDesktopPetChatState("assistant_error", props.conversationId || undefined);
-    return;
+    await controller.start();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "实时通话启动失败");
   }
-
-  audioCtx = new AudioContext({ sampleRate: 16000 });
-  playCtx = new AudioContext({ sampleRate: 24000 });
-  const inputCtx = audioCtx;
-  if (!inputCtx || !mediaStream) return;
-  const source = inputCtx.createMediaStreamSource(mediaStream);
-  scriptNode = inputCtx.createScriptProcessor(4096, 1, 1);
-
-  const baseUrl = await resolveWebSocketUrl("/api/realtime/session");
-  const params = new URLSearchParams({
-    apiKey: props.apiKey,
-    voiceType: props.voiceType || "zh_female_vv_jupiter_bigtts",
-    resourceId: props.resourceId || "volc.speech.dialog",
-    conversationId: props.conversationId,
-    dialogId: props.dialogId || "",
-  });
-  ws = new WebSocket(baseUrl + "?" + params.toString());
-
-  ws.onopen = () => {
-    callDuration.value = 0;
-    durationTimer = setInterval(() => {
-      callDuration.value++;
-    }, 1000);
-
-    if (scriptNode) {
-      scriptNode.onaudioprocess = (e) => {
-        if (!isAiSpeaking && ws && ws.readyState === WebSocket.OPEN) {
-          const input = e.inputBuffer.getChannelData(0);
-          const pcm = float32ToPCM(input);
-          const base64 = arrayBufferToBase64(pcm);
-          ws.send(JSON.stringify({ event: "audio", data: base64 }));
-        }
-      };
-      const silenceGain = inputCtx.createGain();
-      silenceGain.gain.value = 0;
-      source.connect(scriptNode);
-      scriptNode.connect(silenceGain);
-      silenceGain.connect(inputCtx.destination);
-    }
-  };
-
-  ws.onmessage = (e) => {
-    try {
-      const msg = JSON.parse(e.data);
-      switch (msg.event) {
-        case "ChatTextResponse":
-          if (msg.data?.text) {
-            emit("message", { role: "assistant", text: msg.data.text });
-          }
-          break;
-        case "audio":
-          playAudio(msg.data);
-          break;
-        case "asr_final":
-          void forwardASRFinalToLocalWorkflow(msg.data);
-          break;
-        case "SessionFinished":
-          emit("message", { role: "assistant", text: "[通话结束]" });
-          break;
-        case "connected":
-          callState.value = "connected";
-          emit("stateChange", "connected");
-          notifyDesktopPetChatState(
-            "assistant_listening",
-            props.conversationId || undefined,
-          );
-          break;
-        case "error":
-          errorMsg.value = msg.data || "连接错误";
-          callState.value = "error";
-          emit("stateChange", "error");
-          notifyDesktopPetChatState(
-            "assistant_error",
-            props.conversationId || undefined,
-          );
-          ElMessage.error(msg.data || "实时通话连接失败");
-          cleanupCall();
-          break;
-      }
-    } catch {}
-  };
-
-  ws.onclose = () => {
-    const failed = callState.value === "error";
-    cleanupCall();
-    if (!failed && callState.value !== "idle") {
-      callState.value = "idle";
-      emit("stateChange", "idle");
-      notifyDesktopPetChatState(
-        "assistant_finished",
-        props.conversationId || undefined,
-      );
-    }
-  };
-
-  ws.onerror = () => {
-    errorMsg.value = "WebSocket连接失败";
-    callState.value = "error";
-    emit("stateChange", "error");
-    notifyDesktopPetChatState(
-      "assistant_error",
-      props.conversationId || undefined,
-    );
-    cleanupCall();
-  };
 }
 
-async function forwardASRFinalToLocalWorkflow(data: unknown) {
-  if (!data || typeof data !== "object") return;
-  const payload = data as Record<string, unknown>;
-  const transcript = typeof payload.transcript === "string" ? payload.transcript.trim() : "";
-  const eventId = typeof payload.eventId === "string" ? payload.eventId.trim() : "";
+async function stop() {
+  const active = controller;
+  controller = null;
+  if (active) await active.stop().catch(() => undefined);
+  callState.value = "idle";
+  callDuration.value = 0;
+  stopDurationTimer();
+}
+
+async function toggleMute() {
+  if (!controller) return;
+  await controller.setMuted(!media.value.muted);
+}
+
+async function toggleCamera() {
+  if (!controller) return;
+  try {
+    await controller.toggleCamera();
+  } catch (error) {
+    ElMessage.error("摄像头启动失败：" + (error instanceof Error ? error.message : String(error)));
+  }
+}
+
+async function toggleScreen() {
+  if (!controller) return;
+  try {
+    await controller.toggleScreen();
+  } catch (error) {
+    ElMessage.error("屏幕共享启动失败：" + (error instanceof Error ? error.message : String(error)));
+  }
+}
+
+async function assignPreview(target: typeof cameraPreview, stream: MediaStream | null) {
+  await nextTick();
+  if (!target.value) return;
+  target.value.srcObject = stream;
+  if (stream) await target.value.play().catch(() => undefined);
+}
+
+async function forwardASRFinalToLocalWorkflow(data: Record<string, unknown>) {
+  const transcript = typeof data.transcript === "string" ? data.transcript.trim() : "";
+  const eventId = typeof data.eventId === "string" ? data.eventId.trim() : "";
   if (!transcript || !eventId) return;
   try {
     await publishLocalVoiceASRFinal({
       eventId,
       transcript,
-      sessionId: typeof payload.sessionId === "string" ? payload.sessionId : undefined,
-      conversationId:
-        typeof payload.conversationId === "string"
-          ? payload.conversationId
-          : props.conversationId || undefined,
+      sessionId: typeof data.sessionId === "string" ? data.sessionId : undefined,
+      conversationId: typeof data.conversationId === "string" ? data.conversationId : props.conversationId || undefined,
+      visualContext: typeof data.visualContext === "string" ? data.visualContext : undefined,
+      visualSource: data.visualSource === "camera" || data.visualSource === "screen" ? data.visualSource : undefined,
       occurredAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.warn("[RealtimeCallWidget] 本地语音工作流事件投递失败", error);
+    console.warn("[RealtimeCallWidget] 本地实时工作流事件投递失败", error);
   }
 }
 
-function stop() {
-  const activeSocket = ws;
-  if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
-    activeSocket.send(JSON.stringify({ event: "stop" }));
-    setTimeout(() => {
-      if (activeSocket.readyState === WebSocket.OPEN || activeSocket.readyState === WebSocket.CLOSING) {
-        activeSocket.close();
-      }
-    }, 500);
-  }
-  cleanupCall();
-  callState.value = "idle";
-  emit("stateChange", "idle");
-  notifyDesktopPetChatState(
-    "assistant_finished",
-    props.conversationId || undefined,
-  );
-  callDuration.value = 0;
+function startDurationTimer() {
+  stopDurationTimer();
+  durationTimer = setInterval(() => callDuration.value++, 1000);
 }
 
-function cleanupCall() {
-  if (durationTimer) {
-    clearInterval(durationTimer);
-    durationTimer = null;
-  }
-  ws = null;
-  if (scriptNode) {
-    scriptNode.disconnect();
-    scriptNode = null;
-  }
-  if (mediaStream) {
-    mediaStream.getTracks().forEach((t) => t.stop());
-    mediaStream = null;
-  }
-  nextPlayTime = 0;
-  isAiSpeaking = false;
-  if (petSpeakingDrainTimer) {
-    clearTimeout(petSpeakingDrainTimer);
-    petSpeakingDrainTimer = null;
-  }
-  if (playCtx && playCtx.state !== "closed") {
-    setTimeout(() => {
-      try {
-        playCtx?.close();
-      } catch {}
-      playCtx = null;
-    }, 3000);
-  }
-  if (audioCtx && audioCtx.state !== "closed") {
-    void audioCtx.close();
-    audioCtx = null;
-  }
+function stopDurationTimer() {
+  if (durationTimer) clearInterval(durationTimer);
+  durationTimer = null;
 }
 
-function float32ToPCM(float32: Float32Array): ArrayBuffer {
-  const buffer = new ArrayBuffer(float32.length * 2);
-  const view = new DataView(buffer);
-  for (let i = 0; i < float32.length; i++) {
-    let s = Math.max(-1, Math.min(1, float32[i]));
-    s = s < 0 ? s * 0x8000 : s * 0x7fff;
-    view.setInt16(i * 2, s, true);
-  }
-  return buffer;
+function formatDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
+  const rest = (seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${rest}`;
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-function playAudio(base64Data: string) {
-  try {
-    if (!playCtx || playCtx.state === "closed") {
-      playCtx = new AudioContext({ sampleRate: 24000 });
-    }
-    if (playCtx.state === "suspended") {
-      playCtx.resume();
-    }
-    const binaryStr = atob(base64Data);
-    const len = binaryStr.length;
-    const pcmBuf = new ArrayBuffer(len);
-    const pcmView = new DataView(pcmBuf);
-    for (let i = 0; i < len; i++) {
-      pcmView.setUint8(i, binaryStr.charCodeAt(i));
-    }
-    const samples = len / 2;
-    const audioBuffer = playCtx.createBuffer(1, samples, 24000);
-    const channelData = audioBuffer.getChannelData(0);
-    for (let i = 0; i < samples; i++) {
-      channelData[i] = pcmView.getInt16(i * 2, true) / 32768;
-    }
-    const src = playCtx.createBufferSource();
-    src.buffer = audioBuffer;
-    src.connect(playCtx.destination);
-    const now = playCtx.currentTime;
-    nextPlayTime = Math.max(now, nextPlayTime);
-    src.start(nextPlayTime);
-    if (!isAiSpeaking) {
-      isAiSpeaking = true;
-      notifyDesktopPetChatState(
-        "assistant_speaking",
-        props.conversationId || undefined,
-      );
-    }
-    nextPlayTime += audioBuffer.duration;
-    if (petSpeakingDrainTimer) {
-      clearTimeout(petSpeakingDrainTimer);
-    }
-    const remainingMs = Math.max(0, (nextPlayTime - playCtx.currentTime) * 1000);
-    petSpeakingDrainTimer = setTimeout(() => {
-      petSpeakingDrainTimer = null;
-      if (!playCtx || playCtx.state === "closed") return;
-      if (playCtx.currentTime + 0.05 < nextPlayTime) return;
-      isAiSpeaking = false;
-      if (callState.value === "connected") {
-        notifyDesktopPetChatState(
-          "assistant_listening",
-          props.conversationId || undefined,
-        );
-      }
-    }, remainingMs + 120);
-  } catch {}
-}
-
-onUnmounted(() => {
-  stop();
-});
+onUnmounted(() => { void stop(); });
 </script>
 
 <style scoped>
-.realtime-widget {
-  flex-shrink: 0;
-}
-.rw-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--plugin-muted-bg);
-  border: 1px solid var(--surface-border);
-  transition:
-    border-color 0.3s,
-    background 0.3s;
-}
-.rw-bar.active {
-  border-color: var(--el-color-success);
-  background: var(--el-color-success-light-9);
-}
-.rw-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.rw-icon {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--el-color-info);
-}
-.rw-icon.connected {
-  background: var(--el-color-success);
-  animation: pulse 1.5s infinite;
-}
-.rw-icon.connecting {
-  background: var(--el-color-warning);
-  animation: pulse 0.8s infinite;
-}
-.rw-icon.error {
-  background: var(--el-color-danger);
-}
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
-}
-.rw-status {
-  font-size: 13px;
-  color: var(--el-text-color-regular);
-}
-.rw-duration {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  font-variant-numeric: tabular-nums;
-}
-.rw-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.rw-error {
-  font-size: 12px;
-  color: var(--el-color-danger);
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.realtime-widget { flex-shrink: 0; }
+.rw-previews { position: relative; display: flex; justify-content: flex-end; min-height: 88px; margin-bottom: 8px; overflow: hidden; border-radius: var(--radius-sm); background: #111; }
+.rw-preview { object-fit: cover; background: #111; }
+.rw-preview-screen { width: 100%; max-height: 220px; object-fit: contain; }
+.rw-preview-camera { position: absolute; right: 10px; bottom: 10px; width: 112px; height: 76px; border-radius: 8px; border: 1px solid rgba(255,255,255,.28); box-shadow: 0 4px 18px rgba(0,0,0,.32); }
+.rw-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; border-radius: var(--radius-sm); background: var(--plugin-muted-bg); border: 1px solid var(--surface-border); transition: border-color .3s, background .3s; gap: 12px; }
+.rw-bar.active { border-color: var(--el-color-success); background: var(--el-color-success-light-9); }
+.rw-left, .rw-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rw-right { flex-wrap: wrap; justify-content: flex-end; }
+.rw-icon { width: 10px; height: 10px; border-radius: 50%; background: var(--el-color-info); flex: 0 0 auto; }
+.rw-icon.connected { background: var(--el-color-success); animation: pulse 1.5s infinite; }
+.rw-icon.connecting { background: var(--el-color-warning); animation: pulse .8s infinite; }
+.rw-icon.error { background: var(--el-color-danger); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.rw-status, .rw-duration, .rw-vision { font-size: 13px; color: var(--el-text-color-regular); white-space: nowrap; }
+.rw-duration, .rw-vision { color: var(--el-text-color-secondary); font-variant-numeric: tabular-nums; }
+.rw-error { font-size: 12px; color: var(--el-color-danger); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

@@ -16,6 +16,8 @@ export function useMemoryList(injectedCharacterId?: any) {
   const typeFilter = ref("");
   const sourceFilter = ref("");
   const scopeTypeFilter = ref("");
+  const retentionLevelFilter = ref(0);
+  const decayStateFilter = ref("");
   const characterFilter = ref(injectedCharacterId?.value || "");
   const characters = ref<any[]>([]);
   const sortBy = ref("importance_desc");
@@ -43,6 +45,8 @@ export function useMemoryList(injectedCharacterId?: any) {
     if (typeFilter.value) params.memoryType = typeFilter.value;
     if (sourceFilter.value) params.source = sourceFilter.value;
     if (scopeTypeFilter.value) params.scopeType = scopeTypeFilter.value;
+    if (retentionLevelFilter.value) params.retentionLevel = retentionLevelFilter.value;
+    if (decayStateFilter.value) params.decayState = decayStateFilter.value;
     if (sortBy.value) params.sortBy = sortBy.value;
     try {
       const r = await get<any>("/api/memories", params);
@@ -60,6 +64,26 @@ export function useMemoryList(injectedCharacterId?: any) {
     await del("/api/memories/" + id);
     ElMessage.success("已删除");
     fetchList();
+  }
+
+  async function restoreMemory(row: any) {
+    try {
+      await post(`/api/memories/${row.id}/restore`);
+      ElMessage.success("记忆已恢复");
+      await fetchList();
+    } catch (error: any) {
+      ElMessage.error(error?.message || "恢复失败");
+    }
+  }
+
+  async function togglePinned(row: any) {
+    try {
+      await put(`/api/memories/${row.id}`, { pinned: !row.pinned });
+      ElMessage.success(row.pinned ? "已取消固定" : "已固定为核心记忆");
+      await fetchList();
+    } catch (error: any) {
+      ElMessage.error(error?.message || "操作失败");
+    }
   }
 
   async function toggleScope(row: any) {
@@ -165,13 +189,25 @@ export function useMemoryList(injectedCharacterId?: any) {
       if (typeFilter.value) params.memoryType = typeFilter.value;
       if (sourceFilter.value) params.source = sourceFilter.value;
       if (scopeTypeFilter.value) params.scopeType = scopeTypeFilter.value;
+      if (retentionLevelFilter.value) params.retentionLevel = retentionLevelFilter.value;
+      if (decayStateFilter.value) params.decayState = decayStateFilter.value;
       const all = await get<any>("/api/memories", params);
       const items = all?.items || [];
       const data = items.map((memory: any) => ({
         key: memory.key,
         value: memory.value,
         type: memory.memoryType,
+        subtype: memory.memorySubtype || "",
         importance: memory.importance,
+        confidence: memory.confidence,
+        retentionLevel: memory.retentionLevel,
+        memoryStrength: memory.memoryStrength,
+        decayState: memory.decayState,
+        pinned: !!memory.pinned,
+        reinforceCount: memory.reinforceCount || 0,
+        retrievedCount: memory.retrievedCount || 0,
+        injectedCount: memory.injectedCount || 0,
+        lastReinforcedAt: memory.lastReinforcedAt || null,
         source: memory.source,
         scope: memory.scope,
         scopeType: rowScopeType(memory),
@@ -208,6 +244,8 @@ export function useMemoryList(injectedCharacterId?: any) {
     typeFilter,
     sourceFilter,
     scopeTypeFilter,
+    retentionLevelFilter,
+    decayStateFilter,
     characterFilter,
     characters,
     sortBy,
@@ -225,6 +263,8 @@ export function useMemoryList(injectedCharacterId?: any) {
     fetchList,
     handleSelectionChange,
     delMem,
+    restoreMemory,
+    togglePinned,
     toggleScope,
     batchVerify,
     batchSetImportant,

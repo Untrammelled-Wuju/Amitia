@@ -192,6 +192,7 @@ import { useWebChatSSE } from "../../composables/useWebChatSSE";
 import { useWebChatScroll } from "../../composables/useWebChatScroll";
 import { useWebChatSend } from "../../composables/useWebChatSend";
 import { useWebChatConversation } from "../../composables/useWebChatConversation";
+import { useConversationWorkspace } from "../../composables/useConversationWorkspace";
 import ChatBanners from "../../components/ChatBanners.vue";
 import ChatHeaderBar from "../../components/ChatHeaderBar.vue";
 import MessagesArea from "../../components/MessagesArea.vue";
@@ -222,13 +223,12 @@ const ttsResourceId = ref("");
 
 async function fetchTtsConfig() {
   try {
-    const res = await fetch("/api/tts/configs", {
-      headers: {},
-    });
-    const data = await res.json();
-    const list = Array.isArray(data?.data)
-      ? data.data
-      : data?.data?.items || data?.data?.configs || [];
+    const data: any = await get<any>("/api/tts/configs");
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.items)
+        ? data.items
+        : data?.configs || [];
     const active = list.find((c: any) => c.isActive || c.is_active);
     if (active) {
       ttsApiKey.value = active.apiKey || "";
@@ -254,6 +254,15 @@ function handleCallStateChange(state: string) {
 }
 
 const { get, post, del } = useApi();
+const {
+  currentWorkspace,
+  recentWorkspaces,
+  refreshRecentWorkspaces,
+  loadConversationWorkspace,
+  chooseWorkspaceDirectory,
+  selectWorkspaceMount,
+  clearWorkspace,
+} = useConversationWorkspace();
 const { cachedGet, invalidateCache } = useCachedApi();
 const currentCharName = inject<any>("currentCharName", null);
 const extensionUIStore = useExtensionUIStore();
@@ -302,6 +311,8 @@ const chatExtensionContext = computed(() => {
     os: env.os,
     conversationState: sending.value ? "generating" : isOffline.value ? "offline" : "idle",
     capabilities: env.host === "desktop" ? ["browser", "desktop", "clipboard-host"] : ["browser"],
+    workspace: currentWorkspace.value,
+    recentWorkspaces: recentWorkspaces.value,
   };
 });
 const externalConversationProvider = computed(() => {
@@ -608,7 +619,28 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
     const emoteId = String(input?.emoteId ?? input?.id ?? "").trim();
     if (emoteId) return handleEmoteSend({ ...input, id: emoteId });
   },
+  "conversation.workspace.choose": async () => chooseWorkspaceDirectory(),
+  "conversation.workspace.select": async (input) => {
+    const workspaceId = String(input?.workspaceId ?? input ?? "").trim();
+    if (!workspaceId) return chooseWorkspaceDirectory();
+    let mount = recentWorkspaces.value.find((item) => item.id === workspaceId);
+    if (!mount) {
+      await refreshRecentWorkspaces();
+      mount = recentWorkspaces.value.find((item) => item.id === workspaceId);
+    }
+    if (mount) return selectWorkspaceMount(mount);
+  },
+  "conversation.workspace.clear": async () => clearWorkspace(),
+  "conversation.workspace.refresh": async () => refreshRecentWorkspaces(),
 };
+
+watch(
+  convId,
+  (conversationId) => {
+    loadConversationWorkspace(conversationId || "");
+  },
+  { immediate: true },
+);
 
 provideConversationUIContext({
   conversationId: convId,

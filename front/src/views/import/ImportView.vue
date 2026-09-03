@@ -54,12 +54,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import axios from "axios";
-import type { Character, ApiResponse, ImportResult } from "@/types";
+import type { Character, ImportResult } from "@/types";
 import { ElMessage } from "element-plus";
-import { getApiBaseURL } from "../../runtime/runtime-adapter";
+import { apiClient } from "../../composables/useApi";
 
-const apiBaseUrl = ref("");
 const characters = ref<Character[]>([]);
 const importType = ref("plaintext");
 const characterId = ref("");
@@ -68,11 +66,12 @@ const importing = ref(false);
 const result = ref("");
 
 onMounted(async () => {
-  apiBaseUrl.value = await getApiBaseURL();
-  const { data } = await axios.get<ApiResponse<Character[]>>(
-    apiBaseUrl.value + "/api/characters",
-  );
-  if (data.code === 200 && data.data) characters.value = data.data;
+  try {
+    const { data } = await apiClient.get<Character[]>("/api/characters");
+    characters.value = Array.isArray(data) ? data : [];
+  } catch (err: any) {
+    ElMessage.error("加载角色失败: " + (err?.message || "未知错误"));
+  }
 });
 
 async function doImport() {
@@ -86,22 +85,14 @@ async function doImport() {
   }
   importing.value = true;
   try {
-    const { data } = await axios.post<ApiResponse<ImportResult>>(
-      apiBaseUrl.value + "/api/import",
-      {
-        source: importType.value,
-        characterId: characterId.value,
-        raw: rawText.value,
-      },
-    );
-    if (data.code === 200) {
-      result.value =
-        data.message ||
-        "成功导入 " + (data.data?.messageCount || 0) + " 条消息";
-      rawText.value = "";
-    } else {
-      ElMessage.error(data.message || "导入失败");
-    }
+    const { data } = await apiClient.post<ImportResult>("/api/import", {
+      source: importType.value,
+      characterId: characterId.value,
+      raw: rawText.value,
+    });
+    result.value =
+      `成功导入 ${data?.messageCount ?? 0} 条消息`;
+    rawText.value = "";
   } catch (err: any) {
     ElMessage.error("导入失败: " + err.message);
   } finally {

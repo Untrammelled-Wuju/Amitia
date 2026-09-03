@@ -50,7 +50,7 @@ export function useMemoryCandidates(
         scope: "character",
         scopeType: "user_character",
         characterId: characterId?.() || "",
-        sensitivity: "normal",
+        sensitivityLevel: c.sensitivityLevel || "internal",
         allowContextUse: true,
         allowProactiveMention: false,
         requiresConfirmation: false,

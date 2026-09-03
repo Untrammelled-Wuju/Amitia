@@ -52,14 +52,14 @@ const visible = computed({
   set: (v) => emit("update:modelValue", v),
 });
 const TYPES = [
-  { value: "custom", label: "自定义" },
-  { value: "fact", label: "事实" },
+  { value: "personal_info", label: "个人信息" },
+  { value: "hobby", label: "爱好" },
   { value: "preference", label: "偏好" },
-  { value: "experience", label: "经历" },
-  { value: "rule", label: "规则" },
-  { value: "belief", label: "信念" },
-  { value: "emotion", label: "情感" },
-  { value: "skill", label: "技能" },
+  { value: "fact", label: "事实" },
+  { value: "plan", label: "计划" },
+  { value: "habit", label: "习惯" },
+  { value: "relationship", label: "关系" },
+  { value: "custom", label: "自定义" },
 ];
 const editForm = reactive({
   key: "",

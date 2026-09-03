@@ -514,24 +514,18 @@ async function testVoice() {
   testingVoice.value = true;
   testAudioUrl.value = "";
   try {
-    const res = await fetch("/api/tts/synthesize", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        voiceType: form.voiceType,
-        text: "你好，我是你的AI伙伴",
-        speedRatio: form.voiceSpeed,
-        pitchRatio: form.voicePitch,
-        volumeRatio: form.voiceVolume,
-        emotion: form.emotion || undefined,
-        emotionScale: form.emotionScale || undefined,
-        silenceDuration: form.silenceDuration || undefined,
-      }),
+    const res = await apiClient.post("/api/tts/synthesize", {
+      voiceType: form.voiceType,
+      text: "你好，我是你的AI伙伴",
+      speedRatio: form.voiceSpeed,
+      pitchRatio: form.voicePitch,
+      volumeRatio: form.voiceVolume,
+      emotion: form.emotion || undefined,
+      emotionScale: form.emotionScale || undefined,
+      silenceDuration: form.silenceDuration || undefined,
     });
-    const json = await res.json();
-    testAudioUrl.value = json?.data?.audioUrl || json?.audioUrl || "";
+    const json: any = res.data;
+    testAudioUrl.value = json?.audioUrl || json?.data?.audioUrl || "";
   } catch {
   } finally {
     testingVoice.value = false;
@@ -575,17 +569,13 @@ async function submitClone() {
 
     const url =
       "/api/tts/voice-clone?apiKey=" + encodeURIComponent(globalApiKey.value);
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {},
-      body: fd,
-    });
-    const json = await resp.json();
-    if (json.code !== 200) {
-      ElMessage.error(json.message || "复刻失败");
+    const resp = await apiClient.post(url, fd);
+    const json: any = resp.data;
+    const speakerId = json?.speakerId || json?.data?.speakerId || "";
+    if (!speakerId) {
+      ElMessage.error(json?.message || "复刻失败");
       return;
     }
-    const speakerId = json.data?.speakerId || "";
     form.customVoiceId = speakerId;
     cloneResult.value = "复刻成功: " + speakerId;
     ElMessage.success("声音复刻成功");

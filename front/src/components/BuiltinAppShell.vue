@@ -87,7 +87,7 @@ const isContentPaddingDisabled = computed(() => {
 });
 const isContentFullHeight = computed(() => {
   const path = router.currentRoute.value.path;
-  return path === "/emotes" || path.startsWith("/character");
+  return path === "/emotes" || path.startsWith("/character") || path.startsWith("/creative-workshop/workflows/");
 });
 const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path));
 

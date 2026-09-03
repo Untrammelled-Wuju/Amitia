@@ -23,6 +23,28 @@ SPDX-License-Identifier: AGPL-3.0-only
             :value="key"
           />
         </el-select>
+        <el-select
+          v-model="filterRetention"
+          placeholder="全部层级"
+          size="small"
+          style="width: 130px"
+          @change="onFilterChange"
+        >
+          <el-option label="全部层级" :value="0" />
+          <el-option v-for="level in 5" :key="level" :label="`L${level}`" :value="level" />
+        </el-select>
+        <el-select
+          v-model="filterDecay"
+          placeholder="全部状态"
+          size="small"
+          style="width: 130px"
+          @change="onFilterChange"
+        >
+          <el-option label="全部状态" value="" />
+          <el-option label="活跃" value="active" />
+          <el-option label="正在淡化" value="fading" />
+          <el-option label="已归档" value="archived" />
+        </el-select>
         <el-tag size="small" type="info" effect="plain"
           >共 {{ total }} 条</el-tag
         >
@@ -46,6 +68,11 @@ SPDX-License-Identifier: AGPL-3.0-only
           <div class="item-header">
             <span class="scene-emoji">{{ sceneEmoji(m.sceneType) }}</span>
             <span class="scene-type">{{ sceneLabel(m.sceneType) }}</span>
+            <el-tag size="small" effect="plain" :type="retentionTagType(m.retentionLevel)">
+              L{{ normalizeRetention(m.retentionLevel) }} · {{ strengthPercent(m.memoryStrength) }}%
+            </el-tag>
+            <el-tag v-if="m.decayState === 'archived'" size="small" type="info">已归档</el-tag>
+            <el-tag v-else-if="m.decayState === 'fading'" size="small" type="warning">淡化中</el-tag>
             <span
               class="sentiment-badge"
               :style="{ background: sentimentColor(m.sentimentScore) }"
@@ -72,6 +99,15 @@ SPDX-License-Identifier: AGPL-3.0-only
               {{ shortId(m.sourceConvId) }}
             </span>
             <span class="time">{{ m.createdAt }}</span>
+            <el-dropdown trigger="click" @command="(level) => handleRetention(m, Number(level))">
+              <el-button size="small" text @click.stop>调整层级</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-for="level in 5" :key="level" :command="level">L{{ level }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-button v-if="m.decayState === 'archived'" size="small" text type="success" @click.stop="handleRestore(m.id)">恢复</el-button>
             <el-button
               size="small"
               text
@@ -129,6 +165,24 @@ SPDX-License-Identifier: AGPL-3.0-only
               type="info"
               >{{ detailMemory.triggerKeywords }}</el-tag
             >
+            <el-tag size="small" :type="retentionTagType(detailMemory.retentionLevel)">
+              L{{ normalizeRetention(detailMemory.retentionLevel) }} · {{ strengthPercent(detailMemory.memoryStrength) }}%
+            </el-tag>
+            <el-tag v-if="detailMemory.decayState === 'archived'" size="small" type="info">已归档</el-tag>
+            <el-tag v-else-if="detailMemory.decayState === 'fading'" size="small" type="warning">正在淡化</el-tag>
+          </div>
+          <div class="detail-row">
+            <span class="detail-row-label">记忆保持</span>
+            <el-select
+              :model-value="normalizeRetention(detailMemory.retentionLevel)"
+              size="small"
+              style="width: 150px"
+              @change="(level) => handleRetention(detailMemory, Number(level))"
+            >
+              <el-option v-for="level in 5" :key="level" :label="`L${level}`" :value="level" />
+            </el-select>
+            <span class="detail-row-value">强化 {{ detailMemory.reinforceCount || 0 }} 次</span>
+            <el-button v-if="detailMemory.decayState === 'archived'" size="small" type="success" plain @click="handleRestore(detailMemory.id)">恢复归档</el-button>
           </div>
           <div
             v-if="detailMemory.messageIdStart || detailMemory.messageIdEnd"
@@ -204,6 +258,8 @@ const {
   total,
   fetchMemories,
   deleteMemory,
+  updateRetention,
+  restoreMemory,
   getDetail,
   sceneLabel,
   sceneEmoji,
@@ -220,6 +276,8 @@ const typeMap: Record<string, string> = {
 };
 
 const filterType = ref("");
+const filterRetention = ref(0);
+const filterDecay = ref("");
 const drawerVisible = ref(false);
 const detailMemory = ref<EpisodicMemory | null>(null);
 const detailMessages = ref<any[]>([]);
@@ -229,7 +287,58 @@ onMounted(() => {
 });
 
 function onFilterChange() {
-  fetchMemories({ sceneType: filterType.value || undefined });
+  fetchMemories({
+    sceneType: filterType.value || undefined,
+    retentionLevel: filterRetention.value || undefined,
+    decayState: filterDecay.value || undefined,
+  });
+}
+
+function normalizeRetention(level: number | undefined): number {
+  const value = Number(level || 4);
+  return Math.min(5, Math.max(1, Math.round(Number.isFinite(value) ? value : 4)));
+}
+
+function strengthPercent(strength: number | undefined): number {
+  const value = Number(strength ?? 0.5);
+  return Math.round(Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0.5)) * 100);
+}
+
+function retentionTagType(level: number | undefined) {
+  const value = normalizeRetention(level);
+  return value <= 2 ? "success" : value === 3 ? "primary" : value === 4 ? "warning" : "info";
+}
+
+async function handleRetention(memory: EpisodicMemory, level: number) {
+  try {
+    await updateRetention(memory.id, level);
+    if (detailMemory.value?.id === memory.id) {
+      detailMemory.value = { ...detailMemory.value, retentionLevel: level, decayState: "active" };
+    }
+    await onFilterChangeAsync();
+  } catch (error: any) {
+    console.error("更新情景记忆层级失败", error);
+  }
+}
+
+async function handleRestore(id: string) {
+  try {
+    await restoreMemory(id);
+    if (detailMemory.value?.id === id) {
+      detailMemory.value = { ...detailMemory.value, decayState: "active" };
+    }
+    await onFilterChangeAsync();
+  } catch (error: any) {
+    console.error("恢复情景记忆失败", error);
+  }
+}
+
+async function onFilterChangeAsync() {
+  await fetchMemories({
+    sceneType: filterType.value || undefined,
+    retentionLevel: filterRetention.value || undefined,
+    decayState: filterDecay.value || undefined,
+  });
 }
 
 function shortId(id: string): string {
@@ -257,6 +366,7 @@ async function handleDelete(id: string) {
       type: "warning",
     });
     await deleteMemory(id);
+    await onFilterChangeAsync();
   } catch {}
 }
 </script>
