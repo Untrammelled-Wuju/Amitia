@@ -26,7 +26,7 @@ func TestCorsMiddleware_AllowsDesktopDeviceHeadersForLoopbackPetRequests(t *test
 	request.Header.Set("Access-Control-Request-Method", http.MethodGet)
 	request.Header.Set(
 		"Access-Control-Request-Headers",
-		"x-amitia-desktop-session,x-amitia-desktop-instance,x-amitia-device-id,x-amitia-client-type,idempotency-key",
+		"cache-control,x-amitia-desktop-session,x-amitia-desktop-instance,x-amitia-device-id,x-amitia-client-type,idempotency-key",
 	)
 
 	response := httptest.NewRecorder()
@@ -37,6 +37,7 @@ func TestCorsMiddleware_AllowsDesktopDeviceHeadersForLoopbackPetRequests(t *test
 	}
 	allowed := strings.ToLower(response.Header().Get("Access-Control-Allow-Headers"))
 	for _, header := range []string{
+		"cache-control",
 		"x-amitia-desktop-session",
 		"x-amitia-desktop-instance",
 		"x-amitia-device-id",

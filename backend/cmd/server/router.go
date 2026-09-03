@@ -522,7 +522,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				OwnerUserID: userID, OccurredAt: time.Now().UTC(), Payload: event.Payload,
 			}, workflowkernel.ExecutionContext{UserID: userID})
 		})
-		realtime.RegisterRealtimeRouter(apiGroup, ctx)
+		realtime.RegisterRealtimeRouter(apiGroup, ctx, services.Vision)
+		r.GET("/api/realtime/v2/ws/session", realtime.HandleTicketedSession)
+		r.GET("/api/realtime/v2/ws/visual", realtime.HandleTicketedVisualSession)
 		vision.RegisterVisionRouter(apiGroup, ctx)
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
@@ -543,6 +545,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 		if services.WorkspaceService != nil {
 			workspace.NewHandler(services.WorkspaceService).RegisterRoutes(apiGroup)
+		}
+		if services.WorkspaceGitHandler != nil {
+			services.WorkspaceGitHandler.RegisterRoutes(apiGroup)
 		}
 		if services.KernelContainer != nil {
 			cardProvider := extension_center.NewKernelCardProvider(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository)

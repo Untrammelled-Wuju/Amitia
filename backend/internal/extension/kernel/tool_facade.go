@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type ToolFacadeConfig struct {
@@ -182,6 +183,10 @@ func renderSkillCatalogFromEntries(catalog []SkillCatalogEntry) string {
 
 func (f *ToolFacade) BeforePrompt(ctx context.Context, scope LegacyScope) []LegacyContextContribution {
 	f.counters.IncBeforePrompt()
+	contributions := make([]LegacyContextContribution, 0, 4)
+	if workspaceContribution, ok := workspacePromptContribution(scope); ok {
+		contributions = append(contributions, workspaceContribution)
+	}
 	if f.hookService != nil && f.hookService.Integrator != nil {
 		hookCtx := f.buildHookContext(scope)
 		payload := f.buildBeforePromptPayload(scope)
@@ -192,9 +197,52 @@ func (f *ToolFacade) BeforePrompt(ctx context.Context, scope LegacyScope) []Lega
 		if blocked {
 			return nil
 		}
-		return f.parseContextContributions(result)
+		contributions = append(contributions, f.parseContextContributions(result)...)
 	}
-	return nil
+	return contributions
+}
+
+func workspacePromptContribution(scope LegacyScope) (LegacyContextContribution, bool) {
+	if scope.ExecContext == nil || strings.TrimSpace(scope.ExecContext.WorkspaceID) == "" {
+		return LegacyContextContribution{}, false
+	}
+	workspaceID := strings.TrimSpace(scope.ExecContext.WorkspaceID)
+	rootURI := "amitia://workspace/@" + workspaceID + "/"
+	name := ""
+	kind := ""
+	deviceID := ""
+	if metadata := scope.ExecContext.Metadata; metadata != nil {
+		if value, ok := metadata["workspaceRootUri"].(string); ok && strings.TrimSpace(value) != "" {
+			rootURI = strings.TrimSpace(value)
+		}
+		if value, ok := metadata["workspaceName"].(string); ok {
+			name = strings.TrimSpace(value)
+		}
+		if value, ok := metadata["workspaceKind"].(string); ok {
+			kind = strings.TrimSpace(value)
+		}
+		if value, ok := metadata["workspaceDeviceId"].(string); ok {
+			deviceID = strings.TrimSpace(value)
+		}
+	}
+	content := fmt.Sprintf("Current conversation workspace is bound to workspaceId=%s, rootUri=%s.", workspaceID, rootURI)
+	if name != "" {
+		content += " Display name: " + name + "."
+	}
+	content += " Treat relative project paths as relative to this workspace. Use this workspace for file/search/edit operations unless the user explicitly changes the chat workspace. Do not access another workspace ID."
+	return LegacyContextContribution{
+		Source:     "conversation_workspace",
+		Priority:   95,
+		Content:    content,
+		TokenLimit: 220,
+		Metadata: map[string]string{
+			"workspaceId": workspaceID,
+			"rootUri":     rootURI,
+			"name":        name,
+			"kind":        kind,
+			"deviceId":    deviceID,
+		},
+	}, true
 }
 
 func (f *ToolFacade) ModelTools(ctx context.Context, scope LegacyScope) ([]tool.Tool, error) {
@@ -525,7 +573,7 @@ func (f *ToolFacade) SetCapabilityService(svc *capability.CapabilityService) {
 	}
 }
 
-func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.ToolDefinition) resolvedExecution {
+func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.ToolDefinition, scope LegacyScope) resolvedExecution {
 	if f.capabilityResolver == nil {
 		return resolvedExecution{legacyUnresolved: true}
 	}
@@ -540,6 +588,17 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 		AllowCore:          true,
 		AllowDevice:        true,
 		PreferredPlacement: capability.ProviderPlacementCore,
+	}
+	if def.ExtensionID == "com.amitia.builtin.workspace" && scope.ExecContext != nil && scope.ExecContext.RuntimeTarget != nil {
+		deviceID := scope.ExecContext.RuntimeTarget.DeviceID
+		if deviceID != "" && strings.EqualFold(strings.TrimSpace(scope.ExecContext.RuntimeTarget.Placement), "device") {
+			req.ModuleID = ""
+			req.RequiredPlacement = capability.ProviderPlacementDevice
+			req.PreferredPlacement = capability.ProviderPlacementDevice
+			req.RequiredDeviceID = runtimeidentity.DeviceID(deviceID)
+			req.PreferredDeviceID = runtimeidentity.DeviceID(deviceID)
+			req.AllowCore = false
+		}
 	}
 	if def.RoutingMode == capability.RoutingModeProviderRequired || def.RoutingMode == capability.RoutingModeProviderPreferred {
 		if def.ProviderID != "" {
@@ -567,7 +626,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		return LegacyToolResult{Status: "FAILED", VisibleText: "execution kernel not configured", Error: &LegacyToolError{Code: "EXECUTION_KERNEL_UNAVAILABLE"}}
 	}
 	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
-	resolved := f.resolveExecutionTarget(ctx, def)
+	resolved := f.resolveExecutionTarget(ctx, def, scope)
 
 	if resolved.missingCapability != "" {
 		if f.recoveryService != nil {
@@ -618,7 +677,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 					},
 				}
 			}
-			resolved = f.resolveExecutionTarget(ctx, def)
+			resolved = f.resolveExecutionTarget(ctx, def, scope)
 		}
 
 		if resolved.missingCapability != "" {
@@ -690,7 +749,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 	}
 
 	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
-	resolved := f.resolveExecutionTarget(ctx, def)
+	resolved := f.resolveExecutionTarget(ctx, def, scope)
 	streamMetadata := map[string]any{}
 	if resolved.legacyUnresolved {
 		streamMetadata["execution_mode"] = "legacy_unresolved_provider"

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	coreexec "github.com/u-ai/backend/internal/execution"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/temporal"
 )
 
@@ -117,6 +118,11 @@ type UnifiedEntryRequest struct {
 	ProactiveMemory          string          `json:"-"`
 	CharacterID              string          `json:"characterId,omitempty"`
 	ConversationID           string          `json:"conversationId,omitempty"`
+	WorkspaceID              string          `json:"workspaceId,omitempty"`
+	WorkspaceDeviceID        string          `json:"workspaceDeviceId,omitempty"`
+	WorkspaceName            string          `json:"workspaceName,omitempty"`
+	WorkspaceKind            string          `json:"workspaceKind,omitempty"`
+	WorkspaceRootURI         string          `json:"workspaceRootUri,omitempty"`
 	AudioUrl                 string          `json:"audioUrl,omitempty"`
 	AudioDuration            float64         `json:"audioDuration,omitempty"`
 	VoiceMessage             bool            `json:"voiceMessage"`
@@ -209,6 +215,24 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 			userID = resolution.Scope.UserID
 		}
 		created := execService.StartExecution(ctx, rootID, userID)
+		created.ConversationID = resolution.Scope.ConversationID
+		created.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
+		if created.Metadata == nil {
+			created.Metadata = make(map[string]any)
+		}
+		if created.WorkspaceID != "" {
+			created.Metadata["workspaceName"] = strings.TrimSpace(req.WorkspaceName)
+			created.Metadata["workspaceKind"] = strings.TrimSpace(req.WorkspaceKind)
+			created.Metadata["workspaceRootUri"] = strings.TrimSpace(req.WorkspaceRootURI)
+			created.Metadata["workspaceDeviceId"] = strings.TrimSpace(req.WorkspaceDeviceID)
+		}
+		if deviceID := strings.TrimSpace(req.WorkspaceDeviceID); deviceID != "" {
+			created.RuntimeTarget = &coreexec.RuntimeTarget{
+				Placement: "device",
+				UserID:    runtimeidentity.UserID(userID),
+				DeviceID:  runtimeidentity.DeviceID(deviceID),
+			}
+		}
 		execCtx = &created
 	}
 

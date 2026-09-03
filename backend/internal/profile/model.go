@@ -3,18 +3,20 @@
 package profile
 
 type UserProfile struct {
-	ID             string `gorm:"column:id;primaryKey" json:"id"`
-	UserID         string `gorm:"column:user_id;not null" json:"userId"`
-	CharacterID    string `gorm:"column:character_id;not null;default:''" json:"characterId"`
-	Category       string `gorm:"column:category;not null" json:"category"`
-	AttributeName  string `gorm:"column:attribute_name;not null" json:"attributeName"`
-	AttributeValue string `gorm:"column:attribute_value;not null" json:"attributeValue"`
-	Confidence     int    `gorm:"column:confidence;default:50" json:"confidence"`
-	Source         string `gorm:"column:source;not null;default:''" json:"source"`
-	SourceConvID   string `gorm:"column:source_conv_id" json:"sourceConvId"`
-	VerifiedAt     string `gorm:"column:verified_at" json:"verifiedAt"`
-	CreatedAt      string `gorm:"column:created_at" json:"createdAt"`
-	UpdatedAt      string `gorm:"column:updated_at" json:"updatedAt"`
+	ID               string `gorm:"column:id;primaryKey" json:"id"`
+	UserID           string `gorm:"column:user_id;not null" json:"userId"`
+	CharacterID      string `gorm:"column:character_id;not null;default:''" json:"characterId"`
+	Category         string `gorm:"column:category;not null" json:"category"`
+	AttributeName    string `gorm:"column:attribute_name;not null" json:"attributeName"`
+	AttributeValue   string `gorm:"column:attribute_value;not null" json:"attributeValue"`
+	Confidence       int    `gorm:"column:confidence;default:50" json:"confidence"`
+	Source           string `gorm:"column:source;not null;default:''" json:"source"`
+	SourceConvID     string `gorm:"column:source_conv_id" json:"sourceConvId"`
+	VerifiedAt       string `gorm:"column:verified_at" json:"verifiedAt"`
+	CreatedAt        string `gorm:"column:created_at" json:"createdAt"`
+	UpdatedAt        string `gorm:"column:updated_at" json:"updatedAt"`
+	SourceMemoryID   string `gorm:"column:source_memory_id;default:''" json:"sourceMemoryId"`
+	ProjectionStatus string `gorm:"column:projection_status;default:active" json:"projectionStatus"`
 }
 
 func (UserProfile) TableName() string { return "user_profiles" }

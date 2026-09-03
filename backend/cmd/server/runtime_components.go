@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -634,8 +635,13 @@ func (c *desktopPetComponent) readyLocked(svc *AppServices) error {
 	if svc == nil || svc.DesktopPetRuntimeV2 == nil || svc.Readiness == nil {
 		return fmt.Errorf("desktop pet not ready")
 	}
-	if svc.Readiness.Snapshot().OverallStatus == readiness.StatusBlocked {
-		return fmt.Errorf("readiness blocked")
+	snapshot := svc.Readiness.Snapshot()
+	if snapshot.OverallStatus == readiness.StatusBlocked {
+		var details []string
+		for name, check := range snapshot.Checks {
+			details = append(details, fmt.Sprintf("%s=%s(%s)", name, check.Status, check.Message))
+		}
+		return fmt.Errorf("readiness blocked: %s", strings.Join(details, "; "))
 	}
 	if svc.DesktopPetWorker == nil || !svc.DesktopPetWorker.IsRunning() {
 		return fmt.Errorf("desktop pet generation worker not running")

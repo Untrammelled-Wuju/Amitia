@@ -24,24 +24,29 @@ import (
 )
 
 type webChatSendRequest struct {
-	ConversationID   string  `json:"conversationId"`
-	Content          string  `json:"content"`
-	Message          string  `json:"message"`
-	CharacterID      string  `json:"characterId"`
-	UserID           string  `json:"userId"`
-	PeerID           string  `json:"peerId"`
-	RequestID        string  `json:"requestId"`
-	SessionID        string  `json:"sessionId"`
-	Source           string  `json:"source"`
-	ClientMessageID  string  `json:"clientMessageId"`
-	MessageID        string  `json:"messageId"`
-	DeviceTimezone   string  `json:"deviceTimezone"`
-	VoiceMessage     bool    `json:"voiceMessage"`
-	AudioUrl         string  `json:"audioUrl"`
-	AudioDuration    float64 `json:"audioDuration"`
-	ImageUrl         string  `json:"imageUrl"`
-	VideoUrl         string  `json:"videoUrl"`
-	ReplyToMessageID *string `json:"replyToMessageId,omitempty"`
+	ConversationID    string  `json:"conversationId"`
+	Content           string  `json:"content"`
+	Message           string  `json:"message"`
+	CharacterID       string  `json:"characterId"`
+	UserID            string  `json:"userId"`
+	PeerID            string  `json:"peerId"`
+	RequestID         string  `json:"requestId"`
+	SessionID         string  `json:"sessionId"`
+	Source            string  `json:"source"`
+	ClientMessageID   string  `json:"clientMessageId"`
+	MessageID         string  `json:"messageId"`
+	DeviceTimezone    string  `json:"deviceTimezone"`
+	VoiceMessage      bool    `json:"voiceMessage"`
+	AudioUrl          string  `json:"audioUrl"`
+	AudioDuration     float64 `json:"audioDuration"`
+	ImageUrl          string  `json:"imageUrl"`
+	VideoUrl          string  `json:"videoUrl"`
+	ReplyToMessageID  *string `json:"replyToMessageId,omitempty"`
+	WorkspaceID       string  `json:"workspaceId"`
+	WorkspaceDeviceID string  `json:"workspaceDeviceId"`
+	WorkspaceName     string  `json:"workspaceName"`
+	WorkspaceKind     string  `json:"workspaceKind"`
+	WorkspaceRootURI  string  `json:"workspaceRootUri"`
 }
 
 func (h *Handler) WebChatListConversations(c *gin.Context) {
@@ -125,6 +130,7 @@ func (h *Handler) WebChatDeleteConv(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
 		return
 	}
+	_ = h.db.Exec("DELETE FROM conversation_workspace_bindings WHERE conversation_id = ?", id).Error
 	util.SuccessResponse(c, gin.H{"deleted": true})
 }
 
@@ -263,7 +269,7 @@ func (h *Handler) WebChatRegenerate(c *gin.Context) {
 	if source == "" {
 		source = "web"
 	}
-	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
+	orchResult, err := h.handleUnifiedEntryWithWorkspace(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		ConversationID:   convID,
 		Channel:          "web",
 		Source:           source,
@@ -278,7 +284,7 @@ func (h *Handler) WebChatRegenerate(c *gin.Context) {
 		VideoUrl:         userMsg.VideoUrl,
 		ImageContext:     imageContext,
 		ReplyToMessageID: userMsg.ReplyToMessageID,
-	})
+	}, h.workspaceBindingForRequest(convID, webChatSendRequest{}))
 	if err != nil || orchResult == nil || orchResult.Response == nil {
 		restorePreviousState()
 		if errors.Is(err, interaction.ErrOrchestratorProcessing) {
@@ -432,7 +438,8 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		h.db.Table("characters").Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
 	}
 
-	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
+	workspaceBinding := h.workspaceBindingForRequest(convID, body)
+	orchResult, err := h.handleUnifiedEntryWithWorkspace(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		ConversationID: convID, Channel: "web", Source: source,
 		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 		DeviceTimezone: deviceTimezone,
@@ -443,7 +450,7 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		VideoUrl:         body.VideoUrl,
 		ImageContext:     imageCtx,
 		ReplyToMessageID: body.ReplyToMessageID,
-	})
+	}, workspaceBinding)
 	if errors.Is(err, interaction.ErrOrchestratorProcessing) {
 		util.SuccessResponse(c, gin.H{"status": "processing", "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source})
 		return
@@ -452,6 +459,9 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 		h.publishTextModelError(convID, requestID, "web", err)
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
+	}
+	if orchResult != nil && orchResult.Response != nil {
+		h.persistConversationWorkspaceBinding(orchResult.Response.ConversationID, workspaceBinding)
 	}
 	util.SuccessResponse(c, gin.H{"conversationId": orchResult.Response.ConversationID, "reply": orchResult.Response.Reply, "messageIds": orchResult.Response.MessageIDs, "characterName": orchResult.Response.CharacterName, "requestId": requestID, "sessionId": sessionID, "userId": userID, "source": source})
 }
@@ -519,6 +529,11 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	}
 	msgID := userMsg.ID
 	h.db.Exec("UPDATE characters SET conversation_id = ? WHERE id = ?", convID, characterID)
+	// The queued-message transaction has created the conversation at this point,
+	// so persist the workspace binding synchronously before generation starts.
+	// This makes the first turn durable even if the client disconnects immediately
+	// after receiving the submit acknowledgement.
+	workspaceBinding := h.workspaceBindingForRequest(convID, body)
 
 	c.Header("X-Request-ID", requestID)
 	genID := chat.GetGenerationQueue().StartCollection(convID)
@@ -561,7 +576,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 			return
 		}
 
-		orchResult, err := h.unifiedEntry.Handle(genCtx, &interaction.UnifiedEntryRequest{
+		orchResult, err := h.handleUnifiedEntryWithWorkspace(genCtx, &interaction.UnifiedEntryRequest{
 			ConversationID: convID, Channel: "web", Source: source,
 			UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
 			DeviceTimezone: deviceTimezone,
@@ -572,7 +587,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 			VideoUrl:         body.VideoUrl,
 			ImageContext:     imageCtx,
 			ReplyToMessageID: body.ReplyToMessageID,
-		})
+		}, workspaceBinding)
 		if err != nil {
 			applog.Warn(fmt.Sprintf("[WebChatSubmitMessage] generation failed: %v", err))
 			h.publishTextModelError(convID, requestID, "web", err)
