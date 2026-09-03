@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart' hide ActionDispatcher;
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -49,6 +51,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   final BindingEngine _bindingEngine = const BindingEngine();
   late Map<String, dynamic> _formState;
   late Map<String, dynamic> _localState;
+  final Map<String, dynamic> _storageState = {};
   final Map<String, DataSourceResult> _dataSources = {};
 
   @override
@@ -56,6 +59,57 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     super.initState();
     _formState = Map<String, dynamic>.from(widget.initialContext?['formState'] ?? {});
     _localState = Map<String, dynamic>.from(widget.initialContext?['localState'] ?? {});
+    final initialStorage = widget.initialContext?['storage'];
+    if (initialStorage is Map) {
+      _storageState.addAll(initialStorage.cast<String, dynamic>());
+    }
+    unawaited(_loadStorageBindings());
+  }
+
+  @override
+  void didUpdateWidget(covariant SchemaUIRenderer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.document, widget.document)) {
+      unawaited(_loadStorageBindings());
+    }
+  }
+
+  Future<void> _loadStorageBindings() async {
+    final keys = <String>{};
+    void collect(SchemaUINode node) {
+      for (final binding in node.bindings) {
+        if (binding.source == 'storage' && binding.path.trim().isNotEmpty) {
+          keys.add(binding.path.trim());
+        }
+      }
+      for (final child in node.children) {
+        collect(child);
+      }
+    }
+    for (final node in widget.document.children) {
+      collect(node);
+    }
+    if (keys.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final loaded = <String, dynamic>{};
+      for (final key in keys) {
+        final value = prefs.get(key);
+        if (value is String) {
+          try {
+            loaded[key] = jsonDecode(value);
+          } catch (_) {
+            loaded[key] = value;
+          }
+        } else if (value != null) {
+          loaded[key] = value;
+        }
+      }
+      if (!mounted || loaded.isEmpty) return;
+      setState(() => _storageState.addAll(loaded));
+    } catch (error) {
+      debugPrint('SchemaUI storage binding load failed: $error');
+    }
   }
 
   BindingContext _buildContext() {
@@ -69,6 +123,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         if (widget.moduleId != null) 'moduleId': widget.moduleId,
         if (widget.permissions != null) 'permissions': widget.permissions,
       },
+      storage: _storageState,
     );
   }
 
@@ -77,10 +132,6 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     String nodeId = '',
   }) async {
     if (!mounted || action.actionId.trim().isEmpty) return;
-    if (!ActionDispatcher.allowedActions.contains(action.target)) {
-      debugPrint('SchemaUI rejected unsupported action target: ${action.target}');
-      return;
-    }
     final confirmation = action.confirmation?.trim() ?? '';
     if (confirmation.isNotEmpty) {
       final confirmed = await showDialog<bool>(
@@ -243,64 +294,96 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     }
 
     try {
-      switch (node.type) {
+      final renderedNode = _withResolvedBindings(node);
+      switch (renderedNode.type) {
         case SchemaUI.nodePage:
         case SchemaUI.nodeSection:
-          return _buildSection(context, node, depth);
+          return _buildSection(context, renderedNode, depth);
         case SchemaUI.nodeStack:
-          return _buildStack(context, node, depth);
+          return _buildStack(context, renderedNode, depth);
         case SchemaUI.nodeRow:
-          return _buildRow(context, node, depth);
+          return _buildRow(context, renderedNode, depth);
         case SchemaUI.nodeGrid:
-          return _buildGrid(context, node, depth);
+          return _buildGrid(context, renderedNode, depth);
         case SchemaUI.nodeTabs:
-          return _buildTabs(context, node);
+          return _buildTabs(context, renderedNode);
+        case SchemaUI.nodeTabItem:
+        case SchemaUI.nodeColumn:
+          return _buildColumn(context, renderedNode, depth);
         case SchemaUI.nodeCard:
-          return _buildCard(context, node);
+          return _buildCard(context, renderedNode);
         case SchemaUI.nodeText:
-          return _buildText(context, node);
+          return _buildText(context, renderedNode);
         case SchemaUI.nodeMarkdown:
-          return _buildMarkdown(context, node);
+          return _buildMarkdown(context, renderedNode);
         case SchemaUI.nodeBadge:
-          return _buildBadge(context, node);
+          return _buildBadge(context, renderedNode);
         case SchemaUI.nodeDivider:
-          return _buildDivider(context, node);
+          return _buildDivider(context, renderedNode);
         case SchemaUI.nodeIcon:
-          return _buildIcon(context, node);
+          return _buildIcon(context, renderedNode);
         case SchemaUI.nodeImage:
-          return _buildImage(context, node);
+          return _buildImage(context, renderedNode);
         case SchemaUI.nodeField:
-          return _buildField(context, node);
+          return _buildField(context, renderedNode);
         case SchemaUI.nodeSelect:
-          return _buildSelect(context, node);
+          return _buildSelect(context, renderedNode);
         case SchemaUI.nodeSwitch:
-          return _buildSwitch(context, node);
+          return _buildSwitch(context, renderedNode);
         case SchemaUI.nodeSlider:
-          return _buildSlider(context, node);
+          return _buildSlider(context, renderedNode);
         case SchemaUI.nodeButton:
-          return _buildButton(context, node);
+          return _buildButton(context, renderedNode);
         case SchemaUI.nodeButtonGroup:
-          return _buildButtonGroup(context, node);
+          return _buildButtonGroup(context, renderedNode);
         case SchemaUI.nodeList:
-          return _buildList(context, node);
+          return _buildList(context, renderedNode);
         case SchemaUI.nodeTable:
-          return _buildTable(context, node);
+          return _buildTable(context, renderedNode);
         case SchemaUI.nodeEmptyState:
-          return _buildNodeEmptyState(context, node);
+          return _buildNodeEmptyState(context, renderedNode);
         case SchemaUI.nodeAlert:
-          return _buildAlert(context, node);
+          return _buildAlert(context, renderedNode);
         case SchemaUI.nodeProgress:
-          return _buildProgress(context, node);
+          return _buildProgress(context, renderedNode);
+        case SchemaUI.nodeCode:
+          return _buildCode(context, renderedNode);
         case SchemaUI.nodeKeyValue:
-          return _buildKeyValue(context, node);
+          return _buildKeyValue(context, renderedNode);
+        case SchemaUI.nodeResourceLink:
+          return _buildResourceLink(context, renderedNode);
+        case SchemaUI.nodePermissionSummary:
+          return _buildPermissionSummary(context, renderedNode);
+        case SchemaUI.nodeRuntimeStatus:
+          return _buildRuntimeStatus(context, renderedNode);
         case SchemaUI.nodeExtensionSlot:
-          return _buildExtensionSlot(context, node);
+          return _buildExtensionSlot(context, renderedNode);
         default:
-          return _buildErrorWidget(context, 'Unknown node type: ${node.type}');
+          return _buildErrorWidget(context, 'Unknown node type: ${renderedNode.type}');
       }
     } catch (e) {
       return _buildErrorWidget(context, 'Render error: $e');
     }
+  }
+
+  SchemaUINode _withResolvedBindings(SchemaUINode node) {
+    if (node.bindings.isEmpty) return node;
+    final props = <String, dynamic>{...?node.props};
+    for (final binding in node.bindings) {
+      final value = _bindingEngine.resolveBinding(binding, _buildContext());
+      if (value != null || binding.defaultValue != null) {
+        props[binding.path] = value;
+      }
+    }
+    return SchemaUINode(
+      id: node.id,
+      type: node.type,
+      props: props,
+      bindings: node.bindings,
+      actions: node.actions,
+      visibility: node.visibility,
+      children: node.children,
+    );
   }
 
   Widget _buildExtensionSlot(BuildContext context, SchemaUINode node) {
@@ -349,6 +432,25 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       spacing: AppSpacing.sm,
       runSpacing: AppSpacing.sm,
       children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
+    );
+  }
+
+  Widget _buildColumn(BuildContext context, SchemaUINode node, int depth) {
+    final label = node.props?['label']?.toString().trim() ?? '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (label.isNotEmpty) ...[
+          Text(label, style: AppTypography.label(context)),
+          SizedBox(height: AppSpacing.sm),
+        ],
+        ...node.children.map(
+          (child) => Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.componentGap),
+            child: _buildNode(context, child, depth + 1),
+          ),
+        ),
+      ],
     );
   }
 
@@ -759,6 +861,129 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       _buildContext(),
     ) as num?) ?? 0).toDouble();
     return AmitiaProgressBar(progress: progress.clamp(0.0, 1.0));
+  }
+
+  Widget _buildCode(BuildContext context, SchemaUINode node) {
+    final content = (node.props?['content'] ?? node.props?['text'] ?? node.props?['value'] ?? '').toString();
+    final language = node.props?['language']?.toString().trim() ?? '';
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: context.surfaceSecondary,
+        borderRadius: AppRadius.brSmall,
+        border: Border.all(color: context.borderPrimary, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (language.isNotEmpty) ...[
+            Text(language, style: AppTypography.caption(context)),
+            SizedBox(height: AppSpacing.sm),
+          ],
+          SelectableText(
+            content,
+            style: AppTypography.bodySmall(context).copyWith(fontFamily: 'monospace'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResourceLink(BuildContext context, SchemaUINode node) {
+    final href = node.props?['href']?.toString().trim() ?? '';
+    final text = (node.props?['text'] ?? node.props?['label'] ?? href).toString();
+    final action = node.actions.isNotEmpty ? node.actions.first : null;
+    return InkWell(
+      borderRadius: AppRadius.brSmall,
+      onTap: action == null ? null : () => _handleAction(action, nodeId: node.id),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.open_in_new, size: 16, color: context.accentPrimary),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                text,
+                style: AppTypography.bodySmall(context).copyWith(
+                  color: context.accentPrimary,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPermissionSummary(BuildContext context, SchemaUINode node) {
+    final title = (node.props?['title'] ?? '权限概览').toString();
+    final raw = node.props?['permissions'] ?? node.props?['items'];
+    final permissions = raw is List ? raw.map((item) => item.toString()).where((item) => item.trim().isNotEmpty).toList() : <String>[];
+    return AmitiaCard(
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: AppTypography.sectionTitle(context)),
+            SizedBox(height: AppSpacing.sm),
+            if (permissions.isEmpty)
+              Text('无权限声明', style: AppTypography.caption(context))
+            else
+              ...permissions.map(
+                (permission) => Padding(
+                  padding: EdgeInsets.only(bottom: AppSpacing.tightGap),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.circle, size: 6, color: context.textTertiary),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(permission, style: AppTypography.bodySmall(context))),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRuntimeStatus(BuildContext context, SchemaUINode node) {
+    final status = (node.props?['status'] ?? node.props?['state'] ?? 'unknown').toString();
+    final label = (node.props?['label'] ?? '运行时状态').toString();
+    final message = (node.props?['message'] ?? node.props?['detail'] ?? '').toString();
+    final normalized = status.toLowerCase();
+    final badgeType = switch (normalized) {
+      'ready' || 'running' || 'online' || 'healthy' => BadgeType.success,
+      'failed' || 'error' || 'offline' => BadgeType.error,
+      'starting' || 'loading' || 'degraded' || 'paused' => BadgeType.warning,
+      _ => BadgeType.neutral,
+    };
+    return AmitiaCard(
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text(label, style: AppTypography.label(context))),
+                AmitiaStatusBadge(label: status, type: badgeType),
+              ],
+            ),
+            if (message.trim().isNotEmpty) ...[
+              SizedBox(height: AppSpacing.sm),
+              Text(message, style: AppTypography.bodySmall(context)),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildKeyValue(BuildContext context, SchemaUINode node) {

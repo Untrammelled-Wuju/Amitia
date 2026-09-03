@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../core/services/providers.dart' show startupStageProvider;
 import 'theme/app_theme.dart';
 import '../core/ui_runtime/route_surface_provider_host.dart';
+import '../core/ui_runtime/mobile_extension_slot.dart';
 import '../core/ui_runtime/routing/builtin_route_catalog.dart';
 import '../core/ui_runtime/ui_provider.dart';
 import '../core/ui_runtime/ui_provider_host.dart';
@@ -179,13 +180,21 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             route: state.matchedLocation,
             child: child,
           );
-          return UIProviderHost(
+          final shell = UIProviderHost(
             capability: UICapability.appShell,
             context: {'route': state.matchedLocation},
             fallback: AppShell(
               currentRoute: state.matchedLocation,
               child: surface,
             ),
+          );
+          return MobileExtensionSlot(
+            slotId: 'root',
+            context: {
+              'route': state.matchedLocation,
+              'surfaceRole': 'main',
+            },
+            fallback: shell,
           );
         },
         routes: <RouteBase>[
