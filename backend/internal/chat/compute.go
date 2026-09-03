@@ -170,7 +170,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		return nil, fmt.Errorf("没有可用的模型配置")
 	}
 
-	sys1Result := s.sys1Builder(runtimeProfile, req.Message, req.Runtime)
+	sys1Result := s.sys1Builder(convID, runtimeProfile, req.Message, req.Runtime)
 	history := s.loadHistoryExcluding(convID, userMsgID)
 	sys2Result := s.sys2Builder(convID, charID, requestID, req.Channel, req.Message)
 

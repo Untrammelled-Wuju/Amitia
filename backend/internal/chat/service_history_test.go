@@ -181,10 +181,10 @@ func TestSys1BuilderUsesCharacterScopedProfilePrompt(t *testing.T) {
 	}
 	ctx := app.NewAppContext(db, nil)
 	svc := &service{
-		db:         db,
-		profileSvc: profile.NewService(profile.NewRepository(ctx), ctx, nil),
+		db:          db,
+		profilePort: profile.NewService(profile.NewRepository(ctx), ctx, nil),
 	}
-	result := svc.sys1Builder(&character.RoleRuntimeProfile{
+	result := svc.sys1Builder("", &character.RoleRuntimeProfile{
 		CharacterID: "char-1",
 		Name:        "Amitia",
 		Identity:    "心理模拟伙伴",
