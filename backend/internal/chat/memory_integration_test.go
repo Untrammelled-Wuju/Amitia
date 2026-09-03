@@ -76,7 +76,7 @@ func setupMemoryIntegrationService(t *testing.T, profSvc profile.Service) *servi
 	if err := db.AutoMigrate(&Conversation{}, &Message{}); err != nil {
 		t.Fatal(err)
 	}
-	return &service{db: db, profileSvc: profSvc}
+	return &service{db: db, profilePort: profSvc}
 }
 
 func TestExtractProfileUsesConversationPeerID(t *testing.T) {

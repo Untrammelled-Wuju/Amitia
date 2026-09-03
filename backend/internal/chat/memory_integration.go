@@ -51,9 +51,6 @@ func (s *service) autoExtractMemories(convID, charID string) {
 	}
 
 	for _, c := range candidates {
-		if c.Importance < 7 {
-			continue
-		}
 		if existingKeys[c.Key+"|"+c.Value] {
 			continue
 		}
@@ -91,7 +88,7 @@ func (s *service) buildMemoryInjectItems(results []memory.HybridSearchResult) st
 			continue
 		}
 		cat := string(memory.CanonicalMemoryType(r.Memory.MemoryType))
-		tier := mapLayerToTier(r.MemoryLayer)
+		tier := mapMemoryToTier(r)
 		injectItems = append(injectItems, promptir.MemoryInjectItem{
 			Content:  r.Memory.Value,
 			Category: cat,
@@ -101,16 +98,15 @@ func (s *service) buildMemoryInjectItems(results []memory.HybridSearchResult) st
 	return promptir.BuildMemoryInjectRawSection(injectItems)
 }
 
-func mapLayerToTier(layer string) promptir.MemoryInjectTier {
-	switch layer {
-	case "用户画像":
+func mapMemoryToTier(result memory.HybridSearchResult) promptir.MemoryInjectTier {
+	if result.SourceType == "episodic" {
+		return promptir.TierRecent
+	}
+	switch result.Memory.RetentionLevel {
+	case memory.RetentionL1, memory.RetentionL2:
 		return promptir.TierLongTerm
-	case "情景回忆":
+	case memory.RetentionL3:
 		return promptir.TierRoleRel
-	case "当前摘要":
-		return promptir.TierRecent
-	case "事实记忆":
-		return promptir.TierRecent
 	default:
 		return promptir.TierRecent
 	}
