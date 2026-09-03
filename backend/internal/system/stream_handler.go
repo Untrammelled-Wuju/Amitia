@@ -238,7 +238,8 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		return
 	}
 
-	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
+	workspaceBinding := h.workspaceBindingForRequest(convID, body)
+	orchResult, err := h.handleUnifiedEntryWithWorkspace(c.Request.Context(), &interaction.UnifiedEntryRequest{
 		CharacterID: characterID, Message: mergedContent,
 		ConversationID: convID, Channel: "web", Source: source,
 		UserID: userID, PeerID: peerID, RequestID: requestID, SessionID: sessionID,
@@ -249,7 +250,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		VideoUrl:         body.VideoUrl,
 		ImageContext:     imageCtx,
 		ReplyToMessageID: body.ReplyToMessageID,
-	})
+	}, workspaceBinding)
 	if errors.Is(err, interaction.ErrOrchestratorProcessing) {
 		util.ErrorResponse(c, response.InternalError, "请求处理中", nil)
 		return
@@ -263,6 +264,7 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, "统一入口未返回回复", nil)
 		return
 	}
+	h.persistConversationWorkspaceBinding(orchResult.Response.ConversationID, workspaceBinding)
 	result := orchResult.Response
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")

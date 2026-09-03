@@ -22,7 +22,7 @@ func CorsMiddleware(cfg CorsConfig) gin.HandlerFunc {
 		cfg.AllowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
 	}
 	if len(cfg.AllowedHeaders) == 0 {
-		cfg.AllowedHeaders = []string{"Content-Type", "Authorization", "X-Device-Timezone", "X-Amitia-Local-Token", "X-Amitia-Desktop-Session", "X-Amitia-Desktop-Instance", "X-Amitia-Device-ID", "X-Amitia-Client-Type", "Idempotency-Key", "X-Request-ID"}
+		cfg.AllowedHeaders = []string{"Content-Type", "Authorization", "Cache-Control", "X-Device-Timezone", "X-Amitia-Local-Token", "X-Amitia-Desktop-Session", "X-Amitia-Desktop-Instance", "X-Amitia-Device-ID", "X-Amitia-Client-Type", "Idempotency-Key", "X-Request-ID"}
 	}
 	if cfg.MaxAge == 0 {
 		cfg.MaxAge = 86400

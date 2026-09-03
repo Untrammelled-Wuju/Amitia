@@ -66,15 +66,17 @@ func (r *Registry) RegisterLocalMount(ctx context.Context, name string, localRoo
 	now := time.Now().UTC()
 	id := WorkspaceID(uuid.NewString())
 	mount := WorkspaceMount{
-		ID:        id,
-		Name:      name,
-		Kind:      WorkspaceKindLocal,
-		ReadOnly:  readOnly,
-		Available: true,
-		Status:    WorkspaceStatusReady,
-		RootURI:   MountURI(id),
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:         id,
+		Name:       name,
+		Kind:       WorkspaceKindLocal,
+		ReadOnly:   readOnly,
+		Available:  true,
+		Status:     WorkspaceStatusReady,
+		RootURI:    MountURI(id),
+		LocalRoot:  localRoot,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastUsedAt: now,
 	}
 	r.mounts[id] = mount
 	return mount, nil
@@ -195,6 +197,7 @@ func (r *Registry) RegisterSAFMount(ctx context.Context, name string, grantID st
 		NativeGrant: grantID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
+		LastUsedAt:  now,
 	}
 	r.mounts[id] = mount
 	return mount, nil
@@ -253,6 +256,18 @@ func (r *Registry) ListMounts() []WorkspaceMount {
 		result = append(result, m)
 	}
 	return result
+}
+
+func (r *Registry) TouchMount(id WorkspaceID) (WorkspaceMount, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	m, ok := r.mounts[id]
+	if !ok {
+		return WorkspaceMount{}, false
+	}
+	m.LastUsedAt = time.Now().UTC()
+	r.mounts[id] = m
+	return m, true
 }
 
 func (r *Registry) UpdateStatus(id WorkspaceID, status WorkspaceStatus, available bool) bool {

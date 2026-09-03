@@ -274,10 +274,15 @@ func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
 		return ""
 	}
 	categoryGroups := map[string][]string{}
+	coreCount := 0
 	for _, p := range profiles {
+		if coreCount >= 8 || !s.isCoreProfileEntry(p) {
+			continue
+		}
 		label := categoryLabel(p.Category)
 		line := fmt.Sprintf("- %s: %s (置信度%d%%)", p.AttributeName, p.AttributeValue, p.Confidence)
 		categoryGroups[label] = append(categoryGroups[label], line)
+		coreCount++
 	}
 	var parts []string
 	order := []string{"个人信息", "偏好", "习惯", "恐惧", "关系", "健康", "计划"}
@@ -290,6 +295,28 @@ func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
 		return ""
 	}
 	return "【用户画像】\n" + strings.Join(parts, "\n\n")
+}
+
+func (s *service) isCoreProfileEntry(p UserProfile) bool {
+	if strings.EqualFold(strings.TrimSpace(p.ProjectionStatus), "archived") {
+		return false
+	}
+	if p.SourceMemoryID != "" && s.db != nil {
+		var row struct {
+			RetentionLevel int
+			DecayState     string
+			Pinned         bool
+		}
+		if err := s.db.Table("memories").Select("retention_level, decay_state, pinned").Where("id = ?", p.SourceMemoryID).Scan(&row).Error; err == nil {
+			if strings.EqualFold(strings.TrimSpace(row.DecayState), "archived") {
+				return false
+			}
+			return row.Pinned || (row.RetentionLevel >= 1 && row.RetentionLevel <= 2)
+		}
+	}
+	// Legacy profiles remain available as a compact compatibility kernel only
+	// when they are high-confidence; ordinary preferences are dynamically recalled.
+	return p.Confidence >= 80
 }
 
 func (s *service) legacyDefaultCharacterProfiles(scope string) ([]UserProfile, error) {
@@ -443,10 +470,7 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	if err != nil || len(pending) == 0 {
 		return err
 	}
-	if err := s.ExtractFromConversation("", convID, pending); err != nil {
-		return err
-	}
-	return pipelinecheckpoint.New(s.db).Advance(convID, "profile", maxSequence, fmt.Sprintf("profile:%s:%d", convID, maxSequence))
+	return pipelinecheckpoint.New(s.db).Advance(convID, "profile", maxSequence, fmt.Sprintf("profile-projection:%s:%d", convID, maxSequence))
 }
 
 func (s *service) profileScope(convID string, characterID ...string) string {

@@ -113,6 +113,7 @@ import (
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
+	workspacegit "github.com/u-ai/backend/internal/workspace/git"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
@@ -198,6 +199,7 @@ type AppServices struct {
 	MediaService                 *media.Service
 	WorkspaceRegistry            *workspace.Registry
 	WorkspaceService             *workspace.Service
+	WorkspaceGitHandler          *workspacegit.GitHandler
 	ProductionCutover            *cutoverComposition
 	DataPortability              *dataportability.Coordinator
 	Artifact                     *ArtifactRuntime
@@ -349,8 +351,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	var workspaceRegistry *workspace.Registry
 	var workspaceService *workspace.Service
+	var workspaceGitHandler *workspacegit.GitHandler
+	var workspaceSAF workspace.SAFBridge
+	if bootstrap != nil && bootstrap.AndroidNativeBridge() != nil {
+		workspaceSAF = newWorkspaceSAFBridge(bootstrap.AndroidNativeBridge())
+	}
 	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
-		workspaceRegistry, workspaceService, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir, resourceResolver, ctx.DB, nil, nil)
+		workspaceRegistry, workspaceService, workspaceGitHandler, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir, resourceResolver, ctx.DB, workspaceSAF, nil)
 		if err != nil {
 			return nil, fmt.Errorf("initialize workspace services: %w", err)
 		}
@@ -382,6 +389,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	canonicalRemoteRegistry := extensionmcp.NewCanonicalRemoteRegistry(canonicalRemoteFactory)
 	mcpRepository := mcp.NewRepository(ctx.DB)
 	mcpAcquisitionRuntime := newMCPAcquisitionRuntime(canonicalStdioRegistry, canonicalRemoteRegistry)
+	agentAdminController := newServerAgentAdminController(chatSvc, charRepo, ctx.DB, graphSvc, extensionRuntime.Kernel, mcpRepository)
 
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithWorkshopModelGenerator(chatSvc).
@@ -390,6 +398,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithCharacterReader(kernelCharReader).
 		WithConversationReader(kernelConvReader).
 		WithMemoryQueryService(kernelMemQuerySvc).
+		WithAgentAdminController(agentAdminController).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
 		WithSearchConfig(search.DefaultConfig()).
@@ -1067,6 +1076,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if mcpCompatibilityErr != nil {
 		return nil, fmt.Errorf("initialize canonical MCP compatibility runtime: %w", mcpCompatibilityErr)
 	}
+	agentAdminController.SetMCPConnections(mcpCompatibility.Connections)
 
 	var desktopPetOwnerMapper *desktopPetOwnerMapper
 	if runtimeProfile.IsDeviceAgent() {
@@ -1150,6 +1160,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		MediaService:                 mediaService,
 		WorkspaceRegistry:            workspaceRegistry,
 		WorkspaceService:             workspaceService,
+		WorkspaceGitHandler:          workspaceGitHandler,
 		Artifact:                     artifactRuntime,
 		Sync:                         syncService,
 		DB:                           ctx.DB,
@@ -1223,7 +1234,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			deviceMeshRuntime.Handler.SetOnReady(func(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) {
 				go func() {
 					if _, resumeErr := kernelContainer.WorkflowExecutor.ResumeWaitingDevice(context.Background(), userID.String(), deviceID.String()); resumeErr != nil {
-						log.Warnf("workflow waiting-device resume failed: userId=%s deviceId=%s err=%v", userID, deviceID, resumeErr)
+						log.Warn(fmt.Sprintf("workflow waiting-device resume failed: userId=%s deviceId=%s err=%v", userID, deviceID, resumeErr))
 					}
 				}()
 				services.Extension.StartWorkflowDeviceSync(userID.String(), deviceID.String())

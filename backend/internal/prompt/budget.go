@@ -1,8 +1,10 @@
 package prompt
 
 import (
+	"math"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 type BudgetPolicy struct {
@@ -133,11 +135,11 @@ func trimSectionTokens(section Section, tokenLimit int) Section {
 		section.Content = ""
 		return section
 	}
-	words := strings.Fields(section.Content)
-	if len(words) <= tokenLimit {
+	if estimateTokens(section.Content) <= tokenLimit {
 		return section
 	}
-	section.Content = strings.Join(words[:tokenLimit], " ")
+	kept, _ := splitByApproxTokenLimit(section.Content, tokenLimit)
+	section.Content = strings.TrimSpace(kept)
 	return section
 }
 
@@ -154,22 +156,77 @@ func makeTrimRecord(section Section, afterTokens int, reason string) TrimRecord 
 }
 
 func summarizeTrimmed(content string, keptTokens int) string {
-	words := strings.Fields(content)
-	if keptTokens < 0 {
-		keptTokens = 0
-	}
-	if keptTokens >= len(words) {
+	_, trimmed := splitByApproxTokenLimit(content, keptTokens)
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" {
 		return ""
 	}
-	trimmed := words[keptTokens:]
-	if len(trimmed) > 12 {
-		trimmed = trimmed[:12]
+	runes := []rune(trimmed)
+	if len(runes) > 48 {
+		runes = runes[:48]
 	}
-	return strings.Join(trimmed, " ")
+	return string(runes)
 }
 
+// estimateTokens is deliberately tokenizer-agnostic, but unlike strings.Fields
+// it accounts for CJK text where an entire sentence commonly contains no spaces.
+// The estimate is conservative enough for prompt budgeting without binding the
+// prompt package to one model vendor's tokenizer.
 func estimateTokens(content string) int {
-	return len(strings.Fields(content))
+	if strings.TrimSpace(content) == "" {
+		return 0
+	}
+	cost := 0.0
+	latinRunes := 0
+	flushLatin := func() {
+		if latinRunes > 0 {
+			cost += math.Ceil(float64(latinRunes) / 4.0)
+			latinRunes = 0
+		}
+	}
+	for _, r := range content {
+		switch {
+		case isCJKRune(r):
+			flushLatin()
+			cost += 0.75
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			latinRunes++
+		case unicode.IsSpace(r):
+			flushLatin()
+		default:
+			flushLatin()
+			cost += 0.25
+		}
+	}
+	flushLatin()
+	if cost < 1 {
+		return 1
+	}
+	return int(math.Ceil(cost))
+}
+
+func splitByApproxTokenLimit(content string, tokenLimit int) (string, string) {
+	if tokenLimit <= 0 {
+		return "", content
+	}
+	runes := []rune(content)
+	if estimateTokens(content) <= tokenLimit {
+		return content, ""
+	}
+	lo, hi := 0, len(runes)
+	for lo < hi {
+		mid := (lo + hi + 1) / 2
+		if estimateTokens(string(runes[:mid])) <= tokenLimit {
+			lo = mid
+		} else {
+			hi = mid - 1
+		}
+	}
+	return string(runes[:lo]), string(runes[lo:])
+}
+
+func isCJKRune(r rune) bool {
+	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
 }
 
 func cloneTrimRecords(values []TrimRecord) []TrimRecord {

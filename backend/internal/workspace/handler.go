@@ -22,6 +22,8 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 		group.GET("", h.listMounts)
 		group.GET("/:id", h.getMount)
 		group.DELETE("/:id", h.removeMount)
+		group.POST("/local", h.registerLocalMount)
+		group.POST("/:id/touch", h.touchMount)
 		group.POST("/saf", h.registerSAFMount)
 		group.PUT("/:id/grant", h.replaceSAFGrant)
 		group.POST("/:id/refresh", h.refreshMountStatus)
@@ -59,6 +61,33 @@ func (h *Handler) removeMount(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
+func (h *Handler) registerLocalMount(c *gin.Context) {
+	var req struct {
+		Name      string `json:"name"`
+		LocalRoot string `json:"localRoot" binding:"required"`
+		ReadOnly  bool   `json:"readOnly"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	mount, err := h.service.RegisterLocalMount(c.Request.Context(), req.Name, req.LocalRoot, req.ReadOnly)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, mount)
+}
+
+func (h *Handler) touchMount(c *gin.Context) {
+	mount, err := h.service.TouchMount(c.Request.Context(), WorkspaceID(strings.TrimSpace(c.Param("id"))))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, mount)
 }
 
 func (h *Handler) statResource(c *gin.Context) {

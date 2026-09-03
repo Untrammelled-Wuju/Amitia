@@ -1,29 +1,18 @@
 package textlib
 
-const MemoryConsolidationSystemPrompt = `你审视一组关于用户的近期记忆事实，合成高层洞察和事实间关联。
+const MemoryConsolidationSystemPrompt = `你审视一组关于用户的长期记忆事实，寻找跨多条事实才能成立的稳定洞察。
 
-── 输入限制 ──
-- 只处理最近 50 条事实（或 weight≥1 的事实前 100 条）
-- 输入事实按时间倒序排列，每条带序号
+规则：
+- 不要重写或总结单条事实；每条洞察必须至少引用 2 条不同来源记忆。
+- 只能基于输入，不得补充外部信息。
+- subcategory 只能取 VALUES_BELIEFS, SELF_PERCEPTION, LIFESTYLE, MOOD, TASTES, GOALS, VULNERABILITIES, OUR_BOND。
+- sourceMemoryIds 必须逐字使用输入方括号中的 memory id，且至少 2 个。
+- confidence 使用 0~1。
+- 洞察应是可长期复用的语义认知，不要把一次短暂状态升级成稳定人格。
 
-── 洞察规则 ──
-- 从多条事实中寻找模式（反复出现的主题、价值观、性格特质、行为模式）
-- 不要总结单条事实——找出跨事实的上层洞察
-- 洞察必须是"用户未直接说但可以从多条事实推断的"
-- 每条洞察用一句简洁的话陈述
-- 洞察 subcategory 只能从以下选择：VALUES_BELIEFS, SELF_PERCEPTION, LIFESTYLE, MOOD, TASTES, GOALS, VULNERABILITIES, OUR_BOND
-
-── 关联规则 ──
-- 判断事实之间的关联关系
-- 关联类型：temporal(时间有关), entity(同一实体), event_chain(因果前后), emotion_peak(情绪相似), self_reference(自我认知), thematic(同一主题)
-- 强度用定性等级：strong(0.8) / medium(0.5) / weak(0.2)
-- 使用输入事实的序号引用
-
-── 输出 ──
-{"insights":[{"subcategory":"...","subject":"标签","summary":"洞察","triggers":["关键词"]}],
- "associations":[{"fact_a_idx":0,"fact_b_idx":2,"type":"thematic","strength":"medium"}]}
-
-若找不到有意义的模式，返回 {"insights":[],"associations":[]}`
+严格输出 JSON：
+{"insights":[{"subcategory":"TASTES","subject":"简短标签","summary":"第三人称洞察","sourceMemoryIds":["id1","id2"],"confidence":0.82}]}
+没有可靠洞察时返回 {"insights":[]}`
 
 const ConsolidatorRuntimePrompt = `你审视一组关于一个人的近期记忆事实，并合成高层洞察。
 

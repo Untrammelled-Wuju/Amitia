@@ -562,7 +562,7 @@ func buildSearchTool() capability.ToolDefinition {
 			"contextBefore": {"type": "integer", "minimum": 0, "maximum": 10},
 			"contextAfter": {"type": "integer", "minimum": 0, "maximum": 10}
 		},
-		"required": ["workspaceId", "query"],
+		"required": ["query"],
 		"additionalProperties": false
 	}`)
 	outputSchema := json.RawMessage(`{
@@ -578,7 +578,7 @@ func buildSearchTool() capability.ToolDefinition {
 		ModelName:    "workspace.search",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Workspace Search",
-		Description:  "Search for literal or regex patterns across workspace files.",
+		Description:  "Search for literal or regex patterns across the current workspace. workspaceId is optional when a conversation workspace is bound.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -624,7 +624,7 @@ func buildContextSearchTool() capability.ToolDefinition {
 			"maxResults": {"type": "integer", "minimum": 1, "maximum": 200},
 			"contextLines": {"type": "integer", "minimum": 1, "maximum": 10}
 		},
-		"required": ["workspaceId", "query"],
+		"required": ["query"],
 		"additionalProperties": false
 	}`)
 	outputSchema := json.RawMessage(`{
@@ -638,7 +638,7 @@ func buildContextSearchTool() capability.ToolDefinition {
 	return capability.ToolDefinition{
 		ID: "workspace.grep_context", ModelName: "grep_context", Source: capability.ToolSourceBuiltin,
 		Name:        "Workspace Context Search",
-		Description: "Find code relevant to a natural-language intent using local identifier/path/context ranking; no external embedding service is required.",
+		Description: "Find code relevant to a natural-language intent in the current workspace using local identifier/path/context ranking; workspaceId is optional when a conversation workspace is bound.",
 		InputSchema: inputSchema, OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{{Capability: "workspace.read", Risk: "low"}},
 		RiskLevel:   capability.RiskLow, SideEffect: capability.SideEffectReadOnly, HasSideEffects: false,
@@ -661,7 +661,7 @@ func buildPrecisePatchTool() capability.ToolDefinition {
 			"baseSha256": {"type": "string"},
 			"patch": {"type": "string"}
 		},
-		"required": ["workspaceId", "filePath", "patch"],
+		"required": ["filePath", "patch"],
 		"additionalProperties": false
 	}`)
 	outputSchema := json.RawMessage(`{
@@ -677,7 +677,7 @@ func buildPrecisePatchTool() capability.ToolDefinition {
 		ModelName:    "workspace.patch",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Workspace Patch",
-		Description:  "Apply a unified-diff patch to a workspace file with integrity verification.",
+		Description:  "Apply a unified-diff patch to a file in the current workspace with integrity verification. workspaceId is optional when a conversation workspace is bound.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -720,7 +720,7 @@ func buildPreciseDiffTool() capability.ToolDefinition {
 			"beforeFiles": {"type": "object"},
 			"afterFiles": {"type": "object"}
 		},
-		"required": ["workspaceId"],
+		"required": [],
 		"additionalProperties": false
 	}`)
 	outputSchema := json.RawMessage(`{
@@ -737,7 +737,7 @@ func buildPreciseDiffTool() capability.ToolDefinition {
 		ModelName:    "workspace.diff",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Workspace Diff",
-		Description:  "Compute unified diff between before and after file snapshots.",
+		Description:  "Compute unified diff between before and after file snapshots in the current workspace. workspaceId is optional when a conversation workspace is bound.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -782,7 +782,7 @@ func buildPreciseReplaceTool() capability.ToolDefinition {
 			"newText": {"type": "string"},
 			"expectedOccurrences": {"type": "integer", "minimum": 0}
 		},
-		"required": ["workspaceId", "filePath", "oldText"],
+		"required": ["filePath", "oldText"],
 		"additionalProperties": false
 	}`)
 	outputSchema := json.RawMessage(`{
@@ -798,7 +798,7 @@ func buildPreciseReplaceTool() capability.ToolDefinition {
 		ModelName:    "workspace.replace",
 		Source:       capability.ToolSourceBuiltin,
 		Name:         "Workspace Replace",
-		Description:  "Perform exact text replacement in a workspace file with occurrence validation.",
+		Description:  "Perform exact text replacement in the current workspace with occurrence validation. workspaceId is optional when a conversation workspace is bound.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{

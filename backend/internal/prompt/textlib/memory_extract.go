@@ -89,7 +89,8 @@ TEMPORAL（当下未来）
 严格 JSON 数组。每条记忆字段：
 - key：简短标签（对应 subject）
 - value：完整事实描述（对应 summary，第三人称 ≤150 字）
-- memoryType：类型，取 personal_info/hobby/preference/fact/plan/habit/relationship/emotion/event 之一
+- memoryType：稳定大类，只能取 personal_info/hobby/preference/fact/plan/habit/relationship/custom 之一；MOOD/NOW/LIFE_STORY 等细粒度语义不要另造大类
+- memorySubtype：必须填写上述 25 子类之一（BASIC_PROFILE/LIFE_STORY/VALUES_BELIEFS/SELF_PERCEPTION/OUR_BOND/FAMILY/FRIENDS/PARTNER/ROUTINES/HEALTH/LIVING_SPACE/LIFESTYLE/CAREER/LEARNING/GOALS/PROJECTS/PROCEDURES/MOOD/TASTES/VULNERABILITIES/INSIDE_JOKES/NOW/COMMITMENTS/PLANS/WORLD）
 - importance：重要度 1-10（weight 0→1-3, weight 1→4-6, weight 2→7-8, weight 3→9-10）
 - confidence：置信度 0-100（原 0.6-1.0 乘以 100）
 - scope：作用域，用户全局记忆填 "user"，角色相关填 "character"

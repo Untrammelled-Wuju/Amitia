@@ -27,8 +27,9 @@ func (r *MountRepository) LoadAll() ([]persistenceRecord, error) {
 		Enabled       int    `gorm:"column:enabled"`
 		CreatedAt     string `gorm:"column:created_at"`
 		UpdatedAt     string `gorm:"column:updated_at"`
+		LastUsedAt    string `gorm:"column:last_used_at"`
 	}
-	query := "SELECT id, name, kind, local_root, native_grant_id, COALESCE(backend_config_json, '') as backend_config_json, COALESCE(credential_ref, '') as credential_ref, read_only, enabled, created_at, updated_at FROM workspace_mounts WHERE enabled = 1"
+	query := "SELECT id, name, kind, local_root, native_grant_id, COALESCE(backend_config_json, '') as backend_config_json, COALESCE(credential_ref, '') as credential_ref, read_only, enabled, created_at, updated_at, COALESCE(last_used_at, updated_at) as last_used_at FROM workspace_mounts WHERE enabled = 1"
 	if err := r.db.Raw(query).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -36,6 +37,10 @@ func (r *MountRepository) LoadAll() ([]persistenceRecord, error) {
 	for _, row := range rows {
 		createdAt, _ := time.Parse(time.RFC3339, row.CreatedAt)
 		updatedAt, _ := time.Parse(time.RFC3339, row.UpdatedAt)
+		lastUsedAt, _ := time.Parse(time.RFC3339, row.LastUsedAt)
+		if lastUsedAt.IsZero() {
+			lastUsedAt = updatedAt
+		}
 		result = append(result, persistenceRecord{
 			id:            row.ID,
 			name:          row.Name,
@@ -46,6 +51,7 @@ func (r *MountRepository) LoadAll() ([]persistenceRecord, error) {
 			enabled:       row.Enabled != 0,
 			createdAt:     createdAt,
 			updatedAt:     updatedAt,
+			lastUsedAt:    lastUsedAt,
 			backendConfig: row.BackendConfig,
 			credentialRef: row.CredentialRef,
 		})
@@ -54,8 +60,12 @@ func (r *MountRepository) LoadAll() ([]persistenceRecord, error) {
 }
 
 func (r *MountRepository) Insert(rec persistenceRecord) error {
+	lastUsedAt := rec.lastUsedAt
+	if lastUsedAt.IsZero() {
+		lastUsedAt = rec.updatedAt
+	}
 	return r.db.Exec(
-		"INSERT INTO workspace_mounts (id, name, kind, local_root, native_grant_id, backend_config_json, credential_ref, read_only, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO workspace_mounts (id, name, kind, local_root, native_grant_id, backend_config_json, credential_ref, read_only, enabled, created_at, updated_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		rec.id,
 		rec.name,
 		string(rec.kind),
@@ -67,6 +77,7 @@ func (r *MountRepository) Insert(rec persistenceRecord) error {
 		boolToInt(rec.enabled),
 		rec.createdAt.Format(time.RFC3339),
 		rec.updatedAt.Format(time.RFC3339),
+		lastUsedAt.Format(time.RFC3339),
 	).Error
 }
 
@@ -87,6 +98,13 @@ func (r *MountRepository) UpdateConfig(id string, configJSON string, credentialR
 	return r.db.Exec(
 		"UPDATE workspace_mounts SET backend_config_json = ?, credential_ref = ?, read_only = ?, updated_at = ? WHERE id = ?",
 		configJSON, credentialRef, boolToInt(readOnly), now, id,
+	).Error
+}
+
+func (r *MountRepository) Touch(id string, lastUsedAt time.Time) error {
+	return r.db.Exec(
+		"UPDATE workspace_mounts SET last_used_at = ? WHERE id = ?",
+		lastUsedAt.UTC().Format(time.RFC3339), id,
 	).Error
 }
 

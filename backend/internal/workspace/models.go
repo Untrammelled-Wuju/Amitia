@@ -28,19 +28,21 @@ const (
 )
 
 type WorkspaceMount struct {
-	ID             WorkspaceID     `json:"id"`
-	Name           string          `json:"name"`
-	Kind           WorkspaceKind   `json:"kind"`
-	ReadOnly       bool            `json:"readOnly"`
-	Available      bool            `json:"available"`
-	Status         WorkspaceStatus `json:"status"`
-	StatusReason   string          `json:"statusReason,omitempty"`
-	RootURI        string          `json:"rootUri"`
-	NativeGrant    string          `json:"-"`
-	BackendConfig  string          `json:"-"`
-	CredentialRef  string          `json:"-"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	UpdatedAt      time.Time       `json:"updatedAt"`
+	ID            WorkspaceID     `json:"id"`
+	Name          string          `json:"name"`
+	Kind          WorkspaceKind   `json:"kind"`
+	ReadOnly      bool            `json:"readOnly"`
+	Available     bool            `json:"available"`
+	Status        WorkspaceStatus `json:"status"`
+	StatusReason  string          `json:"statusReason,omitempty"`
+	RootURI       string          `json:"rootUri"`
+	NativeGrant   string          `json:"-"`
+	LocalRoot     string          `json:"-"`
+	BackendConfig string          `json:"-"`
+	CredentialRef string          `json:"-"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
+	LastUsedAt    time.Time       `json:"lastUsedAt"`
 }
 
 func (m WorkspaceMount) backendConfig() (string, bool) {
@@ -107,6 +109,7 @@ type persistenceRecord struct {
 	enabled       bool
 	createdAt     time.Time
 	updatedAt     time.Time
+	lastUsedAt    time.Time
 	backendConfig string
 	credentialRef string
 }

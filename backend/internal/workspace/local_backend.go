@@ -23,6 +23,9 @@ func (b *LocalBackend) Kind() WorkspaceKind {
 }
 
 func (b *LocalBackend) rootForMount(mount WorkspaceMount) string {
+	if root := strings.TrimSpace(mount.LocalRoot); root != "" {
+		return root
+	}
 	return b.defaultRoot
 }
 

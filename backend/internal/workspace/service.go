@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/u-ai/backend/pkg/resourceuri"
@@ -62,6 +65,107 @@ func (s *Service) HasBackend(kind WorkspaceKind) bool {
 	return s.registry != nil && s.registry.HasBackend(kind)
 }
 
+func canonicalLocalRoot(localRoot string) (string, error) {
+	root := strings.TrimSpace(localRoot)
+	if root == "" {
+		return "", fmt.Errorf("localRoot is required")
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve localRoot: %w", err)
+	}
+	real, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", fmt.Errorf("resolve localRoot symlinks: %w", err)
+	}
+	info, err := os.Stat(real)
+	if err != nil {
+		return "", fmt.Errorf("stat localRoot: %w", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("localRoot must be a directory")
+	}
+	return filepath.Clean(real), nil
+}
+
+func sameLocalRoot(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+// RegisterLocalMount creates a durable local workspace rooted at the exact
+// directory selected by the device user. Re-selecting the same canonical
+// directory reuses the existing mount so chat workspace history stays stable.
+func (s *Service) RegisterLocalMount(ctx context.Context, name, localRoot string, readOnly bool) (WorkspaceMount, error) {
+	root, err := canonicalLocalRoot(localRoot)
+	if err != nil {
+		return WorkspaceMount{}, err
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = filepath.Base(root)
+	}
+	if name == "." || name == string(filepath.Separator) || name == "" {
+		name = "Workspace"
+	}
+
+	if s.mountRepo != nil {
+		records, loadErr := s.mountRepo.LoadAll()
+		if loadErr == nil {
+			for _, rec := range records {
+				if rec.kind != WorkspaceKindLocal || strings.TrimSpace(rec.localRoot) == "" || !sameLocalRoot(rec.localRoot, root) {
+					continue
+				}
+				if existing, ok := s.registry.GetMount(WorkspaceID(rec.id)); ok {
+					if touched, ok := s.registry.TouchMount(existing.ID); ok {
+						_ = s.mountRepo.Touch(string(touched.ID), touched.LastUsedAt)
+						return touched, nil
+					}
+					return existing, nil
+				}
+			}
+		}
+	}
+
+	mount, err := s.registry.RegisterLocalMount(ctx, name, root, readOnly)
+	if err != nil {
+		return WorkspaceMount{}, err
+	}
+	if s.mountRepo != nil {
+		rec := persistenceRecord{
+			id:         string(mount.ID),
+			name:       mount.Name,
+			kind:       mount.Kind,
+			localRoot:  root,
+			readOnly:   readOnly,
+			enabled:    true,
+			createdAt:  mount.CreatedAt,
+			updatedAt:  mount.UpdatedAt,
+			lastUsedAt: mount.LastUsedAt,
+		}
+		if err := s.mountRepo.Insert(rec); err != nil {
+			_ = s.registry.RemoveMount(ctx, mount.ID)
+			return WorkspaceMount{}, fmt.Errorf("persist local mount: %w", err)
+		}
+	}
+	return mount, nil
+}
+
+func (s *Service) TouchMount(ctx context.Context, id WorkspaceID) (WorkspaceMount, error) {
+	mount, ok := s.registry.TouchMount(id)
+	if !ok {
+		return WorkspaceMount{}, ErrMountNotFound
+	}
+	if s.mountRepo != nil {
+		if err := s.mountRepo.Touch(string(id), mount.LastUsedAt); err != nil {
+			return WorkspaceMount{}, fmt.Errorf("touch workspace mount: %w", err)
+		}
+	}
+	return mount, nil
+}
+
 // Precise returns a PreciseEditingService backed by this Service.
 // The precise engine provides fine-grained file editing operations
 // with content-addressable integrity checking and transaction support.
@@ -79,6 +183,7 @@ func (s *Service) SetPrecise(p PreciseEditingService) {
 }
 
 func (s *Service) RegisterSAFMount(ctx context.Context, name string, grantID string, readOnly bool) (WorkspaceMount, error) {
+	var resolvedGrant *SAFGrantStatus
 	if s.safGrantResolver != nil {
 		status, err := s.safGrantResolver.ResolveGrant(grantID)
 		if err != nil {
@@ -87,14 +192,28 @@ func (s *Service) RegisterSAFMount(ctx context.Context, name string, grantID str
 		if !status.Valid {
 			return WorkspaceMount{}, ErrSAFPermissionRevoked
 		}
+		resolvedGrant = &status
 	}
 
 	if s.mountRepo != nil {
 		existing, err := s.mountRepo.LoadAll()
 		if err == nil {
 			for _, rec := range existing {
-				if rec.nativeGrant == grantID {
-					m, _ := s.registry.GetMountOrEmpty(WorkspaceID(rec.id))
+				if rec.nativeGrant != grantID {
+					continue
+				}
+				if m, ok := s.registry.GetMountOrEmpty(WorkspaceID(rec.id)); ok {
+					if resolvedGrant != nil {
+						status, available := GrantStatusToMountUpdate(grantID, *resolvedGrant)
+						s.registry.UpdateStatus(m.ID, status, available)
+					}
+					if refreshed, refreshedOK := s.registry.GetMountOrEmpty(m.ID); refreshedOK {
+						m = refreshed
+					}
+					if touched, touchedOK := s.registry.TouchMount(m.ID); touchedOK {
+						_ = s.mountRepo.Touch(string(touched.ID), touched.LastUsedAt)
+						return touched, nil
+					}
 					return m, nil
 				}
 			}
@@ -116,6 +235,7 @@ func (s *Service) RegisterSAFMount(ctx context.Context, name string, grantID str
 			enabled:     true,
 			createdAt:   mount.CreatedAt,
 			updatedAt:   mount.UpdatedAt,
+			lastUsedAt:  mount.LastUsedAt,
 		}
 		if err := s.mountRepo.Insert(rec); err != nil {
 			s.registry.RemoveMount(ctx, mount.ID)
@@ -308,10 +428,12 @@ func (s *Service) LoadAndRestoreMounts(ctx context.Context) error {
 			Status:        WorkspaceStatusReady,
 			RootURI:       MountURI(WorkspaceID(rec.id)),
 			NativeGrant:   rec.nativeGrant,
+			LocalRoot:     rec.localRoot,
 			BackendConfig: rec.backendConfig,
 			CredentialRef: rec.credentialRef,
 			CreatedAt:     rec.createdAt,
 			UpdatedAt:     rec.updatedAt,
+			LastUsedAt:    rec.lastUsedAt,
 		}
 		switch rec.kind {
 		case WorkspaceKindLocal:
