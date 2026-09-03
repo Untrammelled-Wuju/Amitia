@@ -7,6 +7,8 @@ import {
   getTask,
   enqueueTask,
   cancelTask,
+  pauseTask,
+  resumeTask,
   retryTask,
   recoverTask,
   getTaskProgress,
@@ -65,6 +67,9 @@ const statusOptions = [
   { label: "全部", value: "" },
   { label: "排队中", value: "queued" },
   { label: "运行中", value: "running" },
+  { label: "暂停中", value: "pausing" },
+  { label: "已暂停", value: "paused" },
+  { label: "恢复中", value: "resuming" },
   { label: "已成功", value: "succeeded" },
   { label: "已失败", value: "failed" },
   { label: "已取消", value: "cancelled" },
@@ -133,6 +138,28 @@ async function showDetail(taskRunId: string) {
     if (checkpoint.status === "fulfilled") detailCheckpoint.value = checkpoint.value;
   } finally {
     detailLoading.value = false;
+  }
+}
+
+async function handlePause(task: TaskRun) {
+  try {
+    await pauseTask(task.taskRunId, task.generation ?? 0);
+    ElMessage.success("已发送暂停请求");
+    await fetchTasks();
+    if (detailTask.value?.taskRunId === task.taskRunId) await showDetail(task.taskRunId);
+  } catch (e: unknown) {
+    ElMessage.error("暂停失败: " + (e instanceof Error ? e.message : String(e)));
+  }
+}
+
+async function handleResume(task: TaskRun) {
+  try {
+    await resumeTask(task.taskRunId, task.generation ?? 0);
+    ElMessage.success("已发送继续请求");
+    await fetchTasks();
+    if (detailTask.value?.taskRunId === task.taskRunId) await showDetail(task.taskRunId);
+  } catch (e: unknown) {
+    ElMessage.error("继续失败: " + (e instanceof Error ? e.message : String(e)));
   }
 }
 
@@ -320,9 +347,11 @@ onUnmounted(() => {
               {{ formatTime(row.createdAt) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="200" fixed="right">
+          <el-table-column label="操作" width="280" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="isActive(row.status)" size="small" type="danger" :icon="VideoPause" @click.stop="handleCancel(row.taskRunId)">取消</el-button>
+              <el-button v-if="['running', 'checkpointing'].includes(row.status)" size="small" :icon="VideoPause" @click.stop="handlePause(row)">暂停</el-button>
+              <el-button v-if="['paused', 'pausing'].includes(row.status)" size="small" type="primary" :icon="VideoPlay" @click.stop="handleResume(row)">继续</el-button>
+              <el-button v-if="isActive(row.status)" size="small" type="danger" @click.stop="handleCancel(row.taskRunId)">取消</el-button>
               <el-button v-if="row.status === 'recovery_required'" size="small" type="warning" :icon="RefreshRight" @click.stop="handleRecover(row.taskRunId)">恢复</el-button>
               <el-button v-if="isTerminal(row.status) && row.status !== 'cancelled'" size="small" :icon="VideoPlay" @click.stop="handleRetry(row.taskRunId)">重试</el-button>
             </template>
@@ -412,7 +441,9 @@ onUnmounted(() => {
           </div>
 
           <div class="detail-actions">
-            <el-button v-if="isActive(detailTask.status)" type="danger" :icon="VideoPause" @click="handleCancel(detailTask.taskRunId)">取消任务</el-button>
+            <el-button v-if="['running', 'checkpointing'].includes(detailTask.status)" :icon="VideoPause" @click="handlePause(detailTask)">暂停任务</el-button>
+            <el-button v-if="['paused', 'pausing'].includes(detailTask.status)" type="primary" :icon="VideoPlay" @click="handleResume(detailTask)">继续任务</el-button>
+            <el-button v-if="isActive(detailTask.status)" type="danger" @click="handleCancel(detailTask.taskRunId)">取消任务</el-button>
             <el-button v-if="detailTask.status === 'recovery_required'" type="warning" :icon="RefreshRight" @click="handleRecover(detailTask.taskRunId)">恢复任务</el-button>
             <el-button v-if="isTerminal(detailTask.status)" :icon="VideoPlay" @click="handleRetry(detailTask.taskRunId)">重试任务</el-button>
           </div>

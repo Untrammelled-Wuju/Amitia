@@ -33,6 +33,16 @@ export async function cancelTask(taskRunId: string, reason?: string): Promise<{ 
   return res.data;
 }
 
+export async function pauseTask(taskRunId: string, generation: number, reason = "user_requested"): Promise<TaskRun> {
+  const res = await apiClient.post(`${TASKS_BASE}/${encodeURIComponent(taskRunId)}/pause`, { generation, reason });
+  return res.data;
+}
+
+export async function resumeTask(taskRunId: string, generation: number): Promise<TaskRun> {
+  const res = await apiClient.post(`${TASKS_BASE}/${encodeURIComponent(taskRunId)}/resume`, { generation, resumeKind: "resume" });
+  return res.data;
+}
+
 export async function retryTask(taskRunId: string): Promise<TaskRun> {
   const res = await apiClient.post(`${TASKS_BASE}/${encodeURIComponent(taskRunId)}/retry`);
   return res.data;
