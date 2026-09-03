@@ -27,7 +27,9 @@ export function collectRegistryProviders(
 export function providerHasRouteSelectors(provider: UIProviderDefinition): boolean {
   const metadata = provider.metadata ?? {};
   return (Array.isArray(metadata.routes) && metadata.routes.length > 0) ||
-    (Array.isArray(metadata.routePatterns) && metadata.routePatterns.length > 0);
+    (Array.isArray(metadata.routePatterns) && metadata.routePatterns.length > 0) ||
+    (Array.isArray(metadata.surfaces) && metadata.surfaces.length > 0) ||
+    (Array.isArray(metadata.surfacePatterns) && metadata.surfacePatterns.length > 0);
 }
 
 export function providerHasMessageSelectors(provider: UIProviderDefinition): boolean {

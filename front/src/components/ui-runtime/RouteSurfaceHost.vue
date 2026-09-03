@@ -5,6 +5,7 @@ import UIProviderHost from "./UIProviderHost.vue";
 import type { UIProviderCapability } from "@/ui-runtime/types";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { resolvePageProvider } from "@/ui-runtime/pageProviderRegistry";
+import { canonicalUISurfaceId, uiRouteAliases } from "@/ui-runtime/uiSurfaceCatalog";
 
 const props = defineProps<{ fallback: Component }>();
 const route = useRoute();
@@ -46,7 +47,7 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
     :capability="capability"
     :provider-id="providerId"
     :fallback="fallback"
-    :context="{ route: route.fullPath, routeParams: route.params, routeQuery: route.query }"
+    :context="{ route: route.fullPath, routeParams: route.params, routeQuery: route.query, surfaceId: canonicalUISurfaceId(route.path), routeAliases: uiRouteAliases(route.path) }"
   />
   <component :is="fallback" v-else />
 </template>
