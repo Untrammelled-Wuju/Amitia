@@ -42,6 +42,12 @@ func (r *repository) List(q EpisodicListQuery) ([]EpisodicMemory, int64, error) 
 	if q.SceneType != "" {
 		query = query.Where("scene_type = ?", q.SceneType)
 	}
+	if q.RetentionLevel >= 1 && q.RetentionLevel <= 5 {
+		query = query.Where("retention_level = ?", q.RetentionLevel)
+	}
+	if q.DecayState != "" {
+		query = query.Where("decay_state = ?", q.DecayState)
+	}
 	var total int64
 	query.Count(&total)
 	if q.Page <= 0 {
