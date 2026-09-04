@@ -3,6 +3,8 @@
 package episodic
 
 import (
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -48,9 +50,12 @@ func (r *repository) List(q EpisodicListQuery) ([]EpisodicMemory, int64, error) 
 	if q.DecayState != "" {
 		query = query.Where("decay_state = ?", q.DecayState)
 	}
-	if q.Keyword != "" {
-		like := "%" + q.Keyword + "%"
-		query = query.Where("title LIKE ? OR content LIKE ? OR context_before LIKE ? OR context_after LIKE ? OR trigger_keywords LIKE ?", like, like, like, like, like)
+	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
+		like := "%" + strings.ToLower(keyword) + "%"
+		query = query.Where(
+			"LOWER(title) LIKE ? OR LOWER(content) LIKE ? OR LOWER(context_before) LIKE ? OR LOWER(context_after) LIKE ? OR LOWER(trigger_keywords) LIKE ? OR LOWER(scene_type) LIKE ?",
+			like, like, like, like, like, like,
+		)
 	}
 	var total int64
 	query.Count(&total)

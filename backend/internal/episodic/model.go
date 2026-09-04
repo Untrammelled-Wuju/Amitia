@@ -79,12 +79,12 @@ type CreateEpisodicRequest struct {
 }
 
 type EpisodicListQuery struct {
-	Keyword        string `form:"keyword"`
 	UserID         string `form:"userId"`
 	CharacterID    string `form:"characterId"`
 	SceneType      string `form:"sceneType"`
 	RetentionLevel int    `form:"retentionLevel"`
 	DecayState     string `form:"decayState"`
+	Keyword        string `form:"keyword"`
 	Page           int    `form:"page"`
 	PageSize       int    `form:"pageSize"`
 }

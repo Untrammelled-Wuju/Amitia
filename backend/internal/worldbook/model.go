@@ -49,9 +49,9 @@ type UpdateWorldBookRequest struct {
 }
 
 type WorldBookListQuery struct {
-	Keyword     string `form:"keyword"`
 	MatchType   string `form:"matchType"`
 	CharacterID string `form:"characterId"`
+	Keyword     string `form:"keyword"`
 	Page        int    `form:"page"`
 	PageSize    int    `form:"pageSize"`
 }
