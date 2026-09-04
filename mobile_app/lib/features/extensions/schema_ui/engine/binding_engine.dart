@@ -1,33 +1,57 @@
 import '../models/schema_ui_types.dart';
 
 class BindingContext {
+  final Map<String, dynamic> input;
   final Map<String, dynamic> formState;
   final Map<String, dynamic> localState;
+  final Map<String, dynamic> query;
   final Map<String, dynamic> runtime;
   final Map<String, dynamic> host;
   final Map<String, dynamic> storage;
+  final Map<String, dynamic> runtimeStatus;
+  final Map<String, dynamic> resourceList;
+  final Map<String, dynamic> dataSources;
+  final Map<String, dynamic> flat;
 
   const BindingContext({
+    this.input = const {},
     this.formState = const {},
     this.localState = const {},
+    this.query = const {},
     this.runtime = const {},
     this.host = const {},
     this.storage = const {},
+    this.runtimeStatus = const {},
+    this.resourceList = const {},
+    this.dataSources = const {},
+    this.flat = const {},
   });
 
   BindingContext copyWith({
+    Map<String, dynamic>? input,
     Map<String, dynamic>? formState,
     Map<String, dynamic>? localState,
+    Map<String, dynamic>? query,
     Map<String, dynamic>? runtime,
     Map<String, dynamic>? host,
     Map<String, dynamic>? storage,
+    Map<String, dynamic>? runtimeStatus,
+    Map<String, dynamic>? resourceList,
+    Map<String, dynamic>? dataSources,
+    Map<String, dynamic>? flat,
   }) {
     return BindingContext(
+      input: input ?? this.input,
       formState: formState ?? this.formState,
       localState: localState ?? this.localState,
+      query: query ?? this.query,
       runtime: runtime ?? this.runtime,
       host: host ?? this.host,
       storage: storage ?? this.storage,
+      runtimeStatus: runtimeStatus ?? this.runtimeStatus,
+      resourceList: resourceList ?? this.resourceList,
+      dataSources: dataSources ?? this.dataSources,
+      flat: flat ?? this.flat,
     );
   }
 }
@@ -117,11 +141,17 @@ bool evaluateCondition(dynamic value, String op, dynamic expected) {
 
 bool evaluateVisibility(List<UICondition>? conditions, BindingContext context) {
   if (conditions == null || conditions.isEmpty) return true;
-  for (final c in conditions) {
-    final val = _lookupPath(context.localState, c.field) ??
-        _lookupPath(context.runtime, c.field) ??
-        _lookupPath(context.host, c.field);
-    if (!evaluateCondition(val, c.operator, c.value)) return false;
+  for (final condition in conditions) {
+    final value = _lookupPath(context.flat, condition.field) ??
+        _lookupPath(context.localState, condition.field) ??
+        _lookupPath(context.formState, condition.field) ??
+        _lookupPath(context.input, condition.field) ??
+        _lookupPath(context.query, condition.field) ??
+        _lookupPath(context.runtime, condition.field) ??
+        _lookupPath(context.host, condition.field) ??
+        _lookupPath(context.dataSources, condition.field) ??
+        _lookupPath(context.storage, condition.field);
+    if (!evaluateCondition(value, condition.operator, condition.value)) return false;
   }
   return true;
 }
@@ -129,10 +159,7 @@ bool evaluateVisibility(List<UICondition>? conditions, BindingContext context) {
 class BindingEngine {
   const BindingEngine();
 
-  dynamic resolveBinding(
-    SchemaUIBinding? binding,
-    BindingContext context,
-  ) {
+  dynamic resolveBinding(SchemaUIBinding? binding, BindingContext context) {
     if (binding == null) return null;
     final source = binding.source;
     final path = binding.path;
@@ -150,9 +177,11 @@ class BindingEngine {
         resolved = _lookupPath(context.localState, path);
         break;
       case 'input':
-        resolved = _lookupPath(context.formState, path);
+        resolved = _lookupPath(context.input, path);
         break;
       case 'query':
+        resolved = _lookupPath(context.query, path);
+        break;
       case 'runtime':
         resolved = _lookupPath(context.runtime, path);
         break;
@@ -160,27 +189,22 @@ class BindingEngine {
         resolved = _lookupPath(context.host, path);
         break;
       case 'storage':
-        // Storage bindings use the exact key (matching web localStorage), with
-        // nested lookup as a compatibility fallback for structured host data.
         resolved = context.storage[path] ?? _lookupPath(context.storage, path);
         break;
       case 'runtime_status':
-        final rt = context.runtime;
-        final status = rt['runtimeStatus'] ?? rt['runtime_status'];
-        resolved = _lookupPath(status, path);
+        resolved = _lookupPath(context.runtimeStatus, path);
         break;
       case 'resource_list':
-        final rt = context.runtime;
-        final list = rt['resourceList'] ?? rt['resource_list'];
-        resolved = _lookupPath(list, path);
+        resolved = _lookupPath(context.resourceList, path);
         break;
       default:
-        resolved = _lookupPath(context.runtime, path);
+        resolved = null;
     }
 
-    if (resolved == null && binding.defaultValue != null) {
-      return binding.defaultValue;
+    if (resolved == null && {'input', 'form_state', 'form', 'state', 'query'}.contains(source)) {
+      resolved = _lookupPath(context.flat, path);
     }
+    if (resolved == null && binding.defaultValue != null) return binding.defaultValue;
     return resolved;
   }
 }

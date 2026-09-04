@@ -7,6 +7,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../app/theme/design_tokens.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -64,14 +65,25 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       _storageState.addAll(initialStorage.cast<String, dynamic>());
     }
     unawaited(_loadStorageBindings());
+    unawaited(_loadDataSources());
   }
 
   @override
   void didUpdateWidget(covariant SchemaUIRenderer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.document, widget.document)) {
+    if (!identical(oldWidget.document, widget.document) ||
+        oldWidget.extensionId != widget.extensionId ||
+        oldWidget.contributionId != widget.contributionId) {
+      widget.dataSourceLoader?.invalidate(widget.extensionId, widget.contributionId);
       unawaited(_loadStorageBindings());
+      unawaited(_loadDataSources());
     }
+  }
+
+  @override
+  void dispose() {
+    widget.dataSourceLoader?.cancel(widget.extensionId, widget.contributionId);
+    super.dispose();
   }
 
   Future<void> _loadStorageBindings() async {
@@ -112,18 +124,122 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     }
   }
 
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+    if (value is Map) return value.map((key, value) => MapEntry(key.toString(), value));
+    return <String, dynamic>{};
+  }
+
+  Map<String, dynamic> _dataSourceGroup(String type) {
+    final group = <String, dynamic>{};
+    for (final source in widget.document.dataSources.where((item) => item.type == type)) {
+      final result = _dataSources[source.id];
+      if (result == null || !result.hasData) continue;
+      final data = result.data;
+      if (data is Map) group.addAll(_asMap(data));
+      group[source.id] = data;
+    }
+    return group;
+  }
+
+  Map<String, dynamic> _allDataSourceValues() {
+    final values = <String, dynamic>{};
+    for (final entry in _dataSources.entries) {
+      if (entry.value.hasData) values[entry.key] = entry.value.data;
+    }
+    return values;
+  }
+
+  Map<String, dynamic> _dataSourceInput(SchemaUIDataSource source) {
+    final perSource = widget.initialContext?['dataSourceInput'];
+    if (perSource is Map && perSource[source.id] is Map) {
+      return _asMap(perSource[source.id]);
+    }
+    return _asMap(widget.initialContext?['input']);
+  }
+
+  Future<void> _loadDataSources() async {
+    final loader = widget.dataSourceLoader;
+    if (loader == null || widget.document.dataSources.isEmpty) {
+      if (mounted && _dataSources.isNotEmpty) setState(_dataSources.clear);
+      return;
+    }
+    final sources = widget.document.dataSources.where(loader.requiresFetch).toList(growable: false);
+    if (sources.isEmpty) return;
+    if (mounted) {
+      setState(() {
+        for (final source in sources) {
+          _dataSources[source.id] = const DataSourceResult(isLoading: true);
+        }
+      });
+    }
+    final results = await Future.wait(
+      sources.map((source) async => MapEntry(
+            source.id,
+            await loader.load(
+              DataSourceRequest(
+                dataSource: source,
+                input: _dataSourceInput(source),
+                extensionId: widget.extensionId,
+                contributionId: widget.contributionId,
+              ),
+            ),
+          )),
+    );
+    if (!mounted) return;
+    setState(() {
+      for (final entry in results) {
+        _dataSources[entry.key] = entry.value;
+      }
+    });
+  }
+
   BindingContext _buildContext() {
+    final input = <String, dynamic>{
+      ..._asMap(widget.initialContext?['input']),
+      ..._dataSourceGroup('input'),
+    };
+    final query = <String, dynamic>{
+      ..._asMap(widget.initialContext?['query']),
+      ..._dataSourceGroup('query'),
+    };
+    final runtime = <String, dynamic>{
+      ..._asMap(widget.initialContext?['runtime']),
+      ..._dataSourceGroup('runtime'),
+    };
+    final runtimeStatus = <String, dynamic>{
+      ..._asMap(widget.initialContext?['runtimeStatus'] ?? widget.initialContext?['runtime_status']),
+      ..._dataSourceGroup('runtime_status'),
+    };
+    final resourceList = <String, dynamic>{
+      ..._asMap(widget.initialContext?['resourceList'] ?? widget.initialContext?['resource_list']),
+      ..._dataSourceGroup('resource_list'),
+    };
+    final allDataSources = _allDataSourceValues();
+    final host = <String, dynamic>{
+      ..._asMap(widget.initialContext?['host']),
+      'extensionId': widget.extensionId,
+      'contributionId': widget.contributionId,
+      if (widget.moduleId != null) 'moduleId': widget.moduleId,
+      if (widget.permissions != null) 'permissions': widget.permissions,
+    };
     return BindingContext(
+      input: input,
       formState: _formState,
       localState: _localState,
-      runtime: widget.initialContext?['runtime'] ?? {},
-      host: {
-        'extensionId': widget.extensionId,
-        'contributionId': widget.contributionId,
-        if (widget.moduleId != null) 'moduleId': widget.moduleId,
-        if (widget.permissions != null) 'permissions': widget.permissions,
-      },
+      query: query,
+      runtime: runtime,
+      host: host,
       storage: _storageState,
+      runtimeStatus: runtimeStatus,
+      resourceList: resourceList,
+      dataSources: allDataSources,
+      flat: <String, dynamic>{
+        ...?widget.initialContext,
+        ...allDataSources,
+        ..._localState,
+        ..._formState,
+      },
     );
   }
 
@@ -247,31 +363,60 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   @override
   Widget build(BuildContext context) {
     final doc = widget.document;
-    return SchemaUIThemeResolver(
-      theme: doc.theme,
-      child: Builder(
-        builder: (context) {
-          if (doc.children.isEmpty) {
-            return _buildEmptyState(context);
-          }
-          final children = doc.children.map((node) => _buildNode(context, node, 0)).toList();
-          if (widget.embedded) {
-            return Padding(
-              padding: EdgeInsets.all(AppSpacing.pagePadding),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: children,
-              ),
-            );
-          }
-          return ListView(
+    Widget content = Builder(
+      builder: (context) {
+        if (doc.children.isEmpty) return _buildEmptyState(context);
+        final children = doc.children.map((node) => _buildNode(context, node, 0)).toList();
+        if (widget.embedded) {
+          return Padding(
             padding: EdgeInsets.all(AppSpacing.pagePadding),
-            children: children,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
           );
-        },
-      ),
+        }
+        return ListView(
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
+          children: children,
+        );
+      },
     );
+    final accessibility = doc.accessibility;
+    if (accessibility != null && accessibility.enabled) {
+      final accessibilityChild = content;
+      content = Builder(
+        builder: (context) {
+          final media = MediaQuery.of(context);
+          Widget accessible = MediaQuery(
+            data: media.copyWith(
+              highContrast: media.highContrast || accessibility.highContrast,
+              disableAnimations: media.disableAnimations || accessibility.reducedMotion,
+            ),
+            child: Semantics(
+              container: true,
+              label: doc.title ?? 'Schema UI',
+              liveRegion: accessibility.screenReader,
+              child: accessibilityChild,
+            ),
+          );
+          if (accessibility.keyboardNav) accessible = FocusTraversalGroup(child: accessible);
+          return accessible;
+        },
+      );
+    }
+    final locale = _parseLocale(doc.locale?.current);
+    if (locale != null) content = Localizations.override(context: context, locale: locale, child: content);
+    return SchemaUIThemeResolver(theme: doc.theme, child: content);
+  }
+
+  Locale? _parseLocale(String? raw) {
+    final normalized = raw?.trim().replaceAll('_', '-') ?? '';
+    if (normalized.isEmpty) return null;
+    final parts = normalized.split('-');
+    if (parts.length == 1) return Locale(parts.first);
+    return Locale(parts.first, parts[1]);
   }
 
   Widget _buildEmptyState(BuildContext context) {
@@ -337,7 +482,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         case SchemaUI.nodeButtonGroup:
           return _buildButtonGroup(context, renderedNode);
         case SchemaUI.nodeList:
-          return _buildList(context, renderedNode);
+          return _buildList(context, renderedNode, depth);
         case SchemaUI.nodeTable:
           return _buildTable(context, renderedNode);
         case SchemaUI.nodeEmptyState:
@@ -661,11 +806,34 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     );
   }
 
+  bool _isEditableBinding(SchemaUIBinding? binding) {
+    return binding != null && (binding.source == 'form' || binding.source == 'form_state');
+  }
+
+  void _updateBinding(SchemaUIBinding? binding, dynamic value) {
+    if (!_isEditableBinding(binding)) return;
+    _updateFormState(binding!.path, value);
+  }
+
   Widget _buildField(BuildContext context, SchemaUINode node) {
-    final label = node.props?['label'] as String? ?? '';
-    final placeholder = node.props?['placeholder'] as String? ?? '';
+    final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
+    final placeholder = node.props?['placeholder']?.toString() ?? '';
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
-    final value = _bindingEngine.resolveBinding(binding, _buildContext());
+    if (node.children.isNotEmpty && binding == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (label.isNotEmpty) ...[
+            Text(label, style: AppTypography.label(context)),
+            const SizedBox(height: 4),
+          ],
+          ...node.children.map((child) => _buildNode(context, child, 0)),
+        ],
+      );
+    }
+    final value = _bindingEngine.resolveBinding(binding, _buildContext()) ?? node.props?['value'];
+    final rows = ((node.props?['rows'] as num?) ?? 1).toInt().clamp(1, 20);
+    final multiline = node.props?['variant'] == 'textarea' || rows > 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -674,29 +842,32 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           const SizedBox(height: 4),
         ],
         AmitiaTextField(
+          key: ValueKey('${node.id}:${value ?? ''}'),
           hintText: placeholder,
           controller: TextEditingController(text: value?.toString() ?? ''),
-          onChanged: (v) {
-            if (binding != null) {
-              _updateFormState(binding.path, v);
-            }
-          },
+          readOnly: !_isEditableBinding(binding) || node.props?['disabled'] == true,
+          maxLines: multiline ? rows : 1,
+          onChanged: (v) => _updateBinding(binding, v),
         ),
       ],
     );
   }
 
   Widget _buildSelect(BuildContext context, SchemaUINode node) {
-    final label = node.props?['label'] as String? ?? '';
+    final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
+    final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
+    final currentValue = (_bindingEngine.resolveBinding(binding, _buildContext()) ?? node.props?['value'])?.toString();
     final options = (node.props?['options'] as List?)?.map((e) {
-      if (e is Map) {
-        return DropdownMenuItem<String>(
-          value: e['value']?.toString() ?? '',
-          child: Text(e['label']?.toString() ?? e['value']?.toString() ?? ''),
-        );
-      }
-      return DropdownMenuItem<String>(value: e.toString(), child: Text(e.toString()));
-    }).toList() ?? [];
+          if (e is Map) {
+            return DropdownMenuItem<String>(
+              value: e['value']?.toString() ?? '',
+              child: Text((e['label'] ?? e['text'] ?? e['value'] ?? '').toString()),
+            );
+          }
+          return DropdownMenuItem<String>(value: e.toString(), child: Text(e.toString()));
+        }).toList() ??
+        <DropdownMenuItem<String>>[];
+    final optionValues = options.map((item) => item.value).toSet();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -705,65 +876,67 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           const SizedBox(height: 4),
         ],
         DropdownButtonFormField<String>(
+          key: ValueKey('${node.id}:${currentValue ?? ''}'),
+          value: optionValues.contains(currentValue) ? currentValue : null,
           decoration: InputDecoration(
+            hintText: node.props?['placeholder']?.toString(),
             filled: true,
             fillColor: context.surfaceSecondary,
             border: OutlineInputBorder(borderRadius: AppRadius.brMedium, borderSide: BorderSide.none),
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
           items: options,
-          onChanged: (v) {
-            if (v != null && node.bindings.isNotEmpty) {
-              _updateFormState(node.bindings.first.path, v);
-            }
-          },
+          onChanged: _isEditableBinding(binding) && node.props?['disabled'] != true
+              ? (v) {
+                  if (v != null) _updateBinding(binding, v);
+                }
+              : null,
         ),
       ],
     );
   }
 
   Widget _buildSwitch(BuildContext context, SchemaUINode node) {
-    final label = node.props?['label'] as String? ?? '';
+    final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
-    final value = _bindingEngine.resolveBinding(binding, _buildContext()) == true;
+    final value = (_bindingEngine.resolveBinding(binding, _buildContext()) ?? node.props?['value']) == true;
     return AmitiaSwitchTile(
       title: label,
       value: value,
-      onChanged: (v) {
-        if (binding != null) {
-          _updateFormState(binding.path, v);
-        }
-      },
+      onChanged: _isEditableBinding(binding) && node.props?['disabled'] != true
+          ? (v) => _updateBinding(binding, v)
+          : null,
     );
   }
 
   Widget _buildSlider(BuildContext context, SchemaUINode node) {
-    final label = node.props?['label'] as String? ?? '';
+    final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
     final min = ((node.props?['min'] as num?) ?? 0).toDouble();
     final max = ((node.props?['max'] as num?) ?? 100).toDouble();
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
-    final value = ((_bindingEngine.resolveBinding(binding, _buildContext()) as num?) ?? min).toDouble().clamp(min, max);
+    final raw = _bindingEngine.resolveBinding(binding, _buildContext()) ?? node.props?['value'];
+    final value = ((raw as num?) ?? min).toDouble().clamp(min, max);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (label.isNotEmpty)
-          Text(label, style: AppTypography.label(context)),
+        if (label.isNotEmpty) Text(label, style: AppTypography.label(context)),
         Slider(
           value: value,
           min: min,
           max: max,
-          onChanged: (v) {
-            if (binding != null) {
-              _updateFormState(binding.path, v);
-            }
-          },
+          divisions: node.props?['step'] is num && (node.props!['step'] as num) > 0
+              ? ((max - min) / (node.props!['step'] as num)).round().clamp(1, 10000)
+              : null,
+          onChanged: _isEditableBinding(binding) && node.props?['disabled'] != true
+              ? (v) => _updateBinding(binding, v)
+              : null,
         ),
       ],
     );
   }
 
   Widget _buildButton(BuildContext context, SchemaUINode node) {
-    final label = _resolveStringProp(node, 'label', '');
+    final label = (node.props?['text'] ?? node.props?['label'] ?? '按钮').toString();
     final isSecondary = node.props?['variant'] == 'secondary';
     final action = node.actions.isNotEmpty ? node.actions.first : null;
     return AmitiaButton(
@@ -783,55 +956,111 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     );
   }
 
-  Widget _buildList(BuildContext context, SchemaUINode node) {
-    final items = node.props?['items'] as List? ?? [];
+  Widget _buildList(BuildContext context, SchemaUINode node, int depth) {
+    final items = node.props?['items'] as List? ?? const [];
+    if (items.isNotEmpty) {
+      return Column(
+        children: items
+            .map((item) => ListTile(
+                  title: Text(item.toString(), style: AppTypography.bodySmall(context)),
+                  contentPadding: EdgeInsets.zero,
+                ))
+            .toList(),
+      );
+    }
     return Column(
-      children: items.map((item) {
-        return ListTile(
-          title: Text(item.toString(), style: AppTypography.bodySmall(context)),
-          contentPadding: EdgeInsets.zero,
-        );
-      }).toList(),
+      children: node.children
+          .map((child) => Padding(
+                padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                child: _buildNode(context, child, depth + 1),
+              ))
+          .toList(),
     );
   }
 
   Widget _buildTable(BuildContext context, SchemaUINode node) {
-    final headers = (node.props?['headers'] as List?)?.map((e) => e.toString()).toList() ?? [];
-    final rowsRaw = node.props?['rows'] as List?;
-    final rows = rowsRaw?.map((r) {
-      if (r is List) return r.map((c) => c.toString()).toList();
-      return [r.toString()];
-    }).toList() ?? [];
+    final headers = <String>[];
+    final keys = <String>[];
+    final columns = node.props?['columns'];
+    if (columns is List) {
+      for (final column in columns) {
+        if (column is Map) {
+          final key = (column['prop'] ?? column['key'] ?? column['field'] ?? '').toString();
+          if (key.isEmpty) continue;
+          keys.add(key);
+          headers.add((column['label'] ?? column['title'] ?? key).toString());
+        } else {
+          final key = column.toString();
+          keys.add(key);
+          headers.add(key);
+        }
+      }
+    } else {
+      final legacyHeaders = node.props?['headers'];
+      if (legacyHeaders is List) {
+        for (final header in legacyHeaders) {
+          keys.add(header.toString());
+          headers.add(header.toString());
+        }
+      }
+    }
+    final rawRows = node.props?['data'] ?? node.props?['items'] ?? node.props?['rows'];
+    final rows = <List<String>>[];
+    if (rawRows is List) {
+      for (final row in rawRows) {
+        if (row is Map) {
+          rows.add(keys.map((key) => row[key]?.toString() ?? '').toList());
+        } else if (row is List) {
+          rows.add(row.map((cell) => cell?.toString() ?? '').toList());
+        } else {
+          rows.add(<String>[row.toString()]);
+        }
+      }
+    }
+    if (headers.isEmpty && rawRows is List) {
+      for (final row in rawRows) {
+        if (row is Map) {
+          for (final key in row.keys.map((item) => item.toString())) {
+            if (!keys.contains(key)) {
+              keys.add(key);
+              headers.add(key);
+            }
+          }
+        }
+      }
+      rows.clear();
+      for (final row in rawRows) {
+        if (row is Map) rows.add(keys.map((key) => row[key]?.toString() ?? '').toList());
+      }
+    }
     if (headers.isEmpty) return const SizedBox.shrink();
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
         columns: headers.map((h) => DataColumn(label: Text(h, style: AppTypography.label(context)))).toList(),
-        rows: rows.map((row) => DataRow(
-          cells: headers.map((h) {
-            final idx = headers.indexOf(h);
-            final cellValue = idx < row.length ? row[idx] : '';
-            return DataCell(Text(cellValue, style: AppTypography.bodySmall(context)));
-          }).toList(),
-        )).toList(),
+        rows: rows
+            .map((row) => DataRow(
+                  cells: List.generate(
+                    headers.length,
+                    (index) => DataCell(Text(index < row.length ? row[index] : '', style: AppTypography.bodySmall(context))),
+                  ),
+                ))
+            .toList(),
       ),
     );
   }
 
   Widget _buildNodeEmptyState(BuildContext context, SchemaUINode node) {
-    final iconName = node.props?['icon'] as String? ?? 'inbox_outlined';
-    final title = node.props?['title'] as String? ?? 'No data';
-    final subtitle = node.props?['subtitle'] as String?;
-    return AmitiaEmptyState(
-      icon: _mapIconData(iconName),
-      title: title,
-      subtitle: subtitle,
-    );
+    final iconName = node.props?['icon']?.toString() ?? 'inbox_outlined';
+    final title = (node.props?['title'] ?? 'No data').toString();
+    final subtitle = (node.props?['subtitle'] ?? node.props?['description'] ?? node.props?['text'])?.toString();
+    return AmitiaEmptyState(icon: _mapIconData(iconName), title: title, subtitle: subtitle);
   }
 
   Widget _buildAlert(BuildContext context, SchemaUINode node) {
-    final text = _resolveStringProp(node, 'text', '');
-    final variant = node.props?['variant'] as String? ?? 'info';
+    final title = node.props?['title']?.toString().trim() ?? '';
+    final text = (node.props?['text'] ?? node.props?['message'] ?? node.props?['description'] ?? node.props?['detail'] ?? '').toString();
+    final variant = (node.props?['variant'] ?? node.props?['type'] ?? 'info').toString();
     final color = _alertColor(context, variant);
     return Container(
       padding: EdgeInsets.all(AppSpacing.md),
@@ -841,25 +1070,44 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
-        children: [Icon(Icons.info_outline, color: color, size: 18), const SizedBox(width: 8), Expanded(child: Text(text, style: AppTypography.bodySmall(context)))],
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (title.isNotEmpty) Text(title, style: AppTypography.label(context)),
+                if (title.isNotEmpty && text.isNotEmpty) const SizedBox(height: 2),
+                if (text.isNotEmpty) Text(text, style: AppTypography.bodySmall(context)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Color _alertColor(BuildContext context, String variant) {
     switch (variant) {
-      case 'success': return context.success;
-      case 'warning': return context.warning;
-      case 'error': return context.error;
-      default: return context.info;
+      case 'success':
+        return context.success;
+      case 'warning':
+        return context.warning;
+      case 'error':
+      case 'danger':
+        return context.error;
+      default:
+        return context.info;
     }
   }
 
   Widget _buildProgress(BuildContext context, SchemaUINode node) {
-    final progress = ((_bindingEngine.resolveBinding(
-      node.bindings.isNotEmpty ? node.bindings.first : null,
-      _buildContext(),
-    ) as num?) ?? 0).toDouble();
+    final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
+    final raw = _bindingEngine.resolveBinding(binding, _buildContext()) ?? node.props?['value'] ?? node.props?['percentage'] ?? 0;
+    var progress = (raw is num ? raw.toDouble() : double.tryParse(raw.toString()) ?? 0).clamp(0.0, 100.0);
+    if (progress > 1) progress /= 100;
     return AmitiaProgressBar(progress: progress.clamp(0.0, 1.0));
   }
 
@@ -1031,32 +1279,73 @@ class SchemaUIThemeResolver extends StatelessWidget {
 
   const SchemaUIThemeResolver({super.key, this.theme, required this.child});
 
+  Color? _parseColor(String? raw) {
+    var value = raw?.trim() ?? '';
+    if (!value.startsWith('#')) return null;
+    value = value.substring(1);
+    if (value.length == 3) value = value.split('').map((c) => '$c$c').join();
+    if (value.length == 6) value = 'FF$value';
+    if (value.length != 8) return null;
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? null : Color(parsed);
+  }
+
+  double? _parseDimension(String? raw) {
+    final value = raw?.trim().replaceAll(RegExp(r'px$'), '') ?? '';
+    return double.tryParse(value);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (theme == null) return child;
-    final mode = theme!.mode;
-    Brightness brightness;
-    switch (mode) {
-      case 'light':
-        brightness = Brightness.light;
-        break;
-      case 'dark':
-        brightness = Brightness.dark;
-        break;
-      default:
-        brightness = Theme.of(context).brightness;
-    }
-    if (brightness == Theme.of(context).brightness && theme!.overrides == null) {
-      return child;
-    }
+    final base = Theme.of(context);
+    final brightness = switch (theme!.mode) {
+      'light' => Brightness.light,
+      'dark' => Brightness.dark,
+      _ => base.brightness,
+    };
+    var colors = brightness == base.brightness
+        ? (base.extension<AmitiaColorTokens>() ??
+            (brightness == Brightness.dark ? defaultDarkColorTokens() : defaultLightColorTokens()))
+        : (brightness == Brightness.dark ? defaultDarkColorTokens() : defaultLightColorTokens());
+    var layout = base.extension<AmitiaLayoutTokens>() ?? const AmitiaLayoutTokens();
+    final overrides = theme!.overrides ?? const <String, String>{};
+    Color? color(String key) => _parseColor(overrides[key]);
+    colors = colors.copyWith(
+      backgroundPrimary: color('--amitia-bg-primary') ?? color('--amitia-color-background'),
+      backgroundSecondary: color('--amitia-bg-secondary'),
+      surfacePrimary: color('--amitia-bg-surface') ?? color('--amitia-color-surface'),
+      surfaceSecondary: color('--amitia-bg-surface-secondary'),
+      accentPrimary: color('--amitia-color-accent') ?? color('--amitia-color-primary'),
+      textPrimary: color('--amitia-text-primary') ?? color('--amitia-color-text'),
+      textSecondary: color('--amitia-text-secondary') ?? color('--amitia-color-text-secondary'),
+      borderPrimary: color('--amitia-border') ?? color('--amitia-color-border'),
+      success: color('--amitia-color-success'),
+      warning: color('--amitia-color-warning'),
+      error: color('--amitia-color-danger') ?? color('--amitia-color-error'),
+      info: color('--amitia-color-info'),
+    );
+    layout = layout.copyWith(
+      radiusSmall: _parseDimension(overrides['--amitia-radius-sm']),
+      radiusMedium: _parseDimension(overrides['--amitia-radius-md']),
+      radiusLarge: _parseDimension(overrides['--amitia-radius-lg']),
+    );
+    final extensions = <ThemeExtension<dynamic>>[
+      ...base.extensions.values.where((value) => value is! AmitiaColorTokens && value is! AmitiaLayoutTokens),
+      colors,
+      layout,
+    ];
+    final scheme = base.colorScheme.copyWith(
+      brightness: brightness,
+      primary: colors.accentPrimary,
+      surface: colors.surfacePrimary,
+      error: colors.error,
+      onSurface: colors.textPrimary,
+    );
     return Theme(
-      data: Theme.of(context).copyWith(
-        brightness: brightness,
-        colorScheme: Theme.of(context).colorScheme.copyWith(
-          brightness: brightness,
-        ),
-      ),
+      data: base.copyWith(brightness: brightness, colorScheme: scheme, extensions: extensions),
       child: child,
     );
   }
 }
+

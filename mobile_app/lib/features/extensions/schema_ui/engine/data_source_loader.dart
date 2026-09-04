@@ -114,7 +114,7 @@ class DataSourceLoader {
 
   bool requiresFetch(SchemaUIDataSource? ds) {
     if (ds == null) return false;
-    return ds.type == 'query' || ds.type == 'runtime';
+    return ds.id.trim().isNotEmpty;
   }
 }
 
