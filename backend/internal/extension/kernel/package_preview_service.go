@@ -153,7 +153,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		preview.TrustDecision = "rejected"
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_signature_required", Message: "Manifest v2 signature is required"})
 	} else {
-		if r.packageUnsignedDevAllowed(request, preview.ExtensionID) {
+		if packageDevelopmentModeEnabled() || r.packageUnsignedDevAllowed(request, preview.ExtensionID) {
 			preview.DevOnly = true
 			preview.DeveloperSessionID = request.DeveloperSessionID
 			preview.TrustDecision = string(trust.TrustLevelDevelopment)
@@ -302,6 +302,9 @@ func (r *Runtime) packageUnsignedDevAllowed(request PackagePreviewRequest, exten
 }
 
 func (r *Runtime) validateUnsignedDeveloperSession(sessionID, userID, extensionID string) error {
+	if packageDevelopmentModeEnabled() {
+		return nil
+	}
 	if r.container == nil {
 		return fmt.Errorf("kernel: developer session binding unavailable")
 	}
