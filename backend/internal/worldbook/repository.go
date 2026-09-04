@@ -38,6 +38,10 @@ func (r *repository) List(q WorldBookListQuery) ([]WorldBookEntry, int64, error)
 	if q.CharacterID != "" {
 		query = query.Where("character_id = ? OR character_id = ''", q.CharacterID)
 	}
+	if q.Keyword != "" {
+		like := "%" + q.Keyword + "%"
+		query = query.Where("match_pattern LIKE ? OR inject_content LIKE ?", like, like)
+	}
 	var total int64
 	query.Count(&total)
 	if q.Page <= 0 {

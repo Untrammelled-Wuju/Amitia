@@ -16,6 +16,7 @@ type Repository interface {
 	Create(user *AuthUser) error
 	UpdateLoginTime(id int) error
 	UpdatePassword(id int, hash string) error
+	UpdateProfile(id int, nickname, userLabel, bio string) error
 	CreateSession(session *AuthSession) error
 	ListSessions(userID int) ([]SessionResponse, error)
 	DeleteSession(id int) error
@@ -61,6 +62,14 @@ func (r *repository) UpdateLoginTime(id int) error {
 
 func (r *repository) UpdatePassword(id int, hash string) error {
 	return r.db.Model(&AuthUser{}).Where("id = ?", id).Update("password_hash", hash).Error
+}
+
+func (r *repository) UpdateProfile(id int, nickname, userLabel, bio string) error {
+	return r.db.Model(&AuthUser{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"nickname":   nickname,
+		"user_label": userLabel,
+		"bio":        bio,
+	}).Error
 }
 
 func (r *repository) CreateSession(session *AuthSession) error {

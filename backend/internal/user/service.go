@@ -32,6 +32,8 @@ type Service interface {
 
 	GetMe(token string) (*UserInfoResponse, error)
 
+	UpdateMe(token, nickname, userLabel, bio string) (*UserInfoResponse, error)
+
 	Logout(token string) error
 
 	HasAdmin() (bool, error)
@@ -233,6 +235,9 @@ func (s *service) GetMe(token string) (*UserInfoResponse, error) {
 		ID:             user.ID,
 		Username:       user.Username,
 		Role:           user.Role,
+		Nickname:       user.Nickname,
+		UserLabel:      user.UserLabel,
+		Bio:            user.Bio,
 		CreatedAt:      user.CreatedAt,
 		JwtExpiryDays:  config.AppCfg.JWT.ExpireDays,
 		SessionTimeout: 1440,
@@ -242,6 +247,17 @@ func (s *service) GetMe(token string) (*UserInfoResponse, error) {
 		resp.LastLoginAt = *user.LastLoginAt
 	}
 	return resp, nil
+}
+
+func (s *service) UpdateMe(token, nickname, userLabel, bio string) (*UserInfoResponse, error) {
+	claims, err := s.parseJWT(token)
+	if err != nil {
+		return nil, fmt.Errorf("令牌无效")
+	}
+	if err := s.repo.UpdateProfile(claims.UserId, nickname, userLabel, bio); err != nil {
+		return nil, fmt.Errorf("更新用户资料失败: %w", err)
+	}
+	return s.GetMe(token)
 }
 
 func (s *service) Logout(token string) error {

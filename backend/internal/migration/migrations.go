@@ -198,6 +198,7 @@ func DefaultMigrations() []Migration {
 		ConversationWorkspaceBindingsMigration(),
 		WorkspaceMountLastUsedMigration(),
 		MemoryDynamicRecallRetentionMigration(),
+		AuthUserProfileMigration(),
 	}
 }
 

@@ -3,6 +3,8 @@
 package user
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -54,6 +56,34 @@ func (h *Handler) Me(c *gin.Context) {
 	resp, err := h.service.GetMe(token)
 	if err != nil {
 		util.ErrorResponse(c, response.InvalidToken, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, resp)
+}
+
+func (h *Handler) UpdateMe(c *gin.Context) {
+	token := extractToken(c)
+	if token == "" {
+		util.ErrorResponse(c, response.Unauthorized, "请先登录", nil)
+		return
+	}
+
+	var req UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "用户资料格式错误", nil)
+		return
+	}
+	req.Nickname = strings.TrimSpace(req.Nickname)
+	req.UserLabel = strings.TrimSpace(req.UserLabel)
+	req.Bio = strings.TrimSpace(req.Bio)
+	if len([]rune(req.Nickname)) > 100 || len([]rune(req.UserLabel)) > 100 || len([]rune(req.Bio)) > 1000 {
+		util.ErrorResponse(c, response.InvalidParams, "用户资料长度超出限制", nil)
+		return
+	}
+
+	resp, err := h.service.UpdateMe(token, req.Nickname, req.UserLabel, req.Bio)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, resp)

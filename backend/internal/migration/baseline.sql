@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS auth_users (
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT DEFAULT 'admin',
+    nickname TEXT NOT NULL DEFAULT '',
+    user_label TEXT NOT NULL DEFAULT '',
+    bio TEXT NOT NULL DEFAULT '',
     is_active INTEGER DEFAULT 1,
     created_at TEXT DEFAULT '',
     last_login_at TEXT

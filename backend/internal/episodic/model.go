@@ -79,6 +79,7 @@ type CreateEpisodicRequest struct {
 }
 
 type EpisodicListQuery struct {
+	Keyword        string `form:"keyword"`
 	UserID         string `form:"userId"`
 	CharacterID    string `form:"characterId"`
 	SceneType      string `form:"sceneType"`

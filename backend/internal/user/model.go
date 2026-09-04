@@ -7,6 +7,9 @@ type AuthUser struct {
 	Username     string  `gorm:"column:username;uniqueIndex;size:100;not null" json:"username"`
 	PasswordHash string  `gorm:"column:password_hash;size:255;not null" json:"-"`
 	Role         string  `gorm:"column:role;size:20;default:admin" json:"role"`
+	Nickname     string  `gorm:"column:nickname;size:100;not null;default:''" json:"nickname"`
+	UserLabel    string  `gorm:"column:user_label;size:100;not null;default:''" json:"userLabel"`
+	Bio          string  `gorm:"column:bio;size:1000;not null;default:''" json:"bio"`
 	IsActive     int     `gorm:"column:is_active;default:1" json:"isActive"`
 	CreatedAt    string  `gorm:"column:created_at" json:"createdTime"`
 	LastLoginAt  *string `gorm:"column:last_login_at" json:"lastLoginTime"`
@@ -43,6 +46,12 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"newPassword" binding:"required,min=6"`
 }
 
+type UpdateProfileRequest struct {
+	Nickname  string `json:"nickname"`
+	UserLabel string `json:"userLabel"`
+	Bio       string `json:"bio"`
+}
+
 type LoginResponse struct {
 	Token    string `json:"token"`
 	Username string `json:"username"`
@@ -53,6 +62,9 @@ type UserInfoResponse struct {
 	ID             int    `json:"id"`
 	Username       string `json:"username"`
 	Role           string `json:"role"`
+	Nickname       string `json:"nickname"`
+	UserLabel      string `json:"userLabel"`
+	Bio            string `json:"bio"`
 	CreatedAt      string `json:"createdTime"`
 	LastLoginAt    string `json:"lastLoginTime"`
 	JwtExpiryDays  int    `json:"jwtExpiryDays"`

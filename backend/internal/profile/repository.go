@@ -39,6 +39,10 @@ func (r *repository) List(q ProfileListQuery) ([]UserProfile, int64, error) {
 	if q.Category != "" {
 		query = query.Where("category = ?", q.Category)
 	}
+	if q.Keyword != "" {
+		like := "%" + q.Keyword + "%"
+		query = query.Where("attribute_name LIKE ? OR attribute_value LIKE ?", like, like)
+	}
 	var total int64
 	query.Count(&total)
 	if q.Page <= 0 {
