@@ -255,11 +255,29 @@ func (h *Handler) ImportPackConfirm(c *gin.Context) {
 }
 
 func (h *Handler) PacksHistory(c *gin.Context) {
-	util.SuccessResponse(c, []map[string]interface{}{})
+	history, err := h.service.ListPackHistory()
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, history)
 }
 
 func (h *Handler) CreateFromTemplate(c *gin.Context) {
-	util.SuccessMsgResponse(c, "创建成功", gin.H{"id": c.Param("id")})
+	var body struct {
+		Name string `json:"name"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	created, err := h.service.CreateFromTemplate(
+		c.Param("id"),
+		body.Name,
+		requestidentity.ResolveGin(c, ""),
+	)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessMsgResponse(c, "创建成功", created)
 }
 
 func (h *Handler) ExportCardV2(c *gin.Context) {

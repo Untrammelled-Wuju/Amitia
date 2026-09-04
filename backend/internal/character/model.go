@@ -79,6 +79,7 @@ type CreateCharacterRequest struct {
 	CharacterBase     string          `json:"characterBase"`
 	BoundaryRules     string          `json:"boundaryRules"`
 	Description       string          `json:"description"`
+	BasePrompt        string          `json:"basePrompt"`
 	Gender            string          `json:"gender"`
 	Pronoun           string          `json:"pronoun"`
 	SelfReference     string          `json:"selfReference"`
