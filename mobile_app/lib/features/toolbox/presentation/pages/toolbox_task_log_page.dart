@@ -7,7 +7,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/services/providers.dart';
 
 class _TaskEntry {
   final String name;
@@ -38,12 +38,8 @@ class _ToolboxTaskLogPageState extends ConsumerState<ToolboxTaskLogPage> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final api = ref.watch(backendServiceProvider);
-      final resp = await api.get<Map<String, dynamic>>('/api/extensions/tasks', queryParameters: const {'limit': 200});
-      final rows = resp?['items'];
-      final items = rows is List ? rows : const <dynamic>[];
-      final logs = items.map((e) {
-        final m = e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{};
+      final items = await ref.read(extensionTaskServiceProvider).listRuns(limit: 200);
+      final logs = items.map((m) {
         return _TaskEntry(
           name: (m['taskDefinitionId'] ?? m['taskRunId'] ?? '').toString(),
           status: (m['status'] ?? m['state'] ?? '未知').toString(),

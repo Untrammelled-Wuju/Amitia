@@ -40,6 +40,8 @@ List<SettingGroup> _settingsGroups({required String modelSummary, required Strin
   SettingGroup(title: '部署与隐私', items: [
     SettingItem(title: '部署配置', icon: Icons.cloud_upload_outlined, route: AppRoutes.settingsDeployment),
     SettingItem(title: '隐私扫描', icon: Icons.privacy_tip_outlined, route: AppRoutes.settingsPrivacyScan),
+    SettingItem(title: '隐私政策', icon: Icons.policy_outlined, route: AppRoutes.settingsPrivacyPolicy),
+    SettingItem(title: '用户协议', icon: Icons.description_outlined, route: AppRoutes.settingsUserAgreement),
     SettingItem(title: '系统设置', icon: Icons.settings_applications_outlined, route: AppRoutes.settingsSystem),
   ]),
   SettingGroup(title: '关于', items: [

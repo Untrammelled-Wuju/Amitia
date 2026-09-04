@@ -8,8 +8,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/services/providers.dart';
 
 class KernelHomePage extends ConsumerStatefulWidget {
   const KernelHomePage({super.key});
@@ -102,11 +102,8 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
 
   Future<int?> _loadTaskCount() async {
     try {
-      final data = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
-        '/api/extensions/tasks',
-        fromJson: (value) => Map<String, dynamic>.from(value as Map),
-      );
-      return (data?['items'] as List?)?.length;
+      final runs = await ref.read(extensionTaskServiceProvider).listRuns(limit: 200);
+      return runs.length;
     } catch (_) {
       return null;
     }
