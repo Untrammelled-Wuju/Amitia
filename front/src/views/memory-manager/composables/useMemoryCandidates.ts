@@ -12,6 +12,7 @@ export function useMemoryCandidates(
   const conversationList = ref<any[]>([]);
   const showGenerateDialog = ref(false);
   const generating = ref(false);
+  const acceptingAll = ref(false);
   const generateConvId = ref("");
   const editCandidateVisible = ref(false);
   const editForm = reactive({
@@ -59,6 +60,25 @@ export function useMemoryCandidates(
     }
     candidates.value = candidates.value.filter((x) => x.id !== c.id);
     await fetchList?.();
+  }
+
+  async function confirmAllCandidates() {
+    const ids = candidates.value
+      .map((candidate) => String(candidate?.id ?? "").trim())
+      .filter(Boolean);
+    if (ids.length === 0 || acceptingAll.value) return;
+    acceptingAll.value = true;
+    try {
+      const result: any = await post("/api/memory-candidates/batch-accept", { ids });
+      const accepted = Number(result?.accepted ?? result?.acceptedCount ?? ids.length);
+      ElMessage.success(`已接受 ${accepted} 条候选记忆`);
+      await loadCandidates();
+      await fetchList?.();
+    } catch (error: any) {
+      ElMessage.error(error?.message || "批量接受失败");
+    } finally {
+      acceptingAll.value = false;
+    }
   }
 
   async function deleteCandidateItem(c: any) {
@@ -160,6 +180,7 @@ export function useMemoryCandidates(
     conversationList,
     showGenerateDialog,
     generating,
+    acceptingAll,
     generateConvId,
     editCandidateVisible,
     editForm,
@@ -170,6 +191,7 @@ export function useMemoryCandidates(
     resolveAction,
     loadCandidates,
     confirmCandidate,
+    confirmAllCandidates,
     deleteCandidateItem,
     toggleCandidates,
     loadConversations,

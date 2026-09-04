@@ -2,6 +2,10 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <template>
   <div v-if="showCandidates && candidates.length > 0" class="candidate-list">
+    <div class="candidate-toolbar">
+      <span>待确认 {{ candidates.length }} 条</span>
+      <el-button size="small" type="primary" :loading="acceptingAll" @click="emit('confirmAll')">全部接受</el-button>
+    </div>
     <div v-for="c in candidates" :key="c.id" class="candidate-card">
       <div class="cc-header">
         <el-tag size="small" :type="c.importance > 7 ? 'danger' : 'info'">{{
@@ -26,9 +30,10 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ candidates: any[]; showCandidates: boolean }>();
+defineProps<{ candidates: any[]; showCandidates: boolean; acceptingAll?: boolean }>();
 const emit = defineEmits<{
   confirm: [c: any];
+  confirmAll: [];
   edit: [c: any];
   deleteItem: [c: any];
   "toggle-show": [];
@@ -54,6 +59,13 @@ function typeLabel(t: string) {
   flex-direction: column;
   gap: 8px;
   margin: 10px 0;
+}
+.candidate-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--ac-font-size-sm);
 }
 .candidate-card {
   padding: 12px;

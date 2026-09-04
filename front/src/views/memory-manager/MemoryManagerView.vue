@@ -299,7 +299,9 @@
         <CandidateMemoryPanel
           :candidates="candidates"
           :show-candidates="showCandidates"
+          :accepting-all="acceptingAll"
           @confirm="confirmCandidate"
+          @confirm-all="confirmAllCandidates"
           @edit="editCandidate"
           @delete-item="deleteCandidateItem"
           @toggle-show="showCandidates = !showCandidates"
@@ -469,6 +471,7 @@ const {
   conversationList,
   showGenerateDialog,
   generating,
+  acceptingAll,
   generateConvId,
   editCandidateVisible,
   editForm,
@@ -479,6 +482,7 @@ const {
   resolveAction,
   loadCandidates,
   confirmCandidate,
+  confirmAllCandidates,
   deleteCandidateItem,
   loadConversations,
   generateCandidates,
