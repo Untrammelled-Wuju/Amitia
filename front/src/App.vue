@@ -6,14 +6,10 @@ SPDX-License-Identifier: AGPL-3.0-only
   <DesktopTitleBar v-if="isDesktopShell()" :transparent="isOnboardingPage" />
   <div id="amitia-overlay-root" aria-live="polite"></div>
   <UpdateDialog />
-  <PrivacyConsent v-if="!isPublicPage && !isUIProviderRecoveryPage && !renderError" />
-  <MCPInteractionGuard v-if="!isPublicPage && !isUIProviderRecoveryPage && !renderError" />
+  <PrivacyConsent v-if="!isPublicPage && !renderError" />
   <NotFoundView v-if="renderError" :error="capturedError" />
   <Transition v-else name="route-slide" mode="out-in">
-    <div v-if="isUIProviderRecoveryPage" key="ui-provider-recovery" class="ui-provider-recovery-root">
-      <router-view />
-    </div>
-    <AppLayout v-else-if="!isPublicPage" key="app">
+    <AppLayout v-if="!isPublicPage" key="app">
       <router-view v-slot="{ Component }">
         <RouteSurfaceHost v-if="Component" :fallback="Component" />
       </router-view>
@@ -36,7 +32,6 @@ import { AppLayout } from "./ui-index";
 import { apiClient } from "./ui-index";
 import PrivacyConsent from "./components/PrivacyConsent.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
-import MCPInteractionGuard from "./components/MCPInteractionGuard.vue";
 import DesktopTitleBar from "./components/DesktopTitleBar.vue";
 import { useTheme } from "./ui-index";
 import { isDesktopShell } from "./runtime/runtime-capabilities";
@@ -114,6 +109,14 @@ onMounted(async () => {
     }
   } catch {}
 
+  try {
+    const authRes = await apiClient.get("/api/public/auth/status");
+    const authData = authRes.data?.data || authRes.data;
+    if (!authData?.hasAdmin) {
+      router.replace("/onboarding");
+      return;
+    }
+  } catch {}
 
   try {
     const meRes = await apiClient.get("/api/auth/me");
