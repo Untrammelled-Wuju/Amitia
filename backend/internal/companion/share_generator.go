@@ -223,7 +223,7 @@ func (s *service) GenerateSharePrompt(characterID string, taskType string, sched
 	}
 	if len(recentMemories) == 0 {
 		nowStr := time.Now().Format("2006-01-02 15:04:05")
-		rows, err := s.db.Table("memories").Select("value").Where("character_id = ? AND allow_proactive_mention = 1 AND verified_status NOT IN ('deleted','invalidated','expired','rejected','tombstone','tombstoned','inactive') AND (expires_at IS NULL OR expires_at > ?)", characterID, nowStr).Order("created_at DESC").Limit(5).Rows()
+		rows, err := s.db.Table("memories").Select("value").Where("character_id = ? AND COALESCE(allow_context_use, 1) = 1 AND allow_proactive_mention = 1 AND verified_status NOT IN ('deleted','invalidated','expired','rejected','tombstone','tombstoned','inactive') AND (expires_at IS NULL OR expires_at > ?)", characterID, nowStr).Order("created_at DESC").Limit(5).Rows()
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {

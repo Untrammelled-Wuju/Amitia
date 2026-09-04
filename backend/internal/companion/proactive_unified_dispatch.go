@@ -508,7 +508,7 @@ func (s *service) buildProactiveMemoryContext(conversationID, characterID string
 	var memories []memoryRow
 
 	rows, err := s.db.Table("memories").Select("key, value").
-		Where("character_id = ?", characterID).
+		Where("character_id = ? AND COALESCE(allow_context_use, 1) = 1", characterID).
 		Order("updated_at DESC").
 		Limit(3).
 		Rows()

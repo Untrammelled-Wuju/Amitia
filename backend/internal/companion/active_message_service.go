@@ -12,10 +12,12 @@ import (
 
 func (s *service) GetActiveMessageSetting(characterID string) map[string]interface{} {
 	var enabled, activeLevel, minInterval, maxPerDay, maxDailyCalls int
+	var unrepliedSlowdownEnabled, unrepliedSlowdownAfter, unrepliedRecoveryOnReply int
+	var unrepliedCooldownMultiplier float64
 	var channel, quietStart, quietEnd string
-	err := s.db.Table("active_message_settings").Select("enabled, COALESCE(active_level, 40) as active_level, min_interval, COALESCE(quiet_start, '23:00') as quiet_start, COALESCE(quiet_end, '07:00') as quiet_end, max_per_day, COALESCE(max_daily_calls, 10) as max_daily_calls, channel").Where("character_id = ?", characterID).Limit(1).Row().Scan(&enabled, &activeLevel, &minInterval, &quietStart, &quietEnd, &maxPerDay, &maxDailyCalls, &channel)
+	err := s.db.Table("active_message_settings").Select("enabled, COALESCE(active_level, 40) as active_level, min_interval, COALESCE(quiet_start, '23:00') as quiet_start, COALESCE(quiet_end, '07:00') as quiet_end, max_per_day, COALESCE(max_daily_calls, 10) as max_daily_calls, channel, COALESCE(unreplied_slowdown_enabled, 1), COALESCE(unreplied_slowdown_after, 2), COALESCE(unreplied_cooldown_multiplier, 2.0), COALESCE(unreplied_recovery_on_reply, 1)").Where("character_id = ?", characterID).Limit(1).Row().Scan(&enabled, &activeLevel, &minInterval, &quietStart, &quietEnd, &maxPerDay, &maxDailyCalls, &channel, &unrepliedSlowdownEnabled, &unrepliedSlowdownAfter, &unrepliedCooldownMultiplier, &unrepliedRecoveryOnReply)
 	if err != nil {
-		return map[string]interface{}{"enabled": true, "activeLevel": 40, "quietStart": "23:00", "quietEnd": "07:00", "minInterval": 60, "maxPerDay": 6, "maxDailyCalls": 10, "channel": "all"}
+		return defaultActiveMessageSetting()
 	}
 	if quietStart == "" {
 		quietStart = "23:00"
@@ -26,30 +28,67 @@ func (s *service) GetActiveMessageSetting(characterID string) map[string]interfa
 	if activeLevel == 0 {
 		activeLevel = 40
 	}
-	return map[string]interface{}{"enabled": enabled == 1, "activeLevel": activeLevel, "quietStart": quietStart, "quietEnd": quietEnd, "minInterval": minInterval, "maxPerDay": maxPerDay, "maxDailyCalls": maxDailyCalls, "channel": channel}
+	if minInterval < 1 {
+		minInterval = 60
+	}
+	if maxPerDay < 1 {
+		maxPerDay = 6
+	}
+	if maxDailyCalls < 1 {
+		maxDailyCalls = 10
+	}
+	if channel == "" {
+		channel = "all"
+	}
+	if unrepliedSlowdownAfter < 1 {
+		unrepliedSlowdownAfter = 2
+	}
+	if unrepliedCooldownMultiplier < 1 {
+		unrepliedCooldownMultiplier = 2
+	}
+	return map[string]interface{}{
+		"enabled":                     enabled == 1,
+		"activeLevel":                 activeLevel,
+		"quietStart":                  quietStart,
+		"quietEnd":                    quietEnd,
+		"minInterval":                 minInterval,
+		"maxPerDay":                   maxPerDay,
+		"maxDailyCalls":               maxDailyCalls,
+		"channel":                     channel,
+		"unrepliedSlowdownEnabled":    unrepliedSlowdownEnabled == 1,
+		"unrepliedSlowdownAfter":      unrepliedSlowdownAfter,
+		"unrepliedCooldownMultiplier": unrepliedCooldownMultiplier,
+		"unrepliedRecoveryOnReply":    unrepliedRecoveryOnReply == 1,
+	}
+}
+
+func defaultActiveMessageSetting() map[string]interface{} {
+	return map[string]interface{}{
+		"enabled":                     true,
+		"activeLevel":                 40,
+		"quietStart":                  "23:00",
+		"quietEnd":                    "07:00",
+		"minInterval":                 60,
+		"maxPerDay":                   6,
+		"maxDailyCalls":               10,
+		"channel":                     "all",
+		"unrepliedSlowdownEnabled":    true,
+		"unrepliedSlowdownAfter":      2,
+		"unrepliedCooldownMultiplier": 2.0,
+		"unrepliedRecoveryOnReply":    true,
+	}
 }
 
 func (s *service) UpdateActiveMessageSetting(body map[string]interface{}, characterID string) map[string]interface{} {
 	updates := make(map[string]interface{})
 	if v, ok := body["enabled"].(bool); ok {
-		if v {
-			updates["enabled"] = 1
-		} else {
-			updates["enabled"] = 0
-		}
+		updates["enabled"] = boolInt(v)
 	}
-	if v, ok := body["activeLevel"].(float64); ok {
-		vv := int(v)
-		if vv < 1 {
-			vv = 1
-		}
-		if vv > 100 {
-			vv = 100
-		}
-		updates["active_level"] = vv
+	if v, ok := numberValue(body["activeLevel"]); ok {
+		updates["active_level"] = clampInt(int(v), 1, 100)
 	}
-	if v, ok := body["minInterval"].(float64); ok {
-		updates["min_interval"] = int(v)
+	if v, ok := numberValue(body["minInterval"]); ok {
+		updates["min_interval"] = clampInt(int(v), 1, 24*60)
 	}
 	if v, ok := body["quietStart"].(string); ok {
 		updates["quiet_start"] = v
@@ -57,31 +96,76 @@ func (s *service) UpdateActiveMessageSetting(body map[string]interface{}, charac
 	if v, ok := body["quietEnd"].(string); ok {
 		updates["quiet_end"] = v
 	}
-	if v, ok := body["maxPerDay"].(float64); ok {
-		updates["max_per_day"] = int(v)
+	if v, ok := numberValue(body["maxPerDay"]); ok {
+		updates["max_per_day"] = clampInt(int(v), 1, 100)
 	}
-	if v, ok := body["maxDailyCalls"].(float64); ok {
-		vv := int(v)
-		if vv < 1 {
-			vv = 1
-		}
-		if vv > 50 {
-			vv = 50
-		}
-		updates["max_daily_calls"] = vv
+	if v, ok := numberValue(body["maxDailyCalls"]); ok {
+		updates["max_daily_calls"] = clampInt(int(v), 1, 50)
 	}
 	if v, ok := body["channel"].(string); ok {
 		updates["channel"] = v
+	}
+	if v, ok := body["unrepliedSlowdownEnabled"].(bool); ok {
+		updates["unreplied_slowdown_enabled"] = boolInt(v)
+	}
+	if v, ok := numberValue(body["unrepliedSlowdownAfter"]); ok {
+		updates["unreplied_slowdown_after"] = clampInt(int(v), 1, 20)
+	}
+	if v, ok := numberValue(body["unrepliedCooldownMultiplier"]); ok {
+		if v < 1 {
+			v = 1
+		}
+		if v > 10 {
+			v = 10
+		}
+		updates["unreplied_cooldown_multiplier"] = v
+	}
+	if v, ok := body["unrepliedRecoveryOnReply"].(bool); ok {
+		updates["unreplied_recovery_on_reply"] = boolInt(v)
 	}
 	if len(updates) > 0 {
 		var count int64
 		s.db.Table("active_message_settings").Where("character_id = ?", characterID).Count(&count)
 		if count == 0 {
-			s.db.Exec("INSERT INTO active_message_settings (character_id, enabled, active_level, min_interval, quiet_start, quiet_end, max_per_day, max_daily_calls, channel) VALUES (?, 1, 40, 60, '23:00', '07:00', 6, 10, 'all')", characterID)
+			s.db.Exec("INSERT INTO active_message_settings (character_id, enabled, active_level, min_interval, quiet_start, quiet_end, max_per_day, max_daily_calls, channel, unreplied_slowdown_enabled, unreplied_slowdown_after, unreplied_cooldown_multiplier, unreplied_recovery_on_reply) VALUES (?, 1, 40, 60, '23:00', '07:00', 6, 10, 'all', 1, 2, 2.0, 1)", characterID)
 		}
 		s.db.Table("active_message_settings").Where("character_id = ?", characterID).Updates(updates)
 	}
 	return s.GetActiveMessageSetting(characterID)
+}
+
+func numberValue(value interface{}) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	default:
+		return 0, false
+	}
+}
+
+func clampInt(value, min, max int) int {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 func (s *service) GetActiveMessageTasksToday(characterID string) []map[string]interface{} {
@@ -202,4 +286,3 @@ func (s *service) CancelActiveMessageTask(id int, characterID string) map[string
 	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='manual', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)
 	return map[string]interface{}{"id": id, "cancelled": true}
 }
-

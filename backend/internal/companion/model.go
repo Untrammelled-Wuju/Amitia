@@ -126,14 +126,19 @@ type WorkProfile struct {
 func (WorkProfile) TableName() string { return "work_profiles" }
 
 type ActiveMessageSetting struct {
-	CharacterID   string `gorm:"column:character_id;uniqueIndex" json:"characterId"`
-	Enabled       int    `gorm:"column:enabled;default:1" json:"enabled"`
-	MinInterval   int    `gorm:"column:min_interval;default:60" json:"minInterval"`
-	QuietStart    string `gorm:"column:quiet_start;default:23:00" json:"quietStart"`
-	QuietEnd      string `gorm:"column:quiet_end;default:07:00" json:"quietEnd"`
-	MaxPerDay     int    `gorm:"column:max_per_day;default:6" json:"maxPerDay"`
-	MaxDailyCalls int    `gorm:"column:max_daily_calls;default:10" json:"maxDailyCalls"`
-	Channel       string `gorm:"column:channel;default:all" json:"channel"`
+	CharacterID                 string  `gorm:"column:character_id;uniqueIndex" json:"characterId"`
+	Enabled                     int     `gorm:"column:enabled;default:1" json:"enabled"`
+	ActiveLevel                 int     `gorm:"column:active_level;default:40" json:"activeLevel"`
+	MinInterval                 int     `gorm:"column:min_interval;default:60" json:"minInterval"`
+	QuietStart                  string  `gorm:"column:quiet_start;default:23:00" json:"quietStart"`
+	QuietEnd                    string  `gorm:"column:quiet_end;default:07:00" json:"quietEnd"`
+	MaxPerDay                   int     `gorm:"column:max_per_day;default:6" json:"maxPerDay"`
+	MaxDailyCalls               int     `gorm:"column:max_daily_calls;default:10" json:"maxDailyCalls"`
+	Channel                     string  `gorm:"column:channel;default:all" json:"channel"`
+	UnrepliedSlowdownEnabled    int     `gorm:"column:unreplied_slowdown_enabled;default:1" json:"unrepliedSlowdownEnabled"`
+	UnrepliedSlowdownAfter      int     `gorm:"column:unreplied_slowdown_after;default:2" json:"unrepliedSlowdownAfter"`
+	UnrepliedCooldownMultiplier float64 `gorm:"column:unreplied_cooldown_multiplier;default:2" json:"unrepliedCooldownMultiplier"`
+	UnrepliedRecoveryOnReply    int     `gorm:"column:unreplied_recovery_on_reply;default:1" json:"unrepliedRecoveryOnReply"`
 }
 
 func (ActiveMessageSetting) TableName() string { return "active_message_settings" }
