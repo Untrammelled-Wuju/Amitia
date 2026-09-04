@@ -104,7 +104,7 @@ type Service interface {
 	OnboardingReset() map[string]interface{}
 	OnboardingStatus() map[string]interface{}
 	PrivacyMask() map[string]interface{}
-	PrivacyScan() map[string]interface{}
+	PrivacyScan(scope []string) map[string]interface{}
 	PrivacyScanResults() map[string]interface{}
 	RotateLogs() map[string]interface{}
 	RunDiagnostics() map[string]interface{}
