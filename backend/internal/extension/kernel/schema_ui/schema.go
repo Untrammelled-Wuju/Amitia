@@ -80,6 +80,7 @@ const (
 	SourceRuntime       BindingSource = "runtime"
 	SourceHost          BindingSource = "host"
 	SourceForm          BindingSource = "form"
+	SourceFormState     BindingSource = "form_state"
 	SourceStatic        BindingSource = "static"
 	SourceStorage       BindingSource = "storage"
 	SourceRuntimeStatus BindingSource = "runtime_status"
@@ -88,7 +89,7 @@ const (
 
 var allowedBindingSources = map[BindingSource]bool{
 	SourceInput: true, SourceState: true, SourceQuery: true,
-	SourceRuntime: true, SourceHost: true, SourceForm: true,
+	SourceRuntime: true, SourceHost: true, SourceForm: true, SourceFormState: true,
 	SourceStatic: true, SourceStorage: true,
 	SourceRuntimeStatus: true, SourceResourceList: true,
 }
@@ -114,26 +115,69 @@ type UICondition struct {
 }
 
 type SchemaUINode struct {
-	ID         string                  `json:"id"`
-	Type       NodeType                `json:"type"`
-	Props      json.RawMessage         `json:"props,omitempty"`
-	Bindings   []SchemaUIBinding       `json:"bindings,omitempty"`
-	Actions    []SchemaUIActionBinding `json:"actions,omitempty"`
-	Visibility []UICondition           `json:"visibility,omitempty"`
-	Children   []SchemaUINode          `json:"children,omitempty"`
+	ID           string                  `json:"id"`
+	Type         NodeType                `json:"type"`
+	Props        json.RawMessage         `json:"props,omitempty"`
+	Bindings     []SchemaUIBinding       `json:"bindings,omitempty"`
+	Actions      []SchemaUIActionBinding `json:"actions,omitempty"`
+	Visibility   []UICondition           `json:"visibility,omitempty"`
+	VisibleWhen  []UICondition           `json:"visibleWhen,omitempty"`
+	DisabledWhen []UICondition           `json:"disabledWhen,omitempty"`
+	DataSource   *SchemaUIBinding        `json:"dataSource,omitempty"`
+	Children     []SchemaUINode          `json:"children,omitempty"`
 }
 
 type SchemaUIDocument struct {
-	SchemaVersion string                   `json:"schemaVersion"`
-	Type          string                   `json:"type"`
-	Title         string                   `json:"title,omitempty"`
-	Layout        map[string]any           `json:"layout,omitempty"`
-	Children      []SchemaUINode           `json:"children"`
-	DataSources   []SchemaUIDataSource     `json:"dataSources,omitempty"`
-	Actions       []SchemaUIDeclaredAction `json:"actions,omitempty"`
-	Theme         *ThemeConfig             `json:"theme,omitempty"`
-	Locale        *LocaleConfig            `json:"locale,omitempty"`
-	Accessibility *AccessibilityConfig     `json:"accessibility,omitempty"`
+	SchemaVersion     string                   `json:"schemaVersion,omitempty"`
+	Version           string                   `json:"version,omitempty"`
+	Type              string                   `json:"type,omitempty"`
+	Title             string                   `json:"title,omitempty"`
+	Layout            map[string]any           `json:"layout,omitempty"`
+	Root              *SchemaUINode            `json:"root,omitempty"`
+	Children          []SchemaUINode           `json:"children,omitempty"`
+	DataSources       []SchemaUIDataSource     `json:"dataSources,omitempty"`
+	Actions           []SchemaUIDeclaredAction `json:"actions,omitempty"`
+	Theme             *ThemeConfig             `json:"theme,omitempty"`
+	Locale            *LocaleConfig            `json:"locale,omitempty"`
+	Accessibility     *AccessibilityConfig     `json:"accessibility,omitempty"`
+	PerformanceBudget *PerformanceBudget       `json:"performanceBudget,omitempty"`
+}
+
+func (d *SchemaUIDocument) effectiveVersion() string {
+	if d == nil {
+		return ""
+	}
+	if strings.TrimSpace(d.SchemaVersion) != "" {
+		return strings.TrimSpace(d.SchemaVersion)
+	}
+	if strings.TrimSpace(d.Version) != "" {
+		return strings.TrimSpace(d.Version)
+	}
+	return SchemaUIVersion
+}
+
+func (d *SchemaUIDocument) rootNodes() []*SchemaUINode {
+	if d == nil {
+		return nil
+	}
+	if d.Root != nil {
+		return []*SchemaUINode{d.Root}
+	}
+	roots := make([]*SchemaUINode, 0, len(d.Children))
+	for i := range d.Children {
+		roots = append(roots, &d.Children[i])
+	}
+	return roots
+}
+
+func (n *SchemaUINode) effectiveVisibility() []UICondition {
+	if n == nil {
+		return nil
+	}
+	if len(n.VisibleWhen) > 0 {
+		return n.VisibleWhen
+	}
+	return n.Visibility
 }
 
 type UITheme string
@@ -269,15 +313,13 @@ func (v *Validator) Validate(doc *SchemaUIDocument) *ValidationResult {
 		result.Errors = append(result.Errors, "nil document")
 		return result
 	}
-	if doc.SchemaVersion != SchemaUIVersion {
-		result.Errors = append(result.Errors, fmt.Sprintf("%v: expected %s got %s", ErrInvalidSchemaVersion, SchemaUIVersion, doc.SchemaVersion))
+	version := doc.effectiveVersion()
+	if version != SchemaUIVersion {
+		result.Errors = append(result.Errors, fmt.Sprintf("%v: expected %s got %s", ErrInvalidSchemaVersion, SchemaUIVersion, version))
 		return result
 	}
-	if doc.Type == "" {
-		result.Errors = append(result.Errors, "missing document type")
-		return result
-	}
-	if len(doc.Children) == 0 {
+	roots := doc.rootNodes()
+	if len(roots) == 0 {
 		result.Errors = append(result.Errors, ErrEmptyDocument.Error())
 		return result
 	}
@@ -311,8 +353,8 @@ func (v *Validator) Validate(doc *SchemaUIDocument) *ValidationResult {
 		}
 	}
 	seenIDs := make(map[string]bool)
-	for i := range doc.Children {
-		v.validateNode(&doc.Children[i], 1, result, seenIDs)
+	for _, root := range roots {
+		v.validateNode(root, 1, result, seenIDs)
 	}
 	if result.NodeCount > v.limits.MaxNodes {
 		result.Errors = append(result.Errors, fmt.Sprintf("%v: %d > %d", ErrTooManyNodes, result.NodeCount, v.limits.MaxNodes))
@@ -349,13 +391,19 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidNodeType, node.Type))
 		return
 	}
-	for _, b := range node.Bindings {
+	validateBinding := func(b SchemaUIBinding) {
 		if !allowedBindingSources[b.Source] {
 			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidBindingSource, b.Source))
 		}
 		if b.Path != "" && (len(b.Path) > v.limits.MaxExpressionLen || !exprAllowedPattern.MatchString(b.Path)) {
 			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidExpression, b.Path))
 		}
+	}
+	for _, b := range node.Bindings {
+		validateBinding(b)
+	}
+	if node.DataSource != nil {
+		validateBinding(*node.DataSource)
 	}
 	for _, a := range node.Actions {
 		if a.ActionID == "" {
@@ -364,11 +412,15 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrActionNotDeclared, a.ActionID))
 		}
 	}
-	for _, condition := range node.Visibility {
-		if condition.Field == "" || len(condition.Field) > v.limits.MaxExpressionLen || !exprAllowedPattern.MatchString(condition.Field) {
-			result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidExpression, condition.Field))
+	validateConditions := func(conditions []UICondition) {
+		for _, condition := range conditions {
+			if condition.Field == "" || len(condition.Field) > v.limits.MaxExpressionLen || !exprAllowedPattern.MatchString(condition.Field) {
+				result.Errors = append(result.Errors, fmt.Sprintf("%v: %s", ErrInvalidExpression, condition.Field))
+			}
 		}
 	}
+	validateConditions(node.effectiveVisibility())
+	validateConditions(node.DisabledWhen)
 	if node.Type == NodeGrid {
 		var props struct {
 			Columns int `json:"columns"`
@@ -453,8 +505,8 @@ func Compile(doc *SchemaUIDocument) (*CompiledDocument, error) {
 	for i := range doc.DataSources {
 		compiled.DataSourceIndex[doc.DataSources[i].ID] = &doc.DataSources[i]
 	}
-	for i := range doc.Children {
-		indexNodes(&doc.Children[i], compiled.NodeIndex)
+	for _, root := range doc.rootNodes() {
+		indexNodes(root, compiled.NodeIndex)
 	}
 	compiled.Hash = computeHash(doc)
 	return compiled, nil
@@ -547,9 +599,10 @@ type RenderedNode struct {
 }
 
 func (r *Renderer) Render(data map[string]any) []RenderedNode {
-	out := make([]RenderedNode, 0, len(r.compiled.Document.Children))
-	for i := range r.compiled.Document.Children {
-		out = append(out, r.renderNode(&r.compiled.Document.Children[i], data))
+	roots := r.compiled.Document.rootNodes()
+	out := make([]RenderedNode, 0, len(roots))
+	for _, root := range roots {
+		out = append(out, r.renderNode(root, data))
 	}
 	return out
 }
@@ -558,7 +611,7 @@ func (r *Renderer) renderNode(node *SchemaUINode, data map[string]any) RenderedN
 	rendered := RenderedNode{
 		ID:      node.ID,
 		Type:    node.Type,
-		Visible: r.evaluateVisibility(node.Visibility, data),
+		Visible: r.evaluateVisibility(node.effectiveVisibility(), data),
 	}
 	if len(node.Props) > 0 {
 		_ = json.Unmarshal(node.Props, &rendered.Props)
@@ -636,7 +689,7 @@ func (r *Renderer) resolveBinding(binding SchemaUIBinding, data map[string]any) 
 		return decodeBindingDefault(binding.Default)
 	case SourceInput:
 		value, ok = lookup(rootFor("input"), binding.Path)
-	case SourceForm:
+	case SourceForm, SourceFormState:
 		value, ok = lookup(rootFor("form", "formState", "form_state"), binding.Path)
 	case SourceState:
 		value, ok = lookup(rootFor("state", "localState", "local_state"), binding.Path)
@@ -663,7 +716,7 @@ func (r *Renderer) resolveBinding(binding SchemaUIBinding, data map[string]any) 
 		// Preserve schema-ui/1 compatibility: input/form/state/query historically
 		// resolved against a flat render context.
 		switch binding.Source {
-		case SourceInput, SourceForm, SourceState, SourceQuery:
+		case SourceInput, SourceForm, SourceFormState, SourceState, SourceQuery:
 			value, ok = lookup(data, binding.Path)
 		}
 	}
