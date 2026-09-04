@@ -48,6 +48,10 @@ func (r *repository) List(q EpisodicListQuery) ([]EpisodicMemory, int64, error) 
 	if q.DecayState != "" {
 		query = query.Where("decay_state = ?", q.DecayState)
 	}
+	if q.Keyword != "" {
+		like := "%" + q.Keyword + "%"
+		query = query.Where("title LIKE ? OR content LIKE ? OR context_before LIKE ? OR context_after LIKE ? OR trigger_keywords LIKE ?", like, like, like, like, like)
+	}
 	var total int64
 	query.Count(&total)
 	if q.Page <= 0 {
