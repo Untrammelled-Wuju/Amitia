@@ -99,6 +99,9 @@ export function useProactiveRules() {
 
   const enabledRuleCount = ref(0);
   const totalRuleCount = ref(0);
+  const queueSummary = ref<Record<string, any>>({});
+  const triggerHistory = ref<any[]>([]);
+  const runtimeLoading = ref(false);
 
   const conversations = ref<any[]>([]);
   const characters = ref<any[]>([]);
@@ -150,7 +153,7 @@ export function useProactiveRules() {
       const params: any = {};
       if (injectedCharacterId?.value)
         params.characterId = injectedCharacterId.value;
-      const res: any = await request.get("/api/proactive/rules", params);
+      const res: any = await request.get("/api/proactive/rules", { params });
       const rawRules = Array.isArray(res) ? res : res?.items || res?.data || [];
       rules.value = rawRules.map((r: any) => ({
         ...r,
@@ -179,11 +182,36 @@ export function useProactiveRules() {
       const sParams: any = {};
       if (injectedCharacterId?.value)
         sParams.characterId = injectedCharacterId.value;
-      const res: any = await request.get("/api/proactive/status", sParams);
+      const res: any = await request.get("/api/proactive/status", { params: sParams });
       schedulerRunning.value = res?.schedulerRunning ?? false;
       enabledRuleCount.value = res?.enabledRuleCount ?? 0;
       totalRuleCount.value = res?.totalRuleCount ?? 0;
     } catch {}
+  }
+
+  async function fetchRuntimeDetails() {
+    runtimeLoading.value = true;
+    try {
+      const [queue, history]: any[] = await Promise.all([
+        request.get("/api/proactive/queue-summary"),
+        request.get("/api/proactive/history", {
+          params: { page: 1, pageSize: 5 },
+        }),
+      ]);
+      queueSummary.value = queue || {};
+      triggerHistory.value = Array.isArray(history)
+        ? history
+        : history?.items || [];
+    } catch {
+      queueSummary.value = {};
+      triggerHistory.value = [];
+    } finally {
+      runtimeLoading.value = false;
+    }
+  }
+
+  async function refreshRuntimeSummary() {
+    await Promise.all([fetchStatus(), fetchRuntimeDetails()]);
   }
 
   async function fetchActiveMsgSettings() {
@@ -193,7 +221,7 @@ export function useProactiveRules() {
         params.characterId = injectedCharacterId.value;
       const res: any = await request.get(
         "/api/companion/active-message/setting",
-        params,
+        { params },
       );
       if (res) Object.assign(activeMsgSettings.value, res);
     } catch {}
@@ -271,7 +299,7 @@ export function useProactiveRules() {
       }
       dialogVisible.value = false;
       await fetchRules();
-      await fetchStatus();
+      await refreshRuntimeSummary();
     } catch (err: any) {
       ElMessage.error(err?.message || "操作失败");
     } finally {
@@ -297,7 +325,7 @@ export function useProactiveRules() {
       await request.delete(`/api/proactive/rules/${row.id}`);
       ElMessage.success("规则已删除");
       await fetchRules();
-      await fetchStatus();
+      await refreshRuntimeSummary();
     } catch (err: any) {
       ElMessage.error(err?.message || "删除失败");
     }
@@ -306,7 +334,7 @@ export function useProactiveRules() {
   async function testRule(row: ProactiveRule) {
     try {
       const res: any = await request.post(
-        `/api/proactive/rules/${row.id}/test`,
+        `/api/proactive/rules/test/${row.id}`,
       );
       testResult.value = res;
       testVisible.value = true;
@@ -320,7 +348,7 @@ export function useProactiveRules() {
       await request.post(`/api/proactive/rules/${row.id}/trigger`);
       ElMessage.success("消息已发送");
       await fetchRules();
-      await fetchStatus();
+      await refreshRuntimeSummary();
     } catch (err: any) {
       ElMessage.error(err?.message || "发送失败");
     }
@@ -341,10 +369,10 @@ export function useProactiveRules() {
       const resetPayload: any = {};
       if (injectedCharacterId?.value)
         resetPayload.characterId = injectedCharacterId.value;
-      await request.post("/api/proactive/rules/reset-presets", resetPayload);
+      await request.post("/api/proactive/presets/reset", resetPayload);
       ElMessage.success("已恢复为系统预设规则");
       await fetchRules();
-      await fetchStatus();
+      await refreshRuntimeSummary();
     } catch (err: any) {
       if (err !== "cancel") ElMessage.error(err?.message || "恢复失败");
     } finally {
@@ -372,7 +400,7 @@ export function useProactiveRules() {
 
   onMounted(() => {
     fetchRules();
-    fetchStatus();
+    refreshRuntimeSummary();
     fetchConversations();
     fetchCharacters();
     fetchActiveMsgSettings();
@@ -392,6 +420,9 @@ export function useProactiveRules() {
     savingSettings,
     enabledRuleCount,
     totalRuleCount,
+    queueSummary,
+    triggerHistory,
+    runtimeLoading,
     conversations,
     characters,
     resettingPresets,
@@ -410,5 +441,7 @@ export function useProactiveRules() {
     resetPresetRules,
     saveActiveMsgSettings,
     fetchStatus,
+    fetchRuntimeDetails,
+    refreshRuntimeSummary,
   };
 }

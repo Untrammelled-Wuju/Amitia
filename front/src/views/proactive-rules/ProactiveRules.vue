@@ -32,7 +32,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <template #header>
         <div class="card-header-row">
           <span class="section-title">调度状态</span>
-          <el-button type="primary" size="small" @click="fetchStatus"
+          <el-button type="primary" size="small" :loading="runtimeLoading" @click="refreshRuntimeSummary"
             >刷新</el-button
           >
         </div>
@@ -52,7 +52,43 @@ SPDX-License-Identifier: AGPL-3.0-only
           <span class="status-label">规则总数</span>
           <span class="status-value">{{ totalRuleCount }}</span>
         </div>
+        <div class="status-item">
+          <span class="status-label">运行队列</span>
+          <span class="status-value">{{ queueSummary.depth ?? queueSummary.pendingCount ?? 0 }}</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">24h 失败</span>
+          <span class="status-value">{{ queueSummary.recentFailures ?? 0 }}</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">背压</span>
+          <el-tag :type="queueSummary.backpressure ? 'danger' : 'success'" size="small">
+            {{ queueSummary.backpressure ? "已触发" : "正常" }}
+          </el-tag>
+        </div>
       </div>
+    </el-card>
+
+    <el-card shadow="never" class="section-card">
+      <template #header>
+        <span class="section-title">最近运行历史</span>
+      </template>
+      <el-empty v-if="triggerHistory.length === 0" description="暂无运行历史" :image-size="56" />
+      <el-table v-else :data="triggerHistory" size="small">
+        <el-table-column prop="title" label="任务" min-width="160">
+          <template #default="{ row }">{{ row.title || row.triggerType || "主动消息" }}</template>
+        </el-table-column>
+        <el-table-column prop="triggerType" label="类型" width="130" />
+        <el-table-column prop="state" label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.state === 'success' || row.state === 'sent' ? 'success' : row.state === 'failed' ? 'danger' : 'info'" size="small">
+              {{ row.state || "unknown" }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="createdAt" label="时间" min-width="160" />
+        <el-table-column prop="lastError" label="错误" min-width="180" show-overflow-tooltip />
+      </el-table>
     </el-card>
 
     <RuleListTable
@@ -104,6 +140,9 @@ const {
   savingSettings,
   enabledRuleCount,
   totalRuleCount,
+  queueSummary,
+  triggerHistory,
+  runtimeLoading,
   conversations,
   characters,
   resettingPresets,
@@ -120,7 +159,7 @@ const {
   triggerRule,
   resetPresetRules,
   saveActiveMsgSettings,
-  fetchStatus,
+  refreshRuntimeSummary,
 } = useProactiveRules();
 </script>
 
@@ -159,7 +198,8 @@ const {
 
 .status-grid {
   display: flex;
-  gap: 32px;
+  gap: 20px 32px;
+  flex-wrap: wrap;
 }
 
 .status-item {
