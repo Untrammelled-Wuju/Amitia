@@ -58,9 +58,40 @@ class _SandboxWebProviderHostState
   String get _characterId => _contextValue('characterId', 'character');
   String get _conversationId =>
       _contextValue('conversationId', 'conversation');
+
+  String _surfaceRoleFor(Map<String, dynamic> runtimeContext) {
+    const roles = <String>{
+      'header',
+      'status',
+      'sidebar',
+      'message',
+      'composer',
+      'main',
+      'overlay',
+    };
+    String normalize(dynamic value) => value?.toString().trim().toLowerCase() ?? '';
+
+    final explicit = normalize(runtimeContext['surfaceRole']);
+    if (roles.contains(explicit)) return explicit;
+    final surface = runtimeContext['surface'];
+    if (surface is Map) {
+      final nested = normalize(surface['role']);
+      if (roles.contains(nested)) return nested;
+    }
+    final surfaceText = normalize(surface);
+    if (roles.contains(surfaceText)) return surfaceText;
+    for (final role in roles) {
+      if (surfaceText.startsWith('$role-') || surfaceText.startsWith('$role.')) {
+        return role;
+      }
+    }
+    return 'main';
+  }
+
+  String get _surfaceRole => _surfaceRoleFor(widget.context);
   String get _scopeIdentity =>
       '${widget.provider.providerId}:${widget.provider.generation}:'
-      '$_characterId:$_conversationId';
+      '$_characterId:$_conversationId:$_surfaceRole';
 
   @override
   void initState() {
@@ -101,7 +132,8 @@ class _SandboxWebProviderHostState
 
     return '${value.provider.providerId}:${value.provider.generation}:'
         '${read('characterId', 'character')}:'
-        '${read('conversationId', 'conversation')}';
+        '${read('conversationId', 'conversation')}:'
+        '${_surfaceRoleFor(value.context)}';
   }
 
   Future<void> _restart() async {
@@ -137,8 +169,8 @@ class _SandboxWebProviderHostState
       final service = ref.read(extensionServiceProvider);
       final session = await service.createWebUISession({
         'contributionId': contributionId,
-        'surface': 'main',
-        'surfaceRole': 'main',
+        'surface': _surfaceRole,
+        'surfaceRole': _surfaceRole,
         'host': 'mobile',
         'platform': currentUIPlatform(),
         'characterId': _characterId,
@@ -308,12 +340,17 @@ class _SandboxWebProviderHostState
       'height': size.height,
       'devicePixelRatio': MediaQuery.devicePixelRatioOf(context),
       'breakpoint': size.width < 600 ? 'xs' : (size.width < 1024 ? 'md' : 'lg'),
-      'surfaceRole': widget.context['surface'] ?? 'main',
+      'surfaceRole': _surfaceRole,
+    };
+    final hostContext = <String, dynamic>{
+      ...widget.context,
+      'surfaceRole': _surfaceRole,
+      if (widget.context['surface'] == null) 'surface': _surfaceRole,
     };
     try {
       await target.runJavaScript('''
         window.dispatchEvent(new CustomEvent('amitia:host-context', {
-          detail:${jsonEncode(widget.context)}
+          detail:${jsonEncode(hostContext)}
         }));
         window.dispatchEvent(new CustomEvent('amitia:host-theme', {
           detail:${jsonEncode(themePayload)}

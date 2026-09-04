@@ -39,10 +39,66 @@ class MobileExtensionSlot extends ConsumerWidget {
   final String? declaredBySlotId;
   final String? declaredByOwner;
 
+  String? _normalizedLayout(dynamic value) {
+    final layout = value?.toString().trim().toLowerCase() ?? '';
+    const allowed = <String>{'inline', 'stack', 'row', 'grid', 'tabs', 'panel', 'drawer', 'modal'};
+    return allowed.contains(layout) ? layout : null;
+  }
+
+  String? _normalizedFallback(dynamic value) {
+    final mode = value?.toString().trim().toLowerCase() ?? '';
+    const allowed = <String>{'none', 'skeleton', 'empty', 'default'};
+    return allowed.contains(mode) ? mode : null;
+  }
+
+  String? _normalizedSurfaceRole(dynamic value) {
+    final role = value?.toString().trim().toLowerCase() ?? '';
+    const allowed = <String>{'header', 'status', 'sidebar', 'message', 'composer', 'main', 'overlay'};
+    return allowed.contains(role) ? role : null;
+  }
+
+  String _resolveSurfaceRole() {
+    final explicit = _normalizedSurfaceRole(context['surfaceRole']);
+    if (explicit != null) return explicit;
+    final surface = context['surface'];
+    if (surface is Map) {
+      final nested = _normalizedSurfaceRole(surface['role']);
+      if (nested != null) return nested;
+    }
+    final text = surface?.toString().trim().toLowerCase() ?? '';
+    for (final role in const ['header', 'status', 'sidebar', 'message', 'composer', 'overlay']) {
+      if (text == role || text.startsWith('$role-') || text.startsWith('$role.')) return role;
+    }
+    return 'main';
+  }
+
+  Widget _fallbackWidget(BuildContext context, String mode) {
+    switch (mode) {
+      case 'skeleton':
+        return Container(
+          height: 48,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(8),
+          ),
+        );
+      case 'default':
+        return fallback ?? const SizedBox.shrink();
+      case 'empty':
+      case 'none':
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final requestedFallback = _normalizedFallback(this.context['slotFallback']);
     final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
-    if (snapshot == null) return fallback ?? const SizedBox.shrink();
+    if (snapshot == null) {
+      return _fallbackWidget(context, requestedFallback ?? (fallback == null ? 'none' : 'default'));
+    }
     final conversationId = (this.context['conversationId'] ?? '')
         .toString()
         .trim();
@@ -57,7 +113,12 @@ class MobileExtensionSlot extends ConsumerWidget {
           sessionState: runtimeState,
           slotId: slotId,
         );
-    if (slot == null) return fallback ?? const SizedBox.shrink();
+    if (slot == null) {
+      return _fallbackWidget(context, requestedFallback ?? (fallback == null ? 'none' : 'default'));
+    }
+    final fallbackMode = requestedFallback ?? _normalizedFallback(slot.fallbackPolicy) ?? (fallback == null ? 'none' : 'default');
+    final layout = _normalizedLayout(this.context['slotLayout']) ?? _normalizedLayout(slot.layout) ?? 'stack';
+    final surfaceRole = _resolveSurfaceRole();
     if (declaredBySlotId != null || declaredByOwner != null) {
       if (slot.parentSlotId != declaredBySlotId ||
           slot.ownerExtension != declaredByOwner) {
@@ -68,9 +129,18 @@ class MobileExtensionSlot extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
+    final inheritedSurface = this.context['surface'];
     final slotContext = <String, dynamic>{
       ...this.context,
       'slotScope': slot.scope,
+      'surfaceRole': surfaceRole,
+      if (inheritedSurface is Map)
+        'surface': <String, dynamic>{
+          ...inheritedSurface.cast<String, dynamic>(),
+          'role': surfaceRole,
+        }
+      else if (inheritedSurface == null)
+        'surface': surfaceRole,
       if (conversationId.isNotEmpty) 'sessionId': conversationId,
     };
     final dynamicContributions = MobileDynamicRuntime.slotContributions(
@@ -103,7 +173,7 @@ class MobileExtensionSlot extends ConsumerWidget {
           )
           .toList(growable: false);
     }
-    if (contributions.isEmpty) return fallback ?? const SizedBox.shrink();
+    if (contributions.isEmpty) return _fallbackWidget(context, fallbackMode);
 
     final children = contributions.map((item) {
       final matched = item.matched ??
@@ -124,7 +194,7 @@ class MobileExtensionSlot extends ConsumerWidget {
       );
     }).toList(growable: false);
 
-    return switch (slot.layout) {
+    return switch (layout) {
       'row' || 'inline' => Wrap(
         spacing: 8,
         runSpacing: 8,
@@ -137,6 +207,18 @@ class MobileExtensionSlot extends ConsumerWidget {
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
         children: children,
+      ),
+      'tabs' => Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children.map((child) => Expanded(child: child)).toList(growable: false),
+      ),
+      'panel' => Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
       ),
       _ => Column(
         mainAxisSize: MainAxisSize.min,

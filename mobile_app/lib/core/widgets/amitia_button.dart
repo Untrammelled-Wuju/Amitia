@@ -16,6 +16,8 @@ class AmitiaButton extends StatelessWidget {
   final IconData? icon;
   final double? width;
   final double height;
+  final bool outlined;
+  final bool round;
 
   AmitiaButton({
     super.key,
@@ -28,6 +30,8 @@ class AmitiaButton extends StatelessWidget {
     this.icon,
     this.width,
     double? height,
+    this.outlined = false,
+    this.round = false,
   }) : height = height ?? AppSpacing.buttonHeight;
 
   @override
@@ -57,6 +61,11 @@ class AmitiaButton extends StatelessWidget {
       bgColor = onPressed == null ? context.accentPrimary.withValues(alpha: 0.4) : context.accentPrimary;
       fgColor = Colors.white;
     }
+    if (outlined) {
+      fgColor = isDestructive ? context.error : context.accentPrimary;
+      bgColor = Colors.transparent;
+      if (onPressed == null) fgColor = fgColor.withValues(alpha: 0.4);
+    }
 
     final button = GestureDetector(
       onTap: onPressed,
@@ -69,7 +78,8 @@ class AmitiaButton extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(radius),
+          borderRadius: BorderRadius.circular(round ? effectiveHeight / 2 : radius),
+          border: outlined ? Border.all(color: fgColor, width: context.uiComponents.borderWidth) : null,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -157,6 +167,9 @@ class AmitiaTextField extends StatelessWidget {
   final FocusNode? focusNode;
   final ValueChanged<String>? onChanged;
   final TextInputType? keyboardType;
+  final int? maxLength;
+  final bool showCounter;
+  final String? errorText;
 
   const AmitiaTextField({
     super.key,
@@ -171,6 +184,9 @@ class AmitiaTextField extends StatelessWidget {
     this.focusNode,
     this.onChanged,
     this.keyboardType,
+    this.maxLength,
+    this.showCounter = false,
+    this.errorText,
   });
 
   @override
@@ -199,11 +215,16 @@ class AmitiaTextField extends StatelessWidget {
       onTap: onTap,
       onChanged: onChanged,
       keyboardType: keyboardType,
+      maxLength: maxLength,
+      buildCounter: showCounter
+          ? null
+          : (_, {required currentLength, required isFocused, maxLength}) => null,
       style: AppTypography.body(context).copyWith(
         fontSize: number('fontSize', context.uiTypography.bodySize),
       ),
       decoration: InputDecoration(
         hintText: hintText,
+        errorText: errorText,
         hintStyle: TextStyle(color: context.textTertiary),
         prefixIcon: prefixIcon,
         suffixIcon: suffixIcon,

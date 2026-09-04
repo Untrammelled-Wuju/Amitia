@@ -1253,6 +1253,7 @@ const List<String> _codeLanguages = [
 
 class AmitiaChatInput extends StatefulWidget {
   final ValueChanged<String> onSend;
+  final TextEditingController? controller;
   final String? recipientName;
   final FutureOr<void> Function()? onPickFile;
   final FutureOr<void> Function(bool camera)? onPickImage;
@@ -1268,6 +1269,7 @@ class AmitiaChatInput extends StatefulWidget {
   const AmitiaChatInput({
     super.key,
     required this.onSend,
+    this.controller,
     this.recipientName,
     this.onPickFile,
     this.onPickImage,
@@ -1286,7 +1288,8 @@ class AmitiaChatInput extends StatefulWidget {
 }
 
 class _AmitiaChatInputState extends State<AmitiaChatInput> {
-  final _controller = TextEditingController();
+  late TextEditingController _controller;
+  late bool _ownsController;
   final _inputFocusNode = FocusNode();
   bool _hasText = false;
   bool _isInputFocused = false;
@@ -1295,7 +1298,29 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
   @override
   void initState() {
     super.initState();
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? TextEditingController();
+    _hasText = _controller.text.trim().isNotEmpty;
+    _controller.addListener(_syncControllerText);
     _inputFocusNode.addListener(_syncInputFocus);
+  }
+
+  @override
+  void didUpdateWidget(covariant AmitiaChatInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    _controller.removeListener(_syncControllerText);
+    if (_ownsController) _controller.dispose();
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? TextEditingController();
+    _hasText = _controller.text.trim().isNotEmpty;
+    _controller.addListener(_syncControllerText);
+  }
+
+  void _syncControllerText() {
+    final hasText = _controller.text.trim().isNotEmpty;
+    if (hasText == _hasText || !mounted) return;
+    setState(() => _hasText = hasText);
   }
 
   void _syncInputFocus() {
@@ -1304,9 +1329,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
 
   @override
   void dispose() {
+    _controller.removeListener(_syncControllerText);
     _inputFocusNode.removeListener(_syncInputFocus);
     _inputFocusNode.dispose();
-    _controller.dispose();
+    if (_ownsController) _controller.dispose();
     super.dispose();
   }
 
@@ -1808,7 +1834,6 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                   minLines: 1,
                   maxLines: 4,
                   textCapitalization: TextCapitalization.sentences,
-                  onChanged: (value) => setState(() => _hasText = value.trim().isNotEmpty),
                   onSubmitted: (_) => _send(),
                   style: AppTypography.bodySmall(context).copyWith(fontSize: 16),
                   decoration: InputDecoration(

@@ -92,6 +92,7 @@ class AmitiaEmptyState extends StatelessWidget {
   final String? subtitle;
   final String? actionText;
   final VoidCallback? onAction;
+  final double iconSize;
 
   const AmitiaEmptyState({
     super.key,
@@ -100,6 +101,7 @@ class AmitiaEmptyState extends StatelessWidget {
     this.subtitle,
     this.actionText,
     this.onAction,
+    this.iconSize = 56,
   });
 
   @override
@@ -110,7 +112,7 @@ class AmitiaEmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 56, color: context.textTertiary),
+            Icon(icon, size: iconSize, color: context.textTertiary),
             SizedBox(height: AppSpacing.md),
             Text(title, style: AppTypography.cardTitle(context)),
             if (subtitle != null) ...[
