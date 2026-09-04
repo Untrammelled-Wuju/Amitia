@@ -26,15 +26,18 @@ func currentPackageHostVersion() string {
 }
 
 func normalizePackagePlatform(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "windows", "win32", "win64":
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch {
+	case normalized == "windows" || normalized == "win32" || normalized == "win64" ||
+		strings.HasPrefix(normalized, "windows-"):
 		return "windows"
-	case "darwin", "macos", "osx", "mac":
+	case normalized == "darwin" || normalized == "macos" || normalized == "osx" || normalized == "mac" ||
+		strings.HasPrefix(normalized, "macos-") || strings.HasPrefix(normalized, "darwin-"):
 		return "darwin"
-	case "linux":
+	case normalized == "linux" || strings.HasPrefix(normalized, "linux-"):
 		return "linux"
 	default:
-		return strings.ToLower(strings.TrimSpace(value))
+		return normalized
 	}
 }
 
@@ -143,6 +146,7 @@ func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manife
 	if preview == nil {
 		return
 	}
+	devMode := packageDevelopmentModeEnabled()
 	for moduleIndex, mod := range manifest.Modules {
 		for contributionIndex, contribution := range mod.Contributions {
 			if strings.TrimSpace(string(contribution.Kind)) != "game_plugin" {
@@ -153,7 +157,7 @@ func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manife
 				continue // Manifest validation owns malformed contribution specs.
 			}
 			policy, code, policyErr := packageGamePluginNetworkPolicy(spec.Network, contribution.RequiredPermissions)
-			if policyErr == nil && validateHost != nil {
+			if policyErr == nil && validateHost != nil && !devMode {
 				if hostErr := validateHost(policy); hostErr != nil {
 					code = "game_plugin_network_sandbox_unavailable"
 					policyErr = fmt.Errorf("game plugin network sandbox prerequisites are unavailable on this host: %w", hostErr)
