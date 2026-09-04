@@ -209,7 +209,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     await _run('备份', () async {
       final result = await ref.read(backendServiceProvider).post<Map<String, dynamic>>('/api/storage/backups');
       if (result?['ok'] != true) throw StateError((result?['error'] ?? '备份未完成').toString());
-      _show('本地备份已创建');
+      _show('当前业务 Core 备份已创建');
       await _loadBackups();
     });
   }
@@ -235,8 +235,8 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('恢复本地备份'),
-        content: Text('将用「$name」覆盖当前本地数据库。是否继续？'),
+        title: const Text('恢复 Core 备份'),
+        content: Text('将用「$name」覆盖当前业务 Core 的数据库。Local 模式对应本机 Core，Cloud 模式对应 Cloud Core。是否继续？'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('恢复')),
@@ -299,7 +299,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 actions: [
                   ('导出数据', Icons.file_upload_outlined, _exportData),
                   ('导入数据', Icons.file_download_outlined, _importData),
-                  ('本地备份', Icons.save_outlined, _createBackup),
+                  ('Core 备份', Icons.save_outlined, _createBackup),
                   ('迁移检查', Icons.sync_alt_outlined, _checkMigrations),
                   ('清理缓存', Icons.cleaning_services_outlined, _cleanupTemp),
                   ('导出配置', Icons.settings_backup_restore_outlined, _exportConfig),
@@ -307,10 +307,15 @@ class _BackupPageState extends ConsumerState<BackupPage> {
                 ],
               ),
               SizedBox(height: AppSpacing.sectionGap),
+              Text(
+                '备份接口作用于当前业务 Core：Local 模式为本机 Core，Cloud 模式为 Cloud Core；不会把云端数据库误标为当前设备本地数据库。',
+                style: AppTypography.body(context).copyWith(color: context.textTertiary),
+              ),
+              SizedBox(height: AppSpacing.md),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('本地备份', style: AppTypography.sectionTitle(context)),
+                  Text('Core 备份', style: AppTypography.sectionTitle(context)),
                   IconButton(icon: Icon(Icons.refresh, size: 20, color: context.textTertiary), onPressed: _loadingBackups ? null : _loadBackups),
                 ],
               ),

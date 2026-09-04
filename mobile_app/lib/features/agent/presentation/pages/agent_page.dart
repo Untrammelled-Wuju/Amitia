@@ -69,14 +69,16 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetCtx) {
         return _CreateTaskSheet(
-          onCreate: (title, desc, abilities, stepCount) {
-            Navigator.pop(sheetCtx);
-            ref.read(agentTasksProvider.notifier).createTask(
+          onCreate: (taskDefinitionId, title, desc, abilities, stepCount) async {
+            await ref.read(agentTasksProvider.notifier).createTask(
+              taskDefinitionId: taskDefinitionId,
               title: title,
               description: desc,
               abilities: abilities,
               stepCount: stepCount,
             );
+            if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+            if (mounted) amitiaSnackBar(context, '任务已提交到选定的 TaskDefinition');
           },
         );
       },
@@ -401,20 +403,22 @@ const Map<String, List<String>> _quickTaskAbilities = {
   '信息搜索': ['Web 搜索'],
 };
 
-class _CreateTaskSheet extends StatefulWidget {
-  final void Function(String title, String description, List<String> abilities, int stepCount) onCreate;
+class _CreateTaskSheet extends ConsumerStatefulWidget {
+  final Future<void> Function(String taskDefinitionId, String title, String description, List<String> abilities, int stepCount) onCreate;
 
   const _CreateTaskSheet({required this.onCreate});
 
   @override
-  State<_CreateTaskSheet> createState() => _CreateTaskSheetState();
+  ConsumerState<_CreateTaskSheet> createState() => _CreateTaskSheetState();
 }
 
-class _CreateTaskSheetState extends State<_CreateTaskSheet> {
+class _CreateTaskSheetState extends ConsumerState<_CreateTaskSheet> {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final List<String> _abilities = [];
   int _stepCount = 3;
+  String? _taskDefinitionId;
+  bool _submitting = false;
   _QuickTask? _selectedQuickTask;
 
   final _quickTasks = [
@@ -465,15 +469,27 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
     });
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_submitting) return;
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
       amitiaSnackBar(context, '请输入任务名称');
       return;
     }
+    if ((_taskDefinitionId ?? '').isEmpty) {
+      amitiaSnackBar(context, '请选择实际执行的 Kernel Task 定义');
+      return;
+    }
     final desc = _descCtrl.text.trim();
     final abilities = _abilities.isEmpty ? ['文件系统'] : List<String>.from(_abilities);
-    widget.onCreate(title, desc, abilities, _stepCount);
+    setState(() => _submitting = true);
+    try {
+      await widget.onCreate(_taskDefinitionId!, title, desc, abilities, _stepCount);
+    } catch (error) {
+      if (mounted) amitiaSnackBar(context, '任务创建失败：$error');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   Widget _buildQuickTaskSelector() {
@@ -574,6 +590,7 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final definitionsAsync = ref.watch(agentTaskDefinitionsProvider);
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(20, 0, 20, 20).copyWith(bottom: MediaQuery.viewInsetsOf(context).bottom + 20),
@@ -597,6 +614,33 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
               Text('新建任务', style: AppTypography.pageTitle(context)),
               const SizedBox(height: 16),
               _buildQuickTaskSelector(),
+              const SizedBox(height: 16),
+              Text('执行定义', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              definitionsAsync.when(
+                loading: () => const LinearProgressIndicator(),
+                error: (error, _) => Text('任务定义加载失败：$error', style: AppTypography.caption(context).copyWith(color: context.error)),
+                data: (definitions) {
+                  if (definitions.isEmpty) {
+                    return Text('当前没有可执行的 Kernel Task 定义', style: AppTypography.caption(context).copyWith(color: context.warning));
+                  }
+                  if (_taskDefinitionId != null && !definitions.any((item) => item.taskId == _taskDefinitionId)) {
+                    _taskDefinitionId = null;
+                  }
+                  return DropdownButtonFormField<String>(
+                    value: _taskDefinitionId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(hintText: '选择真正要执行的 TaskDefinition'),
+                    items: definitions
+                        .map((item) => DropdownMenuItem<String>(
+                              value: item.taskId,
+                              child: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ))
+                        .toList(growable: false),
+                    onChanged: (value) => setState(() => _taskDefinitionId = value),
+                  );
+                },
+              ),
               const SizedBox(height: 16),
               Text('任务名称', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
@@ -667,10 +711,10 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
               ),
               const SizedBox(height: 24),
               AmitiaButton(
-                label: '开始任务',
+                label: _submitting ? '提交中…' : '开始任务',
                 icon: Icons.play_arrow,
                 isFullWidth: true,
-                onPressed: _submit,
+                onPressed: _submitting ? null : _submit,
               ),
             ],
           ),
