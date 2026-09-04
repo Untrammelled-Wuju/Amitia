@@ -298,7 +298,7 @@ func (h *psycheSnapshotHandler) loadBeliefSnapshots(characterID string) []belief
 		Value      string
 		Confidence float64
 	}
-	err := h.db.Table("memories").Select("key, value, confidence").Where("character_id = ? AND confidence > 0", characterID).Order("importance DESC, updated_at DESC").Limit(10).Scan(&rows).Error
+	err := h.db.Table("memories").Select("key, value, confidence").Where("character_id = ? AND confidence > 0 AND COALESCE(allow_context_use, 1) = 1", characterID).Order("importance DESC, updated_at DESC").Limit(10).Scan(&rows).Error
 	if err != nil || len(rows) == 0 {
 		return []beliefSnapshotEntry{}
 	}

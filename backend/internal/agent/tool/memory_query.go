@@ -242,7 +242,7 @@ func getMemoryByTitle(callCtx context.Context, execCtx ToolExecutionContext, arg
 	var matches []candidate
 	seenIDs := make(map[string]struct{})
 	if toolDB != nil {
-		rows, err := toolDB.QueryContext(callCtx, `SELECT id, key, value, created_at FROM memories WHERE character_id = ? AND lower(trim(key)) = lower(trim(?)) ORDER BY updated_at DESC, created_at DESC LIMIT 20`, execCtx.CharacterID, title)
+		rows, err := toolDB.QueryContext(callCtx, `SELECT id, key, value, created_at FROM memories WHERE character_id = ? AND COALESCE(allow_context_use, 1) = 1 AND lower(trim(key)) = lower(trim(?)) ORDER BY updated_at DESC, created_at DESC LIMIT 20`, execCtx.CharacterID, title)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {

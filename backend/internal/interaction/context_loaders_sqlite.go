@@ -248,7 +248,7 @@ func (l *BeliefContextLoader) Load(ctx context.Context, scope InteractionScope, 
 		Value      string
 		Confidence float64
 	}
-	err := l.db.WithContext(ctx).Table("memories").Select("key, value, confidence").Where("character_id = ?", scope.CharacterID).Order("importance DESC, updated_at DESC").Limit(5).Scan(&rows).Error
+	err := l.db.WithContext(ctx).Table("memories").Select("key, value, confidence").Where("character_id = ? AND COALESCE(allow_context_use, 1) = 1", scope.CharacterID).Order("importance DESC, updated_at DESC").Limit(5).Scan(&rows).Error
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}

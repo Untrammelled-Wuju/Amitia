@@ -113,6 +113,9 @@ func mapMemoryToTier(result memory.HybridSearchResult) promptir.MemoryInjectTier
 }
 
 func isMemoryBlocked(m memory.Memory) bool {
+	if m.AllowContextUse != nil && !*m.AllowContextUse {
+		return true
+	}
 	status := strings.ToLower(strings.TrimSpace(m.VerifiedStatus))
 	switch status {
 	case "deleted", "invalidated", "expired", "rejected", "tombstone", "tombstoned", "inactive":
