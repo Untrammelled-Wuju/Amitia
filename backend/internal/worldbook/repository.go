@@ -3,6 +3,8 @@
 package worldbook
 
 import (
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -38,9 +40,12 @@ func (r *repository) List(q WorldBookListQuery) ([]WorldBookEntry, int64, error)
 	if q.CharacterID != "" {
 		query = query.Where("character_id = ? OR character_id = ''", q.CharacterID)
 	}
-	if q.Keyword != "" {
-		like := "%" + q.Keyword + "%"
-		query = query.Where("match_pattern LIKE ? OR inject_content LIKE ?", like, like)
+	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
+		like := "%" + strings.ToLower(keyword) + "%"
+		query = query.Where(
+			"LOWER(match_pattern) LIKE ? OR LOWER(inject_content) LIKE ? OR LOWER(match_type) LIKE ? OR LOWER(match_scope) LIKE ?",
+			like, like, like, like,
+		)
 	}
 	var total int64
 	query.Count(&total)

@@ -3,6 +3,8 @@
 package profile
 
 import (
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
@@ -39,9 +41,12 @@ func (r *repository) List(q ProfileListQuery) ([]UserProfile, int64, error) {
 	if q.Category != "" {
 		query = query.Where("category = ?", q.Category)
 	}
-	if q.Keyword != "" {
-		like := "%" + q.Keyword + "%"
-		query = query.Where("attribute_name LIKE ? OR attribute_value LIKE ?", like, like)
+	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
+		like := "%" + strings.ToLower(keyword) + "%"
+		query = query.Where(
+			"LOWER(attribute_name) LIKE ? OR LOWER(attribute_value) LIKE ? OR LOWER(category) LIKE ? OR LOWER(source) LIKE ?",
+			like, like, like, like,
+		)
 	}
 	var total int64
 	query.Count(&total)

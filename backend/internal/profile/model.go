@@ -79,10 +79,10 @@ type UpdateProfileRequest struct {
 }
 
 type ProfileListQuery struct {
-	Keyword     string `form:"keyword"`
 	UserID      string `form:"userId"`
 	CharacterID string `form:"characterId"`
 	Category    string `form:"category"`
+	Keyword     string `form:"keyword"`
 	Page        int    `form:"page"`
 	PageSize    int    `form:"pageSize"`
 }
