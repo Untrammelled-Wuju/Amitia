@@ -34,6 +34,7 @@ type Memory struct {
 	ArchivedAt            *string `gorm:"column:archived_at" json:"archivedAt"`
 	SupersededBy          string  `gorm:"column:superseded_by;default:''" json:"supersededBy"`
 	SensitivityLevel      string  `gorm:"column:sensitivity_level;default:internal" json:"sensitivityLevel"`
+	AllowContextUse       *bool   `gorm:"column:allow_context_use;default:1" json:"allowContextUse"`
 	AllowProactiveMention bool    `gorm:"column:allow_proactive_mention;default:1" json:"allowProactiveMention"`
 	RequiresConfirmation  bool    `gorm:"column:requires_confirmation;default:0" json:"requiresConfirmation"`
 	Version               int     `gorm:"column:version;default:1" json:"version"`
@@ -60,6 +61,7 @@ type CreateMemoryRequest struct {
 	VerifiedStatus        string  `json:"verifiedStatus"`
 	Source                string  `json:"source"`
 	SensitivityLevel      string  `json:"sensitivityLevel"`
+	AllowContextUse       *bool   `json:"allowContextUse"`
 	AllowProactiveMention bool    `json:"allowProactiveMention"`
 	RequiresConfirmation  bool    `json:"requiresConfirmation"`
 	Scope                 string  `json:"scope"`
@@ -81,6 +83,7 @@ type UpdateMemoryRequest struct {
 	EntityType            *string  `json:"entityType"`
 	VerifiedStatus        *string  `json:"verifiedStatus"`
 	SensitivityLevel      *string  `json:"sensitivityLevel"`
+	AllowContextUse       *bool    `json:"allowContextUse"`
 	AllowProactiveMention *bool    `json:"allowProactiveMention"`
 	RequiresConfirmation  *bool    `json:"requiresConfirmation"`
 	Scope                 *string  `json:"scope"`
@@ -336,6 +339,7 @@ type MemoryRecordV1 struct {
 	LastVerifiedAt        *string `json:"lastVerifiedAt,omitempty"`
 	ExpiresAt             *string `json:"expiresAt,omitempty"`
 	SensitivityLevel      string  `json:"sensitivityLevel"`
+	AllowContextUse       *bool   `json:"allowContextUse"`
 	AllowProactiveMention bool    `json:"allowProactiveMention"`
 	RequiresConfirmation  bool    `json:"requiresConfirmation"`
 	Version               int     `json:"version"`

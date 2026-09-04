@@ -40,6 +40,7 @@ type canonicalCreateRequest struct {
 	VerifiedStatus string
 
 	SensitivityLevel      string
+	AllowContextUse       *bool
 	AllowProactiveMention bool
 	RequiresConfirmation  bool
 
@@ -135,6 +136,8 @@ type memorySemanticSnapshot struct {
 
 	SensitivityLevel string `json:"sensitivityLevel"`
 
+	AllowContextUse bool `json:"allowContextUse"`
+
 	AllowProactiveMention bool `json:"allowProactiveMention"`
 
 	RequiresConfirmation bool `json:"requiresConfirmation"`
@@ -186,6 +189,11 @@ func (s *service) createCanonicalMemory(req canonicalCreateRequest) (*Memory, er
 	verifiedStatus := req.VerifiedStatus
 	if verifiedStatus == "" {
 		verifiedStatus = "unverified"
+	}
+
+	allowContextUse := true
+	if req.AllowContextUse != nil {
+		allowContextUse = *req.AllowContextUse
 	}
 
 	scope := req.Scope
@@ -268,6 +276,7 @@ func (s *service) createCanonicalMemory(req canonicalCreateRequest) (*Memory, er
 			SourceConvID:          req.SourceConvID,
 			VerifiedStatus:        verifiedStatus,
 			SensitivityLevel:      req.SensitivityLevel,
+			AllowContextUse:       &allowContextUse,
 			AllowProactiveMention: req.AllowProactiveMention,
 			RequiresConfirmation:  req.RequiresConfirmation,
 			RetentionLevel:        retentionLevel,
@@ -509,6 +518,7 @@ func computeMemorySnapshotHashCanonical(m *Memory) string {
 		SourceConvID:          m.SourceConvID,
 		VerifiedStatus:        m.VerifiedStatus,
 		SensitivityLevel:      m.SensitivityLevel,
+		AllowContextUse:       memoryContextUseAllowed(*m),
 		AllowProactiveMention: m.AllowProactiveMention,
 		RequiresConfirmation:  m.RequiresConfirmation,
 		RetentionLevel:        m.RetentionLevel,

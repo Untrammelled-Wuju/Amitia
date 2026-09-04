@@ -15,6 +15,9 @@ type retrievalAuthorityPolicy struct {
 }
 
 func memoryAllowedBySQLiteAuthority(m Memory, policy retrievalAuthorityPolicy) bool {
+	if !memoryContextUseAllowed(m) {
+		return false
+	}
 	if !memoryMatchesRetrievalScope(m, policy.CharacterID, policy.UserID) {
 		return false
 	}
@@ -42,6 +45,10 @@ func tombstoneTargetsFromMemorySearch(coordinator *mindruntime.DataLifecycleCoor
 		return nil
 	}
 	return blocked
+}
+
+func memoryContextUseAllowed(m Memory) bool {
+	return m.AllowContextUse == nil || *m.AllowContextUse
 }
 
 func memoryAllowedForDerivedContent(m Memory, now time.Time) bool {

@@ -542,8 +542,10 @@ func (c *MemoryBackupContributor) RestoreMemories(ctx context.Context, in datapo
 		idMap.AddMemory(rec.ID, newID)
 		if svc, ok := c.svc.(*service); ok {
 			svc.syncProfileProjection(&memory)
-			svc.syncGraph(&memory)
-			go svc.SyncEmbedding(memory.ID, memory.Key, memory.Value, memory.CharacterID, memory.MemoryType)
+			if memoryContextUseAllowed(memory) {
+				svc.syncGraph(&memory)
+				go svc.SyncEmbedding(memory.ID, memory.Key, memory.Value, memory.CharacterID, memory.MemoryType)
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -808,6 +810,7 @@ func (m *Memory) toV1() MemoryRecordV1 {
 		LastVerifiedAt:        m.LastVerifiedAt,
 		ExpiresAt:             m.ExpiresAt,
 		SensitivityLevel:      m.SensitivityLevel,
+		AllowContextUse:       m.AllowContextUse,
 		AllowProactiveMention: m.AllowProactiveMention,
 		RequiresConfirmation:  m.RequiresConfirmation,
 		Version:               m.Version,
@@ -863,6 +866,7 @@ func (r MemoryRecordV1) toMemory() Memory {
 		ArchivedAt:            r.ArchivedAt,
 		SupersededBy:          r.SupersededBy,
 		SensitivityLevel:      r.SensitivityLevel,
+		AllowContextUse:       r.AllowContextUse,
 		AllowProactiveMention: r.AllowProactiveMention,
 		RequiresConfirmation:  r.RequiresConfirmation,
 		Version:               r.Version,

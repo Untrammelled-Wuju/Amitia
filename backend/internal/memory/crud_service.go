@@ -76,6 +76,11 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 			update.MemorySubtype = &subtype
 			needsUpdate = true
 		}
+		if req.AllowContextUse != nil {
+			allowContextUse := *req.AllowContextUse
+			update.AllowContextUse = &allowContextUse
+			needsUpdate = true
+		}
 		if needsUpdate {
 			return s.Update(resp.MemoryID, update)
 		}
@@ -106,6 +111,7 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 		SourceConvID:          req.SourceConvID,
 		VerifiedStatus:        req.VerifiedStatus,
 		SensitivityLevel:      req.SensitivityLevel,
+		AllowContextUse:       req.AllowContextUse,
 		AllowProactiveMention: req.AllowProactiveMention,
 		RequiresConfirmation:  req.RequiresConfirmation,
 		RetentionLevel:        req.RetentionLevel,
@@ -119,8 +125,10 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 		return nil, fmt.Errorf("创建失败: %w", err)
 	}
 
-	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
-	s.syncGraph(m)
+	if memoryContextUseAllowed(*m) {
+		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+		s.syncGraph(m)
+	}
 
 	return m, nil
 }
@@ -170,6 +178,9 @@ func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
 	}
 	if req.SensitivityLevel != nil {
 		updates["sensitivity_level"] = *req.SensitivityLevel
+	}
+	if req.AllowContextUse != nil {
+		updates["allow_context_use"] = *req.AllowContextUse
 	}
 	if req.AllowProactiveMention != nil {
 		updates["allow_proactive_mention"] = *req.AllowProactiveMention
@@ -270,10 +281,12 @@ func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
 	if before != nil && before.MemoryType != m.MemoryType {
 		deleteVectorsFromCollections([]string{m.ID}, collectionNameForMemoryType(before.MemoryType))
 	}
-	if memoryStatusBlocksRetrieval(m.VerifiedStatus) {
+	if memoryStatusBlocksRetrieval(m.VerifiedStatus) || !memoryContextUseAllowed(*m) {
 		deleteVectorsFromCollections([]string{m.ID})
 		_ = s.repo.UnmarkEmbedded(m.ID)
-		s.deleteGraph(m)
+		if !memoryContextUseAllowed(*m) {
+			s.deleteGraph(m)
+		}
 		return m, nil
 	}
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
@@ -310,8 +323,10 @@ func (s *service) Restore(id string) (*Memory, error) {
 	if err != nil {
 		return nil, err
 	}
-	go s.SyncEmbedding(restored.ID, restored.Key, restored.Value, restored.CharacterID, restored.MemoryType)
-	s.syncGraph(restored)
+	if memoryContextUseAllowed(*restored) {
+		go s.SyncEmbedding(restored.ID, restored.Key, restored.Value, restored.CharacterID, restored.MemoryType)
+		s.syncGraph(restored)
+	}
 	return restored, nil
 }
 
