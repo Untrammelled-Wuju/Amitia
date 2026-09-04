@@ -5,6 +5,7 @@ package character
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,6 +45,8 @@ type Service interface {
 	SetActive(id string) (*Character, error)
 	ListTemplates() ([]CharacterTemplate, error)
 	GetTemplateByID(id string) (*CharacterTemplate, error)
+	CreateFromTemplate(id string, nameOverride string, userID string) (*Character, error)
+	ListPackHistory() ([]map[string]interface{}, error)
 	GetRoleProfile(characterID string) (*RoleProfileResponse, error)
 	UpdateRoleProfile(characterID string, updates map[string]interface{}) (*RoleProfileResponse, error)
 	UpdateAvatar(id string, avatarUrl string) error
@@ -90,7 +93,7 @@ func (s *service) CreateForUser(req *CreateCharacterRequest, userID string) (*Ch
 		Personality: req.Personality, SpeakingStyle: req.SpeakingStyle,
 		Avatar:            req.Avatar,
 		RelationshipStyle: req.RelationshipStyle, CharacterBase: req.CharacterBase,
-		BoundaryRules: req.BoundaryRules, Description: req.Description,
+		BoundaryRules: req.BoundaryRules, Description: req.Description, BasePrompt: req.BasePrompt,
 		Gender: req.Gender, Pronoun: req.Pronoun, SelfReference: req.SelfReference,
 		GenderExpression: req.GenderExpression, LifeIdentity: req.LifeIdentity,
 		Status:            "enabled",
@@ -558,6 +561,59 @@ func (s *service) GetTemplateByID(id string) (*CharacterTemplate, error) {
 		return nil, fmt.Errorf("模板不存在")
 	}
 	return t, nil
+}
+
+func (s *service) CreateFromTemplate(id string, nameOverride string, userID string) (*Character, error) {
+	template, err := s.GetTemplateByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	var req CreateCharacterRequest
+	raw := strings.TrimSpace(template.TemplateJSON)
+	if raw != "" && raw != "{}" {
+		if err := json.Unmarshal([]byte(raw), &req); err != nil {
+			return nil, fmt.Errorf("模板数据无效: %w", err)
+		}
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		req.Name = template.Name
+	}
+	if override := strings.TrimSpace(nameOverride); override != "" {
+		req.Name = override
+	}
+	if strings.TrimSpace(req.Description) == "" {
+		req.Description = template.Description
+	}
+	return s.CreateForUser(&req, userID)
+}
+
+func (s *service) ListPackHistory() ([]map[string]interface{}, error) {
+	var characters []Character
+	err := s.db.
+		Where("card_data_json IS NOT NULL AND card_data_json <> '' AND card_data_json <> '{}' AND deleted_at IS NULL").
+		Order("created_at DESC").
+		Find(&characters).Error
+	if err != nil {
+		return nil, err
+	}
+	history := make([]map[string]interface{}, 0, len(characters))
+	for _, character := range characters {
+		format := ""
+		var cardData card.CharacterCardData
+		if json.Unmarshal([]byte(character.CardDataJSON), &cardData) == nil {
+			format = string(cardData.SourceFormat)
+		}
+		history = append(history, map[string]interface{}{
+			"id":           character.ID,
+			"characterId":  character.ID,
+			"name":         character.Name,
+			"sourceFormat": format,
+			"importedAt":   character.CreatedAt,
+			"updatedAt":    character.UpdatedAt,
+		})
+	}
+	return history, nil
 }
 
 func (s *service) GetRoleProfile(characterID string) (*RoleProfileResponse, error) {
