@@ -54,6 +54,7 @@ export function useWorldBook() {
 
   async function fetchRules(params?: {
     matchType?: string;
+    keyword?: string;
     page?: number;
     pageSize?: number;
   }) {

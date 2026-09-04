@@ -67,8 +67,7 @@ self.addEventListener("fetch", (event) => {
   // NEVER cache auth-related paths
   if (
     url.pathname.includes("/auth/") ||
-    url.pathname.includes("/login") ||
-    url.pathname.includes("/setup")
+    url.pathname.includes("/login")
   ) {
     return;
   }

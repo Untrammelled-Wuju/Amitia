@@ -36,7 +36,19 @@
             <strong>当前桌面 Runtime</strong>
             <div class="muted">本机身份来自 127.0.0.1:18899，不由云端猜测</div>
           </div>
-          <el-tag :type="localMeshState === 'connected' ? 'success' : 'info'">{{ localMeshStateLabel }}</el-tag>
+          <div class="device-head-actions">
+            <el-tag :type="localMeshState === 'connected' ? 'success' : 'info'">{{ localMeshStateLabel }}</el-tag>
+            <el-button
+              v-if="localMeshBound"
+              size="small"
+              type="danger"
+              plain
+              :loading="leaveBusy"
+              @click="leaveCurrentDeviceMesh"
+            >
+              解除本机云端绑定
+            </el-button>
+          </div>
         </div>
       </template>
       <template v-if="localIdentity">
@@ -97,6 +109,7 @@ type LocalIdentity = { deviceId?: string; runtimeId?: string; platform?: string;
 const api = useApi();
 const loading = ref(false);
 const joinBusy = ref(false);
+const leaveBusy = ref(false);
 const busy = ref("");
 const error = ref("");
 const localError = ref("");
@@ -107,6 +120,7 @@ const localMeshStatus = ref<Record<string, any>>({});
 const deploymentMode = ref("local");
 const desktopAvailable = computed(() => Boolean(window.amitiaDesktop));
 const localMeshState = computed(() => String(localMeshStatus.value?.state || "unknown").toLowerCase());
+const localMeshBound = computed(() => !["", "unknown", "unprovisioned"].includes(localMeshState.value));
 const localMeshStateLabel = computed(() => {
   if (localMeshState.value === "connected") return "已加入 Mesh";
   if (localMeshState.value === "connecting") return "连接中";
@@ -188,6 +202,33 @@ async function joinCurrentDevice() {
   }
 }
 
+async function leaveCurrentDeviceMesh() {
+  if (!window.amitiaDesktop?.deprovisionMesh) {
+    ElMessage.error("当前桌面桥接不支持解除 Device Mesh 绑定");
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      "确定解除当前桌面 Runtime 的云端绑定吗？这只会清除本机 Device Agent 的 Mesh 凭据，不会切换 Cloud Core 登录状态。",
+      "解除本机云端绑定",
+      { type: "warning", confirmButtonText: "解除绑定", cancelButtonText: "取消" },
+    );
+  } catch {
+    return;
+  }
+
+  leaveBusy.value = true;
+  try {
+    await window.amitiaDesktop.deprovisionMesh();
+    ElMessage.success("本机 Device Mesh 凭据已清除");
+    await refreshAll();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "解除本机 Device Mesh 绑定失败");
+  } finally {
+    leaveBusy.value = false;
+  }
+}
+
 async function loadSync(deviceId: string, notify = true) {
   try {
     const result = await api.get<Record<string, any>>("/api/v1/sync/status", { deviceId });
@@ -249,7 +290,7 @@ onMounted(refreshAll);
 
 <style scoped>
 .devices-page { padding: 24px; display: flex; flex-direction: column; gap: 18px; }
-.page-head, .device-head, .detail-row, .runtime-row, .card-actions, .head-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.page-head, .device-head, .detail-row, .runtime-row, .card-actions, .head-actions, .device-head-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .page-head h2 { margin: 0 0 6px; font-size: 22px; }
 .page-head p { margin: 0; color: var(--el-text-color-secondary); font-size: 13px; }
 .device-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }

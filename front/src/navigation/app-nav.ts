@@ -95,7 +95,6 @@ const titleItems = desktopNavGroups.flatMap((group) => group.items);
 const extraTitles = [
   { path: "/login", label: "登录" },
   { path: "/onboarding", label: "引导" },
-  { path: "/setup", label: "初始化" },
   { path: "/privacy", label: "隐私说明" },
   { path: "/usage-boundary", label: "使用边界" },
   { path: "/storage", label: "存储清理" },

@@ -122,12 +122,8 @@ export function useMemoryHub() {
       results.episodics = er?.items || [];
     } catch {}
     try {
-      const wr = await get<any>("/api/world-book", { pageSize: 5 });
-      results.worldBooks = (wr?.items || []).filter(
-        (w: any) =>
-          w.matchPattern?.toLowerCase().includes(query.toLowerCase()) ||
-          w.injectContent?.toLowerCase().includes(query.toLowerCase()),
-      );
+      const wr = await get<any>("/api/world-book", { keyword: query, pageSize: 5 });
+      results.worldBooks = wr?.items || [];
     } catch {}
     return results;
   }

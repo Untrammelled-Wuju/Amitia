@@ -11,12 +11,14 @@
       <div v-for="r in searchResults" :key="r.id" class="search-result-item">
         <div class="sri-header">
           <el-tag size="small">{{ typeLabel(r.memoryType) }}</el-tag>
-          <span class="sri-score"
-            >Score: {{ (r.score * 100).toFixed(1) }}%</span
-          >
+          <span class="sri-score">Score: {{ (r.score * 100).toFixed(1) }}%</span>
         </div>
         <div class="sri-key">{{ r.key }}</div>
         <div class="sri-value">{{ r.value }}</div>
+        <div v-if="r.hasRankedScore" class="sri-breakdown">
+          final={{ pct(r.finalScore) }} · vector={{ pct(r.vectorScore) }} · keyword={{ pct(r.keywordScore) }}
+          · importance={{ pct(r.importanceNorm) }} · temporal={{ pct(r.temporalBoost) }}
+        </div>
       </div>
       <el-empty
         v-if="searchResults.length === 0 && searched"
@@ -63,6 +65,10 @@ const TYPES = [
 function typeLabel(t: string) {
   return TYPES.find((x) => x.value === t)?.label || t;
 }
+function pct(value: unknown) {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : "0.0%";
+}
 async function doSearch() {
   if (!searchQuery.value.trim()) return;
   try {
@@ -71,15 +77,36 @@ async function doSearch() {
       limit: 10,
     });
     const items = result?.items || [];
-    searchResults.value = items.map((r: any) => ({
-      id: r.memory?.id || r.id,
-      key: r.memory?.key || r.key,
-      value: r.memory?.value || r.value,
-      memoryType: r.memory?.memoryType || r.memoryType,
-      score: r.score ?? 0,
-      matchType: r.matchType || "hybrid",
-      memoryLayer: r.memoryLayer || "",
-    }));
+    let ranked: any[] = [];
+    try {
+      const rankedResult = await get<any>("/api/memories/ranked", {
+        query: searchQuery.value.trim(),
+        limit: 10,
+      });
+      ranked = Array.isArray(rankedResult) ? rankedResult : rankedResult?.items || [];
+    } catch {}
+    const rankedById = new Map(
+      ranked.map((row: any) => [String(row?.memory?.id || ""), row]),
+    );
+    searchResults.value = items.map((r: any) => {
+      const id = String(r.memory?.id || r.id || "");
+      const rr = rankedById.get(id);
+      return {
+        id,
+        key: r.memory?.key || r.key,
+        value: r.memory?.value || r.value,
+        memoryType: r.memory?.memoryType || r.memoryType,
+        score: rr?.finalScore ?? r.score ?? 0,
+        matchType: r.matchType || "hybrid",
+        memoryLayer: r.memoryLayer || "",
+        hasRankedScore: Boolean(rr),
+        finalScore: rr?.finalScore ?? 0,
+        vectorScore: rr?.vectorScore ?? 0,
+        keywordScore: rr?.keywordScore ?? 0,
+        importanceNorm: rr?.importanceNorm ?? 0,
+        temporalBoost: rr?.temporalBoost ?? 0,
+      };
+    });
     searched.value = true;
   } catch {
     try {
@@ -126,5 +153,11 @@ async function doSearch() {
 .sri-value {
   font-size: var(--ac-font-size-sm);
   color: var(--ac-color-text-secondary);
+}
+.sri-breakdown {
+  margin-top: 5px;
+  font-size: var(--ac-font-size-xs);
+  color: var(--ac-color-text-muted);
+  line-height: 1.45;
 }
 </style>

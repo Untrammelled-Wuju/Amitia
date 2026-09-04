@@ -76,10 +76,13 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
     },
     { path: "safety", name: "settingsSafety", component: () => import("@/views/safety-settings/SafetySettingsView.vue"), meta: { requiresAuth: true } },
     { path: "maintenance", name: "settingsMaintenance", component: () => import("@/views/maintenance-diagnostics/MaintenanceDiagnosticsView.vue"), meta: { requiresAuth: true } },
+    { path: "prompt-trace", name: "settingsPromptTrace", component: () => import("@/views/settings/PromptTracePanel.vue"), meta: { requiresAuth: true } },
     { path: "about", name: "settingsAbout", component: () => import("@/views/settings/AboutPanel.vue"), meta: { requiresAuth: true } },
-    { path: "ui-providers", name: "settingsUIProviders", component: () => import("@/views/settings/UIProviderSettingsView.vue"), meta: { requiresAuth: true } },
   ],
 },
+// Recovery route must stay outside SettingsView/AppShell extension surfaces so a
+// broken ui provider cannot prevent the user from restoring the built-in UI.
+{ path: "/settings/ui-providers", name: "settingsUIProviders", component: () => import("@/views/settings/UIProviderSettingsView.vue"), meta: { requiresAuth: true } },
 { path: "/model", redirect: "/settings/model" },
 { path: "/model/:path*", redirect: (to: any) => "/settings/model/" + (to.params.path || "") },
 { path: "/safety", redirect: "/settings/safety" },

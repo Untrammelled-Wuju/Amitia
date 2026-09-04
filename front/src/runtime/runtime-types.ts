@@ -137,6 +137,7 @@ export interface AmitiaDesktopAPI {
   publishLocalVoiceASRFinal(event: LocalVoiceASRFinalEvent): Promise<{ accepted: boolean; eventId: string; eventType: string }>;
   getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null>;
   getMeshStatus(): Promise<{ state: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null>;
+  deprovisionMesh(): Promise<{ ok: boolean }>;
   onUINavigate(callback: (target: string) => void): () => void;
 }
 
