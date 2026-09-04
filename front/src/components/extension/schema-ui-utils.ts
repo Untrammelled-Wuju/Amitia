@@ -94,6 +94,15 @@ export interface PerformanceBudget {
   maxActionCount: number;
 }
 
+export interface SchemaUIDataSource {
+  id: string;
+  type: string;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  refreshPolicy?: string;
+  runtimeEntry?: string;
+}
+
 export interface SchemaUIDocument {
   schemaVersion?: string;
   version?: string;
@@ -101,7 +110,7 @@ export interface SchemaUIDocument {
   title?: string;
   root?: SchemaUINode;
   children?: SchemaUINode[];
-  dataSources?: unknown[];
+  dataSources?: SchemaUIDataSource[];
   actions?: Array<{ actionId: string; target?: string; inputSchema?: unknown }>;
   theme?: ThemeConfig;
   locale?: LocaleConfig;
@@ -267,7 +276,29 @@ export function evaluateVisibility(
 ): boolean {
   if (!conditions || conditions.length === 0) return true;
   for (const c of conditions) {
-    const val = lookupPath(context, c.field);
+    const candidates = [
+      context,
+      context.localState,
+      context.local_state,
+      context.state,
+      context.formState,
+      context.form_state,
+      context.input,
+      context.query,
+      context.runtime,
+      context.host,
+      context.dataSources,
+      context.storage,
+      context.runtimeStatus,
+      context.runtime_status,
+      context.resourceList,
+      context.resource_list,
+    ];
+    let val: unknown = undefined;
+    for (const candidate of candidates) {
+      val = lookupPath(candidate, c.field);
+      if (val !== undefined) break;
+    }
     if (!evaluateCondition(val, c.operator, c.value)) return false;
   }
   return true;

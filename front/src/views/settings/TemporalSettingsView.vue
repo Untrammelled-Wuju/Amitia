@@ -120,6 +120,21 @@
                 主动消息是否可投递始终按用户当地时间判断。
               </div>
             </el-form-item>
+            <el-form-item label="节日感知">
+              <el-switch v-model="profile.holidayAwareness" />
+            </el-form-item>
+            <el-form-item label="时段感知">
+              <el-switch v-model="profile.daypartAwareness" />
+            </el-form-item>
+            <el-form-item label="纪念日感知">
+              <el-switch v-model="profile.anniversaryAwareness" />
+            </el-form-item>
+            <el-form-item label="记忆时间共振">
+              <el-switch v-model="profile.memoryResonance" />
+            </el-form-item>
+            <el-form-item label="允许共享日期提及">
+              <el-switch v-model="profile.allowSharedDateMention" />
+            </el-form-item>
             <el-form-item label="旅行模式">
               <!-- 旅行模式暂未在运行时消费，暂时隐藏 -->
             </el-form-item>
@@ -246,13 +261,16 @@
           ></el-form-item>
           <el-form-item label="时间语义" prop="timeKind"
             ><el-select v-model="anchorForm.timeKind" class="full-width"
-              ><el-option label="年度日期" value="annual_date" /><el-option
+              ><el-option label="周期规则" value="recurring" /><el-option
+                label="年度日期" value="annual_date" /><el-option
                 label="一次性日期"
                 value="local_date" /><el-option
                 label="当地日期时间"
                 value="local_datetime" /><el-option
                 label="UTC 瞬间"
-                value="instant" /></el-select
+                value="instant" /><el-option
+                label="UTC 时间范围"
+                value="range" /></el-select
           ></el-form-item>
           <el-form-item
             v-if="anchorForm.timeKind === 'annual_date'"
@@ -261,7 +279,7 @@
             ><el-input v-model="anchorForm.localDate" placeholder="08-16"
           /></el-form-item>
           <el-form-item
-            v-else-if="anchorForm.timeKind !== 'instant'"
+            v-else-if="anchorForm.timeKind !== 'instant' && anchorForm.timeKind !== 'range'"
             label="当地日期"
             prop="localDate"
             ><el-date-picker
@@ -272,7 +290,7 @@
               class="full-width"
           /></el-form-item>
           <el-form-item
-            v-if="anchorForm.timeKind !== 'instant'"
+            v-if="anchorForm.timeKind !== 'instant' && anchorForm.timeKind !== 'range'"
             label="当地时间"
             ><el-time-picker
               v-model="anchorForm.localTime"
@@ -280,13 +298,26 @@
               format="HH:mm"
               class="full-width"
           /></el-form-item>
-          <el-form-item v-else label="UTC 瞬间"
+          <el-form-item
+            v-if="anchorForm.timeKind === 'instant' || anchorForm.timeKind === 'range'"
+            :label="anchorForm.timeKind === 'range' ? '开始 UTC' : 'UTC 瞬间'"
+            prop="instantAtUtc"
             ><el-date-picker
               v-model="anchorForm.instantAtUtc"
               type="datetime"
               value-format="YYYY-MM-DDTHH:mm:ss[Z]"
               class="full-width"
           /></el-form-item>
+          <el-form-item v-if="anchorForm.timeKind === 'range'" label="结束 UTC" prop="endAtUtc"
+            ><el-date-picker
+              v-model="anchorForm.endAtUtc"
+              type="datetime"
+              value-format="YYYY-MM-DDTHH:mm:ss[Z]"
+              class="full-width"
+          /></el-form-item>
+          <el-form-item v-if="anchorForm.timeKind === 'recurring'" label="RRULE" prop="rrule">
+            <el-input v-model="anchorForm.rrule" placeholder="FREQ=WEEKLY;BYDAY=MO,WE,FR" />
+          </el-form-item>
           <el-form-item label="IANA 时区"
             ><el-select
               v-model="anchorForm.timezone"
@@ -412,9 +443,11 @@ const timezoneOptions = [
 ];
 const anchorTypes = [
   { label: "生日", value: "birthday" },
+  { label: "纪念日", value: "anniversary" },
   { label: "关系纪念日", value: "relationship_anniversary" },
   { label: "首次相识", value: "first_meeting" },
   { label: "共同经历", value: "shared_memory" },
+  { label: "节日", value: "holiday" },
   { label: "截止日期", value: "deadline" },
   { label: "预约", value: "appointment" },
   { label: "考试", value: "exam" },
@@ -433,6 +466,8 @@ function emptyAnchor(): Partial<TemporalAnchor> {
     title: "",
     description: "",
     timeKind: "annual_date",
+    instantAtUtc: "",
+    endAtUtc: "",
     localDate: "",
     localTime: "09:00",
     timezone: profile.timezone,
@@ -458,8 +493,32 @@ const anchorRules: FormRules = {
   localDate: [
     {
       validator: (_rule, value, callback) => {
-        if (anchorForm.timeKind !== "instant" && !value)
+        if (anchorForm.timeKind !== "instant" && anchorForm.timeKind !== "range" && !value)
           callback(new Error("请选择或输入日期"));
+        else callback();
+      },
+      trigger: "change",
+    },
+  ],
+  instantAtUtc: [
+    {
+      validator: (_rule, value, callback) => {
+        if ((anchorForm.timeKind === "instant" || anchorForm.timeKind === "range") && !value)
+          callback(new Error("请选择 UTC 开始时间"));
+        else callback();
+      },
+      trigger: "change",
+    },
+  ],
+  endAtUtc: [
+    {
+      validator: (_rule, value, callback) => {
+        if (anchorForm.timeKind !== "range") return callback();
+        if (!value) return callback(new Error("请选择 UTC 结束时间"));
+        const start = Date.parse(String(anchorForm.instantAtUtc || ""));
+        const end = Date.parse(String(value));
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)
+          callback(new Error("结束时间必须晚于开始时间"));
         else callback();
       },
       trigger: "change",
@@ -566,6 +625,10 @@ async function loadAnchors() {
   }
 }
 function openAnchorDialog(anchor?: TemporalAnchor) {
+  if (anchor?.timeKind === "derived") {
+    ElMessage.info("派生时间锚点由系统维护，不能在此直接编辑");
+    return;
+  }
   Object.assign(anchorForm, emptyAnchor(), anchor || {});
   anchorDialogVisible.value = true;
 }
@@ -613,6 +676,8 @@ function formatCivil(value: TemporalSnapshot["userTime"]) {
 }
 function anchorTimeLabel(anchor: TemporalAnchor) {
   if (anchor.timeKind === "instant") return anchor.instantAtUtc || "—";
+  if (anchor.timeKind === "range")
+    return `${anchor.instantAtUtc || "—"} → ${anchor.endAtUtc || "—"}`;
   const base = [anchor.localDate, anchor.localTime].filter(Boolean).join(" ");
   return anchor.timeKind === "recurring"
     ? `${base} · ${anchor.rrule}`

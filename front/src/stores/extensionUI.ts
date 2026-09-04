@@ -115,6 +115,8 @@ export interface SlotError {
 export interface SlotSession {
   contributionId: string;
   sessionId: string;
+  token?: string;
+  generation?: number;
   createdAt: number;
   lastActivity: number;
 }
@@ -441,6 +443,8 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     registerSession({
       contributionId: key,
       sessionId: res.sessionId,
+      token: res.token,
+      generation: res.generation,
       createdAt: Date.now(),
       lastActivity: Date.now(),
     });
