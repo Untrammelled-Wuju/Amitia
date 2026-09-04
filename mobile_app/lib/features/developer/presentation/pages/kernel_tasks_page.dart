@@ -8,7 +8,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -39,18 +39,15 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
       _error = null;
     });
     try {
-      final api = ref.read(backendServiceProvider);
-      final values = await Future.wait<Map<String, dynamic>?>([
-        api.get<Map<String, dynamic>>('/api/extensions/task-definitions'),
-        api.get<Map<String, dynamic>>(
-          '/api/extensions/tasks',
-          queryParameters: const {'limit': 200},
-        ),
+      final service = ref.read(kernelTaskServiceProvider);
+      final values = await Future.wait<List<Map<String, dynamic>>>([
+        service.definitions(),
+        service.runs(limit: 200),
       ]);
       if (!mounted) return;
       setState(() {
-        _definitions = _items(values[0]);
-        _runs = _items(values[1]);
+        _definitions = values[0];
+        _runs = values[1];
         _loading = false;
       });
     } catch (e) {
@@ -60,13 +57,6 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
         _loading = false;
       });
     }
-  }
-
-  List<Map<String, dynamic>> _items(Map<String, dynamic>? page) {
-    return ((page?['items'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList(growable: false);
   }
 
   Future<void> _runAction(String successMessage, Future<void> Function() action) async {
@@ -197,17 +187,14 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
       if (decoded is! Map) throw const FormatException('Input 必须是 JSON Object');
       final priority = int.tryParse(priorityController.text.trim()) ?? 0;
       await _runAction('任务已真实入队', () async {
-        await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-          '/api/extensions/tasks',
-          data: {
-            'taskDefinitionId': definitionId,
-            'extensionId': (definition['extensionId'] ?? '').toString(),
-            'moduleId': (definition['moduleId'] ?? '').toString(),
-            'input': Map<String, dynamic>.from(decoded),
-            'priority': priority,
-            'source': 'mobile_kernel_tasks',
-          },
-        );
+        await ref.read(kernelTaskServiceProvider).enqueue({
+          'taskDefinitionId': definitionId,
+          'extensionId': (definition['extensionId'] ?? '').toString(),
+          'moduleId': (definition['moduleId'] ?? '').toString(),
+          'input': Map<String, dynamic>.from(decoded),
+          'priority': priority,
+          'source': 'mobile_kernel_tasks',
+        });
       });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('入队失败：$e')));
@@ -217,20 +204,8 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     }
   }
 
-  Future<Map<String, dynamic>> _loadRuntimeDetail(String taskRunId) async {
-    final api = ref.read(backendServiceProvider);
-    final values = await Future.wait<Map<String, dynamic>?>([
-      api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskRunId'),
-      api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskRunId/progress'),
-      api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskRunId/result'),
-      api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskRunId/checkpoint'),
-    ]);
-    return {
-      'run': values[0] ?? const <String, dynamic>{},
-      'progress': values[1] ?? const <String, dynamic>{},
-      'result': values[2] ?? const <String, dynamic>{},
-      'checkpoint': values[3] ?? const <String, dynamic>{},
-    };
+  Future<Map<String, dynamic>> _loadRuntimeDetail(String taskRunId) {
+    return ref.read(kernelTaskServiceProvider).runtimeDetail(taskRunId);
   }
 
   Future<void> _showRunDetail(Map<String, dynamic> run) async {
@@ -247,13 +222,13 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
         onRetry: () async {
           Navigator.pop(sheetContext);
           await _runAction('任务已重新入队', () async {
-            await ref.read(backendServiceProvider).post<Map<String, dynamic>>('/api/extensions/tasks/$id/retry');
+            await ref.read(kernelTaskServiceProvider).retry(id);
           });
         },
         onRecover: () async {
           Navigator.pop(sheetContext);
           await _runAction('任务恢复操作已提交', () async {
-            await ref.read(backendServiceProvider).post<Map<String, dynamic>>('/api/extensions/tasks/$id/recover');
+            await ref.read(kernelTaskServiceProvider).recover(id);
           });
         },
       ),
@@ -263,50 +238,42 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
   Future<void> _pause(Map<String, dynamic> run) async {
     final id = _runId(run);
     await _runAction('任务已暂停', () async {
-      await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-        '/api/extensions/tasks/$id/pause',
-        data: {
-          'generation': (run['generation'] as num?)?.toInt() ?? 0,
-          'reason': 'mobile_user',
-        },
-      );
+      await ref.read(kernelTaskServiceProvider).pause(
+            id,
+            generation: (run['generation'] as num?)?.toInt() ?? 0,
+            reason: 'mobile_user',
+          );
     });
   }
 
   Future<void> _resume(Map<String, dynamic> run) async {
     final id = _runId(run);
     await _runAction('任务已继续', () async {
-      await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-        '/api/extensions/tasks/$id/resume',
-        data: {
-          'generation': (run['generation'] as num?)?.toInt() ?? 0,
-          'resumeKind': 'resume',
-        },
-      );
+      await ref.read(kernelTaskServiceProvider).resume(
+            id,
+            generation: (run['generation'] as num?)?.toInt() ?? 0,
+          );
     });
   }
 
   Future<void> _cancel(Map<String, dynamic> run) async {
     final id = _runId(run);
     await _runAction('任务已请求取消', () async {
-      await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-        '/api/extensions/tasks/$id/cancel',
-        data: const {'reason': 'mobile_user'},
-      );
+      await ref.read(kernelTaskServiceProvider).cancel(id, reason: 'mobile_user');
     });
   }
 
   Future<void> _retry(Map<String, dynamic> run) async {
     final id = _runId(run);
     await _runAction('任务已重新入队', () async {
-      await ref.read(backendServiceProvider).post<Map<String, dynamic>>('/api/extensions/tasks/$id/retry');
+      await ref.read(kernelTaskServiceProvider).retry(id);
     });
   }
 
   Future<void> _recover(Map<String, dynamic> run) async {
     final id = _runId(run);
     await _runAction('任务恢复操作已提交', () async {
-      await ref.read(backendServiceProvider).post<Map<String, dynamic>>('/api/extensions/tasks/$id/recover');
+      await ref.read(kernelTaskServiceProvider).recover(id);
     });
   }
 

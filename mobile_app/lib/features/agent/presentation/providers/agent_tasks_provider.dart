@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/services/providers.dart';
 
 enum AgentTaskStatus { pending, waitingApproval, running, paused, completed, failed, cancelled }
 
@@ -157,13 +157,8 @@ class AgentTaskItem {
 
 class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
   Future<List<AgentTaskItem>> _fetch() async {
-    final resp = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
-      '/api/extensions/tasks',
-      queryParameters: const {'limit': 200},
-    );
-    final rows = resp?['items'];
-    if (rows is! List) return const [];
-    return rows.whereType<Map>().map((e) => AgentTaskItem.fromJson(Map<String, dynamic>.from(e))).toList(growable: false);
+    final rows = await ref.read(kernelTaskServiceProvider).runs(limit: 200);
+    return rows.map(AgentTaskItem.fromJson).toList(growable: false);
   }
 
   @override
@@ -192,28 +187,24 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
     if (definition == null) {
       throw StateError('选择的 Kernel Task 定义已不存在，请重新选择');
     }
-    final api = ref.read(backendServiceProvider);
-    await api.post<Map<String, dynamic>>(
-      '/api/extensions/tasks',
-      data: {
-        'taskDefinitionId': definition.taskId,
-        'extensionId': definition.extensionId,
-        'moduleId': definition.moduleId,
-        'input': {
-          'title': title,
-          'description': description,
-          'requiredAbilities': abilities,
-          'stepCount': stepCount,
-        },
-        'priority': 0,
-        'source': 'mobile_agent',
+    await ref.read(kernelTaskServiceProvider).enqueue({
+      'taskDefinitionId': definition.taskId,
+      'extensionId': definition.extensionId,
+      'moduleId': definition.moduleId,
+      'input': {
+        'title': title,
+        'description': description,
+        'requiredAbilities': abilities,
+        'stepCount': stepCount,
       },
-    );
+      'priority': 0,
+      'source': 'mobile_agent',
+    });
     await refresh();
   }
 
   Future<void> changeStatus(String id, AgentTaskStatus newStatus) async {
-    final api = ref.read(backendServiceProvider);
+    final service = ref.read(kernelTaskServiceProvider);
     final items = state.valueOrNull ?? const <AgentTaskItem>[];
     AgentTaskItem? current;
     for (final item in items) {
@@ -223,14 +214,14 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
       }
     }
     if (newStatus == AgentTaskStatus.cancelled) {
-      await api.post<Map<String, dynamic>>('/api/extensions/tasks/$id/cancel', data: const {'reason': 'user_requested'});
+      await service.cancel(id);
     } else if (newStatus == AgentTaskStatus.paused) {
-      await api.post<Map<String, dynamic>>('/api/extensions/tasks/$id/pause', data: {'generation': current?.generation ?? 0, 'reason': 'user_requested'});
+      await service.pause(id, generation: current?.generation ?? 0);
     } else if (newStatus == AgentTaskStatus.running && current?.status == AgentTaskStatus.paused) {
-      await api.post<Map<String, dynamic>>('/api/extensions/tasks/$id/resume', data: {'generation': current?.generation ?? 0, 'resumeKind': 'resume'});
+      await service.resume(id, generation: current?.generation ?? 0);
     } else if (newStatus == AgentTaskStatus.running &&
         (current?.status == AgentTaskStatus.failed || current?.status == AgentTaskStatus.cancelled || current?.status == AgentTaskStatus.completed)) {
-      await api.post<Map<String, dynamic>>('/api/extensions/tasks/$id/retry');
+      await service.retry(id);
     } else {
       throw UnsupportedError(
         'Kernel Task 不支持从 ${current?.status.name ?? 'unknown'} 直接切换到 ${newStatus.name}；必须使用真实服务端 Action',
@@ -241,9 +232,7 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
   }
 
   Future<void> recover(String id) async {
-    await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
-      '/api/extensions/tasks/$id/recover',
-    );
+    await ref.read(kernelTaskServiceProvider).recover(id);
     await refresh();
     ref.invalidate(agentTaskRuntimeDetailProvider(id));
   }
@@ -313,40 +302,21 @@ class AgentTaskRuntimeDetail {
   }
 }
 
-Future<Map<String, dynamic>> _optionalTaskMap(Future<Map<String, dynamic>?> request) async {
-  try {
-    return await request ?? const <String, dynamic>{};
-  } catch (_) {
-    return const <String, dynamic>{};
-  }
-}
-
 final agentTaskDefinitionsProvider = FutureProvider.autoDispose<List<AgentTaskDefinition>>((ref) async {
-  final api = ref.read(backendServiceProvider);
-  final response = await api.get<Map<String, dynamic>>('/api/extensions/task-definitions');
-  final rows = response?['items'];
-  if (rows is! List) return const <AgentTaskDefinition>[];
+  final rows = await ref.read(kernelTaskServiceProvider).definitions();
   return rows
-      .whereType<Map>()
-      .map((row) => AgentTaskDefinition.fromJson(Map<String, dynamic>.from(row)))
+      .map(AgentTaskDefinition.fromJson)
       .where((definition) => definition.taskId.isNotEmpty)
       .toList(growable: false);
 });
 
 final agentTaskRuntimeDetailProvider = FutureProvider.autoDispose.family<AgentTaskRuntimeDetail, String>((ref, taskId) async {
-  final api = ref.read(backendServiceProvider);
-  final run = await api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskId');
-  if (run == null || run.isEmpty) throw StateError('任务不存在');
-  final values = await Future.wait<Map<String, dynamic>>([
-    _optionalTaskMap(api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskId/progress')),
-    _optionalTaskMap(api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskId/result')),
-    _optionalTaskMap(api.get<Map<String, dynamic>>('/api/extensions/tasks/$taskId/checkpoint')),
-  ]);
+  final detail = await ref.read(kernelTaskServiceProvider).runtimeDetail(taskId);
   return AgentTaskRuntimeDetail(
-    run: run,
-    progress: values[0],
-    result: values[1],
-    checkpoint: values[2],
+    run: Map<String, dynamic>.from(detail['run'] as Map),
+    progress: Map<String, dynamic>.from(detail['progress'] as Map),
+    result: Map<String, dynamic>.from(detail['result'] as Map),
+    checkpoint: Map<String, dynamic>.from(detail['checkpoint'] as Map),
   );
 });
 
