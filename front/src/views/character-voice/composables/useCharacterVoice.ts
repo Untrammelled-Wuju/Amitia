@@ -3,6 +3,7 @@
 import { ref, reactive, inject, onMounted, computed, type Ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { apiClient } from "../../../ui-index";
+import { normalizeVoicePitchRatio } from "@/utils/voicePitch";
 
 interface VoicePreset {
   name: string;
@@ -35,7 +36,7 @@ export function useCharacterVoice() {
   const form = reactive({
     voiceType: "zh_female_vv_uranus_bigtts",
     voiceSpeed: 1.0,
-    voicePitch: 0,
+    voicePitch: 1.0,
     voiceVolume: 1.0,
     customVoiceId: "",
     voiceConfigId: "",
@@ -126,7 +127,7 @@ export function useCharacterVoice() {
       if (data) {
         form.voiceType = data.voiceType || "zh_female_vv_uranus_bigtts";
         form.voiceSpeed = data.voiceSpeed ?? 1.0;
-        form.voicePitch = data.voicePitch ?? 0;
+        form.voicePitch = normalizeVoicePitchRatio(data.voicePitch);
         form.voiceVolume = data.voiceVolume ?? 1.0;
         form.customVoiceId = data.customVoiceId || "";
         form.voiceConfigId = data.voiceConfigId || "";
@@ -274,7 +275,7 @@ export function useCharacterVoice() {
       await apiClient.put(`/api/characters/${cid}`, {
         voiceType: form.voiceType,
         voiceSpeed: form.voiceSpeed,
-        voicePitch: form.voicePitch,
+        voicePitch: normalizeVoicePitchRatio(form.voicePitch),
         voiceVolume: form.voiceVolume,
         customVoiceId: form.customVoiceId,
         voiceConfigId: form.voiceConfigId || "",
