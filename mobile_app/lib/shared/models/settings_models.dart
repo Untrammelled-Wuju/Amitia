@@ -117,10 +117,15 @@ class TimeAnchor {
   final String description;
   final String timeKind;
   final String instantAtUtc;
+  final String endAtUtc;
   final String localDate;
   final String localTime;
   final String timezone;
   final String rrule;
+  final int durationSeconds;
+  final int preWindowSeconds;
+  final int postWindowSeconds;
+  final String sensitivityLevel;
   final int importance;
   final int confidence;
   final bool allowPromptMention;
@@ -139,10 +144,15 @@ class TimeAnchor {
     this.description = '',
     required this.timeKind,
     this.instantAtUtc = '',
+    this.endAtUtc = '',
     this.localDate = '',
     this.localTime = '',
     this.timezone = 'Asia/Shanghai',
     this.rrule = '',
+    this.durationSeconds = 0,
+    this.preWindowSeconds = 259200,
+    this.postWindowSeconds = 86400,
+    this.sensitivityLevel = 'internal',
     this.importance = 70,
     this.confidence = 100,
     this.allowPromptMention = true,
@@ -163,10 +173,15 @@ class TimeAnchor {
       description: (json['description'] ?? '').toString(),
       timeKind: (json['timeKind'] ?? 'local_date').toString(),
       instantAtUtc: (json['instantAtUtc'] ?? '').toString(),
+      endAtUtc: (json['endAtUtc'] ?? '').toString(),
       localDate: (json['localDate'] ?? '').toString(),
       localTime: (json['localTime'] ?? '').toString(),
       timezone: (json['timezone'] ?? 'Asia/Shanghai').toString(),
       rrule: (json['rrule'] ?? '').toString(),
+      durationSeconds: (json['durationSeconds'] as num?)?.toInt() ?? 0,
+      preWindowSeconds: (json['preWindowSeconds'] as num?)?.toInt() ?? 259200,
+      postWindowSeconds: (json['postWindowSeconds'] as num?)?.toInt() ?? 86400,
+      sensitivityLevel: (json['sensitivityLevel'] ?? 'internal').toString(),
       importance: (json['importance'] as num?)?.toInt() ?? 70,
       confidence: (json['confidence'] as num?)?.toInt() ?? 100,
       allowPromptMention: json['allowPromptMention'] as bool? ?? true,
@@ -205,6 +220,11 @@ class TimeAnchor {
 
   String get displayValue {
     if (timeKind == 'instant') return instantAtUtc.isEmpty ? '—' : instantAtUtc;
+    if (timeKind == 'range') {
+      final start = instantAtUtc.isEmpty ? '—' : instantAtUtc;
+      final end = endAtUtc.isEmpty ? '—' : endAtUtc;
+      return '$start → $end';
+    }
     final parts = <String>[
       if (localDate.isNotEmpty) localDate,
       if (localTime.isNotEmpty) localTime,

@@ -188,6 +188,47 @@ class ThemeConfig {
   }
 }
 
+
+class LocaleConfig {
+  final String current;
+  final List<String> available;
+
+  const LocaleConfig({this.current = 'zh-CN', this.available = const []});
+
+  factory LocaleConfig.fromJson(Map<String, dynamic> json) {
+    return LocaleConfig(
+      current: json['current'] as String? ?? 'zh-CN',
+      available: ((json['available'] as List?) ?? const []).map((value) => value.toString()).toList(growable: false),
+    );
+  }
+}
+
+class AccessibilityConfig {
+  final bool enabled;
+  final bool highContrast;
+  final bool reducedMotion;
+  final bool screenReader;
+  final bool keyboardNav;
+
+  const AccessibilityConfig({
+    this.enabled = false,
+    this.highContrast = false,
+    this.reducedMotion = false,
+    this.screenReader = false,
+    this.keyboardNav = false,
+  });
+
+  factory AccessibilityConfig.fromJson(Map<String, dynamic> json) {
+    return AccessibilityConfig(
+      enabled: json['enabled'] == true,
+      highContrast: json['highContrast'] == true,
+      reducedMotion: json['reducedMotion'] == true,
+      screenReader: json['screenReader'] == true,
+      keyboardNav: json['keyboardNav'] == true,
+    );
+  }
+}
+
 class SchemaUIDataSource {
   final String id;
   final String type;
@@ -246,6 +287,8 @@ class SchemaUIDocument {
   final List<SchemaUIDataSource> dataSources;
   final List<SchemaUIDeclaredAction> actions;
   final ThemeConfig? theme;
+  final LocaleConfig? locale;
+  final AccessibilityConfig? accessibility;
 
   const SchemaUIDocument({
     this.schemaVersion = 'schema-ui/1',
@@ -256,6 +299,8 @@ class SchemaUIDocument {
     this.dataSources = const [],
     this.actions = const [],
     this.theme,
+    this.locale,
+    this.accessibility,
   });
 
   factory SchemaUIDocument.fromJson(Map<String, dynamic> json) {
@@ -267,7 +312,9 @@ class SchemaUIDocument {
       children: SchemaUINode._parseList(json['children'], SchemaUINode.fromJson),
       dataSources: SchemaUINode._parseList(json['dataSources'], SchemaUIDataSource.fromJson),
       actions: SchemaUINode._parseList(json['actions'], SchemaUIDeclaredAction.fromJson),
-      theme: json['theme'] != null ? ThemeConfig.fromJson(json['theme'] as Map<String, dynamic>) : null,
+      theme: json['theme'] is Map ? ThemeConfig.fromJson(Map<String, dynamic>.from(json['theme'] as Map)) : null,
+      locale: json['locale'] is Map ? LocaleConfig.fromJson(Map<String, dynamic>.from(json['locale'] as Map)) : null,
+      accessibility: json['accessibility'] is Map ? AccessibilityConfig.fromJson(Map<String, dynamic>.from(json['accessibility'] as Map)) : null,
     );
   }
 
