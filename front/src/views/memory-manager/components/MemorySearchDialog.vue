@@ -1,57 +1,69 @@
 <!-- SPDX-FileCopyrightText: 2026 Peng Xu -->
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <template>
-  <el-dialog v-model="visible" title="语义搜索" width="500px">
-    <el-input
-      v-model="searchQuery"
-      placeholder="输入搜索词..."
-      @keyup.enter="doSearch"
-    />
-    <div style="margin-top: 12px; max-height: 300px; overflow-y: auto">
-      <div v-for="r in searchResults" :key="r.id" class="search-result-item">
-        <div class="sri-header">
-          <el-tag size="small">{{ typeLabel(r.memoryType) }}</el-tag>
-          <span class="sri-score">Score: {{ (r.score * 100).toFixed(1) }}%</span>
-        </div>
-        <div class="sri-key">{{ r.key }}</div>
-        <div class="sri-value">{{ r.value }}</div>
-        <div v-if="r.hasRankedScore" class="sri-breakdown">
-          final={{ pct(r.finalScore) }} · vector={{ pct(r.vectorScore) }} · keyword={{ pct(r.keywordScore) }}
-          · importance={{ pct(r.importanceNorm) }} · temporal={{ pct(r.temporalBoost) }}
-        </div>
-      </div>
-      <el-empty
-        v-if="searchResults.length === 0 && searched"
-        description="无结果"
+  <el-dialog v-model="visible" title="记忆搜索" width="560px" @closed="reset">
+    <div class="search-controls">
+      <el-select v-model="searchMode" style="width: 116px">
+        <el-option label="混合" value="hybrid" />
+        <el-option label="向量" value="vector" />
+        <el-option label="关键词" value="keyword" />
+      </el-select>
+      <el-input
+        v-model="searchQuery"
+        placeholder="输入搜索词..."
+        clearable
+        @keyup.enter="doSearch"
       />
-      <div
-        v-if="!searched"
-        style="
-          color: var(--ac-color-text-muted);
-          text-align: center;
-          padding: 20px;
-        "
-      >
-        输入关键词进行语义搜索
+      <el-button type="primary" :loading="searching" @click="doSearch">搜索</el-button>
+    </div>
+
+    <div class="search-hint">
+      {{ modeHint }}
+    </div>
+
+    <div class="search-results" v-loading="searching">
+      <div v-for="result in searchResults" :key="result.id || result.key" class="search-result-item">
+        <div class="sri-header">
+          <div class="sri-tags">
+            <el-tag size="small">{{ typeLabel(result.memoryType) }}</el-tag>
+            <el-tag size="small" type="info" effect="plain">{{ matchLabel(result.matchType) }}</el-tag>
+            <el-tag v-if="result.memoryLayer" size="small" type="info" effect="plain">{{ result.memoryLayer }}</el-tag>
+          </div>
+          <span v-if="searchMode !== 'keyword'" class="sri-score">
+            Score: {{ (result.score * 100).toFixed(1) }}%
+          </span>
+        </div>
+        <div class="sri-key">{{ result.key }}</div>
+        <div class="sri-value">{{ result.value }}</div>
       </div>
+      <el-empty v-if="searchResults.length === 0 && searched && !searching" description="无结果" />
+      <div v-if="!searched && !searching" class="search-placeholder">输入关键词开始搜索</div>
     </div>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { computed, ref } from "vue";
 import { ElMessage } from "element-plus";
-import { useApi } from "../../../composables/useApi";
-const { post, get } = useApi();
+import {
+  searchMemories,
+  type MemorySearchMode,
+  type MemorySearchResult,
+} from "../composables/memorySearchApi";
+
 const props = defineProps<{ modelValue: boolean }>();
 const emit = defineEmits<{ "update:modelValue": [value: boolean] }>();
 const visible = computed({
   get: () => props.modelValue,
-  set: (v) => emit("update:modelValue", v),
+  set: (value) => emit("update:modelValue", value),
 });
+
 const searchQuery = ref("");
-const searchResults = ref<any[]>([]);
+const searchMode = ref<MemorySearchMode>("hybrid");
+const searchResults = ref<MemorySearchResult[]>([]);
 const searched = ref(false);
+const searching = ref(false);
+
 const TYPES = [
   { value: "personal_info", label: "个人信息" },
   { value: "hobby", label: "爱好" },
@@ -62,74 +74,66 @@ const TYPES = [
   { value: "relationship", label: "关系" },
   { value: "custom", label: "自定义" },
 ];
-function typeLabel(t: string) {
-  return TYPES.find((x) => x.value === t)?.label || t;
+
+const modeHint = computed(() => {
+  if (searchMode.value === "vector") return "向量搜索只按语义相似度召回。";
+  if (searchMode.value === "keyword") return "关键词搜索使用结构化记忆的普通检索能力。";
+  return "混合搜索综合向量、关键词与记忆检索评分。";
+});
+
+function typeLabel(type: string) {
+  return TYPES.find((item) => item.value === type)?.label || type;
 }
-function pct(value: unknown) {
-  const n = Number(value ?? 0);
-  return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : "0.0%";
+
+function matchLabel(matchType: string) {
+  const value = String(matchType || searchMode.value).toLowerCase();
+  if (value.includes("vector")) return "向量";
+  if (value.includes("keyword")) return "关键词";
+  return "混合";
 }
+
 async function doSearch() {
-  if (!searchQuery.value.trim()) return;
+  const query = searchQuery.value.trim();
+  if (!query || searching.value) return;
+  searching.value = true;
   try {
-    const result = await post<any>("/api/memories/hybrid-search", {
-      keyword: searchQuery.value.trim(),
-      limit: 10,
-    });
-    const items = result?.items || [];
-    let ranked: any[] = [];
-    try {
-      const rankedResult = await get<any>("/api/memories/ranked", {
-        query: searchQuery.value.trim(),
-        limit: 10,
-      });
-      ranked = Array.isArray(rankedResult) ? rankedResult : rankedResult?.items || [];
-    } catch {}
-    const rankedById = new Map(
-      ranked.map((row: any) => [String(row?.memory?.id || ""), row]),
-    );
-    searchResults.value = items.map((r: any) => {
-      const id = String(r.memory?.id || r.id || "");
-      const rr = rankedById.get(id);
-      return {
-        id,
-        key: r.memory?.key || r.key,
-        value: r.memory?.value || r.value,
-        memoryType: r.memory?.memoryType || r.memoryType,
-        score: rr?.finalScore ?? r.score ?? 0,
-        matchType: r.matchType || "hybrid",
-        memoryLayer: r.memoryLayer || "",
-        hasRankedScore: Boolean(rr),
-        finalScore: rr?.finalScore ?? 0,
-        vectorScore: rr?.vectorScore ?? 0,
-        keywordScore: rr?.keywordScore ?? 0,
-        importanceNorm: rr?.importanceNorm ?? 0,
-        temporalBoost: rr?.temporalBoost ?? 0,
-      };
-    });
+    searchResults.value = await searchMemories(query, searchMode.value, 20);
     searched.value = true;
-  } catch {
-    try {
-      const result = await post<any>("/api/memories/search", {
-        keyword: searchQuery.value.trim(),
-        limit: 10,
-      });
-      searchResults.value = (result?.items || []).map((r: any) => ({
-        ...r,
-        score: 0,
-      }));
-      searched.value = true;
-    } catch {
-      searchResults.value = [];
-      searched.value = true;
-    }
+  } catch (e: any) {
+    searchResults.value = [];
+    searched.value = true;
+    ElMessage.error(e?.message || "记忆搜索失败");
+  } finally {
+    searching.value = false;
   }
+}
+
+function reset() {
+  searchQuery.value = "";
+  searchResults.value = [];
+  searched.value = false;
+  searching.value = false;
 }
 </script>
 
 <style scoped>
+.search-controls {
+  display: flex;
+  gap: 8px;
+}
+.search-hint {
+  margin-top: 8px;
+  color: var(--ac-color-text-muted);
+  font-size: var(--ac-font-size-xs);
+}
+.search-results {
+  min-height: 160px;
+  max-height: 360px;
+  overflow-y: auto;
+  margin-top: 12px;
+}
 .search-result-item {
-  padding: 8px 10px;
+  padding: 10px;
   border-bottom: 1px solid var(--ac-color-border-light);
 }
 .search-result-item:last-child {
@@ -139,25 +143,41 @@ async function doSearch() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.sri-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
 }
 .sri-score {
-  font-size: var(--ac-font-size-xs);
+  flex-shrink: 0;
   color: var(--ac-color-primary);
+  font-size: var(--ac-font-size-xs);
   font-weight: 600;
 }
 .sri-key {
-  font-weight: 600;
   font-size: var(--ac-font-size-sm);
+  font-weight: 600;
 }
 .sri-value {
-  font-size: var(--ac-font-size-sm);
+  margin-top: 2px;
   color: var(--ac-color-text-secondary);
+  font-size: var(--ac-font-size-sm);
+  white-space: pre-wrap;
 }
-.sri-breakdown {
-  margin-top: 5px;
-  font-size: var(--ac-font-size-xs);
+.search-placeholder {
+  padding: 28px;
   color: var(--ac-color-text-muted);
-  line-height: 1.45;
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .search-controls {
+    flex-wrap: wrap;
+  }
+  .search-controls .el-input {
+    min-width: 100%;
+  }
 }
 </style>
