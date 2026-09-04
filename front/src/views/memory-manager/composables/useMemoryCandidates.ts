@@ -12,7 +12,7 @@ export function useMemoryCandidates(
   const conversationList = ref<any[]>([]);
   const showGenerateDialog = ref(false);
   const generating = ref(false);
-  const acceptingAll = ref(false);
+  const extracting = ref(false);
   const generateConvId = ref("");
   const editCandidateVisible = ref(false);
   const editForm = reactive({
@@ -62,25 +62,6 @@ export function useMemoryCandidates(
     await fetchList?.();
   }
 
-  async function confirmAllCandidates() {
-    const ids = candidates.value
-      .map((candidate) => String(candidate?.id ?? "").trim())
-      .filter(Boolean);
-    if (ids.length === 0 || acceptingAll.value) return;
-    acceptingAll.value = true;
-    try {
-      const result: any = await post("/api/memory-candidates/batch-accept", { ids });
-      const accepted = Number(result?.accepted ?? result?.acceptedCount ?? ids.length);
-      ElMessage.success(`已接受 ${accepted} 条候选记忆`);
-      await loadCandidates();
-      await fetchList?.();
-    } catch (error: any) {
-      ElMessage.error(error?.message || "批量接受失败");
-    } finally {
-      acceptingAll.value = false;
-    }
-  }
-
   async function deleteCandidateItem(c: any) {
     try {
       await del("/api/memory-candidates/" + c.id);
@@ -103,6 +84,25 @@ export function useMemoryCandidates(
       conversationList.value = result?.items || result?.data || [];
     } catch {}
   }
+  async function extractCandidates() {
+    if (extracting.value) return;
+    extracting.value = true;
+    try {
+      const result: any = await post("/api/memories/extract-candidates", {});
+      candidates.value = result?.candidates || [];
+      showCandidates.value = candidates.value.length > 0;
+      if (candidates.value.length > 0) {
+        ElMessage.success("已提取 " + candidates.value.length + " 条待审核候选记忆");
+      } else {
+        ElMessage.info("当前没有可提取的待审核候选记忆");
+      }
+    } catch (error: any) {
+      ElMessage.error(error?.message || "候选提取失败");
+    } finally {
+      extracting.value = false;
+    }
+  }
+
   async function generateCandidates() {
     if (!generateConvId.value) {
       ElMessage.warning("请选择会话");
@@ -180,7 +180,7 @@ export function useMemoryCandidates(
     conversationList,
     showGenerateDialog,
     generating,
-    acceptingAll,
+    extracting,
     generateConvId,
     editCandidateVisible,
     editForm,
@@ -191,11 +191,11 @@ export function useMemoryCandidates(
     resolveAction,
     loadCandidates,
     confirmCandidate,
-    confirmAllCandidates,
     deleteCandidateItem,
     toggleCandidates,
     loadConversations,
     generateCandidates,
+    extractCandidates,
     editCandidate,
     saveEditCandidate,
     doResolveConflict,

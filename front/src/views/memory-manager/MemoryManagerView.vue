@@ -143,9 +143,9 @@
         <el-option label="记忆强度升序" value="memory_strength_asc" />
         <el-option label="记忆层级" value="retention_level_asc" />
       </el-select>
-      <el-button size="small" @click="showGenerateDialog = true"
-        >生成候选</el-button
-      >
+      <el-button size="small" @click="searchMemory">记忆搜索</el-button>
+      <el-button size="small" :loading="extracting" @click="extractCandidates">提取待审核候选</el-button>
+      <el-button size="small" @click="showGenerateDialog = true">从会话生成候选</el-button>
       <div class="toolbar-spacer"></div>
       <el-button size="small" type="primary" :icon="Plus" @click="showCreate"
         >新建</el-button
@@ -299,9 +299,7 @@
         <CandidateMemoryPanel
           :candidates="candidates"
           :show-candidates="showCandidates"
-          :accepting-all="acceptingAll"
           @confirm="confirmCandidate"
-          @confirm-all="confirmAllCandidates"
           @edit="editCandidate"
           @delete-item="deleteCandidateItem"
           @toggle-show="showCandidates = !showCandidates"
@@ -471,7 +469,7 @@ const {
   conversationList,
   showGenerateDialog,
   generating,
-  acceptingAll,
+  extracting,
   generateConvId,
   editCandidateVisible,
   editForm,
@@ -482,10 +480,10 @@ const {
   resolveAction,
   loadCandidates,
   confirmCandidate,
-  confirmAllCandidates,
   deleteCandidateItem,
   loadConversations,
   generateCandidates,
+  extractCandidates,
   editCandidate,
   saveEditCandidate,
   doResolveConflict,
@@ -495,9 +493,6 @@ const {
 );
 const {
   searchDialogVisible,
-  searchQuery,
-  searchResults,
-  searched,
   globalQuery,
   globalSearching,
   globalSearched,
@@ -505,7 +500,6 @@ const {
   globalResults,
   globalResultCount,
   searchMemory,
-  doSearch,
   clearGlobalSearch,
   doGlobalSearch,
 } = useMemorySearch();
