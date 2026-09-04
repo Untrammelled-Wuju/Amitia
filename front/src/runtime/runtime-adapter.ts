@@ -16,6 +16,7 @@ export const DEVICE_LOCAL_ROUTE_PREFIXES = [
   "/api/local/workflows",
   "/api/local/workflow-runs",
   "/api/local/workspaces",
+  "/api/workspaces",
   "/internal/device-mesh",
 ] as const;
 
