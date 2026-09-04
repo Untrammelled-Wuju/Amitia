@@ -1,0 +1,113 @@
+/* SPDX-FileCopyrightText: 2026 彭旭 */
+/* SPDX-License-Identifier: AGPL-3.0-only */
+
+:root,
+html[data-theme="light"] {
+  --tp-page: #f3f2ee;
+  --workbench-bg: #f3f2ee;
+  --workbench-sidebar-bg: #f8f7f4;
+  --surface-bg: #fcfbf8;
+  --surface-bg-elevated: #fffdf9;
+  --tp-shell: rgba(250, 249, 246, 0.92);
+  --tp-panel: #fcfbf8;
+  --tp-panel-soft: #f6f3ed;
+  --tp-profile-bg: #f8f5ef;
+  --tp-control: #f1eee7;
+  --tp-control-hover: #e8e2d8;
+  --tp-float: #fffdf9;
+  --tp-primary: #8a5728;
+  --tp-primary-hover: #74451e;
+  --tp-primary-active: #5e3516;
+  --tp-primary-soft: #f1e4d4;
+  --tp-primary-bg: #f1e4d4;
+  --tp-primary-border: rgba(138, 87, 40, 0.28);
+  --tp-primary-ring: rgba(138, 87, 40, 0.24);
+  --tp-primary-light-3: #a67547;
+  --tp-primary-light-5: #bf9974;
+  --tp-primary-light-7: #dcc5ad;
+  --tp-primary-light-8: #e8d8c6;
+  --tp-primary-light-9: #f4eadf;
+  --tp-text: #24221f;
+  --tp-text-secondary: #5f5b54;
+  --tp-text-muted: #706b63;
+  --tp-text-placeholder: #706b63;
+  --tp-text-on-primary: #ffffff;
+  --tp-text-on-status: #ffffff;
+  --tp-border: #d8d2c7;
+  --tp-border-light: #e6e1d8;
+  --tp-border-strong: #bfb7aa;
+  --tp-success: #3f7653;
+  --tp-success-soft: #e4efe7;
+  --tp-warning: #8a5a18;
+  --tp-warning-soft: #f5e8d8;
+  --tp-danger: #a83f3f;
+  --tp-danger-soft: #f5e3e1;
+  --tp-info: #4e6c82;
+  --tp-info-soft: #e8eff3;
+  --tp-overlay: rgba(30, 28, 25, 0.46);
+  --tp-glass-bg: rgba(252, 251, 248, 0.78);
+  --tp-glass-bg-strong: rgba(255, 253, 249, 0.94);
+  --tp-glass-border: rgba(81, 66, 47, 0.14);
+  --tp-glass-blur: 14px;
+  --tp-glass-saturate: 105%;
+  --tp-page-glow: radial-gradient(
+    circle at 8% 0%,
+    rgba(166, 117, 71, 0.08),
+    transparent 34%
+  );
+  --tp-sidebar-glow: linear-gradient(
+    180deg,
+    rgba(138, 87, 40, 0.06),
+    transparent 36%
+  );
+  --tp-logo-bg: linear-gradient(145deg, #a96f39, #74451e);
+  --tp-shadow-card: 0 1px 2px rgba(48, 40, 31, 0.05);
+  --tp-shadow-float: 0 18px 48px rgba(36, 32, 27, 0.15);
+  --tp-bg: var(--tp-page);
+  --tp-bg-secondary: var(--tp-panel-soft);
+  --tp-surface: var(--tp-panel);
+  --tp-surface-hover: var(--tp-control-hover);
+  --tp-glass: var(--tp-glass-bg);
+  --tp-shadow-sm: var(--tp-shadow-card);
+  --tp-shadow-md: var(--tp-shadow-float);
+  --tp-shadow-lg: var(--tp-shadow-float);
+  --nav-active-color: var(--tp-primary);
+  --nav-active-bg: var(--tp-primary-soft);
+  --nav-hover-color: var(--tp-primary-hover);
+  --nav-hover-bg: rgba(138, 87, 40, 0.09);
+  --status-ok-bg: var(--tp-success-soft);
+  --status-ok-color: var(--tp-success);
+  --status-off-bg: var(--tp-danger-soft);
+  --status-off-color: var(--tp-danger);
+  --console-bg: var(--tp-page);
+  --console-sidebar: var(--tp-shell);
+  --console-topbar: var(--tp-shell);
+  --console-card: var(--tp-panel);
+  --console-bg-subtle: var(--tp-panel-soft);
+  --console-code-bg: var(--tp-panel-soft);
+  --console-border: var(--tp-border);
+  --console-border-soft: var(--tp-border-light);
+  --console-text: var(--tp-text);
+  --console-text-secondary: var(--tp-text-secondary);
+  --console-text-muted: var(--tp-text-muted);
+  --console-search-bg: var(--tp-control);
+  --console-search-text: var(--tp-text-secondary);
+  --console-shadow: var(--tp-shadow-card);
+  --console-glass: var(--tp-glass-bg);
+  --console-glass-strong: var(--tp-glass-bg-strong);
+  --console-glass-border: var(--tp-glass-border);
+  --console-status-ok-bg: var(--tp-success-soft);
+  --console-status-warn-bg: var(--tp-warning-soft);
+  --console-value-ok-bg: var(--tp-success-soft);
+  --console-value-warn-bg: var(--tp-warning-soft);
+  --console-value-off-bg: var(--tp-danger-soft);
+  --console-blue-soft: #e8eff3;
+  --console-purple-soft: #efeaf2;
+  --console-violet-soft: #edeaf4;
+  --console-orange-soft: #f5e8d8;
+  --console-amber-soft: #f1e4d4;
+  --console-green-soft: #e4efe7;
+  --console-diagnostic-warn-bg: var(--tp-warning-soft);
+  --console-diagnostic-ok-bg: var(--tp-success-soft);
+  --console-avatar-bg: linear-gradient(180deg, #f1e4d4, #d8d2c7);
+}

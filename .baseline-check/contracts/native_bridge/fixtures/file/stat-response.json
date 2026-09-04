@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-stat-001",
+  "status": "ok",
+  "result": {
+    "exists": true,
+    "isDirectory": false,
+    "size": 2048576,
+    "modifiedAt": "2026-08-15T10:30:00Z",
+    "createdAt": "2026-08-10T08:00:00Z",
+    "mimeType": "application/pdf"
+  },
+  "error": null
+}

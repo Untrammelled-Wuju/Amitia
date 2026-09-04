@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-copy-001",
+  "status": "ok",
+  "result": {
+    "copied": true,
+    "resourceUri": "amitia://backup/backup/report.pdf"
+  },
+  "error": null
+}

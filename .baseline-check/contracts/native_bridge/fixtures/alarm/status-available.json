@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "requestId": "alm-stat-002",
+  "operation": "media.alarms.status",
+  "response": {
+    "status": "ok",
+    "result": {
+      "available": true,
+      "platformVersion": "26.0"
+    }
+  }
+}

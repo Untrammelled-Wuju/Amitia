@@ -1,0 +1,39 @@
+{
+  "description": "允许修改目录与禁止修改目录清单",
+  "version": "1.0",
+  "created": "2026-07-03",
+  "allowed_directories": [
+    "backend/cmd/",
+    "backend/internal/",
+    "backend/config/",
+    "backend/pkg/",
+    "front/src/",
+    "front/public/",
+    "front/*.ts",
+    "front/*.json",
+    "desktop/",
+    "docs/",
+    "scripts/",
+    "wechat-chat-extractor/"
+  ],
+  "forbidden_directories": [
+    "release/",
+    "WorkDone/",
+    "backend/bin/",
+    "backend/WorkDone/",
+    "front/dist/"
+  ],
+  "forbidden_files": [
+    "server.exe",
+    "LICENSE",
+    "COMMERCIAL-LICENSING.md",
+    "COPYRIGHT",
+    "TRADEMARKS.md"
+  ],
+  "rules": [
+    "release/目录中的任何文件不得被直接修改",
+    "WorkDone/目录中的编译产物不得被源码修复修改",
+    "所有构建产物必须由正式构建流水线生成",
+    "禁止手动复制源码或数据文件到release目录"
+  ]
+}

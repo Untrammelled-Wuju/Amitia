@@ -1,0 +1,253 @@
+import 'package:flutter/material.dart';
+import 'app_colors.dart';
+import 'design_tokens.dart';
+
+class AppTheme {
+  AppTheme._();
+
+  static ThemeData lightTheme() {
+    final colors = AppColors.light;
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.light,
+      extensions: <ThemeExtension<dynamic>>[
+        defaultLightColorTokens(),
+        const AmitiaLayoutTokens(),
+        const AmitiaTypographyTokens(),
+        const AmitiaIconTokens(),
+        const AmitiaComponentTokens(),
+        const AmitiaComponentVariants(),
+      ],
+      scaffoldBackgroundColor: colors.backgroundPrimary,
+      canvasColor: colors.backgroundPrimary,
+      disabledColor: colors.textDisabled,
+      dividerColor: colors.borderSecondary,
+      colorScheme: ColorScheme.light(
+        primary: colors.accentPrimary,
+        onPrimary: Colors.white,
+        primaryContainer: colors.accentSoft,
+        onPrimaryContainer: colors.accentPressed,
+        secondary: colors.accentSecondary,
+        onSecondary: Colors.white,
+        secondaryContainer: colors.accentSoft,
+        onSecondaryContainer: colors.accentPressed,
+        error: colors.error,
+        onError: Colors.white,
+        surface: colors.surfacePrimary,
+        onSurface: colors.textPrimary,
+        surfaceContainerHighest: colors.surfaceSecondary,
+        onSurfaceVariant: colors.textSecondary,
+        outline: colors.borderPrimary,
+        outlineVariant: colors.borderSecondary,
+        shadow: Colors.black,
+        scrim: colors.scrim,
+        inverseSurface: colors.textPrimary,
+        onInverseSurface: colors.surfacePrimary,
+        inversePrimary: colors.accentSecondary,
+        surfaceTint: Colors.transparent,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.backgroundPrimary,
+        foregroundColor: colors.textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+      ),
+      cardTheme: CardThemeData(
+        color: colors.surfacePrimary,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: colors.borderPrimary, width: 0.5),
+        ),
+        margin: EdgeInsets.zero,
+      ),
+      dividerTheme: DividerThemeData(
+        color: colors.borderSecondary,
+        thickness: 1,
+        space: 1,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colors.surfaceSecondary,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: colors.accentPrimary, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: TextStyle(color: colors.textTertiary, fontSize: 15),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: colors.textPrimary,
+        contentTextStyle: TextStyle(color: Colors.white, fontSize: 14),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colors.surfacePrimary,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        showDragHandle: true,
+        dragHandleColor: colors.borderPrimary,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: colors.surfacePrimary,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      ),
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.white;
+          return colors.textTertiary;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return colors.accentPrimary;
+          return colors.borderPrimary;
+        }),
+        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: colors.accentPrimary,
+        linearTrackColor: colors.accentSoft,
+        linearMinHeight: 6,
+      ),
+    );
+  }
+
+  static ThemeData darkTheme() {
+    final colors = AppColors.dark;
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      extensions: <ThemeExtension<dynamic>>[
+        defaultDarkColorTokens(),
+        const AmitiaLayoutTokens(),
+        const AmitiaTypographyTokens(),
+        const AmitiaIconTokens(),
+        const AmitiaComponentTokens(),
+        const AmitiaComponentVariants(),
+      ],
+      scaffoldBackgroundColor: colors.backgroundPrimary,
+      canvasColor: colors.backgroundPrimary,
+      disabledColor: colors.textDisabled,
+      dividerColor: colors.borderSecondary,
+      colorScheme: ColorScheme.dark(
+        primary: colors.accentPrimary,
+        onPrimary: Colors.white,
+        primaryContainer: colors.accentSoft,
+        onPrimaryContainer: colors.accentSecondary,
+        secondary: colors.accentSecondary,
+        onSecondary: colors.backgroundPrimary,
+        secondaryContainer: colors.accentSoft,
+        onSecondaryContainer: colors.accentSecondary,
+        error: colors.error,
+        onError: Colors.white,
+        surface: colors.surfacePrimary,
+        onSurface: colors.textPrimary,
+        surfaceContainerHighest: colors.surfaceSecondary,
+        onSurfaceVariant: colors.textSecondary,
+        outline: colors.borderPrimary,
+        outlineVariant: colors.borderSecondary,
+        shadow: Colors.black,
+        scrim: colors.scrim,
+        inverseSurface: colors.textPrimary,
+        onInverseSurface: colors.backgroundPrimary,
+        inversePrimary: colors.accentSecondary,
+        surfaceTint: Colors.transparent,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.backgroundPrimary,
+        foregroundColor: colors.textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+      ),
+      cardTheme: CardThemeData(
+        color: colors.surfacePrimary,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: colors.borderPrimary, width: 0.5),
+        ),
+        margin: EdgeInsets.zero,
+      ),
+      dividerTheme: DividerThemeData(
+        color: colors.borderSecondary,
+        thickness: 1,
+        space: 1,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colors.surfaceSecondary,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: colors.accentPrimary, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: TextStyle(color: colors.textTertiary, fontSize: 15),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: colors.surfaceSecondary,
+        contentTextStyle: TextStyle(color: colors.textPrimary, fontSize: 14),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colors.surfacePrimary,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        showDragHandle: true,
+        dragHandleColor: colors.borderPrimary,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: colors.surfacePrimary,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      ),
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.white;
+          return colors.textTertiary;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return colors.accentPrimary;
+          return colors.borderPrimary;
+        }),
+        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: colors.accentPrimary,
+        linearTrackColor: colors.accentSoft,
+        linearMinHeight: 6,
+      ),
+    );
+  }
+}

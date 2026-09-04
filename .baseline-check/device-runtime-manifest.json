@@ -1,0 +1,117 @@
+{
+  "components": [
+    {
+      "architecture": "",
+      "entry": "",
+      "id": "runtime.backend",
+      "root": "backend",
+      "sha256": "63549fc311264913690fc57184181d7fdfcb365faa4daa7d82cd1fa0362f38ca",
+      "source": "package",
+      "treeSha256": "",
+      "version": "dev"
+    },
+    {
+      "architecture": "",
+      "entry": "",
+      "id": "runtime.node",
+      "root": "node",
+      "sha256": "e71047456eeb9bec66c1cef8b5da89fa4b50f26ffca02f7a5f25e9dc52bd0783",
+      "source": "package",
+      "treeSha256": "",
+      "version": "24.19.0"
+    },
+    {
+      "architecture": "",
+      "entry": "",
+      "id": "runtime.plugin-host",
+      "root": "plugin-host",
+      "sha256": "e6e5383d7854cd56f30ae953a377d580440c4f6ce1c3c88f5ff4265be2b221b9",
+      "source": "package",
+      "treeSha256": "",
+      "version": "1.0.0"
+    },
+    {
+      "architecture": "",
+      "entry": "",
+      "id": "runtime.qdrant",
+      "root": "qdrant",
+      "sha256": "d3225cdc2b9e0b520ed986ff1fa6d7b363f8a781c741ef68e68590f40d23a05f",
+      "source": "package",
+      "treeSha256": "",
+      "version": "1.19.0"
+    },
+    {
+      "architecture": "",
+      "entry": "",
+      "id": "runtime.task-host",
+      "root": "task-host",
+      "sha256": "1d50c39cca0be7979ac29034b18ec1f1c09d2da8ac75cf2996ead40f62449f9d",
+      "source": "package",
+      "treeSha256": "",
+      "version": "1.0.0"
+    }
+  ],
+  "installation": {
+    "activeVersion": "1.0.0",
+    "rootfsId": "150cb66eb4090dba",
+    "runtimeRootId": "1.0.0",
+    "runtimeRootTreeSha256": "f1aaf4a83ff56633f9d98aa273176f1df319bdd14d4071a6025ba8674a722b82"
+  },
+  "packageId": "amitia.runtime.android",
+  "packageSha256": "7536cde0498c29983c1b717d93c915a8d4ee2ee28c0c423c6530219dd1db3cc2",
+  "paths": {
+    "cacheHostPath": "/data/user/0/com.amitia.amitia_app.debug/files/amitia/cache",
+    "configHostPath": "/data/user/0/com.amitia.amitia_app.debug/files/amitia/config",
+    "dataHostPath": "/data/user/0/com.amitia.amitia_app.debug/files/amitia/data",
+    "guestCacheRoot": "/var/cache/amitia",
+    "guestConfigRoot": "/etc/amitia",
+    "guestDataRoot": "/var/lib/amitia",
+    "guestLogRoot": "/var/log/amitia",
+    "guestRunRoot": "/run/amitia",
+    "guestRuntimeRoot": "/opt/amitia",
+    "logHostPath": "/data/user/0/com.amitia.amitia_app.debug/files/amitia/logs",
+    "rootfsHostPath": "/data/user/0/com.amitia.amitia_app.debug/no_backup/amitia-runtime/rootfs",
+    "runHostPath": "/data/user/0/com.amitia.amitia_app.debug/files/amitia/run",
+    "runtimeRootHostPath": "/data/user/0/com.amitia.amitia_app.debug/no_backup/amitia-runtime/versions/1.0.0"
+  },
+  "payloads": [
+    {
+      "id": "rootfs",
+      "role": "rootfs",
+      "sha256": "150cb66eb4090dbaf3ff3a51dd16f04b120d7bb3c9fc11f1f90f58c821598fad",
+      "size": 16746876
+    },
+    {
+      "id": "runtime",
+      "role": "runtime",
+      "sha256": "35bf0bef00818d13e9cf36729b13d08dafcada8de97d5c56772ad974ec3c6c93",
+      "size": 75440028
+    },
+    {
+      "id": "sha256sums",
+      "role": "integrity",
+      "sha256": "7c78ffb688209b4657bcb5c9838ad279d51691c8400aa531d8ac82bff4a13803",
+      "size": 837
+    }
+  ],
+  "runtimeVersion": "1.0.0",
+  "schemaVersion": 1,
+  "sourceCommit": "ed7e2f0140b78bd3a5088227882a2e78dd4c98e9",
+  "target": {
+    "distribution": "amitia",
+    "distributionRelease": "1.0.0",
+    "guestArchitecture": "arm64",
+    "guestPlatform": "linux",
+    "hostAbi": "arm64-v8a",
+    "hostPlatform": "android",
+    "runtimeKind": "proot"
+  },
+  "verification": {
+    "componentsVerified": true,
+    "guestLayoutVerified": true,
+    "mountContractVerified": true,
+    "packageVerified": true,
+    "rootfsVerified": true,
+    "runtimeRootVerified": true
+  }
+}

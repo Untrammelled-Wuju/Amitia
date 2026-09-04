@@ -1,0 +1,100 @@
+import { app, BrowserWindow, Menu, nativeTheme, shell, Tray } from "electron";
+import { configToLabel } from "../shared/deployment";
+import type { DeploymentModeConfig } from "../shared/types";
+import type { ConfigStore } from "./config-store";
+import { IPC_CHANNELS } from "../shared/ipc";
+import { getInitialBrandImage } from "./branding";
+import { getAmitiaDataDir } from "./path-manager";
+
+let latestUpdateMenu: (() => Promise<void>) | null = null;
+
+export function refreshTrayMenu() {
+  latestUpdateMenu?.();
+}
+
+export function createAppTray(
+  win: BrowserWindow,
+  getConfig: () => DeploymentModeConfig,
+  configStore: ConfigStore,
+): {
+  tray: Tray;
+  refreshMenu: () => Promise<void>;
+  setExtensionItems: (items: Electron.MenuItemConstructorOptions[]) => Promise<void>;
+} {
+  const icon = getInitialBrandImage(
+    nativeTheme.shouldUseDarkColors ? "dark" : "light",
+    "tray",
+  );
+  const tray = new Tray(icon);
+  tray.setToolTip("Amitia");
+  let extensionItems: Electron.MenuItemConstructorOptions[] = [];
+
+  const updateMenu = async () => {
+    const visible = win.isVisible();
+    const config = getConfig();
+    const autoLaunch = await configStore.getAutoLaunch();
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        {
+          label: "显示 Amitia",
+          enabled: !visible,
+          click: () => showWindow(win),
+        },
+        { label: "隐藏窗口", enabled: visible, click: () => win.hide() },
+        { label: `当前部署模式：${configToLabel(config)}`, enabled: false },
+        { type: "separator" },
+        {
+          label: "开机自启动",
+          type: "checkbox",
+          checked: autoLaunch,
+          click: async (menuItem) => {
+            const next = menuItem.checked;
+            await configStore.setAutoLaunch(next);
+            app.setLoginItemSettings({ openAtLogin: next });
+            win.webContents.send(IPC_CHANNELS.autoLaunchChanged, next);
+          },
+        },
+        { type: "separator" },
+        {
+          label: "打开数据目录",
+          click: () => void shell.openPath(getAmitiaDataDir()),
+        },
+        ...(extensionItems.length > 0
+          ? [{ type: "separator" as const }, ...extensionItems]
+          : []),
+        { type: "separator" },
+        {
+          label: "退出 Amitia",
+          click: () => {
+            app.quit();
+          },
+        },
+      ]),
+    );
+  };
+
+  tray.on("click", () => showWindow(win));
+  tray.on("double-click", () => showWindow(win));
+  win.on("show", () => {
+    void updateMenu();
+  });
+  win.on("hide", () => {
+    void updateMenu();
+  });
+  void updateMenu();
+  latestUpdateMenu = updateMenu;
+  return {
+    tray,
+    refreshMenu: updateMenu,
+    setExtensionItems: async (items) => {
+      extensionItems = items;
+      await updateMenu();
+    },
+  };
+}
+
+function showWindow(win: BrowserWindow): void {
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}

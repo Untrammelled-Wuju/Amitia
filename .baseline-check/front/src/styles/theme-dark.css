@@ -1,0 +1,70 @@
+/* SPDX-FileCopyrightText: 2026 彭旭 */
+/* SPDX-License-Identifier: AGPL-3.0-only */
+
+html[data-theme="dark"] {
+  --tp-page: #0b0b0c;
+  --workbench-bg: #0b0b0c;
+  --workbench-sidebar-bg: #121214;
+  --surface-bg: #121214;
+  --surface-bg-elevated: #121214;
+  --tp-shell: rgba(18, 18, 20, 0.88);
+  --tp-panel: #121214;
+  --tp-panel-soft: #141416;
+  --tp-profile-bg: #161617;
+  --tp-control: #202024;
+  --tp-control-hover: #252529;
+  --tp-float: #121214;
+  --tp-primary: #c99557;
+  --tp-primary-hover: #d8a96a;
+  --tp-primary-active: #ad773d;
+  --tp-primary-soft: rgba(201, 149, 87, 0.11);
+  --tp-primary-bg: rgba(201, 149, 87, 0.11);
+  --tp-primary-border: rgba(201, 149, 87, 0.22);
+  --tp-primary-ring: rgba(201, 149, 87, 0.22);
+  --tp-primary-light-3: #d4aa76;
+  --tp-primary-light-5: #b99365;
+  --tp-primary-light-7: rgba(201, 149, 87, 0.28);
+  --tp-primary-light-8: rgba(201, 149, 87, 0.18);
+  --tp-primary-light-9: rgba(201, 149, 87, 0.11);
+  --tp-text: #f1f0ed;
+  --tp-text-secondary: #aaa7a2;
+  --tp-text-muted: #74716d;
+  --tp-text-placeholder: #74716d;
+  --tp-text-on-primary: #17120c;
+  --tp-text-on-status: #17120c;
+  --tp-border: #29292d;
+  --tp-border-light: #212124;
+  --tp-border-strong: #3b3b41;
+  --tp-success: #75a184;
+  --tp-success-soft: rgba(117, 161, 132, 0.12);
+  --tp-warning: #c99a56;
+  --tp-warning-soft: rgba(201, 154, 86, 0.12);
+  --tp-danger: #c96e6a;
+  --tp-danger-soft: rgba(201, 110, 106, 0.12);
+  --tp-info: #9a9e99;
+  --tp-info-soft: rgba(154, 158, 153, 0.11);
+  --tp-overlay: rgba(11, 11, 12, 0.88);
+  --tp-glass-bg: rgba(24, 24, 27, 0.32);
+  --tp-glass-bg-strong: rgba(24, 24, 27, 0.32);
+  --tp-glass-border: rgba(255, 255, 255, 0.08);
+  --tp-glass-blur: 14px;
+  --tp-glass-saturate: 105%;
+  /* --tp-page-glow: radial-gradient(circle at 18% 0%, rgba(201, 149, 87, 0.055), transparent 30%); */
+  --tp-page-glow: none;
+  --tp-sidebar-glow: linear-gradient(
+    180deg,
+    rgba(201, 149, 87, 0.028),
+    transparent 32%
+  );
+  --tp-logo-bg: linear-gradient(145deg, #d2a363, #a66f39);
+  --tp-shadow-card: none;
+  --tp-shadow-float: 0 16px 40px rgba(0, 0, 0, 0.3);
+  --nav-hover-bg: rgba(201, 149, 87, 0.07);
+  --console-blue-soft: rgba(154, 158, 153, 0.11);
+  --console-purple-soft: rgba(176, 162, 143, 0.1);
+  --console-violet-soft: rgba(164, 157, 145, 0.1);
+  --console-orange-soft: rgba(201, 154, 86, 0.12);
+  --console-amber-soft: rgba(201, 149, 87, 0.11);
+  --console-green-soft: rgba(117, 161, 132, 0.12);
+  --console-avatar-bg: linear-gradient(180deg, #3b3b41, #18181b);
+}

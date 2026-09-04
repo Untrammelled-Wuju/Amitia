@@ -1,0 +1,10 @@
+{
+  "domain": "bluetooth",
+  "event": "discovered",
+  "timestamp": "2026-08-16T15:59:55Z",
+  "data": {
+    "deviceId": "bt-001",
+    "name": "Amitia Speaker",
+    "rssi": -45
+  }
+}

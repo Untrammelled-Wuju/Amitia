@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://amitia.untrammelled.top/contracts/native_bridge/health.schema.json",
+  "title": "NativeBridgeHealth",
+  "description": "Native Bridge v1 健康状态载荷",
+  "type": "object",
+  "required": ["ready", "platform"],
+  "properties": {
+    "generation": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "foreground": {
+      "type": "boolean"
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["android", "ios"]
+    },
+    "protocolVersion": {
+      "type": "integer",
+      "enum": [1]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ready", "unhealthy", "unknown"]
+    },
+    "hostGeneration": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": { "type": "boolean" }
+    },
+    "health": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

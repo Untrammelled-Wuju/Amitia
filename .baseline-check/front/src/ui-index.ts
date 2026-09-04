@@ -1,0 +1,52 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
+// Shared UI Components
+export { default as AppLayout } from "./components/AppLayout.vue";
+export { default as StatusBar } from "./components/StatusBar.vue";
+export { default as SideNav } from "./components/SideNav.vue";
+export { default as MobileNav } from "./components/MobileNav.vue";
+export { default as ChatBubble } from "./components/ChatBubble.vue";
+export { default as ConversationDrawer } from "./components/ConversationDrawer.vue";
+export { default as ChatInput } from "./components/ChatInput.vue";
+export { default as ErrorPanel } from "./components/ErrorPanel.vue";
+
+// Shared Views
+export { default as LoginView } from "./views/login/LoginView.vue";
+export { default as WebChatView } from "./views/web-chat/WebChatView.vue";
+export { default as WechatConnectView } from "./views/wechat-connect/WechatConnectView.vue";
+export { default as ModelConfigView } from "./views/model-config/ModelConfigView.vue";
+export { default as CharacterConfigView } from "./views/character-config/CharacterConfigView.vue";
+export { default as CharacterVoiceView } from "./views/character-voice/CharacterVoiceView.vue";
+export { default as MemoryManagerView } from "./views/memory-manager/MemoryManagerView.vue";
+export { default as MemoryTimelineView } from "./views/memory-timeline/MemoryTimeline.vue";
+export { default as AiCharacterSettingsView } from "./views/ai-character-settings/AiCharacterSettingsView.vue";
+export { default as CompanionDebugView } from "./views/companion-debug/CompanionDebugView.vue";
+export { default as ProactiveRulesView } from "./views/proactive-rules/ProactiveRules.vue";
+export { default as RemindersView } from "./views/reminders/Reminders.vue";
+export { default as ChatLogsView } from "./views/chat-logs/ChatLogsView.vue";
+export { default as ChatImportView } from "./views/chat-import/ChatImportView.vue";
+export { default as SafetySettingsView } from "./views/safety-settings/SafetySettingsView.vue";
+export { default as SettingsView } from "./views/settings/SettingsView.vue";
+export { default as ChatCleanupView } from "./views/chat-cleanup/ChatCleanupView.vue";
+export { default as PrivacyScanView } from "./views/privacy-scan/PrivacyScanView.vue";
+
+// Composables
+export { useChat } from "./composables/useChat";
+export { useTheme } from "./composables/useTheme";
+export {
+  useApi,
+  apiClient,
+} from "./composables/useApi";
+export {
+  request,
+  get,
+  post,
+  put,
+  del,
+  setStartCoreHandler,
+  setErrorPanelHandler,
+  setErrorBannerHandler,
+  type RequestError,
+  type ErrorSeverity,
+} from "./composables/request";
+export type { ThemePreset } from "./composables/useTheme";

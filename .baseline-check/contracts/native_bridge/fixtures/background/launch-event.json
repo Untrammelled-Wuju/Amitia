@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "event": "execution_window_started",
+  "payload": {
+    "taskRunId": "run-20260816-001",
+    "identifier": "com.amitia.background.refresh",
+    "systemClass": "app_refresh",
+    "timestamp": "2026-08-16T16:00:05Z"
+  }
+}

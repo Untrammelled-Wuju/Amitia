@@ -1,0 +1,51 @@
+import { createDriver, BackendDriver } from '../backend_driver';
+
+const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
+const MOCK_EXTENSION_ID = 'com.mock-developer/mock-amitiax-game-plugin';
+
+function requireArchive(): string {
+  if (!ARCHIVE_PATH) {
+    throw new Error('MOCK_PLUGIN_ARCHIVE_PATH environment variable is required for F15 smoke tests');
+  }
+  return ARCHIVE_PATH;
+}
+
+describe('G47-F15 Smoke (Backend Driver)', () => {
+  let driver: BackendDriver;
+  let extensionId: string | null = null;
+
+  beforeEach(() => {
+    driver = createDriver();
+  });
+
+  afterEach(async () => {
+    try {
+      await driver.uninstallPlugin(extensionId ?? MOCK_EXTENSION_ID);
+    } catch {
+      // Package may not have been installed in this test.
+    }
+    extensionId = null;
+  });
+
+  it('backend is reachable via game-center API', async () => {
+    const plugins = await driver.listPlugins();
+    expect(Array.isArray(plugins)).toBe(true);
+  }, 10000);
+
+  it('list runtimes returns array', async () => {
+    const runtimes = await driver.listRuntimes();
+    expect(Array.isArray(runtimes)).toBe(true);
+  }, 10000);
+
+  it('install plugin via API returns success', async () => {
+    const archivePath = requireArchive();
+    const result = await driver.installPlugin(archivePath);
+    expect(result).toBeDefined();
+    const plugin = await driver.waitForPluginByExtension(MOCK_EXTENSION_ID, 30000);
+    extensionId = plugin.extensionId;
+  }, 30000);
+
+  it('zero residue after fresh backend start', async () => {
+    await driver.assertZeroResidue();
+  }, 10000);
+});

@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "requestId": "sc-exec-bad",
+  "operation": "shortcuts.execute",
+  "payload": {
+    "actionId": "com.amitia.action.unknown"
+  },
+  "expectedError": {
+    "code": "ACTION_NOT_SUPPORTED",
+    "message": "unsupported action: com.amitia.action.unknown"
+  }
+}

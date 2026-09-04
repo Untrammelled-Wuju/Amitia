@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-err-001",
+  "operation": "file.stat",
+  "payload": {
+    "mountId": "mount-documents-001",
+    "relativePath": "../../etc/passwd"
+  },
+  "expectedError": {
+    "code": "PATH_ESCAPE",
+    "message": "path escapes mount root"
+  }
+}

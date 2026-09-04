@@ -1,0 +1,52 @@
+{
+  "name": "@amitia/desktop",
+  "version": "26.1.8",
+  "desktopPetRuntimeVersion": "2.0.0",
+  "desktopPetRuntimeContractVersion": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/index.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -p tsconfig.json && vite build && node scripts/copy-static-assets.mjs && node scripts/verify-renderer-build.mjs && node scripts/verify-desktop-pet-package.mjs",
+    "dist:win": "node scripts/build-release.mjs --win --x64",
+    "dist:win:dir": "node scripts/build-release.mjs --win --x64 --dir",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "package": "node scripts/build-release.mjs --win --x64",
+    "upload": "node scripts/publish-release.mjs",
+    "verify:desktop-pet-package": "node scripts/verify-desktop-pet-package.mjs",
+    "package:ci": "pnpm run release:gate && node scripts/build-amitiacore.mjs && electron-builder --config electron-builder.ci.yml --win --x64 --dir && node scripts/verify-packaged-desktop-pet.mjs release-ci/win-unpacked && node scripts/verify-packaged-core.mjs release-ci/win-unpacked",
+    "test:electron-pet-smoke": "electron scripts/desktop-pet-electron-smoke.cjs",
+    "verify:pet-player-singleton": "node scripts/verify-pet-player-singleton.mjs",
+    "verify:desktop-pet-runtime-singletrack": "node ../scripts/audit/verify-desktop-pet-runtime-singletrack.mjs",
+    "verify:source-hygiene": "node ../scripts/audit/verify-source-hygiene.mjs",
+    "release:gate": "node scripts/verify-release-prerequisites.mjs && pnpm run typecheck && pnpm run test && pnpm run verify:source-hygiene && pnpm run build && pnpm run verify:pet-player-singleton && pnpm run verify:desktop-pet-runtime-singletrack && pnpm run verify:desktop-pet-runtime-lifecycle-semantics && pnpm run verify:desktop-pet-finalization && pnpm run verify:cloud-device-execution-finalization && pnpm run verify:desktop-pet-device-agent-freeze-gate && pnpm run test:electron-pet-smoke && node ../scripts/build-freeze-scope.mjs --verify && node scripts/release-integrity.mjs --pre-build",
+    "verify:desktop-pet-finalization": "node scripts/verify-desktop-pet-finalization.mjs",
+    "verify:cloud-device-execution-finalization": "node scripts/verify-cloud-device-execution-finalization.mjs",
+    "verify:desktop-pet-device-agent-freeze-gate": "node scripts/verify-desktop-pet-device-agent-freeze-gate.mjs",
+    "verify:desktop-pet-runtime-lifecycle-semantics": "node scripts/verify-desktop-pet-runtime-lifecycle-semantics.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "^6.0.7",
+    "electron-is-dev": "^3.0.1",
+    "electron-log": "^5.4.4",
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "@vue/compiler-sfc": "3.5.35",
+    "concurrently": "^10.0.3",
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3",
+    "jsdom": "^29.1.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.3",
+    "vite-plugin-electron": "^1.1.0",
+    "vite-plugin-electron-renderer": "^1.0.0",
+    "vitest": "^4.1.10",
+    "vue": "3.5.35",
+    "wait-on": "^9.0.10"
+  },
+  "packageManager": "pnpm@11.17.0+sha512.cca3cea332ad254bb84145f966d19f4879615210346fc92c79a047f23a0d7b3cca3c3792f0076ba1f1831d277efbcf0a9119b31a9a60eca7fb3d6231f331ef72"
+}

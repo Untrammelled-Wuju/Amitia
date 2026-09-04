@@ -1,0 +1,11 @@
+{
+  "domain": "bluetooth",
+  "event": "characteristic.value_updated",
+  "timestamp": "2026-08-16T16:03:00Z",
+  "data": {
+    "peripheralId": "bt-001",
+    "serviceUUID": "0000180f-0000-1000-8000-00805f9b34fb",
+    "characteristicUUID": "00002a19-0000-1000-8000-00805f9b34fb",
+    "value": "64"
+  }
+}

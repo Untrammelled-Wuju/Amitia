@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-err-003",
+  "operation": "file.stat",
+  "payload": {
+    "mountId": "mount-nonexistent",
+    "relativePath": "file.txt"
+  },
+  "expectedError": {
+    "code": "MOUNT_NOT_FOUND",
+    "message": "mount not found"
+  }
+}

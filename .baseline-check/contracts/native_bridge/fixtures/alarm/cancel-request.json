@@ -1,0 +1,8 @@
+{
+  "protocolVersion": 1,
+  "requestId": "alm-cancel-001",
+  "operation": "media.alarms.cancel",
+  "payload": {
+    "alarmId": "alarm-001"
+  }
+}

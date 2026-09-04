@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "event": "execution_window_expired",
+  "payload": {
+    "taskRunId": "run-20260816-001",
+    "identifier": "com.amitia.background.refresh",
+    "reason": "system_timeout",
+    "timestamp": "2026-08-16T16:05:00Z"
+  }
+}

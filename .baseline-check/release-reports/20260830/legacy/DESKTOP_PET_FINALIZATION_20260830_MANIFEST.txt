@@ -1,0 +1,163 @@
+Amitia Desktop Pet Finalization - 2026-08-31 Complete Repair Freeze Manifest
+Baseline file: DESKTOP_PET_FINALIZATION_SHA256SUMS.txt
+Frozen file count: 1046
+
+FINAL CONCLUSION
+- This freeze supersedes the invalid 2026-08-30 SHA baseline.
+- Runtime V2 remains the sole desktop-pet runtime wire path.
+- The 2026-08-31 complete repair closes all audited finalization gate defects:
+  legacy protocol removal, runtime pollution cleanup, freeze scope expansion,
+  SHA baseline rebuild, source hygiene gate, release integrity hardening,
+  and CI/local release rule unification.
+
+COMPLETE REPAIRS EXECUTED (P0-01 through P0-15, P1-01)
+
+P0-01 Runtime V1 Legacy Protocol Removal
+- Deleted: desktop/src/shared/runtime-protocol.ts
+- Verified: RUNTIME_PROTOCOL_VERSION_1_0 references = 0
+- Verified: RuntimeProtocolV1 references = 0
+- Verified: protocolVersion "1.0" references = 0
+- Canonical contract: desktop/src/desktop-pet/runtime/protocol-v2.ts
+
+P0-02 Runtime Pollution Cleanup
+- Deleted: trace.atrace, .qdrant-initialized, backend/.qdrant-initialized
+- Deleted runtime data directories: backend/qdrant/storage, backend/qdrant/snapshots,
+  backend/snapshots, backend/storage, backend/surrealdb/data.sdb, backend/surrealdb/surreal.exe,
+  snapshots, storage, surrealdb/data
+- Preserved: config templates, launch scripts, zip archives for distribution
+- Source hygiene gate: scripts/audit/verify-source-hygiene.mjs
+
+P0-03 Desktop Pet Freeze Scope Expansion
+- Added to freeze scope:
+  - front/src/runtime/, front/src/composables/, front/src/components/
+  - desktop/src/main/, desktop/src/preload/, desktop/src/renderer/, desktop/src/shared/
+  - backend/internal/runtimeprofile/, backend/internal/migration/, backend/cmd/server/
+  - desktop/vite.config.ts
+- Gate mechanisms themselves added to freeze scope:
+  - desktop/scripts/verify-desktop-pet-finalization.mjs
+  - desktop/scripts/release-integrity.mjs
+  - scripts/audit/verify-source-hygiene.mjs
+  - scripts/pack-source.ps1
+  - DESKTOP_PET_FINALIZATION_SHA256SUMS.txt
+
+P0-04 SHA256 Freeze Manifest Rebuild
+- Old baseline removed: DESKTOP_PET_FINALIZATION_20260830_SHA256SUMS.txt
+- New baseline generated: DESKTOP_PET_FINALIZATION_SHA256SUMS.txt
+- Frozen file count: 1046
+- Generation order: collect -> sort -> hash -> output -> verify
+- Verification: sha256sum -c = 1046/1046 OK
+
+P0-05 Source Pack Script Fixes
+- scripts/pack-source.ps1 updated with pre-pack gates:
+  - verify-desktop-pet-finalization.mjs execution
+  - SHA256 freeze verification
+- Gate failure = exit 1, no archive generated
+
+P0-06 Source Hygiene Gate
+- New script: scripts/audit/verify-source-hygiene.mjs
+- Checks for: trace.atrace, .qdrant-initialized, storage/, surrealdb/,
+  backend/surrealdb/, backend/qdrant/, raft_state.json, *.wal, node_modules/,
+  dist/, build/, coverage/, .DS_Store, Thumbs.db
+- Distinguishes: source/config/launcher vs runtime data
+
+P0-07 tar Exclude Rules
+- Added runtime pollution excludes to pack-source.ps1:
+  --exclude=trace.atrace, --exclude=*.atrace, --exclude=.qdrant-initialized,
+  --exclude=*/.qdrant-initialized, --exclude=storage, --exclude=*/storage,
+  --exclude=surrealdb, --exclude=backend/surrealdb, --exclude=backend/qdrant,
+  --exclude=raft_state.json, --exclude=*.wal
+
+P0-08 Archive Revalidation
+- After pack, archive extracted to temp directory
+- Re-runs: verify-desktop-pet-finalization.mjs, source hygiene audit
+- Workspace source == archive source verification
+
+P0-09 Release Integrity SourceGateHash Expansion
+- release-integrity.mjs SOURCE_INPUTS expanded to cover:
+  - desktop/package.json, desktop/vite.config.ts, desktop/src, desktop/scripts
+  - backend/internal/desktoppet, backend/internal/deviceruntime,
+    backend/internal/runtimeprofile, backend/internal/migration, backend/cmd/server
+  - front/src/runtime, front/src/composables, front/src/components
+  - scripts/audit/verify-source-hygiene.mjs, scripts/pack-source.ps1
+  - DESKTOP_PET_FINALIZATION_SHA256SUMS.txt
+
+P0-10 SourceGateHash Deterministic Algorithm
+- Algorithm: relative_path + "\0" + file_sha256
+- All files sorted by normalized relative path ASC
+- Forbidden: mtime, absolute path, workspace path, creation time in hash
+
+P0-11 Release Gate Stamp Binding
+- Added: verifyPreBuildGates() function
+- Pre-build: verify freeze SHA + compute SourceGateHash
+- Post-build: installer hash + SourceGateHash + build metadata -> gate stamp
+- Stamp verification: current SourceGateHash must == build SourceGateHash
+
+P0-12 desktop/package.json Release Flow
+- All publish scripts now run through release:gate:
+  - dist:win, dist:win:dir, package, package:ci, dist:linux, dist:mac
+- release:gate includes:
+  - typecheck, test, source hygiene, build, all verification gates,
+    electron smoke test, release-integrity pre-build gate
+
+P0-13 CI/Local Release Rule Unification
+- GitHub Actions workflow calls same gate scripts as local release
+- Added to CI: source hygiene gate, release-integrity pre-build gate
+- CI does not duplicate rules, only calls scripts
+
+P0-14 Freeze Coverage Gate
+- verify-desktop-pet-finalization.mjs includes:
+  - requiredFreezeCoverage: scope -> manifest direction check
+  - If scope file missing from SHA manifest = FAIL
+- Verifies both: manifest file existence AND scope completeness
+
+P0-15 Gate Self-Protection
+- The following files are themselves in freeze scope:
+  - desktop/scripts/verify-desktop-pet-finalization.mjs
+  - desktop/scripts/release-integrity.mjs
+  - scripts/audit/verify-source-hygiene.mjs
+  - scripts/pack-source.ps1
+  - DESKTOP_PET_FINALIZATION_SHA256SUMS.txt
+
+VALIDATION RESULTS
+[PASS] Legacy Runtime V1 scan: 0 references
+[PASS] Source hygiene scan: 0 violations
+[PASS] Runtime V2 single-track: verify-desktop-pet-runtime-singletrack.mjs
+[PASS] Cloud/device boundary: verify-cloud-device-execution-finalization.mjs
+[PASS] Lifecycle semantics: verify-desktop-pet-runtime-lifecycle-semantics.mjs
+[PASS] Pet player singleton: verify-pet-player-singleton.mjs
+[PASS] Device Agent freeze gate: verify-desktop-pet-device-agent-freeze-gate.mjs
+[PASS] Freeze coverage: all scope files in SHA manifest
+[PASS] SHA256 freeze verification: 1046/1046 OK
+[PASS] Release SourceGateHash: deterministic algorithm
+[PASS] Finalization gate: verify-desktop-pet-finalization.mjs
+[PASS] Source hygiene gate: verify-source-hygiene.mjs
+
+FINAL CHECKLIST
+- Legacy Runtime V1                 = 0
+- Forbidden runtime artifacts       = 0
+- Freeze missing files              = 0
+- Freeze untracked scope files      = 0
+- SHA mismatch                      = 0
+- Desktop Pet single-track          = PASS
+- Lifecycle                         = PASS
+- Pet player singleton              = PASS
+- Cloud/device boundary             = PASS
+- Source hygiene                    = PASS
+- Release SourceGateHash            = PASS
+- Finalization Gate                 = PASS
+- Archive Finalization Gate         = PASS
+
+FINAL CONCLUSION
+DESKTOP PET FINALIZATION: PASS
+DESKTOP PET FREEZE: PASS
+SOURCE ARCHIVE: PASS
+RELEASE INTEGRITY: PASS
+
+FREEZE RULES
+- DESKTOP_PET_FINALIZATION_SHA256SUMS.txt is the active hash baseline.
+- Any covered source change requires regenerating the baseline and rerunning
+  the finalization verifier plus sha256sum -c.
+- The finalization verifier itself is part of the baseline and may not be
+  changed without regenerating the freeze.
+- Gate mechanisms (verify-desktop-pet-finalization.mjs, release-integrity.mjs,
+  verify-source-hygiene.mjs, pack-source.ps1) are protected by the freeze.

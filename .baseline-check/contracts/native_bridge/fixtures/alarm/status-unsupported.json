@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "requestId": "alm-stat-001",
+  "operation": "media.alarms.status",
+  "response": {
+    "status": "error",
+    "error": {
+      "code": "PLATFORM_NOT_SUPPORTED",
+      "message": "AlarmKit requires iOS 26.0+"
+    }
+  }
+}

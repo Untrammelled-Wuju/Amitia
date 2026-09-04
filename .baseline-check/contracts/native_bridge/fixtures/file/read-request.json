@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-read-001",
+  "operation": "file.read",
+  "payload": {
+    "mountId": "mount-documents-001",
+    "relativePath": "projects/report.pdf",
+    "offset": 0,
+    "limit": 65536
+  }
+}

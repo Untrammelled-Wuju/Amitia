@@ -1,0 +1,193 @@
+.onboarding-world .ob-character-line,
+.onboarding-world .ob-identity-prompt .ob-character-line,
+.onboarding-world .ob-memory-prompt .ob-character-line {
+  font-size: clamp(28px, 3.2vw, 46px);
+  line-height: 1.35;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  color: var(--ob-text);
+}
+
+.onboarding-world .ob-identity-complete-message,
+.onboarding-world .ob-memory-complete-copy h2 {
+  font-size: clamp(24px, 2.7vw, 38px);
+  line-height: 1.38;
+}
+
+.onboarding-world .ob-boot-title,
+.onboarding-world .ob-sheet-title,
+.onboarding-world .ob-model-panel-title,
+.onboarding-world .ob-voice-title,
+.onboarding-world .ob-voice-model-title,
+.onboarding-world .ob-memory-title {
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.onboarding-world .ob-choice-title {
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.onboarding-world .ob-subtitle,
+.onboarding-world .ob-boot-copy,
+.onboarding-world .ob-sheet-desc,
+.onboarding-world .ob-model-panel-copy,
+.onboarding-world .ob-model-mode-desc,
+.onboarding-world .ob-voice-copy,
+.onboarding-world .ob-memory-copy,
+.onboarding-world .ob-identity-context,
+.onboarding-world .ob-memory-context,
+.onboarding-world .ob-identity-complete-note,
+.onboarding-world .ob-memory-complete-copy p,
+.onboarding-world .ob-choice-desc,
+.onboarding-world .ob-boundary-desc {
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.onboarding-world .ob-input-label input,
+.onboarding-world .ob-input-label textarea,
+.onboarding-world .ob-input-label select,
+.onboarding-world .ob-identity-answer textarea,
+.onboarding-world .ob-memory-answer textarea,
+.onboarding-world .ob-identity-ledger-value,
+.onboarding-world .ob-memory-value,
+.onboarding-world .ob-memory-summary-value {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.onboarding-world .ob-input-label,
+.onboarding-world .ob-voice-name,
+.onboarding-world .ob-boot-name,
+.onboarding-world .ob-dialogue-note,
+.onboarding-world .ob-identity-ledger-key,
+.onboarding-world .ob-memory-key,
+.onboarding-world .ob-memory-summary-label {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.onboarding-world .kicker,
+.onboarding-world .ob-model-page-card-kicker,
+.onboarding-world .ob-voice-model-kicker,
+.onboarding-world .ob-model-status,
+.onboarding-world .ob-boot-state,
+.onboarding-world .ob-choice-note,
+.onboarding-world .ob-voice-desc,
+.onboarding-world .ob-identity-complete-kicker,
+.onboarding-world .core-caption {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.onboarding-world .ob-primary-ghost,
+.onboarding-world .ob-stage-action,
+.onboarding-world .ob-small-action,
+.onboarding-world .ob-model-setup-next,
+.onboarding-world .ob-identity-complete-next,
+.onboarding-world .ob-memory-complete-next,
+.onboarding-world .ob-chip,
+.onboarding-world .ob-permission-node,
+.onboarding-world .ob-back {
+  font-size: 13px;
+}
+
+@media (min-width: 541px) and (max-width: 780px) {
+  .onboarding-world .ob-character-line {
+    font-size: 31px;
+  }
+
+  .onboarding-world .ob-identity-complete-message,
+  .onboarding-world .ob-memory-complete-copy h2 {
+    font-size: 28px;
+  }
+
+  .onboarding-world .ob-boot-title,
+  .onboarding-world .ob-sheet-title,
+  .onboarding-world .ob-model-panel-title,
+  .onboarding-world .ob-voice-title,
+  .onboarding-world .ob-voice-model-title {
+    font-size: 19px;
+  }
+
+  .onboarding-world .ob-choice-title {
+    font-size: 21px;
+  }
+}
+
+@media (max-width: 540px) {
+  .onboarding-world .ob-character-line {
+    font-size: 24px;
+    line-height: 1.28;
+  }
+
+  .onboarding-world .ob-identity-complete-message,
+  .onboarding-world .ob-memory-complete-copy h2 {
+    font-size: 21px;
+  }
+
+  .onboarding-world .ob-boot-title,
+  .onboarding-world .ob-sheet-title,
+  .onboarding-world .ob-model-panel-title,
+  .onboarding-world .ob-voice-title,
+  .onboarding-world .ob-voice-model-title {
+    font-size: 18px;
+  }
+
+  .onboarding-world .ob-choice-title {
+    font-size: 20px;
+  }
+
+  .onboarding-world .ob-subtitle,
+  .onboarding-world .ob-boot-copy,
+  .onboarding-world .ob-sheet-desc,
+  .onboarding-world .ob-model-panel-copy,
+  .onboarding-world .ob-voice-copy,
+  .onboarding-world .ob-memory-copy,
+  .onboarding-world .ob-identity-context,
+  .onboarding-world .ob-memory-context,
+  .onboarding-world .ob-choice-desc,
+  .onboarding-world .ob-boundary-desc {
+    font-size: 12px;
+  }
+
+  .onboarding-world .ob-input-label input,
+  .onboarding-world .ob-input-label textarea,
+  .onboarding-world .ob-input-label select,
+  .onboarding-world .ob-identity-answer textarea,
+  .onboarding-world .ob-memory-answer textarea,
+  .onboarding-world .ob-identity-ledger-value,
+  .onboarding-world .ob-memory-value {
+    font-size: 12px;
+  }
+
+  .onboarding-world .ob-input-label,
+  .onboarding-world .ob-voice-name,
+  .onboarding-world .ob-boot-name,
+  .onboarding-world .ob-dialogue-note {
+    font-size: 10px;
+  }
+
+  .onboarding-world .kicker,
+  .onboarding-world .ob-model-page-card-kicker,
+  .onboarding-world .ob-boot-state,
+  .onboarding-world .ob-choice-note,
+  .onboarding-world .ob-voice-desc,
+  .onboarding-world .core-caption {
+    font-size: 9px;
+  }
+
+  .onboarding-world .ob-primary-ghost,
+  .onboarding-world .ob-stage-action,
+  .onboarding-world .ob-small-action,
+  .onboarding-world .ob-model-setup-next,
+  .onboarding-world .ob-identity-complete-next,
+  .onboarding-world .ob-memory-complete-next,
+  .onboarding-world .ob-chip,
+  .onboarding-world .ob-permission-node,
+  .onboarding-world .ob-back {
+    font-size: 12px;
+  }
+}

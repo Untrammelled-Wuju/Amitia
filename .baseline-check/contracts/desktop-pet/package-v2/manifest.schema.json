@@ -1,0 +1,186 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Amitia Desktop Pet Manifest Schema v2",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "manifestFormat",
+    "petId",
+    "releaseId",
+    "version",
+    "name",
+    "compatibility",
+    "binding",
+    "canvas",
+    "defaultAction",
+    "actions",
+    "capabilities",
+    "integrity",
+    "provenance"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 2
+    },
+    "manifestFormat": {
+      "type": "string",
+      "const": "amitia-desktop-pet"
+    },
+    "petId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "releaseId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "author": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "id": { "type": "string" }
+      }
+    },
+    "license": {
+      "type": "object",
+      "properties": {
+        "spdx": { "type": "string" },
+        "noticePath": { "type": "string" }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "required": ["minRuntimeVersion", "renderMode"],
+      "properties": {
+        "minRuntimeVersion": {
+          "type": "string",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
+        },
+        "maxRuntimeVersion": {
+          "type": ["string", "null"],
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
+        },
+        "renderMode": {
+          "type": "string",
+          "const": "sprite"
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "required": ["policy"],
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": ["bound", "unbound", "legacy_inferred"]
+        },
+        "sourceCharacterId": { "type": "string" }
+      }
+    },
+    "canvas": {
+      "type": "object",
+      "required": ["width", "height", "coordinateSystem"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "coordinateSystem": { "type": "string", "const": "top-left" }
+      }
+    },
+    "defaultAction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "preview": {
+      "type": ["string", "null"]
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["key", "name", "config", "playbackMode", "fps", "frameCount", "supportsDefaultIdle", "isStableStateCandidate", "isTransitionOnly"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "config": { "type": "string", "minLength": 1 },
+          "revisionId": { "type": "string" },
+          "qualityEvaluationId": { "type": "string" },
+          "qualityVerdict": {
+            "type": "string",
+            "enum": ["accepted", "accepted_with_warning", "needs_review", "rejected"]
+          },
+          "playbackMode": {
+            "type": "string",
+            "enum": ["loop", "once", "hold", "ping_pong"]
+          },
+          "fps": { "type": "integer", "minimum": 1, "maximum": 120 },
+          "frameCount": { "type": "integer", "minimum": 1 },
+          "supportsDefaultIdle": { "type": "boolean" },
+          "isStableStateCandidate": { "type": "boolean" },
+          "isTransitionOnly": { "type": "boolean" }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "transparentBackground": { "type": "boolean" },
+        "frameSequence": { "type": "boolean" },
+        "perFrameDuration": { "type": "boolean" },
+        "audio": { "type": "boolean" }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["algorithm", "manifestHash", "contentRootHash", "fileCount", "totalBytes", "files"],
+      "properties": {
+        "algorithm": { "type": "string", "const": "amitia-package-sha256-v2" },
+        "manifestHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "contentRootHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "fileCount": { "type": "integer", "minimum": 1 },
+        "totalBytes": { "type": "integer", "minimum": 0 },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "sha256", "bytes", "mediaType", "role"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "bytes": { "type": "integer", "minimum": 0 },
+              "mediaType": { "type": "string" },
+              "role": { "type": "string" },
+              "actionKey": { "type": "string" },
+              "frameId": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["builder"],
+      "properties": {
+        "sourceType": { "type": "string" },
+        "generationTaskId": { "type": "string" },
+        "processingTaskId": { "type": "string" },
+        "builtAt": { "type": "string" },
+        "builder": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "additionalProperties": false
+}

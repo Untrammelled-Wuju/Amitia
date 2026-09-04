@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-write-001",
+  "operation": "file.write",
+  "payload": {
+    "mountId": "mount-documents-001",
+    "relativePath": "projects/output.txt",
+    "contentBase64": "SGVsbG8gV29ybGQ=",
+    "createIfMissing": true
+  }
+}

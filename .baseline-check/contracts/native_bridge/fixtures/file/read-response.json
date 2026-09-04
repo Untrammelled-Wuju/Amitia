@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-read-001",
+  "status": "ok",
+  "result": {
+    "contentBase64": "SGVsbG8gV29ybGQ=",
+    "size": 11,
+    "mimeType": "application/pdf",
+    "truncated": false
+  },
+  "error": null
+}

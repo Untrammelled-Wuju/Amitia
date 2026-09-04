@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://amitia.untrammelled.top/contracts/native_bridge/relay-envelope.schema.json",
+  "title": "RelayEnvelope",
+  "description": "Native Bridge 协议 v1 信封格式",
+  "type": "object",
+  "required": ["type", "generation"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "native_bridge.request",
+        "native_bridge.response",
+        "native_bridge.event",
+        "native_bridge.health"
+      ]
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["android", "ios"]
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

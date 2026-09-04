@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "sc-exec-001",
+  "status": "ok",
+  "result": {
+    "executed": true,
+    "actionId": "com.amitia.action.chat"
+  },
+  "error": null
+}

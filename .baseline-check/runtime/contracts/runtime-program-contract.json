@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "requiredProgramPaths": [
+    "backend/amitia-server",
+    "node/bin/node",
+    "node/lib/node_modules/npm/bin/npm-cli.js",
+    "node/lib/node_modules/npm/bin/npx-cli.js",
+    "qdrant/bin/qdrant",
+    "plugin-host/dist/index.js",
+    "task-host/dist/index.js",
+    "scripts/node/amitia-node-prepare.sh",
+    "scripts/node/amitia-node-probe.sh",
+    "manifest/guest-layout.json",
+    "manifest/mount-contract.json"
+  ],
+  "programSubdirs": [
+    "backend",
+    "node",
+    "qdrant",
+    "plugin-host",
+    "task-host",
+    "scripts",
+    "manifest"
+  ],
+  "entries": [
+    {
+      "path": "backend/amitia-server",
+      "type": "executable",
+      "component": "backend",
+      "required": true
+    },
+    {
+      "path": "node/bin/node",
+      "type": "executable",
+      "component": "node",
+      "required": true
+    },
+    {
+      "path": "node/lib/node_modules/npm/bin/npm-cli.js",
+      "type": "file",
+      "component": "node",
+      "required": true
+    },
+    {
+      "path": "node/lib/node_modules/npm/bin/npx-cli.js",
+      "type": "file",
+      "component": "node",
+      "required": true
+    },
+    {
+      "path": "qdrant/bin/qdrant",
+      "type": "executable",
+      "component": "qdrant",
+      "required": true
+    },
+    {
+      "path": "plugin-host/dist/index.js",
+      "type": "file",
+      "component": "plugin-host",
+      "required": true
+    },
+    {
+      "path": "task-host/dist/index.js",
+      "type": "file",
+      "component": "task-host",
+      "required": true
+    },
+    {
+      "path": "scripts/node/amitia-node-prepare.sh",
+      "type": "executable",
+      "component": "scripts",
+      "required": true
+    },
+    {
+      "path": "scripts/node/amitia-node-probe.sh",
+      "type": "executable",
+      "component": "scripts",
+      "required": true
+    },
+    {
+      "path": "manifest/guest-layout.json",
+      "type": "file",
+      "component": "manifest",
+      "required": true
+    },
+    {
+      "path": "manifest/mount-contract.json",
+      "type": "file",
+      "component": "manifest",
+      "required": true
+    }
+  ]
+}
