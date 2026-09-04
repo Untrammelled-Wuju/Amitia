@@ -382,6 +382,7 @@ export function startCore(profile: BundledCoreProfile): void {
     CONFIG_PATH: configPath,
     AMITIA_RUN_MODE: "desktop",
     AMITIA_DATA_DIR: dataDir,
+    AMITIA_EXTENSION_DEV_MODE: isDevMode() ? "true" : "false",
   };
 
   console.log("[CoreManager] CONFIG_PATH:", configPath);
