@@ -95,7 +95,6 @@ export class DeviceMeshCoordinator {
 
   async deprovision(): Promise<void> {
     await deleteMeshCredential();
-    this.lastState = "unprovisioned";
     this.lastStatus = null;
     this.emitState("unprovisioned");
   }

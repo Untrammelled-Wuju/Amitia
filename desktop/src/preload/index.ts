@@ -113,6 +113,9 @@ const api = {
   getMeshStatus(): Promise<{ state: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null> {
     return ipcRenderer.invoke(IPC_CHANNELS.meshGetStatus);
   },
+  deprovisionMesh(): Promise<{ ok: boolean }> {
+    return ipcRenderer.invoke(IPC_CHANNELS.meshDeprovision);
+  },
   onUINavigate(callback: (target: string) => void): () => void {
     const listener = (
       _event: Electron.IpcRendererEvent,
