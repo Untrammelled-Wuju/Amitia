@@ -87,7 +87,7 @@
         <template #default="{ row }">
           <span :class="['risk-tag', row.risk_level]">
             {{
-              row.risk_level === "high"
+              row.risk_level === "critical" || row.risk_level === "high"
                 ? "高"
                 : row.risk_level === "medium"
                   ? "中"
@@ -121,7 +121,7 @@
             type="danger"
             size="small"
             text
-            @click="maskSingle(row.id)"
+            @click="maskSingle(row)"
           >
             脱敏
           </el-button>
@@ -142,8 +142,8 @@
       />
     </div>
 
-    <div class="batch-actions" v-if="selectedIds.length > 0">
-      <span class="batch-info">已选择 {{ selectedIds.length }} 条</span>
+    <div class="batch-actions" v-if="selectedItems.length > 0">
+      <span class="batch-info">已选择 {{ selectedItems.length }} 条</span>
       <el-button
         type="danger"
         :disabled="maskConfirmText !== '确认脱敏'"
@@ -201,13 +201,13 @@ const results = ref<any[]>([]);
 const totalResults = ref(0);
 const riskTypes = ref<any[]>([]);
 const sourceTables = ref<any[]>([]);
-const selectedIds = ref<number[]>([]);
+const selectedItems = ref<any[]>([]);
 const masking = ref(false);
 const maskConfirmText = ref("");
 const maskResult = ref<any>(null);
 
 function onSelectionChange(rows: any[]) {
-  selectedIds.value = rows.map((r) => r.id);
+  selectedItems.value = rows.filter((row) => row?.masked !== true);
 }
 
 async function loadResults() {
@@ -217,7 +217,7 @@ async function loadResults() {
     if (filter.riskType) params.riskType = filter.riskType;
     if (filter.sourceTable) params.sourceTable = filter.sourceTable;
 
-    const d = await getScanResults(params);
+    const d = await getScanResults(params, props.scanSummary?.scanId ?? props.scanSummary?.id);
     results.value = d.items || [];
     totalResults.value = d.total || 0;
     riskTypes.value = d.riskTypes || [];
@@ -229,7 +229,7 @@ async function loadResults() {
   }
 }
 
-async function maskSingle(id: number) {
+async function maskSingle(row: any) {
   try {
     await ElMessageBox.confirm(
       "将此条记录中的敏感信息替换为 [已脱敏]。此操作不可撤销。",
@@ -240,7 +240,10 @@ async function maskSingle(id: number) {
         type: "warning",
       },
     );
-    const d = await postMask([id], "确认脱敏");
+    const d = await postMask(
+      [{ id: row.id, sourceTable: row.source_table ?? row.sourceTable ?? "messages" }],
+      "确认脱敏",
+    );
     maskResult.value = d;
     ElMessage.success("已脱敏");
     await loadResults();
@@ -257,10 +260,16 @@ async function batchMask() {
   if (maskConfirmText.value !== "确认脱敏") return;
   masking.value = true;
   try {
-    const d = await postMask(selectedIds.value, "确认脱敏");
+    const d = await postMask(
+      selectedItems.value.map((row) => ({
+        id: row.id,
+        sourceTable: row.source_table ?? row.sourceTable ?? "messages",
+      })),
+      "确认脱敏",
+    );
     maskResult.value = d;
     ElMessage.success(`已脱敏 ${d.maskedCount} 条`);
-    selectedIds.value = [];
+    selectedItems.value = [];
     maskConfirmText.value = "";
     await loadResults();
   } catch (err: any) {
@@ -274,7 +283,7 @@ async function batchMask() {
 
 async function exportReport(format: "csv" | "json") {
   try {
-    const blob = await getExportScanReport({ format });
+    const blob = await getExportScanReport({ scanId: props.scanSummary?.scanId ?? props.scanSummary?.id, format });
     const ext = format === "csv" ? "csv" : "json";
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -297,7 +306,7 @@ watch(
       filter.page = 1;
       results.value = [];
       maskResult.value = null;
-      selectedIds.value = [];
+      selectedItems.value = [];
       maskConfirmText.value = "";
       loadResults();
     }
@@ -378,7 +387,8 @@ watch(
   font-size: 12px;
   font-weight: 600;
 }
-.risk-tag.high {
+.risk-tag.high,
+.risk-tag.critical {
   background: var(--ac-color-danger-bg);
   color: var(--ac-color-danger);
   border: 1px solid var(--ac-color-danger);

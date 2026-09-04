@@ -89,6 +89,7 @@ import ScanHistoryPanel from "./components/ScanHistoryPanel.vue";
 import {
   getDeletionStats,
   getDeletionStatus,
+  getScanResult,
   postScan,
   requestDeletion,
   runDeletionCleanup,
@@ -179,8 +180,18 @@ async function runScan(scope: string[]) {
   }
 }
 
-function onViewHistoryResult(scanId: number) {
-  ElMessage.info("历史扫描 ID: " + scanId + "，请重新执行扫描以查看最新结果");
+async function onViewHistoryResult(scanId: number | string) {
+  try {
+    const result = await getScanResult(scanId);
+    if (!result) {
+      ElMessage.warning("未找到该历史扫描结果");
+      return;
+    }
+    scanSummary.value = result;
+    ElMessage.success("已加载历史扫描结果");
+  } catch (err: any) {
+    ElMessage.error("加载历史扫描失败: " + (err?.response?.data?.message || err.message));
+  }
 }
 </script>
 
