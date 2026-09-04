@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -141,6 +143,11 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   late String _timezoneMode;
   late String _timezone;
   late String _locale;
+  late int _weekStart;
+  late String _hemisphere;
+  late bool _quietHoursEnabled;
+  late String _quietHoursStart;
+  late String _quietHoursEnd;
   late bool _autoDetectTimezone;
   late bool _holidayAwareness;
   late bool _daypartAwareness;
@@ -160,6 +167,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
 
   static const _localeLabels = <String, String>{
     'zh-CN': '简体中文',
+    'zh-TW': '繁體中文',
     'en-US': 'English (US)',
     'ja-JP': '日本語',
   };
@@ -167,7 +175,12 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   static const _anchorTypeLabels = <String, String>{
     'birthday': '生日',
     'anniversary': '纪念日',
+    'relationship_anniversary': '关系纪念日',
+    'first_meeting': '首次相识',
+    'shared_memory': '共同经历',
     'holiday': '节日',
+    'deadline': '截止日期',
+    'appointment': '预约',
     'exam': '考试',
     'travel': '旅行',
     'work_event': '工作事件',
@@ -205,6 +218,13 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     _timezone = (config?['timezone'] ?? 'Asia/Shanghai').toString();
     _locale = (config?['locale'] ?? 'zh-CN').toString();
     if (!_localeLabels.containsKey(_locale)) _locale = 'zh-CN';
+    _weekStart = (config?['weekStart'] as num?)?.toInt() == 0 ? 0 : 1;
+    _hemisphere = (config?['hemisphere'] ?? 'unknown').toString();
+    if (!{'unknown', 'north', 'south'}.contains(_hemisphere)) _hemisphere = 'unknown';
+    final quietHours = _decodeQuietHours(config?['quietHoursJson']);
+    _quietHoursEnabled = quietHours['enabled'] as bool;
+    _quietHoursStart = quietHours['start'] as String;
+    _quietHoursEnd = quietHours['end'] as String;
     _autoDetectTimezone = config?['autoDetectTimezone'] as bool? ?? true;
     _holidayAwareness = config?['holidayAwareness'] as bool? ?? true;
     _daypartAwareness = config?['daypartAwareness'] as bool? ?? true;
@@ -298,6 +318,13 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
         'timezoneMode': _timezoneMode,
         'timezone': _timezone.trim(),
         'locale': _locale,
+        'weekStart': _weekStart,
+        'hemisphere': _hemisphere,
+        'quietHoursJson': jsonEncode({
+          'enabled': _quietHoursEnabled,
+          'start': _quietHoursStart,
+          'end': _quietHoursEnd,
+        }),
         'autoDetectTimezone': _autoDetectTimezone,
         'holidayAwareness': _holidayAwareness,
         'daypartAwareness': _daypartAwareness,
@@ -410,6 +437,26 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             onChanged: (value) => setState(() => _locale = value),
           ),
           _divider(),
+          _buildDropdownTile(
+            icon: Icons.calendar_view_week_outlined,
+            title: '每周起始日',
+            value: _weekStart.toString(),
+            options: const ['1', '0'],
+            labels: const {'1': '星期一', '0': '星期日'},
+            onChanged: (value) => setState(() => _weekStart = int.parse(value)),
+          ),
+          _divider(),
+          _buildDropdownTile(
+            icon: Icons.public_outlined,
+            title: '所在半球',
+            value: _hemisphere,
+            options: const ['unknown', 'north', 'south'],
+            labels: const {'unknown': '未知', 'north': '北半球', 'south': '南半球'},
+            onChanged: (value) => setState(() => _hemisphere = value),
+          ),
+          _divider(),
+          _buildQuietHoursTile(),
+          _divider(),
           AmitiaSwitchTile(
             title: '自动检测设备时区',
             subtitle: '后端收到设备时区时优先使用设备时区',
@@ -517,6 +564,116 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     final values = <String>{...widget.timezones};
     if (_timezone.trim().isNotEmpty) values.add(_timezone.trim());
     return values.toList(growable: false);
+  }
+
+  Map<String, dynamic> _decodeQuietHours(dynamic raw) {
+    final defaults = <String, dynamic>{'enabled': true, 'start': '23:00', 'end': '07:00'};
+    if (raw is! String || raw.trim().isEmpty) return defaults;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return <String, dynamic>{
+          'enabled': decoded['enabled'] is bool ? decoded['enabled'] : true,
+          'start': (decoded['start'] ?? '23:00').toString(),
+          'end': (decoded['end'] ?? '07:00').toString(),
+        };
+      }
+    } catch (_) {}
+    return defaults;
+  }
+
+  Widget _buildQuietHoursTile() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _showQuietHoursSheet,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(color: context.accentSoft, shape: BoxShape.circle),
+              child: Icon(Icons.bedtime_outlined, size: 17, color: context.accentPrimary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text('安静时段', style: AppTypography.body(context))),
+            Text(
+              _quietHoursEnabled ? '$_quietHoursStart - $_quietHoursEnd' : '关闭',
+              style: AppTypography.caption(context),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 20, color: context.textTertiary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showQuietHoursSheet() async {
+    final startController = TextEditingController(text: _quietHoursStart);
+    final endController = TextEditingController(text: _quietHoursEnd);
+    var enabled = _quietHoursEnabled;
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('安静时段', style: AppTypography.sectionTitle(context)),
+                SizedBox(height: AppSpacing.md),
+                AmitiaSwitchTile(
+                  title: '启用安静时段',
+                  value: enabled,
+                  onChanged: (value) => setSheetState(() => enabled = value),
+                ),
+                SizedBox(height: AppSpacing.md),
+                _sheetLabel('开始时间 (HH:mm)'),
+                AmitiaTextField(controller: startController, hintText: '23:00', readOnly: !enabled),
+                SizedBox(height: AppSpacing.md),
+                _sheetLabel('结束时间 (HH:mm)'),
+                AmitiaTextField(controller: endController, hintText: '07:00', readOnly: !enabled),
+                SizedBox(height: AppSpacing.lg),
+                AmitiaButton(
+                  label: '确定',
+                  isFullWidth: true,
+                  onPressed: () {
+                    final start = startController.text.trim();
+                    final end = endController.text.trim();
+                    if (enabled && (!_validClock(start) || !_validClock(end))) {
+                      _showMessage('时间格式应为 HH:mm', error: true);
+                      return;
+                    }
+                    Navigator.pop(sheetContext, <String, dynamic>{'enabled': enabled, 'start': start, 'end': end});
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    startController.dispose();
+    endController.dispose();
+    if (result != null && mounted) {
+      setState(() {
+        _quietHoursEnabled = result['enabled'] == true;
+        _quietHoursStart = (result['start'] ?? '23:00').toString();
+        _quietHoursEnd = (result['end'] ?? '07:00').toString();
+      });
+    }
   }
 
   Widget _buildTimezoneTile() {
@@ -869,6 +1026,10 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     TimeAnchor? existing, {
     String? initialKind,
   }) async {
+    if (existing?.timeKind == 'derived') {
+      _showMessage('派生时间锚点由系统维护，不能在此直接编辑');
+      return;
+    }
     final characters =
         ref.read(characterListProvider).valueOrNull ?? const <CharacterDto>[];
     final titleController = TextEditingController(text: existing?.title ?? '');
@@ -884,15 +1045,16 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     final timeController = TextEditingController(
       text: existing?.localTime.isNotEmpty == true ? existing!.localTime : '09:00',
     );
+    final instantController = TextEditingController(text: existing?.instantAtUtc ?? '');
+    final endInstantController = TextEditingController(text: existing?.endAtUtc ?? '');
 
     var timeKind = existing?.timeKind ?? initialKind ?? 'recurring';
-    if (!{'recurring', 'annual_date', 'local_date'}.contains(timeKind)) {
+    if (!{'recurring', 'annual_date', 'local_date', 'local_datetime', 'instant', 'range'}.contains(timeKind)) {
       timeKind = 'local_date';
     }
     var scopeCharacterId = existing?.characterId ?? '';
     var anchorType = existing?.anchorType ??
         (timeKind == 'annual_date' ? 'anniversary' : 'custom');
-    if (!_anchorTypeLabels.containsKey(anchorType)) anchorType = 'custom';
     var frequency = _frequencyFromRRule(existing?.rrule ?? '');
     var importance = (existing?.importance ?? 70).clamp(0, 100).toDouble();
     var allowPromptMention = existing?.allowPromptMention ?? true;
@@ -910,6 +1072,10 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
           final kindIndex = switch (timeKind) {
             'recurring' => 0,
             'annual_date' => 1,
+            'local_date' => 2,
+            'local_datetime' => 3,
+            'instant' => 4,
+            'range' => 5,
             _ => 2,
           };
           return SafeArea(
@@ -930,13 +1096,16 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                   ),
                   SizedBox(height: AppSpacing.lg),
                   AmitiaSegmentedControl(
-                    segments: const ['周期', '每年', '单次'],
+                    segments: const ['周期', '每年', '单次', '日期时间', 'UTC', '范围'],
                     selectedIndex: kindIndex,
                     onChanged: (index) => setSheetState(() {
                       timeKind = switch (index) {
                         0 => 'recurring',
                         1 => 'annual_date',
-                        _ => 'local_date',
+                        2 => 'local_date',
+                        3 => 'local_datetime',
+                        4 => 'instant',
+                        _ => 'range',
                       };
                       if (timeKind == 'annual_date' &&
                           dateController.text.length >= 10) {
@@ -959,14 +1128,13 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                   DropdownButtonFormField<String>(
                     value: anchorType,
                     isExpanded: true,
-                    items: _anchorTypeLabels.entries
-                        .map(
-                          (entry) => DropdownMenuItem<String>(
-                            value: entry.key,
-                            child: Text(entry.value),
-                          ),
-                        )
-                        .toList(growable: false),
+                    items: <DropdownMenuItem<String>>[
+                      if (!_anchorTypeLabels.containsKey(anchorType))
+                        DropdownMenuItem<String>(value: anchorType, child: Text(anchorType)),
+                      ..._anchorTypeLabels.entries.map(
+                        (entry) => DropdownMenuItem<String>(value: entry.key, child: Text(entry.value)),
+                      ),
+                    ],
                     onChanged: (value) {
                       if (value != null) {
                         setSheetState(() => anchorType = value);
@@ -999,23 +1167,36 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                         : null,
                   ),
                   SizedBox(height: AppSpacing.md),
-                  _sheetLabel(
-                    timeKind == 'annual_date'
-                        ? '日期 (MM-DD)'
-                        : timeKind == 'recurring'
-                            ? '起始日期 (YYYY-MM-DD)'
-                            : '日期 (YYYY-MM-DD)',
-                  ),
-                  AmitiaTextField(
-                    hintText: timeKind == 'annual_date' ? '06-15' : '2026-08-22',
-                    controller: dateController,
-                  ),
-                  SizedBox(height: AppSpacing.md),
-                  _sheetLabel('时间 (HH:mm)'),
-                  AmitiaTextField(
-                    hintText: '09:00',
-                    controller: timeController,
-                  ),
+                  if (timeKind == 'instant' || timeKind == 'range') ...[
+                    _sheetLabel(timeKind == 'range' ? '开始 UTC (ISO 8601)' : 'UTC 瞬间 (ISO 8601)'),
+                    AmitiaTextField(
+                      hintText: '2026-09-04T12:00:00Z',
+                      controller: instantController,
+                    ),
+                    if (timeKind == 'range') ...[
+                      SizedBox(height: AppSpacing.md),
+                      _sheetLabel('结束 UTC (ISO 8601)'),
+                      AmitiaTextField(
+                        hintText: '2026-09-04T13:00:00Z',
+                        controller: endInstantController,
+                      ),
+                    ],
+                  ] else ...[
+                    _sheetLabel(
+                      timeKind == 'annual_date'
+                          ? '日期 (MM-DD)'
+                          : timeKind == 'recurring'
+                              ? '起始日期 (YYYY-MM-DD)'
+                              : '日期 (YYYY-MM-DD)',
+                    ),
+                    AmitiaTextField(
+                      hintText: timeKind == 'annual_date' ? '06-15' : '2026-08-22',
+                      controller: dateController,
+                    ),
+                    SizedBox(height: AppSpacing.md),
+                    _sheetLabel('时间 (HH:mm)'),
+                    AmitiaTextField(hintText: '09:00', controller: timeController),
+                  ],
                   if (timeKind == 'recurring') ...[
                     SizedBox(height: AppSpacing.md),
                     _sheetLabel('重复频率'),
@@ -1082,12 +1263,24 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                       final title = titleController.text.trim();
                       final date = dateController.text.trim();
                       final time = timeController.text.trim();
-                      if (title.isEmpty || !_validAnchorDate(timeKind, date) || !_validClock(time)) {
-                        if (mounted) {
-                          _showMessage('请检查名称、日期和时间格式', error: true);
-                        }
+                      final instantAtUtc = instantController.text.trim();
+                      final endAtUtc = endInstantController.text.trim();
+                      final startInstant = DateTime.tryParse(instantAtUtc);
+                      final endInstant = DateTime.tryParse(endAtUtc);
+                      final usesUtc = timeKind == 'instant' || timeKind == 'range';
+                      final validInstant = !usesUtc || startInstant?.isUtc == true;
+                      final validEnd = timeKind != 'range' ||
+                          (endInstant?.isUtc == true &&
+                              startInstant != null &&
+                              endInstant!.isAfter(startInstant));
+                      final validCivil = usesUtc || (_validAnchorDate(timeKind, date) && _validClock(time));
+                      if (title.isEmpty || !validInstant || !validEnd || !validCivil) {
+                        if (mounted) _showMessage('请检查名称和时间格式', error: true);
                         return;
                       }
+                      final nextRRule = timeKind == 'recurring'
+                          ? _replaceRRuleFrequency(existing?.rrule ?? '', frequency)
+                          : '';
                       final payload = <String, dynamic>{
                         'characterId': scopeCharacterId,
                         'scopeType': scopeCharacterId.isEmpty ? 'user' : 'relationship',
@@ -1095,16 +1288,18 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                         'title': title,
                         'description': descriptionController.text.trim(),
                         'timeKind': timeKind,
-                        'localDate': date,
-                        'localTime': time,
-                        'timezone': _timezone,
-                        'rrule': timeKind == 'recurring' ? 'FREQ=$frequency' : '',
-                        'durationSeconds': 0,
-                        'preWindowSeconds': 259200,
-                        'postWindowSeconds': 86400,
+                        'instantAtUtc': usesUtc ? instantAtUtc : '',
+                        'endAtUtc': timeKind == 'range' ? endAtUtc : '',
+                        'localDate': usesUtc ? '' : date,
+                        'localTime': usesUtc ? '' : time,
+                        'timezone': existing?.timezone.isNotEmpty == true ? existing!.timezone : _timezone,
+                        'rrule': nextRRule,
+                        'durationSeconds': existing?.durationSeconds ?? 0,
+                        'preWindowSeconds': existing?.preWindowSeconds ?? 259200,
+                        'postWindowSeconds': existing?.postWindowSeconds ?? 86400,
                         'importance': importance.round(),
                         'confidence': existing?.confidence ?? 100,
-                        'sensitivityLevel': 'internal',
+                        'sensitivityLevel': existing?.sensitivityLevel.isNotEmpty == true ? existing!.sensitivityLevel : 'internal',
                         'allowPromptMention': allowPromptMention,
                         'allowProactiveMention': allowProactiveMention,
                         'requiresConfirmation': existing?.requiresConfirmation ?? false,
@@ -1147,6 +1342,8 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     descriptionController.dispose();
     dateController.dispose();
     timeController.dispose();
+    instantController.dispose();
+    endInstantController.dispose();
   }
 
   Widget _sheetLabel(String text) {
@@ -1531,6 +1728,24 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
         month <= 12 &&
         day >= 1 &&
         day <= 31;
+  }
+
+  static String _replaceRRuleFrequency(String rrule, String frequency) {
+    final trimmed = rrule.trim();
+    if (trimmed.isEmpty) return 'FREQ=$frequency';
+    final prefix = trimmed.toUpperCase().startsWith('RRULE:') ? 'RRULE:' : '';
+    final body = prefix.isEmpty ? trimmed : trimmed.substring(6);
+    final parts = body.split(';').where((part) => part.trim().isNotEmpty).toList();
+    var replaced = false;
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].toUpperCase().startsWith('FREQ=')) {
+        parts[i] = 'FREQ=$frequency';
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) parts.insert(0, 'FREQ=$frequency');
+    return '$prefix${parts.join(';')}';
   }
 
   static String _frequencyFromRRule(String rrule) {

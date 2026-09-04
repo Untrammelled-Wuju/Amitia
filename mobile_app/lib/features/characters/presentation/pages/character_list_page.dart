@@ -10,6 +10,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_connection/backend_uri_builder.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -55,6 +56,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
   @override
   Widget build(BuildContext context) {
     final charactersAsync = ref.watch(characterListProvider);
+    final backendAvailability = ref.watch(backendConnectionProvider).valueOrNull;
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '角色',
@@ -130,6 +132,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                         identity: character.identity,
                         avatarInitial: character.name.isNotEmpty ? character.name[0] : '?',
                         avatarColor: '#8A5728',
+                        avatarUrl: _resolveAvatarUrl(character.avatar, backendAvailability),
                         mood: '',
                         lastActive: _getLastActive(character.isActive == 1),
                         onTap: () => context.push(AppRoutes.character(character.id)),
@@ -179,6 +182,20 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
       return '刚刚活跃';
     }
     return '离线';
+  }
+
+  String _resolveAvatarUrl(
+    String raw,
+    BackendConnectionAvailability? availability,
+  ) {
+    final avatar = raw.trim();
+    if (avatar.isEmpty) return '';
+    final parsed = Uri.tryParse(avatar);
+    if (parsed != null && parsed.hasScheme) return avatar;
+    if (!avatar.startsWith('/') || availability is! BackendConnectionAvailable) {
+      return avatar;
+    }
+    return BackendUriBuilder().http(availability.config, avatar).toString();
   }
 
   Future<Dio> _dio() async {
@@ -286,12 +303,13 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetContext) {
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 const SizedBox(height: 8),
                 Center(
                   child: Container(
@@ -306,6 +324,22 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                 const SizedBox(height: 20),
                 Text('管理角色', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
+                AmitiaListTile(
+                  leading: _buildSheetIcon(context, Icons.auto_awesome_outlined, context.accentPrimary),
+                  title: '从模板创建',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showTemplatePicker(context);
+                  },
+                ),
+                AmitiaListTile(
+                  leading: _buildSheetIcon(context, Icons.history_outlined, context.accentPrimary),
+                  title: '角色包导入历史',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showPackHistory(context);
+                  },
+                ),
                 AmitiaListTile(
                   leading: _buildSheetIcon(context, Icons.sort, context.accentPrimary),
                   title: '排序',
@@ -388,6 +422,14 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   },
                 ),
                 AmitiaListTile(
+                  leading: _buildSheetIcon(context, Icons.unarchive_outlined, context.accentPrimary),
+                  title: '已归档角色',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showArchivedCharacters(context);
+                  },
+                ),
+                AmitiaListTile(
                   leading: _buildSheetIcon(context, Icons.delete_outline, context.error),
                   title: '删除角色',
                   onTap: () {
@@ -397,13 +439,174 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                     });
                   },
                 ),
-                const SizedBox(height: 8),
-              ],
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
           ),
         );
       },
     );
+  }
+
+  Future<void> _showTemplatePicker(BuildContext context) async {
+    try {
+      final service = ref.read(characterDetailServiceProvider);
+      final templates = await service.templates();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: dialogContext.surfacePrimary,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+          title: Text('从模板创建角色', style: AppTypography.cardTitle(dialogContext)),
+          content: SizedBox(
+            width: 560,
+            height: 420,
+            child: templates.isEmpty
+                ? const Center(child: Text('暂无可用角色模板'))
+                : ListView.separated(
+                    itemCount: templates.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (_, index) {
+                      final template = templates[index];
+                      final id = (template['id'] ?? '').toString();
+                      final name = (template['name'] ?? '未命名模板').toString();
+                      final category = (template['category'] ?? '').toString();
+                      final description = (template['description'] ?? '').toString();
+                      return ListTile(
+                        leading: const Icon(Icons.person_add_alt_1_outlined),
+                        title: Text(name),
+                        subtitle: Text(
+                          [if (category.isNotEmpty) category, if (description.isNotEmpty) description].join(' · '),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: id.isEmpty
+                            ? null
+                            : () async {
+                                try {
+                                  final created = await service.createFromTemplate(id);
+                                  if (created == null || (created['id'] ?? '').toString().isEmpty) {
+                                    throw StateError('后端未返回创建后的角色');
+                                  }
+                                  ref.invalidate(characterListProvider);
+                                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                                  if (mounted) amitiaSnackBar(context, '已从模板创建 ${(created['name'] ?? name).toString()}');
+                                } catch (e) {
+                                  if (mounted) amitiaSnackBar(context, '模板创建失败：$e');
+                                }
+                              },
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '模板加载失败：$e');
+    }
+  }
+
+  Future<void> _showPackHistory(BuildContext context) async {
+    try {
+      final history = await ref.read(characterDetailServiceProvider).packHistory();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: dialogContext.surfacePrimary,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+          title: Text('角色包导入历史', style: AppTypography.cardTitle(dialogContext)),
+          content: SizedBox(
+            width: 560,
+            height: 420,
+            child: history.isEmpty
+                ? const Center(child: Text('暂无角色包导入记录'))
+                : ListView.separated(
+                    itemCount: history.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (_, index) {
+                      final item = history[index];
+                      final name = (item['name'] ?? item['characterName'] ?? '未命名角色').toString();
+                      final format = (item['sourceFormat'] ?? item['format'] ?? '').toString();
+                      final importedAt = (item['importedAt'] ?? item['createdAt'] ?? '').toString();
+                      return ListTile(
+                        leading: const Icon(Icons.history_outlined),
+                        title: Text(name),
+                        subtitle: Text(
+                          [if (format.isNotEmpty) format, if (importedAt.isNotEmpty) importedAt].join(' · '),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '导入历史加载失败：$e');
+    }
+  }
+
+  Future<void> _showArchivedCharacters(BuildContext context) async {
+    try {
+      final allCharacters = await ref.read(characterServiceProvider).list(includeDisabled: true);
+      final archived = allCharacters.where((character) => character.status.toLowerCase() == 'disabled').toList();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            backgroundColor: dialogContext.surfacePrimary,
+            shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+            title: Text('已归档角色', style: AppTypography.cardTitle(dialogContext)),
+            content: SizedBox(
+              width: 560,
+              height: 420,
+              child: archived.isEmpty
+                  ? const Center(child: Text('暂无已归档角色'))
+                  : ListView.separated(
+                      itemCount: archived.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final character = archived[index];
+                        return ListTile(
+                          leading: const Icon(Icons.archive_outlined),
+                          title: Text(character.name),
+                          subtitle: Text(character.identity),
+                          trailing: TextButton(
+                            onPressed: () async {
+                              try {
+                                await ref.read(characterServiceProvider).restore(character.id);
+                                archived.removeAt(index);
+                                ref.invalidate(characterListProvider);
+                                if (dialogContext.mounted) setDialogState(() {});
+                                if (mounted) amitiaSnackBar(context, '已恢复 ${character.name}');
+                              } catch (e) {
+                                if (mounted) amitiaSnackBar(context, '恢复失败：$e');
+                              }
+                            },
+                            child: const Text('恢复'),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) amitiaSnackBar(context, '归档角色加载失败：$e');
+    }
   }
 
   void _showSortSheet(BuildContext context) {
@@ -602,117 +805,5 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
       ),
       child: Icon(icon, size: 20, color: color),
     );
-  }
-}
-
-class AmitiaCharacterCard extends StatelessWidget {
-  final String name;
-  final String status;
-  final String identity;
-  final String avatarInitial;
-  final String avatarColor;
-  final String mood;
-  final String lastActive;
-  final VoidCallback? onTap;
-
-  const AmitiaCharacterCard({
-    super.key,
-    required this.name,
-    required this.status,
-    required this.identity,
-    required this.avatarInitial,
-    required this.avatarColor,
-    this.mood = '',
-    this.lastActive = '',
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: context.surfacePrimary,
-          borderRadius: AppRadius.brMedium,
-          border: Border.all(color: context.borderPrimary, width: 0.5),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: _parseColor(avatarColor, context),
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Text(
-                  avatarInitial.isNotEmpty ? avatarInitial : '?',
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: AppTypography.cardTitle(context)),
-                  const SizedBox(height: 2),
-                  Text(
-                    identity,
-                    style: AppTypography.label(context),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (status.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(status, style: AppTypography.statusLabel(context)),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (lastActive.isNotEmpty)
-                  Text(lastActive, style: AppTypography.statusLabel(context)),
-                if (mood.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(mood, style: AppTypography.label(context)),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Color _parseColor(String hex, BuildContext context) {
-    try {
-      var value = hex.trim().replaceFirst('#', '');
-      if (value.length == 6) value = 'FF$value';
-      final parsed = int.tryParse(value, radix: 16);
-      return parsed == null ? context.accentPrimary : Color(parsed);
-    } catch (_) {
-      return context.accentPrimary;
-    }
   }
 }
