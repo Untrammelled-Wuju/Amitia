@@ -12,6 +12,7 @@ class EpisodicService {
     String sceneType = '',
     int retentionLevel = 0,
     String decayState = '',
+    String keyword = '',
     int page = 1,
     int pageSize = 100,
   }) async {
@@ -23,6 +24,7 @@ class EpisodicService {
         if (sceneType.isNotEmpty) 'sceneType': sceneType,
         if (retentionLevel >= 1 && retentionLevel <= 5) 'retentionLevel': retentionLevel,
         if (decayState.isNotEmpty) 'decayState': decayState,
+        if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
         'page': page,
         'pageSize': pageSize,
       },

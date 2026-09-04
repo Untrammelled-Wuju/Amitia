@@ -16,6 +16,14 @@ import '../../../../core/services/providers.dart';
 import '../../../../core/services/memory_service.dart';
 import '../../../../core/models/memory.dart';
 
+class _GlobalSearchRow {
+  final String layer;
+  final String title;
+  final String detail;
+
+  const _GlobalSearchRow({required this.layer, required this.title, required this.detail});
+}
+
 class MemoryManagerPage extends ConsumerStatefulWidget {
   const MemoryManagerPage({super.key});
 
@@ -388,6 +396,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
             children: [
               Text('高级记忆工具', style: AppTypography.sectionTitle(context)),
               SizedBox(height: AppSpacing.md),
+              ListTile(leading: const Icon(Icons.manage_search_outlined), title: const Text('跨记忆层全局搜索'), onTap: () { Navigator.pop(ctx); _showGlobalSearch(); }),
               ListTile(leading: const Icon(Icons.analytics_outlined), title: const Text('向量与检索诊断'), onTap: () { Navigator.pop(ctx); _showDiagnostics(); }),
               ListTile(leading: const Icon(Icons.pending_actions_outlined), title: const Text('候选记忆管理'), onTap: () { Navigator.pop(ctx); _showCandidates(); }),
               ListTile(leading: const Icon(Icons.auto_awesome_outlined), title: const Text('从会话生成候选'), onTap: () async { Navigator.pop(ctx); await _generateCandidates(); }),
@@ -400,6 +409,106 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _showGlobalSearch() async {
+    final controller = TextEditingController(text: _searchController.text.trim());
+    final query = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('跨记忆层全局搜索'),
+        content: SizedBox(
+          width: 560,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: '同时搜索长期记忆、用户画像、情景记忆和世界书',
+              prefixIcon: Icon(Icons.search),
+            ),
+            onSubmitted: (value) => Navigator.pop(ctx, value.trim()),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('搜索')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (query == null || query.trim().isEmpty || !mounted) return;
+
+    try {
+      final q = query.trim();
+      final memories = await ref.read(memoryServiceProvider).hybridSearch(q, limit: 5);
+      final profiles = await ref.read(profileServiceProvider).list(keyword: q, pageSize: 5);
+      final episodics = await ref.read(episodicServiceProvider).list(keyword: q, pageSize: 5);
+      final worldBooks = await ref.read(worldBookServiceProvider).list(keyword: q, pageSize: 5);
+      if (!mounted) return;
+
+      final rows = <_GlobalSearchRow>[
+        ...memories.map((item) => _GlobalSearchRow(
+              layer: '长期记忆',
+              title: item.key.isEmpty ? item.content : item.key,
+              detail: item.content,
+            )),
+        ...profiles.map((item) => _GlobalSearchRow(
+              layer: '用户画像',
+              title: item.attributeName,
+              detail: item.attributeValue,
+            )),
+        ...episodics.map((item) => _GlobalSearchRow(
+              layer: '情景记忆',
+              title: item.title,
+              detail: item.content,
+            )),
+        ...worldBooks.map((item) => _GlobalSearchRow(
+              layer: '世界书',
+              title: item.matchPattern,
+              detail: item.injectContent,
+            )),
+      ];
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('“$q” 的全局搜索结果'),
+          content: SizedBox(
+            width: 680,
+            height: 520,
+            child: rows.isEmpty
+                ? const Center(child: Text('没有匹配结果'))
+                : ListView.separated(
+                    itemCount: rows.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (_, index) {
+                      final row = rows[index];
+                      return ListTile(
+                        dense: true,
+                        leading: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: context.accentSoft,
+                            borderRadius: AppRadius.brTag,
+                          ),
+                          child: Text(row.layer, style: AppTypography.caption(context).copyWith(color: context.accentPrimary)),
+                        ),
+                        title: Text(row.title.isEmpty ? '未命名' : row.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(row.detail, maxLines: 3, overflow: TextOverflow.ellipsis),
+                      );
+                    },
+                  ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭'))],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('全局搜索失败: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
+      }
+    }
   }
 
   Future<void> _showDiagnostics() async {

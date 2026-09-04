@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -34,18 +35,49 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
   }
 
   Future<void> _loadUser() async {
-    final auth = ref.read(authServiceProvider);
-    final user = await auth.currentUser;
-    if (user != null && mounted) {
+    try {
+      final auth = ref.read(authServiceProvider);
+      final user = await auth.fetchProfile();
+      if (!mounted) return;
       setState(() {
         _username = user.username;
-        _nickname = user.username;
-        _userLabel = user.username;
+        _nickname = user.nickname.isEmpty ? user.username : user.nickname;
+        _userLabel = user.userLabel.isEmpty ? user.username : user.userLabel;
+        _bio = user.bio;
         _loading = false;
       });
-    } else if (mounted) {
-      setState(() => _loading = false);
+    } catch (error) {
+      final localUser = await ref.read(authServiceProvider).currentUser;
+      if (!mounted) return;
+      setState(() {
+        _username = localUser?.username ?? '';
+        _nickname = localUser?.username ?? '';
+        _userLabel = localUser?.username ?? '';
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('用户资料加载失败：$error')),
+      );
     }
+  }
+
+  Future<void> _saveProfile({
+    String? nickname,
+    String? userLabel,
+    String? bio,
+  }) async {
+    final updated = await ref.read(authServiceProvider).updateProfile(
+          nickname: nickname ?? _nickname,
+          userLabel: userLabel ?? _userLabel,
+          bio: bio ?? _bio,
+        );
+    if (!mounted) return;
+    setState(() {
+      _nickname = updated.nickname.isEmpty ? updated.username : updated.nickname;
+      _userLabel = updated.userLabel.isEmpty ? updated.username : updated.userLabel;
+      _bio = updated.bio;
+    });
+    ref.invalidate(currentUserProvider);
   }
 
   @override
@@ -82,13 +114,13 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                 _SectionLabel(text: '基础资料'),
                 SizedBox(height: AppSpacing.sm),
                 _buildCard([
-                  _buildEditTile('昵称', _nickname, () => _showEditSheet('昵称', _nickname, (v) => setState(() => _nickname = v))),
+                  _buildEditTile('昵称', _nickname, () => _showEditSheet('昵称', _nickname, (v) => _saveProfile(nickname: v))),
                   _divider(),
                   _buildEditTile('用户名', _username, null),
                   _divider(),
-                  _buildEditTile('用户称呼', _userLabel, () => _showEditSheet('用户称呼', _userLabel, (v) => setState(() => _userLabel = v))),
+                  _buildEditTile('用户称呼', _userLabel, () => _showEditSheet('用户称呼', _userLabel, (v) => _saveProfile(userLabel: v))),
                   _divider(),
-                  _buildEditTile('个人简介', _bio.isEmpty ? '未设置' : _bio, () => _showEditSheet('个人简介', _bio, (v) => setState(() => _bio = v), maxLines: 3)),
+                  _buildEditTile('个人简介', _bio.isEmpty ? '未设置' : _bio, () => _showEditSheet('个人简介', _bio, (v) => _saveProfile(bio: v), maxLines: 3, allowEmpty: true)),
                 ]),
                 SizedBox(height: AppSpacing.sectionGap),
                 _SectionLabel(text: '账号安全'),
@@ -177,7 +209,13 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
     );
   }
 
-  void _showEditSheet(String title, String current, ValueChanged<String> onSave, {int maxLines = 1}) {
+  void _showEditSheet(
+    String title,
+    String current,
+    Future<void> Function(String) onSave, {
+    int maxLines = 1,
+    bool allowEmpty = false,
+  }) {
     final ctrl = TextEditingController(text: current);
     showModalBottomSheet(
       context: context,
@@ -198,13 +236,22 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
               AmitiaButton(
                 label: '保存',
                 isFullWidth: true,
-                onPressed: () {
-                  if (ctrl.text.isEmpty) return;
-                  onSave(ctrl.text);
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('$title已更新'), duration: const Duration(seconds: 1)),
-                  );
+                onPressed: () async {
+                  final value = ctrl.text.trim();
+                  if (!allowEmpty && value.isEmpty) return;
+                  try {
+                    await onSave(value);
+                    if (!ctx.mounted || !mounted) return;
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('$title已更新'), duration: const Duration(seconds: 1)),
+                    );
+                  } catch (error) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('$title保存失败：$error')),
+                    );
+                  }
                 },
               ),
             ],
@@ -305,23 +352,35 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
             children: [
               Padding(
                 padding: EdgeInsets.all(AppSpacing.lg),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(child: Text('登录设备管理', style: AppTypography.sectionTitle(sheetContext))),
-                    TextButton(
-                      onPressed: sessions.length <= 1
-                          ? null
-                          : () async {
-                              try {
-                                final count = await ref.read(authServiceProvider).revokeOtherSessions();
-                                if (!sheetContext.mounted) return;
-                                Navigator.pop(sheetContext);
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已退出 $count 个其他登录会话')));
-                              } catch (e) {
-                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败：$e')));
-                              }
-                            },
-                      child: const Text('退出其他设备'),
+                    Text('登录设备管理', style: AppTypography.sectionTitle(sheetContext)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 8,
+                      children: [
+                        TextButton(
+                          onPressed: sessions.length <= 1
+                              ? null
+                              : () async {
+                                  try {
+                                    final count = await ref.read(authServiceProvider).revokeOtherSessions();
+                                    if (!sheetContext.mounted) return;
+                                    Navigator.pop(sheetContext);
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已退出 $count 个其他登录会话')));
+                                  } catch (e) {
+                                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败：$e')));
+                                  }
+                                },
+                          child: const Text('退出其他设备'),
+                        ),
+                        TextButton(
+                          onPressed: () => _confirmLogoutAll(sheetContext),
+                          child: Text('退出全部设备', style: TextStyle(color: context.error)),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -385,19 +444,49 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              final auth = ref.read(authServiceProvider);
-              auth.logout();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已退出登录'), duration: Duration(seconds: 1)),
-              );
+              await ref.read(authServiceProvider).logout();
+              if (!mounted) return;
+              ref.invalidate(currentUserProvider);
+              context.go('/login');
             },
             child: Text('退出', style: TextStyle(color: context.error)),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmLogoutAll(BuildContext sheetContext) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+        title: Text('退出全部设备', style: AppTypography.cardTitle(context)),
+        content: Text('这会撤销当前账号的全部登录会话，并回到登录页。', style: AppTypography.body(context)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('全部退出', style: TextStyle(color: context.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(authServiceProvider).logoutAll();
+      if (!mounted) return;
+      if (sheetContext.mounted) Navigator.pop(sheetContext);
+      ref.invalidate(currentUserProvider);
+      context.go('/login');
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('退出全部设备失败：$error')),
+      );
+    }
   }
 }
 

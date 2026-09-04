@@ -9,6 +9,7 @@ class WorldBookService {
   Future<List<WorldBookDto>> list({
     String matchType = '',
     String characterId = '',
+    String keyword = '',
     int page = 1,
     int pageSize = 100,
   }) async {
@@ -17,6 +18,7 @@ class WorldBookService {
       queryParameters: {
         if (matchType.isNotEmpty) 'matchType': matchType,
         if (characterId.isNotEmpty) 'characterId': characterId,
+        if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
         'page': page,
         'pageSize': pageSize,
       },

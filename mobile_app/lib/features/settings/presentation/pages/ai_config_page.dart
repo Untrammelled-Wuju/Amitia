@@ -10,7 +10,6 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/character.dart';
 import '../../../../core/models/model_config.dart';
 import '../../../../core/services/providers.dart';
-import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
 final _aiAppConfigProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((ref) {
@@ -122,16 +121,8 @@ class _AiConfigContent extends ConsumerStatefulWidget {
 }
 
 class _AiConfigContentState extends ConsumerState<_AiConfigContent> {
-  static const _strategies = ['滑动窗口', '摘要压缩', '全量上下文', '向量检索'];
-  static const _fallbackOptions = ['简单回复', '重试', '切换模型', '静默失败'];
-
   String _defaultCharacterId = '';
   String _defaultModelId = '';
-  String _contextStrategy = _strategies.first;
-  bool _streamingOutput = true;
-  bool _messageSplitting = true;
-  bool _toolCalls = true;
-  String _errorFallback = _fallbackOptions.first;
   bool _saving = false;
 
   @override
@@ -166,14 +157,6 @@ class _AiConfigContentState extends ConsumerState<_AiConfigContent> {
     _defaultModelId = widget.configs.any((item) => item.id == storedModelId)
         ? storedModelId
         : _preferredModelId();
-
-    final strategy = (settings['ai_context_strategy'] ?? '').toString();
-    _contextStrategy = _strategies.contains(strategy) ? strategy : _strategies.first;
-    _streamingOutput = _parseBool(settings['ai_streaming_output'], fallback: true);
-    _messageSplitting = _parseBool(settings['ai_message_splitting'], fallback: true);
-    _toolCalls = _parseBool(settings['ai_tool_calls'], fallback: true);
-    final fallback = (settings['ai_error_fallback'] ?? '').toString();
-    _errorFallback = _fallbackOptions.contains(fallback) ? fallback : _fallbackOptions.first;
   }
 
   String _preferredCharacterId() {
@@ -188,25 +171,6 @@ class _AiConfigContentState extends ConsumerState<_AiConfigContent> {
       if (item.isActive == 1) return item.id;
     }
     return widget.configs.isEmpty ? '' : widget.configs.first.id;
-  }
-
-  bool _parseBool(dynamic value, {required bool fallback}) {
-    if (value is bool) return value;
-    if (value is num) return value != 0;
-    switch (value?.toString().trim().toLowerCase()) {
-      case 'true':
-      case '1':
-      case 'yes':
-      case 'on':
-        return true;
-      case 'false':
-      case '0':
-      case 'no':
-      case 'off':
-        return false;
-      default:
-        return fallback;
-    }
   }
 
   Future<void> _save() async {
@@ -226,11 +190,6 @@ class _AiConfigContentState extends ConsumerState<_AiConfigContent> {
           'settings': <String, String>{
             'ai_default_character_id': _defaultCharacterId,
             'ai_default_model_id': _defaultModelId,
-            'ai_context_strategy': _contextStrategy,
-            'ai_streaming_output': _streamingOutput.toString(),
-            'ai_message_splitting': _messageSplitting.toString(),
-            'ai_tool_calls': _toolCalls.toString(),
-            'ai_error_fallback': _errorFallback,
           },
         }),
       );
@@ -255,7 +214,7 @@ class _AiConfigContentState extends ConsumerState<_AiConfigContent> {
     return ListView(
       padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
       children: [
-        const _SectionLabel(text: '全局 AI 行为'),
+        const _SectionLabel(text: '默认 AI 配置'),
         SizedBox(height: AppSpacing.sm),
         _buildCard([
           _buildDropdownTile(
@@ -277,54 +236,15 @@ class _AiConfigContentState extends ConsumerState<_AiConfigContent> {
             emptyLabel: '暂无模型',
             onChanged: (value) => setState(() => _defaultModelId = value),
           ),
-          _divider(),
-          _buildDropdownTile(
-            icon: Icons.memory,
-            title: '上下文策略',
-            value: _contextStrategy,
-            options: _strategies,
-            labels: const {},
-            onChanged: (value) => setState(() => _contextStrategy = value),
-          ),
         ]),
-        SizedBox(height: AppSpacing.sectionGap),
-        const _SectionLabel(text: '输出与调用'),
-        SizedBox(height: AppSpacing.sm),
-        _buildCard([
-          AmitiaSwitchTile(
-            title: '流式输出',
-            subtitle: '逐字显示回复内容',
-            value: _streamingOutput,
-            onChanged: (value) => setState(() => _streamingOutput = value),
+        SizedBox(height: AppSpacing.md),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: Text(
+            '上下文策略、流式输出、消息拆分、工具调用和错误回落由实际会话/模型/执行策略管理；当前不提供未接通的全局开关。',
+            style: AppTypography.caption(context),
           ),
-          _divider(),
-          AmitiaSwitchTile(
-            title: '消息拆分',
-            subtitle: '长文本自动分段发送',
-            value: _messageSplitting,
-            onChanged: (value) => setState(() => _messageSplitting = value),
-          ),
-          _divider(),
-          AmitiaSwitchTile(
-            title: '工具调用',
-            subtitle: '允许 AI 调用扩展工具',
-            value: _toolCalls,
-            onChanged: (value) => setState(() => _toolCalls = value),
-          ),
-        ]),
-        SizedBox(height: AppSpacing.sectionGap),
-        const _SectionLabel(text: '异常处理'),
-        SizedBox(height: AppSpacing.sm),
-        _buildCard([
-          _buildDropdownTile(
-            icon: Icons.error_outline,
-            title: '错误回落',
-            value: _errorFallback,
-            options: _fallbackOptions,
-            labels: const {},
-            onChanged: (value) => setState(() => _errorFallback = value),
-          ),
-        ]),
+        ),
         SizedBox(height: AppSpacing.xl),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
