@@ -1,77 +1,74 @@
+<!--
+SPDX-FileCopyrightText: 2026 彭旭
+SPDX-License-Identifier: AGPL-3.0-only
+-->
 <template>
   <div class="logs-page">
-    <h2 class="page-title">系统日志</h2>
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">系统运行日志</h2>
+        <p>读取当前 Business Core 的运行日志；云端模式下这里显示 Cloud Core 日志。</p>
+      </div>
+      <el-button :loading="loading" @click="refreshCurrent">刷新</el-button>
+    </div>
 
-    <!-- Tab: DB Logs / Log Files -->
-    <el-tabs v-model="activeTab" @tab-change="onTabChange">
-      <el-tab-pane label="操作日志" name="db">
+    <el-tabs v-model="activeTab" @tab-change="refreshCurrent">
+      <el-tab-pane label="最近日志" name="recent">
         <div class="log-toolbar">
-          <el-button size="small" @click="fetchDbLogs">刷新</el-button>
+          <span class="log-count">{{ recentLogs.length }} 条</span>
           <el-button
             size="small"
             type="danger"
             plain
-            @click="clearDbLogs"
-            :disabled="dbLogs.length === 0"
-            >清除</el-button
-          >
-          <span class="log-count" v-if="dbLogs.length"
-            >{{ dbLogs.length }}条</span
-          >
+            :disabled="logFiles.length === 0"
+            @click="clearAllLogs"
+          >清除日志文件</el-button>
         </div>
-        <el-table :data="dbLogs" stripe size="small" max-height="500">
-          <el-table-column
-            prop="action"
-            label="操作"
-            width="150"
-            show-overflow-tooltip
-          />
-          <el-table-column prop="targetType" label="目标" width="100" />
-          <el-table-column prop="details" label="详情" show-overflow-tooltip />
-          <el-table-column label="时间" width="160">
-            <template #default="{ row }">{{ fmtDate(row.createdAt) }}</template>
-          </el-table-column>
+        <el-table :data="recentLogs" stripe size="small" max-height="560" v-loading="loading">
+          <el-table-column prop="file" label="文件" width="190" show-overflow-tooltip />
+          <el-table-column prop="line" label="内容" min-width="520" show-overflow-tooltip />
+          <el-table-column prop="time" label="读取时间" width="170" />
         </el-table>
+        <el-empty v-if="!loading && recentLogs.length === 0" description="暂无运行日志" :image-size="48" />
       </el-tab-pane>
 
       <el-tab-pane label="日志文件" name="files">
-        <div class="files-layout">
+        <div class="files-layout" v-loading="loading">
           <div class="file-list">
             <div class="file-toolbar">
-              <el-button size="small" @click="fetchLogFiles">刷新</el-button>
+              <span class="log-count">{{ logFiles.length }} 个文件</span>
               <el-button
                 size="small"
                 type="danger"
                 plain
-                @click="clearLogFiles"
                 :disabled="logFiles.length === 0"
-                >清除所有</el-button
-              >
+                @click="clearAllLogs"
+              >清除所有</el-button>
             </div>
-            <div
-              v-for="f in logFiles"
-              :key="f.name"
+            <button
+              v-for="file in logFiles"
+              :key="file.name"
+              type="button"
               class="file-item"
-              :class="{ active: selectedFile === f.name }"
-              @click="viewFile(f.name)"
+              :class="{ active: selectedFile === file.name }"
+              @click="viewFile(file.name)"
             >
-              <span class="fi-name">{{ f.name }}</span>
-              <span class="fi-size">{{ formatSize(f.size) }}</span>
-            </div>
-            <el-empty
-              v-if="logFiles.length === 0"
-              description="暂无日志文件"
-              :image-size="40"
-            />
+              <span class="fi-main">
+                <span class="fi-name">{{ file.name }}</span>
+                <span class="fi-time">{{ file.modTime || "" }}</span>
+              </span>
+              <span class="fi-size">{{ formatSize(file.size) }}</span>
+            </button>
+            <el-empty v-if="!loading && logFiles.length === 0" description="暂无日志文件" :image-size="40" />
           </div>
-          <div class="file-content" v-if="selectedFile">
+          <div v-if="selectedFile" class="file-content">
             <div class="fc-header">
               <span>{{ selectedFile }}</span>
-              <span class="fc-lines">{{ fileLines }}行</span>
+              <span class="fc-lines">{{ fileLineCount }} 行</span>
             </div>
             <pre class="fc-body">{{ fileContent }}</pre>
           </div>
-          <div class="file-content empty" v-else>
+          <div v-else class="file-content empty">
             <el-empty description="选择左侧文件查看" :image-size="50" />
           </div>
         </div>
@@ -81,206 +78,220 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { onMounted, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { useApi } from "../../composables/useApi";
+import { useApi } from "@/composables/useApi";
+
+type RecentLog = { file?: string; line?: string; time?: string };
+type LogFile = { name: string; size: number; modTime?: string };
 
 const { get, del } = useApi();
-
-const activeTab = ref("db");
-
-// DB Logs
-const dbLogs = ref<any[]>([]);
-
-// Log Files
-const logFiles = ref<any[]>([]);
+const activeTab = ref("recent");
+const loading = ref(false);
+const recentLogs = ref<RecentLog[]>([]);
+const logFiles = ref<LogFile[]>([]);
 const selectedFile = ref("");
 const fileContent = ref("");
-const fileLines = ref(0);
+const fileLineCount = ref(0);
 
-async function fetchDbLogs() {
-  try {
-    const r = await get<any>("/api/logs/recent", { limit: 100 });
-    dbLogs.value = r?.items || [];
-  } catch {}
-}
-
-async function clearDbLogs() {
-  await ElMessageBox.confirm("确定清除所有操作日志？", "提示", {
-    type: "warning",
-  });
-  try {
-    await del("/api/logs");
-    dbLogs.value = [];
-    ElMessage.success("已清除");
-  } catch {}
+async function fetchRecentLogs() {
+  const result = await get<{ logs?: RecentLog[] }>("/api/logs/recent", { limit: 100 });
+  recentLogs.value = Array.isArray(result?.logs) ? result.logs : [];
 }
 
 async function fetchLogFiles() {
-  try {
-    logFiles.value = (await get<any[]>("/api/logs/files")) || [];
-  } catch {}
-}
-
-async function clearLogFiles() {
-  await ElMessageBox.confirm("确定删除所有日志文件？", "提示", {
-    type: "warning",
-  });
-  try {
-    await del("/api/logs");
-    logFiles.value = [];
+  const result = await get<{ files?: LogFile[] }>("/api/logs/files");
+  logFiles.value = Array.isArray(result?.files)
+    ? result.files.filter((file) => String(file?.name || "").toLowerCase().endsWith(".log"))
+    : [];
+  if (selectedFile.value && !logFiles.value.some((file) => file.name === selectedFile.value)) {
     selectedFile.value = "";
     fileContent.value = "";
-    ElMessage.success("已清除");
-  } catch {}
-}
-
-async function viewFile(name: string) {
-  selectedFile.value = name;
-  try {
-    const r = await get<any>(`/api/logs/files/${encodeURIComponent(name)}`);
-    fileContent.value = r?.content || "";
-    fileLines.value = r?.lines || 0;
-  } catch {}
-}
-
-function formatSize(bytes: number): string {
-  if (!bytes) return "0 B";
-  if (bytes < 1024) return bytes + " B";
-  return (bytes / 1024).toFixed(1) + " KB";
-}
-
-function fmtDate(d: string) {
-  if (!d) return "";
-  try {
-    return new Date(d).toLocaleString("zh-CN");
-  } catch {
-    return d;
+    fileLineCount.value = 0;
   }
 }
 
-function onTabChange() {
-  if (activeTab.value === "db") fetchDbLogs();
-  else fetchLogFiles();
+async function refreshCurrent() {
+  loading.value = true;
+  try {
+    if (activeTab.value === "recent") {
+      await Promise.all([fetchRecentLogs(), fetchLogFiles()]);
+    } else {
+      await fetchLogFiles();
+      if (selectedFile.value) await viewFile(selectedFile.value, false);
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.message || "日志加载失败");
+  } finally {
+    loading.value = false;
+  }
 }
 
-onMounted(fetchDbLogs);
+async function clearAllLogs() {
+  try {
+    await ElMessageBox.confirm("确定删除当前 Core 的所有 .log 运行日志文件？", "清除系统日志", { type: "warning" });
+    await del("/api/logs");
+    recentLogs.value = [];
+    logFiles.value = [];
+    selectedFile.value = "";
+    fileContent.value = "";
+    fileLineCount.value = 0;
+    ElMessage.success("系统日志已清除");
+  } catch (e: any) {
+    if (e === "cancel" || e === "close") return;
+    ElMessage.error(e?.message || "清除失败");
+  }
+}
+
+async function viewFile(name: string, showLoading = true) {
+  selectedFile.value = name;
+  if (showLoading) loading.value = true;
+  try {
+    const content = await get<string>(`/api/logs/files/${encodeURIComponent(name)}`);
+    fileContent.value = typeof content === "string" ? content : String(content ?? "");
+    fileLineCount.value = fileContent.value ? fileContent.value.split(/\r?\n/).length : 0;
+  } catch (e: any) {
+    fileContent.value = "";
+    fileLineCount.value = 0;
+    ElMessage.error(e?.message || "日志文件读取失败");
+  } finally {
+    if (showLoading) loading.value = false;
+  }
+}
+
+function formatSize(bytes: number): string {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+onMounted(refreshCurrent);
 </script>
 
 <style scoped>
 .logs-page {
+  min-height: 320px;
 }
-.page-title {
-  font-size: var(--ac-font-size-lg);
-  font-weight: 600;
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 14px;
 }
-
-.log-toolbar {
+.page-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+.page-header p {
+  margin: 5px 0 0;
+  color: var(--ac-color-text-secondary);
+  font-size: var(--ac-font-size-sm);
+}
+.log-toolbar,
+.file-toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
 }
 .log-count {
-  font-size: var(--ac-font-size-xs);
   color: var(--ac-color-text-muted);
-  margin-left: auto;
+  font-size: var(--ac-font-size-xs);
 }
-
-/* File layout */
 .files-layout {
-  display: flex;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 14px;
-  min-height: 400px;
+  min-height: 440px;
 }
 .file-list {
-  width: 240px;
-  flex-shrink: 0;
   overflow-y: auto;
   border-right: 1px solid var(--ac-color-border-light);
   padding-right: 10px;
 }
-.file-toolbar {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
 .file-item {
+  width: 100%;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 8px;
+  border: 0;
   border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: inherit;
   cursor: pointer;
-  font-size: var(--ac-font-size-sm);
-  transition: background var(--ac-transition-fast);
+  text-align: left;
 }
-.file-item:hover {
+.file-item:hover,
+.file-item.active {
   background: var(--ac-color-surface-hover);
 }
-.file-item.active {
-  background: var(--ac-color-primary-bg);
-  color: var(--ac-color-primary);
+.fi-main {
+  min-width: 0;
 }
-.fi-name {
+.fi-name,
+.fi-time {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
+}
+.fi-name {
+  font-size: var(--ac-font-size-sm);
+}
+.fi-time,
+.fi-size {
+  color: var(--ac-color-text-muted);
+  font-size: var(--ac-font-size-xs);
 }
 .fi-size {
-  font-size: var(--ac-font-size-xs);
-  color: var(--ac-color-text-muted);
-  margin-left: 6px;
+  flex-shrink: 0;
 }
-
 .file-content {
-  flex: 1;
+  min-width: 0;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  border: 1px solid var(--ac-color-border-light);
+  border-radius: var(--ac-radius-md);
 }
 .file-content.empty {
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
 }
 .fc-header {
   display: flex;
   justify-content: space-between;
-  padding: 4px 0 6px;
+  gap: 10px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--ac-color-border-light);
   font-size: var(--ac-font-size-sm);
-  font-weight: 500;
-  flex-shrink: 0;
 }
 .fc-lines {
-  font-weight: 400;
   color: var(--ac-color-text-muted);
 }
 .fc-body {
-  flex: 1;
+  height: 410px;
   overflow: auto;
-  padding: 8px 0;
-  font-family: monospace;
-  font-size: 12px;
-  line-height: 1.5;
+  margin: 0;
+  padding: 12px;
+  background: var(--ac-color-surface-secondary);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--ac-color-text-secondary);
+  overflow-wrap: anywhere;
 }
-
-@media (max-width: 768px) {
+@media (max-width: 800px) {
   .files-layout {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
   .file-list {
-    width: 100%;
-    max-height: 150px;
-    border-right: none;
+    max-height: 220px;
+    border-right: 0;
     border-bottom: 1px solid var(--ac-color-border-light);
-    padding-right: 0;
-    padding-bottom: 8px;
+    padding: 0 0 10px;
   }
 }
 </style>

@@ -129,6 +129,8 @@ const extraTitles = [
   { path: "/workspaces", label: "工作区" },
   { path: "/realtime-voice", label: "实时语音" },
   { path: "/long-running", label: "长期运行维护" },
+  { path: "/settings/system-logs", label: "系统运行日志" },
+  { path: "/settings/prompt-trace", label: "Prompt Trace" },
 ];
 
 export function isNavItemActive(path: string, item: AppNavItem) {
