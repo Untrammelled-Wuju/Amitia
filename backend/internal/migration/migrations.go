@@ -199,6 +199,8 @@ func DefaultMigrations() []Migration {
 		WorkspaceMountLastUsedMigration(),
 		MemoryDynamicRecallRetentionMigration(),
 		AuthUserProfileMigration(),
+		ActiveMessageUnrepliedSlowdownMigration(),
+		MemoryContextUseMigration(),
 	}
 }
 
