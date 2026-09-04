@@ -28,6 +28,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
   String? _error;
   late Map<String, bool> _toolEnabledState;
   late Map<String, bool> _capabilityState;
+  final Map<String, Map<String, dynamic>> _capabilityConfigurations = {};
   final Set<String> _resourceSubscriptions = <String>{};
   bool _connectionAction = false;
 
@@ -61,10 +62,17 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
           final key = (tool['remoteName'] ?? tool['name'] ?? '').toString();
           _toolEnabledState[key] = (tool['enabled'] as int? ?? 0) == 1;
         }
+        _capabilityConfigurations.clear();
         _capabilityState = {
           for (final capability in capabilities)
             (capability['capability'] ?? '').toString(): (capability['enabled'] as int? ?? 0) == 1,
         };
+        for (final capability in capabilities) {
+          final name = (capability['capability'] ?? '').toString();
+          if (name.isNotEmpty) {
+            _capabilityConfigurations[name] = _parseCapabilityConfiguration(capability['configuration']);
+          }
+        }
 
         final tasksEnabled = _capabilityState['tasks'] ?? false;
         final tasks = tasksEnabled ? await svc.tasks(widget.mcpId) : <Map<String, dynamic>>[];
@@ -80,6 +88,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
         data['hasSampling'] = _capabilityState['sampling'] ?? false;
         data['hasTasks'] = tasksEnabled;
         data['hasRoots'] = _capabilityState['roots'] ?? false;
+        data['hasElicitation'] = _capabilityState['elicitation'] ?? false;
         data['hasOAuth'] = (data['authType'] ?? '').toString().toLowerCase() == 'oauth';
       }
       if (mounted) {
@@ -101,8 +110,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
   String _transportLabel(dynamic transport) {
     final t = transport.toString().toLowerCase();
     if (t.contains('stdio')) return 'STDIO';
-    if (t.contains('sse')) return 'SSE';
-    if (t.contains('websocket') || t.contains('ws')) return 'WebSocket';
+    if (t.contains('streamable_http') || t == 'http') return 'HTTP';
     return transport.toString();
   }
 
@@ -240,6 +248,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
     final hasSampling = (server['hasSampling'] ?? false) as bool;
     final hasTasks = (server['hasTasks'] ?? false) as bool;
     final hasRoots = (server['hasRoots'] ?? false) as bool;
+    final hasElicitation = (server['hasElicitation'] ?? false) as bool;
     final hasOAuth = (server['hasOAuth'] ?? false) as bool;
 
     return Column(
@@ -278,6 +287,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
             _CapabilityChip(label: 'Sampling', enabled: hasSampling, icon: Icons.graphic_eq),
             _CapabilityChip(label: 'Tasks', enabled: hasTasks, icon: Icons.task_outlined),
             _CapabilityChip(label: 'Roots', enabled: hasRoots, icon: Icons.account_tree_outlined),
+            _CapabilityChip(label: 'Elicitation', enabled: hasElicitation, icon: Icons.dynamic_form_outlined),
             _CapabilityChip(label: 'OAuth', enabled: hasOAuth, icon: Icons.lock_outline),
           ],
         ),
@@ -286,7 +296,29 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
           children: [
             Expanded(
               child: AmitiaButton(
-                label: _connectionAction ? '处理中...' : '重新连接',
+                label: _connectionAction ? '处理中...' : '连接',
+                isSecondary: true,
+                icon: Icons.link,
+                onPressed: _connectionAction ? null : _connectServer,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: AmitiaButton(
+                label: '断开',
+                isSecondary: true,
+                icon: Icons.link_off,
+                onPressed: _connectionAction ? null : _disconnectServer,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: AmitiaButton(
+                label: '重新连接',
                 isSecondary: true,
                 icon: Icons.sync,
                 onPressed: _connectionAction ? null : _reconnectServer,
@@ -623,6 +655,34 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
         );
       }).toList(),
     );
+  }
+
+  Future<void> _connectServer() async {
+    if (_connectionAction) return;
+    setState(() => _connectionAction = true);
+    try {
+      await ref.read(mcpServiceProvider).connectServer(widget.mcpId);
+      await _loadServer();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('MCP 服务已连接')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('连接失败：$e')));
+    } finally {
+      if (mounted) setState(() => _connectionAction = false);
+    }
+  }
+
+  Future<void> _disconnectServer() async {
+    if (_connectionAction) return;
+    setState(() => _connectionAction = true);
+    try {
+      await ref.read(mcpServiceProvider).disconnectServer(widget.mcpId);
+      await _loadServer();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('MCP 服务已断开')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('断开失败：$e')));
+    } finally {
+      if (mounted) setState(() => _connectionAction = false);
+    }
   }
 
   Future<void> _reconnectServer() async {
@@ -989,6 +1049,12 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                 onChanged: (value) => _updateCapability('sampling', value, setDialogState),
               ),
               _CapabilityToggle(
+                label: 'Elicitation',
+                desc: '允许服务请求受控表单或外部 URL 确认',
+                value: _capabilityState['elicitation'] ?? false,
+                onChanged: (value) => _updateCapability('elicitation', value, setDialogState),
+              ),
+              _CapabilityToggle(
                 label: 'Tasks',
                 desc: '启用远端任务管理能力',
                 value: _capabilityState['tasks'] ?? false,
@@ -1020,10 +1086,12 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
     final previous = _capabilityState[capability] ?? false;
     setState(() => _capabilityState[capability] = enabled);
     setDialogState(() {});
-    Map<String, dynamic> configuration = const {};
-    if (enabled && capability == 'sampling') {
+    Map<String, dynamic> configuration = Map<String, dynamic>.from(
+      _capabilityConfigurations[capability] ?? const <String, dynamic>{},
+    );
+    if (enabled && configuration.isEmpty && capability == 'sampling') {
       configuration = {'maxTokens': 2048, 'timeoutSeconds': 60, 'maxConcurrent': 1};
-    } else if (enabled && capability == 'tasks') {
+    } else if (enabled && configuration.isEmpty && capability == 'tasks') {
       configuration = {'maxConcurrent': 4, 'maxTTLSeconds': 86400};
     }
     try {
@@ -1040,6 +1108,18 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
       setDialogState(() {});
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('能力更新失败：$e')));
     }
+  }
+
+  static Map<String, dynamic> _parseCapabilityConfiguration(dynamic value) {
+    if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String && value.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return <String, dynamic>{};
   }
 
   Future<void> _showOAuthDialog() async {

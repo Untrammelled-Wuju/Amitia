@@ -116,6 +116,14 @@ class CharacterDebugPage extends ConsumerWidget {
             ),
             _buildDebugAction(
               context,
+              '延迟回复队列',
+              '查看等待中的延迟回复，并可取消单条任务',
+              Icons.pending_actions_outlined,
+              context.accentPrimary,
+              () => _showDelayedReplies(context, ref),
+            ),
+            _buildDebugAction(
+              context,
               '处理延迟回复',
               '立即处理当前角色等待中的延迟回复',
               Icons.schedule_send_outlined,
@@ -231,22 +239,112 @@ class CharacterDebugPage extends ConsumerWidget {
   }
 
   Future<void> _testCharacter(BuildContext context, WidgetRef ref) async {
-    final confirmed = await _showConfirmDialog(context, '测试角色对话', '将发送一条测试消息验证角色响应。确定继续吗？');
-    if (confirmed != true) return;
+    final controller = TextEditingController();
+    final messages = <Map<String, String>>[];
+    var sending = false;
     try {
-      final svc = ref.read(characterDetailServiceProvider);
-      final result = await svc.test(characterId);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('测试成功: ${result?.name ?? characterId}')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('测试失败: $e')),
-        );
-      }
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> send() async {
+              final text = controller.text.trim();
+              if (text.isEmpty || sending) return;
+              setDialogState(() {
+                sending = true;
+                messages.add({'role': 'user', 'content': text});
+                controller.clear();
+              });
+              try {
+                final result = await ref.read(characterDetailServiceProvider).test(characterId, text);
+                final reply = (result?['reply'] ?? result?['content'] ?? result?['message'] ?? '').toString().trim();
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    messages.add({'role': 'assistant', 'content': reply.isEmpty ? '测试接口未返回可显示文本' : reply});
+                  });
+                }
+              } catch (e) {
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    messages.add({'role': 'error', 'content': '测试失败: $e'});
+                  });
+                }
+              } finally {
+                if (dialogContext.mounted) setDialogState(() => sending = false);
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('角色测试会话'),
+              content: SizedBox(
+                width: 680,
+                height: 500,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: messages.isEmpty
+                          ? const Center(child: Text('输入任意消息开始测试；可连续发送多轮消息。'))
+                          : ListView.builder(
+                              itemCount: messages.length,
+                              itemBuilder: (_, index) {
+                                final item = messages[index];
+                                final role = item['role'] ?? '';
+                                final isUser = role == 'user';
+                                final isError = role == 'error';
+                                return Align(
+                                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                                  child: Container(
+                                    constraints: const BoxConstraints(maxWidth: 520),
+                                    margin: const EdgeInsets.symmetric(vertical: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                                    decoration: BoxDecoration(
+                                      color: isUser
+                                          ? dialogContext.accentSoft
+                                          : isError
+                                              ? dialogContext.error.withValues(alpha: 0.08)
+                                              : dialogContext.surfaceSecondary,
+                                      borderRadius: AppRadius.brSmall,
+                                    ),
+                                    child: Text(item['content'] ?? '', style: AppTypography.bodySmall(dialogContext)),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controller,
+                            enabled: !sending,
+                            minLines: 1,
+                            maxLines: 3,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => send(),
+                            decoration: const InputDecoration(hintText: '输入测试消息'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: '发送',
+                          onPressed: sending ? null : send,
+                          icon: sending
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.send_outlined),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+            );
+          },
+        ),
+      );
+    } finally {
+      controller.dispose();
     }
   }
 
@@ -522,6 +620,68 @@ class CharacterDebugPage extends ConsumerWidget {
                   if (dialogContext.mounted) setDialogState(() {});
                 },
                 child: const Text('重新生成'),
+              ),
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      _showError(context, e);
+    }
+  }
+
+
+  Future<void> _showDelayedReplies(BuildContext context, WidgetRef ref) async {
+    try {
+      final svc = ref.read(companionServiceProvider);
+      var items = await svc.delayedReplies(characterId: characterId);
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: const Text('延迟回复队列'),
+            content: SizedBox(
+              width: 700,
+              height: 460,
+              child: items.isEmpty
+                  ? const Center(child: Text('当前没有等待中的延迟回复'))
+                  : ListView.separated(
+                      itemCount: items.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final item = items[index];
+                        final id = (item['id'] ?? '').toString();
+                        final message = (item['userMessage'] ?? item['message'] ?? item['content'] ?? '延迟回复').toString();
+                        final dueAt = (item['expectedReplyAfter'] ?? item['replyAt'] ?? item['dueAt'] ?? '').toString();
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.schedule_outlined),
+                          title: Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(dueAt.isEmpty ? _compact(item) : '预计回复：$dueAt'),
+                          trailing: id.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: '取消该延迟回复',
+                                  icon: const Icon(Icons.cancel_outlined),
+                                  onPressed: () async {
+                                    await svc.cancelDelayedReply(id, characterId: characterId);
+                                    items = await svc.delayedReplies(characterId: characterId);
+                                    if (dialogContext.mounted) setDialogState(() {});
+                                  },
+                                ),
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  items = await svc.delayedReplies(characterId: characterId);
+                  if (dialogContext.mounted) setDialogState(() {});
+                },
+                child: const Text('刷新'),
               ),
               TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭')),
             ],

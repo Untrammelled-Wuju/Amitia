@@ -68,8 +68,15 @@ class CharacterTimelinePage extends ConsumerWidget {
     final memorySvc = ref.read(memoryServiceProvider);
     final timelineData = await memorySvc.timeline(characterId: characterId);
     final companionSvc = ref.read(companionServiceProvider);
-    final fixedEvents = await companionSvc.todaySchedule(characterId: characterId);
-    final allEvents = <Map<String, dynamic>>[...timelineData, ...fixedEvents];
+    final runtimeEvents = await companionSvc.todayTimeline(characterId: characterId);
+    final normalizedRuntimeEvents = runtimeEvents.map((event) => <String, dynamic>{
+          ...event,
+          'time': (event['startTime'] ?? '').toString(),
+          'type': (event['sourceType'] ?? 'life').toString(),
+          'title': (event['state'] ?? '生活状态').toString(),
+          'description': (event['reason'] ?? '').toString(),
+        });
+    final allEvents = <Map<String, dynamic>>[...timelineData, ...normalizedRuntimeEvents];
     allEvents.sort((a, b) {
       final timeA = DateTime.tryParse(a['time']?.toString() ?? '') ?? DateTime(2000);
       final timeB = DateTime.tryParse(b['time']?.toString() ?? '') ?? DateTime(2000);

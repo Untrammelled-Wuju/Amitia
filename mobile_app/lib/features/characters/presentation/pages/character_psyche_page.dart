@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -28,7 +26,7 @@ class CharacterPsychePage extends ConsumerWidget {
       body: SafeArea(
         top: false,
         child: FutureBuilder<Map<String, dynamic>?>(
-          future: ref.read(companionServiceProvider).mindState(characterId: characterId),
+          future: ref.read(companionServiceProvider).psycheSnapshot(characterId: characterId),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -48,15 +46,13 @@ class CharacterPsychePage extends ConsumerWidget {
   }
 
   Widget _buildContent(BuildContext context, Map<String, dynamic> state) {
-    final psyche = _asMap(state['psyche']);
-    final relationships = _asMapList(state['relationships']);
-    final needs = _asMapList(state['needs']);
-
-    final emotion = _humanizeStructuredValue(psyche['emotion']);
-    final mood = _humanizeStructuredValue(psyche['mood']);
-    final stress = _toPercent(psyche['stress']);
-    final energy = _toPercent(psyche['energy']);
-    final updatedAt = (psyche['updatedAt'] ?? '').toString();
+    final emotion = _asMap(state['emotion']);
+    final mood = _asMap(state['mood']);
+    final needs = _asMap(state['needs']);
+    final relationship = _asMap(state['relationship']);
+    final beliefs = _asMapList(state['beliefs']);
+    final affectLabel = (state['affectLabel'] ?? '平静').toString();
+    final collectedAt = (state['collectedAt'] ?? emotion['updatedAt'] ?? mood['updatedAt'] ?? '').toString();
 
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
@@ -74,17 +70,13 @@ class CharacterPsychePage extends ConsumerWidget {
               Text('当前心理状态', style: AppTypography.label(context)),
               SizedBox(height: AppSpacing.xs),
               Text(
-                emotion.isNotEmpty ? emotion : (mood.isNotEmpty ? mood : '暂无情绪标签'),
+                affectLabel,
                 style: AppTypography.pageLargeTitle(context).copyWith(color: context.accentPrimary),
                 textAlign: TextAlign.center,
               ),
-              if (mood.isNotEmpty && mood != emotion) ...[
+              if (collectedAt.isNotEmpty) ...[
                 SizedBox(height: AppSpacing.xs),
-                Text('心境：$mood', style: AppTypography.caption(context), textAlign: TextAlign.center),
-              ],
-              if (updatedAt.isNotEmpty) ...[
-                SizedBox(height: AppSpacing.xs),
-                Text('更新时间：$updatedAt', style: AppTypography.label(context)),
+                Text('采集时间：$collectedAt', style: AppTypography.label(context), textAlign: TextAlign.center),
               ],
             ],
           ),
@@ -92,29 +84,48 @@ class CharacterPsychePage extends ConsumerWidget {
         SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(title: '状态指标'),
         SizedBox(height: AppSpacing.sm),
-        _metricCard(context, '压力', stress, Icons.speed_outlined, context.warning),
+        _metricCard(context, '压力', state['stress'], Icons.speed_outlined, context.warning),
         SizedBox(height: AppSpacing.sm),
-        _metricCard(context, '精力', energy, Icons.bolt_outlined, context.accentPrimary),
+        _metricCard(context, '精力', state['energy'], Icons.bolt_outlined, context.accentPrimary),
+        SizedBox(height: AppSpacing.sectionGap),
+        AmitiaSectionHeader(title: '情绪维度'),
+        SizedBox(height: AppSpacing.sm),
+        _dimensionGrid(context, {
+          '积极': emotion['positive'],
+          '消极': emotion['negative'],
+          '唤醒': emotion['arousal'],
+          '支配': emotion['dominance'],
+          '心境效价': mood['valence'],
+          '心境张力': mood['tension'],
+        }),
         SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(title: '需求状态'),
         SizedBox(height: AppSpacing.sm),
         if (needs.isEmpty)
           Text('暂无需求状态', style: AppTypography.caption(context))
         else
-          ...needs.map((need) => _needCard(context, need)),
+          ...needs.entries.map((entry) => _needCard(context, entry.key, entry.value)),
         SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(title: '关系状态'),
         SizedBox(height: AppSpacing.sm),
-        if (relationships.isEmpty)
+        if (relationship.isEmpty)
           Text('暂无关系状态', style: AppTypography.caption(context))
         else
-          ...relationships.map((item) => _relationshipCard(context, item)),
+          _relationshipCard(context, relationship),
+        SizedBox(height: AppSpacing.sectionGap),
+        AmitiaSectionHeader(title: '信念快照'),
+        SizedBox(height: AppSpacing.sm),
+        if (beliefs.isEmpty)
+          Text('暂无高置信度信念', style: AppTypography.caption(context))
+        else
+          ...beliefs.map((belief) => _beliefCard(context, belief)),
         SizedBox(height: AppSpacing.xxl),
       ],
     );
   }
 
-  Widget _metricCard(BuildContext context, String label, int value, IconData icon, Color color) {
+  Widget _metricCard(BuildContext context, String label, dynamic rawValue, IconData icon, Color color) {
+    final value = _toPercent(rawValue);
     return AmitiaCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -136,12 +147,33 @@ class CharacterPsychePage extends ConsumerWidget {
     );
   }
 
-  Widget _needCard(BuildContext context, Map<String, dynamic> need) {
-    final key = (need['needKey'] ?? need['key'] ?? '未命名需求').toString();
-    final current = _toPercent(need['currentValue']);
-    final baseline = _toPercent(need['baseline']);
-    final trend = _toDouble(need['trend']);
-    final saturated = need['saturated'] == true;
+  Widget _dimensionGrid(BuildContext context, Map<String, dynamic> values) {
+    return AmitiaCard(
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: values.entries.map((entry) {
+          final value = _toPercent(entry.value);
+          return SizedBox(
+            width: 132,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(entry.key, style: AppTypography.label(context)),
+                const SizedBox(height: 4),
+                Text('$value/100', style: AppTypography.cardTitle(context).copyWith(color: context.accentPrimary)),
+                const SizedBox(height: 6),
+                AmitiaProgressBar(progress: value / 100, color: context.accentPrimary, height: 5),
+              ],
+            ),
+          );
+        }).toList(growable: false),
+      ),
+    );
+  }
+
+  Widget _needCard(BuildContext context, String key, dynamic rawValue) {
+    final value = _toPercent(rawValue);
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
@@ -150,17 +182,12 @@ class CharacterPsychePage extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text(key, style: AppTypography.cardTitle(context))),
-                AmitiaStatusBadge(
-                  label: saturated ? '已满足' : trend > 0 ? '上升' : trend < 0 ? '下降' : '稳定',
-                  type: saturated ? BadgeType.success : BadgeType.neutral,
-                ),
+                Expanded(child: Text(_needLabel(key), style: AppTypography.cardTitle(context))),
+                Text('$value/100', style: AppTypography.label(context)),
               ],
             ),
             SizedBox(height: AppSpacing.sm),
-            AmitiaProgressBar(progress: current / 100, color: context.accentPrimary, height: 7),
-            SizedBox(height: AppSpacing.xs),
-            Text('当前 $current · 基线 $baseline', style: AppTypography.label(context)),
+            AmitiaProgressBar(progress: value / 100, color: context.accentPrimary, height: 7),
           ],
         ),
       ),
@@ -168,9 +195,39 @@ class CharacterPsychePage extends ConsumerWidget {
   }
 
   Widget _relationshipCard(BuildContext context, Map<String, dynamic> relationship) {
-    final data = _asMap(relationship['data']);
-    final title = (relationship['relation_type'] ?? relationship['relationType'] ?? relationship['target_id'] ?? relationship['targetId'] ?? '关系').toString();
-    final detail = data.isNotEmpty ? _humanizeStructuredValue(data) : _humanizeStructuredValue(relationship);
+    const labels = <String, String>{
+      'trust': '信任',
+      'familiarity': '熟悉度',
+      'security': '安全感',
+      'tension': '紧张度',
+      'repairConfidence': '修复信心',
+      'boundary': '边界强度',
+    };
+    return AmitiaCard(
+      child: Column(
+        children: labels.entries.map((entry) {
+          final value = _toPercent(relationship[entry.key]);
+          return Padding(
+            padding: EdgeInsets.only(bottom: entry.key == labels.keys.last ? 0 : AppSpacing.sm),
+            child: Row(
+              children: [
+                SizedBox(width: 76, child: Text(entry.value, style: AppTypography.bodySmall(context))),
+                Expanded(child: AmitiaProgressBar(progress: value / 100, color: context.accentPrimary, height: 6)),
+                const SizedBox(width: 10),
+                SizedBox(width: 48, child: Text('$value', textAlign: TextAlign.end, style: AppTypography.label(context))),
+              ],
+            ),
+          );
+        }).toList(growable: false),
+      ),
+    );
+  }
+
+  Widget _beliefCard(BuildContext context, Map<String, dynamic> belief) {
+    final key = (belief['key'] ?? '未命名信念').toString();
+    final value = (belief['value'] ?? '').toString();
+    final confidence = _toPercent(belief['confidence']);
+    final conflicted = belief['conflicted'] == true;
     return Padding(
       padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
@@ -181,17 +238,22 @@ class CharacterPsychePage extends ConsumerWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
-              child: Icon(Icons.favorite_outline, color: context.accentPrimary, size: 20),
+              child: Icon(conflicted ? Icons.compare_arrows_outlined : Icons.lightbulb_outline, color: context.accentPrimary, size: 20),
             ),
             SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: AppTypography.cardTitle(context)),
-                  if (detail.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Expanded(child: Text(key, style: AppTypography.cardTitle(context))),
+                      AmitiaStatusBadge(label: conflicted ? '冲突' : '置信 $confidence%', type: conflicted ? BadgeType.warning : BadgeType.neutral),
+                    ],
+                  ),
+                  if (value.isNotEmpty) ...[
                     SizedBox(height: AppSpacing.xs),
-                    Text(detail, style: AppTypography.caption(context), maxLines: 4, overflow: TextOverflow.ellipsis),
+                    Text(value, style: AppTypography.caption(context)),
                   ],
                 ],
               ),
@@ -224,28 +286,16 @@ class CharacterPsychePage extends ConsumerWidget {
     return scaled.clamp(0, 100).round();
   }
 
-  static String _humanizeStructuredValue(dynamic value) {
-    if (value == null) return '';
-    if (value is String) {
-      final trimmed = value.trim();
-      if (trimmed.isEmpty || trimmed == '{}') return '';
-      try {
-        return _humanizeStructuredValue(jsonDecode(trimmed));
-      } catch (_) {
-        return trimmed;
-      }
-    }
-    if (value is Map) {
-      final entries = value.entries
-          .where((e) => e.value != null && e.value.toString().isNotEmpty)
-          .take(4)
-          .map((e) => '${e.key}: ${_humanizeStructuredValue(e.value)}')
-          .where((e) => !e.endsWith(': '));
-      return entries.join(' · ');
-    }
-    if (value is List) {
-      return value.take(4).map(_humanizeStructuredValue).where((e) => e.isNotEmpty).join('、');
-    }
-    return value.toString();
+  static String _needLabel(String key) {
+    const labels = <String, String>{
+      'reassurance': '被确认',
+      'connection': '连接感',
+      'autonomy': '自主性',
+      'clarity': '清晰度',
+      'rest': '休息',
+      'expression': '表达',
+      'novelty': '新鲜感',
+    };
+    return labels[key] ?? key;
   }
 }

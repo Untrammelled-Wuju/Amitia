@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -386,7 +390,8 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
               SizedBox(height: AppSpacing.md),
               ListTile(leading: const Icon(Icons.analytics_outlined), title: const Text('向量与检索诊断'), onTap: () { Navigator.pop(ctx); _showDiagnostics(); }),
               ListTile(leading: const Icon(Icons.pending_actions_outlined), title: const Text('候选记忆管理'), onTap: () { Navigator.pop(ctx); _showCandidates(); }),
-              ListTile(leading: const Icon(Icons.auto_awesome_outlined), title: const Text('提取待审核候选'), onTap: () async { Navigator.pop(ctx); await _extractCandidates(); }),
+              ListTile(leading: const Icon(Icons.auto_awesome_outlined), title: const Text('从会话生成候选'), onTap: () async { Navigator.pop(ctx); await _generateCandidates(); }),
+              ListTile(leading: const Icon(Icons.download_outlined), title: const Text('导出当前记忆'), onTap: () async { Navigator.pop(ctx); await _exportMemories(); }),
               ListTile(leading: const Icon(Icons.sort), title: const Text('查看检索排序结果'), onTap: () { Navigator.pop(ctx); _showRanked(); }),
               ListTile(leading: const Icon(Icons.replay), title: const Text('重建向量嵌入'), onTap: () async { Navigator.pop(ctx); await _runMaintenance('正在重建向量嵌入', () => ref.read(memoryServiceProvider).rebuildEmbeddings()); }),
               ListTile(leading: const Icon(Icons.reorder), title: const Text('重建记忆索引'), onTap: () async { Navigator.pop(ctx); await _runMaintenance('正在重建记忆索引', () => ref.read(memoryServiceProvider).rebuildIndex()); }),
@@ -451,15 +456,75 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     }
   }
 
-  Future<void> _extractCandidates() async {
+  Future<void> _generateCandidates() async {
     try {
-      final candidates = await ref.read(memoryServiceProvider).extractCandidates();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已提取 ${candidates.length} 条候选记忆')));
-        await _showCandidates();
+      final conversations = await ref.read(chatServiceProvider).listConversations();
+      if (!mounted) return;
+      if (conversations.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('暂无可用于提取记忆的会话')));
+        return;
       }
+      final conversationId = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('选择来源会话'),
+          content: SizedBox(
+            width: 620,
+            height: 440,
+            child: ListView.separated(
+              itemCount: conversations.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (_, index) {
+                final conversation = conversations[index];
+                final title = conversation.title.trim().isEmpty ? '未命名会话' : conversation.title.trim();
+                return ListTile(
+                  leading: const Icon(Icons.chat_bubble_outline),
+                  title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('${conversation.messageCount} 条消息${conversation.updatedAt.isEmpty ? '' : ' · ${conversation.updatedAt}'}'),
+                  onTap: () => Navigator.pop(ctx, conversation.id),
+                );
+              },
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消'))],
+        ),
+      );
+      if (conversationId == null || conversationId.isEmpty) return;
+      final candidates = await ref.read(memoryServiceProvider).generateCandidates(conversationId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已从会话生成 ${candidates.length} 条候选记忆')));
+      await _showCandidates();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('候选提取失败: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('候选生成失败: $e')));
+    }
+  }
+
+  Future<void> _exportMemories() async {
+    try {
+      final memories = await ref.read(memoryListProvider.future);
+      if (memories.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('当前没有可导出的记忆')));
+        return;
+      }
+      final now = DateTime.now();
+      final stamp = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: '导出当前记忆',
+        fileName: 'amitia_memories_$stamp.json',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+      );
+      if (path == null || path.trim().isEmpty) return;
+      final payload = <String, dynamic>{
+        'schemaVersion': 1,
+        'exportedAt': now.toUtc().toIso8601String(),
+        'count': memories.length,
+        'memories': memories.map((memory) => memory.toJson()).toList(growable: false),
+      };
+      await File(path).writeAsString(const JsonEncoder.withIndent('  ').convert(payload), flush: true);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已导出 ${memories.length} 条记忆')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('记忆导出失败: $e')));
     }
   }
 

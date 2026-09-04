@@ -1,15 +1,17 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 class McpEditPage extends ConsumerStatefulWidget {
   final String mcpId;
@@ -22,122 +24,168 @@ class McpEditPage extends ConsumerStatefulWidget {
 
 class _McpEditPageState extends ConsumerState<McpEditPage> {
   final _nameController = TextEditingController();
-  final _addressController = TextEditingController();
+  final _displayNameController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _endpointController = TextEditingController();
+  final _commandController = TextEditingController();
+  final _argsController = TextEditingController();
+  final _workDirController = TextEditingController();
+  final _credentialController = TextEditingController();
+
   int _transportIndex = 0;
-  late List<MapEntry<TextEditingController, TextEditingController>> _envControllers;
+  String _authType = 'none';
+  bool _enabled = false;
+  bool _privateNetworkConfirmed = false;
   bool _hasSampling = false;
   bool _hasTasks = false;
   bool _hasRoots = false;
+  bool _hasElicitation = false;
+  final Map<String, Map<String, dynamic>> _capabilityConfigurations = {};
   Map<String, dynamic>? _server;
   bool _loading = true;
   String? _error;
   bool _saving = false;
 
+  bool get _isNew => widget.mcpId.trim().isEmpty || widget.mcpId == 'new';
+  bool get _isHttp => _transportIndex == 0;
+
+  static const _authLabels = <String, String>{
+    'none': '无需认证',
+    'oauth': 'OAuth',
+    'bearer_token': 'Bearer Token',
+    'custom_headers': '自定义 Header',
+    'stdio_env': 'STDIO 环境变量',
+  };
+
   @override
   void initState() {
     super.initState();
-    _envControllers = [];
     _loadServer();
   }
 
   Future<void> _loadServer() async {
-    if (widget.mcpId.isEmpty) {
-      if (mounted) setState(() { _loading = false; });
+    if (_isNew) {
+      if (mounted) setState(() => _loading = false);
       return;
     }
     try {
       final svc = ref.read(mcpServiceProvider);
       final data = await svc.getServer(widget.mcpId);
-      if (data != null && mounted) {
-        _nameController.text = (data['name'] ?? '').toString();
-        _addressController.text = (data['address'] ?? data['url'] ?? '').toString();
-        final transportStr = (data['transport'] ?? '').toString().toLowerCase();
-        if (transportStr.contains('sse')) {
-          _transportIndex = 1;
-        } else if (transportStr.contains('websocket') || transportStr.contains('ws')) {
-          _transportIndex = 2;
-        } else {
-          _transportIndex = 0;
-        }
-        _hasSampling = (data['hasSampling'] ?? false) as bool;
-        _hasTasks = (data['hasTasks'] ?? false) as bool;
-        _hasRoots = (data['hasRoots'] ?? false) as bool;
-        final envVars = (data['envVars'] as Map?)?.cast<String, dynamic>() ?? {};
-        _envControllers = envVars.entries.map((e) {
-          return MapEntry(TextEditingController(text: e.key), TextEditingController(text: (e.value ?? '').toString()));
-        }).toList();
+      if (data == null) throw StateError('MCP 服务不存在');
+      final capabilities = await svc.capabilities(widget.mcpId);
+      if (!mounted) return;
+      _nameController.text = (data['name'] ?? '').toString();
+      _displayNameController.text = (data['displayName'] ?? '').toString();
+      _descriptionController.text = (data['description'] ?? '').toString();
+      _endpointController.text = (data['endpoint'] ?? '').toString();
+      _commandController.text = (data['command'] ?? '').toString();
+      _workDirController.text = (data['workDir'] ?? '').toString();
+      _argsController.text = _parseArgs(data['args']).join('\n');
+      _transportIndex = (data['transport'] ?? '').toString() == 'stdio' ? 1 : 0;
+      _authType = (data['authType'] ?? 'none').toString();
+      if (!_authLabels.containsKey(_authType)) _authType = 'none';
+      _enabled = _asBool(data['enabled']);
+      _privateNetworkConfirmed = _asBool(data['privateNetworkConfirmed']);
+      final capabilityState = <String, bool>{};
+      _capabilityConfigurations.clear();
+      for (final item in capabilities) {
+        final name = (item['capability'] ?? '').toString();
+        if (name.isEmpty) continue;
+        capabilityState[name] = _asBool(item['enabled']);
+        _capabilityConfigurations[name] = _parseConfiguration(item['configuration']);
       }
-      if (mounted) setState(() { _server = data; _loading = false; });
+      _hasSampling = capabilityState['sampling'] ?? false;
+      _hasTasks = capabilityState['tasks'] ?? false;
+      _hasRoots = capabilityState['roots'] ?? false;
+      _hasElicitation = capabilityState['elicitation'] ?? false;
+      setState(() {
+        _server = data;
+        _loading = false;
+      });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _addressController.dispose();
-    for (final pair in _envControllers) {
-      pair.key.dispose();
-      pair.value.dispose();
-    }
+    _displayNameController.dispose();
+    _descriptionController.dispose();
+    _endpointController.dispose();
+    _commandController.dispose();
+    _argsController.dispose();
+    _workDirController.dispose();
+    _credentialController.dispose();
     super.dispose();
-  }
-
-  String _transportToLabel() {
-    switch (_transportIndex) {
-      case 1:
-        return 'sse';
-      case 2:
-        return 'websocket';
-      default:
-        return 'stdio';
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isNew = _server == null;
     if (_loading) {
       return AmitiaScaffold(
         appBar: AmitiaAppBar(
-          title: isNew ? '添加 MCP 服务' : '编辑 MCP 服务',
+          title: _isNew ? '添加 MCP 服务' : '编辑 MCP 服务',
           showBackButton: true,
           fallbackRoute: AppRoutes.extensions,
         ),
-        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
+        body: const SafeArea(
+          top: false,
+          child: AmitiaLoadingState(message: '加载中...'),
+        ),
       );
     }
-    if (_error != null && !isNew) {
+    if (_error != null && !_isNew) {
       return AmitiaScaffold(
         appBar: AmitiaAppBar(
           title: '编辑 MCP 服务',
           showBackButton: true,
           fallbackRoute: AppRoutes.extensions,
         ),
-        body: SafeArea(top: false, child: AmitiaErrorState(message: _error!, onRetry: () {
-          setState(() { _loading = true; _error = null; });
-          _loadServer();
-        })),
+        body: SafeArea(
+          top: false,
+          child: AmitiaErrorState(
+            message: _error!,
+            onRetry: () {
+              setState(() {
+                _loading = true;
+                _error = null;
+              });
+              _loadServer();
+            },
+          ),
+        ),
       );
     }
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: isNew ? '添加 MCP 服务' : '编辑 MCP 服务',
+        title: _isNew ? '添加 MCP 服务' : '编辑 MCP 服务',
         showBackButton: true,
         fallbackRoute: AppRoutes.extensions,
       ),
       body: SafeArea(
         top: false,
         child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+            AppSpacing.pagePadding,
+            AppSpacing.xxxl,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildFormSection(context),
+              _buildBasicSection(context),
               SizedBox(height: AppSpacing.sectionGap),
-              _buildEnvSection(context),
+              _buildTransportSection(context),
+              SizedBox(height: AppSpacing.sectionGap),
+              _buildAuthSection(context),
               SizedBox(height: AppSpacing.sectionGap),
               _buildCapabilitySection(context),
               SizedBox(height: AppSpacing.xxl),
@@ -147,13 +195,13 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                     child: AmitiaButton(
                       label: '取消',
                       isSecondary: true,
-                      onPressed: () => context.pop(),
+                      onPressed: _saving ? null : () => context.pop(),
                     ),
                   ),
                   SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: AmitiaButton(
-                      label: '保存',
+                      label: _saving ? '保存中...' : '保存',
                       icon: Icons.check,
                       onPressed: _saving ? null : _onSave,
                     ),
@@ -167,8 +215,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
     );
   }
 
-  Widget _buildFormSection(BuildContext context) {
-    final transports = ['STDIO', 'SSE', 'WebSocket'];
+  Widget _buildBasicSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -178,23 +225,23 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('服务名称', style: AppTypography.caption(context)),
+              _label(context, '服务名称'),
               const SizedBox(height: 6),
-              AmitiaTextField(hintText: '输入服务名称', controller: _nameController),
+              AmitiaTextField(hintText: '例如 github', controller: _nameController),
               SizedBox(height: AppSpacing.md),
-              Text('Transport 类型', style: AppTypography.caption(context)),
+              _label(context, '显示名称'),
               const SizedBox(height: 6),
-              AmitiaSegmentedControl(
-                segments: transports,
-                selectedIndex: _transportIndex,
-                onChanged: (i) => setState(() => _transportIndex = i),
-              ),
+              AmitiaTextField(hintText: '可选', controller: _displayNameController),
               SizedBox(height: AppSpacing.md),
-              Text(_transportIndex == 0 ? '启动命令' : '服务地址', style: AppTypography.caption(context)),
+              _label(context, '说明'),
               const SizedBox(height: 6),
-              AmitiaTextField(
-                hintText: _transportIndex == 0 ? '例如：filesystem-server' : '例如：https://example.com/sse',
-                controller: _addressController,
+              AmitiaTextField(hintText: '可选', controller: _descriptionController),
+              SizedBox(height: AppSpacing.md),
+              AmitiaSwitchTile(
+                title: '启用并连接',
+                subtitle: '保存后允许该 MCP 服务参与连接和工具同步',
+                value: _enabled,
+                onChanged: (value) => setState(() => _enabled = value),
               ),
             ],
           ),
@@ -203,77 +250,100 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
     );
   }
 
-  Widget _buildEnvSection(BuildContext context) {
+  Widget _buildTransportSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('环境变量', style: AppTypography.sectionTitle(context)),
-            GestureDetector(
-              onTap: _addEnvRow,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: context.accentSoft,
-                  borderRadius: AppRadius.brTag,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.add, size: 16, color: context.accentPrimary),
-                    const SizedBox(width: 4),
-                    Text('添加', style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+        Text('连接方式', style: AppTypography.sectionTitle(context)),
         SizedBox(height: AppSpacing.md),
-        if (_envControllers.isEmpty)
-          AmitiaCard(
-            child: Center(
-              child: Text('暂无环境变量', style: AppTypography.caption(context)),
-            ),
-          )
-        else
-          ..._envControllers.asMap().entries.map((entry) {
-            final index = entry.key;
-            final pair = entry.value;
-            return Padding(
-              padding: EdgeInsets.only(bottom: AppSpacing.sm),
-              child: AmitiaCard(
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: AmitiaTextField(hintText: '键名', controller: pair.key),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 3,
-                      child: AmitiaTextField(hintText: '值', controller: pair.value),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () => _removeEnvRow(index),
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: context.error.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(Icons.close, size: 18, color: context.error),
-                      ),
-                    ),
-                  ],
-                ),
+        AmitiaCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AmitiaSegmentedControl(
+                segments: const ['HTTP', 'STDIO'],
+                selectedIndex: _transportIndex,
+                onChanged: (index) => setState(() {
+                  _transportIndex = index;
+                  if (_isHttp && _authType == 'stdio_env') _authType = 'none';
+                }),
               ),
-            );
-          }),
+              SizedBox(height: AppSpacing.md),
+              if (_isHttp) ...[
+                _label(context, 'Server URL'),
+                const SizedBox(height: 6),
+                AmitiaTextField(
+                  hintText: 'https://example.com/mcp',
+                  controller: _endpointController,
+                ),
+                SizedBox(height: AppSpacing.md),
+                AmitiaSwitchTile(
+                  title: '允许可信私网地址',
+                  subtitle: '仅在确认该服务属于可信私网时启用',
+                  value: _privateNetworkConfirmed,
+                  onChanged: (value) => setState(() => _privateNetworkConfirmed = value),
+                ),
+              ] else ...[
+                _label(context, '命令'),
+                const SizedBox(height: 6),
+                AmitiaTextField(
+                  hintText: '已安装的可执行程序',
+                  controller: _commandController,
+                ),
+                SizedBox(height: AppSpacing.md),
+                _label(context, '参数'),
+                const SizedBox(height: 6),
+                AmitiaTextField(
+                  hintText: '每行一个参数',
+                  controller: _argsController,
+                ),
+                SizedBox(height: AppSpacing.md),
+                _label(context, '工作目录'),
+                const SizedBox(height: 6),
+                AmitiaTextField(hintText: '可选', controller: _workDirController),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAuthSection(BuildContext context) {
+    final options = _authLabels.keys.where((value) => _isHttp || value == 'none' || value == 'stdio_env').toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('认证', style: AppTypography.sectionTitle(context)),
+        SizedBox(height: AppSpacing.md),
+        AmitiaCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                value: options.contains(_authType) ? _authType : 'none',
+                decoration: const InputDecoration(labelText: '认证方式'),
+                items: options
+                    .map((value) => DropdownMenuItem(value: value, child: Text(_authLabels[value]!)))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) setState(() => _authType = value);
+                },
+              ),
+              if (_authType == 'bearer_token' || _authType == 'custom_headers' || _authType == 'stdio_env') ...[
+                SizedBox(height: AppSpacing.md),
+                _label(context, _authType == 'bearer_token' ? 'Token' : '凭据 JSON'),
+                const SizedBox(height: 6),
+                AmitiaTextField(
+                  hintText: _authType == 'bearer_token'
+                      ? (_isNew ? '输入 Token' : '留空保留现有 Token')
+                      : (_isNew ? '{"KEY":"VALUE"}' : '留空保留现有凭据'),
+                  controller: _credentialController,
+                ),
+              ],
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -282,30 +352,37 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('能力配置', style: AppTypography.sectionTitle(context)),
+        Text('客户端能力', style: AppTypography.sectionTitle(context)),
         SizedBox(height: AppSpacing.md),
         AmitiaCard(
           child: Column(
             children: [
               AmitiaSwitchTile(
+                title: 'Roots',
+                subtitle: '允许向该服务提供已授权目录',
+                value: _hasRoots,
+                onChanged: (value) => setState(() => _hasRoots = value),
+              ),
+              const Divider(height: 1),
+              AmitiaSwitchTile(
                 title: 'Sampling',
-                subtitle: '允许服务端请求 LLM 采样',
+                subtitle: '允许服务请求受控模型采样',
                 value: _hasSampling,
-                onChanged: (val) => setState(() => _hasSampling = val),
+                onChanged: (value) => setState(() => _hasSampling = value),
+              ),
+              const Divider(height: 1),
+              AmitiaSwitchTile(
+                title: 'Elicitation',
+                subtitle: '允许服务请求受控表单或外部 URL 确认',
+                value: _hasElicitation,
+                onChanged: (value) => setState(() => _hasElicitation = value),
               ),
               const Divider(height: 1),
               AmitiaSwitchTile(
                 title: 'Tasks',
-                subtitle: '启用任务管理能力',
+                subtitle: '启用异步任务查询与取消能力',
                 value: _hasTasks,
-                onChanged: (val) => setState(() => _hasTasks = val),
-              ),
-              const Divider(height: 1),
-              AmitiaSwitchTile(
-                title: 'Roots',
-                subtitle: '启用根目录能力',
-                value: _hasRoots,
-                onChanged: (val) => setState(() => _hasRoots = val),
+                onChanged: (value) => setState(() => _hasTasks = value),
               ),
             ],
           ),
@@ -314,71 +391,161 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
     );
   }
 
-  void _addEnvRow() {
-    setState(() {
-      _envControllers.add(MapEntry(TextEditingController(), TextEditingController()));
-    });
-  }
-
-  void _removeEnvRow(int index) {
-    setState(() {
-      _envControllers[index].key.dispose();
-      _envControllers[index].value.dispose();
-      _envControllers.removeAt(index);
-    });
-  }
+  Widget _label(BuildContext context, String text) => Text(text, style: AppTypography.caption(context));
 
   Future<void> _onSave() async {
-    if (_nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: const Text('请输入服务名称'), backgroundColor: context.error),
-      );
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      _showMessage('请输入服务名称', error: true);
       return;
     }
-    if (_addressController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: const Text('请输入地址或命令'), backgroundColor: context.error),
-      );
+    if (_isHttp && _endpointController.text.trim().isEmpty) {
+      _showMessage('请输入 Server URL', error: true);
       return;
     }
+    if (!_isHttp && _commandController.text.trim().isEmpty) {
+      _showMessage('请输入 STDIO 命令', error: true);
+      return;
+    }
+
+    dynamic credential;
+    final credentialText = _credentialController.text.trim();
+    if (credentialText.isNotEmpty) {
+      if (_authType == 'bearer_token') {
+        credential = credentialText;
+      } else if (_authType == 'custom_headers' || _authType == 'stdio_env') {
+        try {
+          final decoded = jsonDecode(credentialText);
+          if (decoded is! Map) throw const FormatException();
+          credential = decoded;
+        } catch (_) {
+          _showMessage('凭据必须是 JSON 对象', error: true);
+          return;
+        }
+      }
+    }
+
     setState(() => _saving = true);
     try {
       final svc = ref.read(mcpServiceProvider);
-      final envVars = <String, String>{};
-      for (final pair in _envControllers) {
-        final key = pair.key.text.trim();
-        if (key.isNotEmpty) {
-          envVars[key] = pair.value.text;
-        }
-      }
-      final data = {
-        'name': _nameController.text.trim(),
-        'transport': _transportToLabel(),
-        'address': _addressController.text.trim(),
-        'hasSampling': _hasSampling,
-        'hasTasks': _hasTasks,
-        'hasRoots': _hasRoots,
-        'envVars': envVars,
+      final payload = <String, dynamic>{
+        'name': name,
+        'displayName': _displayNameController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'transport': _isHttp ? 'streamable_http' : 'stdio',
+        'endpoint': _isHttp ? _endpointController.text.trim() : '',
+        'command': _isHttp ? '' : _commandController.text.trim(),
+        'args': _isHttp
+            ? <String>[]
+            : _argsController.text
+                .split('\n')
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .toList(growable: false),
+        'workDir': _isHttp ? '' : _workDirController.text.trim(),
+        'authType': _authType,
+        'enabled': _enabled,
+        'source': 'manual',
+        'privateNetworkConfirmed': _isHttp && _privateNetworkConfirmed,
+        if (credential != null) 'credential': credential,
       };
-      if (_server != null) {
-        await svc.updateServer(widget.mcpId, data);
+
+      Map<String, dynamic>? saved;
+      if (_isNew) {
+        saved = await svc.createServer(payload);
       } else {
-        await svc.createServer(data);
+        saved = await svc.updateServer(widget.mcpId, payload);
       }
-      if (mounted) {
-        context.pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: const Text('MCP 服务配置已保存'), backgroundColor: context.success),
-        );
-      }
+      final serverId = _isNew ? (saved?['id'] ?? '').toString() : widget.mcpId;
+      if (serverId.isEmpty) throw StateError('保存响应缺少 MCP Server ID');
+
+      await Future.wait([
+        svc.setCapability(
+          serverId,
+          'roots',
+          _hasRoots,
+          configuration: _capabilityConfiguration('roots', _hasRoots),
+        ),
+        svc.setCapability(
+          serverId,
+          'sampling',
+          _hasSampling,
+          configuration: _capabilityConfiguration('sampling', _hasSampling),
+        ),
+        svc.setCapability(
+          serverId,
+          'elicitation',
+          _hasElicitation,
+          configuration: _capabilityConfiguration('elicitation', _hasElicitation),
+        ),
+        svc.setCapability(
+          serverId,
+          'tasks',
+          _hasTasks,
+          configuration: _capabilityConfiguration('tasks', _hasTasks),
+        ),
+      ]);
+
+      if (!mounted) return;
+      _showMessage(_isNew ? 'MCP 服务已添加' : 'MCP 服务配置已保存');
+      context.pop(true);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败: $e'), backgroundColor: context.error),
-        );
-      }
+      if (mounted) _showMessage('保存失败: ${e.toString().replaceFirst('Exception: ', '')}', error: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _showMessage(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? context.error : context.success,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _capabilityConfiguration(String capability, bool enabled) {
+    final existing = _capabilityConfigurations[capability];
+    if (existing != null && existing.isNotEmpty) return Map<String, dynamic>.from(existing);
+    if (!enabled) return <String, dynamic>{};
+    switch (capability) {
+      case 'sampling':
+        return <String, dynamic>{'maxTokens': 2048, 'timeoutSeconds': 60, 'maxConcurrent': 1};
+      case 'tasks':
+        return <String, dynamic>{'maxConcurrent': 4, 'maxTTLSeconds': 86400};
+      default:
+        return <String, dynamic>{};
+    }
+  }
+
+  static Map<String, dynamic> _parseConfiguration(dynamic value) {
+    if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String && value.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return <String, dynamic>{};
+  }
+
+  static bool _asBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    return value.toString().toLowerCase() == 'true';
+  }
+
+  static List<String> _parseArgs(dynamic value) {
+    if (value is List) return value.map((item) => item.toString()).toList(growable: false);
+    final raw = (value ?? '').toString().trim();
+    if (raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) return decoded.map((item) => item.toString()).toList(growable: false);
+    } catch (_) {}
+    return raw.split('\n').map((item) => item.trim()).where((item) => item.isNotEmpty).toList(growable: false);
   }
 }
