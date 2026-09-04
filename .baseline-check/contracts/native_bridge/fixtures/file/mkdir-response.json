@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-mkdir-001",
+  "status": "ok",
+  "result": {
+    "created": true,
+    "relativePath": "projects/new_folder"
+  },
+  "error": null
+}

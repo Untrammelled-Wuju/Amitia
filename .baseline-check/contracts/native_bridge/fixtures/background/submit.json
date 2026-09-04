@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 1,
+  "requestId": "bg-sub-001",
+  "operation": "background.submit",
+  "payload": {
+    "taskRunId": "run-20260816-001",
+    "systemClass": "processing",
+    "identifier": "com.amitia.background.processing",
+    "earliestBeginAt": "2026-08-16T16:00:00Z",
+    "networkRequired": false,
+    "externalPowerRequired": false
+  }
+}

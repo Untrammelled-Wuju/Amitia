@@ -1,0 +1,718 @@
+<!--
+Deprecated: Legacy extension architecture.
+Do not add new capabilities. This view is retained only for
+compatibility, maintenance, testing, and migration to Extension Kernel.
+-->
+<template>
+  <div class="plugin-page" v-loading="loading">
+    <ExtensionPageHeader :title="plugin?.manifest.metadata.name || '插件详情'">
+      <template v-if="plugin" #meta
+        ><div class="detail-heading-meta">
+          <code>{{ plugin.manifest.metadata.id }}</code
+          ><el-tag :type="plugin.enabled ? 'success' : 'info'">{{
+            plugin.enabled ? "已启用" : "已禁用"
+          }}</el-tag
+          ><el-tag :type="plugin.compatible ? 'success' : 'danger'">{{
+            plugin.compatible ? "兼容" : "不兼容"
+          }}</el-tag>
+        </div></template
+      >
+      <template v-if="plugin" #actions
+        ><div class="actions">
+          <el-button :icon="Lock" @click="permissionVisible = true"
+            >管理权限</el-button
+          ><ExtensionSlot
+            slot-id="extension.detail.action"
+            :context="extensionDetailContext"
+            fallback="none"
+            layout="inline"
+            surface-role="header"
+          /><el-button :loading="reloading" @click="reload">重新加载</el-button
+          ><el-button
+            :type="plugin.enabled ? 'danger' : 'primary'"
+            plain
+            :loading="changing"
+            @click="toggle"
+            >{{ plugin.enabled ? "禁用" : "启用" }}</el-button
+          >
+        </div></template
+      >
+    </ExtensionPageHeader>
+    <el-alert
+      v-if="loadError"
+      :title="loadError"
+      type="error"
+      show-icon
+      :closable="false"
+      ><el-button link type="primary" @click="load"
+        >重新加载</el-button
+      ></el-alert
+    >
+
+    <template v-if="plugin">
+      <el-card shadow="never"
+        ><p class="description">{{ plugin.manifest.metadata.description }}</p>
+        <el-descriptions :column="3" border
+          ><el-descriptions-item label="版本">{{
+            plugin.manifest.metadata.version
+          }}</el-descriptions-item
+          ><el-descriptions-item label="来源">内置</el-descriptions-item
+          ><el-descriptions-item label="生命周期">{{
+            plugin.lifecycle
+          }}</el-descriptions-item
+          ><el-descriptions-item label="作者">{{
+            plugin.manifest.metadata.author || "—"
+          }}</el-descriptions-item
+          ><el-descriptions-item label="Hook 超时"
+            >{{
+              plugin.manifest.execution.hookTimeoutMs
+            }}
+            ms</el-descriptions-item
+          ><el-descriptions-item label="最大并发">{{
+            plugin.manifest.execution.maxConcurrency
+          }}</el-descriptions-item></el-descriptions
+        ></el-card
+      >
+
+      <el-tabs v-model="activeTab">
+        <el-tab-pane label="协议" name="protocol">
+          <div class="two-grid">
+            <el-card shadow="never"
+              ><template #header>Hooks</template>
+              <div class="tags">
+                <el-tag
+                  v-for="hook in plugin.manifest.hooks"
+                  :key="hook"
+                  type="info"
+                  >{{ hook }}</el-tag
+                >
+              </div></el-card
+            ><el-card shadow="never"
+              ><template #header>事件订阅</template>
+              <div class="tags">
+                <el-tag
+                  v-for="item in plugin.manifest.subscriptions"
+                  :key="item"
+                  type="info"
+                  >{{ item }}</el-tag
+                ><span
+                  v-if="!plugin.manifest.subscriptions.length"
+                  class="muted"
+                  >未订阅事件</span
+                >
+              </div></el-card
+            ><el-card shadow="never"
+              ><template #header>Capability</template>
+              <div class="tags">
+                <el-tag
+                  v-for="item in plugin.manifest.capabilities"
+                  :key="item"
+                  >{{ item }}</el-tag
+                >
+              </div></el-card
+            ><el-card shadow="never"
+              ><template #header>注册技能</template>
+              <div class="tags">
+                <el-tag
+                  v-for="item in plugin.manifest.registeredSkills"
+                  :key="item"
+                  >{{ item }}</el-tag
+                >
+              </div></el-card
+            >
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="管理界面" name="surface"
+          ><SchemaSurfaceRenderer
+            :surface="surface"
+            :config="plugin.config"
+            :health="health"
+            :states="states"
+            :saving="savingConfig"
+            :running-action="runningAction"
+            @save-config="saveSurfaceConfig"
+            @run-action="runAction"
+        /></el-tab-pane>
+        <el-tab-pane label="配置" name="config"
+          ><el-card shadow="never"
+            ><el-form label-position="top" @submit.prevent
+              ><el-form-item label="角色配置 JSON"
+                ><el-input
+                  v-model="configText"
+                  type="textarea"
+                  :rows="14"
+                  spellcheck="false"
+                  aria-label="插件角色配置 JSON"
+                />
+                <div class="help">
+                  Secret 字段只会返回遮罩值；保存时遮罩值会保留已有密文。
+                </div></el-form-item
+              >
+              <div v-if="configError" class="error" role="alert">
+                {{ configError }}
+              </div>
+              <div class="actions">
+                <el-button :loading="resetting" @click="resetConfig"
+                  >恢复默认</el-button
+                ><el-button
+                  type="primary"
+                  :loading="savingConfig"
+                  @click="saveConfigText"
+                  >保存配置</el-button
+                >
+              </div></el-form
+            ></el-card
+          ></el-tab-pane
+        >
+        <el-tab-pane label="健康与断路器" name="health"
+          ><el-card shadow="never"
+            ><div class="panel-header">
+              <span>各 Hook 独立断路状态</span
+              ><el-button :loading="resettingCircuit" @click="resetCircuit"
+                >重置断路器</el-button
+              >
+            </div>
+            <el-table :data="circuitRows" empty-text="暂无 Hook 状态" stripe
+              ><el-table-column
+                prop="hook"
+                label="Hook"
+                min-width="160"
+              /><el-table-column label="状态" width="120"
+                ><template #default="{ row }"
+                  ><el-tag
+                    :type="row.state === 'closed' ? 'success' : 'danger'"
+                    >{{ row.state }}</el-tag
+                  ></template
+                ></el-table-column
+              ><el-table-column
+                prop="failures"
+                label="连续失败"
+                width="110"
+              /><el-table-column
+                prop="nextProbeAt"
+                label="下次探测"
+                min-width="180"
+                ><template #default="{ row }">{{
+                  formatTime(row.nextProbeAt)
+                }}</template></el-table-column
+              ></el-table
+            ></el-card
+          ></el-tab-pane
+        >
+        <el-tab-pane label="状态" name="state"
+          ><el-card shadow="never" class="table-card"
+            ><el-table :data="states" empty-text="暂无持久化状态" stripe
+              ><el-table-column
+                prop="scopeType"
+                label="范围"
+                width="110"
+              /><el-table-column
+                prop="scopeId"
+                label="范围 ID"
+                min-width="160"
+                show-overflow-tooltip
+              /><el-table-column
+                prop="schemaVersion"
+                label="Schema"
+                width="100"
+              /><el-table-column
+                prop="revision"
+                label="修订"
+                width="80"
+              /><el-table-column label="更新时间" min-width="180"
+                ><template #default="{ row }">{{
+                  formatTime(row.updatedAt)
+                }}</template></el-table-column
+              ><el-table-column label="数据" min-width="240"
+                ><template #default="{ row }"
+                  ><code>{{ compact(row.data) }}</code></template
+                ></el-table-column
+              ></el-table
+            ></el-card
+          ></el-tab-pane
+        >
+        <el-tab-pane label="调度" name="schedules"
+          ><el-card shadow="never" class="table-card"
+            ><el-table :data="schedules" empty-text="暂无插件调度" stripe
+              ><el-table-column
+                prop="scheduleId"
+                label="调度 ID"
+                min-width="180"
+              /><el-table-column
+                prop="type"
+                label="类型"
+                width="100"
+              /><el-table-column
+                prop="expression"
+                label="表达式"
+                min-width="140"
+              /><el-table-column label="下次运行" min-width="180"
+                ><template #default="{ row }">{{
+                  formatTime(row.nextRunAt)
+                }}</template></el-table-column
+              ><el-table-column label="状态" width="100"
+                ><template #default="{ row }"
+                  ><el-tag :type="row.enabled ? 'success' : 'info'">{{
+                    row.enabled ? "运行中" : "已暂停"
+                  }}</el-tag></template
+                ></el-table-column
+              ><el-table-column label="操作" width="100"
+                ><template #default="{ row }"
+                  ><el-button
+                    link
+                    type="primary"
+                    @click="toggleSchedule(row)"
+                    >{{ row.enabled ? "暂停" : "恢复" }}</el-button
+                  ></template
+                ></el-table-column
+              ></el-table
+            ></el-card
+          ></el-tab-pane
+        >
+        <el-tab-pane label="事件" name="events"
+          ><el-card shadow="never" class="table-card"
+            ><div class="event-filter">
+              <el-select
+                v-model="eventStatus"
+                clearable
+                placeholder="全部状态"
+                @change="loadEvents"
+                ><el-option label="待处理" value="pending" /><el-option
+                  label="已完成"
+                  value="completed" /><el-option
+                  label="死信"
+                  value="dead_letter"
+              /></el-select>
+            </div>
+            <el-table :data="events.items" empty-text="暂无事件" stripe
+              ><el-table-column prop="time" label="时间" min-width="180"
+                ><template #default="{ row }">{{
+                  formatTime(row.time)
+                }}</template></el-table-column
+              ><el-table-column
+                prop="type"
+                label="事件类型"
+                min-width="240"
+                show-overflow-tooltip
+              /><el-table-column
+                prop="subject"
+                label="Subject"
+                min-width="180"
+                show-overflow-tooltip
+              /><el-table-column
+                prop="depth"
+                label="深度"
+                width="70"
+              /><el-table-column label="操作" width="90"
+                ><template #default="{ row }"
+                  ><el-button
+                    v-if="eventStatus === 'dead_letter'"
+                    link
+                    type="primary"
+                    @click="retryEvent(row.id)"
+                    >重试</el-button
+                  ></template
+                ></el-table-column
+              ></el-table
+            ></el-card
+          ></el-tab-pane
+        >
+        <el-tab-pane label="Manifest" name="manifest"
+          ><el-card shadow="never">
+            <pre>{{ pretty(plugin.manifest) }}</pre>
+          </el-card></el-tab-pane
+        >
+        <el-tab-pane label="扩展界面" name="extension-ui">
+          <ExtensionSlot
+            slot-id="extension.detail.tab"
+            :context="extensionDetailContext"
+            fallback="empty"
+            layout="tabs"
+            surface-role="main"
+          />
+        </el-tab-pane>
+      </el-tabs>
+    </template>
+
+    <PermissionDialog
+      v-if="plugin"
+      v-model="permissionVisible"
+      subject-label="插件"
+      :capability-names="plugin.manifest.capabilities"
+      :catalog="capabilities"
+      :grants="plugin.permissions"
+      :character-id="characterId"
+      :saving="savingPermissions"
+      @save="savePermissions"
+    />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from "vue";
+import { useRoute } from "vue-router";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { Lock } from "@element-plus/icons-vue";
+import ExtensionPageHeader from "./components/ExtensionPageHeader.vue";
+import PermissionDialog from "./components/PermissionDialog.vue";
+import SchemaSurfaceRenderer from "./components/SchemaSurfaceRenderer.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
+import {
+  executePluginAction,
+  fetchCapabilities,
+  fetchPlugin,
+  fetchPluginEvents,
+  fetchPluginHealth,
+  fetchPluginSchedules,
+  fetchPluginState,
+  fetchPluginSurface,
+  reloadPlugin,
+  resetPluginCircuit,
+  resetPluginConfig,
+  resolveCharacterId,
+  retryPluginEvent,
+  setPluginEnabled,
+  setPluginScheduleEnabled,
+  updatePluginConfig,
+  updatePluginPermissions,
+} from "./api";
+import type {
+  CapabilityDefinition,
+  PermissionGrant,
+  PluginDetail,
+  PluginEventPage,
+  PluginHealth,
+  PluginSchedule,
+  PluginState,
+  SurfaceDocument,
+} from "./types";
+
+const route = useRoute();
+const pluginId = computed(() => String(route.params.id || ""));
+const extensionDetailContext = computed(() => ({ extensionId: pluginId.value, route: route.fullPath, surface: "extension-detail" }));
+const plugin = ref<PluginDetail>();
+const characterId = ref("");
+const loading = ref(false);
+const loadError = ref("");
+const activeTab = ref("protocol");
+const surface = ref<SurfaceDocument>();
+const health = ref<PluginHealth>();
+const states = ref<PluginState[]>([]);
+const schedules = ref<PluginSchedule[]>([]);
+const events = ref<PluginEventPage>({
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 20,
+});
+const capabilities = ref<CapabilityDefinition[]>([]);
+const permissionVisible = ref(false);
+const savingPermissions = ref(false);
+const changing = ref(false);
+const reloading = ref(false);
+const savingConfig = ref(false);
+const resetting = ref(false);
+const resettingCircuit = ref(false);
+const runningAction = ref("");
+const eventStatus = ref("");
+const configText = ref("{}");
+const configError = ref("");
+const circuitRows = computed(() =>
+  Object.entries(health.value?.circuits || {}).map(([hook, value]) => ({
+    hook,
+    ...value,
+  })),
+);
+async function load() {
+  loading.value = true;
+  loadError.value = "";
+  try {
+    if (!characterId.value) characterId.value = await resolveCharacterId();
+    if (!characterId.value) throw new Error("请先创建或选择角色");
+    const [
+      detail,
+      catalog,
+      surfaceData,
+      healthData,
+      stateData,
+      scheduleData,
+      eventData,
+    ] = await Promise.all([
+      fetchPlugin(characterId.value, pluginId.value),
+      fetchCapabilities(),
+      fetchPluginSurface(pluginId.value),
+      fetchPluginHealth(pluginId.value),
+      fetchPluginState(pluginId.value, characterId.value),
+      fetchPluginSchedules(pluginId.value, characterId.value),
+      fetchPluginEvents(pluginId.value, characterId.value),
+    ]);
+    plugin.value = detail;
+    capabilities.value = catalog;
+    surface.value = surfaceData;
+    health.value = healthData;
+    states.value = stateData;
+    schedules.value = scheduleData;
+    events.value = eventData;
+    configText.value = pretty(detail.config || {});
+  } catch (error: any) {
+    loadError.value = problem(error, "插件详情加载失败");
+  } finally {
+    loading.value = false;
+  }
+}
+async function toggle() {
+  if (!plugin.value) return;
+  if (plugin.value.enabled)
+    await ElMessageBox.confirm(
+      "禁用将立即停止所有插件 Hook、事件、调度和注册技能。",
+      "确认禁用插件",
+      { type: "warning" },
+    );
+  changing.value = true;
+  try {
+    await setPluginEnabled(
+      pluginId.value,
+      !plugin.value.enabled,
+      characterId.value,
+    );
+    ElMessage.success(plugin.value.enabled ? "插件已禁用" : "插件已启用");
+    await load();
+  } catch (error: any) {
+    ElMessage.error(problem(error, "操作失败"));
+  } finally {
+    changing.value = false;
+  }
+}
+async function reload() {
+  reloading.value = true;
+  try {
+    await reloadPlugin(pluginId.value);
+    ElMessage.success("插件已重新加载");
+    await load();
+  } catch (error: any) {
+    ElMessage.error(problem(error, "重新加载失败"));
+  } finally {
+    reloading.value = false;
+  }
+}
+async function savePermissions(grants: PermissionGrant[]) {
+  savingPermissions.value = true;
+  try {
+    await updatePluginPermissions(pluginId.value, characterId.value, grants);
+    permissionVisible.value = false;
+    ElMessage.success("插件权限已保存");
+    await load();
+  } catch (error: any) {
+    ElMessage.error(problem(error, "权限保存失败"));
+  } finally {
+    savingPermissions.value = false;
+  }
+}
+async function saveSurfaceConfig(config: Record<string, unknown>) {
+  await saveConfig(config);
+}
+async function saveConfigText() {
+  configError.value = "";
+  try {
+    await saveConfig(JSON.parse(configText.value));
+  } catch (error: any) {
+    configError.value = problem(error, "配置 JSON 无效");
+  }
+}
+async function saveConfig(config: Record<string, unknown>) {
+  savingConfig.value = true;
+  try {
+    await updatePluginConfig(pluginId.value, characterId.value, config);
+    ElMessage.success("插件配置已保存并重新加载");
+    await load();
+  } finally {
+    savingConfig.value = false;
+  }
+}
+async function resetConfig() {
+  resetting.value = true;
+  try {
+    await resetPluginConfig(pluginId.value, characterId.value);
+    ElMessage.success("插件配置已恢复默认");
+    await load();
+  } catch (error: any) {
+    ElMessage.error(problem(error, "恢复失败"));
+  } finally {
+    resetting.value = false;
+  }
+}
+async function resetCircuit() {
+  resettingCircuit.value = true;
+  try {
+    await resetPluginCircuit(pluginId.value);
+    ElMessage.success("断路器已重置");
+    health.value = await fetchPluginHealth(pluginId.value);
+  } catch (error: any) {
+    ElMessage.error(problem(error, "重置失败"));
+  } finally {
+    resettingCircuit.value = false;
+  }
+}
+async function runAction(actionId: string) {
+  runningAction.value = actionId;
+  try {
+    const result = await executePluginAction(
+      pluginId.value,
+      actionId,
+      characterId.value,
+      {},
+    );
+    ElMessage.success(result.visibleText || "操作执行成功");
+    await load();
+  } catch (error: any) {
+    ElMessage.error(problem(error, "操作失败"));
+  } finally {
+    runningAction.value = "";
+  }
+}
+async function toggleSchedule(item: PluginSchedule) {
+  try {
+    await setPluginScheduleEnabled(
+      pluginId.value,
+      item.scheduleId,
+      !item.enabled,
+      characterId.value,
+    );
+    schedules.value = await fetchPluginSchedules(
+      pluginId.value,
+      characterId.value,
+    );
+  } catch (error: any) {
+    ElMessage.error(problem(error, "调度操作失败"));
+  }
+}
+async function loadEvents() {
+  events.value = await fetchPluginEvents(
+    pluginId.value,
+    characterId.value,
+    eventStatus.value,
+  );
+}
+async function retryEvent(eventId: string) {
+  try {
+    await retryPluginEvent(pluginId.value, eventId, characterId.value);
+    ElMessage.success("事件已进入重试队列");
+    await loadEvents();
+  } catch (error: any) {
+    ElMessage.error(problem(error, "事件重试失败"));
+  }
+}
+function pretty(value: unknown) {
+  return JSON.stringify(value, null, 2);
+}
+function compact(value: unknown) {
+  const text = JSON.stringify(value);
+  return text.length > 160 ? `${text.slice(0, 160)}…` : text;
+}
+function formatTime(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+function problem(error: any, fallback: string) {
+  return error?.response?.data?.detail || error?.message || fallback;
+}
+onMounted(load);
+</script>
+
+<style scoped>
+.plugin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.page-header,
+.title-row,
+.actions,
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.page-header,
+.panel-header {
+  justify-content: space-between;
+}
+.page-header {
+  align-items: flex-start;
+}
+.title-row {
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.title-row h1 {
+  font-size: 24px;
+  line-height: 32px;
+}
+.title-row code,
+.muted,
+.help {
+  color: var(--ac-color-text-muted);
+}
+.description {
+  margin-bottom: 16px;
+  color: var(--ac-color-text-secondary);
+  line-height: 1.6;
+}
+.two-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.table-card :deep(.el-card__body) {
+  padding: 0;
+  overflow-x: auto;
+}
+.event-filter {
+  padding: 16px;
+  max-width: 220px;
+}
+.help {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.error {
+  margin-bottom: 12px;
+  color: var(--el-color-danger);
+}
+pre {
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--ac-color-surface-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+code {
+  overflow-wrap: anywhere;
+}
+.detail-heading-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.detail-heading-meta code {
+  color: var(--ac-color-text-muted);
+}
+@media (max-width: 840px) {
+  .page-header {
+    flex-direction: column;
+  }
+  .two-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

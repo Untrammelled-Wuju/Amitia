@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-move-001",
+  "operation": "file.move",
+  "payload": {
+    "mountId": "mount-documents-001",
+    "relativePath": "projects/report.pdf",
+    "newRelativePath": "2026/report.pdf"
+  }
+}

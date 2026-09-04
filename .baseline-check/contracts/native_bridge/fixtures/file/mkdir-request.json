@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-mkdir-001",
+  "operation": "file.mkdir",
+  "payload": {
+    "mountId": "mount-documents-001",
+    "parentRelativePath": "projects",
+    "name": "new_folder",
+    "createIntermediate": true
+  }
+}

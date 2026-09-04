@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://amitia.untrammelled.top/contracts/native_bridge/native-response.schema.json",
+  "title": "NativeBridgeResponse",
+  "description": "Native Bridge v1 响应载荷",
+  "type": "object",
+  "required": ["protocolVersion", "requestId", "status"],
+  "properties": {
+    "protocolVersion": {
+      "type": "integer",
+      "enum": [1]
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "error"]
+    },
+    "result": {
+      "type": "object"
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "domainCode": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

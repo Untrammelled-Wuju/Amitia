@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amitia 角色图标导出</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #0b0b0c;
+    --panel: #171719;
+    --panel-soft: #202023;
+    --border: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.2);
+    --text: #f1f0ed;
+    --text-secondary: #aaa7a2;
+    --accent: #c99557;
+    --accent-hover: #d8a96a;
+    --accent-soft: rgba(201, 149, 87, 0.14);
+    --focus: rgba(201, 149, 87, 0.36);
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    padding: 40px 24px;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(201, 149, 87, 0.08), transparent 30%),
+      var(--page);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+  }
+
+  button,
+  select,
+  input[type="range"] {
+    cursor: pointer;
+  }
+
+  .exporter-shell {
+    width: min(1040px, 100%);
+    margin: 0 auto;
+  }
+
+  .page-header {
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  .eyebrow {
+    margin-bottom: 8px;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    font-size: clamp(26px, 4vw, 38px);
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+  }
+
+  .subtitle {
+    margin-top: 10px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .controls {
+    display: flex;
+    align-items: end;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: rgba(23, 23, 25, 0.82);
+    backdrop-filter: blur(16px);
+  }
+
+  .control-group {
+    display: grid;
+    gap: 8px;
+    width: min(280px, 100%);
+  }
+
+  .control-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  select {
+    width: 100%;
+    height: 44px;
+    padding: 0 36px 0 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--panel-soft);
+    color: var(--text);
+  }
+
+  select:focus-visible,
+  button:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .preview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  .preview-card {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--panel);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  }
+
+  .preview-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 70px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .preview-card__title {
+    font-size: 15px;
+    font-weight: 650;
+  }
+
+  .preview-card__meta {
+    margin-top: 4px;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .model-chip {
+    flex: 0 0 auto;
+    padding: 5px 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    font-size: 11px;
+  }
+
+  .preview-frame {
+    display: grid;
+    min-height: 400px;
+    place-items: center;
+    padding: 40px;
+  }
+
+  .preview-frame--light {
+    background:
+      radial-gradient(circle at 50% 50%, rgba(138, 87, 40, 0.08), transparent 34%),
+      #f3f2ee;
+  }
+
+  .preview-frame--dark {
+    background:
+      radial-gradient(circle at 50% 50%, rgba(201, 149, 87, 0.08), transparent 34%),
+      #0b0b0c;
+  }
+
+  .core-zone {
+    position: relative;
+    display: grid;
+    width: min(320px, 100%);
+    aspect-ratio: 1;
+    overflow: hidden;
+    padding: 1px;
+    place-items: center;
+    --model-stroke: 12px;
+    --center-stroke: 3px;
+  }
+
+  .core-symbol {
+    position: relative;
+    width: 131.578947%;
+    height: 131.578947%;
+    opacity: 0.96;
+  }
+
+  .core-zone[data-variant="black"] .core-symbol {
+    filter: drop-shadow(0 0 24px rgba(20, 19, 18, 0.1));
+  }
+
+  .core-zone[data-variant="white"] .core-symbol {
+    filter: drop-shadow(0 0 28px rgba(255, 255, 255, 0.1));
+  }
+
+  .sigil-loop {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 76%;
+    height: 38%;
+    border: var(--model-stroke) solid currentColor;
+    border-radius: 50%;
+    transform-origin: center;
+  }
+
+  [data-variant="black"] .sigil-loop {
+    color: rgba(23, 22, 20, 0.9);
+  }
+
+  [data-variant="white"] .sigil-loop {
+    color: rgba(247, 244, 238, 0.92);
+  }
+
+  .loop-a {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+
+  .loop-b {
+    transform: translate(-50%, -50%) rotate(60deg);
+  }
+
+  .loop-c {
+    transform: translate(-50%, -50%) rotate(120deg);
+  }
+
+  .sigil-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 18%;
+    height: 18%;
+    transform: translate(-50%, -50%) rotate(45deg);
+    border: var(--center-stroke) solid;
+    border-radius: 34%;
+  }
+
+  [data-variant="black"] .sigil-center {
+    border-color: rgba(23, 22, 20, 0.72);
+    background: radial-gradient(circle at 35% 35%, rgba(23, 22, 20, 0.18), rgba(23, 22, 20, 0.04));
+    box-shadow: 0 0 24px rgba(23, 22, 20, 0.12);
+  }
+
+  [data-variant="white"] .sigil-center {
+    border-color: rgba(247, 244, 238, 0.74);
+    background: radial-gradient(circle at 35% 35%, rgba(247, 244, 238, 0.2), rgba(247, 244, 238, 0.04));
+    box-shadow: 0 0 24px rgba(247, 244, 238, 0.12);
+  }
+
+  .preview-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .export-button {
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--panel-soft);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    transition: border-color 180ms var(--ease), background 180ms var(--ease), color 180ms var(--ease);
+  }
+
+  .export-button:hover:not(:disabled) {
+    border-color: rgba(201, 149, 87, 0.46);
+    background: var(--accent-soft);
+  }
+
+  .export-button--primary {
+    border-color: rgba(201, 149, 87, 0.48);
+    background: var(--accent-soft);
+    color: #f5d9b5;
+  }
+
+  .export-button--primary:hover:not(:disabled) {
+    background: rgba(201, 149, 87, 0.24);
+    color: #ffe4bf;
+  }
+
+  .export-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .status {
+    min-height: 24px;
+    margin-top: 18px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  .status.is-success {
+    color: #8fb79b;
+  }
+
+  .status.is-error {
+    color: #d47f7b;
+  }
+
+  .info {
+    margin-top: 6px;
+    color: #77736d;
+    font-size: 12px;
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  @media (max-width: 760px) {
+    body {
+      padding: 24px 14px;
+    }
+
+    .controls {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    select {
+      width: 100%;
+    }
+
+    .preview-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .preview-frame {
+      min-height: 320px;
+      padding: 28px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+<main class="exporter-shell">
+  <header class="page-header">
+    <div class="eyebrow">Amitia Icon Studio</div>
+    <h1>角色图标导出</h1>
+    <p class="subtitle">亮色与暗色图标并排预览，分别导出透明背景 PNG 或 ICO。</p>
+  </header>
+
+  <section class="controls" aria-label="导出设置">
+    <label class="control-group" for="exportSize">
+      <span class="control-label">导出分辨率</span>
+      <select id="exportSize">
+        <option value="16">16 × 16px</option>
+        <option value="32">32 × 32px</option>
+        <option value="48">48 × 48px</option>
+        <option value="64">64 × 64px</option>
+        <option value="128">128 × 128px</option>
+        <option value="256" selected>256 × 256px</option>
+        <option value="512">512 × 512px</option>
+        <option value="1024">1024 × 1024px</option>
+      </select>
+    </label>
+  </section>
+
+  <section class="preview-grid" aria-label="角色图标预览">
+    <article class="preview-card">
+      <header class="preview-card__header">
+        <div>
+          <h2 class="preview-card__title">亮色模式图标</h2>
+          <p class="preview-card__meta">用于浅色背景与亮色界面</p>
+        </div>
+        <span class="model-chip">黑色模型</span>
+      </header>
+      <div class="preview-frame preview-frame--light">
+        <div class="core-zone" id="lightCore" data-variant="black" aria-label="亮色模式黑色角色图标预览">
+          <div class="core-symbol">
+            <span class="sigil-loop loop-a"></span>
+            <span class="sigil-loop loop-b"></span>
+            <span class="sigil-loop loop-c"></span>
+            <span class="sigil-center"></span>
+          </div>
+        </div>
+      </div>
+      <div class="preview-actions">
+        <button class="export-button" type="button" data-format="png" data-model="light">导出 PNG</button>
+        <button class="export-button export-button--primary" type="button" data-format="ico" data-model="light">导出 ICO</button>
+      </div>
+    </article>
+
+    <article class="preview-card">
+      <header class="preview-card__header">
+        <div>
+          <h2 class="preview-card__title">暗色模式图标</h2>
+          <p class="preview-card__meta">用于深色背景与暗色界面</p>
+        </div>
+        <span class="model-chip">白色模型</span>
+      </header>
+      <div class="preview-frame preview-frame--dark">
+        <div class="core-zone" id="darkCore" data-variant="white" aria-label="暗色模式白色角色图标预览">
+          <div class="core-symbol">
+            <span class="sigil-loop loop-a"></span>
+            <span class="sigil-loop loop-b"></span>
+            <span class="sigil-loop loop-c"></span>
+            <span class="sigil-center"></span>
+          </div>
+        </div>
+      </div>
+      <div class="preview-actions">
+        <button class="export-button" type="button" data-format="png" data-model="dark">导出 PNG</button>
+        <button class="export-button export-button--primary" type="button" data-format="ico" data-model="dark">导出 ICO</button>
+      </div>
+    </article>
+  </section>
+
+  <p class="status" id="status" role="status" aria-live="polite">选择格式后即可导出，图片背景保持透明。</p>
+  <p class="info">PNG 支持全部分辨率；ICO 支持 16–256px，并自动优化小尺寸线条。</p>
+</main>
+
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script>
+  const exportSize = document.getElementById('exportSize')
+  const status = document.getElementById('status')
+  const exportButtons = document.querySelectorAll('[data-format][data-model]')
+  const icoButtons = document.querySelectorAll('[data-format="ico"]')
+
+  const models = {
+    light: {
+      element: document.getElementById('lightCore'),
+      name: 'amitia-character-light-black',
+      label: '亮色模式黑色模型',
+    },
+    dark: {
+      element: document.getElementById('darkCore'),
+      name: 'amitia-character-dark-white',
+      label: '暗色模式白色模型',
+    },
+  }
+
+  function setStatus(message, type = '') {
+    status.textContent = message
+    status.className = `status${type ? ` is-${type}` : ''}`
+  }
+
+  function updateExportAvailability() {
+    const size = Number(exportSize.value)
+    const icoSupported = size <= 256
+    icoButtons.forEach(button => {
+      button.disabled = !icoSupported
+      button.title = icoSupported ? '' : 'ICO 最高支持 256 × 256px'
+    })
+    if (icoSupported) setStatus('选择格式后即可导出，图片背景保持透明。')
+    else setStatus(`${size} × ${size}px 仅支持 PNG；ICO 最高支持 256 × 256px。`)
+  }
+
+  function downloadBlob(blob, fileName) {
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  function canvasToBlob(canvas) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (blob) resolve(blob)
+        else reject(new Error('无法生成图片数据'))
+      }, 'image/png')
+    })
+  }
+
+  function resizeCanvas(source, size) {
+    if (source.width === size && source.height === size) return source
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const context = canvas.getContext('2d')
+    context.clearRect(0, 0, size, size)
+    context.imageSmoothingEnabled = true
+    context.imageSmoothingQuality = 'high'
+    context.drawImage(source, 0, 0, size, size)
+    return canvas
+  }
+
+  async function captureModel(model, targetSize) {
+    if (typeof html2canvas !== 'function') throw new Error('导出组件加载失败，请检查网络后重试')
+    if (document.fonts?.ready) await document.fonts.ready
+
+    const rect = model.element.getBoundingClientRect()
+    const originalStroke = model.element.style.getPropertyValue('--model-stroke')
+    const originalCenterStroke = model.element.style.getPropertyValue('--center-stroke')
+    const stroke = Math.max(12, rect.width / targetSize)
+    const centerStroke = Math.max(3, rect.width / targetSize)
+    const renderSize = Math.max(512, targetSize)
+
+    model.element.style.setProperty('--model-stroke', `${stroke}px`)
+    model.element.style.setProperty('--center-stroke', `${centerStroke}px`)
+
+    try {
+      const canvas = await html2canvas(model.element, {
+        backgroundColor: null,
+        scale: renderSize / rect.width,
+        width: rect.width,
+        height: rect.height,
+        useCORS: true,
+        logging: false,
+      })
+      return resizeCanvas(canvas, targetSize)
+    } finally {
+      if (originalStroke) model.element.style.setProperty('--model-stroke', originalStroke)
+      else model.element.style.removeProperty('--model-stroke')
+      if (originalCenterStroke) model.element.style.setProperty('--center-stroke', originalCenterStroke)
+      else model.element.style.removeProperty('--center-stroke')
+    }
+  }
+
+  async function createIcoBlob(canvas, size) {
+    const pngBlob = await canvasToBlob(canvas)
+    const pngBytes = new Uint8Array(await pngBlob.arrayBuffer())
+    const header = new ArrayBuffer(22)
+    const view = new DataView(header)
+
+    view.setUint16(0, 0, true)
+    view.setUint16(2, 1, true)
+    view.setUint16(4, 1, true)
+    view.setUint8(6, size === 256 ? 0 : size)
+    view.setUint8(7, size === 256 ? 0 : size)
+    view.setUint8(8, 0)
+    view.setUint8(9, 0)
+    view.setUint16(10, 1, true)
+    view.setUint16(12, 32, true)
+    view.setUint32(14, pngBytes.byteLength, true)
+    view.setUint32(18, 22, true)
+
+    return new Blob([header, pngBytes], { type: 'image/vnd.microsoft.icon' })
+  }
+
+  async function handleExport(button) {
+    const format = button.dataset.format
+    const model = models[button.dataset.model]
+    const size = Number(exportSize.value)
+    const idleText = button.textContent
+
+    button.disabled = true
+    button.textContent = '导出中…'
+    setStatus(`正在生成 ${model.label} ${format.toUpperCase()}…`)
+
+    try {
+      const canvas = await captureModel(model, size)
+      if (format === 'ico') {
+        const blob = await createIcoBlob(canvas, size)
+        downloadBlob(blob, `${model.name}-${size}.ico`)
+      } else {
+        const blob = await canvasToBlob(canvas)
+        downloadBlob(blob, `${model.name}-${size}.png`)
+      }
+      setStatus(`${model.label}已导出：${size} × ${size}px ${format.toUpperCase()}`, 'success')
+    } catch (error) {
+      setStatus(`导出失败：${error instanceof Error ? error.message : String(error)}`, 'error')
+    } finally {
+      button.textContent = idleText
+      button.disabled = false
+      updateExportAvailability()
+    }
+  }
+
+  exportSize.addEventListener('change', updateExportAvailability)
+  exportButtons.forEach(button => {
+    button.addEventListener('click', () => handleExport(button))
+  })
+  updateExportAvailability()
+</script>
+</body>
+</html>

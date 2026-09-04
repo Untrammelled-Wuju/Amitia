@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "alm-sch-001",
+  "status": "ok",
+  "result": {
+    "scheduled": true,
+    "alarmId": "alarm-001"
+  },
+  "error": null
+}

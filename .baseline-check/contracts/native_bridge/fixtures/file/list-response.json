@@ -1,0 +1,20 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-list-001",
+  "status": "ok",
+  "result": {
+    "entries": [
+      {
+        "name": "report.pdf",
+        "isDirectory": false,
+        "size": 2048576
+      },
+      {
+        "name": "data",
+        "isDirectory": true,
+        "size": 0
+      }
+    ]
+  },
+  "error": null
+}

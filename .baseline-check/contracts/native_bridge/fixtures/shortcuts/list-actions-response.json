@@ -1,0 +1,19 @@
+{
+  "protocolVersion": 1,
+  "status": "ok",
+  "result": {
+    "actions": [
+      {
+        "id": "com.amitia.action.chat",
+        "title": "Chat with Amitia",
+        "available": true
+      },
+      {
+        "id": "com.amitia.action.alarm.add",
+        "title": "Add Alarm",
+        "available": true
+      }
+    ]
+  },
+  "error": null
+}

@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "media-photo-001",
+  "operation": "media.photos.get",
+  "payload": {
+    "assetId": "asset-001",
+    "format": "jpeg",
+    "quality": 0.9
+  }
+}

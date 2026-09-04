@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-move-001",
+  "status": "ok",
+  "result": {
+    "moved": true,
+    "resourceUri": "amitia://archive/2026/report.pdf"
+  },
+  "error": null
+}

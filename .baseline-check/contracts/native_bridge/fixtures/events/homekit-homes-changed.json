@@ -1,0 +1,9 @@
+{
+  "domain": "homekit",
+  "event": "homes_changed",
+  "timestamp": "2026-08-16T16:08:00Z",
+  "data": {
+    "reason": "home_added",
+    "homeId": "hk-home-001"
+  }
+}

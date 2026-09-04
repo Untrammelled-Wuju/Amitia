@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-write-001",
+  "status": "ok",
+  "result": {
+    "written": true,
+    "size": 11
+  },
+  "error": null
+}

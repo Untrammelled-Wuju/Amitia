@@ -1,0 +1,21 @@
+{
+  "protocolVersion": 1,
+  "requestId": "alm-sch-001",
+  "operation": "media.alarms.schedule",
+  "payload": {
+    "alarmId": "alarm-001",
+    "title": "Morning Alarm",
+    "schedule": {
+      "hour": 7,
+      "minute": 0,
+      "recurrence": "weekdays"
+    },
+    "presentation": {
+      "alertTitle": "Time to wake up"
+    },
+    "sound": {
+      "kind": "system",
+      "soundId": "bell"
+    }
+  }
+}

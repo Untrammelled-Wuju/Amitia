@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "requestId": "res-stat-001",
+  "status": "ok",
+  "result": {
+    "exists": true,
+    "size": 1048576,
+    "mimeType": "image/jpeg",
+    "nativeStagingId": "stg-abc123"
+  },
+  "error": null
+}

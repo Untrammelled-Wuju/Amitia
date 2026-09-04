@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-rename-001",
+  "status": "ok",
+  "result": {
+    "renamed": true,
+    "newRelativePath": "projects/new_name.txt"
+  },
+  "error": null
+}

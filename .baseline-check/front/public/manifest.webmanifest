@@ -1,0 +1,27 @@
+﻿{
+  "name": "AI Companion",
+  "short_name": "AI Companion",
+  "description": "Your private AI companion - chat, memories, and more",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#3B82F6",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "scope": "/",
+  "lang": "zh-CN",
+  "categories": ["productivity", "social", "utilities"]
+}

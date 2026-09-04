@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "requestId": "sc-exec-001",
+  "operation": "shortcuts.execute",
+  "payload": {
+    "actionId": "com.amitia.action.chat",
+    "payload": {
+      "query": "Hello"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+diff --git a/out/util/electronGet.js b/out/util/electronGet.js
+index a941f9d20c10ca58a84b9a600b0df468631aae01..052abc86ec58c44d5c55e4a5666ad8e5762aec0d 100644
+--- a/out/util/electronGet.js
++++ b/out/util/electronGet.js
+@@ -61,12 +61,15 @@ function resolveCacheMode() {
+     var _a;
+     const varName = "ELECTRON_DOWNLOAD_CACHE_MODE";
+     const cacheOverride = (_a = process.env[varName]) === null || _a === void 0 ? void 0 : _a.trim();
+-    if (cacheOverride && Number(cacheOverride) in get_1.ElectronDownloadCacheMode) {
++    if (cacheOverride && get_1.ElectronDownloadCacheMode != null && Number(cacheOverride) in get_1.ElectronDownloadCacheMode) {
+         const mode = Number(cacheOverride);
+         builder_util_1.log.debug({ mode }, `cache mode overridden via env var ${varName}`);
+         return mode;
+     }
+-    return get_1.ElectronDownloadCacheMode.ReadWrite;
++    if (get_1.ElectronDownloadCacheMode != null && get_1.ElectronDownloadCacheMode.ReadWrite != null) {
++        return get_1.ElectronDownloadCacheMode.ReadWrite;
++    }
++    return 0;
+ }
+ async function extractZipStreaming(file, dir) {
+     var _a;
+@@ -271,7 +274,8 @@ async function downloadArtifactToFile(config, label) {
+         }
+         if (!(await (0, builder_util_1.exists)(filePath))) {
+             builder_util_1.log.warn({ filePath, label }, "cached artifact missing from disk; retrying with cache write");
+-            filePath = await get.downloadArtifact({ ...configWithProgress, cacheMode: get_1.ElectronDownloadCacheMode.WriteOnly });
++            const writeOnlyMode = (get_1.ElectronDownloadCacheMode != null && get_1.ElectronDownloadCacheMode.WriteOnly != null) ? get_1.ElectronDownloadCacheMode.WriteOnly : 1;
++            filePath = await get.downloadArtifact({ ...configWithProgress, cacheMode: writeOnlyMode });
+         }
+         if (!state.bar && lastLoggedMilestone === -1) {
+             builder_util_1.log.info({ label }, "using cached artifact");

@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "requestId": "res-read-001",
+  "status": "ok",
+  "result": {
+    "contentBase64": "AAAA",
+    "offset": 0,
+    "length": 4,
+    "finished": true
+  },
+  "error": null
+}

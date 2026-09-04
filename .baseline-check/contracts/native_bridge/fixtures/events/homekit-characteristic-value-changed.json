@@ -1,0 +1,11 @@
+{
+  "domain": "homekit",
+  "event": "characteristic_value_changed",
+  "timestamp": "2026-08-16T16:15:00Z",
+  "data": {
+    "accessoryId": "hk-001",
+    "serviceId": "svc-light",
+    "characteristicId": "char-on",
+    "value": true
+  }
+}

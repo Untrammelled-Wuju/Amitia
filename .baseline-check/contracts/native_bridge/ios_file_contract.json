@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "iOS File Native Bridge Wire Contract",
+  "description": "Frozen wire contract for iOS File operations. File:contracts/native_bridge/protocol-v1.md",
+  "version": "1",
+  "frozen": true,
+  "encoding": {
+    "binaryContent": "contentBase64",
+    "forbiddenFields": ["sourcePath", "destPath", "sourceMountId", "destMountId", "data", "filePath", "rawPath", "absolutePath"]
+  },
+  "operations": {
+    "file.access.stat": {
+      "description": "Get file/directory metadata",
+      "request": {
+        "type": "object",
+        "required": ["mountId", "relativePath"],
+        "properties": {
+          "mountId": { "type": "string" },
+          "relativePath": { "type": "string", "pattern": "^[^/]" }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["name", "relativePath", "size", "isDirectory"],
+        "properties": {
+          "name": { "type": "string" },
+          "relativePath": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0 },
+          "isDirectory": { "type": "boolean" },
+          "isSymbolicLink": { "type": "boolean" },
+          "isMaterialized": { "type": "boolean" },
+          "mimeType": { "type": "string" },
+          "modifiedAt": { "type": "string", "format": "date-time" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "file.access.list": {
+      "description": "List directory entries",
+      "request": {
+        "type": "object",
+        "required": ["mountId", "relativePath"],
+        "properties": {
+          "mountId": { "type": "string" },
+          "relativePath": { "type": "string", "pattern": "^[^/]" }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["entries"],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "relativePath", "size", "isDirectory"],
+              "properties": {
+                "name": { "type": "string" },
+                "relativePath": { "type": "string" },
+                "size": { "type": "integer", "minimum": 0 },
+                "isDirectory": { "type": "boolean" },
+                "isSymbolicLink": { "type": "boolean" },
+                "isMaterialized": { "type": "boolean" },
+                "mimeType": { "type": "string" },
+                "modifiedAt": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "file.access.read": {
+      "description": "Read file bytes with bounded chunk",
+      "request": {
+        "type": "object",
+        "required": ["mountId", "relativePath", "offset", "length"],
+        "properties": {
+          "mountId": { "type": "string" },
+          "relativePath": { "type": "string", "pattern": "^[^/]" },
+          "offset": { "type": "integer", "minimum": 0 },
+          "length": { "type": "integer", "minimum": 1, "maximum": 1048576 }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["contentBase64", "offset", "size", "finished"],
+        "properties": {
+          "contentBase64": { "type": "string" },
+          "offset": { "type": "integer", "minimum": 0 },
+          "size": { "type": "integer", "minimum": 0 },
+          "finished": { "type": "boolean" }
+        }
+      }
+    },
+    "file.access.write": {
+      "description": "Write file bytes",
+      "request": {
+        "type": "object",
+        "required": ["mountId", "relativePath", "contentBase64"],
+        "properties": {
+          "mountId": { "type": "string" },
+          "relativePath": { "type": "string", "pattern": "^[^/]" },
+          "offset": { "type": "integer", "minimum": 0 },
+          "contentBase64": { "type": "string" },
+          "atomic": { "type": "boolean" },
+          "append": { "type": "boolean" }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["written"],
+        "properties": {
+          "written": { "type": "boolean" },
+          "bytesWritten": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "file.access.mkdir": {
+      "description": "Create directory",
+      "request": {
+        "type": "object",
+        "required": ["mountId", "relativePath"],
+        "properties": {
+          "mountId": { "type": "string" },
+          "relativePath": { "type": "string", "pattern": "^[^/]" },
+          "createIntermediate": { "type": "boolean" }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["created"],
+        "properties": {
+          "created": { "type": "boolean" },
+          "relativePath": { "type": "string" }
+        }
+      }
+    },
+    "file.access.rename": {
+      "description": "Rename file or directory",
+      "request": {
+        "type": "object",
+        "required": ["mountId", "relativePath", "newName"],
+        "properties": {
+          "mountId": { "type": "string" },
+          "relativePath": { "type": "string", "pattern": "^[^/]" },
+          "newName": { "type": "string" }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["renamed"],
+        "properties": {
+          "renamed": { "type": "boolean" },
+          "newRelativePath": { "type": "string" }
+        }
+      }
+    },
+    "file.access.move": {
+      "description": "Move file or directory within same mount",
+      "request": {
+        "type": "object",
+        "required": ["mountId", "relativePath", "newRelativePath"],
+        "properties": {
+          "mountId": { "type": "string" },
+          "relativePath": { "type": "string", "pattern": "^[^/]" },
+          "newRelativePath": { "type": "string", "pattern": "^[^/]" }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["moved"],
+        "properties": {
+          "moved": { "type": "boolean" },
+          "newRelativePath": { "type": "string" }
+        }
+      }
+    },
+    "file.access.copy": {
+      "description": "Copy file or directory within same mount",
+      "request": {
+        "type": "object",
+        "required": ["mountId", "relativePath", "newRelativePath"],
+        "properties": {
+          "mountId": { "type": "string" },
+          "relativePath": { "type": "string", "pattern": "^[^/]" },
+          "newRelativePath": { "type": "string", "pattern": "^[^/]" }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["copied"],
+        "properties": {
+          "copied": { "type": "boolean" },
+          "newRelativePath": { "type": "string" }
+        }
+      }
+    },
+    "file.access.delete": {
+      "description": "Delete file or directory",
+      "request": {
+        "type": "object",
+        "required": ["mountId", "relativePath"],
+        "properties": {
+          "mountId": { "type": "string" },
+          "relativePath": { "type": "string", "pattern": "^[^/]" },
+          "recursive": { "type": "boolean" }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["deleted"],
+        "properties": {
+          "deleted": { "type": "boolean" }
+        }
+      }
+    },
+    "file.access.export": {
+      "description": "Export file to canonical ResourceURI",
+      "request": {
+        "type": "object",
+        "required": ["mountId", "relativePath"],
+        "properties": {
+          "mountId": { "type": "string" },
+          "relativePath": { "type": "string", "pattern": "^[^/]" }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["resourceUri"],
+        "properties": {
+          "resourceUri": { "type": "string" },
+          "mimeType": { "type": "string" },
+          "size": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "errorCodes": {
+    "MOUNT_NOT_FOUND": "Mount ID not found or not authorized",
+    "PATH_NOT_FOUND": "relativePath does not exist",
+    "PATH_TRAVERSAL": "Path traversal attempt detected",
+    "PATH_ESCAPE": "Resolved path escapes mount root",
+    "PERMISSION_DENIED": "Permission denied by OS or broker",
+    "READONLY_MOUNT": "Mount is read-only",
+    "QUOTA_EXCEEDED": "Storage quota exceeded",
+    "DISK_FULL": "No space left on device",
+    "INVALID_PATH": "Path contains invalid characters",
+    "FILE_EXISTS": "Target already exists",
+    "NOT_EMPTY": "Directory is not empty",
+    "STALE_MOUNT": "Mount bookmark is stale",
+    "TIMEOUT": "Operation timed out",
+    "CANCELLED": "Operation was cancelled"
+  }
+}

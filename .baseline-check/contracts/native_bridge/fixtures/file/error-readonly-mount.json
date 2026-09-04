@@ -1,0 +1,14 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-err-004",
+  "operation": "file.write",
+  "payload": {
+    "mountId": "mount-readonly-001",
+    "relativePath": "file.txt",
+    "contentBase64": "AAAA"
+  },
+  "expectedError": {
+    "code": "READONLY_MOUNT",
+    "message": "mount is read-only"
+  }
+}

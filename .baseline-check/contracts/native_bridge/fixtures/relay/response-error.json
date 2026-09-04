@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-test-001",
+  "status": "error",
+  "error": {
+    "code": "OPERATION_NOT_SUPPORTED",
+    "message": "operation not supported on this platform",
+    "domainCode": "MEDIA_ERROR"
+  }
+}

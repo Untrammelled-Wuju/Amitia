@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractHash": "initial",
+  "fixtures": [
+    { "name": "package-v2", "path": "package-v2/" },
+    { "name": "generation", "path": "generation/" },
+    { "name": "processing", "path": "processing/" },
+    { "name": "action-revision", "path": "action-revision/" },
+    { "name": "quality", "path": "quality/" },
+    { "name": "release", "path": "release/" },
+    { "name": "installation", "path": "installation/" },
+    { "name": "runtime", "path": "runtime/" },
+    { "name": "behavior", "path": "behavior/" },
+    { "name": "errors", "path": "errors/" }
+  ],
+  "goldenPath": "golden/",
+  "createdAt": "2026-08-02"
+}

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_name">Amitia Accessibility Service</string>
+    <string name="accessibility_service_description">允许 Amitia 读取屏幕内容以辅助自动化操作和任务执行</string>
+</resources>

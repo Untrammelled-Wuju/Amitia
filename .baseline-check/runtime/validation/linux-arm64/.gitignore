@@ -1,0 +1,11 @@
+work/
+reports/
+temp/
+*.log
+*.pyc
+__pycache__/
+.pytest_cache/
+.coverage
+*.egg-info/
+dist/
+build/

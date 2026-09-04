@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "requestId": "alm-cancel-001",
+  "status": "ok",
+  "result": {
+    "cancelled": true,
+    "alarmId": "alarm-001"
+  },
+  "error": null
+}

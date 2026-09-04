@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>测试扩展</title>
+  <style>
+    body { font-family: system-ui; margin: 0; padding: 16px; background: #f5f5f5; }
+    .container { max-width: 480px; margin: 0 auto; }
+    .card { background: white; border-radius: 8px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .title { font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+    .text { font-size: 13px; color: #666; margin: 0; }
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; background: #4a6cf7; color: white; font-size: 13px; cursor: pointer; }
+    .btn:hover { background: #3b5de7; }
+    #status { font-size: 12px; color: #888; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1 class="title">Amitia 测试扩展</h1>
+      <p class="text">此扩展运行在沙箱环境中，通过 amitiaUI SDK 与宿主通信。</p>
+    </div>
+    <div class="card">
+      <h2 class="title">会话信息</h2>
+      <p class="text" id="session-info">加载中...</p>
+    </div>
+    <div class="card">
+      <h2 class="title">操作测试</h2>
+      <button class="btn" id="ping-btn">Ping</button>
+      <button class="btn" id="context-btn">获取上下文</button>
+      <div id="status"></div>
+    </div>
+  </div>
+  <script>
+    // 使用 amitiaUI SDK
+    if (window.amitiaUI) {
+      var ui = window.amitiaUI;
+      ui.ready().then(function() {
+        document.getElementById('session-info').textContent = '会话: ' + ui.sessionId + ' (代次: ' + ui.generation + ')';
+        document.getElementById('status').textContent = '就绪';
+      });
+
+      document.getElementById('ping-btn').addEventListener('click', function() {
+        ui.ping().then(function(result) {
+          document.getElementById('status').textContent = 'Ping: ' + JSON.stringify(result);
+        }).catch(function(e) {
+          document.getElementById('status').textContent = 'Ping 失败: ' + e.message;
+        });
+      });
+
+      document.getElementById('context-btn').addEventListener('click', function() {
+        ui.getContext().then(function(ctx) {
+          document.getElementById('status').textContent = '上下文: ' + JSON.stringify(ctx);
+        }).catch(function(e) {
+          document.getElementById('status').textContent = '获取上下文失败: ' + e.message;
+        });
+      });
+    } else {
+      document.getElementById('session-info').textContent = 'amitiaUI 不可用';
+    }
+  </script>
+</body>
+</html>

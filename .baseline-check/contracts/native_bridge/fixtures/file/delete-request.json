@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-delete-001",
+  "operation": "file.delete",
+  "payload": {
+    "mountId": "mount-documents-001",
+    "relativePath": "projects/temp.txt"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "protocolVersion": 1,
+  "requestId": "media-photo-001",
+  "status": "ok",
+  "result": {
+    "nativeStagingId": "stg-photo-001",
+    "assetId": "asset-001",
+    "size": 204800,
+    "mimeType": "image/jpeg"
+  },
+  "error": null
+}

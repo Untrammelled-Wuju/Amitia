@@ -1,0 +1,8 @@
+{
+  "protocolVersion": 1,
+  "requestId": "res-rel-001",
+  "operation": "native.resource.release",
+  "payload": {
+    "nativeStagingId": "stg-abc123"
+  }
+}

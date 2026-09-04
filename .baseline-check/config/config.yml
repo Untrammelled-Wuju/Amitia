@@ -1,0 +1,137 @@
+server:
+  port: 18899
+  host: "127.0.0.1"
+  mode: "debug"
+
+storage:
+  dataDir: "data"
+
+jwt:
+  secret: ""
+  expireDays: 7
+  issuer: "amitia"
+  audience: "amitia-api"
+
+security:
+  mode: "local_single_user"
+  localToken: "2kUNkGYS8ZGb13sI2L7YXV7e9bZ3WGYiVxzBsBybErI"
+  allowRemoteAccess: false
+  localUserId: "1"
+  allowedOrigins:
+    - "app://amitia"
+    - "http://127.0.0.1:18899"
+    - "http://localhost:18899"
+
+config:
+  version: 2
+
+app:
+  name: "U-Ai"
+  version: "26.1.8"
+  deployMode: "desktop-local"
+
+chat:
+  mergeWindowMs: 5000
+  contextWindowMaxRounds: 20
+
+providers:
+  scriptRuntime:
+    enabled: true
+    required: false
+    provider: "builtin.node-process"
+  vectorStore:
+    enabled: true
+    required: false
+    provider: "builtin.qdrant-process"
+    qdrant:
+      host: "127.0.0.1"
+      port: 19178
+      binaryPath: ""
+      configDir: ""
+      dataDir: ""
+      snapshotsDir: ""
+      collectionName: "memory_embeddings"
+      vectorDim: 1536
+      limit: 10
+      collections:
+        memory_embeddings:
+          name: "memory_embeddings"
+          vectorDim: 1536
+        working_memory:
+          name: "working_memory"
+          vectorDim: 1536
+        user_profiles:
+          name: "user_profiles"
+          vectorDim: 1536
+        episodic_memories:
+          name: "episodic_memories"
+          vectorDim: 1536
+  graphStore:
+    enabled: true
+    required: false
+    provider: "builtin.surrealdb-process"
+    surrealdb:
+      host: "127.0.0.1"
+      port: 18000
+      namespace: "uai"
+      database: "memory_graph"
+      username: "root"
+      password: ""
+      dataPath: "data/graph.db"
+
+components:
+  pluginHost:
+    enabled: true
+    entryUri: ""
+    workUri: ""
+  taskHost:
+    enabled: true
+    entryUri: ""
+    workUri: ""
+  sidecars:
+    wechat:
+      enabled: true
+      entryUri: ""
+      workUri: ""
+      port: 19876
+      healthUrl: "http://127.0.0.1:19876/api/health"
+    qq:
+      enabled: true
+      entryUri: ""
+      workUri: ""
+      port: 19877
+      healthUrl: "http://127.0.0.1:19877/api/health"
+
+runtime:
+  mode: "desktop"
+  node:
+    binaryPath: ""
+    npmPath: ""
+    npxPath: ""
+    workDir: ""
+  pluginHost:
+    enabled: true
+    entryPath: ""
+    workDir: ""
+  taskHost:
+    enabled: true
+    entryPath: ""
+    workDir: ""
+  sidecars:
+    wechat:
+      enabled: true
+      entryPath: ""
+      workDir: ""
+      port: 19876
+      healthUrl: "http://127.0.0.1:19876/api/health"
+    qq:
+      enabled: true
+      entryPath: ""
+      workDir: ""
+      port: 19877
+      healthUrl: "http://127.0.0.1:19877/api/health"
+
+embedding:
+  modelName: "text-embedding-3-small"
+  baseUrl: ""
+  apiKey: ""

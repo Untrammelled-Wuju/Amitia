@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-delete-001",
+  "status": "ok",
+  "result": {
+    "deleted": true
+  },
+  "error": null
+}
