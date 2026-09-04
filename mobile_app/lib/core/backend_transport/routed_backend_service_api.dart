@@ -8,6 +8,7 @@ const List<String> _deviceLocalApiPrefixes = <String>[
   '/api/local/workflows',
   '/api/local/workflow-runs',
   '/api/local/workspaces',
+  '/api/workspaces',
   '/internal/device-mesh',
 ];
 
