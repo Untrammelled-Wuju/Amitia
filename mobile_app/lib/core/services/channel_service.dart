@@ -6,20 +6,37 @@ class MCPService {
 
   MCPService(this._api);
 
+  dynamic _unwrapData(dynamic response) {
+    if (response is Map && response.containsKey('data')) return response['data'];
+    return response;
+  }
+
+  Map<String, dynamic>? _asMap(dynamic response) {
+    final value = _unwrapData(response);
+    if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
+    if (value is Map) return value.map((key, item) => MapEntry(key.toString(), item));
+    return null;
+  }
+
+  List<Map<String, dynamic>> _asMapList(dynamic response) {
+    final value = _unwrapData(response);
+    if (value is! List) return const <Map<String, dynamic>>[];
+    return value
+        .whereType<Map>()
+        .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+        .toList(growable: false);
+  }
+
   Future<List<Map<String, dynamic>>> servers() async {
-    final resp = await _api.get<List<dynamic>>('/api/mcp/servers');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    return _asMapList(await _api.get<dynamic>('/api/mcp/servers'));
   }
 
   Future<Map<String, dynamic>?> createServer(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers', data: data);
-    return resp;
+    return _asMap(await _api.post<dynamic>('/api/mcp/servers', data: data));
   }
 
   Future<Map<String, dynamic>?> updateServer(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/mcp/servers/$id', data: data);
-    return resp;
+    return _asMap(await _api.put<dynamic>('/api/mcp/servers/$id', data: data));
   }
 
   Future<bool> deleteServer(String id) async {
@@ -28,74 +45,61 @@ class MCPService {
   }
 
   Future<Map<String, dynamic>?> getServer(String id) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/mcp/servers/$id');
-    return resp;
+    return _asMap(await _api.get<dynamic>('/api/mcp/servers/$id'));
   }
 
   Future<Map<String, dynamic>?> testServer(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/test');
-    return resp;
+    return _asMap(await _api.post<dynamic>('/api/mcp/servers/$id/test'));
   }
 
   Future<Map<String, dynamic>?> connectServer(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/connect');
-    return resp;
+    return _asMap(await _api.post<dynamic>('/api/mcp/servers/$id/connect'));
   }
 
   Future<Map<String, dynamic>?> disconnectServer(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/disconnect');
-    return resp;
+    return _asMap(await _api.post<dynamic>('/api/mcp/servers/$id/disconnect'));
   }
 
   Future<Map<String, dynamic>?> reconnectServer(String id) async {
-    return _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/reconnect');
+    return _asMap(await _api.post<dynamic>('/api/mcp/servers/$id/reconnect'));
   }
 
   Future<Map<String, dynamic>?> refreshTools(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/mcp/servers/$id/refresh');
-    return resp;
+    return _asMap(await _api.post<dynamic>('/api/mcp/servers/$id/refresh'));
   }
 
   Future<List<Map<String, dynamic>>> tools(String id) async {
-    final resp = await _api.get<List<dynamic>>('/api/mcp/servers/$id/tools');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    return _asMapList(await _api.get<dynamic>('/api/mcp/servers/$id/tools'));
   }
 
   Future<List<Map<String, dynamic>>> prompts(String id) async {
-    final resp = await _api.get<List<dynamic>>('/api/mcp/servers/$id/prompts');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    return _asMapList(await _api.get<dynamic>('/api/mcp/servers/$id/prompts'));
   }
 
   Future<Map<String, dynamic>> resources(String id) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/mcp/servers/$id/resources');
-    return resp ?? <String, dynamic>{'resources': <dynamic>[], 'resourceTemplates': <dynamic>[]};
+    return _asMap(await _api.get<dynamic>('/api/mcp/servers/$id/resources')) ??
+        <String, dynamic>{'resources': <dynamic>[], 'resourceTemplates': <dynamic>[]};
   }
 
   Future<List<Map<String, dynamic>>> tasks(String id) async {
-    final resp = await _api.get<List<dynamic>>('/api/mcp/servers/$id/tasks');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    return _asMapList(await _api.get<dynamic>('/api/mcp/servers/$id/tasks'));
   }
 
   Future<List<Map<String, dynamic>>> logs(String id, {int limit = 100}) async {
-    final resp = await _api.get<List<dynamic>>(
-      '/api/mcp/servers/$id/logs',
-      queryParameters: {'limit': limit},
+    return _asMapList(
+      await _api.get<dynamic>(
+        '/api/mcp/servers/$id/logs',
+        queryParameters: {'limit': limit},
+      ),
     );
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
   Future<List<Map<String, dynamic>>> capabilities(String id) async {
-    final resp = await _api.get<List<dynamic>>('/api/mcp/servers/$id/capabilities');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    return _asMapList(await _api.get<dynamic>('/api/mcp/servers/$id/capabilities'));
   }
 
   Future<void> setToolEnabled(String serverId, String toolId, bool enabled) async {
-    await _api.put<Map<String, dynamic>>(
+    await _api.put<dynamic>(
       '/api/mcp/servers/$serverId/tools/$toolId/scope',
       data: {'characterId': '', 'enabled': enabled},
     );
@@ -107,7 +111,7 @@ class MCPService {
     bool enabled, {
     Map<String, dynamic>? configuration,
   }) async {
-    await _api.put<Map<String, dynamic>>(
+    await _api.put<dynamic>(
       '/api/mcp/servers/$serverId/capabilities/$capability',
       data: {
         'enabled': enabled,
@@ -116,22 +120,28 @@ class MCPService {
     );
   }
 
-  Future<Map<String, dynamic>?> readResource(String serverId, String uri) =>
-      _api.post<Map<String, dynamic>>(
+  Future<Map<String, dynamic>?> readResource(String serverId, String uri) async {
+    return _asMap(
+      await _api.post<dynamic>(
         '/api/mcp/servers/$serverId/resources/read',
         data: {'characterId': '', 'uri': uri},
-      );
+      ),
+    );
+  }
 
   Future<Map<String, dynamic>?> setResourceSubscription(
     String serverId,
     String uri,
     bool subscribed, {
     String characterId = '',
-  }) =>
-      _api.post<Map<String, dynamic>>(
+  }) async {
+    return _asMap(
+      await _api.post<dynamic>(
         '/api/mcp/servers/$serverId/resources/${subscribed ? 'subscribe' : 'unsubscribe'}',
         data: {'characterId': characterId, 'uri': uri},
-      );
+      ),
+    );
+  }
 
   Future<Map<String, dynamic>?> completePromptArgument(
     String serverId, {
@@ -140,8 +150,9 @@ class MCPService {
     String value = '',
     Map<String, String> contextArguments = const <String, String>{},
     String characterId = '',
-  }) =>
-      _api.post<Map<String, dynamic>>(
+  }) async {
+    return _asMap(
+      await _api.post<dynamic>(
         '/api/mcp/servers/$serverId/completion',
         data: {
           'characterId': characterId,
@@ -149,60 +160,74 @@ class MCPService {
           'argument': {'name': argumentName, 'value': value},
           'contextArguments': contextArguments,
         },
-      );
+      ),
+    );
+  }
 
   Future<Map<String, dynamic>?> getPrompt(
     String serverId,
     String name, {
     Map<String, String> arguments = const {},
-  }) =>
-      _api.post<Map<String, dynamic>>(
+  }) async {
+    return _asMap(
+      await _api.post<dynamic>(
         '/api/mcp/servers/$serverId/prompts/get',
         data: {'characterId': '', 'name': name, 'arguments': arguments},
-      );
+      ),
+    );
+  }
 
-  Future<Map<String, dynamic>?> cancelTask(String serverId, String taskId) =>
-      _api.post<Map<String, dynamic>>('/api/mcp/servers/$serverId/tasks/$taskId/cancel');
+  Future<Map<String, dynamic>?> cancelTask(String serverId, String taskId) async {
+    return _asMap(await _api.post<dynamic>('/api/mcp/servers/$serverId/tasks/$taskId/cancel'));
+  }
 
   Future<Map<String, dynamic>?> startOAuth(
     String serverId, {
     required String resourceUrl,
     String redirectUri = '',
     List<String> scopes = const [],
-  }) =>
-      _api.post<Map<String, dynamic>>(
+  }) async {
+    return _asMap(
+      await _api.post<dynamic>(
         '/api/mcp/servers/$serverId/oauth/start',
         data: {
           'resourceUrl': resourceUrl,
           'redirectUri': redirectUri,
           'scopes': scopes,
         },
-      );
+      ),
+    );
+  }
 
-  Future<Map<String, dynamic>?> revokeOAuth(String serverId) =>
-      _api.post<Map<String, dynamic>>('/api/mcp/servers/$serverId/oauth/revoke');
+  Future<Map<String, dynamic>?> revokeOAuth(String serverId) async {
+    return _asMap(await _api.post<dynamic>('/api/mcp/servers/$serverId/oauth/revoke'));
+  }
 
   Future<Map<String, dynamic>?> previewAgentSkillDependencies({
     required String agentSkillExtensionId,
     required String characterId,
     required List<dynamic> dependencies,
-  }) =>
-      _api.post<Map<String, dynamic>>(
+  }) async {
+    return _asMap(
+      await _api.post<dynamic>(
         '/api/mcp/agent-skills/dependencies/preview',
         data: {
           'agentSkillExtensionId': agentSkillExtensionId,
           'characterId': characterId,
           'dependencies': dependencies,
         },
-      );
+      ),
+    );
+  }
 
   Future<Map<String, dynamic>?> installAgentSkillDependencies(
     Map<String, dynamic> plan, {
     bool installOptional = false,
     bool confirmHttp = false,
     bool confirmStdio = false,
-  }) =>
-      _api.post<Map<String, dynamic>>(
+  }) async {
+    return _asMap(
+      await _api.post<dynamic>(
         '/api/mcp/agent-skills/dependencies/install',
         data: {
           'plan': plan,
@@ -211,32 +236,30 @@ class MCPService {
           'confirmStdio': confirmStdio,
           'enableServers': true,
         },
-      );
+      ),
+    );
+  }
 
-  Future<Map<String, dynamic>?> removeAgentSkillDependencies(String skillId) =>
-      _api.delete<Map<String, dynamic>>('/api/mcp/agent-skills/$skillId/dependencies');
+  Future<Map<String, dynamic>?> removeAgentSkillDependencies(String skillId) async {
+    return _asMap(
+      await _api.deleteWithResponse<dynamic>('/api/mcp/agent-skills/$skillId/dependencies'),
+    );
+  }
 
   Future<List<Map<String, dynamic>>> agentSkillDependencies(String skillId) async {
-    final resp = await _api.get<List<dynamic>>('/api/mcp/agent-skills/$skillId/dependencies');
-    if (resp == null) return const [];
-    return resp.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    return _asMapList(await _api.get<dynamic>('/api/mcp/agent-skills/$skillId/dependencies'));
   }
 
   Future<List<Map<String, dynamic>>> interactions() async {
-    final resp = await _api.get<List<dynamic>>('/api/mcp/interactions');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    return _asMapList(await _api.get<dynamic>('/api/mcp/interactions'));
   }
 
   Future<Map<String, dynamic>?> resolveInteraction(String id, Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/mcp/interactions/$id/resolve', data: data);
-    return resp;
+    return _asMap(await _api.post<dynamic>('/api/mcp/interactions/$id/resolve', data: data));
   }
 
   Future<List<Map<String, dynamic>>> operations() async {
-    final resp = await _api.get<List<dynamic>>('/api/mcp/operations');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    return _asMapList(await _api.get<dynamic>('/api/mcp/operations'));
   }
 }
 
@@ -627,67 +650,5 @@ class ProactiveService {
     final resp = await _api.get<List<dynamic>>('/api/proactive/history');
     if (resp == null) return [];
     return resp.map((e) => e as Map<String, dynamic>).toList();
-  }
-}
-
-class TemporalService {
-  final BackendServiceApi _api;
-
-  TemporalService(this._api);
-
-  Future<Map<String, dynamic>?> userProfile() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/temporal/profile');
-    return resp;
-  }
-
-  Future<bool> updateUserProfile(Map<String, dynamic> data) async {
-    await _api.put('/api/temporal/profile', data: data);
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> characterProfile(String characterId) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/temporal/characters/$characterId/profile');
-    return resp;
-  }
-
-  Future<bool> updateCharacterProfile(String characterId, Map<String, dynamic> data) async {
-    await _api.put('/api/temporal/characters/$characterId/profile', data: data);
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> snapshot() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/temporal/snapshot');
-    return resp;
-  }
-
-  Future<Map<String, dynamic>?> diagnostics() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/temporal/diagnostics');
-    return resp;
-  }
-
-  Future<List<Map<String, dynamic>>> anchors() async {
-    final resp = await _api.get<List<dynamic>>('/api/temporal/anchors');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
-  }
-
-  Future<Map<String, dynamic>?> createAnchor(Map<String, dynamic> data) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/temporal/anchors', data: data);
-    return resp;
-  }
-
-  Future<Map<String, dynamic>?> updateAnchor(String id, Map<String, dynamic> data) async {
-    final resp = await _api.put<Map<String, dynamic>>('/api/temporal/anchors/$id', data: data);
-    return resp;
-  }
-
-  Future<bool> deleteAnchor(String id) async {
-    await _api.delete('/api/temporal/anchors/$id');
-    return true;
-  }
-
-  Future<bool> recompute() async {
-    await _api.post('/api/temporal/recompute');
-    return true;
   }
 }

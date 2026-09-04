@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/providers.dart';
 import '../../../features/extensions/schema_ui/engine/action_dispatcher.dart';
+import '../../../features/extensions/schema_ui/engine/data_source_loader.dart';
 import '../../../features/extensions/schema_ui/models/schema_ui_types.dart';
 import '../../../features/extensions/schema_ui/renderer/schema_ui_renderer.dart';
 import '../mobile_extension_slot.dart';
@@ -39,11 +40,20 @@ class _SchemaProviderHostState extends ConsumerState<SchemaProviderHost> {
   bool _loading = true;
   int _loadEpoch = 0;
   late final SchemaUIBridgeController _bridge;
+  late final DataSourceLoader _dataSourceLoader;
 
   @override
   void initState() {
     super.initState();
     _bridge = SchemaUIBridgeController(ref.read(extensionServiceProvider));
+    _dataSourceLoader = DataSourceLoader(fetcher: (request) => _bridge.requestData(
+      request.dataSource.id,
+      contributionId: widget.entry.contributionId ?? '',
+      contractVersion: _providerContractVersion(widget.provider),
+      characterId: _characterId(widget.context),
+      conversationId: _conversationId(widget.context),
+      params: request.input,
+    ));
     unawaited(_load());
   }
 
@@ -159,6 +169,7 @@ class _SchemaProviderHostState extends ConsumerState<SchemaProviderHost> {
         context: {...widget.context, ...childContext},
         actions: widget.actions,
       ),
+      dataSourceLoader: _dataSourceLoader,
       onActionDispatch: _dispatchAction,
       onReloadSchema: _load,
     );

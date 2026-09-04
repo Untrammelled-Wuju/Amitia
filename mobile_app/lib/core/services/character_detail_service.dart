@@ -1,18 +1,19 @@
 import '../backend_transport/backend_service_api.dart';
-import '../models/character.dart';
 
 class CharacterDetailService {
   final BackendServiceApi _api;
 
   CharacterDetailService(this._api);
 
-  Future<CharacterDto?> test(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>(
+  Future<Map<String, dynamic>?> test(String id, String message) async {
+    final trimmed = message.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(message, 'message', '测试消息不能为空');
+    }
+    return _api.post<Map<String, dynamic>>(
       '/api/characters/$id/test',
-      data: {'message': '你好'},
+      data: {'message': trimmed},
     );
-    if (resp == null) return null;
-    return CharacterDto.fromJson(resp);
   }
 
   Future<List<Map<String, dynamic>>> packHistory() async {
@@ -60,9 +61,9 @@ class CharacterDetailService {
   }
 
   Future<Map<String, dynamic>?> uploadAvatar(String id, String filePath) async {
-    final resp = await _api.post<Map<String, dynamic>>(
+    final resp = await _api.postMultipart<Map<String, dynamic>>(
       '/api/characters/$id/avatar',
-      data: {'filePath': filePath},
+      files: {'avatar': [filePath]},
     );
     return resp;
   }

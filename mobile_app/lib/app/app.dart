@@ -16,6 +16,7 @@ import '../core/ui_runtime/ui_runtime_controller.dart';
 import '../core/ui_runtime/ui_theme.dart';
 import '../core/settings/appearance_preferences.dart';
 import '../features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart';
+import '../features/extensions/presentation/widgets/mcp_interaction_guard.dart';
 import 'theme/app_theme.dart';
 import 'theme/app_motion.dart';
 import 'theme/design_tokens.dart';
@@ -410,6 +411,7 @@ class AmitiaApp extends ConsumerWidget {
           child: Stack(
             children: [
               if (child case final Widget currentChild) currentChild,
+              const McpInteractionGuard(),
               const DebugLogOverlay(),
             ],
           ),

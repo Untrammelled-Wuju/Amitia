@@ -241,36 +241,66 @@ class ExtensionService {
         <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> invokeSchemaUIBridge(
+  Future<dynamic> invokeSchemaUIBridgeMessage(
     String sessionId, {
     required String contributionId,
     required String origin,
     required int contractVersion,
-    required String actionId,
-    Map<String, dynamic> input = const <String, dynamic>{},
+    required String token,
+    required int generation,
+    required String nonce,
+    required String method,
+    Map<String, dynamic> payload = const <String, dynamic>{},
   }) async {
     final response = await _api.post<Map<String, dynamic>>(
           '/api/extensions/ui/sessions/${Uri.encodeComponent(sessionId)}/bridge',
           data: {
-            'method': 'ui.action.invoke',
+            'method': method,
             'contributionId': contributionId,
             'origin': origin,
             'contractVersion': contractVersion,
-            'payload': {
-              'action_id': actionId,
-              'input': input,
-            },
+            'token': token,
+            'generation': generation,
+            'nonce': nonce,
+            'payload': payload,
           },
         ) ??
         <String, dynamic>{};
     if (response['ok'] == false) {
       final error = response['error'];
       final message = error is Map
-          ? (error['message'] ?? error['code'] ?? 'UI action failed').toString()
-          : (error ?? 'UI action failed').toString();
+          ? (error['message'] ?? error['code'] ?? 'UI bridge request failed').toString()
+          : (error ?? 'UI bridge request failed').toString();
       throw StateError(message);
     }
-    final result = response['result'];
+    return response['result'];
+  }
+
+  Future<Map<String, dynamic>> invokeSchemaUIBridge(
+    String sessionId, {
+    required String contributionId,
+    required String origin,
+    required int contractVersion,
+    required String token,
+    required int generation,
+    required String nonce,
+    required String actionId,
+    Map<String, dynamic> input = const <String, dynamic>{},
+  }) async {
+    final result = await invokeSchemaUIBridgeMessage(
+      sessionId,
+      contributionId: contributionId,
+      origin: origin,
+      contractVersion: contractVersion,
+      token: token,
+      generation: generation,
+      nonce: nonce,
+      method: 'ui.action.invoke',
+      payload: {
+        'action_id': actionId,
+        'input': input,
+      },
+    );
     if (result is Map<String, dynamic>) return result;
     if (result is Map) return result.cast<String, dynamic>();
     return <String, dynamic>{};

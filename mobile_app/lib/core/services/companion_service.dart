@@ -34,6 +34,17 @@ class CompanionService {
     return resp;
   }
 
+  Future<Map<String, dynamic>?> psycheSnapshot({required String characterId}) async {
+    final id = characterId.trim();
+    if (id.isEmpty) {
+      throw ArgumentError.value(characterId, 'characterId', 'characterId 不能为空');
+    }
+    return _api.get<Map<String, dynamic>>(
+      '/api/psyche/snapshot',
+      queryParameters: {'characterId': id},
+    );
+  }
+
   Future<Map<String, dynamic>?> schedule({String? characterId}) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/companion/schedule',
@@ -42,13 +53,21 @@ class CompanionService {
     return resp;
   }
 
-  Future<List<Map<String, dynamic>>> todaySchedule({String? characterId}) async {
-    final resp = await _api.get<List<dynamic>>(
+  Future<Map<String, dynamic>?> todaySchedule({String? characterId}) async {
+    return _api.get<Map<String, dynamic>>(
       '/api/companion/schedule/today',
       queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
     );
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> todayTimeline({String? characterId}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/companion/timeline/today',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
+    final events = resp?['events'];
+    if (events is! List) return const [];
+    return events.whereType<Map>().map((event) => Map<String, dynamic>.from(event)).toList(growable: false);
   }
 
   Future<bool> regenerateSchedule({String? characterId}) async {

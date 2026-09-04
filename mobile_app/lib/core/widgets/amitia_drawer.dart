@@ -742,6 +742,7 @@ class AmitiaCharacterCard extends StatelessWidget {
   final String identity;
   final String avatarInitial;
   final String avatarColor;
+  final String avatarUrl;
   final String mood;
   final String lastActive;
   final VoidCallback? onTap;
@@ -753,6 +754,7 @@ class AmitiaCharacterCard extends StatelessWidget {
     required this.identity,
     required this.avatarInitial,
     required this.avatarColor,
+    this.avatarUrl = '',
     required this.mood,
     required this.lastActive,
     this.onTap,
@@ -763,7 +765,8 @@ class AmitiaCharacterCard extends StatelessWidget {
     final color = Color(
       int.parse('FF${avatarColor.replaceAll('#', '')}', radix: 16),
     );
-    final isOnline = status == '在线';
+    final normalizedStatus = status.toLowerCase();
+    final isOnline = normalizedStatus == '在线' || normalizedStatus == 'enabled' || normalizedStatus == 'online';
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -780,20 +783,18 @@ class AmitiaCharacterCard extends StatelessWidget {
                 Container(
                   width: 52,
                   height: 52,
+                  clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     color: color,
                     shape: BoxShape.circle,
                   ),
-                  child: Center(
-                    child: Text(
-                      avatarInitial,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
+                  child: avatarUrl.trim().isNotEmpty
+                      ? Image.network(
+                          avatarUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _initialAvatar(),
+                        )
+                      : _initialAvatar(),
                 ),
                 if (isOnline)
                   Positioned(
@@ -844,6 +845,19 @@ class AmitiaCharacterCard extends StatelessWidget {
             ),
             Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _initialAvatar() {
+    return Center(
+      child: Text(
+        avatarInitial.isEmpty ? '?' : avatarInitial,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

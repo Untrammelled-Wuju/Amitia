@@ -18,6 +18,9 @@ class SchemaUIBridgeController {
   String _sessionId = '';
   String _sessionOrigin = '';
   int _sessionContractVersion = 0;
+  String _sessionToken = '';
+  int _sessionGeneration = 0;
+  int _nonceSequence = 0;
   String _sessionIdentity = '';
   Future<void>? _creatingSession;
   int _epoch = 0;
@@ -60,8 +63,44 @@ class SchemaUIBridgeController {
       contributionId: sourceContributionId,
       origin: _sessionOrigin,
       contractVersion: _sessionContractVersion,
+      token: _sessionToken,
+      generation: _sessionGeneration,
+      nonce: _nextNonce(),
       actionId: invocation.actionId,
       input: invocation.input ?? const <String, dynamic>{},
+    );
+  }
+
+  Future<dynamic> requestData(
+    String key, {
+    required String contributionId,
+    int contractVersion = 1,
+    String characterId = '',
+    String conversationId = '',
+    Map<String, dynamic> params = const <String, dynamic>{},
+  }) async {
+    if (_disposed) throw StateError('Schema UI bridge controller is disposed');
+    final normalizedKey = key.trim();
+    if (normalizedKey.isEmpty) throw StateError('Schema UI data source key is empty');
+    final sourceContributionId = contributionId.trim();
+    if (sourceContributionId.isEmpty) throw StateError('Schema UI data source does not reference a contribution');
+    await _ensureSession(
+      contributionId: sourceContributionId,
+      contractVersion: contractVersion,
+      characterId: characterId.trim(),
+      conversationId: conversationId.trim(),
+    );
+    if (_disposed || _sessionId.isEmpty) throw StateError('UI session unavailable');
+    return _service.invokeSchemaUIBridgeMessage(
+      _sessionId,
+      contributionId: sourceContributionId,
+      origin: _sessionOrigin,
+      contractVersion: _sessionContractVersion,
+      token: _sessionToken,
+      generation: _sessionGeneration,
+      nonce: _nextNonce(),
+      method: 'ui.data.request',
+      payload: {'key': normalizedKey, 'params': params},
     );
   }
 
@@ -114,6 +153,19 @@ class SchemaUIBridgeController {
           (response['contractVersion'] as num?)?.toInt() ??
           (response['contract_version'] as num?)?.toInt() ??
           contractVersion;
+      _sessionToken = (response['token'] ?? '').toString().trim();
+      _sessionGeneration =
+          (response['generation'] as num?)?.toInt() ?? 0;
+      if (_sessionToken.isEmpty) {
+        _sessionId = '';
+        _sessionOrigin = '';
+        _sessionContractVersion = 0;
+        _sessionToken = '';
+        _sessionGeneration = 0;
+        _sessionIdentity = '';
+        await _safeRevoke(id);
+        throw StateError('UI session response missing token');
+      }
     } finally {
       completer.complete();
       _creatingSession = null;
@@ -129,7 +181,15 @@ class SchemaUIBridgeController {
     _sessionId = '';
     _sessionOrigin = '';
     _sessionContractVersion = 0;
+    _sessionToken = '';
+    _sessionGeneration = 0;
     if (id.isNotEmpty) await _safeRevoke(id);
+  }
+
+  String _nextNonce() {
+    _nonceSequence++;
+    final now = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+    return '$now-${_nonceSequence.toRadixString(36)}-${identityHashCode(this).toRadixString(36)}';
   }
 
   Future<void> _safeRevoke(String id) async {

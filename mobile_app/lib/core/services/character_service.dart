@@ -6,8 +6,11 @@ class CharacterService {
 
   CharacterService(this._api);
 
-  Future<List<CharacterDto>> list() async {
-    final resp = await _api.get<List<dynamic>>('/api/characters');
+  Future<List<CharacterDto>> list({bool includeDisabled = false}) async {
+    final resp = await _api.get<List<dynamic>>(
+      '/api/characters',
+      queryParameters: {if (includeDisabled) 'includeDisabled': true},
+    );
     if (resp == null) return [];
     return resp
         .map((e) => CharacterDto.fromJson(e as Map<String, dynamic>))
@@ -59,7 +62,7 @@ class CharacterService {
     const fields = <String>[
       'voiceType', 'voiceSpeed', 'voicePitch', 'voiceVolume', 'customVoiceId',
       'identity', 'personality', 'avatar', 'speakingStyle', 'relationshipStyle',
-      'characterBase', 'boundaryRules', 'description', 'gender', 'pronoun',
+      'characterBase', 'boundaryRules', 'description', 'basePrompt', 'gender', 'pronoun',
       'selfReference', 'genderExpression', 'lifeIdentity', 'personalityConfig',
       'chatStyleConfig', 'sceneRules',
     ];
@@ -78,6 +81,8 @@ class CharacterService {
   Future<CharacterDto?> setDefault(String id) => update(id, const {'isDefault': true});
 
   Future<CharacterDto?> archive(String id) => update(id, const {'status': 'disabled'});
+
+  Future<CharacterDto?> restore(String id) => update(id, const {'status': 'enabled'});
 
   Future<bool> delete(String id) async {
     await _api.delete('/api/characters/$id');
