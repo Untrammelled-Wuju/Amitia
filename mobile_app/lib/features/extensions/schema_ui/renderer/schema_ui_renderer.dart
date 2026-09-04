@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart' hide ActionDispatcher;
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
@@ -54,6 +55,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   late Map<String, dynamic> _localState;
   final Map<String, dynamic> _storageState = {};
   final Map<String, DataSourceResult> _dataSources = {};
+  final Set<String> _dismissedNodeIds = <String>{};
 
   @override
   void initState() {
@@ -164,7 +166,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       if (mounted && _dataSources.isNotEmpty) setState(_dataSources.clear);
       return;
     }
-    final sources = widget.document.dataSources.where(loader.requiresFetch).toList(growable: false);
+    final candidates = widget.document.dataSources.where(loader.requiresFetch).toList(growable: false);
+    final fetchLimit = widget.document.performanceBudget?.maxDataFetchCount ?? 0;
+    final sources = fetchLimit > 0
+        ? candidates.take(fetchLimit).toList(growable: false)
+        : candidates;
     if (sources.isEmpty) return;
     if (mounted) {
       setState(() {
@@ -360,9 +366,41 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     current[parts.last] = value;
   }
 
+  int _countNodes(SchemaUINode node) {
+    var total = 1;
+    for (final child in node.children) {
+      total += _countNodes(child);
+    }
+    return total;
+  }
+
+  int _documentNodeCount(SchemaUIDocument document) {
+    var total = 0;
+    for (final node in document.children) {
+      total += _countNodes(node);
+    }
+    return total;
+  }
+
   @override
   Widget build(BuildContext context) {
     final doc = widget.document;
+    if (doc.schemaVersion != 'schema-ui/1') {
+      return _buildErrorWidget(
+        context,
+        'Schema UI 版本不兼容：期望 schema-ui/1，实际 ${doc.schemaVersion}',
+      );
+    }
+    final nodeLimit = doc.performanceBudget?.maxNodeCount ?? 0;
+    if (nodeLimit > 0) {
+      final nodeCount = _documentNodeCount(doc);
+      if (nodeCount > nodeLimit) {
+        return _buildErrorWidget(
+          context,
+          'Schema UI 节点数量超出性能预算：$nodeCount > $nodeLimit',
+        );
+      }
+    }
     Widget content = Builder(
       builder: (context) {
         if (doc.children.isEmpty) return _buildEmptyState(context);
@@ -417,6 +455,42 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final parts = normalized.split('-');
     if (parts.length == 1) return Locale(parts.first);
     return Locale(parts.first, parts[1]);
+  }
+
+  Future<void> _handleActions(
+    List<SchemaUIActionBinding> actions, {
+    String nodeId = '',
+  }) async {
+    for (final action in actions) {
+      await _handleAction(action, nodeId: nodeId);
+      if (!mounted) return;
+    }
+  }
+
+  Future<void> _openResourceHref(String href) async {
+    final uri = Uri.tryParse(href.trim());
+    if (uri == null || !const {'http', 'https'}.contains(uri.scheme.toLowerCase())) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('仅支持打开 http/https 资源链接')),
+        );
+      }
+      return;
+    }
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.disabled)
+      ..loadRequest(uri);
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (pageContext) => Scaffold(
+          appBar: AppBar(
+            title: Text(uri.host.isEmpty ? '资源链接' : uri.host),
+          ),
+          body: SafeArea(child: WebViewWidget(controller: controller)),
+        ),
+      ),
+    );
   }
 
   Widget _buildEmptyState(BuildContext context) {
@@ -512,12 +586,19 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   SchemaUINode _withResolvedBindings(SchemaUINode node) {
-    if (node.bindings.isEmpty) return node;
+    if (node.bindings.isEmpty && node.dataSource == null) return node;
     final props = <String, dynamic>{...?node.props};
     for (final binding in node.bindings) {
       final value = _bindingEngine.resolveBinding(binding, _buildContext());
       if (value != null || binding.defaultValue != null) {
         props[binding.path] = value;
+      }
+    }
+    final dataSource = node.dataSource;
+    if (dataSource != null) {
+      final value = _bindingEngine.resolveBinding(dataSource, _buildContext());
+      if (value != null || dataSource.defaultValue != null) {
+        props['__boundValue'] = value;
       }
     }
     return SchemaUINode(
@@ -527,8 +608,40 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       bindings: node.bindings,
       actions: node.actions,
       visibility: node.visibility,
+      disabledWhen: node.disabledWhen,
+      dataSource: node.dataSource,
       children: node.children,
     );
+  }
+
+  dynamic _resolvedNodeValue(SchemaUINode node, [SchemaUIBinding? binding]) {
+    final activeBinding = binding ?? (node.bindings.isNotEmpty ? node.bindings.first : null);
+    return _bindingEngine.resolveBinding(activeBinding, _buildContext()) ??
+        node.props?['__boundValue'] ??
+        node.props?['value'];
+  }
+
+  bool _isNodeDisabled(SchemaUINode node) {
+    if (node.props?['disabled'] == true) return true;
+    return node.disabledWhen.isNotEmpty &&
+        evaluateVisibility(node.disabledWhen, _buildContext());
+  }
+
+  double _dimension(dynamic value, double fallback) {
+    if (value is num) return value.toDouble();
+    final text = value?.toString().trim().replaceAll(RegExp(r'px$'), '') ?? '';
+    return double.tryParse(text) ?? fallback;
+  }
+
+  Color? _schemaColor(dynamic raw) {
+    var value = raw?.toString().trim() ?? '';
+    if (!value.startsWith('#')) return null;
+    value = value.substring(1);
+    if (value.length == 3) value = value.split('').map((c) => '$c$c').join();
+    if (value.length == 6) value = 'FF$value';
+    if (value.length != 8) return null;
+    final parsed = int.tryParse(value, radix: 16);
+    return parsed == null ? null : Color(parsed);
   }
 
   Widget _buildExtensionSlot(BuildContext context, SchemaUINode node) {
@@ -540,42 +653,83 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final props = node.props ?? const <String, dynamic>{};
     final dispatchKey = props['dispatchKey'] ?? props['dispatch_key'] ?? props['entryKey'] ?? props['entry_key'];
     final dispatchOnly = props['dispatchOnly'] ?? props['dispatch_only'] ?? props['only'] ?? props['cellId'] ?? props['cell_id'];
+    final fallback = props['fallback']?.toString().trim();
+    final layout = props['layout']?.toString().trim();
+    final surfaceRole = (props['surfaceRole'] ?? props['surface_role'])?.toString().trim();
     return builder(slotId, contributionId, {
       ...?widget.initialContext,
       'schemaNodeId': node.id,
       if (dispatchKey != null) 'dispatchKey': dispatchKey,
       if (dispatchOnly != null) 'dispatchOnly': dispatchOnly,
+      if (fallback != null && fallback.isNotEmpty) 'slotFallback': fallback,
+      if (layout != null && layout.isNotEmpty) 'slotLayout': layout,
+      if (surfaceRole != null && surfaceRole.isNotEmpty) 'surfaceRole': surfaceRole,
     });
   }
 
   Widget _buildSection(BuildContext context, SchemaUINode node, int depth) {
-    final title = node.props?['title'] as String?;
-    return Column(
+    final title = node.props?['title']?.toString().trim() ?? '';
+    final subtitle = node.props?['subtitle']?.toString().trim() ?? '';
+    final bordered = node.props?['bordered'] != false;
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (title != null) ...[
+        if (title.isNotEmpty) ...[
           Text(title, style: AppTypography.sectionTitle(context)),
+          if (subtitle.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(subtitle, style: AppTypography.caption(context)),
+          ],
           SizedBox(height: AppSpacing.sm),
         ],
         ...node.children.map((child) => Padding(
-          padding: EdgeInsets.only(bottom: AppSpacing.componentGap),
-          child: _buildNode(context, child, depth + 1),
-        )),
+              padding: EdgeInsets.only(bottom: AppSpacing.componentGap),
+              child: _buildNode(context, child, depth + 1),
+            )),
       ],
+    );
+    return AmitiaCard(
+      border: bordered ? null : Border.all(color: Colors.transparent, width: 0),
+      child: content,
     );
   }
 
   Widget _buildStack(BuildContext context, SchemaUINode node, int depth) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
-    );
+    final gap = _dimension(node.props?['gap'], AppSpacing.sm);
+    final alignment = switch (node.props?['align']?.toString().trim().toLowerCase()) {
+      'center' => CrossAxisAlignment.center,
+      'end' || 'flex-end' => CrossAxisAlignment.end,
+      'stretch' => CrossAxisAlignment.stretch,
+      _ => CrossAxisAlignment.start,
+    };
+    final children = <Widget>[];
+    for (var index = 0; index < node.children.length; index++) {
+      if (index > 0 && gap > 0) children.add(SizedBox(height: gap));
+      children.add(_buildNode(context, node.children[index], depth + 1));
+    }
+    return Column(crossAxisAlignment: alignment, children: children);
   }
 
   Widget _buildRow(BuildContext context, SchemaUINode node, int depth) {
+    final gap = _dimension(node.props?['gap'], AppSpacing.sm);
+    final alignment = switch (node.props?['justify']?.toString().trim().toLowerCase()) {
+      'center' => WrapAlignment.center,
+      'end' || 'flex-end' => WrapAlignment.end,
+      'space-between' || 'spacebetween' => WrapAlignment.spaceBetween,
+      'space-around' || 'spacearound' => WrapAlignment.spaceAround,
+      'space-evenly' || 'spaceevenly' => WrapAlignment.spaceEvenly,
+      _ => WrapAlignment.start,
+    };
+    final crossAlignment = switch (node.props?['align']?.toString().trim().toLowerCase()) {
+      'center' => WrapCrossAlignment.center,
+      'end' || 'flex-end' => WrapCrossAlignment.end,
+      _ => WrapCrossAlignment.start,
+    };
     return Wrap(
-      spacing: AppSpacing.sm,
-      runSpacing: AppSpacing.sm,
+      spacing: gap,
+      runSpacing: gap,
+      alignment: alignment,
+      crossAxisAlignment: crossAlignment,
       children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
     );
   }
@@ -599,15 +753,51 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     );
   }
 
+  int _gridColumnCount(SchemaUINode node, double availableWidth, double gap) {
+    final rawColumns = node.props?['columns'];
+    final explicit = rawColumns is num
+        ? rawColumns.toInt()
+        : int.tryParse(rawColumns?.toString() ?? '');
+    if (explicit != null && explicit > 0) return explicit.clamp(1, 12).toInt();
+
+    final template = node.props?['columnsTemplate']?.toString().trim() ?? '';
+    if (template.isNotEmpty) {
+      final repeat = RegExp(r'repeat\(\s*(\d+)\s*,', caseSensitive: false).firstMatch(template);
+      final repeated = int.tryParse(repeat?.group(1) ?? '');
+      if (repeated != null && repeated > 0) return repeated.clamp(1, 12).toInt();
+
+      final minmax = RegExp(r'minmax\(\s*([0-9]+(?:\.[0-9]+)?)px', caseSensitive: false).firstMatch(template);
+      final minWidth = double.tryParse(minmax?.group(1) ?? '');
+      if (minWidth != null && minWidth > 0 && availableWidth.isFinite && availableWidth > 0) {
+        return ((availableWidth + gap) / (minWidth + gap)).floor().clamp(1, 12).toInt();
+      }
+
+      final fractionalTracks = RegExp(r'(?:(?:^|\s))(?:[0-9]+(?:\.[0-9]+)?)fr(?=\s|$)', caseSensitive: false)
+          .allMatches(template)
+          .length;
+      if (fractionalTracks > 0) return fractionalTracks.clamp(1, 12).toInt();
+    }
+
+    if (availableWidth.isFinite && availableWidth > 0) {
+      return ((availableWidth + gap) / (220 + gap)).floor().clamp(1, 12).toInt();
+    }
+    return 2;
+  }
+
   Widget _buildGrid(BuildContext context, SchemaUINode node, int depth) {
-    final columns = (node.props?['columns'] as int?) ?? 2;
-    return GridView.count(
-      crossAxisCount: columns,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: AppSpacing.sm,
-      mainAxisSpacing: AppSpacing.sm,
-      children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
+    final gap = _dimension(node.props?['gap'], AppSpacing.sm);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = _gridColumnCount(node, constraints.maxWidth, gap);
+        return GridView.count(
+          crossAxisCount: columns,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: gap,
+          mainAxisSpacing: gap,
+          children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
+        );
+      },
     );
   }
 
@@ -615,65 +805,68 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final tabs = node.children.where((c) => c.type == SchemaUI.nodeTabItem).toList();
     if (tabs.isEmpty) return const SizedBox.shrink();
     final minHeight = (node.props?['minHeight'] as num?)?.toDouble();
-    final tabsWidget = DefaultTabController(
-      length: tabs.length,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TabBar(
-            isScrollable: true,
-            tabs: tabs.map((t) {
-              final label = t.props?['label'] as String? ?? t.props?['title'] as String? ?? '';
-              return Tab(text: label);
-            }).toList(),
+    return _SchemaTabsView(
+      tabs: tabs,
+      position: node.props?['position']?.toString() ?? 'top',
+      variant: node.props?['variant']?.toString() ?? 'line',
+      minHeight: minHeight,
+      isDisabled: _isNodeDisabled,
+      contentBuilder: (tab) {
+        if (tab.children.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: tab.children.map((child) => _buildNode(context, child, 0)).toList(),
           ),
-          if (minHeight != null)
-            SizedBox(
-              height: minHeight,
-              child: _buildTabViews(context, tabs),
-            )
-          else
-            _buildTabViews(context, tabs),
-        ],
-      ),
-    );
-    return tabsWidget;
-  }
-
-  Widget _buildTabViews(BuildContext context, List<SchemaUINode> tabs) {
-    return Flexible(
-      child: TabBarView(
-        children: tabs.map((t) {
-          if (t.children.isEmpty) return const SizedBox.shrink();
-          return SingleChildScrollView(
-            padding: EdgeInsets.all(AppSpacing.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: t.children.map((child) => _buildNode(context, child, 0)).toList(),
-            ),
-          );
-        }).toList(),
-      ),
+        );
+      },
     );
   }
 
   Widget _buildCard(BuildContext context, SchemaUINode node) {
-    return AmitiaCard(
+    final title = node.props?['title']?.toString().trim() ?? '';
+    final bordered = node.props?['bordered'] != false;
+    final shadow = node.props?['shadow']?.toString().trim().toLowerCase() ?? 'hover';
+    Widget card = AmitiaCard(
+      border: bordered ? null : Border.all(color: Colors.transparent, width: 0),
       child: Padding(
         padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: node.children.map((child) => Padding(
-            padding: EdgeInsets.only(bottom: AppSpacing.sm),
-            child: _buildNode(context, child, 0),
-          )).toList(),
+          children: [
+            if (title.isNotEmpty) ...[
+              Text(title, style: AppTypography.cardTitle(context)),
+              SizedBox(height: AppSpacing.sm),
+            ],
+            ...node.children.map((child) => Padding(
+                  padding: EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: _buildNode(context, child, 0),
+                )),
+          ],
         ),
       ),
     );
+    if (shadow != 'never' && shadow != 'none') {
+      card = DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: AppRadius.brMedium,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: shadow == 'always' ? 0.12 : 0.07),
+              blurRadius: shadow == 'always' ? 14 : 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: card,
+      );
+    }
+    return card;
   }
 
   Widget _buildText(BuildContext context, SchemaUINode node) {
-    final text = _resolveStringProp(node, 'text', '');
+    final text = (node.props?['text'] ?? node.props?['content'] ?? _resolvedNodeValue(node) ?? '').toString();
     final style = node.props?['variant'] as String? ?? 'body';
     final styleResolved = _textStyle(context, style);
     return Text(text, style: styleResolved);
@@ -695,51 +888,187 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildMarkdown(BuildContext context, SchemaUINode node) {
-    final source = _resolveStringProp(node, 'source', '');
-    final lines = source.split('\n');
-    final spans = <InlineSpan>[];
-    for (final line in lines) {
-      if (line.startsWith('## ')) {
-        spans.add(TextSpan(text: '${line.substring(3)}\n', style: AppTypography.sectionTitle(context).copyWith(fontSize: 18)));
-      } else if (line.startsWith('# ')) {
-        spans.add(TextSpan(text: '${line.substring(2)}\n', style: AppTypography.sectionTitle(context)));
-      } else if (line.startsWith('- ') || line.startsWith('* ')) {
-        spans.add(TextSpan(text: '• ${line.substring(2)}\n', style: AppTypography.bodySmall(context)));
-      } else {
-        spans.add(_parseInline(line, AppTypography.bodySmall(context)));
-        spans.add(const TextSpan(text: '\n'));
-      }
+    final source = (node.props?['content'] ?? node.props?['text'] ?? node.props?['source'] ?? '').toString();
+    final lines = source.split(RegExp(r'\r?\n'));
+    final widgets = <Widget>[];
+    final codeLines = <String>[];
+    var inCode = false;
+
+    void flushCode() {
+      if (codeLines.isEmpty) return;
+      widgets.add(_markdownCodeBlock(context, codeLines.join('\n')));
+      codeLines.clear();
     }
-    return RichText(text: TextSpan(children: spans, style: AppTypography.bodySmall(context)));
+
+    for (final rawLine in lines) {
+      final line = rawLine;
+      if (RegExp(r'^\s*```').hasMatch(line)) {
+        if (inCode) flushCode();
+        inCode = !inCode;
+        continue;
+      }
+      if (inCode) {
+        codeLines.add(line);
+        continue;
+      }
+      final heading = RegExp(r'^(#{1,6})\s+(.*)$').firstMatch(line);
+      if (heading != null) {
+        final level = heading.group(1)!.length;
+        final size = switch (level) { 1 => 22.0, 2 => 19.0, 3 => 17.0, _ => 15.0 };
+        widgets.add(_markdownInlineText(
+          context,
+          heading.group(2) ?? '',
+          AppTypography.sectionTitle(context).copyWith(fontSize: size),
+        ));
+        continue;
+      }
+      final unordered = RegExp(r'^[-*+]\s+(.*)$').firstMatch(line);
+      if (unordered != null) {
+        widgets.add(_markdownListRow(context, '•', unordered.group(1) ?? ''));
+        continue;
+      }
+      final ordered = RegExp(r'^(\d+)\.\s+(.*)$').firstMatch(line);
+      if (ordered != null) {
+        widgets.add(_markdownListRow(context, '${ordered.group(1)}.', ordered.group(2) ?? ''));
+        continue;
+      }
+      final quote = RegExp(r'^>\s?(.*)$').firstMatch(line);
+      if (quote != null) {
+        widgets.add(Container(
+          width: double.infinity,
+          padding: EdgeInsets.only(left: AppSpacing.sm, top: 4, bottom: 4),
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: context.borderPrimary, width: 3)),
+          ),
+          child: _markdownInlineText(
+            context,
+            quote.group(1) ?? '',
+            AppTypography.bodySmall(context).copyWith(color: context.textSecondary),
+          ),
+        ));
+        continue;
+      }
+      if (RegExp(r'^(-{3,}|\*{3,}|_{3,})$').hasMatch(line.trim())) {
+        widgets.add(const Divider(height: 16));
+        continue;
+      }
+      if (line.trim().isEmpty) {
+        widgets.add(SizedBox(height: AppSpacing.sm));
+        continue;
+      }
+      widgets.add(_markdownInlineText(context, line, AppTypography.bodySmall(context)));
+    }
+    if (inCode || codeLines.isNotEmpty) flushCode();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets
+          .map((item) => Padding(
+                padding: EdgeInsets.only(bottom: AppSpacing.tightGap),
+                child: item,
+              ))
+          .toList(growable: false),
+    );
   }
 
-  TextSpan _parseInline(String text, TextStyle baseStyle) {
+  Widget _markdownListRow(BuildContext context, String marker, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 28, child: Text(marker, style: AppTypography.bodySmall(context))),
+        Expanded(child: _markdownInlineText(context, text, AppTypography.bodySmall(context))),
+      ],
+    );
+  }
+
+  Widget _markdownCodeBlock(BuildContext context, String code) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: context.surfaceSecondary,
+        borderRadius: AppRadius.brSmall,
+        border: Border.all(color: context.borderPrimary, width: 0.5),
+      ),
+      child: SelectableText(
+        code,
+        style: AppTypography.bodySmall(context).copyWith(fontFamily: 'monospace'),
+      ),
+    );
+  }
+
+  Widget _markdownInlineText(BuildContext context, String text, TextStyle baseStyle) {
+    return Text.rich(
+      TextSpan(children: _parseInlineSpans(context, text, baseStyle), style: baseStyle),
+      softWrap: true,
+    );
+  }
+
+  List<InlineSpan> _parseInlineSpans(BuildContext context, String text, TextStyle baseStyle) {
     final spans = <InlineSpan>[];
-    final regex = RegExp(r'\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`');
-    int lastEnd = 0;
+    final regex = RegExp(
+      r'`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_|\[([^\]]+)\]\((https?://[^)]+)\)|(https?://[^\s]+)',
+      caseSensitive: false,
+    );
+    var lastEnd = 0;
     for (final match in regex.allMatches(text)) {
       if (match.start > lastEnd) {
         spans.add(TextSpan(text: text.substring(lastEnd, match.start), style: baseStyle));
       }
       if (match.group(1) != null) {
-        spans.add(TextSpan(text: match.group(1), style: baseStyle.copyWith(fontWeight: FontWeight.bold)));
-      } else if (match.group(2) != null) {
-        spans.add(TextSpan(text: match.group(2), style: baseStyle.copyWith(fontStyle: FontStyle.italic)));
-      } else if (match.group(3) != null) {
-        spans.add(TextSpan(text: match.group(3), style: baseStyle.copyWith(fontFamily: 'monospace', backgroundColor: Colors.grey.withOpacity(0.15))));
+        spans.add(TextSpan(
+          text: match.group(1),
+          style: baseStyle.copyWith(fontFamily: 'monospace', backgroundColor: context.surfaceSecondary),
+        ));
+      } else if (match.group(2) != null || match.group(3) != null) {
+        spans.add(TextSpan(text: match.group(2) ?? match.group(3), style: baseStyle.copyWith(fontWeight: FontWeight.bold)));
+      } else if (match.group(4) != null || match.group(5) != null) {
+        spans.add(TextSpan(text: match.group(4) ?? match.group(5), style: baseStyle.copyWith(fontStyle: FontStyle.italic)));
+      } else {
+        final label = match.group(6) ?? match.group(8) ?? '';
+        final href = match.group(7) ?? match.group(8) ?? '';
+        spans.add(WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: InkWell(
+            onTap: href.isEmpty ? null : () => _openResourceHref(href),
+            child: Text(
+              label,
+              style: baseStyle.copyWith(
+                color: context.accentPrimary,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ));
       }
       lastEnd = match.end;
     }
     if (lastEnd < text.length) {
       spans.add(TextSpan(text: text.substring(lastEnd), style: baseStyle));
     }
-    return TextSpan(children: spans);
+    return spans;
   }
 
   Widget _buildBadge(BuildContext context, SchemaUINode node) {
-    final text = _resolveStringProp(node, 'text', '');
-    final badgeType = _badgeType(node.props?['variant'] as String?);
-    return AmitiaStatusBadge(label: text, type: badgeType);
+    if (_dismissedNodeIds.contains(node.id)) return const SizedBox.shrink();
+    final text = (node.props?['text'] ?? node.props?['label'] ?? _resolvedNodeValue(node) ?? '').toString();
+    final badgeType = _badgeType((node.props?['variant'] ?? node.props?['type'])?.toString());
+    final badge = AmitiaStatusBadge(label: text, type: badgeType);
+    if (node.props?['closable'] != true) return badge;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        badge,
+        const SizedBox(width: 2),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          tooltip: '关闭',
+          onPressed: () => setState(() => _dismissedNodeIds.add(node.id)),
+          icon: const Icon(Icons.close, size: 14),
+        ),
+      ],
+    );
   }
 
   BadgeType _badgeType(String? variant) {
@@ -754,13 +1083,35 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildDivider(BuildContext context, SchemaUINode node) {
-    return const Divider(height: 1);
+    final direction = node.props?['direction']?.toString().trim().toLowerCase() ?? 'horizontal';
+    final text = node.props?['text']?.toString().trim() ?? '';
+    if (direction == 'vertical') {
+      return SizedBox(
+        height: _dimension(node.props?['height'], 24),
+        child: const VerticalDivider(width: 1),
+      );
+    }
+    if (text.isEmpty) return const Divider(height: 1);
+    final position = node.props?['position']?.toString().trim().toLowerCase() ?? 'center';
+    final leadingFlex = position == 'left' || position == 'start' ? 0 : 1;
+    final trailingFlex = position == 'right' || position == 'end' ? 0 : 1;
+    return Row(
+      children: [
+        if (leadingFlex > 0) const Expanded(child: Divider(height: 1)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(text, style: AppTypography.caption(context)),
+        ),
+        if (trailingFlex > 0) const Expanded(child: Divider(height: 1)),
+      ],
+    );
   }
 
   Widget _buildIcon(BuildContext context, SchemaUINode node) {
-    final iconName = node.props?['name'] as String? ?? 'help_outline';
-    final size = ((node.props?['size'] as num?) ?? 24).toDouble();
-    return Icon(_mapIconData(iconName), size: size, color: context.accentPrimary);
+    final iconName = (node.props?['name'] ?? node.props?['symbol'] ?? node.props?['label'] ?? 'help_outline').toString();
+    final size = _dimension(node.props?['size'], 24);
+    final color = _schemaColor(node.props?['color']) ?? context.accentPrimary;
+    return Icon(_mapIconData(iconName), size: size, color: color);
   }
 
   IconData _mapIconData(String name) {
@@ -778,11 +1129,16 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildImage(BuildContext context, SchemaUINode node) {
-    final src = node.props?['src'] as String?;
-    final alt = node.props?['alt'] as String? ?? '';
-    if (src == null || src.isEmpty) {
+    final src = node.props?['src']?.toString().trim() ?? '';
+    final alt = node.props?['alt']?.toString() ?? '';
+    final width = (node.props?['width'] as num?)?.toDouble();
+    final height = (node.props?['height'] as num?)?.toDouble();
+    final preview = node.props?['preview'] == true;
+    final fit = _boxFit(node.props?['fit']?.toString());
+    if (src.isEmpty) {
       return Container(
-        height: 120,
+        width: width,
+        height: height ?? 80,
         decoration: BoxDecoration(
           color: context.surfaceSecondary,
           borderRadius: AppRadius.brSmall,
@@ -790,20 +1146,134 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         child: Center(child: Icon(Icons.image_outlined, color: context.textTertiary)),
       );
     }
-    return ClipRRect(
+
+    final image = ClipRRect(
       borderRadius: AppRadius.brSmall,
-      child: Image.network(
+      child: _schemaImage(
+        context,
         src,
-        height: 120,
-        fit: BoxFit.cover,
-        cacheWidth: 240,
-        errorBuilder: (_, __, ___) => Container(
-          height: 120,
-          color: context.surfaceSecondary,
-          child: Center(child: Icon(Icons.broken_image_outlined, color: context.textTertiary)),
-        ),
+        width: width,
+        height: height,
+        fit: fit,
+        alt: alt,
       ),
     );
+    if (!preview) return image;
+    return InkWell(
+      borderRadius: AppRadius.brSmall,
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (dialogContext) => Dialog(
+          insetPadding: const EdgeInsets.all(20),
+          child: Stack(
+            children: [
+              InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5,
+                child: _schemaImage(
+                  dialogContext,
+                  src,
+                  fit: BoxFit.contain,
+                  alt: alt,
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton.filledTonal(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      child: image,
+    );
+  }
+
+  Widget _schemaImage(
+    BuildContext context,
+    String src, {
+    double? width,
+    double? height,
+    required BoxFit fit,
+    required String alt,
+  }) {
+    Widget error() => Container(
+          width: width,
+          height: height ?? 80,
+          color: context.surfaceSecondary,
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.broken_image_outlined, color: context.textTertiary),
+              if (alt.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(alt, style: AppTypography.caption(context), textAlign: TextAlign.center),
+              ],
+            ],
+          ),
+        );
+
+    if (src.startsWith('data:image/')) {
+      final comma = src.indexOf(',');
+      if (comma > 0) {
+        try {
+          final bytes = base64Decode(src.substring(comma + 1));
+          return Image.memory(
+            bytes,
+            width: width,
+            height: height,
+            fit: fit,
+            errorBuilder: (_, __, ___) => error(),
+          );
+        } catch (_) {
+          return error();
+        }
+      }
+    }
+    return Image.network(
+      src,
+      width: width,
+      height: height,
+      fit: fit,
+      errorBuilder: (_, __, ___) => error(),
+      loadingBuilder: (context, child, progress) => progress == null
+          ? child
+          : Container(
+              width: width,
+              height: height ?? 80,
+              color: context.surfaceSecondary,
+              alignment: Alignment.center,
+              child: const CircularProgressIndicator(strokeWidth: 2),
+            ),
+    );
+  }
+
+  BoxFit _boxFit(String? value) {
+    switch (value?.trim().toLowerCase()) {
+      case 'contain':
+        return BoxFit.contain;
+      case 'fill':
+        return BoxFit.fill;
+      case 'none':
+        return BoxFit.none;
+      case 'scale-down':
+      case 'scaledown':
+        return BoxFit.scaleDown;
+      case 'fit-width':
+      case 'fitwidth':
+        return BoxFit.fitWidth;
+      case 'fit-height':
+      case 'fitheight':
+        return BoxFit.fitHeight;
+      case 'cover':
+      default:
+        return BoxFit.cover;
+    }
   }
 
   bool _isEditableBinding(SchemaUIBinding? binding) {
@@ -817,37 +1287,65 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildField(BuildContext context, SchemaUINode node) {
     final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
-    final placeholder = node.props?['placeholder']?.toString() ?? '';
+    final required = node.props?['required'] == true;
+    final error = node.props?['error']?.toString().trim() ?? '';
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
-    if (node.children.isNotEmpty && binding == null) {
+    final disabled = _isNodeDisabled(node) || !_isEditableBinding(binding);
+    if (node.children.isNotEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (label.isNotEmpty) ...[
-            Text(label, style: AppTypography.label(context)),
+            Text(required ? '$label *' : label, style: AppTypography.label(context)),
             const SizedBox(height: 4),
           ],
           ...node.children.map((child) => _buildNode(context, child, 0)),
+          if (error.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(error, style: AppTypography.caption(context).copyWith(color: context.error)),
+          ],
         ],
       );
     }
-    final value = _bindingEngine.resolveBinding(binding, _buildContext()) ?? node.props?['value'];
+    final value = _resolvedNodeValue(node, binding);
+    final text = value?.toString() ?? '';
     final rows = ((node.props?['rows'] as num?) ?? 1).toInt().clamp(1, 20);
-    final multiline = node.props?['variant'] == 'textarea' || rows > 1;
+    final variant = node.props?['variant']?.toString().trim().toLowerCase() ?? 'text';
+    final multiline = variant == 'textarea' || rows > 1;
+    final rawMaxLength = node.props?['maxlength'] ?? node.props?['maxLength'];
+    final maxLength = rawMaxLength is num ? rawMaxLength.toInt() : int.tryParse(rawMaxLength?.toString() ?? '');
+    final clearable = node.props?['clearable'] == true;
+    final keyboardType = switch (variant) {
+      'number' => TextInputType.number,
+      'email' || 'emailaddress' => TextInputType.emailAddress,
+      'url' => TextInputType.url,
+      _ => multiline ? TextInputType.multiline : TextInputType.text,
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label.isNotEmpty) ...[
-          Text(label, style: AppTypography.label(context)),
+          Text(required ? '$label *' : label, style: AppTypography.label(context)),
           const SizedBox(height: 4),
         ],
         AmitiaTextField(
-          key: ValueKey('${node.id}:${value ?? ''}'),
-          hintText: placeholder,
-          controller: TextEditingController(text: value?.toString() ?? ''),
-          readOnly: !_isEditableBinding(binding) || node.props?['disabled'] == true,
+          key: ValueKey('${node.id}:$text'),
+          hintText: node.props?['placeholder']?.toString() ?? '',
+          controller: TextEditingController(text: text),
+          readOnly: disabled,
+          obscureText: variant == 'password',
+          keyboardType: keyboardType,
           maxLines: multiline ? rows : 1,
-          onChanged: (v) => _updateBinding(binding, v),
+          maxLength: maxLength != null && maxLength > 0 ? maxLength : null,
+          showCounter: node.props?['showWordLimit'] == true,
+          errorText: error.isEmpty ? null : error,
+          suffixIcon: clearable && text.isNotEmpty && !disabled
+              ? IconButton(
+                  onPressed: () => _updateBinding(binding, ''),
+                  icon: const Icon(Icons.close, size: 18),
+                )
+              : null,
+          onChanged: disabled ? null : (v) => _updateBinding(binding, v),
         ),
       ],
     );
@@ -856,18 +1354,42 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Widget _buildSelect(BuildContext context, SchemaUINode node) {
     final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
-    final currentValue = (_bindingEngine.resolveBinding(binding, _buildContext()) ?? node.props?['value'])?.toString();
-    final options = (node.props?['options'] as List?)?.map((e) {
-          if (e is Map) {
-            return DropdownMenuItem<String>(
-              value: e['value']?.toString() ?? '',
-              child: Text((e['label'] ?? e['text'] ?? e['value'] ?? '').toString()),
-            );
-          }
-          return DropdownMenuItem<String>(value: e.toString(), child: Text(e.toString()));
-        }).toList() ??
-        <DropdownMenuItem<String>>[];
-    final optionValues = options.map((item) => item.value).toSet();
+    final rawValue = _resolvedNodeValue(node, binding);
+    final multiple = node.props?['multiple'] == true;
+    final clearable = node.props?['clearable'] == true;
+    final filterable = node.props?['filterable'] == true;
+    final disabled = _isNodeDisabled(node) || !_isEditableBinding(binding);
+    final rawOptions = node.props?['options'];
+    final options = <_SchemaSelectOption>[];
+    if (rawOptions is List) {
+      for (final raw in rawOptions) {
+        if (raw is Map) {
+          final value = raw.containsKey('value') ? raw['value'] : (raw['id'] ?? raw['label'] ?? raw['text']);
+          options.add(
+            _SchemaSelectOption(
+              value: value,
+              label: (raw['label'] ?? raw['text'] ?? value ?? '').toString(),
+            ),
+          );
+        } else {
+          options.add(_SchemaSelectOption(value: raw, label: raw?.toString() ?? ''));
+        }
+      }
+    }
+
+    final selectedValues = multiple
+        ? (rawValue is List ? List<dynamic>.from(rawValue) : <dynamic>[])
+        : <dynamic>[if (rawValue != null) rawValue];
+    final selectedLabels = options
+        .where((option) => selectedValues.any((value) => value == option.value))
+        .map((option) => option.label)
+        .where((item) => item.isNotEmpty)
+        .toList();
+    final placeholder = node.props?['placeholder']?.toString() ?? '';
+    final displayText = selectedLabels.isNotEmpty
+        ? selectedLabels.join(multiple ? '、' : '')
+        : (rawValue != null && !multiple ? rawValue.toString() : '');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -875,61 +1397,245 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           Text(label, style: AppTypography.label(context)),
           const SizedBox(height: 4),
         ],
-        DropdownButtonFormField<String>(
-          key: ValueKey('${node.id}:${currentValue ?? ''}'),
-          value: optionValues.contains(currentValue) ? currentValue : null,
+        InputDecorator(
+          isEmpty: displayText.isEmpty,
           decoration: InputDecoration(
-            hintText: node.props?['placeholder']?.toString(),
+            hintText: placeholder,
             filled: true,
             fillColor: context.surfaceSecondary,
-            border: OutlineInputBorder(borderRadius: AppRadius.brMedium, borderSide: BorderSide.none),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: AppRadius.brMedium,
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            enabled: !disabled,
           ),
-          items: options,
-          onChanged: _isEditableBinding(binding) && node.props?['disabled'] != true
-              ? (v) {
-                  if (v != null) _updateBinding(binding, v);
-                }
-              : null,
+          child: Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: disabled
+                      ? null
+                      : () => _openSelectPicker(
+                            node: node,
+                            binding: binding,
+                            options: options,
+                            selectedValues: selectedValues,
+                            multiple: multiple,
+                            filterable: filterable,
+                          ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      displayText.isEmpty ? placeholder : displayText,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTypography.body(context).copyWith(
+                        color: displayText.isEmpty ? context.textTertiary : context.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (clearable && selectedValues.isNotEmpty && !disabled)
+                IconButton(
+                  tooltip: '清除',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _updateBinding(binding, multiple ? <dynamic>[] : null),
+                  icon: const Icon(Icons.close, size: 18),
+                )
+              else
+                Icon(Icons.arrow_drop_down, color: disabled ? context.textTertiary : context.textSecondary),
+            ],
+          ),
         ),
       ],
+    );
+  }
+
+  Future<void> _openSelectPicker({
+    required SchemaUINode node,
+    required SchemaUIBinding? binding,
+    required List<_SchemaSelectOption> options,
+    required List<dynamic> selectedValues,
+    required bool multiple,
+    required bool filterable,
+  }) async {
+    if (!_isEditableBinding(binding) || _isNodeDisabled(node)) return;
+    final working = List<dynamic>.from(selectedValues);
+    var query = '';
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final normalizedQuery = query.trim().toLowerCase();
+            final visibleOptions = normalizedQuery.isEmpty
+                ? options
+                : options
+                    .where((option) => option.label.toLowerCase().contains(normalizedQuery))
+                    .toList(growable: false);
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  bottom: 16 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (filterable) ...[
+                        TextField(
+                          autofocus: true,
+                          decoration: const InputDecoration(
+                            prefixIcon: Icon(Icons.search),
+                            hintText: '筛选选项',
+                          ),
+                          onChanged: (value) => setSheetState(() => query = value),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      Flexible(
+                        child: visibleOptions.isEmpty
+                            ? const Center(child: Padding(
+                                padding: EdgeInsets.all(24),
+                                child: Text('没有匹配的选项'),
+                              ))
+                            : ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: visibleOptions.length,
+                                itemBuilder: (context, index) {
+                                  final option = visibleOptions[index];
+                                  final selected = working.any((value) => value == option.value);
+                                  if (multiple) {
+                                    return CheckboxListTile(
+                                      value: selected,
+                                      title: Text(option.label),
+                                      controlAffinity: ListTileControlAffinity.leading,
+                                      onChanged: (checked) {
+                                        setSheetState(() {
+                                          working.removeWhere((value) => value == option.value);
+                                          if (checked == true) working.add(option.value);
+                                        });
+                                      },
+                                    );
+                                  }
+                                  return ListTile(
+                                    leading: selected ? const Icon(Icons.check) : const SizedBox(width: 24),
+                                    title: Text(option.label),
+                                    onTap: () {
+                                      _updateBinding(binding, option.value);
+                                      Navigator.of(sheetContext).pop();
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                      if (multiple) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: working.isEmpty ? null : () => setSheetState(working.clear),
+                              child: const Text('清空'),
+                            ),
+                            const Spacer(),
+                            FilledButton(
+                              onPressed: () {
+                                _updateBinding(binding, List<dynamic>.from(working));
+                                Navigator.of(sheetContext).pop();
+                              },
+                              child: const Text('确定'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
   Widget _buildSwitch(BuildContext context, SchemaUINode node) {
     final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
-    final value = (_bindingEngine.resolveBinding(binding, _buildContext()) ?? node.props?['value']) == true;
+    final raw = _resolvedNodeValue(node, binding);
+    final activeValue = node.props?.containsKey('activeValue') == true ? node.props!['activeValue'] : true;
+    final inactiveValue = node.props?.containsKey('inactiveValue') == true ? node.props!['inactiveValue'] : false;
+    final value = raw == activeValue || (activeValue == true && raw == true);
+    final activeText = node.props?['activeText']?.toString().trim() ?? '';
+    final inactiveText = node.props?['inactiveText']?.toString().trim() ?? '';
+    final subtitle = value ? activeText : inactiveText;
+    final disabled = _isNodeDisabled(node) || !_isEditableBinding(binding);
     return AmitiaSwitchTile(
       title: label,
+      subtitle: subtitle.isEmpty ? null : subtitle,
       value: value,
-      onChanged: _isEditableBinding(binding) && node.props?['disabled'] != true
-          ? (v) => _updateBinding(binding, v)
-          : null,
+      onChanged: disabled
+          ? null
+          : (enabled) => _updateBinding(binding, enabled ? activeValue : inactiveValue),
     );
   }
 
   Widget _buildSlider(BuildContext context, SchemaUINode node) {
     final label = (node.props?['label'] ?? node.props?['title'] ?? '').toString();
-    final min = ((node.props?['min'] as num?) ?? 0).toDouble();
-    final max = ((node.props?['max'] as num?) ?? 100).toDouble();
+    final min = _dimension(node.props?['min'], 0);
+    final rawMax = _dimension(node.props?['max'], 100);
+    final max = rawMax > min ? rawMax : min + 1;
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
-    final raw = _bindingEngine.resolveBinding(binding, _buildContext()) ?? node.props?['value'];
-    final value = ((raw as num?) ?? min).toDouble().clamp(min, max);
+    final raw = _resolvedNodeValue(node, binding);
+    final parsed = raw is num ? raw.toDouble() : double.tryParse(raw?.toString() ?? '') ?? min;
+    final value = parsed.clamp(min, max).toDouble();
+    final rawStep = _dimension(node.props?['step'], 0);
+    final divisions = rawStep > 0 ? ((max - min) / rawStep).round().clamp(1, 10000) : null;
+    final disabled = _isNodeDisabled(node) || !_isEditableBinding(binding);
+    final showInput = node.props?['showInput'] == true;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (label.isNotEmpty) Text(label, style: AppTypography.label(context)),
-        Slider(
-          value: value,
-          min: min,
-          max: max,
-          divisions: node.props?['step'] is num && (node.props!['step'] as num) > 0
-              ? ((max - min) / (node.props!['step'] as num)).round().clamp(1, 10000)
-              : null,
-          onChanged: _isEditableBinding(binding) && node.props?['disabled'] != true
-              ? (v) => _updateBinding(binding, v)
-              : null,
+        Row(
+          children: [
+            Expanded(
+              child: Slider(
+                value: value,
+                min: min,
+                max: max,
+                divisions: divisions,
+                onChanged: disabled ? null : (v) => _updateBinding(binding, v),
+              ),
+            ),
+            if (showInput) ...[
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 88,
+                child: AmitiaTextField(
+                  key: ValueKey('${node.id}:slider:$value'),
+                  controller: TextEditingController(text: value.toStringAsFixed(rawStep > 0 && rawStep < 1 ? 2 : 0)),
+                  readOnly: disabled,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  onChanged: disabled
+                      ? null
+                      : (text) {
+                          final next = double.tryParse(text);
+                          if (next != null) _updateBinding(binding, next.clamp(min, max));
+                        },
+                ),
+              ),
+            ],
+          ],
         ),
       ],
     );
@@ -937,12 +1643,23 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildButton(BuildContext context, SchemaUINode node) {
     final label = (node.props?['text'] ?? node.props?['label'] ?? '按钮').toString();
-    final isSecondary = node.props?['variant'] == 'secondary';
-    final action = node.actions.isNotEmpty ? node.actions.first : null;
+    final kind = (node.props?['variant'] ?? node.props?['type'] ?? '').toString().trim().toLowerCase();
+    final size = node.props?['size']?.toString().trim().toLowerCase() ?? 'default';
+    final loading = node.props?['loading'] == true;
+    final disabled = _isNodeDisabled(node) || loading || node.actions.isEmpty;
+    final height = switch (size) {
+      'small' => 32.0,
+      'large' => 48.0,
+      _ => AppSpacing.buttonHeight,
+    };
     return AmitiaButton(
-      label: label,
-      isSecondary: isSecondary,
-      onPressed: action != null ? () => _handleAction(action, nodeId: node.id) : () {},
+      label: loading ? '加载中…' : label,
+      height: height,
+      isSecondary: kind == 'secondary' || kind == 'default' || kind == 'info',
+      isDestructive: kind == 'danger' || kind == 'error',
+      outlined: node.props?['plain'] == true,
+      round: node.props?['round'] == true,
+      onPressed: disabled ? null : () => _handleActions(node.actions, nodeId: node.id),
     );
   }
 
@@ -1034,34 +1751,64 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       }
     }
     if (headers.isEmpty) return const SizedBox.shrink();
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: headers.map((h) => DataColumn(label: Text(h, style: AppTypography.label(context)))).toList(),
-        rows: rows
-            .map((row) => DataRow(
-                  cells: List.generate(
-                    headers.length,
-                    (index) => DataCell(Text(index < row.length ? row[index] : '', style: AppTypography.bodySmall(context))),
+
+    final bordered = node.props?['bordered'] == true;
+    final striped = node.props?['stripe'] != false;
+    final maxHeight = _dimension(node.props?['maxHeight'], 0);
+    final divider = Theme.of(context).dividerColor;
+    final table = DataTable(
+      border: bordered ? TableBorder.all(color: divider) : null,
+      columns: headers.map((h) => DataColumn(label: Text(h, style: AppTypography.label(context)))).toList(),
+      rows: rows
+          .asMap()
+          .entries
+          .map((entry) => DataRow(
+                color: striped && entry.key.isOdd
+                    ? WidgetStatePropertyAll(context.surfaceSecondary.withValues(alpha: 0.55))
+                    : null,
+                cells: List.generate(
+                  headers.length,
+                  (index) => DataCell(
+                    Text(
+                      index < entry.value.length ? entry.value[index] : '',
+                      style: AppTypography.bodySmall(context),
+                    ),
                   ),
-                ))
-            .toList(),
-      ),
+                ),
+              ))
+          .toList(),
     );
+    final horizontal = SingleChildScrollView(scrollDirection: Axis.horizontal, child: table);
+    if (maxHeight > 0) {
+      return SizedBox(
+        height: maxHeight,
+        child: SingleChildScrollView(child: horizontal),
+      );
+    }
+    return horizontal;
   }
 
   Widget _buildNodeEmptyState(BuildContext context, SchemaUINode node) {
     final iconName = node.props?['icon']?.toString() ?? 'inbox_outlined';
-    final title = (node.props?['title'] ?? 'No data').toString();
-    final subtitle = (node.props?['subtitle'] ?? node.props?['description'] ?? node.props?['text'])?.toString();
-    return AmitiaEmptyState(icon: _mapIconData(iconName), title: title, subtitle: subtitle);
+    final title = (node.props?['title'] ?? node.props?['description'] ?? node.props?['text'] ?? '暂无数据').toString();
+    final subtitle = (node.props?['subtitle'])?.toString();
+    final imageSize = _dimension(node.props?['imageSize'], 60).clamp(24.0, 160.0).toDouble();
+    return AmitiaEmptyState(
+      icon: _mapIconData(iconName),
+      title: title,
+      subtitle: subtitle,
+      iconSize: imageSize,
+    );
   }
 
   Widget _buildAlert(BuildContext context, SchemaUINode node) {
+    if (_dismissedNodeIds.contains(node.id)) return const SizedBox.shrink();
     final title = node.props?['title']?.toString().trim() ?? '';
     final text = (node.props?['text'] ?? node.props?['message'] ?? node.props?['description'] ?? node.props?['detail'] ?? '').toString();
     final variant = (node.props?['variant'] ?? node.props?['type'] ?? 'info').toString();
     final color = _alertColor(context, variant);
+    final showIcon = node.props?['showIcon'] != false;
+    final closable = node.props?['closable'] != false;
     return Container(
       padding: EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
@@ -1072,8 +1819,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline, color: color, size: 18),
-          const SizedBox(width: 8),
+          if (showIcon) ...[
+            Icon(Icons.info_outline, color: color, size: 18),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1084,6 +1833,13 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
               ],
             ),
           ),
+          if (closable)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: '关闭',
+              onPressed: () => setState(() => _dismissedNodeIds.add(node.id)),
+              icon: const Icon(Icons.close, size: 16),
+            ),
         ],
       ),
     );
@@ -1105,10 +1861,52 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildProgress(BuildContext context, SchemaUINode node) {
     final binding = node.bindings.isNotEmpty ? node.bindings.first : null;
-    final raw = _bindingEngine.resolveBinding(binding, _buildContext()) ?? node.props?['value'] ?? node.props?['percentage'] ?? 0;
-    var progress = (raw is num ? raw.toDouble() : double.tryParse(raw.toString()) ?? 0).clamp(0.0, 100.0);
-    if (progress > 1) progress /= 100;
-    return AmitiaProgressBar(progress: progress.clamp(0.0, 1.0));
+    final raw = _resolvedNodeValue(node, binding) ?? node.props?['percentage'] ?? 0;
+    var percentage = (raw is num ? raw.toDouble() : double.tryParse(raw.toString()) ?? 0).clamp(0.0, 100.0).toDouble();
+    if (percentage <= 1 && (raw is num && raw.toDouble() <= 1)) percentage *= 100;
+    final progress = (percentage / 100).clamp(0.0, 1.0).toDouble();
+    final variant = node.props?['variant']?.toString().trim().toLowerCase() ?? 'line';
+    final status = node.props?['status']?.toString().trim().toLowerCase() ?? '';
+    final showText = node.props?['showText'] != false;
+    final strokeWidth = _dimension(node.props?['strokeWidth'], 6).clamp(2.0, 24.0).toDouble();
+    final color = switch (status) {
+      'success' => context.success,
+      'warning' => context.warning,
+      'exception' || 'error' => context.error,
+      _ => context.accentPrimary,
+    };
+    if (variant == 'circle' || variant == 'dashboard') {
+      return SizedBox(
+        width: 72,
+        height: 72,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 64,
+              height: 64,
+              child: CircularProgressIndicator(
+                value: progress,
+                strokeWidth: strokeWidth,
+                color: color,
+                backgroundColor: context.accentSoft,
+              ),
+            ),
+            if (showText) Text('${percentage.round()}%', style: AppTypography.caption(context)),
+          ],
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        AmitiaProgressBar(progress: progress, height: strokeWidth, color: color),
+        if (showText) ...[
+          const SizedBox(height: 4),
+          Text('${percentage.round()}%', style: AppTypography.caption(context)),
+        ],
+      ],
+    );
   }
 
   Widget _buildCode(BuildContext context, SchemaUINode node) {
@@ -1141,23 +1939,37 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Widget _buildResourceLink(BuildContext context, SchemaUINode node) {
     final href = node.props?['href']?.toString().trim() ?? '';
     final text = (node.props?['text'] ?? node.props?['label'] ?? href).toString();
-    final action = node.actions.isNotEmpty ? node.actions.first : null;
+    final disabled = node.props?['disabled'] == true;
+    final underline = node.props?['underline'] != false;
+    final canActivate = !disabled && (node.actions.isNotEmpty || href.isNotEmpty);
     return InkWell(
       borderRadius: AppRadius.brSmall,
-      onTap: action == null ? null : () => _handleAction(action, nodeId: node.id),
+      onTap: !canActivate
+          ? null
+          : () async {
+              if (node.actions.isNotEmpty) {
+                await _handleActions(node.actions, nodeId: node.id);
+                return;
+              }
+              await _openResourceHref(href);
+            },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.open_in_new, size: 16, color: context.accentPrimary),
+            Icon(
+              Icons.open_in_new,
+              size: 16,
+              color: canActivate ? context.accentPrimary : context.textTertiary,
+            ),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
                 text,
                 style: AppTypography.bodySmall(context).copyWith(
-                  color: context.accentPrimary,
-                  decoration: TextDecoration.underline,
+                  color: canActivate ? context.accentPrimary : context.textTertiary,
+                  decoration: canActivate && underline ? TextDecoration.underline : TextDecoration.none,
                 ),
               ),
             ),
@@ -1235,22 +2047,79 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   }
 
   Widget _buildKeyValue(BuildContext context, SchemaUINode node) {
-    final items = node.props?['items'] as List? ?? [];
+    final raw = node.props?['items'] ?? node.props?['data'];
+    final entries = <MapEntry<String, String>>[];
+    if (raw is Map) {
+      for (final entry in raw.entries) {
+        entries.add(MapEntry(entry.key.toString(), entry.value?.toString() ?? ''));
+      }
+    } else if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          final key = (item['key'] ?? item['label'] ?? item['name'] ?? '').toString();
+          final value = (item['value'] ?? item['content'] ?? '').toString();
+          entries.add(MapEntry(key, value));
+        } else {
+          entries.add(MapEntry(item.toString(), ''));
+        }
+      }
+    }
+    final title = node.props?['title']?.toString().trim() ?? '';
+    final rawColumns = node.props?['columns'];
+    final columns = (rawColumns is num ? rawColumns.toInt() : int.tryParse(rawColumns?.toString() ?? '') ?? 1)
+        .clamp(1, 6)
+        .toInt();
+    final bordered = node.props?['bordered'] != false;
+
+    Widget item(MapEntry<String, String> entry) {
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.tightGap),
+        decoration: bordered
+            ? BoxDecoration(
+                border: Border.all(color: context.borderPrimary),
+                borderRadius: AppRadius.brSmall,
+              )
+            : null,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: Text(entry.key, style: AppTypography.label(context))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                entry.value,
+                style: AppTypography.bodySmall(context),
+                textAlign: TextAlign.end,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
-      children: items.map((item) {
-        final key = item is Map ? item['key']?.toString() ?? '' : '';
-        final value = item is Map ? item['value']?.toString() ?? '' : '';
-        return Padding(
-          padding: EdgeInsets.only(bottom: AppSpacing.tightGap),
-          child: Row(
-            children: [
-              Text(key, style: AppTypography.label(context)),
-              const Spacer(),
-              Text(value, style: AppTypography.bodySmall(context)),
-            ],
-          ),
-        );
-      }).toList(),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (title.isNotEmpty) ...[
+          Text(title, style: AppTypography.sectionTitle(context)),
+          SizedBox(height: AppSpacing.sm),
+        ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final gap = AppSpacing.tightGap;
+            final width = constraints.maxWidth.isFinite
+                ? ((constraints.maxWidth - gap * (columns - 1)) / columns).clamp(0.0, double.infinity).toDouble()
+                : null;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: entries
+                  .map((entry) => width == null ? item(entry) : SizedBox(width: width, child: item(entry)))
+                  .toList(),
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -1269,6 +2138,189 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         borderRadius: AppRadius.brSmall,
       ),
       child: Text(message, style: AppTypography.caption(context).copyWith(color: context.error)),
+    );
+  }
+}
+
+class _SchemaSelectOption {
+  final dynamic value;
+  final String label;
+
+  const _SchemaSelectOption({required this.value, required this.label});
+}
+
+class _SchemaTabsView extends StatefulWidget {
+  final List<SchemaUINode> tabs;
+  final bool Function(SchemaUINode tab) isDisabled;
+  final Widget Function(SchemaUINode tab) contentBuilder;
+  final String position;
+  final String variant;
+  final double? minHeight;
+
+  const _SchemaTabsView({
+    required this.tabs,
+    required this.isDisabled,
+    required this.contentBuilder,
+    required this.position,
+    required this.variant,
+    this.minHeight,
+  });
+
+  @override
+  State<_SchemaTabsView> createState() => _SchemaTabsViewState();
+}
+
+class _SchemaTabsViewState extends State<_SchemaTabsView> {
+  int _activeIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeIndex = _firstEnabledIndex();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SchemaTabsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final activeId = oldWidget.tabs.isNotEmpty && _activeIndex < oldWidget.tabs.length
+        ? oldWidget.tabs[_activeIndex].id
+        : '';
+    final preserved = widget.tabs.indexWhere((tab) => tab.id == activeId && !widget.isDisabled(tab));
+    if (preserved >= 0) {
+      _activeIndex = preserved;
+      return;
+    }
+    _activeIndex = _firstEnabledIndex();
+  }
+
+  int _firstEnabledIndex() {
+    final index = widget.tabs.indexWhere((tab) => !widget.isDisabled(tab));
+    return index >= 0 ? index : 0;
+  }
+
+  void _activate(int index) {
+    if (index < 0 || index >= widget.tabs.length || widget.isDisabled(widget.tabs[index])) return;
+    if (_activeIndex != index) setState(() => _activeIndex = index);
+  }
+
+  Widget _tabButton(BuildContext context, int index, {required bool vertical}) {
+    final tab = widget.tabs[index];
+    final disabled = widget.isDisabled(tab);
+    final selected = index == _activeIndex;
+    final label = (tab.props?['label'] ?? tab.props?['title'] ?? tab.id).toString();
+    final variant = widget.variant.trim().toLowerCase();
+    final scheme = Theme.of(context).colorScheme;
+    final border = variant == 'card' || variant == 'border-card'
+        ? Border.all(color: selected ? scheme.primary : Theme.of(context).dividerColor)
+        : Border(
+            bottom: BorderSide(
+              color: selected ? scheme.primary : Colors.transparent,
+              width: selected ? 2 : 0,
+            ),
+          );
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: !disabled,
+      child: InkWell(
+        onTap: disabled ? null : () => _activate(index),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          constraints: vertical ? const BoxConstraints(minWidth: 112) : null,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            border: border,
+            borderRadius: variant == 'line' ? null : BorderRadius.circular(8),
+            color: selected && variant != 'line' ? scheme.primaryContainer.withValues(alpha: 0.35) : null,
+          ),
+          child: Text(
+            label,
+            textAlign: vertical ? TextAlign.start : TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: disabled
+                      ? Theme.of(context).disabledColor
+                      : selected
+                          ? scheme.primary
+                          : null,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _horizontalHeader(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: List<Widget>.generate(
+          widget.tabs.length,
+          (index) => Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: _tabButton(context, index, vertical: false),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _verticalHeader(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: List<Widget>.generate(
+        widget.tabs.length,
+        (index) => Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: _tabButton(context, index, vertical: true),
+        ),
+      ),
+    );
+  }
+
+  Widget _content() {
+    if (widget.tabs.isEmpty) return const SizedBox.shrink();
+    final active = _activeIndex.clamp(0, widget.tabs.length - 1).toInt();
+    Widget child = widget.contentBuilder(widget.tabs[active]);
+    if (widget.minHeight != null && widget.minHeight! > 0) {
+      child = ConstrainedBox(
+        constraints: BoxConstraints(minHeight: widget.minHeight!),
+        child: child,
+      );
+    }
+    return child;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.tabs.isEmpty) return const SizedBox.shrink();
+    final position = widget.position.trim().toLowerCase();
+    final content = _content();
+    if (position == 'left' || position == 'right') {
+      final header = _verticalHeader(context);
+      final children = position == 'right'
+          ? <Widget>[
+              Expanded(child: content),
+              const SizedBox(width: 8),
+              SizedBox(width: 128, child: header),
+            ]
+          : <Widget>[
+              SizedBox(width: 128, child: header),
+              const SizedBox(width: 8),
+              Expanded(child: content),
+            ];
+      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+    }
+    final header = _horizontalHeader(context);
+    if (position == 'bottom') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [content, const SizedBox(height: 8), header],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [header, const SizedBox(height: 8), content],
     );
   }
 }

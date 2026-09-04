@@ -13,7 +13,15 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 
 class CharacterLifeRulesPage extends ConsumerStatefulWidget {
   final String characterId;
-  const CharacterLifeRulesPage({super.key, required this.characterId});
+  final String pageTitle;
+  final String fallbackRoute;
+
+  const CharacterLifeRulesPage({
+    super.key,
+    required this.characterId,
+    this.pageTitle = '生活规则',
+    this.fallbackRoute = AppRoutes.characters,
+  });
 
   @override
   ConsumerState<CharacterLifeRulesPage> createState() => _CharacterLifeRulesPageState();
@@ -541,9 +549,9 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
   Widget build(BuildContext context) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '生活规则',
+        title: widget.pageTitle,
         showBackButton: true,
-        fallbackRoute: AppRoutes.characters,
+        fallbackRoute: widget.fallbackRoute,
         actions: [
           AmitiaIconButton(icon: Icons.refresh, tooltip: '刷新', onPressed: _load),
           AmitiaIconButton(icon: Icons.restart_alt, tooltip: '恢复默认并保存', onPressed: _resetToDefaults),
