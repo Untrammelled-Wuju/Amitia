@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/providers.dart';
 import '../../features/extensions/schema_ui/engine/action_dispatcher.dart';
+import '../../features/extensions/schema_ui/engine/data_source_loader.dart';
 import '../../features/extensions/schema_ui/models/schema_ui_types.dart';
 import '../../features/extensions/schema_ui/renderer/schema_ui_renderer.dart';
 import 'mobile_dynamic_runtime.dart';
@@ -165,6 +166,7 @@ class _ContributionHost extends ConsumerStatefulWidget {
 
 class _ContributionHostState extends ConsumerState<_ContributionHost> {
   late final SchemaUIBridgeController _bridge;
+  late final DataSourceLoader _dataSourceLoader;
   Future<Map<String, dynamic>>? _schemaFuture;
 
   String get _sourceContributionId =>
@@ -191,6 +193,14 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
   void initState() {
     super.initState();
     _bridge = SchemaUIBridgeController(ref.read(extensionServiceProvider));
+    _dataSourceLoader = DataSourceLoader(fetcher: (request) => _bridge.requestData(
+      request.dataSource.id,
+      contributionId: _sourceContributionId,
+      contractVersion: widget.contribution.contractVersion,
+      characterId: _characterId,
+      conversationId: _conversationId,
+      params: request.input,
+    ));
   }
 
   @override
@@ -291,6 +301,7 @@ class _ContributionHostState extends ConsumerState<_ContributionHost> {
                         ? 'client-runtime:${contribution.runtimePackageId}'
                         : contribution.extensionId,
                   ),
+              dataSourceLoader: _dataSourceLoader,
               onActionDispatch: _dispatchAction,
               onReloadSchema: _reloadSchema,
             );

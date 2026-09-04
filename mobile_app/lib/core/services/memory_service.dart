@@ -231,13 +231,6 @@ class MemoryService {
     return resp ?? <String, dynamic>{};
   }
 
-  Future<List<MemoryCandidateDto>> extractCandidates() async {
-    final resp = await _api.post<dynamic>('/api/memories/extract-candidates');
-    return _mapList(resp, keys: const ['candidates'])
-        .map(MemoryCandidateDto.fromJson)
-        .toList(growable: false);
-  }
-
   Future<List<MemoryCandidateDto>> generateCandidates(String conversationId) async {
     final resp = await _api.post<dynamic>(
       '/api/memory-candidates/generate',

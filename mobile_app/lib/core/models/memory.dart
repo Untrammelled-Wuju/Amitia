@@ -107,6 +107,7 @@ class MemoryDto {
       'importance': importance,
       'confidence': confidence,
       'verifiedStatus': verifiedStatus,
+      'useCount': useCount,
       'retentionLevel': retentionLevel,
       'memoryStrength': memoryStrength,
       'strengthUpdatedAt': strengthUpdatedAt,
@@ -120,6 +121,8 @@ class MemoryDto {
       'sensitivityLevel': sensitivityLevel,
       'allowProactiveMention': allowProactiveMention,
       'requiresConfirmation': requiresConfirmation,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
     };
   }
 
