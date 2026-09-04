@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -50,10 +51,12 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage> {
   final _scrollController = ScrollController();
+  final _composerController = TextEditingController();
   late final ConversationRuntimeController _runtime;
   Map<String, dynamic>? _cachedProviderContext;
   List<ChatMessage>? _cachedMessagesForContext;
   Map<String, FutureOr<dynamic> Function(dynamic)>? _cachedProviderActions;
+  String _cachedProviderActionsCharacterId = '';
   Timer? _conversationEventRefreshTimer;
   ChatMessage? _replyTarget;
   List<WorkspaceMountDto> _recentWorkspaces = const <WorkspaceMountDto>[];
@@ -93,6 +96,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _cachedProviderContext = null;
     _cachedMessagesForContext = null;
     _cachedProviderActions = null;
+    _cachedProviderActionsCharacterId = '';
     final conversationId = _runtime.conversationId?.trim() ?? '';
     _conversationEventRefreshTimer?.cancel();
     if (conversationId.isNotEmpty) {
@@ -160,6 +164,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _runtime.removeListener(_onRuntimeChanged);
     _runtime.dispose();
     _scrollController.dispose();
+    _composerController.dispose();
     super.dispose();
   }
 
@@ -654,6 +659,194 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
+  Future<ArtifactMetadata> _uploadProviderBase64(
+    ArtifactService service, {
+    required String encoded,
+    required ArtifactKind kind,
+    required String fallbackMimeType,
+    required String fallbackFileName,
+  }) async {
+    var payload = encoded.trim();
+    var mimeType = fallbackMimeType;
+    if (payload.startsWith('data:')) {
+      final comma = payload.indexOf(',');
+      if (comma <= 5) {
+        throw ArtifactServiceException('invalid_data_uri');
+      }
+      final header = payload.substring(5, comma);
+      if (!header.toLowerCase().contains(';base64')) {
+        throw ArtifactServiceException('unsupported_data_uri_encoding');
+      }
+      final declaredMime = header.split(';').first.trim();
+      if (declaredMime.isNotEmpty) mimeType = declaredMime;
+      payload = payload.substring(comma + 1);
+    }
+    payload = payload.replaceAll(RegExp(r'\s+'), '');
+    if (payload.isEmpty) throw ArtifactServiceException('empty_base64_payload');
+
+    try {
+      final bytes = base64Decode(payload);
+      return service.uploadBytes(
+        bytes: bytes,
+        kind: kind,
+        fileName: fallbackFileName,
+        mimeType: mimeType,
+        source: 'ui_provider',
+      );
+    } on FormatException {
+      throw ArtifactServiceException('invalid_base64_payload');
+    }
+  }
+
+  String _artifactDisplayUrl(ArtifactService service, String resourceUri) {
+    final artifactId = parseArtifactUri(resourceUri);
+    return artifactId == null ? resourceUri : service.contentUrl(artifactId);
+  }
+
+  Future<void> _sendProviderImage(Map<dynamic, dynamic> input) async {
+    final encoded = input['imageBase64']?.toString().trim() ?? '';
+    final resourceUri = input['resourceUri']?.toString().trim() ?? '';
+    final text = input['text']?.toString() ?? '';
+    final fileName = (input['fileName'] ?? input['filename'] ?? 'image.png').toString();
+    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'image/png').toString();
+    if (encoded.isEmpty && resourceUri.isEmpty) {
+      final camera = input['source']?.toString() == 'camera';
+      await _pickAndSendImage(camera);
+      return;
+    }
+    await _withArtifactUpload((service) async {
+      if (encoded.isNotEmpty) {
+        final artifact = await _uploadProviderBase64(
+          service,
+          encoded: encoded,
+          kind: ArtifactKind.image,
+          fallbackMimeType: mimeType,
+          fallbackFileName: fileName,
+        );
+        await _runtime.sendImage(
+          resourceUri: artifact.resourceUri,
+          displayUrl: service.contentUrl(artifact.id),
+          fileName: artifact.filename,
+          mimeType: artifact.mimeType,
+          text: text,
+        );
+        return;
+      }
+      await _runtime.sendImage(
+        resourceUri: resourceUri,
+        displayUrl: _artifactDisplayUrl(service, resourceUri),
+        fileName: fileName,
+        mimeType: mimeType,
+        text: text,
+      );
+    });
+  }
+
+  Future<void> _sendProviderVideo(Map<dynamic, dynamic> input) async {
+    final encoded = input['videoBase64']?.toString().trim() ?? '';
+    final resourceUri = input['resourceUri']?.toString().trim() ?? '';
+    final text = input['text']?.toString() ?? '';
+    final fileName = (input['fileName'] ?? input['filename'] ?? 'video.mp4').toString();
+    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'video/mp4').toString();
+    final durationMs = int.tryParse((input['durationMs'] ?? input['duration_ms'] ?? '0').toString()) ?? 0;
+    if (encoded.isEmpty && resourceUri.isEmpty) {
+      final camera = input['source']?.toString() == 'camera';
+      await _pickAndSendVideo(camera);
+      return;
+    }
+    await _withArtifactUpload((service) async {
+      if (encoded.isNotEmpty) {
+        final artifact = await _uploadProviderBase64(
+          service,
+          encoded: encoded,
+          kind: ArtifactKind.video,
+          fallbackMimeType: mimeType,
+          fallbackFileName: fileName,
+        );
+        await _runtime.sendVideo(
+          resourceUri: artifact.resourceUri,
+          displayUrl: service.contentUrl(artifact.id),
+          fileName: artifact.filename,
+          mimeType: artifact.mimeType,
+          durationMs: artifact.durationMs > 0 ? artifact.durationMs : durationMs,
+          text: text,
+        );
+        return;
+      }
+      await _runtime.sendVideo(
+        resourceUri: resourceUri,
+        displayUrl: _artifactDisplayUrl(service, resourceUri),
+        fileName: fileName,
+        mimeType: mimeType,
+        durationMs: durationMs,
+        text: text,
+      );
+    });
+  }
+
+  Future<void> _sendProviderFile(Map<dynamic, dynamic> input) async {
+    final resourceUri = input['resourceUri']?.toString().trim() ?? '';
+    if (resourceUri.isEmpty) {
+      await _pickAndSendFile();
+      return;
+    }
+    final fileName = (input['fileName'] ?? input['filename'] ?? '文件').toString().trim();
+    final sizeBytes = int.tryParse((input['sizeBytes'] ?? input['size_bytes'] ?? '0').toString()) ?? 0;
+    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'application/octet-stream').toString();
+    await _runtime.sendFile(
+      resourceUri: resourceUri,
+      fileName: fileName.isEmpty ? '文件' : fileName,
+      sizeBytes: sizeBytes,
+      mimeType: mimeType,
+    );
+  }
+
+  Future<void> _sendProviderVoice(Map<dynamic, dynamic> input) async {
+    final encoded = (input['audioBase64'] ?? input['voiceBase64'])?.toString().trim() ?? '';
+    final resourceUri = input['resourceUri']?.toString().trim() ?? '';
+    final text = input['text']?.toString() ?? '';
+    if (encoded.isEmpty && resourceUri.isEmpty) {
+      if (text.trim().isNotEmpty) {
+        _composerController.text = text;
+        _composerController.selection = TextSelection.collapsed(offset: _composerController.text.length);
+        return;
+      }
+      await _pickAndSendAudio();
+      return;
+    }
+    final fileName = (input['fileName'] ?? input['filename'] ?? 'voice.webm').toString();
+    final mimeType = (input['mimeType'] ?? input['mime_type'] ?? 'audio/webm').toString();
+    final durationMs = int.tryParse((input['durationMs'] ?? input['duration_ms'] ?? '0').toString()) ?? 0;
+    await _withArtifactUpload((service) async {
+      if (encoded.isNotEmpty) {
+        final artifact = await _uploadProviderBase64(
+          service,
+          encoded: encoded,
+          kind: ArtifactKind.audio,
+          fallbackMimeType: mimeType,
+          fallbackFileName: fileName,
+        );
+        await _runtime.sendVoice(
+          resourceUri: artifact.resourceUri,
+          displayUrl: service.contentUrl(artifact.id),
+          fileName: artifact.filename,
+          mimeType: artifact.mimeType,
+          durationMs: artifact.durationMs > 0 ? artifact.durationMs : durationMs,
+          text: text,
+        );
+        return;
+      }
+      await _runtime.sendVoice(
+        resourceUri: resourceUri,
+        displayUrl: _artifactDisplayUrl(service, resourceUri),
+        fileName: fileName,
+        mimeType: mimeType,
+        durationMs: durationMs,
+        text: text,
+      );
+    });
+  }
+
   void _onSendCode(String lang, String code) {
     _runtime.sendCode(lang, code);
   }
@@ -975,10 +1168,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       _runtime.serializeMessage(message);
 
   Map<String, FutureOr<dynamic> Function(dynamic)> _providerActions(String characterId) {
-    return _cachedProviderActions ??= <String, FutureOr<dynamic> Function(dynamic)>{
-      ConversationUIAction.send: (input) {
-        final value = input is Map ? input['text'] : input;
-        final text = value?.toString() ?? '';
+    if (_cachedProviderActions != null && _cachedProviderActionsCharacterId == characterId) {
+      return _cachedProviderActions!;
+    }
+    _cachedProviderActionsCharacterId = characterId;
+    return _cachedProviderActions = <String, FutureOr<dynamic> Function(dynamic)>{
+      ConversationUIAction.send: (input) async {
+        if (input is Map) {
+          final videoBase64 = input['videoBase64']?.toString().trim() ?? '';
+          final imageBase64 = input['imageBase64']?.toString().trim() ?? '';
+          if (videoBase64.isNotEmpty) {
+            await _sendProviderVideo(input);
+            return null;
+          }
+          if (imageBase64.isNotEmpty) {
+            await _sendProviderImage(input);
+            return null;
+          }
+          final text = input['text']?.toString() ?? '';
+          if (text.trim().isNotEmpty) _onSend(text);
+          return null;
+        }
+        final text = input?.toString() ?? '';
         if (text.trim().isNotEmpty) _onSend(text);
         return null;
       },
@@ -1011,11 +1222,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         if (message != null) _setReplyTarget(message);
         return null;
       },
-      ConversationUIAction.sendFile: (_) => _pickAndSendFile(),
-      ConversationUIAction.sendImage: (input) {
-        final camera = input is Map && input['source']?.toString() == 'camera';
-        return _pickAndSendImage(camera);
-      },
+      ConversationUIAction.sendFile: (input) => input is Map ? _sendProviderFile(input) : _pickAndSendFile(),
+      ConversationUIAction.sendImage: (input) => input is Map ? _sendProviderImage(input) : _pickAndSendImage(false),
       ConversationUIAction.sendCode: (input) {
         final row = input is Map ? input : const <String, dynamic>{};
         final language = row['language']?.toString() ?? 'text';
@@ -1023,7 +1231,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         if (code.isNotEmpty) _runtime.sendCode(language, code);
         return null;
       },
-      ConversationUIAction.sendVoice: (_) => _pickAndSendAudio(),
+      ConversationUIAction.sendVoice: (input) => input is Map ? _sendProviderVoice(input) : _pickAndSendAudio(),
       ConversationUIAction.sendEmote: (input) {
         final row = input is Map ? input : const <String, dynamic>{};
         final emoteId = row['emoteId']?.toString() ?? '';
@@ -1378,6 +1586,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         ),
                         _buildWorkspaceBar(context),
                         AmitiaChatInput(
+                          controller: _composerController,
                           onSend: _onSend,
                           recipientName: characterName,
                           onPickFile: _pickAndSendFile,

@@ -149,14 +149,16 @@ class ConversationRuntimeController extends ChangeNotifier {
     required String displayUrl,
     required String fileName,
     String mimeType = 'image/*',
+    String text = '',
   }) async {
     if (_sending) return;
+    final content = text.trim().isEmpty ? '[图片]' : text.trim();
     await _send(
       ChatMessage(
         id: _localId('u'),
         role: MessageRole.user,
         type: MessageType.image,
-        content: '[图片]',
+        content: content,
         time: DateTime.now(),
         status: MessageStatus.sending,
         fileName: fileName,
@@ -164,7 +166,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         mediaUrl: displayUrl,
         mimeType: mimeType,
       ),
-      message: '[图片]',
+      message: content,
       imageUrl: resourceUri,
     );
   }
@@ -175,14 +177,16 @@ class ConversationRuntimeController extends ChangeNotifier {
     required String fileName,
     String mimeType = 'video/*',
     int durationMs = 0,
+    String text = '',
   }) async {
     if (_sending) return;
+    final content = text.trim().isEmpty ? '[视频]' : text.trim();
     await _send(
       ChatMessage(
         id: _localId('u'),
         role: MessageRole.user,
         type: MessageType.video,
-        content: '[视频]',
+        content: content,
         time: DateTime.now(),
         status: MessageStatus.sending,
         fileName: fileName,
@@ -191,7 +195,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         mimeType: mimeType,
         durationMs: durationMs,
       ),
-      message: '[视频]',
+      message: content,
       videoUrl: resourceUri,
     );
   }
@@ -202,14 +206,16 @@ class ConversationRuntimeController extends ChangeNotifier {
     required String fileName,
     String mimeType = 'audio/*',
     int durationMs = 0,
+    String text = '',
   }) async {
     if (_sending) return;
+    final content = text.trim().isEmpty ? '[语音]' : text.trim();
     await _send(
       ChatMessage(
         id: _localId('u'),
         role: MessageRole.user,
         type: MessageType.audio,
-        content: '[语音]',
+        content: content,
         time: DateTime.now(),
         status: MessageStatus.sending,
         fileName: fileName,
@@ -218,7 +224,7 @@ class ConversationRuntimeController extends ChangeNotifier {
         mimeType: mimeType,
         durationMs: durationMs,
       ),
-      message: '[语音]',
+      message: content,
       audioUrl: resourceUri,
       audioDuration: durationMs / 1000.0,
     );
@@ -520,6 +526,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           displayUrl: message.mediaUrl!,
           fileName: message.fileName ?? 'image',
           mimeType: message.mimeType ?? 'image/*',
+          text: message.content == '[图片]' ? '' : message.content,
         );
       case MessageType.video:
         if (message.resourceUri == null || message.mediaUrl == null) {
@@ -531,6 +538,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           fileName: message.fileName ?? 'video',
           mimeType: message.mimeType ?? 'video/*',
           durationMs: message.durationMs ?? 0,
+          text: message.content == '[视频]' ? '' : message.content,
         );
       case MessageType.audio:
         if (message.resourceUri == null || message.mediaUrl == null) {
@@ -542,6 +550,7 @@ class ConversationRuntimeController extends ChangeNotifier {
           fileName: message.fileName ?? 'audio',
           mimeType: message.mimeType ?? 'audio/*',
           durationMs: message.durationMs ?? 0,
+          text: message.content == '[语音]' ? '' : message.content,
         );
       case MessageType.file:
         if (message.resourceUri == null) return sendText(message.content);
