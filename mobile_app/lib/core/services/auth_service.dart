@@ -22,14 +22,27 @@ class UserInfo {
   final String id;
   final String username;
   final String role;
+  final String nickname;
+  final String userLabel;
+  final String bio;
 
-  UserInfo({required this.id, required this.username, required this.role});
+  UserInfo({
+    required this.id,
+    required this.username,
+    required this.role,
+    this.nickname = '',
+    this.userLabel = '',
+    this.bio = '',
+  });
 
   factory UserInfo.fromJson(Map<String, dynamic> json) {
     return UserInfo(
       id: (json['userId'] ?? json['id'] ?? '').toString(),
       username: json['username'] as String? ?? '',
       role: json['role'] as String? ?? 'user',
+      nickname: json['nickname'] as String? ?? '',
+      userLabel: json['userLabel'] as String? ?? '',
+      bio: json['bio'] as String? ?? '',
     );
   }
 }
@@ -56,6 +69,33 @@ class AuthService {
     final role = await _sessionStore.getRole();
     if (userId == null || username == null) return null;
     return UserInfo(id: userId, username: username, role: role ?? 'user');
+  }
+
+  Future<UserInfo> fetchProfile() async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/auth/me');
+    if (resp == null) {
+      throw ServiceApiException(code: 10000, message: '用户资料响应为空');
+    }
+    return UserInfo.fromJson(resp);
+  }
+
+  Future<UserInfo> updateProfile({
+    required String nickname,
+    required String userLabel,
+    required String bio,
+  }) async {
+    final resp = await _api.put<Map<String, dynamic>>(
+      '/api/auth/me',
+      data: {
+        'nickname': nickname,
+        'userLabel': userLabel,
+        'bio': bio,
+      },
+    );
+    if (resp == null) {
+      throw ServiceApiException(code: 10000, message: '更新用户资料响应为空');
+    }
+    return UserInfo.fromJson(resp);
   }
 
   Future<void> saveSession({
@@ -121,6 +161,10 @@ class AuthService {
     await _sessionStore.clear();
   }
 
+  Future<void> logoutAll() async {
+    await _api.post('/api/auth/logout-all');
+    await _sessionStore.clear();
+  }
 
   Future<List<Map<String, dynamic>>> sessions() async {
     final response = await _api.get<List<dynamic>>('/api/auth/sessions');

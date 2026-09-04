@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../core/services/providers.dart' show startupStageProvider;
+import '../core/services/providers.dart' show authServiceProvider;
 import 'theme/app_theme.dart';
 import '../core/ui_runtime/route_surface_provider_host.dart';
 import '../core/ui_runtime/mobile_extension_slot.dart';
@@ -114,22 +114,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.chat,
     navigatorKey: _shellNavigatorKey,
-    redirect: (context, state) {
-      final stage = ref.read(startupStageProvider).valueOrNull;
+    redirect: (context, state) async {
       final location = state.matchedLocation;
 
       if (location == '/about') return '/settings/about';
       if (location == '/toolbox') return '/settings/toolbox';
 
-      switch (stage) {
-        case 'ready':
-          if (location == '/onboarding' ||
-              location == '/login' ||
-              location == '/privacy') {
-            return AppRoutes.chat;
-          }
-          break;
-      }
+      final isPublicRoute = location == '/onboarding' ||
+          location == '/login' ||
+          location == '/privacy';
+      final loggedIn = await ref.read(authServiceProvider).isLoggedIn;
+
+      if (!loggedIn && !isPublicRoute) return '/login';
+      if (loggedIn && location == '/login') return AppRoutes.chat;
       return null;
     },
     errorBuilder: (context, state) =>

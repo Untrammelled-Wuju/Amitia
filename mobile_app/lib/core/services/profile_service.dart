@@ -10,6 +10,7 @@ class ProfileService {
     String userId = '',
     String characterId = '',
     String category = '',
+    String keyword = '',
     int page = 1,
     int pageSize = 100,
   }) async {
@@ -19,6 +20,7 @@ class ProfileService {
         if (userId.isNotEmpty) 'userId': userId,
         if (characterId.isNotEmpty) 'characterId': characterId,
         if (category.isNotEmpty) 'category': category,
+        if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
         'page': page,
         'pageSize': pageSize,
       },
