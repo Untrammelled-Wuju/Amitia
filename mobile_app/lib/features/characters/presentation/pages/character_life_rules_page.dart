@@ -454,6 +454,28 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
     await _load();
   }
 
+  Widget _relationshipMentionSentenceControl() {
+    final raw = _relationshipTime['maxMentionSentences'];
+    final parsed = raw is num ? raw.toInt() : int.tryParse(raw?.toString() ?? '') ?? 1;
+    final value = parsed.clamp(0, 2).toInt();
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text('最多重逢表达句数'),
+      subtitle: const Text('设为 0 时保留重逢识别，但不生成重逢表达。'),
+      trailing: DropdownButton<int>(
+        value: value,
+        items: const [
+          DropdownMenuItem(value: 0, child: Text('0')),
+          DropdownMenuItem(value: 1, child: Text('1')),
+          DropdownMenuItem(value: 2, child: Text('2')),
+        ],
+        onChanged: (next) {
+          if (next != null) setState(() => _relationshipTime['maxMentionSentences'] = next);
+        },
+      ),
+    );
+  }
+
   Widget _section(String title, Widget child) => Padding(
         padding: EdgeInsets.only(bottom: AppSpacing.sectionGap),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -643,7 +665,9 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
                           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('重逢感知'), value: _bool(_relationshipTime['reunionEnabled'], fallback: true), onChanged: (v) => setState(() => _relationshipTime['reunionEnabled'] = v)),
                           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('允许回忆记忆'), value: _bool(_relationshipTime['allowMemoryRecall'], fallback: true), onChanged: (v) => setState(() => _relationshipTime['allowMemoryRecall'] = v)),
                           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('允许提及关系时长'), value: _bool(_relationshipTime['allowRelationshipAge'], fallback: true), onChanged: (v) => setState(() => _relationshipTime['allowRelationshipAge'] = v)),
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('允许提及重逢'), value: _bool(_relationshipTime['allowReunionMention'], fallback: true), onChanged: (v) => setState(() => _relationshipTime['allowReunionMention'] = v)),
                           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('允许主动引用关系时间'), value: _bool(_relationshipTime['allowProactiveReference'], fallback: true), onChanged: (v) => setState(() => _relationshipTime['allowProactiveReference'] = v)),
+                          _relationshipMentionSentenceControl(),
                           DropdownButtonFormField<String>(
                             value: const ['conservative', 'balanced', 'expressive'].contains(_relationshipTime['sensitivity']) ? _relationshipTime['sensitivity'] as String : 'balanced',
                             decoration: const InputDecoration(labelText: '敏感度'),

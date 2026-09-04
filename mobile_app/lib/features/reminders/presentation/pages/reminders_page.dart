@@ -224,119 +224,191 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
   Future<void> _showEditor(ReminderDto? existing) async {
     final titleController = TextEditingController(text: existing?.title ?? '');
     final contentController = TextEditingController(text: existing?.content ?? '');
-    final conversationController = TextEditingController(text: existing?.conversationId ?? '');
-    final characterController = TextEditingController(text: existing?.characterId ?? '');
+    var selectedConversationId = existing?.conversationId ?? '';
+    var selectedCharacterId = existing?.characterId ?? '';
     var channel = existing?.channel ?? 'web';
     var repeatRule = existing?.repeatRule ?? 'none';
     var remindAt = _parseBackendTime(existing?.remindAt) ?? DateTime.now().add(const Duration(minutes: 10));
+
+    var characters = await ref.read(characterServiceProvider).list();
+    var conversations = await ref.read(chatServiceProvider).listConversations();
+    if (!mounted) return;
+    final knownCharacterIds = characters.map((item) => item.id).toSet();
+    if (selectedCharacterId.isNotEmpty && !knownCharacterIds.contains(selectedCharacterId)) {
+      selectedCharacterId = '';
+    }
+    final knownConversationIds = conversations.map((item) => item.id).toSet();
+    if (selectedConversationId.isNotEmpty && !knownConversationIds.contains(selectedConversationId)) {
+      selectedConversationId = '';
+    }
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.xl,
-            AppSpacing.lg,
-            AppSpacing.xl,
-            MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.xl,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(existing == null ? '新建提醒' : '编辑提醒', style: AppTypography.sectionTitle(context)),
-                SizedBox(height: AppSpacing.lg),
-                AmitiaTextField(controller: titleController, hintText: '提醒标题'),
-                SizedBox(height: AppSpacing.md),
-                AmitiaTextField(controller: contentController, maxLines: 3, hintText: '提醒内容（可选）'),
-                SizedBox(height: AppSpacing.md),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('提醒时间', style: AppTypography.label(context)),
-                  subtitle: Text(_formatBackendTime(remindAt), style: AppTypography.body(context)),
-                  trailing: const Icon(Icons.calendar_month_outlined),
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: sheetContext,
-                      initialDate: remindAt,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 3650)),
-                    );
-                    if (date == null || !sheetContext.mounted) return;
-                    final time = await showTimePicker(context: sheetContext, initialTime: TimeOfDay.fromDateTime(remindAt));
-                    if (time == null) return;
-                    setSheetState(() {
-                      remindAt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-                    });
-                  },
-                ),
-                SizedBox(height: AppSpacing.md),
-                DropdownButtonFormField<String>(
-                  value: repeatRule,
-                  decoration: const InputDecoration(labelText: '重复规则', border: OutlineInputBorder()),
-                  items: _repeatLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(growable: false),
-                  onChanged: (value) { if (value != null) setSheetState(() => repeatRule = value); },
-                ),
-                SizedBox(height: AppSpacing.md),
-                DropdownButtonFormField<String>(
-                  value: channel,
-                  decoration: const InputDecoration(labelText: '渠道', border: OutlineInputBorder()),
-                  items: const [
-                    DropdownMenuItem(value: 'web', child: Text('Web / App')),
-                    DropdownMenuItem(value: 'wechat', child: Text('微信')),
-                    DropdownMenuItem(value: 'qq', child: Text('QQ')),
-                  ],
-                  onChanged: (value) { if (value != null) setSheetState(() => channel = value); },
-                ),
-                SizedBox(height: AppSpacing.md),
-                AmitiaTextField(controller: characterController, hintText: '角色 ID（可选）'),
-                SizedBox(height: AppSpacing.md),
-                AmitiaTextField(controller: conversationController, hintText: '目标会话 ID（可选）'),
-                SizedBox(height: AppSpacing.lg),
-                AmitiaButton(
-                  label: existing == null ? '创建' : '保存',
-                  isFullWidth: true,
-                  onPressed: () async {
-                    if (titleController.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('标题不能为空')));
-                      return;
-                    }
-                    if (!remindAt.isAfter(DateTime.now()) && existing == null) {
-                      ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('提醒时间必须晚于当前时间')));
-                      return;
-                    }
-                    final data = <String, dynamic>{
-                      'title': titleController.text.trim(),
-                      'content': contentController.text.trim(),
-                      'channel': channel,
-                      'conversationId': conversationController.text.trim(),
-                      'characterId': characterController.text.trim(),
-                      'remindAt': _formatBackendTime(remindAt),
-                      'repeatRule': repeatRule,
-                    };
-                    try {
-                      final service = ref.read(reminderServiceProvider);
-                      if (existing == null) {
-                        await service.create(data);
-                      } else {
-                        data['enabled'] = existing.isEnabled;
-                        await service.update(existing.id, data);
-                      }
-                      if (sheetContext.mounted) Navigator.pop(sheetContext);
-                      await _load();
-                    } catch (error) {
-                      if (sheetContext.mounted) ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text('保存失败：$error')));
-                    }
-                  },
-                ),
-              ],
+        builder: (sheetContext, setSheetState) {
+          final visibleConversations = selectedCharacterId.isEmpty
+              ? conversations
+              : conversations.where((item) => item.characterId == selectedCharacterId).toList(growable: false);
+          if (selectedConversationId.isNotEmpty && !visibleConversations.any((item) => item.id == selectedConversationId)) {
+            selectedConversationId = '';
+          }
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              AppSpacing.lg,
+              AppSpacing.xl,
+              MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.xl,
             ),
-          ),
-        ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(existing == null ? '新建提醒' : '编辑提醒', style: AppTypography.sectionTitle(context)),
+                  SizedBox(height: AppSpacing.lg),
+                  AmitiaTextField(controller: titleController, hintText: '提醒标题'),
+                  SizedBox(height: AppSpacing.md),
+                  AmitiaTextField(controller: contentController, maxLines: 3, hintText: '提醒内容（可选）'),
+                  SizedBox(height: AppSpacing.md),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('提醒时间', style: AppTypography.label(context)),
+                    subtitle: Text(_formatBackendTime(remindAt), style: AppTypography.body(context)),
+                    trailing: const Icon(Icons.calendar_month_outlined),
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: sheetContext,
+                        initialDate: remindAt,
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 3650)),
+                      );
+                      if (date == null || !sheetContext.mounted) return;
+                      final time = await showTimePicker(context: sheetContext, initialTime: TimeOfDay.fromDateTime(remindAt));
+                      if (time == null) return;
+                      setSheetState(() {
+                        remindAt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+                      });
+                    },
+                  ),
+                  SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String>(
+                    value: repeatRule,
+                    decoration: const InputDecoration(labelText: '重复规则', border: OutlineInputBorder()),
+                    items: _repeatLabels.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(growable: false),
+                    onChanged: (value) { if (value != null) setSheetState(() => repeatRule = value); },
+                  ),
+                  SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String>(
+                    value: channel,
+                    decoration: const InputDecoration(labelText: '渠道', border: OutlineInputBorder()),
+                    items: const [
+                      DropdownMenuItem(value: 'web', child: Text('Web / App')),
+                      DropdownMenuItem(value: 'wechat', child: Text('微信')),
+                      DropdownMenuItem(value: 'qq', child: Text('QQ')),
+                    ],
+                    onChanged: (value) { if (value != null) setSheetState(() => channel = value); },
+                  ),
+                  SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String>(
+                    value: selectedCharacterId,
+                    decoration: const InputDecoration(labelText: '目标角色（可选）', border: OutlineInputBorder()),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('不指定角色')),
+                      ...characters.map((item) => DropdownMenuItem(value: item.id, child: Text(item.name.isEmpty ? item.id : item.name))),
+                    ],
+                    onChanged: (value) => setSheetState(() {
+                      selectedCharacterId = value ?? '';
+                      if (selectedConversationId.isNotEmpty && !conversations.any((item) => item.id == selectedConversationId && (selectedCharacterId.isEmpty || item.characterId == selectedCharacterId))) {
+                        selectedConversationId = '';
+                      }
+                    }),
+                  ),
+                  SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<String>(
+                    value: selectedConversationId,
+                    decoration: const InputDecoration(labelText: '目标会话（可选）', border: OutlineInputBorder()),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('不指定会话')),
+                      ...visibleConversations.map((item) {
+                        final characterName = _characterNameFor(characters, item.characterId);
+                        final title = item.title.trim().isEmpty ? item.id : item.title.trim();
+                        return DropdownMenuItem(
+                          value: item.id,
+                          child: Text(characterName == null || characterName.isEmpty ? title : '$title · $characterName'),
+                        );
+                      }),
+                    ],
+                    onChanged: (value) => setSheetState(() {
+                      selectedConversationId = value ?? '';
+                      if (selectedConversationId.isNotEmpty) {
+                        final conversation = _conversationById(conversations, selectedConversationId);
+                        if (conversation != null && conversation.characterId.isNotEmpty) {
+                          selectedCharacterId = conversation.characterId;
+                        }
+                      }
+                    }),
+                  ),
+                  SizedBox(height: AppSpacing.lg),
+                  AmitiaButton(
+                    label: existing == null ? '创建' : '保存',
+                    isFullWidth: true,
+                    onPressed: () async {
+                      if (titleController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('标题不能为空')));
+                        return;
+                      }
+                      if (!remindAt.isAfter(DateTime.now()) && existing == null) {
+                        ScaffoldMessenger.of(sheetContext).showSnackBar(const SnackBar(content: Text('提醒时间必须晚于当前时间')));
+                        return;
+                      }
+                      final data = <String, dynamic>{
+                        'title': titleController.text.trim(),
+                        'content': contentController.text.trim(),
+                        'channel': channel,
+                        'conversationId': selectedConversationId,
+                        'characterId': selectedCharacterId,
+                        'remindAt': _formatBackendTime(remindAt),
+                        'repeatRule': repeatRule,
+                      };
+                      try {
+                        final service = ref.read(reminderServiceProvider);
+                        if (existing == null) {
+                          await service.create(data);
+                        } else {
+                          data['enabled'] = existing.isEnabled;
+                          await service.update(existing.id, data);
+                        }
+                        if (sheetContext.mounted) Navigator.pop(sheetContext);
+                        await _load();
+                      } catch (error) {
+                        if (sheetContext.mounted) ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text('保存失败：$error')));
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
+    titleController.dispose();
+    contentController.dispose();
+  }
+
+  String? _characterNameFor(List<dynamic> characters, String characterId) {
+    for (final character in characters) {
+      if (character.id == characterId) return character.name.toString();
+    }
+    return null;
+  }
+
+  dynamic _conversationById(List<dynamic> conversations, String conversationId) {
+    for (final conversation in conversations) {
+      if (conversation.id == conversationId) return conversation;
+    }
+    return null;
   }
 
   Future<void> _test(ReminderDto reminder) async {

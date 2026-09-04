@@ -22,6 +22,7 @@ class MemoryDto {
   final bool pinned;
   final String? archivedAt;
   final String sensitivityLevel;
+  final bool allowContextUse;
   final bool allowProactiveMention;
   final bool requiresConfirmation;
   final String createdAt;
@@ -51,6 +52,7 @@ class MemoryDto {
     this.pinned = false,
     this.archivedAt,
     this.sensitivityLevel = 'internal',
+    this.allowContextUse = true,
     this.allowProactiveMention = true,
     this.requiresConfirmation = false,
     this.createdAt = '',
@@ -86,8 +88,9 @@ class MemoryDto {
       decayState: (json['decayState'] ?? json['decay_state'] ?? 'active').toString(),
       pinned: _asBool(json['pinned']),
       archivedAt: _nullableString(json['archivedAt'] ?? json['archived_at']),
-      sensitivityLevel: (json['sensitivityLevel'] ?? 'internal').toString(),
-      allowProactiveMention: _asBool(json['allowProactiveMention'], fallback: true),
+      sensitivityLevel: (json['sensitivityLevel'] ?? json['sensitivity_level'] ?? 'internal').toString(),
+      allowContextUse: _asBool(json['allowContextUse'] ?? json['allow_context_use'], fallback: true),
+      allowProactiveMention: _asBool(json['allowProactiveMention'] ?? json['allow_proactive_mention'], fallback: true),
       requiresConfirmation: _asBool(json['requiresConfirmation']),
       createdAt: (json['createdAt'] ?? '').toString(),
       updatedAt: (json['updatedAt'] ?? '').toString(),
@@ -119,6 +122,7 @@ class MemoryDto {
       'pinned': pinned,
       'archivedAt': archivedAt,
       'sensitivityLevel': sensitivityLevel,
+      'allowContextUse': allowContextUse,
       'allowProactiveMention': allowProactiveMention,
       'requiresConfirmation': requiresConfirmation,
       'createdAt': createdAt,

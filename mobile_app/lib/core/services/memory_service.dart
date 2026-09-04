@@ -314,6 +314,7 @@ class MemoryService {
       result.putIfAbsent('scope', () => 'character');
       result.putIfAbsent('verifiedStatus', () => 'user_verified');
       result.putIfAbsent('confidence', () => 100);
+      result.putIfAbsent('allowContextUse', () => true);
       result.putIfAbsent('allowProactiveMention', () => true);
       result.putIfAbsent('requiresConfirmation', () => false);
     }

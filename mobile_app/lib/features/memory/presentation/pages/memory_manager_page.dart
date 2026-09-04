@@ -766,6 +766,11 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     required String scope,
     required int retentionLevel,
     required bool pinned,
+    required String memorySubtype,
+    required String sensitivityLevel,
+    required bool allowContextUse,
+    required bool allowProactiveMention,
+    required bool requiresConfirmation,
   }) async {
     final key = content.replaceAll(RegExp(r'\s+'), ' ').trim();
     final normalizedKey = key.length <= 60 ? key : key.substring(0, 60);
@@ -783,6 +788,11 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
         'scope': scope,
         if (retentionLevel > 0) 'retentionLevel': retentionLevel,
         'pinned': pinned,
+        'memorySubtype': memorySubtype,
+        'sensitivityLevel': sensitivityLevel,
+        'allowContextUse': allowContextUse,
+        'allowProactiveMention': allowProactiveMention,
+        'requiresConfirmation': requiresConfirmation,
       });
       return true;
     }
@@ -819,6 +829,11 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
         if (scope != 'character') 'scope': scope,
         if (retentionLevel > 0) 'retentionLevel': retentionLevel,
         'pinned': pinned,
+        'memorySubtype': memorySubtype,
+        'sensitivityLevel': sensitivityLevel,
+        'allowContextUse': allowContextUse,
+        'allowProactiveMention': allowProactiveMention,
+        'requiresConfirmation': requiresConfirmation,
       });
     }
     return true;
@@ -1014,6 +1029,11 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     String scope = _scopes.containsKey(existing?.scope) ? (existing?.scope ?? 'character') : 'character';
     int retentionLevel = existing?.retentionLevel ?? 3;
     bool pinned = existing?.pinned ?? false;
+    final memorySubtypeCtrl = TextEditingController(text: existing?.memorySubtype ?? '');
+    String sensitivityLevel = existing?.sensitivityLevel ?? 'internal';
+    bool allowContextUse = existing?.allowContextUse ?? true;
+    bool allowProactiveMention = existing?.allowProactiveMention ?? true;
+    bool requiresConfirmation = existing?.requiresConfirmation ?? false;
 
     showModalBottomSheet(
       context: context,
@@ -1073,6 +1093,46 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     ),
                   );
                 }).toList(),
+              ),
+              SizedBox(height: AppSpacing.md),
+              Text('记忆子类型', style: AppTypography.label(context)),
+              SizedBox(height: AppSpacing.xs),
+              AmitiaTextField(
+                controller: memorySubtypeCtrl,
+                hintText: '可选，例如 preference / relationship',
+              ),
+              SizedBox(height: AppSpacing.md),
+              Text('敏感等级', style: AppTypography.label(context)),
+              SizedBox(height: AppSpacing.xs),
+              DropdownButtonFormField<String>(
+                value: sensitivityLevel,
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(value: 'public', child: Text('公开')),
+                  DropdownMenuItem(value: 'internal', child: Text('内部')),
+                  DropdownMenuItem(value: 'private', child: Text('私密')),
+                  DropdownMenuItem(value: 'secret', child: Text('高度敏感')),
+                ],
+                onChanged: (value) => setSheetState(() => sensitivityLevel = value ?? 'internal'),
+              ),
+              SizedBox(height: AppSpacing.sm),
+              AmitiaSwitchTile(
+                title: '允许用于上下文理解',
+                subtitle: '关闭后，该记忆不会进入检索、提示词或派生上下文',
+                value: allowContextUse,
+                onChanged: (value) => setSheetState(() => allowContextUse = value),
+              ),
+              AmitiaSwitchTile(
+                title: '允许主动提及',
+                subtitle: '控制主动消息是否可以引用这条记忆',
+                value: allowProactiveMention,
+                onChanged: (value) => setSheetState(() => allowProactiveMention = value),
+              ),
+              AmitiaSwitchTile(
+                title: '使用前需要确认',
+                subtitle: '敏感记忆使用时要求确认',
+                value: requiresConfirmation,
+                onChanged: (value) => setSheetState(() => requiresConfirmation = value),
               ),
               SizedBox(height: AppSpacing.md),
               Text('自然遗忘层级', style: AppTypography.label(context)),
@@ -1167,6 +1227,11 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     'scope': scope,
                     'retentionLevel': retentionLevel,
                     'pinned': pinned,
+                    'memorySubtype': memorySubtypeCtrl.text.trim(),
+                    'sensitivityLevel': sensitivityLevel,
+                    'allowContextUse': allowContextUse,
+                    'allowProactiveMention': allowProactiveMention,
+                    'requiresConfirmation': requiresConfirmation,
                   };
                   try {
                     if (isEdit) {
@@ -1180,6 +1245,11 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                         scope: scope,
                         retentionLevel: retentionLevel,
                         pinned: pinned,
+                        memorySubtype: memorySubtypeCtrl.text.trim(),
+                        sensitivityLevel: sensitivityLevel,
+                        allowContextUse: allowContextUse,
+                        allowProactiveMention: allowProactiveMention,
+                        requiresConfirmation: requiresConfirmation,
                       );
                       if (!handled) return;
                     }
