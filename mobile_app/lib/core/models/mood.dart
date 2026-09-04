@@ -1,5 +1,6 @@
 class MoodDto {
   final String id;
+  final String messageId;
   final String conversationId;
   final String mood;
   final int valence;
@@ -8,6 +9,7 @@ class MoodDto {
 
   MoodDto({
     required this.id,
+    this.messageId = '',
     this.conversationId = '',
     this.mood = '',
     this.valence = 0,
@@ -16,13 +18,21 @@ class MoodDto {
   });
 
   factory MoodDto.fromJson(Map<String, dynamic> json) {
+    final messageId = (json['messageId'] ?? json['id'] ?? '').toString();
+    final mood = (json['moodLabel'] ?? json['mood'] ?? json['name'] ?? '').toString();
     return MoodDto(
-      id: (json['id'] ?? '').toString(),
+      id: (json['id'] ?? messageId).toString(),
+      messageId: messageId,
       conversationId: (json['conversationId'] ?? '').toString(),
-      mood: json['mood'] as String? ?? '',
-      valence: json['valence'] as int? ?? 0,
-      arousal: json['arousal'] as int? ?? 0,
-      createdAt: json['createdAt'] as String? ?? '',
+      mood: mood,
+      valence: _asInt(json['valence']),
+      arousal: _asInt(json['arousal']),
+      createdAt: (json['createdAt'] ?? json['lastDetected'] ?? '').toString(),
     );
+  }
+
+  static int _asInt(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 }

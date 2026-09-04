@@ -26,6 +26,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   String _channelFilter = '';
   List<MessageDto> _messages = const [];
   List<MessageDto> _searchResults = const [];
+  Map<String, String> _moodsByMessage = const {};
   bool _loadingMessages = false;
   bool _searching = false;
   final TextEditingController _searchController = TextEditingController();
@@ -164,12 +165,29 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       _selectedConversationId = id;
       _messages = const [];
       _searchResults = const [];
+      _moodsByMessage = const {};
       _searchController.clear();
       _loadingMessages = true;
     });
     try {
       final messages = await ref.read(chatServiceProvider).getMessages(id);
-      if (mounted && _selectedConversationId == id) setState(() => _messages = messages);
+      final moodMap = <String, String>{};
+      try {
+        final moods = await ref.read(moodServiceProvider).getByConversation(id);
+        for (final item in moods) {
+          final messageId = item.messageId.toString();
+          final label = item.mood.toString().trim();
+          if (messageId.isNotEmpty && label.isNotEmpty) moodMap[messageId] = label;
+        }
+      } catch (_) {
+        // Mood is supplemental metadata; a mood endpoint failure must not block chat logs.
+      }
+      if (mounted && _selectedConversationId == id) {
+        setState(() {
+          _messages = messages;
+          _moodsByMessage = moodMap;
+        });
+      }
     } catch (e) {
       _showError('加载消息失败：$e');
     } finally {
@@ -396,6 +414,10 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
         children: [
           Row(children: [
             Text(isUser ? '用户' : 'AI', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600)),
+            if (!showConversation && (_moodsByMessage[message.id] ?? '').isNotEmpty) ...[
+              const SizedBox(width: 8),
+              AmitiaStatusBadge(label: '心情 ${_moodsByMessage[message.id]}', type: BadgeType.info),
+            ],
             if (showConversation) ...[
               const SizedBox(width: 8),
               Expanded(child: Text('会话 ${message.conversationId}', style: AppTypography.label(context), overflow: TextOverflow.ellipsis)),
@@ -625,6 +647,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       setState(() {
         _selectedConversationId = null;
         _messages = const [];
+        _moodsByMessage = const {};
       });
       ref.invalidate(conversationListProvider);
       _show('会话已删除');
@@ -641,6 +664,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       setState(() {
         _selectedConversationId = null;
         _messages = const [];
+        _moodsByMessage = const {};
         _searchResults = const [];
       });
       ref.invalidate(conversationListProvider);

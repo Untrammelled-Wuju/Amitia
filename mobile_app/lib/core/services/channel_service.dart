@@ -647,8 +647,12 @@ class ProactiveService {
   }
 
   Future<List<Map<String, dynamic>>> history() async {
-    final resp = await _api.get<List<dynamic>>('/api/proactive/history');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/proactive/history',
+      queryParameters: const {'page': 1, 'pageSize': 20},
+    );
+    final items = resp?['items'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
 }

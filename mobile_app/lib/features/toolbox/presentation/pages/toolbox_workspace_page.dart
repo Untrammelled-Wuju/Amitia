@@ -407,7 +407,23 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
                               );
                             }),
                           SizedBox(height: AppSpacing.lg),
-                          Text('分支', style: AppTypography.cardTitle(sheetContext)),
+                          Row(
+                            children: [
+                              Expanded(child: Text('分支', style: AppTypography.cardTitle(sheetContext))),
+                              AmitiaButton(
+                                label: '新建分支',
+                                isSecondary: true,
+                                icon: Icons.call_split_outlined,
+                                onPressed: workspace.readOnly
+                                    ? null
+                                    : () => _gitCreateBranchDialog(
+                                          workspace,
+                                          fromRef: (status!['branch'] ?? 'HEAD').toString(),
+                                          refresh: () => refresh(setSheetState),
+                                        ),
+                              ),
+                            ],
+                          ),
                           ...branchItems.map((raw) {
                             final branch = Map<String, dynamic>.from(raw);
                             return ListTile(
@@ -455,6 +471,61 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
         },
       ),
     );
+  }
+
+  Future<void> _gitCreateBranchDialog(
+    WorkspaceMountDto workspace, {
+    required String fromRef,
+    required Future<void> Function() refresh,
+  }) async {
+    final nameController = TextEditingController();
+    final fromController = TextEditingController(text: fromRef.isEmpty ? 'HEAD' : fromRef);
+    final create = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('新建 Git 分支'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: '分支名称'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: fromController,
+              decoration: const InputDecoration(labelText: '起点', hintText: 'HEAD / 分支 / Commit'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('创建并切换')),
+        ],
+      ),
+    );
+    final branchName = nameController.text.trim();
+    final branchFrom = fromController.text.trim().isEmpty ? 'HEAD' : fromController.text.trim();
+    nameController.dispose();
+    fromController.dispose();
+    if (create != true || branchName.isEmpty) return;
+    try {
+      await ref.read(workspaceServiceProvider).gitCheckout(
+            workspace.rootUri,
+            branchName,
+            create: true,
+            fromRef: branchFrom,
+          );
+      await refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已创建并切换到 $branchName')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('新建分支失败：$error')));
+      }
+    }
   }
 
   Future<void> _gitCommitDialog(WorkspaceMountDto workspace, {required Future<void> Function() refresh}) async {
