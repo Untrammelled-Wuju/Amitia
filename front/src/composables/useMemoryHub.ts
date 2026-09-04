@@ -88,42 +88,64 @@ export function useMemoryHub() {
     await post("/api/memories/batch-importance", { ids, importance });
   }
 
-  async function globalSearch(query: string) {
+  function containsQuery(value: unknown, keyword: string): boolean {
+    if (value == null) return false;
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      return String(value).toLowerCase().includes(keyword);
+    }
+    if (Array.isArray(value)) {
+      return value.some((item) => containsQuery(item, keyword));
+    }
+    if (typeof value === "object") {
+      return Object.values(value as Record<string, unknown>).some((item) =>
+        containsQuery(item, keyword),
+      );
+    }
+    return false;
+  }
+
+  async function globalSearch(query: string, limitPerType = 5) {
+    const keyword = query.trim();
     const results: any = {
       memories: [],
       profiles: [],
       episodics: [],
       worldBooks: [],
     };
+    if (!keyword) return results;
+
     try {
       const mr = await post<any>("/api/memories/hybrid-search", {
-        keyword: query,
-        limit: 5,
+        keyword,
+        query: keyword,
+        limit: limitPerType,
       });
-      results.memories = (mr?.items || []).map((r: any) => ({
-        ...r.memory,
-        score: r.score,
-        matchType: r.matchType,
-        memoryLayer: r.memoryLayer,
+      results.memories = (mr?.items || []).slice(0, limitPerType).map((r: any) => ({
+        ...(r?.memory || r),
+        score: r?.score,
+        matchType: r?.matchType,
+        memoryLayer: r?.memoryLayer,
       }));
     } catch {}
+
+    const normalized = keyword.toLowerCase();
     try {
-      const pr = await get<any>("/api/profiles", {
-        keyword: query,
-        pageSize: 5,
-      });
-      results.profiles = pr?.items || [];
+      const pr = await get<any>("/api/profiles", { keyword, page: 1, pageSize: 100 });
+      results.profiles = (pr?.items || [])
+        .filter((item: any) => containsQuery(item, normalized))
+        .slice(0, limitPerType);
     } catch {}
     try {
-      const er = await get<any>("/api/episodic", {
-        keyword: query,
-        pageSize: 5,
-      });
-      results.episodics = er?.items || [];
+      const er = await get<any>("/api/episodic", { keyword, page: 1, pageSize: 100 });
+      results.episodics = (er?.items || [])
+        .filter((item: any) => containsQuery(item, normalized))
+        .slice(0, limitPerType);
     } catch {}
     try {
-      const wr = await get<any>("/api/world-book", { keyword: query, pageSize: 5 });
-      results.worldBooks = wr?.items || [];
+      const wr = await get<any>("/api/world-book", { keyword, page: 1, pageSize: 100 });
+      results.worldBooks = (wr?.items || [])
+        .filter((item: any) => containsQuery(item, normalized))
+        .slice(0, limitPerType);
     } catch {}
     return results;
   }
