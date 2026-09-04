@@ -45,7 +45,32 @@ func (s *service) checkBurstEligibility(characterID string, setting map[string]i
 	}
 	scope := s.getBurstScopeState(characterID, now)
 	minInterval, _ := setting["minInterval"].(int)
-	if now.Sub(scope.lastAt) < time.Duration(minInterval)*time.Minute {
+	if minInterval < 1 {
+		minInterval = 60
+	}
+	effectiveMinInterval := minInterval
+	if slowdownEnabled, _ := setting["unrepliedSlowdownEnabled"].(bool); slowdownEnabled {
+		after, _ := setting["unrepliedSlowdownAfter"].(int)
+		if after < 1 {
+			after = 2
+		}
+		multiplier, _ := setting["unrepliedCooldownMultiplier"].(float64)
+		if multiplier < 1 {
+			multiplier = 2
+		}
+		recoveryOnReply, ok := setting["unrepliedRecoveryOnReply"].(bool)
+		if !ok {
+			recoveryOnReply = true
+		}
+		unreplied := s.unrepliedProactiveCount(characterID, recoveryOnReply, now)
+		if unreplied >= after {
+			effectiveMinInterval = int(float64(minInterval) * multiplier)
+		}
+	}
+	if now.Sub(scope.lastAt) < time.Duration(effectiveMinInterval)*time.Minute {
+		if effectiveMinInterval > minInterval {
+			return false, "unrepliedSlowdown"
+		}
 		return false, "minInterval"
 	}
 	maxPerDay, _ := setting["maxPerDay"].(int)
@@ -53,6 +78,32 @@ func (s *service) checkBurstEligibility(characterID string, setting map[string]i
 		return false, "maxPerDay"
 	}
 	return true, ""
+}
+
+func (s *service) unrepliedProactiveCount(characterID string, recoveryOnReply bool, now time.Time) int {
+	query := s.db.Table("proactive_messages AS pm").
+		Joins("JOIN conversations AS c ON c.id = pm.conversation_id").
+		Where("c.character_id = ?", characterID)
+
+	if recoveryOnReply {
+		var lastUserAt string
+		_ = s.db.Table("messages AS m").
+			Select("COALESCE(MAX(m.created_at), '')").
+			Joins("JOIN conversations AS c ON c.id = m.conversation_id").
+			Where("c.character_id = ? AND m.role = ?", characterID, "user").
+			Scan(&lastUserAt).Error
+		if lastUserAt != "" {
+			query = query.Where("pm.created_at > ?", lastUserAt)
+		}
+	} else {
+		query = query.Where("date(pm.created_at) = date(?)", now.Format("2006-01-02"))
+	}
+
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return 0
+	}
+	return int(count)
 }
 
 func (s *service) getBurstScopeState(characterID string, now time.Time) burstScopeState {
@@ -221,7 +272,7 @@ func (s *service) buildBurstPrompt(characterID, mood, currentState string, energ
 	}
 	if recentMemoriesStr == "" {
 		nowStr := time.Now().Format("2006-01-02 15:04:05")
-		rows, err := s.db.Table("memories").Select("value").Where("character_id = ? AND importance >= 2 AND allow_proactive_mention = 1 AND verified_status NOT IN ('deleted','invalidated','expired','rejected','tombstone','tombstoned','inactive') AND (expires_at IS NULL OR expires_at > ?)", characterID, nowStr).Order("created_at DESC").Limit(3).Rows()
+		rows, err := s.db.Table("memories").Select("value").Where("character_id = ? AND importance >= 2 AND COALESCE(allow_context_use, 1) = 1 AND allow_proactive_mention = 1 AND verified_status NOT IN ('deleted','invalidated','expired','rejected','tombstone','tombstoned','inactive') AND (expires_at IS NULL OR expires_at > ?)", characterID, nowStr).Order("created_at DESC").Limit(3).Rows()
 		if err == nil {
 			defer rows.Close()
 			var mems []string
