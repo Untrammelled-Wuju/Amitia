@@ -166,6 +166,43 @@ export interface CompatibilityRecord {
   reason?: string;
 }
 
+export interface HostAPIAuditEntry {
+  callId: string;
+  traceId: string;
+  operationId: string;
+  invocationId: string;
+  extensionId: string;
+  moduleId: string;
+  method: string;
+  generation: number;
+  permissionSnapshotId: string;
+  scopeSnapshotId: string;
+  startedAt: string;
+  finishedAt?: string;
+  result: string;
+  errorCode?: string;
+  errorMessage?: string;
+  sideEffect?: string;
+  inputMasked?: string;
+  phase: string;
+}
+
+export interface HostAPIAuditResponse {
+  entries: HostAPIAuditEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface HostAPIAuditFilter {
+  extension?: string;
+  method?: string;
+  result?: string;
+  traceId?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface ConsoleSession {
   sessionId: string;
   workspaceId: string;
@@ -283,6 +320,19 @@ export async function fetchCompatibility(): Promise<CompatibilityRecord[]> {
   return res.data;
 }
 
+export async function fetchHostAPIAudits(params?: HostAPIAuditFilter): Promise<HostAPIAuditResponse> {
+  const sp = new URLSearchParams();
+  if (params?.extension) sp.set("extension", params.extension);
+  if (params?.method) sp.set("method", params.method);
+  if (params?.result) sp.set("result", params.result);
+  if (params?.traceId) sp.set("traceId", params.traceId);
+  if (params?.limit) sp.set("limit", String(params.limit));
+  if (params?.offset != null) sp.set("offset", String(params.offset));
+  const qs = sp.toString();
+  const res = await apiClient.get(`${BASE}/host-api-audits${qs ? `?${qs}` : ""}`);
+  return res.data;
+}
+
 export async function openSession(workspace?: string): Promise<ConsoleSession> {
   const sp = new URLSearchParams();
   if (workspace) sp.set("workspace", workspace);
@@ -297,7 +347,7 @@ export async function closeSession(id: string): Promise<void> {
 
 export async function exportDiagnostics(params?: ConsoleFilter): Promise<Blob> {
   const filter: ConsoleFilter = params || {};
-  const [overview, invocations, events, hooks, tasks, uiSessions, storage, permissions, scopes, resources, lifecycle, logs, performance, migration, compatibility] = await Promise.all([
+  const [overview, invocations, events, hooks, tasks, uiSessions, storage, permissions, scopes, resources, lifecycle, logs, performance, migration, compatibility, hostApiAudits] = await Promise.all([
     fetchOverview().catch(() => null),
     fetchInvocations(filter).catch(() => []),
     fetchEvents(filter).catch(() => []),
@@ -313,6 +363,7 @@ export async function exportDiagnostics(params?: ConsoleFilter): Promise<Blob> {
     fetchPerformance(filter).catch(() => []),
     fetchMigration().catch(() => []),
     fetchCompatibility().catch(() => []),
+    fetchHostAPIAudits({ extension: filter.extension, limit: 1000 }).catch(() => ({ entries: [], total: 0, limit: 1000, offset: 0 })),
   ]);
   const payload = {
     exportedAt: new Date().toISOString(),
@@ -332,6 +383,7 @@ export async function exportDiagnostics(params?: ConsoleFilter): Promise<Blob> {
     performance,
     migration,
     compatibility,
+    hostApiAudits,
   };
   return new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
 }

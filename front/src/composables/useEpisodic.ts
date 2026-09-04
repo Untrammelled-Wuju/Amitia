@@ -61,6 +61,7 @@ export function useEpisodic() {
     sceneType?: string;
     retentionLevel?: number;
     decayState?: string;
+    keyword?: string;
     page?: number;
     pageSize?: number;
   }) {

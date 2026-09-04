@@ -6,11 +6,14 @@ SPDX-License-Identifier: AGPL-3.0-only
   <DesktopTitleBar v-if="isDesktopShell()" :transparent="isOnboardingPage" />
   <div id="amitia-overlay-root" aria-live="polite"></div>
   <UpdateDialog />
-  <PrivacyConsent v-if="!isPublicPage && !renderError" />
-  <MCPInteractionGuard v-if="!isPublicPage && !renderError" />
+  <PrivacyConsent v-if="!isPublicPage && !isUIProviderRecoveryPage && !renderError" />
+  <MCPInteractionGuard v-if="!isPublicPage && !isUIProviderRecoveryPage && !renderError" />
   <NotFoundView v-if="renderError" :error="capturedError" />
   <Transition v-else name="route-slide" mode="out-in">
-    <AppLayout v-if="!isPublicPage" key="app">
+    <div v-if="isUIProviderRecoveryPage" key="ui-provider-recovery" class="ui-provider-recovery-root">
+      <router-view />
+    </div>
+    <AppLayout v-else-if="!isPublicPage" key="app">
       <router-view v-slot="{ Component }">
         <RouteSurfaceHost v-if="Component" :fallback="Component" />
       </router-view>
@@ -55,7 +58,6 @@ const themeRuntime = useTheme();
 const publicPaths = [
   "/onboarding",
   "/login",
-  "/setup",
   "/privacy",
   "/usage-boundary",
 ];
@@ -112,14 +114,6 @@ onMounted(async () => {
     }
   } catch {}
 
-  try {
-    const authRes = await apiClient.get("/api/public/auth/status");
-    const authData = authRes.data?.data || authRes.data;
-    if (!authData?.hasAdmin) {
-      router.replace("/setup");
-      return;
-    }
-  } catch {}
 
   try {
     const meRes = await apiClient.get("/api/auth/me");

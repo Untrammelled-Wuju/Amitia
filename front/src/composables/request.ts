@@ -95,7 +95,7 @@ export function classifyError(
       code === ERR.TOKEN_INVALID
     ) {
       forceCleanupSession();
-      const PUBLIC_PATHS = ["/login", "/setup", "/onboarding", "/privacy", "/usage-boundary"];
+      const PUBLIC_PATHS = ["/login", "/onboarding", "/privacy", "/usage-boundary"];
       if (!PUBLIC_PATHS.includes(window.location.pathname)) {
         window.location.href = "/login";
       }

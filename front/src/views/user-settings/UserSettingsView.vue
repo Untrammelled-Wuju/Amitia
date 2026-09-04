@@ -54,6 +54,32 @@
           </div>
         </div>
 
+        <div class="profile-edit-grid">
+          <el-form label-position="top" class="profile-form" @submit.prevent="saveProfile">
+            <div class="profile-field-row">
+              <el-form-item label="昵称">
+                <el-input v-model="userInfo.nickname" maxlength="100" show-word-limit placeholder="用于界面展示的昵称" />
+              </el-form-item>
+              <el-form-item label="用户称呼">
+                <el-input v-model="userInfo.userLabel" maxlength="100" show-word-limit placeholder="AI 对你的称呼" />
+              </el-form-item>
+            </div>
+            <el-form-item label="个人简介">
+              <el-input
+                v-model="userInfo.bio"
+                type="textarea"
+                :rows="3"
+                maxlength="1000"
+                show-word-limit
+                placeholder="可选的个人简介"
+              />
+            </el-form-item>
+            <div class="profile-form-actions">
+              <el-button type="primary" native-type="submit" :loading="profileSaving">保存资料</el-button>
+            </div>
+          </el-form>
+        </div>
+
         <div class="account-meta">
           <div class="meta-item">
             <span class="meta-icon"
@@ -239,12 +265,16 @@ type UserInfo = {
   id?: number;
   username: string;
   role: string;
+  nickname: string;
+  userLabel: string;
+  bio: string;
   createdTime: string;
   lastLoginTime: string;
 };
 
 const loading = ref(false);
 const saving = ref(false);
+const profileSaving = ref(false);
 const logoutLoading = ref(false);
 const avatarUpdating = ref(false);
 const sessionsLoading = ref(false);
@@ -257,6 +287,9 @@ const router = useRouter();
 const userInfo = reactive<UserInfo>({
   username: "",
   role: "",
+  nickname: "",
+  userLabel: "",
+  bio: "",
   createdTime: "",
   lastLoginTime: "",
 });
@@ -396,6 +429,24 @@ async function loadUserInfo() {
     ElMessage.error(error?.message || "用户信息加载失败");
   } finally {
     loading.value = false;
+  }
+}
+
+async function saveProfile() {
+  profileSaving.value = true;
+  try {
+    const res = await apiClient.put("/api/auth/me", {
+      nickname: userInfo.nickname.trim(),
+      userLabel: userInfo.userLabel.trim(),
+      bio: userInfo.bio.trim(),
+    });
+    const data = res.data?.data || res.data;
+    Object.assign(userInfo, data || {});
+    ElMessage.success("用户资料已保存");
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || error?.message || "用户资料保存失败");
+  } finally {
+    profileSaving.value = false;
   }
 }
 
@@ -624,6 +675,28 @@ onMounted(() => {
   display: none;
 }
 
+.profile-edit-grid {
+  padding: 0 24px 22px;
+}
+
+.profile-form {
+  padding: 18px;
+  border: 1px solid var(--console-border);
+  border-radius: 12px;
+  background: var(--el-fill-color-extra-light);
+}
+
+.profile-field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.profile-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .account-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -803,6 +876,10 @@ onMounted(() => {
 }
 
 @media (max-width: 560px) {
+  .profile-field-row {
+    grid-template-columns: 1fr;
+  }
+
   .page-header {
     align-items: flex-start;
   }

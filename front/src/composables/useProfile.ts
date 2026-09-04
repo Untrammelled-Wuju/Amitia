@@ -42,6 +42,7 @@ export function useProfile() {
   async function fetchProfiles(params?: {
     userId?: string;
     category?: string;
+    keyword?: string;
     page?: number;
     pageSize?: number;
   }) {

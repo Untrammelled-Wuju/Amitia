@@ -80,6 +80,45 @@
         <el-empty v-if="!loading && invocations.length === 0" description="暂无调用记录" />
       </el-tab-pane>
 
+      <el-tab-pane label="Host API" name="hostApiAudits">
+        <div class="tab-toolbar host-audit-toolbar">
+          <el-select v-model="filterExtension" placeholder="按扩展过滤" clearable filterable style="width: 220px" @change="loadHostAPIAudits">
+            <el-option v-for="ext in extensionOptions" :key="ext" :label="ext" :value="ext" />
+          </el-select>
+          <el-input v-model="hostMethod" placeholder="Method" clearable style="width: 200px" @keyup.enter="loadHostAPIAudits" />
+          <el-select v-model="hostResult" placeholder="结果" clearable style="width: 130px" @change="loadHostAPIAudits">
+            <el-option label="成功" value="success" />
+            <el-option label="失败" value="failed" />
+            <el-option label="已取消" value="cancelled" />
+            <el-option label="超时" value="timed_out" />
+            <el-option label="执行中" value="started" />
+          </el-select>
+          <el-input v-model="hostTraceId" placeholder="Trace ID" clearable style="width: 220px" @keyup.enter="loadHostAPIAudits" />
+          <el-button @click="loadHostAPIAudits" :icon="Refresh">刷新</el-button>
+          <span class="audit-total">共 {{ hostApiAuditTotal }} 条</span>
+        </div>
+        <el-table :data="hostApiAudits" border size="small" v-loading="loading">
+          <el-table-column prop="startedAt" label="时间" width="180">
+            <template #default="{ row }">{{ formatDate(row.startedAt) }}</template>
+          </el-table-column>
+          <el-table-column prop="extensionId" label="扩展 ID" min-width="170" show-overflow-tooltip />
+          <el-table-column prop="moduleId" label="模块 ID" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="method" label="Method" min-width="190" show-overflow-tooltip />
+          <el-table-column prop="phase" label="阶段" width="110" />
+          <el-table-column label="结果" width="100">
+            <template #default="{ row }">
+              <el-tag :type="hostResultType(row.result)" size="small">{{ row.result || "unknown" }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="sideEffect" label="副作用" width="130" show-overflow-tooltip />
+          <el-table-column prop="traceId" label="Trace ID" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="callId" label="Call ID" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="inputMasked" label="脱敏输入" min-width="240" show-overflow-tooltip />
+          <el-table-column prop="errorMessage" label="错误" min-width="220" show-overflow-tooltip />
+        </el-table>
+        <el-empty v-if="!loading && hostApiAudits.length === 0" description="暂无 Host API 审计记录" />
+      </el-tab-pane>
+
       <el-tab-pane label="事件" name="events">
         <div class="tab-toolbar">
           <el-select v-model="filterExtension" placeholder="按扩展过滤" clearable filterable style="width: 240px" @change="loadEvents">
@@ -412,6 +451,7 @@ import {
   fetchUISessions,
   fetchMigration,
   fetchCompatibility,
+  fetchHostAPIAudits,
   exportDiagnostics,
   type DevConsoleOverview,
   type InvocationRecord,
@@ -428,6 +468,7 @@ import {
   type UISessionRecord,
   type MigrationRecord,
   type CompatibilityRecord,
+  type HostAPIAuditEntry,
 } from "./dev-console-api";
 
 const loading = ref(false);
@@ -449,10 +490,15 @@ const storage = ref<StorageEntryRecord[]>([]);
 const uiSessions = ref<UISessionRecord[]>([]);
 const migration = ref<MigrationRecord[]>([]);
 const compatibility = ref<CompatibilityRecord[]>([]);
+const hostApiAudits = ref<HostAPIAuditEntry[]>([]);
+const hostApiAuditTotal = ref(0);
 
 const filterExtension = ref("");
 const invocationSeverity = ref("");
 const logSeverity = ref("");
+const hostMethod = ref("");
+const hostResult = ref("");
+const hostTraceId = ref("");
 
 const fieldsVisible = ref(false);
 const currentFields = ref<Record<string, unknown> | null>(null);
@@ -478,6 +524,9 @@ const extensionOptions = computed(() => {
   }
   for (const rec of permissions.value) {
     if (rec.extension) set.add(rec.extension);
+  }
+  for (const rec of hostApiAudits.value) {
+    if (rec.extensionId) set.add(rec.extensionId);
   }
   return Array.from(set).sort();
 });
@@ -516,6 +565,14 @@ function invocationStatusType(status: string): "success" | "warning" | "danger" 
   if (status === "succeeded") return "success";
   if (status === "running") return "warning";
   if (status === "failed" || status === "timeout") return "danger";
+  return "info";
+}
+
+function hostResultType(result: string): "success" | "warning" | "danger" | "info" {
+  const value = String(result || "").toLowerCase();
+  if (["success", "succeeded", "ok", "allowed"].includes(value)) return "success";
+  if (["denied", "blocked", "cancelled", "started"].includes(value)) return "warning";
+  if (["error", "failed", "timeout", "timed_out"].includes(value)) return "danger";
   return "info";
 }
 
@@ -591,6 +648,25 @@ async function loadInvocations() {
     invocations.value = await fetchInvocations(buildInvocationFilter());
   } catch (e: any) {
     ElMessage.error("加载调用记录失败: " + (e?.message || e));
+  }
+}
+
+async function loadHostAPIAudits() {
+  try {
+    const response = await fetchHostAPIAudits({
+      extension: filterExtension.value || undefined,
+      method: hostMethod.value.trim() || undefined,
+      result: hostResult.value || undefined,
+      traceId: hostTraceId.value.trim() || undefined,
+      limit: 500,
+      offset: 0,
+    });
+    hostApiAudits.value = response.entries || [];
+    hostApiAuditTotal.value = Number(response.total || 0);
+  } catch (e: any) {
+    hostApiAudits.value = [];
+    hostApiAuditTotal.value = 0;
+    ElMessage.error("加载 Host API 审计失败: " + (e?.message || e));
   }
 }
 
@@ -706,6 +782,9 @@ async function loadActiveTab() {
     case "invocations":
       await loadInvocations();
       break;
+    case "hostApiAudits":
+      await loadHostAPIAudits();
+      break;
     case "events":
       await loadEvents();
       break;
@@ -801,6 +880,8 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.audit-total { color: var(--el-text-color-secondary); font-size: 12px; white-space: nowrap; }
+.host-audit-toolbar { flex-wrap: wrap; }
 .developer-console {
   padding: 20px;
 }
