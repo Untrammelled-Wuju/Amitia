@@ -474,6 +474,10 @@ CREATE TABLE IF NOT EXISTS active_message_settings (
     max_per_day INTEGER DEFAULT 6,
     max_daily_calls INTEGER DEFAULT 10,
     channel TEXT DEFAULT 'all',
+    unreplied_slowdown_enabled INTEGER DEFAULT 1,
+    unreplied_slowdown_after INTEGER DEFAULT 2,
+    unreplied_cooldown_multiplier REAL DEFAULT 2.0,
+    unreplied_recovery_on_reply INTEGER DEFAULT 1,
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
@@ -596,6 +600,7 @@ CREATE TABLE IF NOT EXISTS memories (
     archived_at TEXT,
     superseded_by TEXT NOT NULL DEFAULT '',
     sensitivity_level TEXT DEFAULT 'internal',
+    allow_context_use INTEGER DEFAULT 1,
     allow_proactive_mention INTEGER DEFAULT 1,
     requires_confirmation INTEGER DEFAULT 0,
     version INTEGER NOT NULL DEFAULT 1,
