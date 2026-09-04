@@ -615,7 +615,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
     final schedulerRunning = _status['schedulerRunning'] == true;
     final enabledCount = _status['enabledRuleCount'] ?? _rules.where((rule) => rule['enabled'] == true || rule['enabled'] == 1).length;
     final totalCount = _status['totalRuleCount'] ?? _rules.length;
-    final queued = _queue['pending'] ?? _queue['queued'] ?? _queue['total'] ?? 0;
+    final queued = _queue['depth'] ?? _queue['pendingCount'] ?? _queue['pending'] ?? _queue['queued'] ?? _queue['total'] ?? 0;
     return AmitiaCard(
       child: Row(
         children: [

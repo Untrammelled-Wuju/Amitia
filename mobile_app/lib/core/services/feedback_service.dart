@@ -45,15 +45,17 @@ class MoodService {
   MoodService(this._api);
 
   Future<List<MoodDto>> list() async {
-    final resp = await _api.get<List<dynamic>>('/api/moods');
-    if (resp == null) return [];
-    return resp.map((e) => MoodDto.fromJson(e as Map<String, dynamic>)).toList();
+    final resp = await _api.get<Map<String, dynamic>>('/api/moods');
+    final items = resp?['moods'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((e) => MoodDto.fromJson(Map<String, dynamic>.from(e))).toList(growable: false);
   }
 
   Future<List<MoodDto>> getByConversation(String conversationId) async {
-    final resp = await _api.get<List<dynamic>>('/api/moods/conversations/$conversationId');
-    if (resp == null) return [];
-    return resp.map((e) => MoodDto.fromJson(e as Map<String, dynamic>)).toList();
+    final resp = await _api.get<Map<String, dynamic>>('/api/moods/conversations/$conversationId');
+    final items = resp?['items'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((e) => MoodDto.fromJson(Map<String, dynamic>.from(e))).toList(growable: false);
   }
 
   Future<bool> delete(String id) async {

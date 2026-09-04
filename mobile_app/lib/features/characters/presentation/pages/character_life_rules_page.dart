@@ -255,7 +255,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
     }
   }
 
-  Future<void> _save() async {
+  Future<void> _save({bool resetLifestyle = false}) async {
     if (_saving) return;
     setState(() => _saving = true);
     try {
@@ -279,7 +279,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
         ..['prepareMaxMinutes'] = _int(_prepareMaxController.text, 60)
         ..['overtimeMinMinutes'] = _int(_overtimeMinController.text, 30)
         ..['overtimeMaxMinutes'] = _int(_overtimeMaxController.text, 180);
-      final lifestyle = Map<String, dynamic>.from(_lifestyle)..['manuallyConfigured'] = true;
+      var lifestyle = Map<String, dynamic>.from(_lifestyle)..['manuallyConfigured'] = true;
       final saveOperations = <Future<dynamic>>[
         characterService.updateCharacter(widget.characterId, {
           'basePrompt': _promptController.text.trim(),
@@ -301,7 +301,12 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
           'sleepReplyEnabled': _sleepReplyEnabled,
           'sleepReplyMode': _sleepReplyMode,
         }, characterId: widget.characterId),
-        companion.updateLifestyleTendency(lifestyle, characterId: widget.characterId),
+        if (resetLifestyle)
+          companion.resetLifestyleTendency(characterId: widget.characterId).then((value) {
+            if (value != null) lifestyle = Map<String, dynamic>.from(value);
+          })
+        else
+          companion.updateLifestyleTendency(lifestyle, characterId: widget.characterId),
         companion.updateWorkProfile(work, characterId: widget.characterId),
         temporal.updateCharacterProfile(widget.characterId, updatedTemporal),
       ];
@@ -314,7 +319,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
         _workProfile = work;
         _lifestyle = lifestyle;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色生活规则已保存')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(resetLifestyle ? '角色生活规则已恢复默认' : '角色生活规则已保存')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败：$e')));
     } finally {
@@ -338,7 +343,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       _selfReferenceController.text = '我';
       _addressingController.clear();
       _lifeIdentity = 'CUSTOM';
-      _lifestyle = {for (final key in _lifestyleLabels.keys) key: 50, 'manuallyConfigured': true};
+      _lifestyle = {for (final key in _lifestyleLabels.keys) key: 50, 'manuallyConfigured': false};
       _workProfile = <String, dynamic>{
         'enabled': false,
         'replyMode': 'SHORT_REPLY',
@@ -371,7 +376,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
         'maxMentionSentences': 1,
       };
     });
-    await _save();
+    await _save(resetLifestyle: true);
   }
 
   Future<void> _editEvent({Map<String, dynamic>? event, required bool special}) async {

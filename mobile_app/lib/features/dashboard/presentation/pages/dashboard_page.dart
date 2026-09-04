@@ -30,6 +30,7 @@ final dashboardOverviewProvider = FutureProvider<Map<String, dynamic>>((ref) asy
     _safeGet(ref, '/api/logs/recent/errors', query: const {'limit': 20}),
     _safeGet(ref, '/api/imports/batches', query: const {'limit': 5}),
     _safeGet(ref, '/api/usage/periodic'),
+    _safeGet(ref, '/api/messages/feedback/stats'),
   ]);
   return {
     'health': values[0],
@@ -41,6 +42,7 @@ final dashboardOverviewProvider = FutureProvider<Map<String, dynamic>>((ref) asy
     'errors': values[6],
     'imports': values[7],
     'periodic': values[8],
+    'feedback': values[9],
   };
 });
 
@@ -168,6 +170,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final importsMap = data['imports'] as Map<String, dynamic>?;
     final imports = importsMap?['items'] is List ? importsMap!['items'] as List : const [];
     final periodicMap = data['periodic'] as Map<String, dynamic>?;
+    final feedback = data['feedback'] as Map<String, dynamic>? ?? const {};
     final daily = periodicMap?['daily'] is List
         ? (periodicMap!['daily'] as List).whereType<Map>().take(7).map((row) => Map<String, dynamic>.from(row)).toList(growable: false)
         : const <Map<String, dynamic>>[];
@@ -192,6 +195,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               _StatCard(label: '总 Token', value: '${usage['totalTokens'] ?? 0}', icon: Icons.data_usage_outlined),
               _StatCard(label: '对话', value: '${stats['totalConversations'] ?? stats['conversationCount'] ?? 0}', icon: Icons.chat_bubble_outline),
               _StatCard(label: '今日消息', value: '${stats['todayMessages'] ?? 0}', icon: Icons.message_outlined),
+              _StatCard(label: '消息反馈', value: '${feedback['total'] ?? 0}', icon: Icons.feedback_outlined),
             ],
           ),
           SizedBox(height: AppSpacing.sectionGap),

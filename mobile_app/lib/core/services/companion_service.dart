@@ -142,6 +142,13 @@ class CompanionService {
     return true;
   }
 
+  Future<Map<String, dynamic>?> resetLifestyleTendency({String? characterId}) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/companion/lifestyle-tendency/reset',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
+  }
+
   Future<Map<String, dynamic>?> workProfile({String? characterId}) {
     return _api.get<Map<String, dynamic>>(
       '/api/companion/work-profile',
