@@ -21,6 +21,7 @@ import 'channel_service.dart';
 import 'workspace_service.dart';
 import 'device_mesh_service.dart';
 import 'privacy_service.dart';
+import 'kernel_task_service.dart';
 import 'temporal_service.dart' as temporal_config;
 import 'onboarding_service.dart';
 import '../models/character.dart';
@@ -114,6 +115,8 @@ final localDeviceMeshStatusProvider = FutureProvider.autoDispose<Map<String, dyn
 });
 
 final privacyServiceProvider = Provider<PrivacyService>((ref) => PrivacyService(_getDynamicServiceApi(ref)));
+
+final kernelTaskServiceProvider = Provider<KernelTaskService>((ref) => KernelTaskService(_getDynamicServiceApi(ref)));
 
 final moodServiceProvider = Provider<MoodService>((ref) => MoodService(_getDynamicServiceApi(ref)));
 
