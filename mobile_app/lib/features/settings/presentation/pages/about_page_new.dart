@@ -102,7 +102,15 @@ class AboutPageNew extends ConsumerWidget {
               icon: Icons.privacy_tip_outlined,
               isSecondary: true,
               isFullWidth: true,
-              onPressed: () => context.push(AppRoutes.privacy),
+              onPressed: () => context.push(AppRoutes.settingsPrivacyPolicy),
+            ),
+            SizedBox(height: AppSpacing.sm),
+            AmitiaButton(
+              label: '用户协议',
+              icon: Icons.description_outlined,
+              isSecondary: true,
+              isFullWidth: true,
+              onPressed: () => context.push(AppRoutes.settingsUserAgreement),
             ),
             if (sourceUrl.isNotEmpty) ...[
               SizedBox(height: AppSpacing.sm),

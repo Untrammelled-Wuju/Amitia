@@ -1,7 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,14 +11,6 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/memory_service.dart';
 import '../../../../core/models/memory.dart';
-
-class _GlobalSearchRow {
-  final String layer;
-  final String title;
-  final String detail;
-
-  const _GlobalSearchRow({required this.layer, required this.title, required this.detail});
-}
 
 class MemoryManagerPage extends ConsumerStatefulWidget {
   const MemoryManagerPage({super.key});
@@ -396,11 +384,10 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
             children: [
               Text('高级记忆工具', style: AppTypography.sectionTitle(context)),
               SizedBox(height: AppSpacing.md),
-              ListTile(leading: const Icon(Icons.manage_search_outlined), title: const Text('跨记忆层全局搜索'), onTap: () { Navigator.pop(ctx); _showGlobalSearch(); }),
+              ListTile(leading: const Icon(Icons.manage_search_outlined), title: const Text('全局搜索所有记忆类型'), onTap: () { Navigator.pop(ctx); _showGlobalSearch(); }),
               ListTile(leading: const Icon(Icons.analytics_outlined), title: const Text('向量与检索诊断'), onTap: () { Navigator.pop(ctx); _showDiagnostics(); }),
               ListTile(leading: const Icon(Icons.pending_actions_outlined), title: const Text('候选记忆管理'), onTap: () { Navigator.pop(ctx); _showCandidates(); }),
-              ListTile(leading: const Icon(Icons.auto_awesome_outlined), title: const Text('从会话生成候选'), onTap: () async { Navigator.pop(ctx); await _generateCandidates(); }),
-              ListTile(leading: const Icon(Icons.download_outlined), title: const Text('导出当前记忆'), onTap: () async { Navigator.pop(ctx); await _exportMemories(); }),
+              ListTile(leading: const Icon(Icons.auto_awesome_outlined), title: const Text('提取待审核候选'), onTap: () async { Navigator.pop(ctx); await _extractCandidates(); }),
               ListTile(leading: const Icon(Icons.sort), title: const Text('查看检索排序结果'), onTap: () { Navigator.pop(ctx); _showRanked(); }),
               ListTile(leading: const Icon(Icons.replay), title: const Text('重建向量嵌入'), onTap: () async { Navigator.pop(ctx); await _runMaintenance('正在重建向量嵌入', () => ref.read(memoryServiceProvider).rebuildEmbeddings()); }),
               ListTile(leading: const Icon(Icons.reorder), title: const Text('重建记忆索引'), onTap: () async { Navigator.pop(ctx); await _runMaintenance('正在重建记忆索引', () => ref.read(memoryServiceProvider).rebuildIndex()); }),
@@ -413,102 +400,137 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
 
   Future<void> _showGlobalSearch() async {
     final controller = TextEditingController(text: _searchController.text.trim());
-    final query = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('跨记忆层全局搜索'),
-        content: SizedBox(
-          width: 560,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(
-              hintText: '同时搜索长期记忆、用户画像、情景记忆和世界书',
-              prefixIcon: Icon(Icons.search),
-            ),
-            onSubmitted: (value) => Navigator.pop(ctx, value.trim()),
-          ),
+    var searching = false;
+    var searched = false;
+    Map<String, List<Map<String, dynamic>>> results = const {
+      'memories': <Map<String, dynamic>>[],
+      'profiles': <Map<String, dynamic>>[],
+      'episodics': <Map<String, dynamic>>[],
+      'worldBooks': <Map<String, dynamic>>[],
+    };
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> runSearch() async {
+              final query = controller.text.trim();
+              if (query.isEmpty || searching) return;
+              setDialogState(() => searching = true);
+              try {
+                final next = await ref.read(memoryServiceProvider).globalSearch(query);
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    results = next;
+                    searched = true;
+                    searching = false;
+                  });
+                }
+              } catch (e) {
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    searching = false;
+                    searched = true;
+                    results = const {
+                      'memories': <Map<String, dynamic>>[],
+                      'profiles': <Map<String, dynamic>>[],
+                      'episodics': <Map<String, dynamic>>[],
+                      'worldBooks': <Map<String, dynamic>>[],
+                    };
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('全局搜索失败: $e')));
+                }
+              }
+            }
+
+            final count = results.values.fold<int>(0, (sum, rows) => sum + rows.length);
+            return AlertDialog(
+              title: const Text('全局记忆搜索'),
+              content: SizedBox(
+                width: 720,
+                height: 520,
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controller,
+                            autofocus: true,
+                            onSubmitted: (_) => runSearch(),
+                            decoration: const InputDecoration(
+                              labelText: '同时搜索结构化记忆、用户画像、情景记忆与世界书',
+                              prefixIcon: Icon(Icons.search),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        FilledButton.icon(
+                          onPressed: searching ? null : runSearch,
+                          icon: searching
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.search),
+                          label: const Text('搜索'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: !searched
+                          ? const Center(child: Text('输入关键词开始全局搜索'))
+                          : count == 0
+                              ? const Center(child: Text('未找到相关结果'))
+                              : ListView(
+                                  children: [
+                                    _globalSearchSection('结构化记忆', results['memories'] ?? const [], (row) => '${row['key'] ?? ''}: ${row['value'] ?? ''}'),
+                                    _globalSearchSection('用户画像', results['profiles'] ?? const [], (row) => '${row['attributeName'] ?? row['key'] ?? ''}: ${row['attributeValue'] ?? row['value'] ?? ''}'),
+                                    _globalSearchSection('情景记忆', results['episodics'] ?? const [], (row) => (row['title'] ?? row['summary'] ?? row['content'] ?? '').toString()),
+                                    _globalSearchSection('世界书', results['worldBooks'] ?? const [], (row) => '${row['matchPattern'] ?? row['title'] ?? ''}: ${row['injectContent'] ?? row['content'] ?? ''}'),
+                                  ],
+                                ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
+            );
+          },
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('搜索')),
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Widget _globalSearchSection(
+    String title,
+    List<Map<String, dynamic>> rows,
+    String Function(Map<String, dynamic>) textOf,
+  ) {
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$title (${rows.length})', style: AppTypography.cardTitle(context)),
+          const SizedBox(height: 6),
+          for (final row in rows)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: context.surfaceSecondary,
+                borderRadius: AppRadius.brSmall,
+                border: Border.all(color: context.borderPrimary, width: 0.5),
+              ),
+              child: Text(textOf(row), maxLines: 3, overflow: TextOverflow.ellipsis, style: AppTypography.bodySmall(context)),
+            ),
         ],
       ),
     );
-    controller.dispose();
-    if (query == null || query.trim().isEmpty || !mounted) return;
-
-    try {
-      final q = query.trim();
-      final memories = await ref.read(memoryServiceProvider).hybridSearch(q, limit: 5);
-      final profiles = await ref.read(profileServiceProvider).list(keyword: q, pageSize: 5);
-      final episodics = await ref.read(episodicServiceProvider).list(keyword: q, pageSize: 5);
-      final worldBooks = await ref.read(worldBookServiceProvider).list(keyword: q, pageSize: 5);
-      if (!mounted) return;
-
-      final rows = <_GlobalSearchRow>[
-        ...memories.map((item) => _GlobalSearchRow(
-              layer: '长期记忆',
-              title: item.key.isEmpty ? item.content : item.key,
-              detail: item.content,
-            )),
-        ...profiles.map((item) => _GlobalSearchRow(
-              layer: '用户画像',
-              title: item.attributeName,
-              detail: item.attributeValue,
-            )),
-        ...episodics.map((item) => _GlobalSearchRow(
-              layer: '情景记忆',
-              title: item.title,
-              detail: item.content,
-            )),
-        ...worldBooks.map((item) => _GlobalSearchRow(
-              layer: '世界书',
-              title: item.matchPattern,
-              detail: item.injectContent,
-            )),
-      ];
-
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text('“$q” 的全局搜索结果'),
-          content: SizedBox(
-            width: 680,
-            height: 520,
-            child: rows.isEmpty
-                ? const Center(child: Text('没有匹配结果'))
-                : ListView.separated(
-                    itemCount: rows.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
-                    itemBuilder: (_, index) {
-                      final row = rows[index];
-                      return ListTile(
-                        dense: true,
-                        leading: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: context.accentSoft,
-                            borderRadius: AppRadius.brTag,
-                          ),
-                          child: Text(row.layer, style: AppTypography.caption(context).copyWith(color: context.accentPrimary)),
-                        ),
-                        title: Text(row.title.isEmpty ? '未命名' : row.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(row.detail, maxLines: 3, overflow: TextOverflow.ellipsis),
-                      );
-                    },
-                  ),
-          ),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭'))],
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('全局搜索失败: ${e.toString().replaceFirst('Exception: ', '')}')),
-        );
-      }
-    }
   }
 
   Future<void> _showDiagnostics() async {
@@ -565,75 +587,15 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     }
   }
 
-  Future<void> _generateCandidates() async {
+  Future<void> _extractCandidates() async {
     try {
-      final conversations = await ref.read(chatServiceProvider).listConversations();
-      if (!mounted) return;
-      if (conversations.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('暂无可用于提取记忆的会话')));
-        return;
+      final candidates = await ref.read(memoryServiceProvider).extractCandidates();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已提取 ${candidates.length} 条候选记忆')));
+        await _showCandidates();
       }
-      final conversationId = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('选择来源会话'),
-          content: SizedBox(
-            width: 620,
-            height: 440,
-            child: ListView.separated(
-              itemCount: conversations.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (_, index) {
-                final conversation = conversations[index];
-                final title = conversation.title.trim().isEmpty ? '未命名会话' : conversation.title.trim();
-                return ListTile(
-                  leading: const Icon(Icons.chat_bubble_outline),
-                  title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text('${conversation.messageCount} 条消息${conversation.updatedAt.isEmpty ? '' : ' · ${conversation.updatedAt}'}'),
-                  onTap: () => Navigator.pop(ctx, conversation.id),
-                );
-              },
-            ),
-          ),
-          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消'))],
-        ),
-      );
-      if (conversationId == null || conversationId.isEmpty) return;
-      final candidates = await ref.read(memoryServiceProvider).generateCandidates(conversationId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已从会话生成 ${candidates.length} 条候选记忆')));
-      await _showCandidates();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('候选生成失败: $e')));
-    }
-  }
-
-  Future<void> _exportMemories() async {
-    try {
-      final memories = await ref.read(memoryListProvider.future);
-      if (memories.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('当前没有可导出的记忆')));
-        return;
-      }
-      final now = DateTime.now();
-      final stamp = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
-      final path = await FilePicker.platform.saveFile(
-        dialogTitle: '导出当前记忆',
-        fileName: 'amitia_memories_$stamp.json',
-        type: FileType.custom,
-        allowedExtensions: const ['json'],
-      );
-      if (path == null || path.trim().isEmpty) return;
-      final payload = <String, dynamic>{
-        'schemaVersion': 1,
-        'exportedAt': now.toUtc().toIso8601String(),
-        'count': memories.length,
-        'memories': memories.map((memory) => memory.toJson()).toList(growable: false),
-      };
-      await File(path).writeAsString(const JsonEncoder.withIndent('  ').convert(payload), flush: true);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已导出 ${memories.length} 条记忆')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('记忆导出失败: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('候选提取失败: $e')));
     }
   }
 
@@ -766,11 +728,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     required String scope,
     required int retentionLevel,
     required bool pinned,
-    required String memorySubtype,
-    required String sensitivityLevel,
-    required bool allowContextUse,
-    required bool allowProactiveMention,
-    required bool requiresConfirmation,
   }) async {
     final key = content.replaceAll(RegExp(r'\s+'), ' ').trim();
     final normalizedKey = key.length <= 60 ? key : key.substring(0, 60);
@@ -788,11 +745,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
         'scope': scope,
         if (retentionLevel > 0) 'retentionLevel': retentionLevel,
         'pinned': pinned,
-        'memorySubtype': memorySubtype,
-        'sensitivityLevel': sensitivityLevel,
-        'allowContextUse': allowContextUse,
-        'allowProactiveMention': allowProactiveMention,
-        'requiresConfirmation': requiresConfirmation,
       });
       return true;
     }
@@ -829,11 +781,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
         if (scope != 'character') 'scope': scope,
         if (retentionLevel > 0) 'retentionLevel': retentionLevel,
         'pinned': pinned,
-        'memorySubtype': memorySubtype,
-        'sensitivityLevel': sensitivityLevel,
-        'allowContextUse': allowContextUse,
-        'allowProactiveMention': allowProactiveMention,
-        'requiresConfirmation': requiresConfirmation,
       });
     }
     return true;
@@ -1029,11 +976,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     String scope = _scopes.containsKey(existing?.scope) ? (existing?.scope ?? 'character') : 'character';
     int retentionLevel = existing?.retentionLevel ?? 3;
     bool pinned = existing?.pinned ?? false;
-    final memorySubtypeCtrl = TextEditingController(text: existing?.memorySubtype ?? '');
-    String sensitivityLevel = existing?.sensitivityLevel ?? 'internal';
-    bool allowContextUse = existing?.allowContextUse ?? true;
-    bool allowProactiveMention = existing?.allowProactiveMention ?? true;
-    bool requiresConfirmation = existing?.requiresConfirmation ?? false;
 
     showModalBottomSheet(
       context: context,
@@ -1093,46 +1035,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     ),
                   );
                 }).toList(),
-              ),
-              SizedBox(height: AppSpacing.md),
-              Text('记忆子类型', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(
-                controller: memorySubtypeCtrl,
-                hintText: '可选，例如 preference / relationship',
-              ),
-              SizedBox(height: AppSpacing.md),
-              Text('敏感等级', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              DropdownButtonFormField<String>(
-                value: sensitivityLevel,
-                isExpanded: true,
-                items: const [
-                  DropdownMenuItem(value: 'public', child: Text('公开')),
-                  DropdownMenuItem(value: 'internal', child: Text('内部')),
-                  DropdownMenuItem(value: 'private', child: Text('私密')),
-                  DropdownMenuItem(value: 'secret', child: Text('高度敏感')),
-                ],
-                onChanged: (value) => setSheetState(() => sensitivityLevel = value ?? 'internal'),
-              ),
-              SizedBox(height: AppSpacing.sm),
-              AmitiaSwitchTile(
-                title: '允许用于上下文理解',
-                subtitle: '关闭后，该记忆不会进入检索、提示词或派生上下文',
-                value: allowContextUse,
-                onChanged: (value) => setSheetState(() => allowContextUse = value),
-              ),
-              AmitiaSwitchTile(
-                title: '允许主动提及',
-                subtitle: '控制主动消息是否可以引用这条记忆',
-                value: allowProactiveMention,
-                onChanged: (value) => setSheetState(() => allowProactiveMention = value),
-              ),
-              AmitiaSwitchTile(
-                title: '使用前需要确认',
-                subtitle: '敏感记忆使用时要求确认',
-                value: requiresConfirmation,
-                onChanged: (value) => setSheetState(() => requiresConfirmation = value),
               ),
               SizedBox(height: AppSpacing.md),
               Text('自然遗忘层级', style: AppTypography.label(context)),
@@ -1227,11 +1129,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     'scope': scope,
                     'retentionLevel': retentionLevel,
                     'pinned': pinned,
-                    'memorySubtype': memorySubtypeCtrl.text.trim(),
-                    'sensitivityLevel': sensitivityLevel,
-                    'allowContextUse': allowContextUse,
-                    'allowProactiveMention': allowProactiveMention,
-                    'requiresConfirmation': requiresConfirmation,
                   };
                   try {
                     if (isEdit) {
@@ -1245,11 +1142,6 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                         scope: scope,
                         retentionLevel: retentionLevel,
                         pinned: pinned,
-                        memorySubtype: memorySubtypeCtrl.text.trim(),
-                        sensitivityLevel: sensitivityLevel,
-                        allowContextUse: allowContextUse,
-                        allowProactiveMention: allowProactiveMention,
-                        requiresConfirmation: requiresConfirmation,
                       );
                       if (!handled) return;
                     }

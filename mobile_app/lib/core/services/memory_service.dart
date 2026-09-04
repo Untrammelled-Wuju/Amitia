@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../backend_transport/backend_service_api.dart';
 import '../models/memory.dart';
 
@@ -119,6 +121,69 @@ class MemoryService {
     return _scoredMemoryList(resp);
   }
 
+  Future<Map<String, List<Map<String, dynamic>>>> globalSearch(
+    String query, {
+    int limitPerType = 5,
+  }) async {
+    final keyword = query.trim();
+    if (keyword.isEmpty) {
+      return const {
+        'memories': <Map<String, dynamic>>[],
+        'profiles': <Map<String, dynamic>>[],
+        'episodics': <Map<String, dynamic>>[],
+        'worldBooks': <Map<String, dynamic>>[],
+      };
+    }
+
+    var memories = <Map<String, dynamic>>[];
+    var profiles = <Map<String, dynamic>>[];
+    var episodics = <Map<String, dynamic>>[];
+    var worldBooks = <Map<String, dynamic>>[];
+
+    try {
+      final memoryResp = await _api.post<dynamic>(
+        '/api/memories/hybrid-search',
+        data: {'keyword': keyword, 'query': keyword, 'limit': limitPerType},
+      );
+      memories = _mapList(memoryResp, keys: const ['items']).map((row) {
+        final nested = row['memory'];
+        final memory = nested is Map
+            ? Map<String, dynamic>.from(nested)
+            : Map<String, dynamic>.from(row);
+        memory['score'] = row['score'];
+        memory['matchType'] = row['matchType'];
+        memory['memoryLayer'] = row['memoryLayer'];
+        return memory;
+      }).take(limitPerType).toList(growable: false);
+    } catch (_) {}
+
+    Future<List<Map<String, dynamic>>> fetchAndFilter(String path) async {
+      try {
+        final resp = await _api.get<dynamic>(
+          path,
+          queryParameters: {'keyword': keyword, 'page': 1, 'pageSize': 100},
+        );
+        return _mapList(resp, keys: const ['items'])
+            .where((row) => _mapContainsQuery(row, keyword))
+            .take(limitPerType)
+            .toList(growable: false);
+      } catch (_) {
+        return <Map<String, dynamic>>[];
+      }
+    }
+
+    profiles = await fetchAndFilter('/api/profiles');
+    episodics = await fetchAndFilter('/api/episodic');
+    worldBooks = await fetchAndFilter('/api/world-book');
+
+    return {
+      'memories': memories,
+      'profiles': profiles,
+      'episodics': episodics,
+      'worldBooks': worldBooks,
+    };
+  }
+
   Future<List<Map<String, dynamic>>> timeline({
     String? characterId,
     int page = 1,
@@ -231,6 +296,13 @@ class MemoryService {
     return resp ?? <String, dynamic>{};
   }
 
+  Future<List<MemoryCandidateDto>> extractCandidates() async {
+    final resp = await _api.post<dynamic>('/api/memories/extract-candidates');
+    return _mapList(resp, keys: const ['candidates'])
+        .map(MemoryCandidateDto.fromJson)
+        .toList(growable: false);
+  }
+
   Future<List<MemoryCandidateDto>> generateCandidates(String conversationId) async {
     final resp = await _api.post<dynamic>(
       '/api/memory-candidates/generate',
@@ -314,7 +386,6 @@ class MemoryService {
       result.putIfAbsent('scope', () => 'character');
       result.putIfAbsent('verifiedStatus', () => 'user_verified');
       result.putIfAbsent('confidence', () => 100);
-      result.putIfAbsent('allowContextUse', () => true);
       result.putIfAbsent('allowProactiveMention', () => true);
       result.putIfAbsent('requiresConfirmation', () => false);
     }
@@ -325,6 +396,19 @@ class MemoryService {
     final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (normalized.isEmpty) return 'manual-memory';
     return normalized.length <= 60 ? normalized : normalized.substring(0, 60);
+  }
+
+  bool _mapContainsQuery(Map<String, dynamic> row, String query) {
+    final lower = query.toLowerCase();
+    for (final value in row.values) {
+      if (value == null) continue;
+      if (value is Map || value is List) {
+        if (jsonEncode(value).toLowerCase().contains(lower)) return true;
+      } else if (value.toString().toLowerCase().contains(lower)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   List<MemoryDto> _memoryList(dynamic resp) {

@@ -15,13 +15,13 @@ import 'model_config_service.dart';
 import 'feedback_service.dart';
 import 'voice_service.dart';
 import 'extension_service.dart';
+import 'extension_task_service.dart';
 import 'extension_view_invalidator.dart';
 import 'system_service.dart';
 import 'channel_service.dart';
 import 'workspace_service.dart';
 import 'device_mesh_service.dart';
 import 'privacy_service.dart';
-import 'kernel_task_service.dart';
 import 'temporal_service.dart' as temporal_config;
 import 'onboarding_service.dart';
 import '../models/character.dart';
@@ -69,6 +69,8 @@ final asrServiceProvider = Provider<ASRService>((ref) => ASRService(_getDynamicS
 
 final extensionServiceProvider = Provider<ExtensionService>((ref) => ExtensionService(_getDynamicServiceApi(ref)));
 
+final extensionTaskServiceProvider = Provider<ExtensionTaskService>((ref) => ExtensionTaskService(_getDynamicServiceApi(ref)));
+
 final systemServiceProvider = Provider<SystemService>((ref) => SystemService(_getDynamicServiceApi(ref)));
 
 final safetyServiceProvider = Provider<SafetyService>((ref) => SafetyService(_getDynamicServiceApi(ref)));
@@ -115,8 +117,6 @@ final localDeviceMeshStatusProvider = FutureProvider.autoDispose<Map<String, dyn
 });
 
 final privacyServiceProvider = Provider<PrivacyService>((ref) => PrivacyService(_getDynamicServiceApi(ref)));
-
-final kernelTaskServiceProvider = Provider<KernelTaskService>((ref) => KernelTaskService(_getDynamicServiceApi(ref)));
 
 final moodServiceProvider = Provider<MoodService>((ref) => MoodService(_getDynamicServiceApi(ref)));
 

@@ -1,45 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/providers.dart';
 
 enum AgentTaskStatus { pending, waitingApproval, running, paused, completed, failed, cancelled }
-
-class AgentTaskDefinition {
-  final String taskId;
-  final String extensionId;
-  final String moduleId;
-  final String name;
-  final String description;
-
-  const AgentTaskDefinition({
-    required this.taskId,
-    required this.extensionId,
-    required this.moduleId,
-    required this.name,
-    required this.description,
-  });
-
-  factory AgentTaskDefinition.fromJson(Map<String, dynamic> json) {
-    final id = (json['taskId'] ?? json['id'] ?? '').toString();
-    final extensionId = (json['extensionId'] ?? '').toString();
-    final moduleId = (json['moduleId'] ?? '').toString();
-    final name = (json['name'] ?? json['title'] ?? id).toString();
-    return AgentTaskDefinition(
-      taskId: id,
-      extensionId: extensionId,
-      moduleId: moduleId,
-      name: name.isEmpty ? id : name,
-      description: (json['description'] ?? '').toString(),
-    );
-  }
-
-  String get label {
-    final scope = [extensionId, moduleId].where((item) => item.isNotEmpty).join(' · ');
-    return scope.isEmpty ? name : '$name · $scope';
-  }
-}
 
 class AgentTaskItem {
   final String id;
@@ -80,28 +43,23 @@ class AgentTaskItem {
     final end = finishedAt ?? DateTime.now();
     final elapsedDuration = end.difference(startedAt ?? createdAt);
     final elapsed = _formatDuration(elapsedDuration);
-    final input = json['input'] is Map ? Map<String, dynamic>.from(json['input'] as Map) : const <String, dynamic>{};
-    final taskDefinitionId = (json['taskDefinitionId'] ?? json['taskRunId'] ?? '').toString();
+    final title = (json['taskDefinitionId'] ?? json['taskRunId'] ?? '').toString();
     final extensionId = (json['extensionId'] ?? '').toString();
     final moduleId = (json['moduleId'] ?? '').toString();
-    final abilities = input['requiredAbilities'] is List
-        ? (input['requiredAbilities'] as List).map((e) => e.toString()).where((e) => e.isNotEmpty).toList(growable: false)
-        : [if (extensionId.isNotEmpty) extensionId, if (moduleId.isNotEmpty) moduleId];
-    final rawSteps = input['steps'];
-    final steps = rawSteps is List
-        ? rawSteps.map((e) => e.toString()).where((e) => e.isNotEmpty).toList(growable: false)
-        : const <String>[];
-    final rawProgress = json['progress'];
-    final progress = rawProgress is num ? rawProgress.round().clamp(0, 100).toInt() : _progressFor(status);
     return AgentTaskItem(
       id: (json['taskRunId'] ?? json['id'] ?? '').toString(),
-      title: (input['title'] ?? taskDefinitionId).toString().trim().isEmpty ? 'Kernel Task' : (input['title'] ?? taskDefinitionId).toString(),
-      description: (input['description'] ?? [extensionId, moduleId].where((e) => e.isNotEmpty).join(' · ')).toString(),
-      requiredAbilities: abilities,
-      steps: steps,
+      title: title.isEmpty ? 'Kernel Task' : title,
+      description: [extensionId, moduleId].where((e) => e.isNotEmpty).join(' · '),
+      requiredAbilities: [if (extensionId.isNotEmpty) extensionId, if (moduleId.isNotEmpty) moduleId],
+      steps: [
+        '排队',
+        '启动运行时',
+        '执行任务',
+        '持久化结果',
+      ],
       status: status,
-      progress: progress,
-      currentStepIndex: 0,
+      progress: _progressFor(status),
+      currentStepIndex: _stepFor(status),
       elapsed: elapsed,
       result: json['result']?.toString(),
       error: json['errorMessage']?.toString() ?? json['error']?.toString(),
@@ -146,6 +104,21 @@ class AgentTaskItem {
     }
   }
 
+  static int _stepFor(AgentTaskStatus status) {
+    switch (status) {
+      case AgentTaskStatus.pending:
+        return 0;
+      case AgentTaskStatus.waitingApproval:
+      case AgentTaskStatus.running:
+      case AgentTaskStatus.paused:
+        return 2;
+      case AgentTaskStatus.completed:
+      case AgentTaskStatus.failed:
+      case AgentTaskStatus.cancelled:
+        return 3;
+    }
+  }
+
   static String _formatDuration(Duration duration) {
     final safe = duration.isNegative ? Duration.zero : duration;
     final hours = safe.inHours.toString().padLeft(2, '0');
@@ -157,7 +130,7 @@ class AgentTaskItem {
 
 class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
   Future<List<AgentTaskItem>> _fetch() async {
-    final rows = await ref.read(kernelTaskServiceProvider).runs(limit: 200);
+    final rows = await ref.read(extensionTaskServiceProvider).listRuns(limit: 200);
     return rows.map(AgentTaskItem.fromJson).toList(growable: false);
   }
 
@@ -170,41 +143,37 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
   }
 
   Future<void> createTask({
-    required String taskDefinitionId,
     required String title,
     required String description,
     required List<String> abilities,
     int stepCount = 3,
   }) async {
-    final definitions = await ref.read(agentTaskDefinitionsProvider.future);
-    AgentTaskDefinition? definition;
-    for (final candidate in definitions) {
-      if (candidate.taskId == taskDefinitionId) {
-        definition = candidate;
-        break;
-      }
+    final service = ref.read(extensionTaskServiceProvider);
+    final rows = await service.listDefinitions();
+    if (rows.isEmpty) {
+      throw StateError('当前没有可执行的 Kernel Task 定义');
     }
-    if (definition == null) {
-      throw StateError('选择的 Kernel Task 定义已不存在，请重新选择');
-    }
-    await ref.read(kernelTaskServiceProvider).enqueue({
-      'taskDefinitionId': definition.taskId,
-      'extensionId': definition.extensionId,
-      'moduleId': definition.moduleId,
-      'input': {
+    final definition = rows.first;
+    final taskDefinitionId = (definition['taskId'] ?? '').toString();
+    if (taskDefinitionId.isEmpty) throw StateError('任务定义缺少 taskId');
+    await service.enqueue(
+      taskDefinitionId: taskDefinitionId,
+      extensionId: (definition['extensionId'] ?? '').toString(),
+      moduleId: (definition['moduleId'] ?? '').toString(),
+      input: {
         'title': title,
         'description': description,
         'requiredAbilities': abilities,
         'stepCount': stepCount,
       },
-      'priority': 0,
-      'source': 'mobile_agent',
-    });
+      priority: 0,
+      source: 'mobile_agent',
+    );
     await refresh();
   }
 
   Future<void> changeStatus(String id, AgentTaskStatus newStatus) async {
-    final service = ref.read(kernelTaskServiceProvider);
+    final service = ref.read(extensionTaskServiceProvider);
     final items = state.valueOrNull ?? const <AgentTaskItem>[];
     AgentTaskItem? current;
     for (final item in items) {
@@ -228,13 +197,11 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
       );
     }
     await refresh();
-    ref.invalidate(agentTaskRuntimeDetailProvider(id));
   }
 
   Future<void> recover(String id) async {
-    await ref.read(kernelTaskServiceProvider).recover(id);
+    await ref.read(extensionTaskServiceProvider).recover(id);
     await refresh();
-    ref.invalidate(agentTaskRuntimeDetailProvider(id));
   }
 }
 
@@ -251,85 +218,29 @@ class AgentTaskRuntimeDetail {
     required this.checkpoint,
   });
 
-  double? get percentage {
-    final direct = (progress['percentage'] as num?)?.toDouble();
-    if (direct != null) return direct.clamp(0, 100).toDouble();
-    final current = (progress['current'] as num?)?.toDouble();
-    final total = (progress['total'] as num?)?.toDouble();
-    if (current != null && total != null && total > 0) return (current / total * 100).clamp(0, 100).toDouble();
-    return null;
-  }
-
-  AgentTaskItem get task {
-    final base = AgentTaskItem.fromJson(run);
-    final input = run['input'] is Map ? Map<String, dynamic>.from(run['input'] as Map) : const <String, dynamic>{};
-    final stage = (progress['stage'] ?? '').toString();
-    final message = (progress['message'] ?? '').toString();
-    final progressValue = percentage?.round() ?? base.progress;
-    final resultText = _prettyPayload(result['resultJson'] ?? result['result'] ?? result['payload']);
-    return AgentTaskItem(
-      id: base.id,
-      title: (input['title'] ?? base.title).toString(),
-      description: (input['description'] ?? message).toString().trim().isEmpty ? base.description : (input['description'] ?? message).toString(),
-      requiredAbilities: base.requiredAbilities,
-      steps: stage.isEmpty ? const <String>[] : <String>[stage],
-      status: base.status,
-      progress: progressValue.clamp(0, 100).toInt(),
-      currentStepIndex: 0,
-      elapsed: base.elapsed,
-      result: resultText.isEmpty ? base.result : resultText,
-      error: base.error,
-      createdAt: base.createdAt,
-      generation: base.generation,
-    );
-  }
-
-  static String _prettyPayload(dynamic value) {
-    if (value == null) return '';
-    if (value is String) {
-      if (value.trim().isEmpty) return '';
-      try {
-        return const JsonEncoder.withIndent('  ').convert(jsonDecode(value));
-      } catch (_) {
-        return value;
-      }
-    }
-    try {
-      return const JsonEncoder.withIndent('  ').convert(value);
-    } catch (_) {
-      return value.toString();
-    }
-  }
+  double? get percentage => (progress['percentage'] as num?)?.toDouble();
 }
 
-final agentTaskDefinitionsProvider = FutureProvider.autoDispose<List<AgentTaskDefinition>>((ref) async {
-  final rows = await ref.read(kernelTaskServiceProvider).definitions();
-  return rows
-      .map(AgentTaskDefinition.fromJson)
-      .where((definition) => definition.taskId.isNotEmpty)
-      .toList(growable: false);
-});
-
 final agentTaskRuntimeDetailProvider = FutureProvider.autoDispose.family<AgentTaskRuntimeDetail, String>((ref, taskId) async {
-  final detail = await ref.read(kernelTaskServiceProvider).runtimeDetail(taskId);
+  final detail = await ref.read(extensionTaskServiceProvider).runtimeDetail(taskId);
+  Map<String, dynamic> part(String key) {
+    final value = detail[key];
+    return value is Map ? Map<String, dynamic>.from(value) : const <String, dynamic>{};
+  }
   return AgentTaskRuntimeDetail(
-    run: Map<String, dynamic>.from(detail['run'] as Map),
-    progress: Map<String, dynamic>.from(detail['progress'] as Map),
-    result: Map<String, dynamic>.from(detail['result'] as Map),
-    checkpoint: Map<String, dynamic>.from(detail['checkpoint'] as Map),
+    run: part('run'),
+    progress: part('progress'),
+    result: part('result'),
+    checkpoint: part('checkpoint'),
   );
 });
 
 final agentTasksProvider = AsyncNotifierProvider<AgentTaskNotifier, List<AgentTaskItem>>(AgentTaskNotifier.new);
 
 final agentTaskDetailProvider = FutureProvider.autoDispose.family<AgentTaskItem?, String>((ref, taskId) async {
-  try {
-    return (await ref.watch(agentTaskRuntimeDetailProvider(taskId).future)).task;
-  } catch (_) {
-    final list = await ref.watch(agentTasksProvider.future);
-    for (final task in list) {
-      if (task.id == taskId) return task;
-    }
-    return null;
+  final list = await ref.watch(agentTasksProvider.future);
+  for (final task in list) {
+    if (task.id == taskId) return task;
   }
+  return null;
 });
