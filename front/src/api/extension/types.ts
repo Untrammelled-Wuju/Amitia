@@ -211,6 +211,7 @@ export interface BackendBridgeSessionResponse {
   extensionId: string;
   moduleId: string;
   generation: number;
+  token: string;
   origin: string;
   contractVersion: number;
   grantedScopes: string[];

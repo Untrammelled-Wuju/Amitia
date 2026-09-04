@@ -71,6 +71,11 @@ const disabled = computed(() => {
 const children = computed<SchemaUINode[]>(() => props.node.children ?? []);
 
 const formBinding = computed<SchemaUIBinding | undefined>(() => getFormBinding(props.node));
+const editableFormBinding = computed<SchemaUIBinding | undefined>(() => {
+  const binding = formBinding.value;
+  if (!binding) return undefined;
+  return binding.source === "form" || binding.source === "form_state" ? binding : undefined;
+});
 
 const modelValue = computed<{ value: unknown }>({
   get: () => {
@@ -477,40 +482,40 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       v-else-if="nodeType === 'field'"
       class="schema-ui-field schema-ui-node"
       :data-node-id="node.id"
-      :label="toText(mergedProps.label)"
+      :label="toText(mergedProps.label ?? mergedProps.title)"
       :required="mergedProps.required === true"
       :prop="toText(mergedProps.prop || formBinding?.path)"
       :error="toText(mergedProps.error)"
     >
-      <SchemaUINode
-        v-for="child in children"
-        :key="child.id"
-        :node="child"
-        :depth="depth + 1"
-        :form-state="formState"
-        :context="context"
-        :session-id="sessionId"
-        :extension-id="extensionId"
-        :contribution-id="contributionId"
-        @action="onActionFromChild"
-        @error="(p) => emit('error', p)"
+      <template v-if="children.length > 0">
+        <SchemaUINode
+          v-for="child in children"
+          :key="child.id"
+          :node="child"
+          :depth="depth + 1"
+          :form-state="formState"
+          :context="context"
+          :session-id="sessionId"
+          :extension-id="extensionId"
+          :contribution-id="contributionId"
+          @action="onActionFromChild"
+          @error="(p) => emit('error', p)"
+        />
+      </template>
+      <el-input
+        v-else
+        class="schema-ui-input"
+        :model-value="modelValue.value"
+        :placeholder="toText(mergedProps.placeholder)"
+        :type="(mergedProps.variant as any) || 'text'"
+        :disabled="disabled || mergedProps.disabled === true || !editableFormBinding"
+        :clearable="mergedProps.clearable === true"
+        :maxlength="mergedProps.maxlength ? toNumber(mergedProps.maxlength) : undefined"
+        :show-word-limit="mergedProps.showWordLimit === true"
+        :rows="mergedProps.rows ? toNumber(mergedProps.rows) : undefined"
+        @update:model-value="updateModelValue"
       />
     </el-form-item>
-
-    <el-input
-      v-else-if="nodeType === 'input'"
-      class="schema-ui-input schema-ui-node"
-      :data-node-id="node.id"
-      :model-value="modelValue.value"
-      :placeholder="toText(mergedProps.placeholder)"
-      :type="(mergedProps.variant as any) || 'text'"
-      :disabled="disabled || mergedProps.disabled === true"
-      :clearable="mergedProps.clearable === true"
-      :maxlength="mergedProps.maxlength ? toNumber(mergedProps.maxlength) : undefined"
-      :show-word-limit="mergedProps.showWordLimit === true"
-      :rows="mergedProps.rows ? toNumber(mergedProps.rows) : undefined"
-      @update:model-value="updateModelValue"
-    />
 
     <el-select
       v-else-if="nodeType === 'select'"
@@ -518,7 +523,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       :data-node-id="node.id"
       :model-value="modelValue.value"
       :placeholder="toText(mergedProps.placeholder)"
-      :disabled="disabled || mergedProps.disabled === true"
+      :disabled="disabled || mergedProps.disabled === true || !editableFormBinding"
       :multiple="mergedProps.multiple === true"
       :clearable="mergedProps.clearable === true"
       :filterable="mergedProps.filterable === true"
@@ -537,7 +542,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       class="schema-ui-switch schema-ui-node"
       :data-node-id="node.id"
       :model-value="!!modelValue.value"
-      :disabled="disabled || mergedProps.disabled === true"
+      :disabled="disabled || mergedProps.disabled === true || !editableFormBinding"
       :active-text="toText(mergedProps.activeText)"
       :inactive-text="toText(mergedProps.inactiveText)"
       :active-value="mergedProps.activeValue ?? true"
@@ -553,7 +558,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       :min="toNumber(mergedProps.min, 0)"
       :max="toNumber(mergedProps.max, 100)"
       :step="toNumber(mergedProps.step, 1)"
-      :disabled="disabled || mergedProps.disabled === true"
+      :disabled="disabled || mergedProps.disabled === true || !editableFormBinding"
       :show-input="mergedProps.showInput === true"
       @update:model-value="updateModelValue"
     />

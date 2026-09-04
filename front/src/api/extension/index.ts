@@ -225,6 +225,9 @@ export async function revokeBridgeSession(sessionId: string): Promise<void> {
 export async function invokeBridgeMethod(sessionId: string, params: {
   method: string;
   contributionId: string;
+  token: string;
+  generation: number;
+  nonce: string;
   origin?: string;
   contractVersion?: number;
   payload?: unknown;
@@ -236,6 +239,9 @@ export async function invokeBridgeMethod(sessionId: string, params: {
       contributionId: params.contributionId,
       origin: params.origin ?? "web",
       contractVersion: params.contractVersion ?? 1,
+      token: params.token,
+      generation: params.generation,
+      nonce: params.nonce,
       payload: params.payload ?? {},
     },
   );
