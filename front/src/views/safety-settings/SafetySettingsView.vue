@@ -18,63 +18,6 @@ SPDX-License-Identifier: AGPL-3.0-only
     </el-alert>
 
     <el-card shadow="never" class="section-card">
-      <template #header
-        ><span class="section-title">安全功能开关</span></template
-      >
-      <div class="toggle-list">
-        <div class="toggle-item">
-          <div class="ti-info">
-            <div class="ti-label">启用安全卫士</div>
-            <div class="ti-desc">
-              自动检测用户输入和 AI 输出，拦截或重写不安全内容
-            </div>
-          </div>
-          <el-switch v-model="safetyGuard" @change="saveAll" />
-        </div>
-
-        <div class="toggle-item">
-          <div class="ti-info">
-            <div class="ti-label">导入敏感内容检测</div>
-            <div class="ti-desc">
-              导入聊天记录时自动检测身份证、银行卡、密码等敏感数据，给出警告
-            </div>
-          </div>
-          <el-switch v-model="importDetection" @change="saveAll" />
-        </div>
-
-        <div class="toggle-item">
-          <div class="ti-info">
-            <div class="ti-label">允许云端模型处理导入摘要</div>
-            <div class="ti-desc">
-              开启后，导入的聊天记录文本将发送到模型服务商进行摘要生成。关闭可保护隐私
-            </div>
-          </div>
-          <el-switch v-model="allowCloudSummary" @change="saveAll" />
-        </div>
-
-        <div class="toggle-item">
-          <div class="ti-info">
-            <div class="ti-label">AI 身份边界提示</div>
-            <div class="ti-desc">
-              在聊天页面显示 AI 身份边界提示，提醒用户 AI 不是真人
-            </div>
-          </div>
-          <el-switch v-model="showIdentityHint" @change="saveAll" />
-        </div>
-
-        <div class="toggle-item">
-          <div class="ti-info">
-            <div class="ti-label">Web 公网访问提醒</div>
-            <div class="ti-desc">
-              在私有云模式下，提醒用户配置访问控制（如 VPN、白名单、防火墙规则）
-            </div>
-          </div>
-          <el-switch v-model="showWebWarning" @change="saveAll" />
-        </div>
-      </div>
-    </el-card>
-
-    <el-card shadow="never" class="section-card">
       <template #header>
         <div class="card-header-row">
           <span class="section-title">安全规则</span>
@@ -565,7 +508,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from "vue";
+import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -579,11 +522,6 @@ import { useApi } from "../../composables/useApi";
 const { get, put, del } = useApi();
 const router = useRouter();
 
-const safetyGuard = ref(true);
-const importDetection = ref(true);
-const allowCloudSummary = ref(false);
-const showIdentityHint = ref(true);
-const showWebWarning = ref(true);
 
 const saving = ref(false);
 
@@ -605,7 +543,6 @@ const auditLogs = ref<any[]>([]);
 const events = ref<any[]>([]);
 const evPage = ref(1);
 const evTotal = ref(0);
-const isBdiEnabled = computed(() => safetyGuard.value);
 
 const hardConstraints = ref<
   Array<{
@@ -736,37 +673,6 @@ async function saveBdiConfig() {
   } catch {}
 }
 
-async function loadSettings() {
-  try {
-    const s = await get<any>("/api/config/settings");
-    if (s?.enable_safety_guard)
-      safetyGuard.value = s.enable_safety_guard === "true";
-    if (s?.enable_import_detection)
-      importDetection.value = s.enable_import_detection !== "false";
-    if (s?.allow_cloud_summary)
-      allowCloudSummary.value = s.allow_cloud_summary === "true";
-    if (s?.show_identity_hint)
-      showIdentityHint.value = s.show_identity_hint !== "false";
-    if (s?.show_web_warning)
-      showWebWarning.value = s.show_web_warning !== "false";
-  } catch {}
-}
-
-async function saveAll() {
-  try {
-    await put("/api/config", {
-      settings: {
-        enable_safety_guard: String(safetyGuard.value),
-        enable_import_detection: String(importDetection.value),
-        allow_cloud_summary: String(allowCloudSummary.value),
-        show_identity_hint: String(showIdentityHint.value),
-        show_web_warning: String(showWebWarning.value),
-      },
-    });
-    ElMessage.success("保存成功");
-  } catch {}
-}
-
 async function fetchEvents() {
   try {
     const r = await get<any>("/api/safety/events", {
@@ -809,7 +715,6 @@ function goPrivacyScan() {
 }
 
 onMounted(() => {
-  loadSettings();
   fetchConfig();
   fetchBdiConfig();
   fetchEvents();
@@ -838,35 +743,6 @@ onMounted(() => {
   justify-content: space-between;
 }
 
-.toggle-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.toggle-item {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--ac-color-border-light);
-}
-.toggle-item:last-child {
-  border-bottom: none;
-}
-.ti-info {
-  flex: 1;
-}
-.ti-label {
-  font-size: var(--ac-font-size-sm);
-  font-weight: 500;
-  margin-bottom: 2px;
-}
-.ti-desc {
-  font-size: var(--ac-font-size-xs);
-  color: var(--ac-color-text-muted);
-  line-height: 1.4;
-}
 .privacy-grid {
   display: flex;
   flex-direction: column;
