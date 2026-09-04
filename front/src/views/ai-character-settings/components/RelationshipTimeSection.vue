@@ -82,11 +82,25 @@
             设为 0 时保留重逢识别，但不生成重逢表达。
           </div>
         </el-form-item>
+        <el-form-item label="允许回忆相关记忆">
+          <el-switch
+            v-model="settings.allowMemoryRecall"
+            :disabled="!settings.enabled"
+          />
+          <div class="field-help">允许关系时间上下文引用与当前关系阶段相关的记忆。</div>
+        </el-form-item>
         <el-form-item label="允许提及相识时长">
           <el-switch
             v-model="settings.allowRelationshipAge"
             :disabled="!settings.enabled"
           />
+        </el-form-item>
+        <el-form-item label="允许主动引用关系时间">
+          <el-switch
+            v-model="settings.allowProactiveReference"
+            :disabled="!settings.enabled"
+          />
+          <div class="field-help">允许主动消息在符合规则时引用相识时长或关系节奏。</div>
         </el-form-item>
         <el-form-item label="允许提及重逢">
           <el-switch

@@ -18,9 +18,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
       <div class="param-item">
         <label
-          >音高 <span class="param-value">{{ voicePitch }}</span></label
+          >音高倍率 <span class="param-value">{{ voicePitch.toFixed(2) }}x</span></label
         >
-        <el-slider v-model="voicePitchModel" :min="-12" :max="12" :step="1" />
+        <el-slider v-model="voicePitchModel" :min="0.5" :max="2" :step="0.05" />
       </div>
       <div class="param-item">
         <label
