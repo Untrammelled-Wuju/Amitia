@@ -135,12 +135,6 @@
             <el-form-item label="允许共享日期提及">
               <el-switch v-model="profile.allowSharedDateMention" />
             </el-form-item>
-            <el-form-item label="旅行模式">
-              <!-- 旅行模式暂未在运行时消费，暂时隐藏 -->
-            </el-form-item>
-            <el-form-item label="时间感知强度">
-              <!-- 时间感知强度暂未在运行时消费，暂时隐藏 -->
-            </el-form-item>
           </el-form>
         </el-card>
 

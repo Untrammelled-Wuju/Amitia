@@ -69,6 +69,8 @@ import {
   Timer,
   Notebook,
   Files,
+  Document,
+  Operation,
 } from "@element-plus/icons-vue";
 import { apiClient } from "../composables/useApi";
 
@@ -111,6 +113,8 @@ const pageItems = [
   { label: "用户画像", desc: "用户特征画像", to: "/profiles", icon: Notebook },
   { label: "世界书", desc: "世界观设定", to: "/world-book", icon: Files },
   { label: "聊天记录", desc: "历史对话", to: "/logs", icon: ChatDotRound },
+  { label: "系统运行日志", desc: "Core 运行日志文件", to: "/settings/system-logs", icon: Document },
+  { label: "Prompt Trace", desc: "提示词调用追踪", to: "/settings/prompt-trace", icon: Operation },
   { label: "导入记录", desc: "导入批次", to: "/import", icon: Upload },
   { label: "设置", desc: "系统配置", to: "/settings", icon: Setting },
 ];
