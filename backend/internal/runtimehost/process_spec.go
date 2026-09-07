@@ -147,6 +147,7 @@ func (s ProcessSpec) Clone() ProcessSpec {
 		Ports:               clonePorts(s.Ports),
 		StartupTimeout:      s.StartupTimeout,
 		StopGracePeriod:     s.StopGracePeriod,
+		HealthProbe:         s.HealthProbe,
 		HealthInterval:      s.HealthInterval,
 		RestartPolicy:       s.RestartPolicy,
 		OnStdout:            s.OnStdout,

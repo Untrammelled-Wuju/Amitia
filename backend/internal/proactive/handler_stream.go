@@ -2,9 +2,11 @@ package proactive
 
 import (
 	"encoding/json"
-	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/pkg/sse"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/pkg/sse"
 )
 
 func (h *Handler) RemindersStream(c *gin.Context) {
@@ -13,9 +15,9 @@ func (h *Handler) RemindersStream(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
 
-	clientID := "reminders-stream"
-	client := sse.Global.Subscribe(clientID)
-	defer sse.Global.Unsubscribe(clientID)
+	userID := normalizeProactiveOwner(requestidentity.ResolveGin(c, ""))
+	client := sse.Global.SubscribeScoped(c.Query("clientId"), userID)
+	defer sse.Global.UnsubscribeClient(client)
 
 	c.Writer.Flush()
 
@@ -24,7 +26,10 @@ func (h *Handler) RemindersStream(c *gin.Context) {
 
 	for {
 		select {
-		case msg := <-client.Events:
+		case msg, ok := <-client.Events:
+			if !ok {
+				return
+			}
 			eventName, _ := msg["event"].(string)
 			data, _ := msg["data"].(map[string]interface{})
 			jsonData, _ := json.Marshal(data)

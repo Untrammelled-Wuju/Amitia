@@ -7,6 +7,7 @@ var SchedulerRunning = false
 
 type ProactiveRule struct {
 	ID             int     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	UserID         string  `gorm:"column:user_id;not null;default:default;index" json:"-"`
 	Name           string  `gorm:"column:name;not null" json:"name"`
 	Enabled        int     `gorm:"column:enabled;default:1" json:"enabled"`
 	Channel        string  `gorm:"column:channel;default:web" json:"channel"`
@@ -29,6 +30,7 @@ func (ProactiveRule) TableName() string { return "proactive_rules" }
 
 type Reminder struct {
 	ID                int     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	UserID            string  `gorm:"column:user_id;not null;default:default;index" json:"-"`
 	Title             string  `gorm:"column:title;not null" json:"title"`
 	Content           string  `gorm:"column:content" json:"content"`
 	Channel           string  `gorm:"column:channel;default:web" json:"channel"`
@@ -48,6 +50,7 @@ func (Reminder) TableName() string { return "reminders" }
 
 type TriggerHistory struct {
 	ID           string `gorm:"column:id;primaryKey" json:"id"`
+	UserID       string `gorm:"column:user_id;not null;default:default;index" json:"-"`
 	TriggerID    string `gorm:"column:trigger_id" json:"triggerId"`
 	TriggerType  string `gorm:"column:trigger_type" json:"triggerType"`
 	Title        string `gorm:"column:title" json:"title"`

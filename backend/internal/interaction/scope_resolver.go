@@ -60,7 +60,7 @@ type ScopeResolution struct {
 }
 
 type ScopeBindingLookup interface {
-	FindScopeBindings(ctx context.Context, channel, peerID string) ([]ScopeBinding, error)
+	FindScopeBindings(ctx context.Context, userID, channel, peerID string) ([]ScopeBinding, error)
 }
 
 type DefaultCharacterProvider interface {
@@ -113,7 +113,7 @@ func (r ScopeResolver) Resolve(ctx context.Context, input ScopeResolveInput) (Sc
 		return ScopeResolution{Scope: scope, Source: normalizeResolutionSource(scope.Source), Confidence: ScopeConfidenceUnboundExplicit}, nil
 	}
 
-	bindings, err := r.lookup.FindScopeBindings(ctx, scope.Channel, scope.PeerID)
+	bindings, err := r.lookup.FindScopeBindings(ctx, scope.UserID, scope.Channel, scope.PeerID)
 	if err != nil {
 		return ScopeResolution{}, err
 	}

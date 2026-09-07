@@ -4,15 +4,24 @@ import (
 	"context"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 	"strconv"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 func (h *Handler) ListRules(c *gin.Context) {
 	characterID := c.Query("characterId")
-	rules, err := h.service.ListRules(characterID)
+	var rules []map[string]interface{}
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rules, err = scoped.ListRulesForUser(characterID, requestidentity.ResolveGin(c, ""))
+	} else {
+		rules, err = h.service.ListRules(characterID)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
 		return
@@ -26,7 +35,13 @@ func (h *Handler) CreateRule(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "名称不能为空", nil)
 		return
 	}
-	rule, err := h.service.CreateRule(&req)
+	var rule *ProactiveRule
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rule, err = scoped.CreateRuleForUser(&req, requestidentity.ResolveGin(c, ""))
+	} else {
+		rule, err = h.service.CreateRule(&req)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -41,7 +56,13 @@ func (h *Handler) UpdateRule(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	rule, err := h.service.UpdateRule(id, updates)
+	var rule *ProactiveRule
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rule, err = scoped.UpdateRuleForUser(id, updates, requestidentity.ResolveGin(c, ""))
+	} else {
+		rule, err = h.service.UpdateRule(id, updates)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -51,7 +72,13 @@ func (h *Handler) UpdateRule(c *gin.Context) {
 
 func (h *Handler) DeleteRule(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	if err := h.service.DeleteRule(id); err != nil {
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		err = scoped.DeleteRuleForUser(id, requestidentity.ResolveGin(c, ""))
+	} else {
+		err = h.service.DeleteRule(id)
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
 		return
 	}
@@ -60,7 +87,13 @@ func (h *Handler) DeleteRule(c *gin.Context) {
 
 func (h *Handler) ToggleRule(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	rule, err := h.service.ToggleRule(id)
+	var rule *ProactiveRule
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rule, err = scoped.ToggleRuleForUser(id, requestidentity.ResolveGin(c, ""))
+	} else {
+		rule, err = h.service.ToggleRule(id)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, "操作失败", nil)
 		return
@@ -70,7 +103,12 @@ func (h *Handler) ToggleRule(c *gin.Context) {
 
 func (h *Handler) Status(c *gin.Context) {
 	characterID := c.Query("characterId")
-	rules, _ := h.service.ListRules(characterID)
+	var rules []map[string]interface{}
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rules, _ = scoped.ListRulesForUser(characterID, requestidentity.ResolveGin(c, ""))
+	} else {
+		rules, _ = h.service.ListRules(characterID)
+	}
 	enabled := 0
 	total := len(rules)
 	for _, r := range rules {
@@ -96,12 +134,21 @@ func (h *Handler) Status(c *gin.Context) {
 
 func (h *Handler) TestRule(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	var rule ProactiveRule
-	if err := h.db.First(&rule, id).Error; err != nil {
+	userID := requestidentity.ResolveGin(c, "")
+	var rule *ProactiveRule
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rule, err = scoped.FindRuleForUser(id, userID)
+	} else {
+		var fallback ProactiveRule
+		err = h.db.First(&fallback, id).Error
+		rule = &fallback
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.NotFound, "规则不存在", nil)
 		return
 	}
-	character, ok := resolveProactiveCharacter(h.db, rule.CharacterID, rule.ConversationID)
+	character, ok := resolveProactiveCharacterForUser(h.db, userID, rule.CharacterID, rule.ConversationID)
 	if !ok {
 		util.ErrorResponse(c, response.OperationFailed, "规则未绑定有效角色", nil)
 		return
@@ -111,16 +158,16 @@ func (h *Handler) TestRule(c *gin.Context) {
 	if channel == "" {
 		channel = "web"
 	}
-	convID := resolveProactiveConversation(h.db, rule.ConversationID, character.ID, channel, false)
+	convID := resolveProactiveConversationForUser(h.db, userID, rule.ConversationID, character.ID, channel, false)
 	if convID == "" {
-		convID = resolveProactiveConversation(h.db, "", character.ID, channel, false)
+		convID = resolveProactiveConversationForUser(h.db, userID, "", character.ID, channel, false)
 	}
 	prompt := rule.PromptTemplate
 	if prompt == "" {
 		prompt = "发一条自然的主动消息。"
 	}
 
-	content, err := h.dispatchContent(c.Request.Context(), character.ID, convID, channel, prompt)
+	content, err := h.dispatchContent(c.Request.Context(), userID, character.ID, convID, channel, prompt)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "AI生成失败："+err.Error(), nil)
 		return
@@ -137,12 +184,21 @@ func (h *Handler) TestRule(c *gin.Context) {
 
 func (h *Handler) TriggerRule(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	var rule ProactiveRule
-	if err := h.db.First(&rule, id).Error; err != nil {
+	userID := requestidentity.ResolveGin(c, "")
+	var rule *ProactiveRule
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rule, err = scoped.FindRuleForUser(id, userID)
+	} else {
+		var fallback ProactiveRule
+		err = h.db.First(&fallback, id).Error
+		rule = &fallback
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.NotFound, "规则不存在", nil)
 		return
 	}
-	character, ok := resolveProactiveCharacter(h.db, rule.CharacterID, rule.ConversationID)
+	character, ok := resolveProactiveCharacterForUser(h.db, userID, rule.CharacterID, rule.ConversationID)
 	if !ok {
 		util.ErrorResponse(c, response.OperationFailed, "规则未绑定有效角色", nil)
 		return
@@ -152,7 +208,7 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 	if channel == "" {
 		channel = "web"
 	}
-	convID := resolveProactiveConversation(h.db, rule.ConversationID, character.ID, channel, false)
+	convID := resolveProactiveConversationForUser(h.db, userID, rule.ConversationID, character.ID, channel, false)
 	if convID == "" {
 		util.ErrorResponse(c, response.OperationFailed, "无可用对话", nil)
 		return
@@ -162,21 +218,21 @@ func (h *Handler) TriggerRule(c *gin.Context) {
 		prompt = "发一条自然的主动消息。"
 	}
 
-	content, err := h.dispatchContent(c.Request.Context(), character.ID, convID, channel, prompt)
+	content, err := h.dispatchContent(c.Request.Context(), userID, character.ID, convID, channel, prompt)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "AI生成失败："+err.Error(), nil)
 		return
 	}
 
 	now := time.Now()
-	h.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?", now, now, rule.ID)
+	proactiveOwnerQuery(h.db.Table("proactive_rules").Where("id = ?", rule.ID), userID).Updates(map[string]interface{}{"sent_count_today": gorm.Expr("sent_count_today + 1"), "last_sent_at": now, "updated_at": now})
 	util.SuccessResponse(c, gin.H{"id": rule.ID, "triggered": true, "messageContent": content, "channel": channel})
 }
 
-func (h *Handler) dispatchContent(ctx context.Context, characterID, convID, channel, prompt string) (string, error) {
+func (h *Handler) dispatchContent(ctx context.Context, userID, characterID, convID, channel, prompt string) (string, error) {
 	if h.compSvc == nil {
 		return "", fmt.Errorf("主动消息统一派发未配置")
 	}
 	requestID := fmt.Sprintf("proactive-handler-%d", time.Now().UnixNano())
-	return h.compSvc.DispatchProactiveMessage(ctx, characterID, convID, channel, prompt, requestID)
+	return h.compSvc.DispatchProactiveMessage(ctx, userID, characterID, convID, channel, prompt, requestID)
 }

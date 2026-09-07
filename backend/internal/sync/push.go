@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type ApplyFunc func(tx *gorm.DB, mutation ClientMutation) (int64, error)
+type ApplyFunc func(tx *gorm.DB, userID string, mutation ClientMutation) (int64, error)
 
 type PushService struct {
 	db        *gorm.DB
@@ -39,11 +39,11 @@ type funcApplier struct {
 	fn ApplyFunc
 }
 
-func (f *funcApplier) Apply(tx *gorm.DB, mutation ClientMutation) (int64, error) {
+func (f *funcApplier) Apply(tx *gorm.DB, userID string, mutation ClientMutation) (int64, error) {
 	if f.fn == nil {
 		return 0, &ApplierError{Code: "no_apply_handler", Message: "no apply handler configured"}
 	}
-	return f.fn(tx, mutation)
+	return f.fn(tx, userID, mutation)
 }
 
 func (f *funcApplier) Supports(entityType EntityType) bool {
@@ -156,7 +156,7 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, scope 
 		}
 	}
 
-	revision, err := s.applier.Apply(tx, mutation)
+	revision, err := s.applier.Apply(tx, userID, mutation)
 	if err != nil {
 		if mutation.MutationID != "" {
 			if rollbackErr := s.changelog.RollbackClaimTx(tx, mutation.MutationID, userID, scope); rollbackErr != nil {

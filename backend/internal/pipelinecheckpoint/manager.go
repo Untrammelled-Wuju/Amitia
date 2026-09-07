@@ -113,6 +113,28 @@ func (m *Manager) Advance(conversationID, pipelineType string, lastSequence int6
 	})
 }
 
+func (m *Manager) ReleaseLease(conversationID, pipelineType, leaseOwner string) error {
+	if m.db == nil {
+		return fmt.Errorf("checkpoint db is nil")
+	}
+	if conversationID == "" || pipelineType == "" || leaseOwner == "" {
+		return nil
+	}
+	if err := m.ensureLeaseColumns(); err != nil {
+		return err
+	}
+	now := time.Now().Format(timeLayout)
+	return m.db.Model(&Record{}).
+		Where("conversation_id = ? AND pipeline_type = ? AND lease_owner = ?", conversationID, pipelineType, leaseOwner).
+		Updates(map[string]interface{}{
+			"processing_start_sequence": 0,
+			"processing_end_sequence":   0,
+			"lease_owner":               "",
+			"lease_expires_at":          "",
+			"updated_at":                now,
+		}).Error
+}
+
 func (m *Manager) AdvanceLeased(conversationID, pipelineType string, lastSequence int64, idempotencyKey string, leaseOwner string) error {
 	if m.db == nil {
 		return fmt.Errorf("checkpoint db is nil")
@@ -128,7 +150,7 @@ func (m *Manager) AdvanceLeased(conversationID, pipelineType string, lastSequenc
 			return err
 		}
 		if err == nil {
-			if current.LeaseOwner != "" && current.LeaseOwner != leaseOwner {
+			if leaseOwner == "" || current.LeaseOwner != leaseOwner {
 				return fmt.Errorf("checkpoint lease owner mismatch")
 			}
 			if current.LastMessageSequence > lastSequence {
@@ -145,16 +167,7 @@ func (m *Manager) AdvanceLeased(conversationID, pipelineType string, lastSequenc
 				"updated_at":                now,
 			}).Error
 		}
-		record := &Record{
-			ConversationID:      conversationID,
-			PipelineType:        pipelineType,
-			LastMessageSequence: lastSequence,
-			CheckpointVersion:   1,
-			IdempotencyKey:      idempotencyKey,
-			CreatedAt:           now,
-			UpdatedAt:           now,
-		}
-		return tx.Create(record).Error
+		return fmt.Errorf("checkpoint lease not found")
 	})
 }
 

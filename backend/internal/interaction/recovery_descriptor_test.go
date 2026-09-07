@@ -28,7 +28,7 @@ func (f *fakeRecoveryGoalReader) GetGoal(ctx context.Context, id string) (decisi
 }
 
 type fakeRecoveryTaskReader struct {
-	runs       map[string]*taskRunRecoveryView
+	runs        map[string]*taskRunRecoveryView
 	checkpoints map[string]*taskCheckpointRecoveryView
 }
 

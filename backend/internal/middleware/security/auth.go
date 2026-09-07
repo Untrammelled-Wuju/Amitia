@@ -274,7 +274,6 @@ var localPublicPathPrefixes = []string{
 	"/api/health",
 	"/api/health/circuit-breakers",
 	"/api/onboarding/status",
-	"/api/onboarding/complete",
 	"/api/tts/voices",
 	"/api/public",
 }
@@ -306,9 +305,14 @@ func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
 		return
 	}
 
-	sessionToken := c.GetHeader("X-Amitia-Desktop-Session")
+	sessionToken := strings.TrimSpace(c.GetHeader("X-Amitia-Desktop-Session"))
 	if sessionToken != "" && cfg.SessionService != nil {
-		session, err := cfg.SessionService.ValidateSessionWithContext(c.Request.Context(), sessionToken)
+		instanceID := strings.TrimSpace(c.GetHeader("X-Amitia-Desktop-Instance"))
+		session, err := cfg.SessionService.ValidateSessionWithInstance(
+			c.Request.Context(),
+			sessionToken,
+			instanceID,
+		)
 		if err == nil {
 			_ = cfg.SessionService.TouchSessionWithContext(c.Request.Context(), session)
 			_ = cfg.SessionService.RenewSessionWithContext(c.Request.Context(), session)

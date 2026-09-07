@@ -5,8 +5,11 @@ package sync
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
+	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -50,34 +53,138 @@ func (a *businessApplier) Supports(entityType EntityType) bool {
 	return false
 }
 
-func (a *businessApplier) Apply(tx *gorm.DB, mutation ClientMutation) (int64, error) {
+func (a *businessApplier) Apply(tx *gorm.DB, userID string, mutation ClientMutation) (int64, error) {
+	owner := requestidentity.NormalizeUserID(userID)
+	if strings.TrimSpace(owner) == "" {
+		return 0, &ApplierError{Code: "unauthorized", Message: "authenticated user scope is required"}
+	}
 	switch mutation.EntityType {
 	case EntityTypeConversation:
-		return a.applyConversation(tx, mutation)
+		return a.applyConversation(tx, owner, mutation)
 	case EntityTypeMessage:
-		return a.applyMessage(tx, mutation)
+		return a.applyMessage(tx, owner, mutation)
 	case EntityTypeCharacter:
-		return a.applyCharacter(tx, mutation)
+		return a.applyCharacter(tx, owner, mutation)
 	case EntityTypeSettings:
+		if !syncGlobalSettingsAllowed() {
+			return 0, &ApplierError{Code: "unsupported_entity_type", Message: "global app settings are not syncable in shared/cloud mode"}
+		}
 		return a.applySettings(tx, mutation)
 	}
-	return 0, &ApplierError{
-		Code:    "unsupported_entity_type",
-		Message: "unsupported entity type: " + string(mutation.EntityType),
-	}
+	return 0, &ApplierError{Code: "unsupported_entity_type", Message: "unsupported entity type: " + string(mutation.EntityType)}
 }
 
-func (a *businessApplier) applyConversation(tx *gorm.DB, mutation ClientMutation) (int64, error) {
+func syncLocalSingleUserMode() bool {
+	return config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
+}
+
+func syncGlobalSettingsAllowed() bool {
+	return syncLocalSingleUserMode()
+}
+
+func syncOwnerScope(query *gorm.DB, column, userID string) *gorm.DB {
+	owner := requestidentity.NormalizeUserID(userID)
+	if syncLocalSingleUserMode() {
+		return query.Where("("+column+" = ? OR "+column+" = '' OR "+column+" IS NULL OR "+column+" = ?)", owner, requestidentity.DefaultUserID)
+	}
+	return query.Where(column+" = ?", owner)
+}
+
+func (a *businessApplier) requireOwnedConversation(tx *gorm.DB, id, userID string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return &ApplierError{Code: "missing_required_field", Message: "conversation id is required"}
+	}
+	var count int64
+	q := tx.Table("conversations").Where("id = ? AND deleted_at IS NULL", id)
+	q = syncOwnerScope(q, "user_id", userID)
+	if err := q.Count(&count).Error; err != nil {
+		return &ApplierError{Code: "apply_failed", Message: "validate conversation ownership: " + err.Error()}
+	}
+	if count != 1 {
+		return &ApplierError{Code: "not_found", Message: "conversation not found"}
+	}
+	return nil
+}
+
+func (a *businessApplier) requireOwnedCharacter(tx *gorm.DB, id, userID string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	var count int64
+	q := tx.Table("characters").Where("id = ? AND deleted_at IS NULL", id)
+	q = syncOwnerScope(q, "user_id", userID)
+	if err := q.Count(&count).Error; err != nil {
+		return &ApplierError{Code: "apply_failed", Message: "validate character ownership: " + err.Error()}
+	}
+	if count != 1 {
+		return &ApplierError{Code: "not_found", Message: "character not found"}
+	}
+	return nil
+}
+
+func (a *businessApplier) ownedConversationRevision(tx *gorm.DB, id, userID string) (int64, bool, error) {
+	var rev int64
+	q := tx.Table("conversations").Where("id = ?", id)
+	q = syncOwnerScope(q, "user_id", userID)
+	result := q.Select("COALESCE(revision, 0)").Scan(&rev)
+	if result.Error != nil {
+		return 0, false, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return 0, false, nil
+	}
+	return rev, true, nil
+}
+
+func (a *businessApplier) ownedCharacterRevision(tx *gorm.DB, id, userID string) (int64, bool, error) {
+	var rev int64
+	q := tx.Table("characters").Where("id = ?", id)
+	q = syncOwnerScope(q, "user_id", userID)
+	result := q.Select("COALESCE(revision, 0)").Scan(&rev)
+	if result.Error != nil {
+		return 0, false, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return 0, false, nil
+	}
+	return rev, true, nil
+}
+
+func (a *businessApplier) ownedMessageRevision(tx *gorm.DB, id, userID string) (int64, bool, error) {
+	var rev int64
+	q := tx.Table("messages AS m").
+		Joins("JOIN conversations c ON c.id = m.conversation_id").
+		Where("m.id = ?", id)
+	q = syncOwnerScope(q, "c.user_id", userID)
+	result := q.Select("COALESCE(m.revision, 0)").Scan(&rev)
+	if result.Error != nil {
+		return 0, false, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return 0, false, nil
+	}
+	return rev, true, nil
+}
+
+func (a *businessApplier) applyConversation(tx *gorm.DB, userID string, mutation ClientMutation) (int64, error) {
 	var payload mutationPayload
 	if len(mutation.Payload) > 0 {
 		if err := json.Unmarshal(mutation.Payload, &payload); err != nil {
 			return 0, &ApplierError{Code: "invalid_payload", Message: "unmarshal conversation payload: " + err.Error()}
 		}
 	}
+	if payload.CharacterID != "" {
+		if err := a.requireOwnedCharacter(tx, payload.CharacterID, userID); err != nil {
+			return 0, err
+		}
+	}
 	switch mutation.Operation {
 	case OpCreate:
 		record := map[string]interface{}{
 			"id":           string(mutation.EntityID),
+			"user_id":      userID,
 			"character_id": payload.CharacterID,
 			"title":        payload.Title,
 			"channel":      payload.Channel,
@@ -111,22 +218,31 @@ func (a *businessApplier) applyConversation(tx *gorm.DB, mutation ClientMutation
 		if payload.PeerID != "" {
 			updates["peer_id"] = payload.PeerID
 		}
-		result := tx.Table("conversations").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Updates(updates)
+		q := tx.Table("conversations").Where("id = ? AND revision = ? AND deleted_at IS NULL", mutation.EntityID, mutation.BaseRevision)
+		q = syncOwnerScope(q, "user_id", userID)
+		result := q.Updates(updates)
 		if result.Error != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "update conversation: " + result.Error.Error()}
 		}
 		if result.RowsAffected == 0 {
-			var currentRev int64
-			tx.Table("conversations").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&currentRev)
+			currentRev, found, err := a.ownedConversationRevision(tx, string(mutation.EntityID), userID)
+			if err != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "read conversation revision: " + err.Error()}
+			}
+			if !found {
+				return 0, &ApplierError{Code: "not_found", Message: "conversation not found"}
+			}
 			return 0, &ApplierError{Code: "conflict", Message: "conversation revision mismatch", ServerRevision: currentRev}
 		}
-		var rev int64
-		if err := tx.Table("conversations").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&rev).Error; err != nil {
+		rev, _, err := a.ownedConversationRevision(tx, string(mutation.EntityID), userID)
+		if err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "read revision: " + err.Error()}
 		}
 		return rev, nil
 	case OpDelete:
-		result := tx.Table("conversations").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Updates(map[string]interface{}{
+		q := tx.Table("conversations").Where("id = ? AND revision = ? AND deleted_at IS NULL", mutation.EntityID, mutation.BaseRevision)
+		q = syncOwnerScope(q, "user_id", userID)
+		result := q.Updates(map[string]interface{}{
 			"deleted_at": a.now(),
 			"updated_at": a.now(),
 			"revision":   gorm.Expr("COALESCE(revision, 0) + 1"),
@@ -135,12 +251,17 @@ func (a *businessApplier) applyConversation(tx *gorm.DB, mutation ClientMutation
 			return 0, &ApplierError{Code: "apply_failed", Message: "delete conversation: " + result.Error.Error()}
 		}
 		if result.RowsAffected == 0 {
-			var currentRev int64
-			tx.Table("conversations").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&currentRev)
+			currentRev, found, err := a.ownedConversationRevision(tx, string(mutation.EntityID), userID)
+			if err != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "read conversation revision: " + err.Error()}
+			}
+			if !found {
+				return 0, &ApplierError{Code: "not_found", Message: "conversation not found"}
+			}
 			return 0, &ApplierError{Code: "conflict", Message: "conversation revision mismatch", ServerRevision: currentRev}
 		}
-		var rev int64
-		if err := tx.Table("conversations").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&rev).Error; err != nil {
+		rev, _, err := a.ownedConversationRevision(tx, string(mutation.EntityID), userID)
+		if err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "read revision: " + err.Error()}
 		}
 		return rev, nil
@@ -148,7 +269,7 @@ func (a *businessApplier) applyConversation(tx *gorm.DB, mutation ClientMutation
 	return 0, &ApplierError{Code: "unsupported_operation", Message: "unsupported operation: " + string(mutation.Operation)}
 }
 
-func (a *businessApplier) applyMessage(tx *gorm.DB, mutation ClientMutation) (int64, error) {
+func (a *businessApplier) applyMessage(tx *gorm.DB, userID string, mutation ClientMutation) (int64, error) {
 	var payload mutationPayload
 	if len(mutation.Payload) > 0 {
 		if err := json.Unmarshal(mutation.Payload, &payload); err != nil {
@@ -162,6 +283,9 @@ func (a *businessApplier) applyMessage(tx *gorm.DB, mutation ClientMutation) (in
 		}
 		if payload.Role == "" {
 			return 0, &ApplierError{Code: "missing_required_field", Message: "message role is required"}
+		}
+		if err := a.requireOwnedConversation(tx, payload.ConversationID, userID); err != nil {
+			return 0, err
 		}
 		record := map[string]interface{}{
 			"id":              string(mutation.EntityID),
@@ -187,22 +311,31 @@ func (a *businessApplier) applyMessage(tx *gorm.DB, mutation ClientMutation) (in
 		if payload.Content != "" {
 			updates["content"] = payload.Content
 		}
-		result := tx.Table("messages").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Updates(updates)
+		ownerSubquery := tx.Table("conversations").Select("id").Where("deleted_at IS NULL")
+		ownerSubquery = syncOwnerScope(ownerSubquery, "user_id", userID)
+		result := tx.Table("messages").Where("id = ? AND revision = ? AND deleted_at IS NULL AND conversation_id IN (?)", mutation.EntityID, mutation.BaseRevision, ownerSubquery).Updates(updates)
 		if result.Error != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "update message: " + result.Error.Error()}
 		}
 		if result.RowsAffected == 0 {
-			var currentRev int64
-			tx.Table("messages").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&currentRev)
+			currentRev, found, err := a.ownedMessageRevision(tx, string(mutation.EntityID), userID)
+			if err != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "read message revision: " + err.Error()}
+			}
+			if !found {
+				return 0, &ApplierError{Code: "not_found", Message: "message not found"}
+			}
 			return 0, &ApplierError{Code: "conflict", Message: "message revision mismatch", ServerRevision: currentRev}
 		}
-		var rev int64
-		if err := tx.Table("messages").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&rev).Error; err != nil {
+		rev, _, err := a.ownedMessageRevision(tx, string(mutation.EntityID), userID)
+		if err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "read revision: " + err.Error()}
 		}
 		return rev, nil
 	case OpDelete:
-		result := tx.Table("messages").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Updates(map[string]interface{}{
+		ownerSubquery := tx.Table("conversations").Select("id").Where("deleted_at IS NULL")
+		ownerSubquery = syncOwnerScope(ownerSubquery, "user_id", userID)
+		result := tx.Table("messages").Where("id = ? AND revision = ? AND deleted_at IS NULL AND conversation_id IN (?)", mutation.EntityID, mutation.BaseRevision, ownerSubquery).Updates(map[string]interface{}{
 			"deleted_at": a.now(),
 			"updated_at": a.now(),
 			"revision":   gorm.Expr("COALESCE(revision, 0) + 1"),
@@ -211,12 +344,17 @@ func (a *businessApplier) applyMessage(tx *gorm.DB, mutation ClientMutation) (in
 			return 0, &ApplierError{Code: "apply_failed", Message: "delete message: " + result.Error.Error()}
 		}
 		if result.RowsAffected == 0 {
-			var currentRev int64
-			tx.Table("messages").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&currentRev)
+			currentRev, found, err := a.ownedMessageRevision(tx, string(mutation.EntityID), userID)
+			if err != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "read message revision: " + err.Error()}
+			}
+			if !found {
+				return 0, &ApplierError{Code: "not_found", Message: "message not found"}
+			}
 			return 0, &ApplierError{Code: "conflict", Message: "message revision mismatch", ServerRevision: currentRev}
 		}
-		var rev int64
-		if err := tx.Table("messages").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&rev).Error; err != nil {
+		rev, _, err := a.ownedMessageRevision(tx, string(mutation.EntityID), userID)
+		if err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "read revision: " + err.Error()}
 		}
 		return rev, nil
@@ -224,11 +362,19 @@ func (a *businessApplier) applyMessage(tx *gorm.DB, mutation ClientMutation) (in
 	return 0, &ApplierError{Code: "unsupported_operation", Message: "unsupported operation: " + string(mutation.Operation)}
 }
 
-func (a *businessApplier) applyCharacter(tx *gorm.DB, mutation ClientMutation) (int64, error) {
+func (a *businessApplier) applyCharacter(tx *gorm.DB, userID string, mutation ClientMutation) (int64, error) {
 	var payload mutationPayload
 	if len(mutation.Payload) > 0 {
 		if err := json.Unmarshal(mutation.Payload, &payload); err != nil {
 			return 0, &ApplierError{Code: "invalid_payload", Message: "unmarshal character payload: " + err.Error()}
+		}
+	}
+	meta := sanitizeCharacterMeta(payload.Meta)
+	if raw, ok := meta["conversation_id"]; ok {
+		if conversationID, ok := raw.(string); ok && strings.TrimSpace(conversationID) != "" {
+			if err := a.requireOwnedConversation(tx, conversationID, userID); err != nil {
+				return 0, err
+			}
 		}
 	}
 	switch mutation.Operation {
@@ -239,12 +385,13 @@ func (a *businessApplier) applyCharacter(tx *gorm.DB, mutation ClientMutation) (
 		}
 		record := map[string]interface{}{
 			"id":         string(mutation.EntityID),
+			"user_id":    userID,
 			"name":       name,
 			"created_at": a.now(),
 			"updated_at": a.now(),
 			"revision":   1,
 		}
-		for key, value := range sanitizeCharacterMeta(payload.Meta) {
+		for key, value := range meta {
 			record[key] = value
 		}
 		if err := tx.Table("characters").Create(record).Error; err != nil {
@@ -261,25 +408,34 @@ func (a *businessApplier) applyCharacter(tx *gorm.DB, mutation ClientMutation) (
 		} else if payload.Title != "" {
 			updates["name"] = payload.Title
 		}
-		for key, value := range sanitizeCharacterMeta(payload.Meta) {
+		for key, value := range meta {
 			updates[key] = value
 		}
-		result := tx.Table("characters").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Updates(updates)
+		q := tx.Table("characters").Where("id = ? AND revision = ? AND deleted_at IS NULL", mutation.EntityID, mutation.BaseRevision)
+		q = syncOwnerScope(q, "user_id", userID)
+		result := q.Updates(updates)
 		if result.Error != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "update character: " + result.Error.Error()}
 		}
 		if result.RowsAffected == 0 {
-			var currentRev int64
-			tx.Table("characters").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&currentRev)
+			currentRev, found, err := a.ownedCharacterRevision(tx, string(mutation.EntityID), userID)
+			if err != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "read character revision: " + err.Error()}
+			}
+			if !found {
+				return 0, &ApplierError{Code: "not_found", Message: "character not found"}
+			}
 			return 0, &ApplierError{Code: "conflict", Message: "character revision mismatch", ServerRevision: currentRev}
 		}
-		var rev int64
-		if err := tx.Table("characters").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&rev).Error; err != nil {
+		rev, _, err := a.ownedCharacterRevision(tx, string(mutation.EntityID), userID)
+		if err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "read revision: " + err.Error()}
 		}
 		return rev, nil
 	case OpDelete:
-		result := tx.Table("characters").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Updates(map[string]interface{}{
+		q := tx.Table("characters").Where("id = ? AND revision = ? AND deleted_at IS NULL", mutation.EntityID, mutation.BaseRevision)
+		q = syncOwnerScope(q, "user_id", userID)
+		result := q.Updates(map[string]interface{}{
 			"deleted_at": a.now(),
 			"updated_at": a.now(),
 			"revision":   gorm.Expr("COALESCE(revision, 0) + 1"),
@@ -288,12 +444,17 @@ func (a *businessApplier) applyCharacter(tx *gorm.DB, mutation ClientMutation) (
 			return 0, &ApplierError{Code: "apply_failed", Message: "delete character: " + result.Error.Error()}
 		}
 		if result.RowsAffected == 0 {
-			var currentRev int64
-			tx.Table("characters").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&currentRev)
+			currentRev, found, err := a.ownedCharacterRevision(tx, string(mutation.EntityID), userID)
+			if err != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "read character revision: " + err.Error()}
+			}
+			if !found {
+				return 0, &ApplierError{Code: "not_found", Message: "character not found"}
+			}
 			return 0, &ApplierError{Code: "conflict", Message: "character revision mismatch", ServerRevision: currentRev}
 		}
-		var rev int64
-		if err := tx.Table("characters").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&rev).Error; err != nil {
+		rev, _, err := a.ownedCharacterRevision(tx, string(mutation.EntityID), userID)
+		if err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "read revision: " + err.Error()}
 		}
 		return rev, nil

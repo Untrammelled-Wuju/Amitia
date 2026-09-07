@@ -34,9 +34,27 @@ func (h *VoiceHandler) CreateSession(c *gin.Context) {
 		return
 	}
 
-	userID := req.UserID
-	if actor := security.GetActor(c); actor != nil && actor.UserID != "" {
-		userID = actor.UserID.String()
+	userID := voiceHandlerUserID(c)
+	if userID == "" {
+		util.ErrorResponse(c, http.StatusForbidden, "缺少有效的用户身份", nil)
+		return
+	}
+	conversationCharacterID, err := requireRealtimeConversationOwner(req.ConversationID, userID)
+	if err != nil {
+		util.ErrorResponse(c, http.StatusNotFound, "会话不存在或无权访问", nil)
+		return
+	}
+	if req.CharacterID == "" {
+		req.CharacterID = conversationCharacterID
+	} else {
+		if conversationCharacterID != "" && conversationCharacterID != req.CharacterID {
+			util.ErrorResponse(c, http.StatusBadRequest, "角色与会话不匹配", nil)
+			return
+		}
+		if err := requireRealtimeCharacterOwner(req.CharacterID, userID); err != nil {
+			util.ErrorResponse(c, http.StatusNotFound, "角色不存在或无权访问", nil)
+			return
+		}
 	}
 	voiceReq := VoiceSessionRequest{
 		ConversationID: req.ConversationID,
@@ -73,9 +91,8 @@ func (h *VoiceHandler) GetSession(c *gin.Context) {
 		return
 	}
 
-	sess, err := h.service.GetSession(sessionID)
-	if err != nil {
-		util.ErrorResponse(c, http.StatusNotFound, "会话不存在", err.Error())
+	sess, ok := h.requireOwnedSession(c, sessionID)
+	if !ok {
 		return
 	}
 
@@ -86,6 +103,10 @@ func (h *VoiceHandler) StartSession(c *gin.Context) {
 	sessionID := c.Param("id")
 	if sessionID == "" {
 		util.ErrorResponse(c, http.StatusBadRequest, "会话ID不能为空", nil)
+		return
+	}
+
+	if _, ok := h.requireOwnedSession(c, sessionID); !ok {
 		return
 	}
 
@@ -104,6 +125,10 @@ func (h *VoiceHandler) StopSession(c *gin.Context) {
 		return
 	}
 
+	if _, ok := h.requireOwnedSession(c, sessionID); !ok {
+		return
+	}
+
 	if err := h.service.StopSession(c.Request.Context(), sessionID); err != nil {
 		util.ErrorResponse(c, http.StatusBadRequest, "停止会话失败", err.Error())
 		return
@@ -116,6 +141,10 @@ func (h *VoiceHandler) InterruptSession(c *gin.Context) {
 	sessionID := c.Param("id")
 	if sessionID == "" {
 		util.ErrorResponse(c, http.StatusBadRequest, "会话ID不能为空", nil)
+		return
+	}
+
+	if _, ok := h.requireOwnedSession(c, sessionID); !ok {
 		return
 	}
 
@@ -134,6 +163,10 @@ func (h *VoiceHandler) ArmWake(c *gin.Context) {
 		return
 	}
 
+	if _, ok := h.requireOwnedSession(c, sessionID); !ok {
+		return
+	}
+
 	if err := h.service.ArmWake(c.Request.Context(), sessionID); err != nil {
 		util.ErrorResponse(c, http.StatusBadRequest, "启动唤醒失败", err.Error())
 		return
@@ -146,6 +179,10 @@ func (h *VoiceHandler) DisarmWake(c *gin.Context) {
 	sessionID := c.Param("id")
 	if sessionID == "" {
 		util.ErrorResponse(c, http.StatusBadRequest, "会话ID不能为空", nil)
+		return
+	}
+
+	if _, ok := h.requireOwnedSession(c, sessionID); !ok {
 		return
 	}
 
@@ -163,14 +200,7 @@ func (h *VoiceHandler) PublishASRFinal(c *gin.Context) {
 		util.ErrorResponse(c, http.StatusBadRequest, "会话ID不能为空", nil)
 		return
 	}
-	sess, err := h.service.GetSession(sessionID)
-	if err != nil {
-		util.ErrorResponse(c, http.StatusNotFound, "会话不存在", err.Error())
-		return
-	}
-	actor := security.GetActor(c)
-	if actor == nil || actor.UserID == "" || actor.UserID.String() != sess.UserID {
-		util.ErrorResponse(c, http.StatusForbidden, "无权发布该会话的 ASR Final", nil)
+	if _, ok := h.requireOwnedSession(c, sessionID); !ok {
 		return
 	}
 	var req struct {
@@ -189,11 +219,59 @@ func (h *VoiceHandler) PublishASRFinal(c *gin.Context) {
 }
 
 func (h *VoiceHandler) ListSessions(c *gin.Context) {
-	sessions := h.service.ListActiveSessions()
+	userID := voiceHandlerUserID(c)
+	if userID == "" {
+		util.ErrorResponse(c, http.StatusForbidden, "缺少有效的用户身份", nil)
+		return
+	}
+	all := h.service.ListActiveSessions()
+	sessions := make([]*ContinuousVoiceSession, 0, len(all))
+	for _, sess := range all {
+		if sess != nil && realtimeOwnerMatches(sess.UserID, userID) {
+			sessions = append(sessions, sess)
+		}
+	}
 	util.SuccessResponse(c, gin.H{"sessions": sessions, "total": len(sessions)})
 }
 
 func (h *VoiceHandler) GetStatus(c *gin.Context) {
+	userID := voiceHandlerUserID(c)
+	if userID == "" {
+		util.ErrorResponse(c, http.StatusForbidden, "缺少有效的用户身份", nil)
+		return
+	}
 	status := h.service.Status()
+	status.ActiveSessions = 0
+	status.WakeArmedSessions = 0
+	for _, sess := range h.service.ListActiveSessions() {
+		if sess == nil || !realtimeOwnerMatches(sess.UserID, userID) {
+			continue
+		}
+		status.ActiveSessions++
+		if sess.WakeArmed {
+			status.WakeArmedSessions++
+		}
+	}
 	util.SuccessResponse(c, status)
+}
+
+func voiceHandlerUserID(c *gin.Context) string {
+	if actor := security.GetActor(c); actor != nil && actor.UserID != "" {
+		return realtimeEffectiveUserID(actor.UserID.String())
+	}
+	return realtimeEffectiveUserID("")
+}
+
+func (h *VoiceHandler) requireOwnedSession(c *gin.Context, sessionID string) (*ContinuousVoiceSession, bool) {
+	userID := voiceHandlerUserID(c)
+	if userID == "" {
+		util.ErrorResponse(c, http.StatusForbidden, "缺少有效的用户身份", nil)
+		return nil, false
+	}
+	sess, err := h.service.GetSession(sessionID)
+	if err != nil || sess == nil || !realtimeOwnerMatches(sess.UserID, userID) {
+		util.ErrorResponse(c, http.StatusNotFound, "会话不存在或无权访问", nil)
+		return nil, false
+	}
+	return sess, true
 }

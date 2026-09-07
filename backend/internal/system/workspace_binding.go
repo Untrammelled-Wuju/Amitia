@@ -51,10 +51,13 @@ func normalizeConversationWorkspaceBinding(binding conversationWorkspaceBinding)
 	return binding, nil
 }
 
-func (h *Handler) loadConversationWorkspaceBinding(conversationID string) (*conversationWorkspaceBinding, error) {
+func (h *Handler) loadConversationWorkspaceBindingForUser(conversationID, userID string) (*conversationWorkspaceBinding, error) {
 	conversationID = strings.TrimSpace(conversationID)
 	if conversationID == "" {
 		return nil, nil
+	}
+	if _, err := h.requireWebChatConversation(conversationID, userID); err != nil {
+		return nil, err
 	}
 	var binding conversationWorkspaceBinding
 	err := h.db.Table("conversation_workspace_bindings").Where("conversation_id = ?", conversationID).Take(&binding).Error
@@ -67,17 +70,13 @@ func (h *Handler) loadConversationWorkspaceBinding(conversationID string) (*conv
 	return &binding, nil
 }
 
-func (h *Handler) saveConversationWorkspaceBinding(binding conversationWorkspaceBinding) (*conversationWorkspaceBinding, error) {
+func (h *Handler) saveConversationWorkspaceBindingForUser(binding conversationWorkspaceBinding, userID string) (*conversationWorkspaceBinding, error) {
 	normalized, err := normalizeConversationWorkspaceBinding(binding)
 	if err != nil {
 		return nil, err
 	}
-	var count int64
-	if err := h.db.Table("conversations").Where("id = ?", normalized.ConversationID).Count(&count).Error; err != nil {
+	if _, err := h.requireWebChatConversation(normalized.ConversationID, userID); err != nil {
 		return nil, err
-	}
-	if count == 0 {
-		return nil, gorm.ErrRecordNotFound
 	}
 	err = h.db.Exec(`INSERT INTO conversation_workspace_bindings
 		(conversation_id, workspace_id, device_id, workspace_name, workspace_kind, root_uri, updated_at)
@@ -103,7 +102,7 @@ func (h *Handler) saveConversationWorkspaceBinding(binding conversationWorkspace
 	return &normalized, nil
 }
 
-func (h *Handler) workspaceBindingForRequest(conversationID string, body webChatSendRequest) *conversationWorkspaceBinding {
+func (h *Handler) workspaceBindingForRequest(conversationID string, body webChatSendRequest, userID string) *conversationWorkspaceBinding {
 	if strings.TrimSpace(body.WorkspaceID) != "" {
 		binding := conversationWorkspaceBinding{
 			ConversationID: conversationID,
@@ -113,27 +112,29 @@ func (h *Handler) workspaceBindingForRequest(conversationID string, body webChat
 			WorkspaceKind:  body.WorkspaceKind,
 			RootURI:        body.WorkspaceRootURI,
 		}
-		if saved, err := h.saveConversationWorkspaceBinding(binding); err == nil {
+		// Existing conversations persist immediately. A brand-new conversation is
+		// normalized here and persisted after UnifiedEntry creates it.
+		if saved, err := h.saveConversationWorkspaceBindingForUser(binding, userID); err == nil {
 			return saved
 		}
 		if normalized, err := normalizeConversationWorkspaceBinding(binding); err == nil {
 			return &normalized
 		}
 	}
-	binding, err := h.loadConversationWorkspaceBinding(conversationID)
+	binding, err := h.loadConversationWorkspaceBindingForUser(conversationID, userID)
 	if err != nil {
 		return nil
 	}
 	return binding
 }
 
-func (h *Handler) persistConversationWorkspaceBinding(conversationID string, binding *conversationWorkspaceBinding) {
+func (h *Handler) persistConversationWorkspaceBinding(conversationID string, binding *conversationWorkspaceBinding, userID string) {
 	if h == nil || binding == nil || strings.TrimSpace(conversationID) == "" {
 		return
 	}
 	copyBinding := *binding
 	copyBinding.ConversationID = strings.TrimSpace(conversationID)
-	_, _ = h.saveConversationWorkspaceBinding(copyBinding)
+	_, _ = h.saveConversationWorkspaceBindingForUser(copyBinding, userID)
 }
 
 func applyWorkspaceBinding(req *interaction.UnifiedEntryRequest, binding *conversationWorkspaceBinding) {
@@ -153,7 +154,11 @@ func (h *Handler) handleUnifiedEntryWithWorkspace(ctx context.Context, req *inte
 }
 
 func (h *Handler) WebChatGetWorkspace(c *gin.Context) {
-	binding, err := h.loadConversationWorkspaceBinding(c.Param("id"))
+	binding, err := h.loadConversationWorkspaceBindingForUser(c.Param("id"), webChatUserID(c))
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
+		return
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "读取工作目录失败", nil)
 		return
@@ -177,16 +182,16 @@ func (h *Handler) WebChatSetWorkspace(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效工作目录", nil)
 		return
 	}
-	binding, err := h.saveConversationWorkspaceBinding(conversationWorkspaceBinding{
+	binding, err := h.saveConversationWorkspaceBindingForUser(conversationWorkspaceBinding{
 		ConversationID: c.Param("id"),
 		WorkspaceID:    body.WorkspaceID,
 		DeviceID:       body.DeviceID,
 		WorkspaceName:  body.WorkspaceName,
 		WorkspaceKind:  body.WorkspaceKind,
 		RootURI:        body.RootURI,
-	})
+	}, webChatUserID(c))
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		util.ErrorResponse(c, response.InvalidParams, "对话不存在", nil)
+		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
 		return
 	}
 	if err != nil {
@@ -197,7 +202,12 @@ func (h *Handler) WebChatSetWorkspace(c *gin.Context) {
 }
 
 func (h *Handler) WebChatClearWorkspace(c *gin.Context) {
-	if err := h.db.Exec("DELETE FROM conversation_workspace_bindings WHERE conversation_id = ?", strings.TrimSpace(c.Param("id"))).Error; err != nil {
+	convID := strings.TrimSpace(c.Param("id"))
+	if _, err := h.requireWebChatConversation(convID, webChatUserID(c)); err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "对话不存在", nil)
+		return
+	}
+	if err := h.db.Exec("DELETE FROM conversation_workspace_bindings WHERE conversation_id = ?", convID).Error; err != nil {
 		util.ErrorResponse(c, response.InternalError, "清除工作目录失败", nil)
 		return
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/u-ai/backend/internal/mcp/discovery"
 	"github.com/u-ai/backend/internal/mcp/features"
 	"github.com/u-ai/backend/internal/mcp/host"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -65,6 +66,7 @@ func RegisterOAuthCallback(routes gin.IRoutes, services Services) {
 func RegisterRouter(group *gin.RouterGroup, _ *app.AppContext, services Services) {
 	handler := &Handler{services: services}
 	routes := group.Group("/mcp")
+	routes.Use(security.SharedCoreAdminOnly())
 	routes.GET("/servers", handler.listServers)
 	routes.POST("/servers", handler.createServer)
 	routes.GET("/servers/:id", handler.getServer)

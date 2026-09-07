@@ -17,10 +17,11 @@ import (
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	"gorm.io/gorm"
 )
 
 func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBreakerRegistry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine) {
-	r.GET("/health/circuit-breakers", func(c *gin.Context) {
+	r.GET("/health/circuit-breakers", security.SharedCoreAdminOnly(), func(c *gin.Context) {
 		reports := cbRegistry.AllHealthReports()
 		result := make([]gin.H, 0, len(reports))
 		for _, report := range reports {
@@ -34,7 +35,7 @@ func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBre
 		util.SuccessResponse(c, result)
 	})
 
-	r.POST("/health/circuit-breakers/:name/reset", func(c *gin.Context) {
+	r.POST("/health/circuit-breakers/:name/reset", security.SharedCoreAdminOnly(), func(c *gin.Context) {
 		name := c.Param("name")
 		cb := cbRegistry.Get(name)
 		if cb == nil {
@@ -45,12 +46,12 @@ func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBre
 		util.SuccessMsgResponse(c, "breaker reset", gin.H{"name": name, "state": string(cb.Status())})
 	})
 
-	r.GET("/health/data-lifecycle", func(c *gin.Context) {
+	r.GET("/health/data-lifecycle", security.SharedCoreAdminOnly(), func(c *gin.Context) {
 		stats := dataLifecycle.Stats()
 		util.SuccessResponse(c, stats)
 	})
 
-	r.GET("/health/reconciliation", func(c *gin.Context) {
+	r.GET("/health/reconciliation", security.SharedCoreAdminOnly(), func(c *gin.Context) {
 		scans := reconciliation.AllScans()
 		util.SuccessResponse(c, gin.H{
 			"status": string(reconciliation.Status()),
@@ -58,7 +59,7 @@ func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBre
 		})
 	})
 
-	r.POST("/health/reconciliation/run", func(c *gin.Context) {
+	r.POST("/health/reconciliation/run", security.SharedCoreAdminOnly(), func(c *gin.Context) {
 		var body struct {
 			Target   string `json:"target"`
 			Strategy string `json:"strategy"`
@@ -78,7 +79,7 @@ func RegisterHealthRouter(r *gin.RouterGroup, cbRegistry *mindruntime.CircuitBre
 	})
 }
 
-func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceEntry, ttsService tts.Service, deliveryStore *delivery.SQLiteDeliveryStore) {
+func RegisterVoiceEntryRouter(r *gin.RouterGroup, db *gorm.DB, voiceEntry *interaction.VoiceEntry, ttsService tts.Service, deliveryStore *delivery.SQLiteDeliveryStore) {
 	r.POST("/voice/session", func(c *gin.Context) {
 		var body struct {
 			SessionID      string `json:"sessionId"`
@@ -89,7 +90,17 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 			util.ErrorResponse(c, response.InvalidParams, "invalid request", nil)
 			return
 		}
-		session := voiceEntry.CreateSession(body.SessionID, body.ConversationID, body.CharacterID)
+		actor := security.GetActor(c)
+		if actor == nil || actor.UserID == "" {
+			util.ErrorResponse(c, response.Unauthorized, "authenticated user is required", nil)
+			return
+		}
+		userID := actor.UserID.String()
+		if err := requireVoiceScope(db, userID, body.ConversationID, body.CharacterID); err != nil {
+			util.ErrorResponse(c, response.NotFound, "conversation or character not found", nil)
+			return
+		}
+		session := voiceEntry.CreateSession(body.SessionID, body.ConversationID, body.CharacterID, userID)
 		util.SuccessMsgResponse(c, "session created", gin.H{
 			"sessionId":      session.SessionID,
 			"conversationId": session.ConversationID,
@@ -111,6 +122,14 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 			return
 		}
 		req.UserID = actor.UserID.String()
+		if err := requireVoiceScope(db, req.UserID, req.ConversationID, req.CharacterID); err != nil {
+			util.ErrorResponse(c, response.NotFound, "conversation or character not found", nil)
+			return
+		}
+		if existing := voiceEntry.GetSession(req.SessionID); existing != nil && (existing.UserID != req.UserID || existing.ConversationID != req.ConversationID || existing.CharacterID != req.CharacterID) {
+			util.ErrorResponse(c, response.NotFound, "voice session not found", nil)
+			return
+		}
 		if req.IsFinal && strings.TrimSpace(req.Text) != "" {
 			if err := realtime.PublishASRWorkflowFinal(c.Request.Context(), req.UserID, req.SessionID, req.TurnID, req.ConversationID, req.CharacterID, req.Text, ""); err != nil {
 				log.Printf("voice workflow asr final publish failed: %v", err)
@@ -159,6 +178,10 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 
 	r.POST("/voice/session/:id/interrupt", func(c *gin.Context) {
 		sessionID := c.Param("id")
+		if !voiceSessionOwned(c, voiceEntry.GetSession(sessionID)) {
+			util.ErrorResponse(c, response.NotFound, "session not found", nil)
+			return
+		}
 		var body struct {
 			Policy string `json:"policy"`
 		}
@@ -176,6 +199,10 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 
 	r.DELETE("/voice/session/:id", func(c *gin.Context) {
 		sessionID := c.Param("id")
+		if !voiceSessionOwned(c, voiceEntry.GetSession(sessionID)) {
+			util.ErrorResponse(c, response.NotFound, "session not found", nil)
+			return
+		}
 		voiceEntry.RemoveSession(sessionID)
 		util.SuccessMsgResponse(c, "session removed", nil)
 	})
@@ -183,7 +210,7 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 	r.GET("/voice/session/:id", func(c *gin.Context) {
 		sessionID := c.Param("id")
 		session := voiceEntry.GetSession(sessionID)
-		if session == nil {
+		if !voiceSessionOwned(c, session) {
 			util.ErrorResponse(c, response.NotFound, "session not found", nil)
 			return
 		}
@@ -195,6 +222,39 @@ func RegisterVoiceEntryRouter(r *gin.RouterGroup, voiceEntry *interaction.VoiceE
 			"currentText":    session.GetCurrentText(),
 		})
 	})
+}
+
+func requireVoiceScope(db *gorm.DB, userID, conversationID, characterID string) error {
+	conversationID = strings.TrimSpace(conversationID)
+	characterID = strings.TrimSpace(characterID)
+	if conversationID == "" || characterID == "" {
+		return gorm.ErrRecordNotFound
+	}
+	var conversation struct{ CharacterID string }
+	if err := webChatOwnerQuery(db.Table("conversations").Where("deleted_at IS NULL"), userID).
+		Select("character_id").Where("id = ?", conversationID).Take(&conversation).Error; err != nil {
+		return err
+	}
+	if strings.TrimSpace(conversation.CharacterID) != characterID {
+		return gorm.ErrRecordNotFound
+	}
+	var count int64
+	if err := webChatOwnerQuery(db.Table("characters").Where("deleted_at IS NULL"), userID).
+		Where("id = ?", characterID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func voiceSessionOwned(c *gin.Context, session *interaction.VoiceSession) bool {
+	if session == nil {
+		return false
+	}
+	actor := security.GetActor(c)
+	return actor != nil && actor.UserID != "" && session.UserID == actor.UserID.String()
 }
 
 func serializeVoiceDeliveryPayload(audioUrl string, duration float64, text string) []byte {

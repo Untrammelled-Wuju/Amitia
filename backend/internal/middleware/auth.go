@@ -24,7 +24,6 @@ var publicPathPrefixes = []string{
 	"/api/auth/status",
 	"/api/health",
 	"/api/onboarding/status",
-	"/api/onboarding/complete",
 	"/api/tts/voices",
 }
 

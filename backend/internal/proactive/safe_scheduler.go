@@ -166,12 +166,6 @@ func (s *SafeScheduler) fireRules() {
 	todayStr := now.Format("2006-01-02")
 	timeStr := now.Format("15:04")
 
-	type rule struct {
-		id, enabled, maxPerDay, sentToday, randomMinutes            int
-		name, channel, ruleType, cron, quietStart, quietEnd, prompt string
-		charID, convID, lastSentAt                                  string
-	}
-
 	rows, err := s.db.Table("proactive_rules").
 		Select("id, name, enabled, channel, character_id, conversation_id, rule_type, schedule_cron, quiet_start, quiet_end, max_per_day, sent_count_today, prompt_template, random_minutes, COALESCE(last_sent_at,'')").
 		Where("enabled = 1 AND schedule_cron != \"\"").Rows()
@@ -181,7 +175,7 @@ func (s *SafeScheduler) fireRules() {
 	defer rows.Close()
 
 	for rows.Next() {
-		var r rule
+		var r scheduledRule
 		rows.Scan(&r.id, &r.name, &r.enabled, &r.channel, &r.charID, &r.convID, &r.ruleType,
 			&r.cron, &r.quietStart, &r.quietEnd, &r.maxPerDay, &r.sentToday,
 			&r.prompt, &r.randomMinutes, &r.lastSentAt)
@@ -232,7 +226,7 @@ func (s *SafeScheduler) fireRules() {
 		}
 
 		log.Printf("[SafeScheduler] 触发规则 id=%d name=%s", r.id, r.name)
-		go s.executor.executeRule(rule{
+		go s.executor.executeRule(scheduledRule{
 			id: r.id, enabled: r.enabled, maxPerDay: r.maxPerDay, sentToday: r.sentToday,
 			randomMinutes: r.randomMinutes, name: r.name, channel: r.channel,
 			ruleType: r.ruleType, cron: r.cron, quietStart: r.quietStart,

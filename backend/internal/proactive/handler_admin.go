@@ -2,21 +2,32 @@ package proactive
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/pkg/comment/response"
-	"github.com/u-ai/backend/pkg/util"
 	"strconv"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/pkg/comment/response"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 func (h *Handler) ResetPresets(c *gin.Context) {
 	var body struct {
 		CharacterID string `json:"characterId"`
 	}
-	c.ShouldBindJSON(&body)
+	_ = c.ShouldBindJSON(&body)
 	characterID := body.CharacterID
 	if characterID == "" {
 		characterID = c.Query("characterId")
+	}
+	userID := requestidentity.ResolveGin(c, "")
+
+	if characterID != "" {
+		var count int64
+		if err := proactiveOwnerQuery(h.db.Table("characters").Where("id = ? AND deleted_at IS NULL", characterID), userID).Count(&count).Error; err != nil || count == 0 {
+			util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
+			return
+		}
 	}
 
 	var amsEnabled int
@@ -37,24 +48,42 @@ func (h *Handler) ResetPresets(c *gin.Context) {
 		{Name: "睡前分享", Channel: "all", CharacterID: characterID, RuleType: "sleep_reminder", ScheduleCron: "30 21 * * *", PromptTemplate: "分享今天让你开心的瞬间或此刻的心情，轻松温暖。不要道别，像睡前聊天。不要使用emoji。", MaxPerDay: 20, Enabled: 1, RandomMinutes: 20, QuietStart: "", QuietEnd: ""},
 	}
 
-	h.service.DeleteRulesByCharacter(characterID)
+	scoped, scopedOK := h.service.(scopedProactiveService)
+	if scopedOK {
+		if err := scoped.DeleteRulesByCharacterForUser(characterID, userID); err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "重置预设失败", nil)
+			return
+		}
+	} else {
+		_ = h.service.DeleteRulesByCharacter(characterID)
+	}
+
+	create := func(rule *ProactiveRule) error {
+		if scopedOK {
+			return scoped.CreateRuleDirectForUser(rule, userID)
+		}
+		return h.service.CreateRuleDirect(rule)
+	}
 
 	scheduleSkipped := []string{}
-	if amsEnabled == 1 {
-		for _, r := range genericRules {
-			h.service.CreateRuleDirect(&r)
+	for i := range genericRules {
+		if err := create(&genericRules[i]); err != nil {
+			util.ErrorResponse(c, response.OperationFailed, "创建预设规则失败", nil)
+			return
 		}
+	}
+	if amsEnabled == 1 {
 		for _, r := range scheduleRules {
 			scheduleSkipped = append(scheduleSkipped, r.Name)
 		}
 	} else {
-		for _, r := range genericRules {
-			h.service.CreateRuleDirect(&r)
-		}
-		for _, r := range scheduleRules {
-			r.Enabled = 0
-			h.service.CreateRuleDirect(&r)
-			scheduleSkipped = append(scheduleSkipped, r.Name+"(已禁用)")
+		for i := range scheduleRules {
+			scheduleRules[i].Enabled = 0
+			if err := create(&scheduleRules[i]); err != nil {
+				util.ErrorResponse(c, response.OperationFailed, "创建预设规则失败", nil)
+				return
+			}
+			scheduleSkipped = append(scheduleSkipped, scheduleRules[i].Name+"(已禁用)")
 		}
 	}
 
@@ -73,8 +102,16 @@ func (h *Handler) ResetPresets(c *gin.Context) {
 
 func (h *Handler) RuleMessages(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+	userID := requestidentity.ResolveGin(c, "")
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		if _, err := scoped.FindRuleForUser(id, userID); err != nil {
+			util.ErrorResponse(c, response.NotFound, "规则不存在", nil)
+			return
+		}
+	}
 	var msgs []map[string]interface{}
-	h.db.Table("proactive_messages").Where("rule_id = ?", id).Order("created_at DESC").Limit(50).Find(&msgs)
+	proactiveOwnerQuery(h.db.Table("proactive_messages").Where("rule_id = ?", id), userID).
+		Order("created_at DESC").Limit(50).Find(&msgs)
 	if msgs == nil {
 		msgs = []map[string]interface{}{}
 	}
@@ -99,10 +136,13 @@ func (h *Handler) SetCleanupConfig(c *gin.Context) {
 		return
 	}
 	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('reminder_cleanup_days', ?, datetime('now', 'localtime'))", body.CleanupDays)
-	h.broadcastReminderChange()
+	h.broadcastReminderChange(requestidentity.ResolveGin(c, ""))
 	util.SuccessMsgResponse(c, "已更新", nil)
 }
 
+// CleanupTriggeredReminders is an internal maintenance task. Expired disabled
+// rows can be removed across tenants because no user data is returned and the
+// predicate never changes active reminders.
 func (h *Handler) CleanupTriggeredReminders() {
 	var daysStr string
 	h.db.Raw("SELECT value FROM app_settings WHERE key = 'reminder_cleanup_days' LIMIT 1").Row().Scan(&daysStr)
@@ -127,7 +167,15 @@ func (h *Handler) ListTriggerHistory(c *gin.Context) {
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
 	}
-	items, total, err := h.service.ListTriggerHistory(page, pageSize, state)
+	userID := requestidentity.ResolveGin(c, "")
+	var items []TriggerHistory
+	var total int64
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		items, total, err = scoped.ListTriggerHistoryForUser(page, pageSize, state, userID)
+	} else {
+		items, total, err = h.service.ListTriggerHistory(page, pageSize, state)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
 		return
@@ -136,12 +184,13 @@ func (h *Handler) ListTriggerHistory(c *gin.Context) {
 }
 
 func (h *Handler) QueueSummary(c *gin.Context) {
+	userID := requestidentity.ResolveGin(c, "")
 	var pendingCount int64
-	h.db.Model(&Reminder{}).Where("enabled = 1").Count(&pendingCount)
+	proactiveOwnerQuery(h.db.Model(&Reminder{}).Where("enabled = 1"), userID).Count(&pendingCount)
 
 	var recentFailures int64
 	cutoff := time.Now().Add(-24 * time.Hour).Format("2006-01-02 15:04:05")
-	h.db.Model(&TriggerHistory{}).Where("state = 'failed' AND created_at > ?", cutoff).Count(&recentFailures)
+	proactiveOwnerQuery(h.db.Model(&TriggerHistory{}).Where("state = 'failed' AND created_at > ?", cutoff), userID).Count(&recentFailures)
 
 	depth := int(pendingCount)
 
@@ -149,17 +198,16 @@ func (h *Handler) QueueSummary(c *gin.Context) {
 	h.db.Raw("SELECT value FROM app_settings WHERE key = 'reminder_backpressure_cleared' LIMIT 1").Row().Scan(&clearedAt)
 	cleared := false
 	if clearedAt != "" {
-		if t, err := time.Parse("2006-01-02 15:04:05", clearedAt); err == nil {
-			if time.Since(t) < 5*time.Minute {
-				cleared = true
-			}
+		if t, err := time.Parse("2006-01-02 15:04:05", clearedAt); err == nil && time.Since(t) < 5*time.Minute {
+			cleared = true
 		}
 	}
 	backpressure := !cleared && (pendingCount > 50 || recentFailures > 10)
 
 	var oldestAgeMs int64
 	var oldestCreated string
-	if err := h.db.Model(&Reminder{}).Where("enabled = 1").Select("MIN(created_at)").Row().Scan(&oldestCreated); err == nil && oldestCreated != "" {
+	if err := proactiveOwnerQuery(h.db.Model(&Reminder{}).Where("enabled = 1"), userID).
+		Select("MIN(created_at)").Row().Scan(&oldestCreated); err == nil && oldestCreated != "" {
 		if t, e := time.Parse("2006-01-02 15:04:05", oldestCreated); e == nil {
 			oldestAgeMs = time.Since(t).Milliseconds()
 		}
@@ -184,12 +232,17 @@ type ProspectiveReminder struct {
 
 func (h *Handler) Prospective(c *gin.Context) {
 	characterID := c.Query("characterId")
+	userID := requestidentity.ResolveGin(c, "")
 	var items []ProspectiveReminder
-	query := h.db.Table("prospective_memories").Where("status = ?", "pending")
+	query := h.db.Table("prospective_memories AS pm").
+		Select("pm.id, pm.title, pm.content, pm.remind_at, pm.status").
+		Joins("JOIN characters AS c ON c.id = pm.character_id").
+		Where("pm.status = ?", "pending")
+	query = proactiveOwnerQuery(query, userID)
 	if characterID != "" {
-		query = query.Where("character_id = ?", characterID)
+		query = query.Where("pm.character_id = ?", characterID)
 	}
-	query.Order("remind_at ASC").Limit(20).Find(&items)
+	query.Order("pm.remind_at ASC").Limit(20).Find(&items)
 	if items == nil {
 		items = []ProspectiveReminder{}
 	}
@@ -199,6 +252,6 @@ func (h *Handler) Prospective(c *gin.Context) {
 func (h *Handler) ClearBackpressure(c *gin.Context) {
 	nowStr := time.Now().Format("2006-01-02 15:04:05")
 	h.db.Exec("INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('reminder_backpressure_cleared', ?, datetime('now', 'localtime'))", nowStr)
-	h.broadcastReminderChange()
+	h.broadcastReminderChange(requestidentity.ResolveGin(c, ""))
 	util.SuccessMsgResponse(c, "背压标记已清除", nil)
 }

@@ -5,15 +5,26 @@ package proactive
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
 	"log"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+type scheduledRule struct {
+	id, enabled, maxPerDay, sentToday, randomMinutes                    int
+	userID, name, channel, ruleType, cron, quietStart, quietEnd, prompt string
+	charID, convID, lastSentAt                                          string
+}
+
+type scheduledReminder struct {
+	id, enabled                                     int
+	userID, title, content, channel, charID, convID string
+	remindAt, repeatRule, lastTriggeredAt           string
+}
 
 type Executor struct {
 	db           *gorm.DB
@@ -48,14 +59,8 @@ func (e *Executor) ScanAndExecute() {
 }
 
 func (e *Executor) ScanRules() {
-	type rule struct {
-		id, enabled, maxPerDay, sentToday, randomMinutes            int
-		name, channel, ruleType, cron, quietStart, quietEnd, prompt string
-		charID, convID, lastSentAt                                  string
-	}
-
 	rows, err := e.db.Table("proactive_rules").
-		Select("id, name, enabled, channel, character_id, conversation_id, rule_type, schedule_cron, quiet_start, quiet_end, max_per_day, sent_count_today, prompt_template, random_minutes, COALESCE(last_sent_at,'')").
+		Select("id, user_id, name, enabled, channel, character_id, conversation_id, rule_type, schedule_cron, quiet_start, quiet_end, max_per_day, sent_count_today, prompt_template, random_minutes, COALESCE(last_sent_at,'')").
 		Where("enabled = 1").Rows()
 	if err != nil {
 		return
@@ -67,10 +72,16 @@ func (e *Executor) ScanRules() {
 	timeStr := fmt.Sprintf("%02d:%02d", now.Hour(), now.Minute())
 
 	for rows.Next() {
-		var r rule
-		rows.Scan(&r.id, &r.name, &r.enabled, &r.channel, &r.charID, &r.convID, &r.ruleType,
+		var r scheduledRule
+		if err := rows.Scan(&r.id, &r.userID, &r.name, &r.enabled, &r.channel, &r.charID, &r.convID, &r.ruleType,
 			&r.cron, &r.quietStart, &r.quietEnd, &r.maxPerDay, &r.sentToday,
-			&r.prompt, &r.randomMinutes, &r.lastSentAt)
+			&r.prompt, &r.randomMinutes, &r.lastSentAt); err != nil {
+			continue
+		}
+		r.userID = strings.TrimSpace(r.userID)
+		if r.userID == "" {
+			continue
+		}
 
 		if r.cron == "" || r.sentToday >= r.maxPerDay {
 			continue
@@ -112,7 +123,7 @@ func (e *Executor) ScanRules() {
 			continue
 		}
 		e.markRuleRunning(r.id)
-		log.Printf("[Proactive] 触发规则 id=%d name=%s channel=%s", r.id, r.name, r.channel)
+		log.Printf("[Proactive] 触发规则 id=%d name=%s", r.id, r.name)
 		ruleCopy := r
 		go func() {
 			defer e.markRuleDone(ruleCopy.id)
@@ -121,13 +132,10 @@ func (e *Executor) ScanRules() {
 	}
 }
 
-func (e *Executor) executeRule(r struct {
-	id, enabled, maxPerDay, sentToday, randomMinutes                                        int
-	name, channel, ruleType, cron, quietStart, quietEnd, prompt, charID, convID, lastSentAt string
-}) {
-	character, ok := resolveProactiveCharacter(e.db, r.charID, r.convID)
+func (e *Executor) executeRule(r scheduledRule) {
+	character, ok := resolveProactiveCharacterForUser(e.db, r.userID, r.charID, r.convID)
 	if !ok {
-		log.Printf("[Proactive] 规则 id=%d 缺少有效角色作用域", r.id)
+		log.Printf("[Proactive] 规则 id=%d 缺少当前用户的有效角色作用域", r.id)
 		return
 	}
 
@@ -135,24 +143,25 @@ func (e *Executor) executeRule(r struct {
 	if channel == "" {
 		channel = "all"
 	}
-	convID := resolveProactiveConversation(e.db, r.convID, character.ID, channel, false)
+	convID := resolveProactiveConversationForUser(e.db, r.userID, r.convID, character.ID, channel, false)
 	if convID == "" {
-		log.Printf("[Proactive] 规则 id=%d 无可用对话", r.id)
+		log.Printf("[Proactive] 规则 id=%d 无当前用户可用对话", r.id)
 		return
 	}
 
 	if e.dispatch == nil {
 		log.Printf("[Proactive] 规则 id=%d 主动消息统一调度未配置，无法发送", r.id)
 		status := "failed"
-		e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
-			r.id, convID, "", channel, status)
-		e.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?",
-			time.Now(), time.Now(), r.id)
+		e.db.Exec("INSERT INTO proactive_messages (user_id, rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?, ?)",
+			r.userID, r.id, convID, "", channel, status)
+		e.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=? AND user_id=?",
+			time.Now(), time.Now(), r.id, r.userID)
 		return
 	}
 
 	requestID := fmt.Sprintf("proactive-rule-%d-%d", r.id, time.Now().Unix())
 	result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
+		UserID:         r.userID,
 		CharacterID:    character.ID,
 		ConversationID: convID,
 		Channel:        channel,
@@ -167,26 +176,20 @@ func (e *Executor) executeRule(r struct {
 	} else if result != nil {
 		content = result.Content
 	}
-	e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
-		r.id, convID, content, channel, status)
-	e.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=?",
-		time.Now(), time.Now(), r.id)
+	e.db.Exec("INSERT INTO proactive_messages (user_id, rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?, ?)",
+		r.userID, r.id, convID, content, channel, status)
+	e.db.Exec("UPDATE proactive_rules SET sent_count_today=sent_count_today+1, last_sent_at=?, updated_at=? WHERE id=? AND user_id=?",
+		time.Now(), time.Now(), r.id, r.userID)
 }
 
 func (e *Executor) ScanReminders() {
-	type rem struct {
-		id, enabled                             int
-		title, content, channel, charID, convID string
-		remindAt, repeatRule, lastTriggeredAt   string
-	}
-
 	now := time.Now()
 	nowStr := now.Format("2006-01-02 15:04:05")
 	nowDate := now.Format("2006-01-02")
 	nowTime := now.Format("15:04")
 
 	rows, err := e.db.Table("reminders").
-		Select("id, title, content, channel, character_id, conversation_id, remind_at, repeat_rule, enabled, last_triggered_at").
+		Select("id, user_id, title, content, channel, character_id, conversation_id, remind_at, repeat_rule, enabled, COALESCE(last_triggered_at,'')").
 		Where("enabled = 1 AND remind_at <= ?", nowStr).
 		Order("remind_at ASC").Limit(20).Rows()
 	if err != nil {
@@ -194,51 +197,45 @@ func (e *Executor) ScanReminders() {
 	}
 	defer rows.Close()
 
-	var pendingRems []rem
+	var pendingRems []scheduledReminder
 	for rows.Next() {
-		var r rem
-		rows.Scan(&r.id, &r.title, &r.content, &r.channel, &r.charID, &r.convID,
-			&r.remindAt, &r.repeatRule, &r.enabled, &r.lastTriggeredAt)
-		pendingRems = append(pendingRems, r)
+		var r scheduledReminder
+		if err := rows.Scan(&r.id, &r.userID, &r.title, &r.content, &r.channel, &r.charID, &r.convID,
+			&r.remindAt, &r.repeatRule, &r.enabled, &r.lastTriggeredAt); err != nil {
+			continue
+		}
+		r.userID = strings.TrimSpace(r.userID)
+		if r.userID != "" {
+			pendingRems = append(pendingRems, r)
+		}
 	}
-	rows.Close()
 
 	for _, r := range pendingRems {
-		log.Printf("[Reminder] 触发提醒 id=%d title=%s channel=%s", r.id, r.title, r.channel)
+		log.Printf("[Reminder] 触发提醒 id=%d title=%s", r.id, r.title)
 		go e.executeReminder(r)
 
 		if r.repeatRule != "" && r.repeatRule != "none" {
 			nextAt := calcNextRemindAt(r.remindAt, r.repeatRule, nowDate, nowTime)
-			if nextAt != "" {
-				e.db.Exec("UPDATE reminders SET remind_at=?, last_triggered_at=?, updated_at=? WHERE id=?",
-					nextAt, nowStr, nowStr, r.id)
-			} else {
+			if nextAt == "" && len(r.remindAt) >= 19 {
 				tomorrow := now.Add(24 * time.Hour).Format("2006-01-02")
-				nextFull := tomorrow + " " + r.remindAt[11:19]
-				e.db.Exec("UPDATE reminders SET remind_at=?, last_triggered_at=?, updated_at=? WHERE id=?",
-					nextFull, nowStr, nowStr, r.id)
+				nextAt = tomorrow + " " + r.remindAt[11:19]
+			}
+			if nextAt != "" {
+				e.db.Exec("UPDATE reminders SET remind_at=?, last_triggered_at=?, updated_at=? WHERE id=? AND user_id=?",
+					nextAt, nowStr, nowStr, r.id, r.userID)
 			}
 		} else {
-			e.db.Exec("UPDATE reminders SET enabled=0, last_triggered_at=?, updated_at=? WHERE id=?",
-				nowStr, nowStr, r.id)
+			e.db.Exec("UPDATE reminders SET enabled=0, last_triggered_at=?, updated_at=? WHERE id=? AND user_id=?",
+				nowStr, nowStr, r.id, r.userID)
 		}
 	}
 }
 
-func (e *Executor) executeReminder(r struct {
-	id, enabled                             int
-	title, content, channel, charID, convID string
-	remindAt, repeatRule, lastTriggeredAt   string
-}) {
-	convID := r.convID
+func (e *Executor) executeReminder(r scheduledReminder) {
+	convID := resolveProactiveConversationForUser(e.db, r.userID, r.convID, r.charID, r.channel, false)
 	if convID == "" {
-		convID = resolveProactiveConversation(e.db, "", r.charID, r.channel, false)
-	} else {
-		convID = resolveProactiveConversation(e.db, r.convID, r.charID, r.channel, false)
-	}
-	if convID == "" {
-		log.Printf("[Reminder] 提醒 id=%d 无可用对话", r.id)
-		e.recordTriggerHistory(r.id, r.title, "reminder", r.channel, "failed", "无可用对话")
+		log.Printf("[Reminder] 提醒 id=%d 无当前用户可用对话", r.id)
+		e.recordTriggerHistory(r.userID, r.id, r.title, "reminder", r.channel, "failed", "无可用对话")
 		return
 	}
 
@@ -254,14 +251,15 @@ func (e *Executor) executeReminder(r struct {
 
 	if e.dispatch == nil {
 		log.Printf("[Reminder] 提醒 id=%d 主动消息统一调度未配置，无法发送", r.id)
-		e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
-			r.id, convID, "", channel, "failed")
-		e.recordTriggerHistory(r.id, r.title, "reminder", channel, "failed", "统一调度未配置")
+		e.db.Exec("INSERT INTO proactive_messages (user_id, rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?, ?)",
+			r.userID, r.id, convID, "", channel, "failed")
+		e.recordTriggerHistory(r.userID, r.id, r.title, "reminder", channel, "failed", "统一调度未配置")
 		return
 	}
 
 	requestID := fmt.Sprintf("proactive-reminder-%d-%d", r.id, time.Now().Unix())
 	result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
+		UserID:         r.userID,
 		CharacterID:    r.charID,
 		ConversationID: convID,
 		Channel:        channel,
@@ -270,20 +268,24 @@ func (e *Executor) executeReminder(r struct {
 	})
 	status := "pending"
 	contentStr := ""
+	lastError := ""
 	if err != nil || (result != nil && !result.Success) {
 		status = "failed"
+		if err != nil {
+			lastError = err.Error()
+		}
 	}
 	if result != nil {
 		contentStr = result.Content
 	}
-	e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?)",
-		r.id, convID, contentStr, channel, status)
+	e.db.Exec("INSERT INTO proactive_messages (user_id, rule_id, conversation_id, message_content, channel, status) VALUES (?, ?, ?, ?, ?, ?)",
+		r.userID, r.id, convID, contentStr, channel, status)
 	finalState := "sent"
 	if status == "failed" {
 		finalState = "failed"
 	}
-	e.recordTriggerHistory(r.id, r.title, "reminder", channel, finalState, "")
-	log.Printf("[Reminder] 提醒 id=%d title=%s 已通过统一调度发送", r.id, r.title)
+	e.recordTriggerHistory(r.userID, r.id, r.title, "reminder", channel, finalState, lastError)
+	log.Printf("[Reminder] 提醒 id=%d title=%s 已通过统一调度处理", r.id, r.title)
 }
 
 func calcNextRemindAt(remindAt, repeatRule, nowDate, nowTime string) string {
@@ -334,13 +336,29 @@ func quietHoursAllow(start, end, now string) bool {
 	return now >= end && now < start
 }
 
+func (e *Executor) ownerForShareTask(conversationID, characterID string) string {
+	var userID string
+	if strings.TrimSpace(conversationID) != "" {
+		e.db.Table("conversations").Select("user_id").Where("id = ?", conversationID).Limit(1).Row().Scan(&userID)
+	}
+	if strings.TrimSpace(userID) == "" && strings.TrimSpace(characterID) != "" {
+		e.db.Table("characters").Select("user_id").Where("id = ?", characterID).Limit(1).Row().Scan(&userID)
+	}
+	return strings.TrimSpace(userID)
+}
+
 func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) string {
-	character, ok := resolveProactiveCharacter(e.db, characterID, conversationID)
+	userID := e.ownerForShareTask(conversationID, characterID)
+	if userID == "" {
+		log.Println("[Proactive] ExecuteShareTask: missing owner scope")
+		return ""
+	}
+	character, ok := resolveProactiveCharacterForUser(e.db, userID, characterID, conversationID)
 	if !ok {
 		log.Println("[Proactive] ExecuteShareTask: missing scoped character")
 		return ""
 	}
-	convID := resolveProactiveConversation(e.db, conversationID, character.ID, "all", false)
+	convID := resolveProactiveConversationForUser(e.db, userID, conversationID, character.ID, "all", false)
 	if convID == "" {
 		log.Println("[Proactive] ExecuteShareTask: no scoped conversation")
 		return ""
@@ -348,13 +366,14 @@ func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) 
 
 	if e.dispatch == nil {
 		log.Println("[Proactive] ExecuteShareTask: 主动消息统一调度未配置")
-		e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, ?, ?, ?)",
-			convID, "", "all", "failed", time.Now(), time.Now())
+		e.db.Exec("INSERT INTO proactive_messages (user_id, rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (?, 0, ?, ?, ?, ?, ?, ?)",
+			userID, convID, "", "all", "failed", time.Now(), time.Now())
 		return ""
 	}
 
 	requestID := fmt.Sprintf("proactive-share-%d", time.Now().UnixNano())
 	result, err := e.dispatch.DispatchProactive(context.Background(), ProactiveDispatchRequest{
+		UserID:         userID,
 		CharacterID:    character.ID,
 		ConversationID: convID,
 		Channel:        "all",
@@ -368,14 +387,14 @@ func (e *Executor) ExecuteShareTask(prompt, conversationID, characterID string) 
 	} else if result != nil {
 		content = result.Content
 	}
-	e.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (0, ?, ?, ?, ?, ?, ?)",
-		convID, content, "all", status, time.Now(), time.Now())
+	e.db.Exec("INSERT INTO proactive_messages (user_id, rule_id, conversation_id, message_content, channel, status, created_at, updated_at) VALUES (?, 0, ?, ?, ?, ?, ?, ?)",
+		userID, convID, content, "all", status, time.Now(), time.Now())
 	log.Printf("[Proactive] ExecuteShareTask dispatched via unified entry: success=%v", err == nil && result != nil && result.Success)
 	return content
 }
 
-func (e *Executor) recordTriggerHistory(triggerID int, title, triggerType, channel, state, lastError string) {
+func (e *Executor) recordTriggerHistory(userID string, triggerID int, title, triggerType, channel, state, lastError string) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	id := uuid.New().String()
-	e.db.Exec("INSERT INTO trigger_histories (id, trigger_id, trigger_type, title, channel, state, priority, reason, attempt_count, last_error, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'normal', '系统触发', 0, ?, ?, ?)", id, fmt.Sprintf("%d", triggerID), triggerType, title, channel, state, lastError, now, now)
+	e.db.Exec("INSERT INTO trigger_histories (id, user_id, trigger_id, trigger_type, title, channel, state, priority, reason, attempt_count, last_error, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'normal', '系统触发', 0, ?, ?, ?)", id, userID, fmt.Sprintf("%d", triggerID), triggerType, title, channel, state, lastError, now, now)
 }

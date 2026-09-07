@@ -11,7 +11,7 @@ type fakeScopeBindingLookup struct {
 	err      error
 }
 
-func (f fakeScopeBindingLookup) FindScopeBindings(ctx context.Context, channel, peerID string) ([]ScopeBinding, error) {
+func (f fakeScopeBindingLookup) FindScopeBindings(ctx context.Context, userID, channel, peerID string) ([]ScopeBinding, error) {
 	if f.err != nil {
 		return nil, f.err
 	}

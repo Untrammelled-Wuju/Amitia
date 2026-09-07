@@ -90,42 +90,37 @@ func HandleSession(c *gin.Context) {
 	} else if value, exists := c.Get("userId"); exists && value != nil {
 		requestUserID = strings.TrimSpace(fmt.Sprint(value))
 	}
-	desktopPetCharacterID := ""
-	desktopPetUserID := ""
+	requestUserID = realtimeEffectiveUserID(requestUserID)
+	if requestUserID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "authenticated user is required"})
+		return
+	}
+	ownedCharacterID, ownerErr := requireRealtimeConversationOwner(conversationID, requestUserID)
+	if ownerErr != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "conversation not found"})
+		return
+	}
+	desktopPetCharacterID := ownedCharacterID
+	desktopPetUserID := requestUserID
 
 	systemRole := ""
 	botName := "AI"
-	if dbInstance != nil && conversationID != "" {
-		var conv struct{ CID string }
-		dbInstance.Table("conversations").Where("id = ?", conversationID).Select("character_id as cid").First(&conv)
-		if conv.CID != "" {
-			desktopPetCharacterID = conv.CID
-			var activePet struct {
-				UserID string `gorm:"column:user_id"`
-			}
-			dbInstance.Table("desktop_pet_installations").
-				Where("character_id = ? AND is_active = 1", conv.CID).
-				Order("updated_at DESC").
-				Select("user_id").
-				First(&activePet)
-			desktopPetUserID = activePet.UserID
-
-			var ch struct{ N, SP, SS, VT, CVID, VM string }
-			dbInstance.Table("characters").Where("id = ?", conv.CID).Select("name as n, character_base as sp, speaking_style as ss, voice_type as vt, custom_voice_id as cvid, voice_mode as vm").First(&ch)
-			if ch.VM == "clone" && ch.CVID != "" {
-				voiceType = ch.CVID
-			} else if ch.VT != "" {
-				voiceType = ch.VT
-			}
-			if ch.N != "" {
-				botName = ch.N
-			}
-			if ch.SP != "" {
-				systemRole = ch.SP
-			}
-			if systemRole == "" && ch.SS != "" {
-				systemRole = ch.SS
-			}
+	if dbInstance != nil && desktopPetCharacterID != "" {
+		var ch struct{ N, SP, SS, VT, CVID, VM string }
+		dbInstance.Table("characters").Where("id = ? AND user_id = ?", desktopPetCharacterID, requestUserID).Select("name as n, character_base as sp, speaking_style as ss, voice_type as vt, custom_voice_id as cvid, voice_mode as vm").First(&ch)
+		if ch.VM == "clone" && ch.CVID != "" {
+			voiceType = ch.CVID
+		} else if ch.VT != "" {
+			voiceType = ch.VT
+		}
+		if ch.N != "" {
+			botName = ch.N
+		}
+		if ch.SP != "" {
+			systemRole = ch.SP
+		}
+		if systemRole == "" && ch.SS != "" {
+			systemRole = ch.SS
 		}
 	}
 

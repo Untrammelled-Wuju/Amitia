@@ -28,13 +28,20 @@ type service struct{ repo Repository }
 
 func NewService(repo Repository) Service { return &service{repo: repo} }
 
+func redactConfigForResponse(cfg *EmbeddingConfig) {
+	if cfg == nil {
+		return
+	}
+	cfg.HasApiKey = cfg.ApiKey != ""
+	cfg.ApiKey = ""
+}
 func (s *service) List() ([]EmbeddingConfig, error) {
 	configs, err := s.repo.List()
 	if err != nil {
 		return nil, err
 	}
 	for i := range configs {
-		configs[i].HasApiKey = configs[i].ApiKey != ""
+		redactConfigForResponse(&configs[i])
 	}
 	return configs, nil
 }
@@ -44,7 +51,7 @@ func (s *service) GetByID(id int) (*EmbeddingConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("向量模型配置不存在")
 	}
-	cfg.HasApiKey = cfg.ApiKey != ""
+	redactConfigForResponse(cfg)
 	return cfg, nil
 }
 
@@ -70,7 +77,7 @@ func (s *service) Create(req *CreateEmbeddingConfigRequest) (*EmbeddingConfig, e
 	if err := s.repo.Create(cfg); err != nil {
 		return nil, fmt.Errorf("创建失败: %w", err)
 	}
-	cfg.HasApiKey = cfg.ApiKey != ""
+	redactConfigForResponse(cfg)
 	return cfg, nil
 }
 
@@ -80,7 +87,7 @@ func (s *service) Update(id int, updates map[string]interface{}) (*EmbeddingConf
 	}
 	cfg, _ := s.repo.GetByID(id)
 	if cfg != nil {
-		cfg.HasApiKey = cfg.ApiKey != ""
+		redactConfigForResponse(cfg)
 	}
 	return cfg, nil
 }
@@ -93,7 +100,7 @@ func (s *service) Activate(id int) (*EmbeddingConfig, error) {
 	}
 	cfg, _ := s.repo.GetByID(id)
 	if cfg != nil {
-		cfg.HasApiKey = cfg.ApiKey != ""
+		redactConfigForResponse(cfg)
 	}
 	return cfg, nil
 }
@@ -173,38 +180,30 @@ func normalizeConfigUpdates(updates map[string]interface{}) map[string]interface
 		return updates
 	}
 	aliases := map[string]string{
-		"apiType":             "api_type",
-		"baseUrl":             "base_url",
-		"apiKey":              "api_key",
-		"modelName":           "model_name",
-		"isActive":            "is_active",
-		"maxTokens":           "max_tokens",
-		"contextWindow":       "context_window",
-		"maxOutputTokens":     "max_output_tokens",
-		"topP":                "top_p",
-		"timeoutSeconds":      "timeout_seconds",
-		"retryCount":          "retry_count",
-		"providerConfig":      "provider_config_json",
-		"providerConfigJSON":  "provider_config_json",
-		"capabilitiesJson":    "capabilities_json",
-		"lastTestStatus":      "last_test_status",
-		"lastTestMessage":     "last_test_message",
-		"lastTestAt":          "last_test_at",
-		"resourceId":          "resource_id",
-		"voiceType":           "voice_type",
-		"customVoiceId":       "custom_voice_id",
-		"cloneResourceId":     "clone_resource_id",
-		"realtimeAppId":       "realtime_app_id",
-		"realtimeAccessToken": "realtime_access_token",
-		"realtimeSecretKey":   "realtime_secret_key",
+		"apiType":            "api_type",
+		"baseUrl":            "base_url",
+		"apiKey":             "api_key",
+		"modelName":          "model_name",
+		"isActive":           "is_active",
+		"providerConfig":     "provider_config_json",
+		"providerConfigJSON": "provider_config_json",
 	}
+	allowed := map[string]bool{"name": true, "api_type": true, "api_key": true, "model_name": true, "base_url": true, "is_active": true, "provider_config_json": true}
 	normalized := make(map[string]interface{}, len(updates))
 	for key, value := range updates {
-		if column, ok := aliases[key]; ok {
-			normalized[column] = value
-		} else {
-			normalized[key] = value
+		column := key
+		if alias, ok := aliases[key]; ok {
+			column = alias
 		}
+		if !allowed[column] {
+			continue
+		}
+		if column == "api_key" {
+			if text, ok := value.(string); ok && text == "" {
+				continue
+			}
+		}
+		normalized[column] = value
 	}
 	return normalized
 }

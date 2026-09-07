@@ -24,6 +24,7 @@ func newScopeLookupTestDB(t *testing.T) *gorm.DB {
 	})
 	if err := db.Exec(`CREATE TABLE conversations (
 		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL DEFAULT 'default',
 		character_id TEXT DEFAULT '',
 		channel TEXT DEFAULT 'web',
 		source TEXT DEFAULT 'manual',
@@ -41,7 +42,7 @@ func TestConversationScopeBindingLookupFindsPeerBinding(t *testing.T) {
 	}
 	lookup := NewConversationScopeBindingLookup(db)
 
-	bindings, err := lookup.FindScopeBindings(context.Background(), "qq", "peer-1")
+	bindings, err := lookup.FindScopeBindings(context.Background(), "default", "qq", "peer-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +73,7 @@ func TestConversationScopeBindingLookupFiltersByChannelAndPeer(t *testing.T) {
 	}
 	lookup := NewConversationScopeBindingLookup(db)
 
-	bindings, err := lookup.FindScopeBindings(context.Background(), "qq", "peer-1")
+	bindings, err := lookup.FindScopeBindings(context.Background(), "default", "qq", "peer-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +92,7 @@ func TestConversationScopeBindingLookupReturnsDuplicatesForResolver(t *testing.T
 	}
 	lookup := NewConversationScopeBindingLookup(db)
 
-	bindings, err := lookup.FindScopeBindings(context.Background(), "qq", "peer-1")
+	bindings, err := lookup.FindScopeBindings(context.Background(), "default", "qq", "peer-1")
 	if err != nil {
 		t.Fatal(err)
 	}

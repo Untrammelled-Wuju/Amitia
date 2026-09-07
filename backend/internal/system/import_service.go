@@ -13,18 +13,37 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	"gorm.io/gorm"
 )
 
+type importScopedMemoryService interface {
+	CreateForUser(req *memory.CreateMemoryRequest, userID string) (*memory.Memory, error)
+}
+
+func (h *Handler) importMemoryServiceForUser() (importScopedMemoryService, bool) {
+	svc, ok := h.memorySvc.(importScopedMemoryService)
+	return svc, ok
+}
+
 func (h *Handler) GetImportsBatches(c *gin.Context) {
+	userID := webChatUserID(c)
 	var conversations []map[string]interface{}
-	h.db.Table("conversations").Where("source = ?", "import").Order("created_at DESC").Find(&conversations)
+	if err := h.webChatOwnedConversationQuery(userID).Where("source = ?", "import").Order("created_at DESC").Find(&conversations).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入批次失败", nil)
+		return
+	}
 	if conversations == nil {
 		conversations = []map[string]interface{}{}
 	}
 	for _, conv := range conversations {
 		var count int64
-		h.db.Table("messages").Where("conversation_id = ?", conv["id"]).Count(&count)
+		if err := h.db.Table("messages").Where("conversation_id = ?", conv["id"]).Count(&count).Error; err != nil {
+			util.ErrorResponse(c, response.InternalError, "读取导入消息统计失败", nil)
+			return
+		}
 		conv["totalItems"] = count
 		conv["message_count"] = count
 		conv["status"] = "completed"
@@ -33,14 +52,22 @@ func (h *Handler) GetImportsBatches(c *gin.Context) {
 }
 
 func (h *Handler) GetImportsBatchDetail(c *gin.Context) {
-	id := c.Param("id")
+	id := strings.TrimSpace(c.Param("id"))
+	userID := webChatUserID(c)
+	if _, err := h.requireWebChatImportConversation(id, userID); err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		return
+	}
 	var conv map[string]interface{}
-	h.db.Table("conversations").Where("id = ? AND source = ?", id, "import").Limit(1).Scan(&conv)
-	if conv == nil {
-		conv = map[string]interface{}{}
+	if err := h.webChatOwnedConversationQuery(userID).Where("id = ? AND source = ?", id, "import").Limit(1).Scan(&conv).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入批次失败", nil)
+		return
 	}
 	var msgs []map[string]interface{}
-	h.db.Table("messages").Where("conversation_id = ?", id).Order("created_at ASC, sequence ASC").Find(&msgs)
+	if err := h.db.Table("messages").Where("conversation_id = ?", id).Order("created_at ASC, sequence ASC").Find(&msgs).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入消息失败", nil)
+		return
+	}
 	if msgs == nil {
 		msgs = []map[string]interface{}{}
 	}
@@ -49,32 +76,55 @@ func (h *Handler) GetImportsBatchDetail(c *gin.Context) {
 }
 
 func (h *Handler) GetImportsBatchSummary(c *gin.Context) {
-	id := c.Param("id")
+	id := strings.TrimSpace(c.Param("id"))
+	userID := webChatUserID(c)
+	if _, err := h.requireWebChatImportConversation(id, userID); err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		return
+	}
 	var conv map[string]interface{}
-	h.db.Table("conversations").Where("id = ?", id).Limit(1).Scan(&conv)
+	if err := h.webChatOwnedConversationQuery(userID).Where("id = ? AND source = ?", id, "import").Limit(1).Scan(&conv).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入批次失败", nil)
+		return
+	}
 	var summaryText string
-	h.db.Table("messages").Where("conversation_id = ? AND role = ?", id, "system").Order("created_at DESC").Limit(1).Pluck("content", &summaryText)
+	if err := h.db.Table("messages").Where("conversation_id = ? AND role = ?", id, "system").Order("created_at DESC").Limit(1).Pluck("content", &summaryText).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入摘要失败", nil)
+		return
+	}
 	var msgCount, totalTokens int64
-	h.db.Table("messages").Where("conversation_id = ? AND role != ?", id, "system").Count(&msgCount)
-	h.db.Table("messages").Where("conversation_id = ?", id).Select("COALESCE(SUM(tokens), 0)").Row().Scan(&totalTokens)
+	if err := h.db.Table("messages").Where("conversation_id = ? AND role != ?", id, "system").Count(&msgCount).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入统计失败", nil)
+		return
+	}
+	if err := h.db.Table("messages").Where("conversation_id = ?", id).Select("COALESCE(SUM(tokens), 0)").Row().Scan(&totalTokens); err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入 token 统计失败", nil)
+		return
+	}
 	title := ""
 	if t, ok := conv["title"]; ok {
 		title = fmt.Sprint(t)
 	}
-	util.SuccessResponse(c, map[string]interface{}{
-		"summary": map[string]interface{}{
-			"messageCount": msgCount,
-			"totalTokens":  totalTokens,
-			"title":        title,
-			"summary":      summaryText,
-		},
-	})
+	util.SuccessResponse(c, map[string]interface{}{"summary": map[string]interface{}{
+		"messageCount": msgCount,
+		"totalTokens":  totalTokens,
+		"title":        title,
+		"summary":      summaryText,
+	}})
 }
 
 func (h *Handler) GetImportsBatchMemoryCandidates(c *gin.Context) {
-	id := c.Param("id")
+	id := strings.TrimSpace(c.Param("id"))
+	userID := webChatUserID(c)
+	if _, err := h.requireWebChatImportConversation(id, userID); err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		return
+	}
 	var msgs []map[string]interface{}
-	h.db.Table("messages").Where("conversation_id = ? AND role = ?", id, "user").Order("created_at DESC").Limit(20).Find(&msgs)
+	if err := h.db.Table("messages").Where("conversation_id = ? AND role = ?", id, "user").Order("created_at DESC").Limit(20).Find(&msgs).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入消息失败", nil)
+		return
+	}
 	if msgs == nil {
 		msgs = []map[string]interface{}{}
 	}
@@ -93,21 +143,41 @@ func (h *Handler) GetImportsBatchMemoryCandidates(c *gin.Context) {
 }
 
 func (h *Handler) DeleteImportsBatch(c *gin.Context) {
-	id := c.Param("id")
-	h.db.Table("messages").Where("conversation_id = ?", id).Delete(nil)
-	h.db.Table("conversations").Where("id = ? AND source = ?", id, "import").Delete(nil)
+	id := strings.TrimSpace(c.Param("id"))
+	userID := webChatUserID(c)
+	if _, err := h.requireWebChatImportConversation(id, userID); err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		return
+	}
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("messages").Where("conversation_id = ?", id).Delete(nil).Error; err != nil {
+			return err
+		}
+		return webChatOwnerQuery(tx.Table("conversations").Where("id = ? AND source = ?", id, "import"), userID).Delete(nil).Error
+	}); err != nil {
+		util.ErrorResponse(c, response.InternalError, "删除导入批次失败", nil)
+		return
+	}
 	util.SuccessResponse(c, map[string]interface{}{"deleted": true})
 }
 
 func (h *Handler) GenerateImportsBatchSummary(c *gin.Context) {
-	id := c.Param("id")
+	id := strings.TrimSpace(c.Param("id"))
+	userID := webChatUserID(c)
+	if _, err := h.requireWebChatImportConversation(id, userID); err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		return
+	}
 	var msgs []map[string]interface{}
-	h.db.Table("messages").Where("conversation_id = ? AND role != ?", id, "system").Order("created_at ASC, sequence ASC").Limit(100).Find(&msgs)
+	if err := h.db.Table("messages").Where("conversation_id = ? AND role != ?", id, "system").Order("created_at ASC, sequence ASC").Limit(100).Find(&msgs).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入消息失败", nil)
+		return
+	}
 	if len(msgs) == 0 {
 		util.SuccessResponse(c, map[string]interface{}{"code": -1, "message": "没有可生成摘要的消息"})
 		return
 	}
-	lines := make([]string, 0)
+	lines := make([]string, 0, len(msgs))
 	for _, m := range msgs {
 		role, _ := m["role"].(string)
 		content, _ := m["content"].(string)
@@ -123,23 +193,30 @@ func (h *Handler) GenerateImportsBatchSummary(c *gin.Context) {
 	}
 	var parsed map[string]interface{}
 	if err := json.Unmarshal([]byte(summaryText), &parsed); err == nil {
-		if s, ok := parsed["summary"].(string); ok {
-			summaryText = strings.TrimSpace(s)
+		if v, ok := parsed["summary"].(string); ok {
+			summaryText = strings.TrimSpace(v)
 		}
 	} else {
 		summaryText = strings.TrimSpace(summaryText)
 	}
 	msgID := uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
-	h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
-		msgID, id, "system", summaryText, now)
+	if err := h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)", msgID, id, "system", summaryText, now).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "保存导入摘要失败", nil)
+		return
+	}
 	util.SuccessResponse(c, map[string]interface{}{"summary": summaryText})
 }
 
 func (h *Handler) ConfirmImportsBatchMemories(c *gin.Context) {
-	id := c.Param("id")
+	id := strings.TrimSpace(c.Param("id"))
+	userID := webChatUserID(c)
+	if _, err := h.requireWebChatImportConversation(id, userID); err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		return
+	}
 	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
+	_ = c.ShouldBindJSON(&body)
 	selectedIDs := []string{}
 	if raw, ok := body["selectedIds"]; ok {
 		if arr, ok2 := raw.([]interface{}); ok2 {
@@ -149,23 +226,33 @@ func (h *Handler) ConfirmImportsBatchMemories(c *gin.Context) {
 		}
 	}
 	var msgs []map[string]interface{}
+	q := h.db.Table("messages").Where("conversation_id = ?", id)
 	if len(selectedIDs) > 0 {
-		h.db.Table("messages").Where("id IN ?", selectedIDs).Find(&msgs)
+		q = q.Where("id IN ?", selectedIDs)
 	} else {
-		h.db.Table("messages").Where("conversation_id = ? AND role = ?", id, "user").Limit(20).Find(&msgs)
+		q = q.Where("role = ?", "user").Limit(20)
+	}
+	if err := q.Find(&msgs).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入消息失败", nil)
+		return
+	}
+	svc, ok := h.importMemoryServiceForUser()
+	if !ok {
+		util.ErrorResponse(c, response.InternalError, "memory service does not provide user-scoped operations", nil)
+		return
 	}
 	confirmed := 0
 	for _, msg := range msgs {
 		content, _ := msg["content"].(string)
-		if len(content) > 10 {
-			_, err := h.memorySvc.Create(&memory.CreateMemoryRequest{
-				Key:    fmt.Sprintf("imported_%d", confirmed),
-				Value:  content,
-				Source: "import",
-			})
-			if err == nil {
-				confirmed++
-			}
+		if len(content) <= 10 {
+			continue
+		}
+		if _, err := svc.CreateForUser(&memory.CreateMemoryRequest{
+			Key:    fmt.Sprintf("imported_%d", confirmed),
+			Value:  content,
+			Source: "import",
+		}, userID); err == nil {
+			confirmed++
 		}
 	}
 	util.SuccessResponse(c, map[string]interface{}{"confirmed": true, "memoriesCreated": confirmed})
@@ -549,6 +636,11 @@ func (h *Handler) ConfirmImports(c *gin.Context) {
 		util.SuccessResponse(c, map[string]interface{}{"code": -1, "message": "请选择目标角色"})
 		return
 	}
+	userID := webChatUserID(c)
+	if err := h.requireWebChatCharacter(charID, userID); err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "角色不存在", nil)
+		return
+	}
 	if title == "" {
 		title = "已导入的聊天"
 	}
@@ -576,8 +668,12 @@ func (h *Handler) ConfirmImports(c *gin.Context) {
 	convID := uuid.New().String()
 	defaultRole, _ := body["defaultRole"].(string)
 
-	h.db.Exec("INSERT OR IGNORE INTO conversations (id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		convID, charID, title, "web", "import", now, now)
+	ownerID := requestidentity.NormalizeUserID(userID)
+	if err := h.db.Exec("INSERT OR IGNORE INTO conversations (id, user_id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		convID, ownerID, charID, title, "web", "import", now, now).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "创建导入会话失败", nil)
+		return
+	}
 
 	var maxSeq int64
 	count := 0
@@ -608,8 +704,11 @@ func (h *Handler) ConfirmImports(c *gin.Context) {
 			}
 		}
 		msgID := uuid.New().String()
-		h.db.Exec("INSERT INTO messages (id, conversation_id, sequence, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			msgID, convID, maxSeq, role, content, "import", createdAt)
+		if err := h.db.Exec("INSERT INTO messages (id, conversation_id, sequence, role, content, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			msgID, convID, maxSeq, role, content, "import", createdAt).Error; err != nil {
+			util.ErrorResponse(c, response.InternalError, "保存导入消息失败", nil)
+			return
+		}
 		count++
 	}
 
@@ -631,6 +730,11 @@ func (h *Handler) DoImportData(c *gin.Context) {
 	raw, _ := body["raw"].(string)
 	if source == "" || charID == "" || raw == "" {
 		util.SuccessResponse(c, map[string]interface{}{"code": -1, "message": "参数不完整"})
+		return
+	}
+	userID := webChatUserID(c)
+	if err := h.requireWebChatCharacter(charID, userID); err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "角色不存在", nil)
 		return
 	}
 	lines := strings.Split(raw, "\n")
@@ -658,11 +762,22 @@ func (h *Handler) DoImportData(c *gin.Context) {
 		util.SuccessResponse(c, map[string]interface{}{"code": -1, "message": "没有有效的消息"})
 		return
 	}
-	h.db.Exec("INSERT OR IGNORE INTO conversations (id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		convID, charID, "导入的聊天记录", "web", "import", now, now)
-	for _, m := range msgs {
-		h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
-			m["id"], m["conversation_id"], m["role"], m["content"], m["created_at"])
+	ownerID := requestidentity.NormalizeUserID(userID)
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("INSERT OR IGNORE INTO conversations (id, user_id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			convID, ownerID, charID, "导入的聊天记录", "web", "import", now, now).Error; err != nil {
+			return err
+		}
+		for _, m := range msgs {
+			if err := tx.Exec("INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
+				m["id"], m["conversation_id"], m["role"], m["content"], m["created_at"]).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		util.ErrorResponse(c, response.InternalError, "保存导入数据失败", nil)
+		return
 	}
 	util.SuccessResponse(c, map[string]interface{}{
 		"code":    200,
@@ -672,7 +787,12 @@ func (h *Handler) DoImportData(c *gin.Context) {
 }
 
 func (h *Handler) ExtractImportsMemoryCandidates(c *gin.Context) {
-	id := c.Param("id")
+	id := strings.TrimSpace(c.Param("id"))
+	userID := webChatUserID(c)
+	if _, err := h.requireWebChatImportConversation(id, userID); err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "导入批次不存在", nil)
+		return
+	}
 	var msgs []map[string]interface{}
 	h.db.Table("messages").Where("conversation_id = ? AND role != ?", id, "system").Order("created_at ASC, sequence ASC").Limit(100).Find(&msgs)
 	if len(msgs) == 0 {
@@ -761,10 +881,14 @@ func (h *Handler) WebChatFromImport(c *gin.Context) {
 		util.SuccessResponse(c, map[string]interface{}{"code": -1, "message": "缺少会话ID"})
 		return
 	}
+	userID := webChatUserID(c)
 	var conv map[string]interface{}
-	h.db.Table("conversations").Where("id = ? AND source = ?", convID, "import").Limit(1).Scan(&conv)
-	if conv == nil {
-		util.SuccessResponse(c, map[string]interface{}{"code": -1, "message": "未找到导入的会话"})
+	if err := h.webChatOwnedConversationQuery(userID).Where("id = ? AND source = ?", convID, "import").Limit(1).Scan(&conv).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取导入会话失败", nil)
+		return
+	}
+	if len(conv) == 0 {
+		util.ErrorResponse(c, response.DataNotFound, "未找到导入的会话", nil)
 		return
 	}
 	util.SuccessResponse(c, map[string]interface{}{"imported": true, "conversationId": convID})

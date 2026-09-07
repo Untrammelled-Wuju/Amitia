@@ -54,6 +54,10 @@ func IssueRealtimeAccessTicket(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "authenticated user is required"})
 		return
 	}
+	if _, err := requireRealtimeConversationOwner(request.ConversationID, userID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "conversation not found"})
+		return
+	}
 
 	token, err := newSecureRealtimeToken(32)
 	if err != nil {

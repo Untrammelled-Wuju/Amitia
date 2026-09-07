@@ -4,6 +4,7 @@ package proactive
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/app"
 )
 
@@ -40,8 +41,8 @@ func RegisterProactiveRouterWithCompanion(r *gin.RouterGroup, ctx *app.AppContex
 	r.POST("/proactive/rules/:id/trigger", handler.TriggerRule)
 	r.POST("/proactive/presets/reset", handler.ResetPresets)
 	r.GET("/proactive/rules/:id/messages", handler.RuleMessages)
-	r.GET("/proactive/settings/cleanup", handler.GetCleanupConfig)
-	r.POST("/proactive/settings/cleanup", handler.SetCleanupConfig)
+	r.GET("/proactive/settings/cleanup", security.SharedCoreAdminOnly(), handler.GetCleanupConfig)
+	r.POST("/proactive/settings/cleanup", security.SharedCoreAdminOnly(), handler.SetCleanupConfig)
 	return handler
 }
 
@@ -54,9 +55,9 @@ func RegisterRemindersRouter(r *gin.RouterGroup, h *Handler) {
 	r.POST("/reminders/:id/test", h.TestReminder)
 	r.POST("/reminders/:id/trigger", h.TriggerReminder)
 	r.GET("/reminders/status", h.ReminderStatus)
-	r.GET("/reminders/cleanup-config", h.GetCleanupConfig)
-	r.PUT("/reminders/cleanup-config", h.SetCleanupConfig)
-	r.POST("/reminders/clear-backpressure", h.ClearBackpressure)
+	r.GET("/reminders/cleanup-config", security.SharedCoreAdminOnly(), h.GetCleanupConfig)
+	r.PUT("/reminders/cleanup-config", security.SharedCoreAdminOnly(), h.SetCleanupConfig)
+	r.POST("/reminders/clear-backpressure", security.SharedCoreAdminOnly(), h.ClearBackpressure)
 	r.GET("/reminders/stream", h.RemindersStream)
 	r.GET("/reminders/prospective", h.Prospective)
 	r.GET("/reminders/queue-summary", h.QueueSummary)

@@ -25,9 +25,10 @@ const (
 )
 
 var (
-	ErrVoiceSessionNotFound = errors.New("voice_entry: session not found")
-	ErrVoiceTurnCancelled   = errors.New("voice_entry: turn cancelled")
-	ErrVoiceBusy            = errors.New("voice_entry: orchestrator busy for voice input")
+	ErrVoiceSessionNotFound      = errors.New("voice_entry: session not found")
+	ErrVoiceTurnCancelled        = errors.New("voice_entry: turn cancelled")
+	ErrVoiceBusy                 = errors.New("voice_entry: orchestrator busy for voice input")
+	ErrVoiceSessionScopeMismatch = errors.New("voice_entry: session scope mismatch")
 )
 
 type VoiceTurnRequest struct {
@@ -50,6 +51,7 @@ type VoiceSession struct {
 	SessionID       string               `json:"sessionId"`
 	ConversationID  string               `json:"conversationId"`
 	CharacterID     string               `json:"characterId"`
+	UserID          string               `json:"userId"`
 	State           VoiceTurnState       `json:"state"`
 	CurrentTurnID   string               `json:"currentTurnId"`
 	CurrentText     string               `json:"currentText"`
@@ -80,13 +82,14 @@ func (v *VoiceEntry) UnifiedEntry() *UnifiedEntry {
 	return v.unifiedEntry
 }
 
-func (v *VoiceEntry) CreateSession(sessionID, conversationID, characterID string) *VoiceSession {
+func (v *VoiceEntry) CreateSession(sessionID, conversationID, characterID, userID string) *VoiceSession {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	session := &VoiceSession{
 		SessionID:       sessionID,
 		ConversationID:  conversationID,
 		CharacterID:     characterID,
+		UserID:          userID,
 		State:           VoiceTurnStateIdle,
 		InterruptPolicy: VoiceInterruptPolicyImmediate,
 		CreatedAt:       time.Now(),
@@ -111,7 +114,9 @@ func (v *VoiceEntry) RemoveSession(sessionID string) {
 func (v *VoiceEntry) HandleTurn(ctx context.Context, req *VoiceTurnRequest) (*OrchestrationResult, error) {
 	session := v.GetSession(req.SessionID)
 	if session == nil {
-		session = v.CreateSession(req.SessionID, req.ConversationID, req.CharacterID)
+		session = v.CreateSession(req.SessionID, req.ConversationID, req.CharacterID, req.UserID)
+	} else if session.UserID != req.UserID || session.ConversationID != req.ConversationID || session.CharacterID != req.CharacterID {
+		return nil, ErrVoiceSessionScopeMismatch
 	}
 
 	session.mu.Lock()

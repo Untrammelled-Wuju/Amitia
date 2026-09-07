@@ -5,6 +5,7 @@ import (
 )
 
 type ProactiveDispatchRequest struct {
+	UserID         string
 	CharacterID    string
 	ConversationID string
 	Channel        string

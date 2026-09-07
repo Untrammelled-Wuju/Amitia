@@ -52,8 +52,8 @@ type Service interface {
 	GetLongRunningConfig() map[string]interface{}
 	GetLongRunningStatus() map[string]interface{}
 	GetMaintenanceStatus() map[string]interface{}
-	GetNotificationsSettings() map[string]interface{}
-	GetNotificationsStatus() map[string]interface{}
+	GetNotificationsSettings(userID, deviceID string) map[string]interface{}
+	GetNotificationsStatus(userID, deviceID string) map[string]interface{}
 	GetPrivacyScanResult(id string) map[string]interface{}
 	GetRecoveryCodesStatus(userID int64) map[string]interface{}
 	GetReleaseCheckHistory() map[string]interface{}
@@ -97,9 +97,9 @@ type Service interface {
 	MaintenanceRestartQQBridge() map[string]interface{}
 	MoodDetectionConfig() map[string]interface{}
 	UpdateMoodDetectionConfig(body map[string]interface{}) map[string]interface{}
-	NotificationsSubscribe(body map[string]interface{}) map[string]interface{}
-	NotificationsTest() map[string]interface{}
-	NotificationsUnsubscribe() map[string]interface{}
+	NotificationsSubscribe(body map[string]interface{}, userID, deviceID string) map[string]interface{}
+	NotificationsTest(userID, deviceID string) map[string]interface{}
+	NotificationsUnsubscribe(userID, deviceID string) map[string]interface{}
 	OnboardingComplete() map[string]interface{}
 	OnboardingReset() map[string]interface{}
 	OnboardingStatus() map[string]interface{}
@@ -130,7 +130,7 @@ type Service interface {
 	UpdateAuditSettings(body map[string]interface{}) map[string]interface{}
 	UpdateLongRunningConfig(body map[string]interface{}) map[string]interface{}
 	ValidateIdentityCorePatch(characterID string, body map[string]interface{}) map[string]interface{}
-	UpdateNotificationsSettings(body map[string]interface{}) map[string]interface{}
+	UpdateNotificationsSettings(body map[string]interface{}, userID, deviceID string) map[string]interface{}
 	UpdateRuntimeMode(body map[string]interface{}) map[string]interface{}
 	UpdateSecurityAccessConfig(body map[string]interface{}) map[string]interface{}
 	UpdateSessionSettings(body map[string]interface{}) map[string]interface{}

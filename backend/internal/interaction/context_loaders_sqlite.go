@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/character"
@@ -116,7 +117,11 @@ func (l *ConversationContextLoader) Load(ctx context.Context, scope InteractionS
 		MessageCount int
 		UpdatedAt    string
 	}
-	err := l.db.WithContext(ctx).Table("conversations").Select("id, message_count, updated_at").Where("id = ?", scope.ConversationID).Take(&row).Error
+	query := l.db.WithContext(ctx).Table("conversations").Select("id, message_count, updated_at").Where("id = ?", scope.ConversationID)
+	if strings.TrimSpace(scope.UserID) != "" {
+		query = query.Where("user_id = ?", strings.TrimSpace(scope.UserID))
+	}
+	err := query.Take(&row).Error
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}

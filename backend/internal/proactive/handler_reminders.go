@@ -3,17 +3,26 @@ package proactive
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/sse"
 	"github.com/u-ai/backend/pkg/util"
-	"strconv"
-	"time"
 )
 
 func (h *Handler) ListReminders(c *gin.Context) {
-	items, err := h.service.ListReminders()
+	userID := requestidentity.ResolveGin(c, "")
+	var items []Reminder
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		items, err = scoped.ListRemindersForUser(userID)
+	} else {
+		items, err = h.service.ListReminders()
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
 		return
@@ -27,17 +36,28 @@ func (h *Handler) CreateReminder(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "标题和提醒时间不能为空", nil)
 		return
 	}
-	rem, err := h.service.CreateReminder(&req)
+	userID := requestidentity.ResolveGin(c, "")
+	var rem *Reminder
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rem, err = scoped.CreateReminderForUser(&req, userID)
+	} else {
+		rem, err = h.service.CreateReminder(&req)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	if rem.RemindAt <= time.Now().Format("2006-01-02 15:04:05") {
-		h.service.DeleteReminder(rem.ID)
+		if scoped, ok := h.service.(scopedProactiveService); ok {
+			_ = scoped.DeleteReminderForUser(rem.ID, userID)
+		} else {
+			_ = h.service.DeleteReminder(rem.ID)
+		}
 		util.ErrorResponse(c, response.InvalidParams, "提醒时间不能早于当前时间", nil)
 		return
 	}
-	h.broadcastReminderChange()
+	h.broadcastReminderChange(userID)
 	util.SuccessMsgResponse(c, "提醒创建成功", rem)
 }
 
@@ -48,49 +68,74 @@ func (h *Handler) UpdateReminder(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	rem, err := h.service.UpdateReminder(id, updates)
+	userID := requestidentity.ResolveGin(c, "")
+	var rem *Reminder
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rem, err = scoped.UpdateReminderForUser(id, updates, userID)
+	} else {
+		rem, err = h.service.UpdateReminder(id, updates)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
-	h.broadcastReminderChange()
+	h.broadcastReminderChange(userID)
 	util.SuccessMsgResponse(c, "提醒更新成功", rem)
 }
 
 func (h *Handler) DeleteReminder(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	if err := h.service.DeleteReminder(id); err != nil {
+	userID := requestidentity.ResolveGin(c, "")
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		err = scoped.DeleteReminderForUser(id, userID)
+	} else {
+		err = h.service.DeleteReminder(id)
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
 		return
 	}
-	h.broadcastReminderChange()
+	h.broadcastReminderChange(userID)
 	util.SuccessMsgResponse(c, "提醒已删除", nil)
 }
 
 func (h *Handler) ToggleReminder(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	rem, err := h.service.ToggleReminder(id)
+	userID := requestidentity.ResolveGin(c, "")
+	var rem *Reminder
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rem, err = scoped.ToggleReminderForUser(id, userID)
+	} else {
+		rem, err = h.service.ToggleReminder(id)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, "操作失败", nil)
 		return
 	}
-	h.broadcastReminderChange()
+	h.broadcastReminderChange(userID)
 	util.SuccessMsgResponse(c, "状态已切换", rem)
 }
 
 func (h *Handler) TestReminder(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	var rem Reminder
-	if err := h.db.First(&rem, id).Error; err != nil {
+	userID := requestidentity.ResolveGin(c, "")
+	var rem *Reminder
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rem, err = scoped.FindReminderForUser(id, userID)
+	} else {
+		var fallback Reminder
+		err = h.db.First(&fallback, id).Error
+		rem = &fallback
+	}
+	if err != nil || rem == nil {
 		util.ErrorResponse(c, response.NotFound, "提醒不存在", nil)
 		return
 	}
-	var convID string
-	if rem.ConversationID != "" {
-		convID = resolveProactiveConversation(h.db, rem.ConversationID, rem.CharacterID, rem.Channel, false)
-	} else {
-		convID = resolveProactiveConversation(h.db, "", rem.CharacterID, rem.Channel, false)
-	}
+	convID := resolveProactiveConversationForUser(h.db, userID, rem.ConversationID, rem.CharacterID, rem.Channel, false)
 	content := rem.Content
 	if content == "" {
 		content = fmt.Sprintf("[提醒测试] %s", rem.Title)
@@ -108,59 +153,72 @@ func (h *Handler) TestReminder(c *gin.Context) {
 
 func (h *Handler) TriggerReminder(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	var rem Reminder
-	if err := h.db.First(&rem, id).Error; err != nil {
+	userID := requestidentity.ResolveGin(c, "")
+	var rem *Reminder
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		rem, err = scoped.FindReminderForUser(id, userID)
+	} else {
+		var fallback Reminder
+		err = h.db.First(&fallback, id).Error
+		rem = &fallback
+	}
+	if err != nil || rem == nil {
 		util.ErrorResponse(c, response.NotFound, "提醒不存在", nil)
 		return
 	}
-	msgID, convID := h.triggerReminderNow(&rem)
+	msgID, convID := h.triggerReminderNow(rem, userID)
 	if convID == "" {
 		util.ErrorResponse(c, response.OperationFailed, "无可用对话", nil)
 		return
 	}
-	h.broadcastReminderChange()
+	h.broadcastReminderChange(userID)
 	util.SuccessResponse(c, gin.H{"id": id, "triggered": true, "title": rem.Title, "conversationId": convID, "messageId": msgID})
 }
 
-func (h *Handler) triggerReminderNow(rem *Reminder) (msgID, convID string) {
-	convID = resolveProactiveConversation(h.db, rem.ConversationID, rem.CharacterID, rem.Channel, false)
+func (h *Handler) triggerReminderNow(rem *Reminder, userID string) (msgID, convID string) {
+	if rem == nil {
+		return "", ""
+	}
+	owner := normalizeProactiveOwner(userID)
+	convID = resolveProactiveConversationForUser(h.db, owner, rem.ConversationID, rem.CharacterID, rem.Channel, false)
 	if convID == "" {
-		return
+		return "", ""
 	}
 	content := rem.Content
 	if content == "" {
 		content = fmt.Sprintf("[提醒] %s", rem.Title)
 	}
 	now := time.Now()
+	nowStr := now.Format("2006-01-02 15:04:05")
 
 	if h.compSvc == nil {
-		nowStr := time.Now().Format("2006-01-02 15:04:05")
 		msgID = uuid.New().String()
 		h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, content, nowStr)
-		h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", rem.ID, convID, content, rem.Channel, nowStr)
-		h.db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?), updated_at=? WHERE id=?", convID, nowStr, convID)
-		h.db.Exec("UPDATE reminders SET enabled=0, last_triggered_at=?, updated_at=? WHERE id=?", nowStr, nowStr, rem.ID)
-		sse.Global.Broadcast("proactive_message", map[string]interface{}{"conversationId": convID, "messageId": msgID, "content": content, "role": "assistant", "source": "proactive", "createdAt": nowStr})
-		return
+		h.db.Exec("INSERT INTO proactive_messages (user_id, rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)", owner, rem.ID, convID, content, rem.Channel, nowStr)
+		h.db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?), updated_at = ? WHERE id = ? AND user_id = ?", convID, nowStr, convID, owner)
+		proactiveOwnerQuery(h.db.Table("reminders").Where("id = ?", rem.ID), owner).Updates(map[string]interface{}{"enabled": 0, "last_triggered_at": nowStr, "updated_at": nowStr})
+		sse.Global.BroadcastToUser(owner, "proactive_message", map[string]interface{}{"userId": owner, "conversationId": convID, "messageId": msgID, "content": content, "role": "assistant", "source": "proactive", "createdAt": nowStr})
+		return msgID, convID
 	}
 
 	requestID := fmt.Sprintf("proactive-reminder-now-%d-%d", rem.ID, now.UnixNano())
-	generatedContent, err := h.compSvc.DispatchProactiveMessage(context.Background(), rem.CharacterID, convID, rem.Channel, content, requestID)
+	generatedContent, err := h.compSvc.DispatchProactiveMessage(context.Background(), owner, rem.CharacterID, convID, rem.Channel, content, requestID)
 	if err != nil || generatedContent == "" {
 		generatedContent = content
 	}
 
 	lines := util.SplitLongMessage(generatedContent, util.MaxWebMessageLen)
-	nowStr := now.Format("2006-01-02 15:04:05")
 	for _, line := range lines {
 		msgID = uuid.New().String()
 		h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, line, nowStr)
-		h.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", rem.ID, convID, line, rem.Channel, nowStr)
+		h.db.Exec("INSERT INTO proactive_messages (user_id, rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)", owner, rem.ID, convID, line, rem.Channel, nowStr)
 	}
-	h.db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?), updated_at=? WHERE id=?", convID, nowStr, convID)
-	h.db.Exec("UPDATE reminders SET enabled=0, last_triggered_at=?, updated_at=? WHERE id=?", nowStr, nowStr, rem.ID)
-	sse.Global.Broadcast("proactive_message", map[string]interface{}{"conversationId": convID, "messageId": msgID, "content": generatedContent, "role": "assistant", "source": "proactive", "createdAt": nowStr})
-	return
+	proactiveOwnerQuery(h.db.Table("conversations").Where("id = ?", convID), owner).Updates(map[string]interface{}{"updated_at": nowStr})
+	h.db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ? AND user_id = ?", convID, convID, owner)
+	proactiveOwnerQuery(h.db.Table("reminders").Where("id = ?", rem.ID), owner).Updates(map[string]interface{}{"enabled": 0, "last_triggered_at": nowStr, "updated_at": nowStr})
+	sse.Global.BroadcastToUser(owner, "proactive_message", map[string]interface{}{"userId": owner, "conversationId": convID, "messageId": msgID, "content": generatedContent, "role": "assistant", "source": "proactive", "createdAt": nowStr})
+	return msgID, convID
 }
 
 func (h *Handler) CancelRemindersByQuery(c *gin.Context) {
@@ -168,39 +226,74 @@ func (h *Handler) CancelRemindersByQuery(c *gin.Context) {
 		Title       string `json:"title"`
 		CharacterID string `json:"characterId"`
 	}
-	c.ShouldBindJSON(&body)
+	_ = c.ShouldBindJSON(&body)
+	userID := requestidentity.ResolveGin(c, "")
 
-	reminders, _ := h.service.ListReminders()
+	var reminders []Reminder
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		reminders, _ = scoped.ListRemindersForUser(userID)
+	} else {
+		reminders, _ = h.service.ListReminders()
+	}
 	count := 0
 	for _, r := range reminders {
-		match := true
 		if body.Title != "" && r.Title != body.Title {
-			match = false
+			continue
 		}
 		if body.CharacterID != "" && r.CharacterID != body.CharacterID {
-			match = false
+			continue
 		}
-		if match {
-			h.service.DeleteReminder(r.ID)
+		var err error
+		if scoped, ok := h.service.(scopedProactiveService); ok {
+			err = scoped.DeleteReminderForUser(r.ID, userID)
+		} else {
+			err = h.service.DeleteReminder(r.ID)
+		}
+		if err == nil {
 			count++
 		}
+	}
+	if count > 0 {
+		h.broadcastReminderChange(userID)
 	}
 	util.SuccessResponse(c, gin.H{"cancelled": count})
 }
 
 func (h *Handler) CancelLatestReminder(c *gin.Context) {
-	reminders, _ := h.service.ListReminders()
+	userID := requestidentity.ResolveGin(c, "")
+	var reminders []Reminder
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		reminders, _ = scoped.ListRemindersForUser(userID)
+	} else {
+		reminders, _ = h.service.ListReminders()
+	}
 	if len(reminders) == 0 {
 		util.SuccessResponse(c, gin.H{"cancelled": false, "reason": "no reminders"})
 		return
 	}
 	latest := reminders[0]
-	h.service.DeleteReminder(latest.ID)
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		err = scoped.DeleteReminderForUser(latest.ID, userID)
+	} else {
+		err = h.service.DeleteReminder(latest.ID)
+	}
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, "取消失败", nil)
+		return
+	}
+	h.broadcastReminderChange(userID)
 	util.SuccessResponse(c, gin.H{"cancelled": true, "id": latest.ID, "title": latest.Title})
 }
 
 func (h *Handler) ReminderStatus(c *gin.Context) {
-	reminders, _ := h.service.ListReminders()
+	userID := requestidentity.ResolveGin(c, "")
+	var reminders []Reminder
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		reminders, _ = scoped.ListRemindersForUser(userID)
+	} else {
+		reminders, _ = h.service.ListReminders()
+	}
 	total := len(reminders)
 	enabled := 0
 	dueNow := 0
@@ -217,7 +310,14 @@ func (h *Handler) ReminderStatus(c *gin.Context) {
 }
 
 func (h *Handler) PendingReminders(c *gin.Context) {
-	items, err := h.service.PendingReminders()
+	userID := requestidentity.ResolveGin(c, "")
+	var items []Reminder
+	var err error
+	if scoped, ok := h.service.(scopedProactiveService); ok {
+		items, err = scoped.PendingRemindersForUser(userID)
+	} else {
+		items, err = h.service.PendingReminders()
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
 		return
