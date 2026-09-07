@@ -54,9 +54,6 @@ func (s *service) List(q EpisodicListQuery) (*EpisodicListResponse, error) {
 	if s.dataLifecycleCoordinator != nil && q.CharacterID != "" && s.dataLifecycleCoordinator.IsRetrievalBlocked(q.CharacterID) {
 		return &EpisodicListResponse{Items: []EpisodicMemory{}, Total: 0, Page: 1, PageSize: 20, TotalPages: 1}, nil
 	}
-	if strings.TrimSpace(q.CharacterID) != "" {
-		q.UserID = strings.TrimSpace(q.CharacterID)
-	}
 	items, total, err := s.repo.List(q)
 	if err != nil {
 		return nil, err
@@ -84,12 +81,10 @@ func (s *service) Create(req *CreateEpisodicRequest) (*EpisodicMemory, error) {
 	if req.SceneType == "" {
 		return nil, fmt.Errorf("sceneType不能为空")
 	}
-	scope := s.episodicScope(req.SourceConvID, req.CharacterID, req.UserID)
-	if scope == "" {
-		return nil, fmt.Errorf("character scope required")
-	}
+	characterID := s.episodicScope(req.SourceConvID, req.CharacterID)
 	m := &EpisodicMemory{
-		UserID:           scope,
+		UserID:           cleanOwner(req.UserID),
+		CharacterID:      characterID,
 		SceneType:        req.SceneType,
 		Title:            req.Title,
 		Content:          req.Content,
@@ -186,10 +181,9 @@ func (s *service) Restore(id string) (*EpisodicMemory, error) {
 }
 
 func (s *service) GetByUserID(userID string, characterID ...string) ([]EpisodicMemory, error) {
-	if scope := firstScope(characterID...); scope != "" {
-		userID = scope
-	}
-	return s.repo.GetByUserID(userID, 0)
+	q := EpisodicListQuery{UserID: cleanOwner(userID), CharacterID: firstScope(characterID...), Page: 1, PageSize: 100}
+	items, _, err := s.repo.List(q)
+	return items, err
 }
 
 func (s *service) GetDetail(id string) (*EpisodicMemory, []map[string]interface{}, error) {
@@ -197,12 +191,15 @@ func (s *service) GetDetail(id string) (*EpisodicMemory, []map[string]interface{
 }
 
 func (s *service) SaveFromTool(userID, sceneType, title, content string, sentimentScore int, convID, msgStart, msgEnd string, characterID ...string) (*EpisodicMemory, error) {
-	scope := s.episodicScope(convID, characterID...)
-	if scope == "" {
-		return nil, fmt.Errorf("character scope required")
+	userID = cleanOwner(userID)
+	requestedScope := firstScope(characterID...)
+	characterScope, err := s.requireEpisodicConversationOwner(convID, userID, requestedScope)
+	if err != nil {
+		return nil, err
 	}
 	m := &EpisodicMemory{
-		UserID:           scope,
+		UserID:           userID,
+		CharacterID:      characterScope,
 		SceneType:        sceneType,
 		Title:            title,
 		Content:          content,
@@ -242,9 +239,11 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 	if len(messages) == 0 {
 		return nil
 	}
-	scope := s.episodicScope(convID, characterID...)
-	if scope == "" {
-		return nil
+	ownerID := cleanOwner(userID)
+	requestedScope := firstScope(characterID...)
+	characterScope, err := s.requireEpisodicConversationOwner(convID, ownerID, requestedScope)
+	if err != nil {
+		return err
 	}
 	cfg := s.getActiveModel()
 	if cfg == nil {
@@ -281,19 +280,32 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 	content = extractJSONArray(content)
 	var scenes []map[string]interface{}
 	if err := json.Unmarshal([]byte(content), &scenes); err != nil {
-		return nil
+		return fmt.Errorf("parse episodic extraction response: %w", err)
 	}
+	persisted := make([]*EpisodicMemory, 0, len(scenes))
 	for _, sc := range scenes {
 		st, _ := sc["scene_type"].(string)
 		title, _ := sc["title"].(string)
 		desc, _ := sc["content"].(string)
 		score, _ := sc["sentiment_score"].(float64)
 		keywords, _ := sc["trigger_keywords"].(string)
+		st = strings.TrimSpace(st)
+		title = strings.TrimSpace(title)
+		desc = strings.TrimSpace(desc)
 		if st == "" || title == "" || desc == "" {
 			continue
 		}
+		exists, err := s.extractedEpisodicExists(ownerID, characterScope, convID, st, title, desc)
+		if err != nil {
+			s.rollbackExtractedEpisodic(persisted)
+			return err
+		}
+		if exists {
+			continue
+		}
 		m := &EpisodicMemory{
-			UserID:          scope,
+			UserID:          ownerID,
+			CharacterID:     characterScope,
 			SceneType:       st,
 			Title:           title,
 			Content:         desc,
@@ -301,19 +313,43 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 			TriggerKeywords: keywords,
 			SourceConvID:    convID,
 		}
-		if err := s.repo.Create(m); err == nil {
-			s.syncGraph(m)
+		if err := s.repo.Create(m); err != nil {
+			s.rollbackExtractedEpisodic(persisted)
+			return fmt.Errorf("persist extracted episodic memory %q: %w", title, err)
 		}
+		persisted = append(persisted, m)
+	}
+	for _, m := range persisted {
+		s.syncGraph(m)
 	}
 	return nil
 }
 
-func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
-	scope := firstScope(characterID...)
-	if scope == "" {
-		scope = cleanScope(userID)
+func (s *service) extractedEpisodicExists(userID, characterID, convID, sceneType, title, content string) (bool, error) {
+	if s.db == nil {
+		return false, nil
 	}
-	memories, err := s.repo.GetRecentScoped(scope, 3)
+	var count int64
+	err := s.db.Model(&EpisodicMemory{}).
+		Where("user_id = ? AND character_id = ? AND source_conv_id = ? AND scene_type = ? AND title = ? AND content = ?", userID, characterID, convID, sceneType, title, content).
+		Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("check extracted episodic idempotency: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (s *service) rollbackExtractedEpisodic(items []*EpisodicMemory) {
+	for i := len(items) - 1; i >= 0; i-- {
+		if items[i] != nil && items[i].ID != "" {
+			_ = s.repo.Delete(items[i].ID)
+		}
+	}
+}
+
+func (s *service) ToSystemPrompt(userID string, characterID ...string) string {
+	q := EpisodicListQuery{UserID: cleanOwner(userID), CharacterID: firstScope(characterID...), Page: 1, PageSize: 3}
+	memories, _, err := s.repo.List(q)
 	if err != nil || len(memories) == 0 {
 		return ""
 	}
@@ -460,10 +496,19 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	if err != nil || !acquired || len(pending) == 0 {
 		return err
 	}
-	if err := s.ExtractFromConversation("", convID, pending); err != nil {
+	if err := ctx.Err(); err != nil {
+		_ = manager.ReleaseLease(convID, "episodic", leaseOwner)
 		return err
 	}
-	return manager.AdvanceLeased(convID, "episodic", maxSequence, fmt.Sprintf("episodic:%s:%d", convID, maxSequence), leaseOwner)
+	if err := s.ExtractFromConversation(s.conversationOwnerForEpisodic(convID), convID, pending); err != nil {
+		_ = manager.ReleaseLease(convID, "episodic", leaseOwner)
+		return err
+	}
+	if err := manager.AdvanceLeased(convID, "episodic", maxSequence, fmt.Sprintf("episodic:%s:%d", convID, maxSequence), leaseOwner); err != nil {
+		_ = manager.ReleaseLease(convID, "episodic", leaseOwner)
+		return err
+	}
+	return nil
 }
 
 func (s *service) episodicScope(convID string, scopes ...string) string {
@@ -489,6 +534,14 @@ func firstScope(scopes ...string) string {
 		}
 	}
 	return ""
+}
+
+func cleanOwner(userID string) string {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return "default"
+	}
+	return userID
 }
 
 func cleanScope(scope string) string {
@@ -520,6 +573,7 @@ func (s *service) syncGraph(m *EpisodicMemory) {
 		"memory_strength": m.MemoryStrength,
 		"decay_state":     m.DecayState,
 		"user_id":         m.UserID,
+		"character_id":    m.CharacterID,
 	})
 	_ = s.graphSvc.SyncEdge("user:"+m.UserID, "episodic:"+m.ID, "experienced", 1.0)
 }

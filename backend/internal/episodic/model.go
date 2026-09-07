@@ -9,7 +9,8 @@ import (
 
 type EpisodicMemory struct {
 	ID                string  `gorm:"column:id;primaryKey" json:"id"`
-	UserID            string  `gorm:"column:user_id;not null;default:default" json:"userId"`
+	UserID            string  `gorm:"column:user_id;not null;default:default;index" json:"userId"`
+	CharacterID       string  `gorm:"column:character_id;not null;default:'';index" json:"characterId"`
 	SceneType         string  `gorm:"column:scene_type;not null" json:"sceneType"`
 	Title             string  `gorm:"column:title;not null" json:"title"`
 	Content           string  `gorm:"column:content;not null" json:"content"`

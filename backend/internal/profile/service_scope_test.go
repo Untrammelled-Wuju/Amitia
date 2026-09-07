@@ -10,6 +10,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/graph"
+	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -148,10 +149,10 @@ func TestProcessUsesCheckpointIncrementally(t *testing.T) {
 	if err := db.Exec(`CREATE TABLE pipeline_checkpoints (conversation_id text not null, pipeline_type text not null, last_message_sequence integer not null default 0, checkpoint_version integer not null default 1, idempotency_key text default '', created_at text default '', updated_at text default '', primary key (conversation_id, pipeline_type))`).Error; err != nil {
 		t.Fatalf("create checkpoints: %v", err)
 	}
-	if err := db.Exec(`CREATE TABLE model_configs (id text primary key, base_url text not null, api_key text not null, model_name text not null, temperature real not null default 0, max_tokens real not null default 256, is_active integer not null default 0)`).Error; err != nil {
+	if err := db.Exec(`CREATE TABLE model_configs (id text primary key, base_url text not null, api_key text not null, model_name text not null, temperature real not null default 0, max_tokens real not null default 256, api_type text not null default 'openai', is_active integer not null default 0)`).Error; err != nil {
 		t.Fatalf("create model configs: %v", err)
 	}
-	if err := db.Exec(`INSERT INTO model_configs (id, base_url, api_key, model_name, temperature, max_tokens, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)`, "model-1", modelServer.URL, "test-key", "test-model", 0, 256).Error; err != nil {
+	if err := db.Exec(`INSERT INTO model_configs (id, base_url, api_key, model_name, temperature, max_tokens, api_type, is_active) VALUES (?, ?, ?, ?, ?, ?, 'openai', 1)`, "model-1", modelServer.URL, "test-key", "test-model", 0, 256).Error; err != nil {
 		t.Fatalf("insert model config: %v", err)
 	}
 	if err := db.Exec(`INSERT INTO conversations (id, character_id) VALUES (?, ?)`, "conv-inc", "char-a").Error; err != nil {
@@ -316,5 +317,66 @@ func TestSystemPromptDoesNotFallbackToDefaultUser(t *testing.T) {
 	prompt := svc.ToSystemPrompt("user-without-profile", "char-a")
 	if prompt != "" {
 		t.Fatalf("prompt leaked default profile: %s", prompt)
+	}
+}
+
+func TestProcessKeepsCheckpointPendingWhenProfileExtractionResponseIsInvalid(t *testing.T) {
+	svc, db := newProfileTestService(t)
+	var calls int
+	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		content := "[]"
+		if calls == 1 {
+			content = "not-json"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{{"message": map[string]string{"content": content}}},
+			"usage":   map[string]int{"total_tokens": 1},
+		})
+	}))
+	t.Cleanup(modelServer.Close)
+
+	if err := db.Exec(`CREATE TABLE messages (id text primary key, conversation_id text not null, sequence integer not null default 0, role text not null, content text not null, created_at text default '')`).Error; err != nil {
+		t.Fatalf("create messages: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE pipeline_checkpoints (conversation_id text not null, pipeline_type text not null, last_message_sequence integer not null default 0, checkpoint_version integer not null default 1, idempotency_key text default '', created_at text default '', updated_at text default '', primary key (conversation_id, pipeline_type))`).Error; err != nil {
+		t.Fatalf("create checkpoints: %v", err)
+	}
+	if err := db.Exec(`CREATE TABLE model_configs (id text primary key, base_url text not null, api_key text not null, model_name text not null, temperature real not null default 0, max_tokens real not null default 256, api_type text not null default 'openai', is_active integer not null default 0)`).Error; err != nil {
+		t.Fatalf("create model configs: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO model_configs (id, base_url, api_key, model_name, temperature, max_tokens, api_type, is_active) VALUES (?, ?, ?, ?, ?, ?, 'openai', 1)`, "model-invalid", modelServer.URL, "test-key", "test-model", 0, 256).Error; err != nil {
+		t.Fatalf("insert model config: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO conversations (id, character_id) VALUES (?, ?)`, "conv-invalid", "char-a").Error; err != nil {
+		t.Fatalf("insert conversation: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO messages (id, conversation_id, sequence, role, content) VALUES (?, ?, ?, ?, ?)`, "m-invalid", "conv-invalid", 1, "user", "我喜欢喝茶").Error; err != nil {
+		t.Fatalf("insert message: %v", err)
+	}
+
+	if err := svc.Process(context.Background(), "conv-invalid", nil, ""); err == nil {
+		t.Fatal("expected invalid extraction response to fail")
+	}
+	record, err := pipelinecheckpoint.New(db).Load("conv-invalid", "profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.LastMessageSequence != 0 || record.LeaseOwner != "" || record.ProcessingEndSeq != 0 {
+		t.Fatalf("failed extraction consumed or retained lease: %#v", record)
+	}
+
+	if err := svc.Process(context.Background(), "conv-invalid", nil, ""); err != nil {
+		t.Fatalf("retry process: %v", err)
+	}
+	record, err = pipelinecheckpoint.New(db).Load("conv-invalid", "profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.LastMessageSequence != 1 {
+		t.Fatalf("retry checkpoint sequence = %d, want 1", record.LastMessageSequence)
+	}
+	if calls != 2 {
+		t.Fatalf("llm calls = %d, want 2", calls)
 	}
 }

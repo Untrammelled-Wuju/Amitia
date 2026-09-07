@@ -4,6 +4,7 @@ package feedback
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/app"
 )
 
@@ -14,7 +15,7 @@ func RegisterFeedbackRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 
 	r.POST("/messages/:id/feedback", handler.Create)
 	r.GET("/messages/:id/feedback", handler.GetByMessage)
-	r.GET("/messages/feedback/stats", handler.Stats)
-	r.GET("/messages/feedback/recent", handler.Recent)
+	r.GET("/messages/feedback/stats", security.SharedCoreAdminOnly(), handler.Stats)
+	r.GET("/messages/feedback/recent", security.SharedCoreAdminOnly(), handler.Recent)
 	r.DELETE("/messages/feedback/:id", handler.Delete)
 }

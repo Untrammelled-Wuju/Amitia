@@ -11,10 +11,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/character/card"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
+
+type readScopedCharacterService interface {
+	ListForUser(includeDisabled bool, userID string) ([]Character, error)
+	GetByIDForUser(id, userID string) (*Character, error)
+	ListPackHistoryForUser(userID string) ([]map[string]interface{}, error)
+	GetRoleProfileForUser(characterID, userID string) (*RoleProfileResponse, error)
+	ExportCardForUser(characterID, format, userID string) (*CardExportResult, []byte, error)
+	GetCardDataForUser(characterID, userID string) (*card.CharacterCardData, error)
+	UpdateCardDataForUser(characterID string, cardData *card.CharacterCardData, userID string) error
+}
 
 type syncScopedCharacterService interface {
 	CreateForUser(req *CreateCharacterRequest, userID string) (*Character, error)
@@ -41,7 +52,13 @@ func NewHandler(srv Service) *Handler {
 
 func (h *Handler) List(c *gin.Context) {
 	includeDisabled := c.Query("includeDisabled") == "true"
-	chars, err := h.service.List(includeDisabled)
+	var chars []Character
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		chars, err = scoped.ListForUser(includeDisabled, requestidentity.ResolveGin(c, ""))
+	} else {
+		chars, err = h.service.List(includeDisabled)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -51,7 +68,13 @@ func (h *Handler) List(c *gin.Context) {
 
 func (h *Handler) Get(c *gin.Context) {
 	id := c.Param("id")
-	char, err := h.service.GetByID(id)
+	var char *Character
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		char, err = scoped.GetByIDForUser(id, requestidentity.ResolveGin(c, ""))
+	} else {
+		char, err = h.service.GetByID(id)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
 		return
@@ -152,7 +175,13 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 
 func (h *Handler) GetRoleProfile(c *gin.Context) {
 	characterID := c.Query("characterId")
-	profile, err := h.service.GetRoleProfile(characterID)
+	var profile *RoleProfileResponse
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		profile, err = scoped.GetRoleProfileForUser(characterID, requestidentity.ResolveGin(c, ""))
+	} else {
+		profile, err = h.service.GetRoleProfile(characterID)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
@@ -162,6 +191,12 @@ func (h *Handler) GetRoleProfile(c *gin.Context) {
 
 func (h *Handler) Test(c *gin.Context) {
 	id := c.Param("id")
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		if _, err := scoped.GetByIDForUser(id, requestidentity.ResolveGin(c, "")); err != nil {
+			util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
+			return
+		}
+	}
 	var req struct {
 		Message string `json:"message"`
 	}
@@ -184,20 +219,24 @@ func (h *Handler) ExportPack(c *gin.Context) {
 	characterID := c.Param("id")
 	format := c.DefaultQuery("format", "v3_charx")
 
-	result, _, err := h.service.ExportCard(characterID, format)
+	var result *CardExportResult
+	var data []byte
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		result, data, err = scoped.ExportCardForUser(characterID, format, requestidentity.ResolveGin(c, ""))
+	} else {
+		result, data, err = h.service.ExportCard(characterID, format)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 
 	if c.Query("download") == "true" {
-		_, data, err := h.service.ExportCard(characterID, format)
-		if err == nil {
-			c.Header("Content-Disposition", "attachment; filename="+result.Filename)
-			c.Header("Content-Type", "application/octet-stream")
-			c.Data(http.StatusOK, "application/octet-stream", data)
-			return
-		}
+		c.Header("Content-Disposition", "attachment; filename="+result.Filename)
+		c.Header("Content-Type", "application/octet-stream")
+		c.Data(http.StatusOK, "application/octet-stream", data)
+		return
 	}
 
 	util.SuccessResponse(c, result)
@@ -255,7 +294,13 @@ func (h *Handler) ImportPackConfirm(c *gin.Context) {
 }
 
 func (h *Handler) PacksHistory(c *gin.Context) {
-	history, err := h.service.ListPackHistory()
+	var history []map[string]interface{}
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		history, err = scoped.ListPackHistoryForUser(requestidentity.ResolveGin(c, ""))
+	} else {
+		history, err = h.service.ListPackHistory()
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -284,20 +329,24 @@ func (h *Handler) ExportCardV2(c *gin.Context) {
 	characterID := c.Param("id")
 	format := c.DefaultQuery("format", "v3_charx")
 
-	result, _, err := h.service.ExportCard(characterID, format)
+	var result *CardExportResult
+	var data []byte
+	var err error
+	if scoped, ok := h.service.(readScopedCharacterService); ok {
+		result, data, err = scoped.ExportCardForUser(characterID, format, requestidentity.ResolveGin(c, ""))
+	} else {
+		result, data, err = h.service.ExportCard(characterID, format)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 
 	if c.Query("download") == "true" {
-		_, data, err := h.service.ExportCard(characterID, format)
-		if err == nil {
-			c.Header("Content-Disposition", "attachment; filename="+result.Filename)
-			c.Header("Content-Type", "application/octet-stream")
-			c.Data(http.StatusOK, "application/octet-stream", data)
-			return
-		}
+		c.Header("Content-Disposition", "attachment; filename="+result.Filename)
+		c.Header("Content-Type", "application/octet-stream")
+		c.Data(http.StatusOK, "application/octet-stream", data)
+		return
 	}
 
 	util.SuccessResponse(c, result)

@@ -17,13 +17,21 @@ import (
 
 type Service interface {
 	List(q WorldBookListQuery) (*WorldBookListResponse, error)
+	ListForUser(userID string, q WorldBookListQuery) (*WorldBookListResponse, error)
 	Create(req *CreateWorldBookRequest) (*WorldBookEntry, error)
+	CreateForUser(userID string, req *CreateWorldBookRequest) (*WorldBookEntry, error)
 	Update(id string, req *UpdateWorldBookRequest) (*WorldBookEntry, error)
+	UpdateForUser(userID, id string, req *UpdateWorldBookRequest) (*WorldBookEntry, error)
 	Delete(id string) error
+	DeleteForUser(userID, id string) error
 	TestMatch(text string) (*TestMatchResponse, error)
+	TestMatchForUser(userID, text string) (*TestMatchResponse, error)
 	MatchAndCollect(userMessage, assistantReply string) []MatchResult
+	MatchAndCollectForUser(userID, characterID, userMessage, assistantReply string) []MatchResult
 	ToSystemPrompt(userMessage, assistantReply string) string
+	ToSystemPromptForUser(userID, characterID, userMessage, assistantReply string) string
 	DeleteAll() error
+	DeleteAllForUser(userID string) error
 }
 
 type regexCacheEntry struct {
@@ -37,8 +45,6 @@ type service struct {
 	graphSvc   graph.Service
 	mu         sync.RWMutex
 	regexCache map[string]*regexCacheEntry
-	rulesTTL   time.Time
-	rulesCache []WorldBookEntry
 }
 
 func NewService(repo Repository, ctx *app.AppContext, graphSvc graph.Service) Service {
@@ -51,7 +57,16 @@ func NewService(repo Repository, ctx *app.AppContext, graphSvc graph.Service) Se
 }
 
 func (s *service) List(q WorldBookListQuery) (*WorldBookListResponse, error) {
-	items, total, err := s.repo.List(q)
+	return s.ListForUser("default", q)
+}
+
+func (s *service) ListForUser(userID string, q WorldBookListQuery) (*WorldBookListResponse, error) {
+	if q.CharacterID != "" {
+		if err := requireWorldbookCharacterOwner(s.db, q.CharacterID, userID); err != nil {
+			return nil, err
+		}
+	}
+	items, total, err := s.repo.List(q, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -71,20 +86,20 @@ func (s *service) List(q WorldBookListQuery) (*WorldBookListResponse, error) {
 }
 
 func (s *service) Create(req *CreateWorldBookRequest) (*WorldBookEntry, error) {
+	return s.CreateForUser("default", req)
+}
+
+func (s *service) CreateForUser(userID string, req *CreateWorldBookRequest) (*WorldBookEntry, error) {
 	if req.MatchType == "" || req.MatchPattern == "" || req.InjectContent == "" {
 		return nil, fmt.Errorf("matchType、matchPattern和injectContent不能为空")
+	}
+	if err := requireWorldbookCharacterOwner(s.db, req.CharacterID, userID); err != nil {
+		return nil, err
 	}
 	if req.MatchScope == "" {
 		req.MatchScope = "full_context"
 	}
-	e := &WorldBookEntry{
-		MatchType:     req.MatchType,
-		MatchPattern:  req.MatchPattern,
-		MatchScope:    req.MatchScope,
-		InjectContent: req.InjectContent,
-		Priority:      req.Priority,
-		CharacterID:   req.CharacterID,
-	}
+	e := &WorldBookEntry{UserID: normalizeWorldbookOwner(userID), MatchType: req.MatchType, MatchPattern: req.MatchPattern, MatchScope: req.MatchScope, InjectContent: req.InjectContent, Priority: req.Priority, CharacterID: req.CharacterID}
 	if err := s.repo.Create(e); err != nil {
 		return nil, err
 	}
@@ -94,6 +109,10 @@ func (s *service) Create(req *CreateWorldBookRequest) (*WorldBookEntry, error) {
 }
 
 func (s *service) Update(id string, req *UpdateWorldBookRequest) (*WorldBookEntry, error) {
+	return s.UpdateForUser("default", id, req)
+}
+
+func (s *service) UpdateForUser(userID, id string, req *UpdateWorldBookRequest) (*WorldBookEntry, error) {
 	updates := map[string]interface{}{}
 	if req.MatchType != nil {
 		updates["match_type"] = *req.MatchType
@@ -111,34 +130,41 @@ func (s *service) Update(id string, req *UpdateWorldBookRequest) (*WorldBookEntr
 		updates["priority"] = *req.Priority
 	}
 	if req.CharacterID != nil {
+		if err := requireWorldbookCharacterOwner(s.db, *req.CharacterID, userID); err != nil {
+			return nil, err
+		}
 		updates["character_id"] = *req.CharacterID
 	}
-	if err := s.repo.Update(id, updates); err != nil {
+	if err := s.repo.Update(id, userID, updates); err != nil {
 		return nil, err
 	}
 	s.invalidateCache()
-	e, err := s.repo.FindByID(id)
+	e, err := s.repo.FindByID(id, userID)
 	if err == nil {
 		s.syncGraph(e)
 	}
 	return e, err
 }
 
-func (s *service) Delete(id string) error {
-	err := s.repo.Delete(id)
+func (s *service) Delete(id string) error { return s.DeleteForUser("default", id) }
+
+func (s *service) DeleteForUser(userID, id string) error {
+	err := s.repo.Delete(id, userID)
 	if err == nil {
-		s.deleteGraph(id)
+		s.deleteGraph(id, userID)
 		s.invalidateCache()
 	}
 	return err
 }
 
-func (s *service) DeleteAll() error {
-	rules := s.loadRules()
-	err := s.repo.DeleteAll()
+func (s *service) DeleteAll() error { return s.DeleteAllForUser("default") }
+
+func (s *service) DeleteAllForUser(userID string) error {
+	rules := s.loadRules(userID)
+	err := s.repo.DeleteAll(userID)
 	if err == nil {
 		for _, rule := range rules {
-			s.deleteGraph(rule.ID)
+			s.deleteGraph(rule.ID, userID)
 		}
 		s.invalidateCache()
 	}
@@ -146,41 +172,23 @@ func (s *service) DeleteAll() error {
 }
 
 func (s *service) invalidateCache() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.regexCache = make(map[string]*regexCacheEntry)
-	s.rulesTTL = time.Time{}
-	s.rulesCache = nil
+	// Rule queries are intentionally not cached across account scopes. Regex
+	// compilation remains safely shared because it contains no tenant data.
 }
 
-func (s *service) loadRules() []WorldBookEntry {
-	s.mu.RLock()
-	if time.Now().Before(s.rulesTTL) && s.rulesCache != nil {
-		rules := s.rulesCache
-		s.mu.RUnlock()
-		return rules
-	}
-	s.mu.RUnlock()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if time.Now().Before(s.rulesTTL) && s.rulesCache != nil {
-		return s.rulesCache
-	}
-	rules, err := s.repo.GetAll()
+func (s *service) loadRules(userID string) []WorldBookEntry {
+	rules, err := s.repo.GetAll(userID)
 	if err != nil {
-		rules = []WorldBookEntry{}
+		return []WorldBookEntry{}
 	}
-	s.rulesCache = rules
-	s.rulesTTL = time.Now().Add(5 * time.Minute)
 	return rules
 }
 
-func (s *service) loadRulesForCharacter(characterID string) []WorldBookEntry {
+func (s *service) loadRulesForCharacter(userID, characterID string) []WorldBookEntry {
 	if characterID == "" {
-		return s.loadRules()
+		return s.loadRules(userID)
 	}
-	rules, err := s.repo.GetByCharacterID(characterID)
+	rules, err := s.repo.GetByCharacterID(userID, characterID)
 	if err != nil {
 		return []WorldBookEntry{}
 	}
@@ -209,16 +217,16 @@ func (s *service) getRegex(pattern string) (*regexp.Regexp, error) {
 }
 
 func (s *service) TestMatch(text string) (*TestMatchResponse, error) {
-	rules := s.loadRules()
+	return s.TestMatchForUser("default", text)
+}
+
+func (s *service) TestMatchForUser(userID, text string) (*TestMatchResponse, error) {
+	rules := s.loadRules(userID)
 	var results []MatchResult
 	for _, rule := range rules {
 		scopedText := s.getScopedText(text, text, text, rule.MatchScope)
 		if matched, hitText := s.tryMatch(rule, scopedText); matched {
-			results = append(results, MatchResult{
-				Entry:      rule,
-				MatchScope: rule.MatchScope,
-				HitText:    hitText,
-			})
+			results = append(results, MatchResult{Entry: rule, MatchScope: rule.MatchScope, HitText: hitText})
 		}
 	}
 	if results == nil {
@@ -228,11 +236,15 @@ func (s *service) TestMatch(text string) (*TestMatchResponse, error) {
 }
 
 func (s *service) MatchAndCollect(userMessage, assistantReply string) []MatchResult {
-	return s.MatchAndCollectForCharacter(userMessage, assistantReply, "")
+	return s.MatchAndCollectForUser("default", "", userMessage, assistantReply)
 }
 
-func (s *service) MatchAndCollectForCharacter(userMessage, assistantReply string, characterID string) []MatchResult {
-	rules := s.loadRulesForCharacter(characterID)
+func (s *service) MatchAndCollectForCharacter(userMessage, assistantReply, characterID string) []MatchResult {
+	return s.MatchAndCollectForUser("default", characterID, userMessage, assistantReply)
+}
+
+func (s *service) MatchAndCollectForUser(userID, characterID, userMessage, assistantReply string) []MatchResult {
+	rules := s.loadRulesForCharacter(userID, characterID)
 	var results []MatchResult
 	for _, rule := range rules {
 		fullText := userMessage
@@ -241,24 +253,15 @@ func (s *service) MatchAndCollectForCharacter(userMessage, assistantReply string
 		}
 		scopedText := s.getScopedText(userMessage, assistantReply, fullText, rule.MatchScope)
 		if matched, hitText := s.tryMatch(rule, scopedText); matched {
-			results = append(results, MatchResult{
-				Entry:      rule,
-				MatchScope: rule.MatchScope,
-				HitText:    hitText,
-			})
-			go s.repo.IncrementHitCount(rule.ID)
+			results = append(results, MatchResult{Entry: rule, MatchScope: rule.MatchScope, HitText: hitText})
+			go s.repo.IncrementHitCount(rule.ID, userID)
 		}
 	}
 	if s.graphSvc != nil {
 		for _, r := range results {
 			s.syncGraph(&r.Entry)
-			triggerID := triggerNodeID(r.Entry.ID, r.HitText)
-			s.graphSvc.SyncNode("worldbook_trigger", triggerID, r.HitText, map[string]interface{}{
-				"worldbook_id": r.Entry.ID,
-				"hit_text":     r.HitText,
-				"match_scope":  r.MatchScope,
-				"user_id":      "default",
-			})
+			triggerID := triggerNodeID(r.Entry.UserID, r.Entry.ID, r.HitText)
+			s.graphSvc.SyncNode("worldbook_trigger", triggerID, r.HitText, map[string]interface{}{"worldbook_id": r.Entry.ID, "hit_text": r.HitText, "match_scope": r.MatchScope, "user_id": normalizeWorldbookOwner(userID)})
 			s.graphSvc.SyncEdge("worldbook:"+r.Entry.ID, "worldbook_trigger:"+triggerID, "triggered_by", float64(r.Entry.Priority)/10.0)
 		}
 	}
@@ -276,25 +279,29 @@ func (s *service) syncGraph(e *WorldBookEntry) {
 		"inject_content": e.InjectContent,
 		"priority":       e.Priority,
 		"hit_count":      e.HitCount,
-		"user_id":        "default",
+		"user_id":        normalizeWorldbookOwner(e.UserID),
 	})
 }
 
-func (s *service) deleteGraph(id string) {
+func (s *service) deleteGraph(id, userID string) {
 	if s.graphSvc == nil || id == "" {
 		return
 	}
-	_ = s.graphSvc.DeleteNode("worldbook:" + id)
+	_ = s.graphSvc.DeleteNodeForUser("worldbook:"+id, normalizeWorldbookOwner(userID))
 	_ = s.graphSvc.DeleteNodesByProperty("worldbook_trigger", "worldbook_id", id)
 }
 
-func triggerNodeID(entryID, hitText string) string {
-	sum := sha1.Sum([]byte(entryID + ":" + hitText))
+func triggerNodeID(userID, entryID, hitText string) string {
+	sum := sha1.Sum([]byte(normalizeWorldbookOwner(userID) + ":" + entryID + ":" + hitText))
 	return fmt.Sprintf("%x", sum)
 }
 
 func (s *service) ToSystemPrompt(userMessage, assistantReply string) string {
-	matches := s.MatchAndCollect(userMessage, assistantReply)
+	return s.ToSystemPromptForUser("default", "", userMessage, assistantReply)
+}
+
+func (s *service) ToSystemPromptForUser(userID, characterID, userMessage, assistantReply string) string {
+	matches := s.MatchAndCollectForUser(userID, characterID, userMessage, assistantReply)
 	if len(matches) == 0 {
 		return ""
 	}

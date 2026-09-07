@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
@@ -273,7 +274,7 @@ func (h *Handler) ManualSend(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "发送参数不完整", nil)
 		return
 	}
-	message, err := h.service.ManualSend(body.ConversationID, body.CharacterID, body.EmoteID, body.ReplyToMessageID)
+	message, err := h.service.ManualSendForUser(requestidentity.ResolveGin(c, ""), body.ConversationID, body.CharacterID, body.EmoteID, body.ReplyToMessageID)
 	if err != nil {
 		fail(c, err)
 		return
@@ -282,7 +283,13 @@ func (h *Handler) ManualSend(c *gin.Context) {
 }
 
 func (h *Handler) GetSettings(c *gin.Context) {
-	settings, err := h.service.GetSettings(c.Param("id"))
+	characterID := strings.TrimSpace(c.Param("id"))
+	owned, err := h.service.CharacterOwnedBy(requestidentity.ResolveGin(c, ""), characterID)
+	if err != nil || !owned {
+		util.ErrorResponse(c, response.DataNotFound, "角色不存在", nil)
+		return
+	}
+	settings, err := h.service.GetSettings(characterID)
 	if err != nil {
 		fail(c, err)
 		return
@@ -304,8 +311,14 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
+	characterID := strings.TrimSpace(c.Param("id"))
+	owned, ownerErr := h.service.CharacterOwnedBy(requestidentity.ResolveGin(c, ""), characterID)
+	if ownerErr != nil || !owned {
+		util.ErrorResponse(c, response.DataNotFound, "角色不存在", nil)
+		return
+	}
 	settings := CharacterSettings{Enabled: boolInt(body.Enabled), BaseProbability: body.BaseProbability, MaxProbability: body.MaxProbability, MaxPerHour: body.MaxPerHour, MinReplyGap: body.MinReplyGap, SameEmoteCooldownMinutes: body.SameEmoteCooldownMinutes, AllowEmoteOnly: boolInt(body.AllowEmoteOnly)}
-	saved, err := h.service.SaveSettings(c.Param("id"), settings)
+	saved, err := h.service.SaveSettings(characterID, settings)
 	if err != nil {
 		fail(c, err)
 		return

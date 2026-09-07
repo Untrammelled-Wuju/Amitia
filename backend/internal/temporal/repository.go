@@ -14,6 +14,7 @@ type Repository interface {
 	SaveProfile(*Profile) error
 	ListProfiles() ([]Profile, error)
 	CharacterExists(characterID string) (bool, error)
+	CharacterOwner(characterID string) (string, error)
 	ListAnchors(AnchorQuery) ([]Anchor, error)
 	GetAnchor(id string) (*Anchor, error)
 	SaveAnchor(*Anchor) error
@@ -60,6 +61,12 @@ func (r *SQLiteRepository) CharacterExists(characterID string) (bool, error) {
 	var count int64
 	err := r.db.Table("characters").Where("id = ?", characterID).Count(&count).Error
 	return count > 0, err
+}
+
+func (r *SQLiteRepository) CharacterOwner(characterID string) (string, error) {
+	var owner string
+	err := r.db.Table("characters").Select("user_id").Where("id = ?", characterID).Take(&owner).Error
+	return owner, err
 }
 
 func (r *SQLiteRepository) ListAnchors(query AnchorQuery) ([]Anchor, error) {

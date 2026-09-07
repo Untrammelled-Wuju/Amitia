@@ -9,6 +9,7 @@ import (
 
 type WorldBookEntry struct {
 	ID            string `gorm:"column:id;primaryKey" json:"id"`
+	UserID        string `gorm:"column:user_id;not null;default:default;index" json:"-"`
 	MatchType     string `gorm:"column:match_type;not null" json:"matchType"`
 	MatchPattern  string `gorm:"column:match_pattern;not null" json:"matchPattern"`
 	MatchScope    string `gorm:"column:match_scope;not null;default:full_context" json:"matchScope"`

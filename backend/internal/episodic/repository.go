@@ -41,6 +41,9 @@ func (r *repository) List(q EpisodicListQuery) ([]EpisodicMemory, int64, error) 
 	if q.UserID != "" {
 		query = query.Where("user_id = ?", q.UserID)
 	}
+	if q.CharacterID != "" {
+		query = query.Where("character_id = ?", q.CharacterID)
+	}
 	if q.SceneType != "" {
 		query = query.Where("scene_type = ?", q.SceneType)
 	}

@@ -3,7 +3,9 @@
 package profile
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -19,6 +21,7 @@ func NewHandler(srv Service) *Handler {
 func (h *Handler) List(c *gin.Context) {
 	var q ProfileListQuery
 	c.ShouldBindQuery(&q)
+	q.UserID = requestidentity.ResolveGin(c, "")
 	resp, err := h.service.List(q)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
@@ -33,7 +36,13 @@ func (h *Handler) Create(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	p, err := h.service.Create(&req)
+	userID := requestidentity.ResolveGin(c, "")
+	scoped, ok := h.service.(profileUserScopedService)
+	if !ok {
+		util.ErrorResponse(c, response.InternalError, "profile service does not support authenticated ownership", nil)
+		return
+	}
+	p, err := scoped.CreateForUser(&req, userID)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -48,7 +57,7 @@ func (h *Handler) Update(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	p, err := h.service.Update(id, &req)
+	p, err := h.updateForUser(id, requestidentity.ResolveGin(c, ""), &req)
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -58,7 +67,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.service.Delete(id); err != nil {
+	if err := h.deleteForUser(id, requestidentity.ResolveGin(c, "")); err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
@@ -66,11 +75,7 @@ func (h *Handler) Delete(c *gin.Context) {
 }
 
 func (h *Handler) GetByUserID(c *gin.Context) {
-	userID := c.Query("userId")
-	if userID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "userId不能为空", nil)
-		return
-	}
+	userID := requestidentity.ResolveGin(c, "")
 	profiles, err := h.service.GetByUserID(userID, c.Query("characterId"))
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
@@ -90,7 +95,7 @@ func (h *Handler) Extract(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	if err := h.service.ExtractFromConversation(body.UserID, body.ConversationID, body.Messages, body.CharacterID); err != nil {
+	if err := h.service.ExtractFromConversation(requestidentity.ResolveGin(c, ""), body.ConversationID, body.Messages, body.CharacterID); err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
@@ -98,10 +103,29 @@ func (h *Handler) Extract(c *gin.Context) {
 }
 
 func (h *Handler) SystemPrompt(c *gin.Context) {
-	userID := c.Query("userId")
-	if userID == "" {
-		userID = "default"
-	}
+	userID := requestidentity.ResolveGin(c, "")
 	prompt := h.service.ToSystemPrompt(userID, c.Query("characterId"))
 	util.SuccessResponse(c, map[string]string{"prompt": prompt})
+}
+
+type profileUserScopedService interface {
+	CreateForUser(req *CreateProfileRequest, userID string) (*UserProfile, error)
+	UpdateForUser(id, userID string, req *UpdateProfileRequest) (*UserProfile, error)
+	DeleteForUser(id, userID string) error
+}
+
+func (h *Handler) updateForUser(id, userID string, req *UpdateProfileRequest) (*UserProfile, error) {
+	scoped, ok := h.service.(profileUserScopedService)
+	if !ok {
+		return nil, fmt.Errorf("profile service does not support authenticated ownership")
+	}
+	return scoped.UpdateForUser(id, userID, req)
+}
+
+func (h *Handler) deleteForUser(id, userID string) error {
+	scoped, ok := h.service.(profileUserScopedService)
+	if !ok {
+		return fmt.Errorf("profile service does not support authenticated ownership")
+	}
+	return scoped.DeleteForUser(id, userID)
 }

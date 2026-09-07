@@ -220,15 +220,13 @@ func (c *surrealChecker) Check() ([]DoctorFinding, error) {
 	defer cancel()
 
 	if _, err := db.SignIn(ctx, map[string]string{"user": c.cfg.Username, "pass": c.cfg.Password}); err != nil {
-		if _, err2 := db.SignIn(ctx, map[string]string{"user": "root", "pass": "root"}); err2 != nil {
-			findings = append(findings, DoctorFinding{
-				Code:     "surrealdb_auth_failed",
-				Severity: SeverityError,
-				Category: "surrealdb",
-				Message:  fmt.Sprintf("SurrealDB authentication failed: %v", err),
-			})
-			return findings, nil
-		}
+		findings = append(findings, DoctorFinding{
+			Code:     "surrealdb_auth_failed",
+			Severity: SeverityError,
+			Category: "surrealdb",
+			Message:  fmt.Sprintf("SurrealDB authentication failed: %v", err),
+		})
+		return findings, nil
 	}
 
 	if err := db.Use(ctx, c.cfg.Namespace, c.cfg.Database); err != nil {

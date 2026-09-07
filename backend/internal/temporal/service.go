@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/requestidentity"
+	"gorm.io/gorm"
 )
 
 var (
@@ -59,6 +62,27 @@ func (s *Service) FeatureFlags() FeatureFlags                         { return s
 func (s *Service) SetCalendarProviders(providers ...CalendarProvider) { s.calendars = providers }
 
 func (s *Service) InitSchema() error { return s.repo.InitSchema() }
+
+func (s *Service) CharacterOwnedBy(characterID, userID string) (bool, error) {
+	characterID = strings.TrimSpace(characterID)
+	if characterID == "" {
+		return true, nil
+	}
+	owner, err := s.repo.CharacterOwner(characterID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	requested := requestidentity.NormalizeUserID(userID)
+	owner = strings.TrimSpace(owner)
+	if owner == requested && requested != "" {
+		return true, nil
+	}
+	local := config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user")
+	return local && requested != "" && (owner == "" || owner == requestidentity.DefaultUserID), nil
+}
 
 func defaultProfile(ownerType, ownerID string, now time.Time) *Profile {
 	mode := TimezoneFollowDevice

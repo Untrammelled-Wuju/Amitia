@@ -75,6 +75,29 @@ func (s *service) List(includeDisabled bool) ([]Character, error) {
 	return s.repo.List(includeDisabled)
 }
 
+func (s *service) ListForUser(includeDisabled bool, userID string) ([]Character, error) {
+	var chars []Character
+	q := s.characterOwnerQuery(s.db.Where("deleted_at IS NULL"), userID).Order("sort_order, created_at")
+	if !includeDisabled {
+		q = q.Where("status = ?", "enabled")
+	}
+	if err := q.Find(&chars).Error; err != nil {
+		return nil, err
+	}
+	if chars == nil {
+		chars = []Character{}
+	}
+	return chars, nil
+}
+
+func (s *service) GetByIDForUser(id, userID string) (*Character, error) {
+	c, err := s.requireCharacterOwner(id, userID)
+	if err != nil {
+		return nil, characterNotFound(err)
+	}
+	return c, nil
+}
+
 func (s *service) GetByID(id string) (*Character, error) {
 	c, err := s.repo.FindByID(id)
 	if err != nil {
@@ -89,7 +112,7 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 
 func (s *service) CreateForUser(req *CreateCharacterRequest, userID string) (*Character, error) {
 	c := &Character{
-		ID: uuid.New().String(), Name: req.Name, Identity: req.Identity,
+		ID: uuid.New().String(), UserID: normalizeCharacterOwner(userID), Name: req.Name, Identity: req.Identity,
 		Personality: req.Personality, SpeakingStyle: req.SpeakingStyle,
 		Avatar:            req.Avatar,
 		RelationshipStyle: req.RelationshipStyle, CharacterBase: req.CharacterBase,
@@ -100,8 +123,10 @@ func (s *service) CreateForUser(req *CreateCharacterRequest, userID string) (*Ch
 		PersonalityConfig: string(req.PersonalityConfig),
 		ChatStyleConfig:   req.ChatStyleConfig,
 		SceneRules:        req.SceneRules,
+		VoiceConfigID:     req.VoiceConfigID,
 		VoiceType:         req.VoiceType, VoiceSpeed: req.VoiceSpeed, VoicePitch: req.VoicePitch,
-		VoiceVolume: req.VoiceVolume, CustomVoiceID: req.CustomVoiceID,
+		VoiceVolume: req.VoiceVolume, CustomVoiceID: req.CustomVoiceID, VoiceMode: req.VoiceMode,
+		Emotion: req.Emotion, EmotionScale: req.EmotionScale, SilenceDuration: req.SilenceDuration,
 	}
 	if c.Name == "" {
 		c.Name = "新角色"
@@ -139,12 +164,19 @@ func (s *service) CreateForUser(req *CreateCharacterRequest, userID string) (*Ch
 	if c.VoiceVolume == 0 {
 		c.VoiceVolume = 1.0
 	}
+	if c.VoiceMode == "" {
+		if c.CustomVoiceID != "" {
+			c.VoiceMode = "clone"
+		} else {
+			c.VoiceMode = "preset"
+		}
+	}
 	c.Revision = 1
 	if req.IsDefault {
 		c.IsDefault = 1
 	}
 	var count int64
-	if err := s.db.Table("characters").Count(&count).Error; err == nil && count == 0 {
+	if err := s.characterOwnerQuery(s.db.Table("characters"), userID).Count(&count).Error; err == nil && count == 0 {
 		c.IsDefault = 1
 	}
 
@@ -152,7 +184,7 @@ func (s *service) CreateForUser(req *CreateCharacterRequest, userID string) (*Ch
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if c.IsDefault == 1 {
 			var previousDefaults []Character
-			if err := tx.Where("is_default = 1 AND deleted_at IS NULL").Find(&previousDefaults).Error; err != nil {
+			if err := s.characterOwnerQuery(tx.Where("is_default = 1 AND deleted_at IS NULL"), userID).Find(&previousDefaults).Error; err != nil {
 				return err
 			}
 			for i := range previousDefaults {
@@ -176,7 +208,7 @@ func (s *service) CreateForUser(req *CreateCharacterRequest, userID string) (*Ch
 		}
 		convID := uuid.New().String()
 		now := time.Now().Format("2006-01-02 15:04:05")
-		if err := tx.Exec("INSERT INTO conversations (id, character_id, title, channel, source, created_at, updated_at, revision) VALUES (?, ?, ?, 'web', 'system', ?, ?, 1)", convID, c.ID, c.Name, now, now).Error; err != nil {
+		if err := tx.Exec("INSERT INTO conversations (id, user_id, character_id, title, channel, source, created_at, updated_at, revision) VALUES (?, ?, ?, ?, 'web', 'system', ?, ?, 1)", convID, normalizeCharacterOwner(userID), c.ID, c.Name, now, now).Error; err != nil {
 			return err
 		}
 		if err := tx.Table("characters").Where("id = ?", c.ID).Update("conversation_id", convID).Error; err != nil {
@@ -233,7 +265,7 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 }
 
 func (s *service) UpdateForUser(id string, req *UpdateCharacterRequest, userID string) (*Character, error) {
-	_, err := s.repo.FindByID(id)
+	_, err := s.requireCharacterOwner(id, userID)
 	if err != nil {
 		return nil, fmt.Errorf("角色不存在")
 	}
@@ -345,12 +377,12 @@ func (s *service) UpdateForUser(id string, req *UpdateCharacterRequest, userID s
 	var updateErr error
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var current Character
-		if err := tx.Where("id = ?", id).First(&current).Error; err != nil {
+		if err := s.characterOwnerQuery(tx.Where("id = ?", id), userID).First(&current).Error; err != nil {
 			return err
 		}
 		if setExclusiveDefault {
 			var previousDefaults []Character
-			if err := tx.Where("is_default = 1 AND id <> ? AND deleted_at IS NULL", id).Find(&previousDefaults).Error; err != nil {
+			if err := s.characterOwnerQuery(tx.Where("is_default = 1 AND id <> ? AND deleted_at IS NULL", id), userID).Find(&previousDefaults).Error; err != nil {
 				return err
 			}
 			for i := range previousDefaults {
@@ -397,7 +429,7 @@ func (s *service) UpdateForUser(id string, req *UpdateCharacterRequest, userID s
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
 	var result Character
-	if err := s.db.Where("id = ?", id).First(&result).Error; err != nil {
+	if err := s.characterOwnerQuery(s.db.Where("id = ?", id), userID).First(&result).Error; err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -410,7 +442,7 @@ func (s *service) Delete(id string) error {
 func (s *service) DeleteForUser(id string, userID string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var current Character
-		if err := tx.Where("id = ?", id).First(&current).Error; err != nil {
+		if err := s.characterOwnerQuery(tx.Where("id = ?", id), userID).First(&current).Error; err != nil {
 			return err
 		}
 		result := tx.Model(&Character{}).Where("id = ? AND revision = ? AND deleted_at IS NULL", id, current.Revision).Updates(map[string]interface{}{
@@ -441,7 +473,7 @@ func (s *service) updateCharacterFieldsForUser(id string, updates map[string]int
 	var updated Character
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var current Character
-		if err := tx.Where("id = ? AND deleted_at IS NULL", id).First(&current).Error; err != nil {
+		if err := s.characterOwnerQuery(tx.Where("id = ? AND deleted_at IS NULL", id), userID).First(&current).Error; err != nil {
 			return err
 		}
 		newRevision := current.Revision + 1
@@ -458,7 +490,7 @@ func (s *service) updateCharacterFieldsForUser(id string, updates map[string]int
 		if result.RowsAffected == 0 {
 			return fmt.Errorf("角色版本冲突")
 		}
-		if err := tx.Where("id = ?", id).First(&updated).Error; err != nil {
+		if err := s.characterOwnerQuery(tx.Where("id = ?", id), userID).First(&updated).Error; err != nil {
 			return err
 		}
 		return s.recordCharacterChangeTx(tx, &updated, sync.OpUpdate, userID)
@@ -487,7 +519,7 @@ func characterSyncMeta(c *Character) map[string]interface{} {
 		return nil
 	}
 	return map[string]interface{}{
-		"name": c.Name, "identity": c.Identity, "personality": c.Personality,
+		"user_id": c.UserID, "name": c.Name, "identity": c.Identity, "personality": c.Personality,
 		"speaking_style": c.SpeakingStyle, "relationship_style": c.RelationshipStyle,
 		"character_base": c.CharacterBase, "boundary_rules": c.BoundaryRules,
 		"description": c.Description, "status": c.Status, "is_active": c.IsActive,
@@ -513,7 +545,7 @@ func (s *service) SetActive(id string) (*Character, error) {
 func (s *service) SetActiveForUser(id string, userID string) (*Character, error) {
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var chars []Character
-		if err := tx.Where("deleted_at IS NULL AND (is_active = 1 OR id = ?)", id).Find(&chars).Error; err != nil {
+		if err := s.characterOwnerQuery(tx.Where("deleted_at IS NULL AND (is_active = 1 OR id = ?)", id), userID).Find(&chars).Error; err != nil {
 			return err
 		}
 		found := false
@@ -550,7 +582,7 @@ func (s *service) SetActiveForUser(id string, userID string) (*Character, error)
 	if err != nil {
 		return nil, fmt.Errorf("设置活跃失败: %w", err)
 	}
-	return s.repo.FindByID(id)
+	return s.GetByIDForUser(id, userID)
 }
 
 func (s *service) ListTemplates() ([]CharacterTemplate, error) { return s.repo.ListTemplates() }
@@ -589,8 +621,12 @@ func (s *service) CreateFromTemplate(id string, nameOverride string, userID stri
 }
 
 func (s *service) ListPackHistory() ([]map[string]interface{}, error) {
+	return s.ListPackHistoryForUser(requestidentity.DefaultUserID)
+}
+
+func (s *service) ListPackHistoryForUser(userID string) ([]map[string]interface{}, error) {
 	var characters []Character
-	err := s.db.
+	err := s.characterOwnerQuery(s.db, userID).
 		Where("card_data_json IS NOT NULL AND card_data_json <> '' AND card_data_json <> '{}' AND deleted_at IS NULL").
 		Order("created_at DESC").
 		Find(&characters).Error
@@ -617,12 +653,20 @@ func (s *service) ListPackHistory() ([]map[string]interface{}, error) {
 }
 
 func (s *service) GetRoleProfile(characterID string) (*RoleProfileResponse, error) {
+	return s.GetRoleProfileForUser(characterID, requestidentity.DefaultUserID)
+}
+
+func (s *service) GetRoleProfileForUser(characterID, userID string) (*RoleProfileResponse, error) {
 	var c *Character
 	var err error
 	if characterID != "" {
-		c, err = s.repo.FindByID(characterID)
+		c, err = s.requireCharacterOwner(characterID, userID)
 	} else {
-		c, err = s.repo.GetActive()
+		var active Character
+		err = s.characterOwnerQuery(s.db.Where("is_active = 1 AND deleted_at IS NULL"), userID).First(&active).Error
+		if err == nil {
+			c = &active
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("没有可用角色")
@@ -639,7 +683,8 @@ func (s *service) UpdateRoleProfileForUser(characterID string, updates map[strin
 	if characterID != "" {
 		targetID = characterID
 	} else {
-		active, err := s.repo.GetActive()
+		var active Character
+		err := s.characterOwnerQuery(s.db.Where("is_active = 1 AND deleted_at IS NULL"), userID).First(&active).Error
 		if err != nil {
 			return nil, fmt.Errorf("没有可用角色")
 		}
@@ -663,12 +708,12 @@ func (s *service) UpdateRoleProfileForUser(characterID string, updates map[strin
 		}
 	}
 	if len(dbUpdates) == 0 {
-		return s.GetRoleProfile(targetID)
+		return s.GetRoleProfileForUser(targetID, userID)
 	}
 	if _, err := s.updateCharacterFieldsForUser(targetID, dbUpdates, userID); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
-	return s.GetRoleProfile(targetID)
+	return s.GetRoleProfileForUser(targetID, userID)
 }
 func (s *service) UpdateAvatar(id string, avatarUrl string) error {
 	return s.UpdateAvatarForUser(id, avatarUrl, requestidentity.DefaultUserID)
@@ -716,6 +761,7 @@ func (s *service) ImportCardForUser(data []byte, filename string, confirm bool, 
 
 	char := &Character{
 		ID:            uuid.New().String(),
+		UserID:        normalizeCharacterOwner(userID),
 		Name:          name,
 		Description:   mapping.Description,
 		Personality:   mapping.Personality,
@@ -739,7 +785,7 @@ func (s *service) ImportCardForUser(data []byte, filename string, confirm bool, 
 		if err := tx.Create(char).Error; err != nil {
 			return err
 		}
-		if err := tx.Exec("INSERT INTO conversations (id, character_id, title, channel, source, created_at, updated_at, revision) VALUES (?, ?, ?, 'web', 'system', ?, ?, 1)", convID, char.ID, char.Name, now, now).Error; err != nil {
+		if err := tx.Exec("INSERT INTO conversations (id, user_id, character_id, title, channel, source, created_at, updated_at, revision) VALUES (?, ?, ?, ?, 'web', 'system', ?, ?, 1)", convID, normalizeCharacterOwner(userID), char.ID, char.Name, now, now).Error; err != nil {
 			return err
 		}
 		if err := tx.Model(&Character{}).Where("id = ?", char.ID).Update("conversation_id", convID).Error; err != nil {
@@ -773,7 +819,11 @@ func (s *service) ImportCardForUser(data []byte, filename string, confirm bool, 
 }
 
 func (s *service) ExportCard(characterID string, format string) (*CardExportResult, []byte, error) {
-	char, err := s.repo.FindByID(characterID)
+	return s.ExportCardForUser(characterID, format, requestidentity.DefaultUserID)
+}
+
+func (s *service) ExportCardForUser(characterID, format, userID string) (*CardExportResult, []byte, error) {
+	char, err := s.requireCharacterOwner(characterID, userID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("角色不存在")
 	}
@@ -823,7 +873,11 @@ func (s *service) ExportCard(characterID string, format string) (*CardExportResu
 }
 
 func (s *service) GetCardData(characterID string) (*card.CharacterCardData, error) {
-	char, err := s.repo.FindByID(characterID)
+	return s.GetCardDataForUser(characterID, requestidentity.DefaultUserID)
+}
+
+func (s *service) GetCardDataForUser(characterID, userID string) (*card.CharacterCardData, error) {
+	char, err := s.requireCharacterOwner(characterID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("角色不存在")
 	}
@@ -840,7 +894,11 @@ func (s *service) GetCardData(characterID string) (*card.CharacterCardData, erro
 }
 
 func (s *service) UpdateCardData(characterID string, cardData *card.CharacterCardData) error {
-	_, err := s.repo.FindByID(characterID)
+	return s.UpdateCardDataForUser(characterID, cardData, requestidentity.DefaultUserID)
+}
+
+func (s *service) UpdateCardDataForUser(characterID string, cardData *card.CharacterCardData, userID string) error {
+	_, err := s.requireCharacterOwner(characterID, userID)
 	if err != nil {
 		return fmt.Errorf("角色不存在")
 	}
@@ -850,5 +908,6 @@ func (s *service) UpdateCardData(characterID string, cardData *card.CharacterCar
 		return fmt.Errorf("序列化卡片数据失败: %w", err)
 	}
 
-	return s.repo.Update(characterID, map[string]interface{}{"card_data_json": string(data)})
+	_, err = s.updateCharacterFieldsForUser(characterID, map[string]interface{}{"card_data_json": string(data)}, userID)
+	return err
 }

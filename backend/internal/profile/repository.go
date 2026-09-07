@@ -127,6 +127,7 @@ func (r *repository) UpsertConfidence(profile *UserProfile) (*UserProfile, error
 	}
 	if updateErr := r.db.Model(&existing).Updates(updates).Error; updateErr != nil {
 		log.Printf("[Profile] UpsertConfidence update error: %v", updateErr)
+		return nil, updateErr
 	}
 	existing.AttributeValue = profile.AttributeValue
 	existing.Confidence = newConfidence

@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/delivery"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"gorm.io/gorm"
 )
 
@@ -314,20 +316,69 @@ func boolInt(value bool) int {
 	return 0
 }
 
+func (s *Service) CharacterOwnedBy(userID, characterID string) (bool, error) {
+	characterID = strings.TrimSpace(characterID)
+	if characterID == "" {
+		return false, nil
+	}
+	owner := requestidentity.NormalizeUserID(userID)
+	query := s.repo.DB().Table("characters").Where("id = ? AND deleted_at IS NULL", characterID)
+	if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
+		query = query.Where("(user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = ?)", owner, requestidentity.DefaultUserID)
+	} else {
+		query = query.Where("user_id = ?", owner)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s *Service) ManualSendForUser(userID, conversationID, characterID, emoteID string, replyTo *string) (*chat.Message, error) {
+	owner := requestidentity.NormalizeUserID(userID)
+	query := s.repo.DB().Where("id = ? AND deleted_at IS NULL", conversationID)
+	if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
+		query = query.Where("(user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = ?)", owner, requestidentity.DefaultUserID)
+	} else {
+		query = query.Where("user_id = ?", owner)
+	}
+	var conversation chat.Conversation
+	if err := query.First(&conversation).Error; err != nil {
+		return nil, err
+	}
+	if conversation.CharacterID != characterID {
+		return nil, errors.New("conversation_character_mismatch")
+	}
+	owned, err := s.CharacterOwnedBy(userID, characterID)
+	if err != nil || !owned {
+		if err != nil {
+			return nil, err
+		}
+		return nil, gorm.ErrRecordNotFound
+	}
+	return s.manualSendWithConversation(conversation, characterID, emoteID, replyTo)
+}
+
 func (s *Service) ManualSend(conversationID, characterID, emoteID string, replyTo *string) (*chat.Message, error) {
+	var conversation chat.Conversation
+	if err := s.repo.DB().Where("id = ?", conversationID).First(&conversation).Error; err != nil {
+		return nil, err
+	}
+	if conversation.CharacterID != characterID {
+		return nil, errors.New("conversation_character_mismatch")
+	}
+	return s.manualSendWithConversation(conversation, characterID, emoteID, replyTo)
+}
+
+func (s *Service) manualSendWithConversation(conversation chat.Conversation, characterID, emoteID string, replyTo *string) (*chat.Message, error) {
+	conversationID := conversation.ID
 	item, err := s.repo.Get(emoteID)
 	if err != nil {
 		return nil, err
 	}
 	if item.Enabled != 1 || item.DeletedAt != nil {
 		return nil, errors.New("emote_not_found")
-	}
-	var conversation chat.Conversation
-	if err = s.repo.DB().Where("id = ?", conversationID).First(&conversation).Error; err != nil {
-		return nil, err
-	}
-	if conversation.CharacterID != characterID {
-		return nil, errors.New("conversation_character_mismatch")
 	}
 	if conversation.Channel != "web" && conversation.Channel != "wechat" && conversation.Channel != "qq" {
 		return nil, errors.New("platform_unsupported")

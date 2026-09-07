@@ -138,6 +138,28 @@ func (s *service) Delete(id string) error {
 	return nil
 }
 
+func (s *service) UpdateForUser(id, userID string, req *UpdateProfileRequest) (*UserProfile, error) {
+	p, err := s.repo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil || strings.TrimSpace(p.UserID) != strings.TrimSpace(userID) {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return s.Update(id, req)
+}
+
+func (s *service) DeleteForUser(id, userID string) error {
+	p, err := s.repo.FindByID(id)
+	if err != nil {
+		return err
+	}
+	if p == nil || strings.TrimSpace(p.UserID) != strings.TrimSpace(userID) {
+		return gorm.ErrRecordNotFound
+	}
+	return s.Delete(id)
+}
+
 func (s *service) GetByUserID(userID string, characterID ...string) ([]UserProfile, error) {
 	if s.dataLifecycleCoordinator != nil && len(characterID) > 0 && characterID[0] != "" && s.dataLifecycleCoordinator.IsRetrievalBlocked(characterID[0]) {
 		return []UserProfile{}, nil
@@ -149,10 +171,14 @@ func (s *service) GetByUserID(userID string, characterID ...string) ([]UserProfi
 }
 
 func (s *service) UpsertFromTool(userID, category, attrName, attrValue string, confidence int, convID string, characterID ...string) (*UserProfile, error) {
-	scope := s.profileScope(convID, characterID...)
-	userID = s.profileUserScope(convID, userID, scope)
+	userID = cleanUserScope(userID)
 	if userID == "" {
 		return nil, fmt.Errorf("user scope required")
+	}
+	requestedScope := firstScope(characterID...)
+	scope, err := s.requireProfileConversationOwner(convID, userID, requestedScope)
+	if err != nil {
+		return nil, err
 	}
 	if category == "" {
 		category = "personal_info"
@@ -190,14 +216,18 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 	if len(messages) == 0 {
 		return nil
 	}
+	userID = cleanUserScope(userID)
+	if userID == "" {
+		return fmt.Errorf("user scope required")
+	}
+	requestedScope := firstScope(characterID...)
+	scope, err := s.requireProfileConversationOwner(convID, userID, requestedScope)
+	if err != nil {
+		return err
+	}
 	cfg := s.getActiveModel()
 	if cfg == nil {
 		return fmt.Errorf("no active model")
-	}
-	scope := s.profileScope(convID, characterID...)
-	userID = s.profileUserScope(convID, userID, scope)
-	if userID == "" {
-		return nil
 	}
 	conversationText := ""
 	for _, m := range messages {
@@ -230,7 +260,7 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 	content = extractJSONArray(content)
 	var facts []map[string]interface{}
 	if err := json.Unmarshal([]byte(content), &facts); err != nil {
-		return nil
+		return fmt.Errorf("parse profile extraction response: %w", err)
 	}
 	for _, f := range facts {
 		cat, _ := f["category"].(string)
@@ -246,10 +276,13 @@ func (s *service) ExtractFromConversation(userID, convID string, messages []map[
 			Category:       cat,
 			AttributeName:  name,
 			AttributeValue: val,
-			Confidence:     int(conf),
+			Confidence:     clampProfileConfidence(int(conf)),
 			SourceConvID:   convID,
 		})
-		if err == nil && result != nil {
+		if err != nil {
+			return fmt.Errorf("persist extracted profile %q: %w", name, err)
+		}
+		if result != nil {
 			s.syncGraph(result)
 		}
 	}
@@ -466,11 +499,40 @@ func minInt(a, b int) int {
 func (s *service) Name() string { return "用户画像" }
 
 func (s *service) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
-	pending, maxSequence, err := pipelinecheckpoint.New(s.db).PendingRange(convID, "profile", 0)
-	if err != nil || len(pending) == 0 {
+	manager := pipelinecheckpoint.New(s.db)
+	leaseOwner := fmt.Sprintf("profile:%s:%d", convID, time.Now().UTC().UnixNano())
+	pending, maxSequence, acquired, err := manager.AcquirePendingRange(convID, "profile", 0, leaseOwner, 10*time.Minute)
+	if err != nil || !acquired || len(pending) == 0 {
 		return err
 	}
-	return pipelinecheckpoint.New(s.db).Advance(convID, "profile", maxSequence, fmt.Sprintf("profile-projection:%s:%d", convID, maxSequence))
+	if err := ctx.Err(); err != nil {
+		_ = manager.ReleaseLease(convID, "profile", leaseOwner)
+		return err
+	}
+	if err := s.ExtractFromConversation(s.profileExtractionUserID(convID), convID, pending); err != nil {
+		_ = manager.ReleaseLease(convID, "profile", leaseOwner)
+		return err
+	}
+	if err := manager.AdvanceLeased(convID, "profile", maxSequence, fmt.Sprintf("profile-projection:%s:%d", convID, maxSequence), leaseOwner); err != nil {
+		_ = manager.ReleaseLease(convID, "profile", leaseOwner)
+		return err
+	}
+	return nil
+}
+
+func (s *service) profileExtractionUserID(convID string) string {
+	if s.db == nil || strings.TrimSpace(convID) == "" {
+		return "default"
+	}
+	var userID string
+	if err := s.db.Table("conversations").Select("user_id").Where("id = ? AND deleted_at IS NULL", convID).Row().Scan(&userID); err != nil {
+		return "default"
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return "default"
+	}
+	return userID
 }
 
 func (s *service) profileScope(convID string, characterID ...string) string {
@@ -505,11 +567,10 @@ func firstScope(characterID ...string) string {
 }
 
 func cleanUserScope(scope string) string {
-	scope = strings.TrimSpace(scope)
-	if scope == "" || scope == "default" {
-		return ""
-	}
-	return scope
+	// "default" is the legitimate owner of a local single-user installation.
+	// Only an actually empty value means that an internal caller did not supply
+	// an owner and may need legacy scope fallback.
+	return strings.TrimSpace(scope)
 }
 
 func (s *service) syncGraph(p *UserProfile) {
