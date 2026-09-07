@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/chat"
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/interaction"
@@ -72,6 +73,34 @@ func NewService(ctx *app.AppContext, unifiedEntry *interaction.UnifiedEntry, fac
 		facade = facades[0]
 	}
 	return &service{db: ctx.DB, unifiedEntry: unifiedEntry, toolFacade: facade}
+}
+
+func (s *service) ownerQuery(db *gorm.DB, userID string) *gorm.DB {
+	owner := requestidentity.NormalizeUserID(userID)
+	if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
+		return db.Where("(user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = ?)", owner, requestidentity.DefaultUserID)
+	}
+	return db.Where("user_id = ?", owner)
+}
+
+func (s *service) TestForUser(userID, characterID, message string) (map[string]interface{}, error) {
+	characterID = strings.TrimSpace(characterID)
+	if characterID == "" {
+		characterID = s.getDefaultCharacterIDForUser(userID)
+	}
+	var count int64
+	if err := s.ownerQuery(s.db.Table("characters").Where("deleted_at IS NULL"), userID).Where("id = ?", characterID).Count(&count).Error; err != nil || count == 0 {
+		return nil, fmt.Errorf("角色不存在")
+	}
+	return s.Test(characterID, message)
+}
+
+func (s *service) ContextPreviewForUser(userID, convID string) (map[string]interface{}, error) {
+	var count int64
+	if err := s.ownerQuery(s.db.Table("conversations").Where("deleted_at IS NULL"), userID).Where("id = ?", strings.TrimSpace(convID)).Count(&count).Error; err != nil || count == 0 {
+		return nil, fmt.Errorf("对话不存在")
+	}
+	return s.ContextPreview(convID)
 }
 
 // Test is a diagnostic character-preview path.
@@ -195,15 +224,19 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	if req.Text == "" && req.ImageUrl == "" && req.VideoUrl == "" {
 		return map[string]interface{}{"outgoingMessage": map[string]interface{}{"text": ""}, "requestId": requestID}, nil
 	}
-	convID := req.ConversationID
-	if convID == "" {
-		convID = "channel-" + req.Channel
-	}
-
-	characterID := s.getDefaultCharacterID()
-	s.ensureWebhookConversation(convID, characterID, req.Channel, req.Text)
-	sessionID := stableWebhookSessionID(req, convID)
 	userID := stableWebhookUserID(req)
+	convID := strings.TrimSpace(req.ConversationID)
+	if convID == "" {
+		convID = "channel-" + strings.TrimSpace(req.Channel) + "-" + requestidentity.NormalizeUserID(userID)
+	}
+	characterID := s.getDefaultCharacterIDForUser(userID)
+	if characterID == "" {
+		return nil, fmt.Errorf("当前用户没有可用角色")
+	}
+	if err := s.ensureWebhookConversation(convID, characterID, req.Channel, req.Text, userID); err != nil {
+		return nil, err
+	}
+	sessionID := stableWebhookSessionID(req, convID)
 	source := stableWebhookSource(req)
 
 	var mergedText string
@@ -294,8 +327,10 @@ func stableWebhookSessionID(req WebhookRequest, convID string) string {
 }
 
 func stableWebhookUserID(req WebhookRequest) string {
-	_ = req
-	return requestidentity.DefaultUserID
+	if strings.TrimSpace(req.UserID) == "" {
+		return requestidentity.DefaultUserID
+	}
+	return requestidentity.NormalizeUserID(req.UserID)
 }
 
 func stableWebhookSource(req WebhookRequest) string {
@@ -325,11 +360,17 @@ func (s *service) getActiveModel() map[string]string {
 }
 
 func (s *service) getDefaultCharacterID() string {
+	return s.getDefaultCharacterIDForUser(requestidentity.DefaultUserID)
+}
+
+func (s *service) getDefaultCharacterIDForUser(userID string) string {
 	var id string
-	if err := s.db.Table("characters").Select("id").Where("is_active = 1").Limit(1).Row().Scan(&id); err == nil && id != "" {
+	query := s.ownerQuery(s.db.Table("characters").Select("id").Where("deleted_at IS NULL"), userID)
+	if err := query.Where("is_active = 1").Limit(1).Row().Scan(&id); err == nil && id != "" {
 		return id
 	}
-	if err := s.db.Table("characters").Select("id").Limit(1).Row().Scan(&id); err == nil && id != "" {
+	id = ""
+	if err := s.ownerQuery(s.db.Table("characters").Select("id").Where("deleted_at IS NULL"), userID).Limit(1).Row().Scan(&id); err == nil && id != "" {
 		return id
 	}
 	return ""
@@ -421,16 +462,26 @@ func truncate(s string, n int) string {
 	return string(runes[:n]) + "..."
 }
 
-func (s *service) ensureWebhookConversation(convID, characterID, channel, text string) {
+func (s *service) ensureWebhookConversation(convID, characterID, channel, text, userID string) error {
 	var count int64
-	s.db.Table("conversations").Where("id = ?", convID).Count(&count)
+	if err := s.ownerQuery(s.db.Table("conversations").Where("deleted_at IS NULL"), userID).Where("id = ?", convID).Count(&count).Error; err != nil {
+		return err
+	}
 	if count > 0 {
-		return
+		return nil
+	}
+	var foreign int64
+	if err := s.db.Table("conversations").Where("id = ?", convID).Count(&foreign).Error; err != nil {
+		return err
+	}
+	if foreign > 0 {
+		return fmt.Errorf("对话不存在")
 	}
 	title := text
 	if len([]rune(title)) > 50 {
 		title = string([]rune(title)[:50])
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
-	s.db.Exec("INSERT OR IGNORE INTO conversations (id, title, channel, character_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, 'webhook', ?, ?)", convID, title, channel, characterID, now, now)
+	owner := requestidentity.NormalizeUserID(userID)
+	return s.db.Exec("INSERT OR IGNORE INTO conversations (id, user_id, title, channel, character_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'webhook', ?, ?)", convID, owner, title, channel, characterID, now, now).Error
 }

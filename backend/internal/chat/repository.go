@@ -50,6 +50,13 @@ func NewRepository(ctx *app.AppContext) Repository {
 
 func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int64, error) {
 	query := r.db.Model(&Conversation{}).Where("deleted_at IS NULL")
+	if q.UserID != "" {
+		if q.IncludeLegacyDefault {
+			query = query.Where("user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default'", q.UserID)
+		} else {
+			query = query.Where("user_id = ?", q.UserID)
+		}
+	}
 	if q.Channel != "" {
 		query = query.Where("channel = ?", q.Channel)
 	}
@@ -136,9 +143,17 @@ func (r *repository) DeleteMessagesByConv(convID string) error {
 }
 
 func (r *repository) SearchMessages(q MessageSearchQuery) ([]Message, int64, error) {
-	query := r.db.Model(&Message{}).Where("deleted_at IS NULL AND content LIKE ?", "%"+q.Keyword+"%")
+	query := r.db.Model(&Message{}).Select("messages.*").Where("messages.deleted_at IS NULL AND messages.content LIKE ?", "%"+q.Keyword+"%")
+	if q.UserID != "" {
+		query = query.Joins("JOIN conversations ON conversations.id = messages.conversation_id").Where("conversations.deleted_at IS NULL")
+		if q.IncludeLegacyDefault {
+			query = query.Where("conversations.user_id = ? OR conversations.user_id = '' OR conversations.user_id IS NULL OR conversations.user_id = 'default'", q.UserID)
+		} else {
+			query = query.Where("conversations.user_id = ?", q.UserID)
+		}
+	}
 	if q.ConversationID != "" {
-		query = query.Where("conversation_id = ?", q.ConversationID)
+		query = query.Where("messages.conversation_id = ?", q.ConversationID)
 	}
 	var total int64
 	query.Count(&total)
@@ -152,7 +167,7 @@ func (r *repository) SearchMessages(q MessageSearchQuery) ([]Message, int64, err
 		q.PageSize = 50
 	}
 	var msgs []Message
-	err := query.Order("created_at DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&msgs).Error
+	err := query.Order("messages.created_at DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&msgs).Error
 	if msgs == nil {
 		msgs = []Message{}
 	}

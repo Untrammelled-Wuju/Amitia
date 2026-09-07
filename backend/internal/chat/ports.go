@@ -30,7 +30,7 @@ type EpisodicPort interface {
 }
 
 type WorldBookPort interface {
-	ToSystemPrompt(userMessage, assistantReply string) string
+	ToSystemPromptForUser(userID, characterID, userMessage, assistantReply string) string
 }
 
 type VisionPort interface {
@@ -38,12 +38,12 @@ type VisionPort interface {
 }
 
 type memoryPipelineLayerAdapter struct {
-	GenerateCandidatesFunc  func(conversationID string) ([]memory.MemoryCandidate, error)
-	AcceptCandidateFunc     func(id string) (*memory.Memory, error)
-	HybridSearchFunc        func(req *memory.VectorSearchRequest) ([]memory.HybridSearchResult, error)
-	RecordUseFunc           func(id string) (*memory.Memory, error)
-	NameFunc                func() string
-	ProcessFunc             func(ctx context.Context, convID string, messages []map[string]string, newReply string) error
+	GenerateCandidatesFunc func(conversationID string) ([]memory.MemoryCandidate, error)
+	AcceptCandidateFunc    func(id string) (*memory.Memory, error)
+	HybridSearchFunc       func(req *memory.VectorSearchRequest) ([]memory.HybridSearchResult, error)
+	RecordUseFunc          func(id string) (*memory.Memory, error)
+	NameFunc               func() string
+	ProcessFunc            func(ctx context.Context, convID string, messages []map[string]string, newReply string) error
 }
 
 func (a memoryPipelineLayerAdapter) GenerateCandidates(conversationID string) ([]memory.MemoryCandidate, error) {
@@ -117,11 +117,11 @@ func (a episodicPipelineLayerAdapter) Process(ctx context.Context, convID string
 }
 
 type worldBookPortAdapter struct {
-	ToSystemPromptFunc func(userMessage, assistantReply string) string
+	ToSystemPromptForUserFunc func(userID, characterID, userMessage, assistantReply string) string
 }
 
-func (a worldBookPortAdapter) ToSystemPrompt(userMessage, assistantReply string) string {
-	return a.ToSystemPromptFunc(userMessage, assistantReply)
+func (a worldBookPortAdapter) ToSystemPromptForUser(userID, characterID, userMessage, assistantReply string) string {
+	return a.ToSystemPromptForUserFunc(userID, characterID, userMessage, assistantReply)
 }
 
 type visionPortAdapter struct {

@@ -5,6 +5,7 @@ package chat
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/app"
 )
 
@@ -45,18 +46,19 @@ func registerChatRoutes(r *gin.RouterGroup, handler *Handler) {
 	}
 	modelGroup := r.Group("/model")
 	{
-		modelGroup.GET("/configs", handler.ListModels)
-		modelGroup.GET("/configs/:id", handler.GetModel)
-		modelGroup.POST("/configs", handler.CreateModel)
-		modelGroup.PUT("/configs/:id", handler.UpdateModel)
-		modelGroup.DELETE("/configs/:id", handler.DeleteModel)
-		modelGroup.POST("/configs/:id/activate", handler.ActivateModel)
-		modelGroup.POST("/configs/:id/active", handler.ActivateModel)
-		modelGroup.POST("/configs/:id/test", handler.TestModel)
-		modelGroup.POST("/test", handler.TestModelStandalone)
-		modelGroup.GET("/routes", handler.GetModelRoutes)
-		modelGroup.PUT("/routes", handler.UpdateModelRoutes)
-		modelGroup.POST("/detect-models", handler.DetectModels)
+		admin := security.SharedCoreAdminOnly()
+		modelGroup.GET("/configs", admin, handler.ListModels)
+		modelGroup.GET("/configs/:id", admin, handler.GetModel)
+		modelGroup.POST("/configs", admin, handler.CreateModel)
+		modelGroup.PUT("/configs/:id", admin, handler.UpdateModel)
+		modelGroup.DELETE("/configs/:id", admin, handler.DeleteModel)
+		modelGroup.POST("/configs/:id/activate", admin, handler.ActivateModel)
+		modelGroup.POST("/configs/:id/active", admin, handler.ActivateModel)
+		modelGroup.POST("/configs/:id/test", admin, handler.TestModel)
+		modelGroup.POST("/test", admin, handler.TestModelStandalone)
+		modelGroup.GET("/routes", admin, handler.GetModelRoutes)
+		modelGroup.PUT("/routes", admin, handler.UpdateModelRoutes)
+		modelGroup.POST("/detect-models", admin, handler.DetectModels)
 		modelGroup.GET("/providers", handler.ListProviders)
 		modelGroup.GET("/providers/:id/schema", handler.ProviderSchema)
 	}

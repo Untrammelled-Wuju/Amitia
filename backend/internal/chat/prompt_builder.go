@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/pkg/app"
+	"gorm.io/gorm"
 
 	"strings"
 )
@@ -52,12 +53,12 @@ func (s *service) sys1Builder(convID string, profile *character.RoleRuntimeProfi
 	// memories are recalled dynamically so relevance and retention decide what is
 	// remembered in this turn instead of being injected unconditionally.
 	var profileCtx, epiCtx, wbCtx string
+	userID := s.profileExtractionUserID(convID, characterID)
 	if s.profilePort != nil && characterID != "" {
-		userID := s.profileExtractionUserID(convID, characterID)
 		profileCtx = s.profilePort.ToSystemPrompt(userID, characterID)
 	}
 	if s.worldBookPort != nil {
-		wbPrompt := s.worldBookPort.ToSystemPrompt(userMessage, "")
+		wbPrompt := s.worldBookPort.ToSystemPromptForUser(userID, characterID, userMessage, "")
 		if wbPrompt != "" {
 			wbCtx = wbPrompt
 		}
@@ -354,6 +355,23 @@ func toneLabel(tone decision.ExpressionTone) string {
 	default:
 		return string(tone)
 	}
+}
+
+func (s *service) getRoleRuntimeProfileForUser(characterID, userID string) (*character.RoleRuntimeProfile, error) {
+	type scopedRuntimeProfileRepository interface {
+		GetRuntimeProfileForUser(id, userID string, includeLegacyDefault bool) (*character.RoleRuntimeProfile, error)
+	}
+	if scoped, ok := s.charRepo.(scopedRuntimeProfileRepository); ok {
+		return scoped.GetRuntimeProfileForUser(characterID, normalizeConversationOwner(userID), chatLocalSingleUserMode())
+	}
+	if strings.TrimSpace(characterID) != "" {
+		var owner string
+		query := s.db.Table("characters").Select("user_id").Where("id = ? AND deleted_at IS NULL", strings.TrimSpace(characterID))
+		if err := query.Row().Scan(&owner); err != nil || !conversationOwnerMatches(owner, userID) {
+			return nil, gorm.ErrRecordNotFound
+		}
+	}
+	return s.getRoleRuntimeProfile(characterID)
 }
 
 func (s *service) getRoleRuntimeProfile(characterID string) (*character.RoleRuntimeProfile, error) {

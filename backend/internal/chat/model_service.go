@@ -7,10 +7,135 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
+
+const maxModelDetectResponseBytes int64 = 4 << 20
+
+var blockedModelDetectIPs = map[string]struct{}{
+	"100.100.100.200": {},
+	"fd00:ec2::254":   {},
+}
+
+func validateModelDetectURL(raw string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("无效的模型服务地址: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("模型服务地址只允许 http/https")
+	}
+	if parsed.Hostname() == "" {
+		return fmt.Errorf("模型服务地址缺少主机名")
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("模型服务地址不得包含内嵌凭据")
+	}
+	if ip := net.ParseIP(parsed.Hostname()); ip != nil && blockedModelDetectIP(ip) {
+		return fmt.Errorf("模型服务地址指向受保护的网络地址")
+	}
+	return nil
+}
+
+func blockedModelDetectIP(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	if ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+	_, blocked := blockedModelDetectIPs[strings.ToLower(ip.String())]
+	return blocked
+}
+
+func modelDetectOrigin(raw *url.URL) string {
+	if raw == nil {
+		return ""
+	}
+	scheme := strings.ToLower(strings.TrimSpace(raw.Scheme))
+	host := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(raw.Hostname()), "."))
+	port := raw.Port()
+	if port == "" {
+		switch scheme {
+		case "http":
+			port = "80"
+		case "https":
+			port = "443"
+		}
+	}
+	return scheme + "://" + net.JoinHostPort(host, port)
+}
+
+func modelDetectHTTPClient() *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, fmt.Errorf("invalid model endpoint address: %w", err)
+		}
+		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		var lastErr error
+		for _, item := range ips {
+			if blockedModelDetectIP(item.IP) {
+				lastErr = fmt.Errorf("model endpoint resolved to a protected network address")
+				continue
+			}
+			conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(item.IP.String(), port))
+			if dialErr == nil {
+				return conn, nil
+			}
+			lastErr = dialErr
+		}
+		if lastErr == nil {
+			lastErr = fmt.Errorf("model endpoint did not resolve to a usable address")
+		}
+		return nil, lastErr
+	}
+	return &http.Client{
+		Timeout:   60 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("too many redirects")
+			}
+			if err := validateModelDetectURL(req.URL.String()); err != nil {
+				return err
+			}
+			if len(via) > 0 && modelDetectOrigin(req.URL) != modelDetectOrigin(via[0].URL) {
+				return fmt.Errorf("model endpoint cross-origin redirect is not allowed")
+			}
+			return nil
+		},
+	}
+}
+
+func newModelDetectRequest(rawURL string) (*http.Request, error) {
+	if err := validateModelDetectURL(rawURL); err != nil {
+		return nil, err
+	}
+	return http.NewRequest(http.MethodGet, rawURL, nil)
+}
+
+func readModelDetectBody(body io.Reader) ([]byte, error) {
+	limited := io.LimitReader(body, maxModelDetectResponseBytes+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxModelDetectResponseBytes {
+		return nil, fmt.Errorf("模型服务响应超过 %d 字节限制", maxModelDetectResponseBytes)
+	}
+	return data, nil
+}
 
 func (s *service) ListModels() ([]ModelConfig, error) {
 	return s.repo.ListModels()
@@ -77,15 +202,21 @@ func (s *service) DetectModels(baseURL, apiKey, apiType string) ([]ModelDetectIt
 
 func (s *service) detectOllamaModels(baseURL string) ([]ModelDetectItem, error) {
 	base := strings.TrimRight(baseURL, "/")
-	req, _ := http.NewRequest("GET", base+"/api/tags", nil)
-	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	req, err := newModelDetectRequest(base + "/api/tags")
+	if err != nil {
+		return nil, err
+	}
+	resp, err := modelDetectHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
 	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(rb))
+	rb, err := readModelDetectBody(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API 返回 %d", resp.StatusCode)
 	}
 	var r struct {
 		Models []struct {
@@ -104,14 +235,20 @@ func (s *service) detectOllamaModels(baseURL string) ([]ModelDetectItem, error) 
 
 func (s *service) detectOpenAIModels(baseURL, apiKey string) ([]ModelDetectItem, error) {
 	base := strings.TrimRight(baseURL, "/")
-	req, _ := http.NewRequest("GET", base+"/models", nil)
+	req, err := newModelDetectRequest(base + "/models")
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	resp, err := modelDetectHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
 	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
+	rb, err := readModelDetectBody(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("API 返回 %d", resp.StatusCode)
 	}
@@ -145,17 +282,26 @@ func (s *service) detectOpenAIModels(baseURL, apiKey string) ([]ModelDetectItem,
 
 func (s *service) detectGeminiModels(baseURL, apiKey string) ([]ModelDetectItem, error) {
 	base := strings.TrimRight(baseURL, "/")
-	url := fmt.Sprintf("%s/v1beta/models?key=%s&pageSize=100", base, apiKey)
-	req, _ := http.NewRequest("GET", url, nil)
+	query := url.Values{}
+	query.Set("key", apiKey)
+	query.Set("pageSize", "100")
+	endpoint := base + "/v1beta/models?" + query.Encode()
+	req, err := newModelDetectRequest(endpoint)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 60 * time.Second}).Do(req)
+	resp, err := modelDetectHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求失败: %w", err)
 	}
 	defer resp.Body.Close()
-	rb, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API 返回 %d: %s", resp.StatusCode, string(rb))
+	rb, err := readModelDetectBody(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API 返回 %d", resp.StatusCode)
 	}
 	var r struct {
 		Models []struct {
@@ -178,11 +324,42 @@ func (s *service) detectGeminiModels(baseURL, apiKey string) ([]ModelDetectItem,
 }
 
 func (s *service) detectAnthropicModels(baseURL, apiKey string) ([]ModelDetectItem, error) {
-	items := []ModelDetectItem{
-		{ID: "claude-sonnet-4-20250514", OwnedBy: "anthropic"},
-		{ID: "claude-3-7-sonnet-20250219", OwnedBy: "anthropic"},
-		{ID: "claude-3-5-haiku-20241022", OwnedBy: "anthropic"},
-		{ID: "claude-3-opus-20240229", OwnedBy: "anthropic"},
+	base := strings.TrimRight(baseURL, "/")
+	endpoint := base + "/v1/models?limit=1000"
+	if parsed, err := url.Parse(base); err == nil && strings.HasSuffix(strings.TrimRight(strings.ToLower(parsed.Path), "/"), "/v1") {
+		endpoint = base + "/models?limit=1000"
+	}
+	req, err := newModelDetectRequest(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Api-Key", apiKey)
+	req.Header.Set("Anthropic-Version", "2023-06-01")
+	resp, err := modelDetectHTTPClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	rb, err := readModelDetectBody(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API 返回 %d", resp.StatusCode)
+	}
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rb, &result); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+	items := make([]ModelDetectItem, 0, len(result.Data))
+	for _, model := range result.Data {
+		if id := strings.TrimSpace(model.ID); id != "" {
+			items = append(items, ModelDetectItem{ID: id, OwnedBy: "anthropic"})
+		}
 	}
 	return items, nil
 }

@@ -36,8 +36,22 @@ func (s *service) ListConversations(q ConversationQuery) (*ConversationListRespo
 	return &ConversationListResponse{Items: convs, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
 }
 
+func (s *service) ListConversationsForUser(q ConversationQuery, userID string) (*ConversationListResponse, error) {
+	q.UserID = normalizeConversationOwner(userID)
+	q.IncludeLegacyDefault = chatLocalSingleUserMode()
+	return s.ListConversations(q)
+}
+
 func (s *service) GetConversation(id string) (*Conversation, error) {
 	c, err := s.repo.GetConversation(id)
+	if err != nil {
+		return nil, fmt.Errorf("对话不存在")
+	}
+	return c, nil
+}
+
+func (s *service) GetConversationForUser(id, userID string) (*Conversation, error) {
+	c, err := s.requireConversationOwner(id, userID)
 	if err != nil {
 		return nil, fmt.Errorf("对话不存在")
 	}
@@ -49,6 +63,14 @@ func (s *service) CreateConversation(req *CreateConversationRequest) (*Conversat
 }
 
 func (s *service) CreateConversationForUser(req *CreateConversationRequest, userID string) (*Conversation, error) {
+	if req == nil {
+		return nil, fmt.Errorf("conversation request is required")
+	}
+	if strings.TrimSpace(req.CharacterID) != "" {
+		if _, err := s.getRoleRuntimeProfileForUser(req.CharacterID, userID); err != nil {
+			return nil, fmt.Errorf("角色不存在")
+		}
+	}
 	if req.Title == "" {
 		req.Title = "New Chat"
 	}
@@ -58,12 +80,13 @@ func (s *service) CreateConversationForUser(req *CreateConversationRequest, user
 	if req.Source == "" {
 		req.Source = "manual"
 	}
-	c := &Conversation{ID: uuid.New().String(), CharacterID: req.CharacterID, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
+	owner := normalizeConversationOwner(userID)
+	c := &Conversation{ID: uuid.New().String(), UserID: owner, CharacterID: req.CharacterID, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		if err := tx.Exec("INSERT INTO conversations (id, character_id, title, channel, source, peer_id, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
-			c.ID, c.CharacterID, c.Title, c.Channel, c.Source, c.PeerID, now, now).Error; err != nil {
+		if err := tx.Exec("INSERT INTO conversations (id, user_id, character_id, title, channel, source, peer_id, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+			c.ID, c.UserID, c.CharacterID, c.Title, c.Channel, c.Source, c.PeerID, now, now).Error; err != nil {
 			return err
 		}
 		if err := s.recordConversationChangeTx(tx, c, sync.OpCreate, 1, userID); err != nil {
@@ -78,33 +101,38 @@ func (s *service) CreateConversationForUser(req *CreateConversationRequest, user
 }
 
 func (s *service) EnsureChannelConversation(channel string) (*Conversation, error) {
+	return s.EnsureChannelConversationForUser(channel, requestidentity.DefaultUserID)
+}
+
+func (s *service) EnsureChannelConversationForUser(channel, userID string) (*Conversation, error) {
+	owner := normalizeConversationOwner(userID)
 	title := "微信对话"
 	if channel == "qq" {
 		title = "QQ对话"
 	}
-	convID := "conv-" + channel
 
-	c, err := s.repo.GetConversation(convID)
-	if err == nil && c != nil && c.ID == convID {
-		s.db.Exec("UPDATE conversations SET channel = ?, title = ?, source = 'system' WHERE id = ?", channel, title, convID)
+	var c Conversation
+	query := s.db.Where("channel = ? AND deleted_at IS NULL", channel)
+	query = applyConversationOwnerScope(query, userID)
+	if err := query.Order("CASE WHEN source = 'system' THEN 0 ELSE 1 END, updated_at DESC").First(&c).Error; err == nil {
+		if err := s.db.Model(&Conversation{}).Where("id = ?", c.ID).Updates(map[string]interface{}{
+			"user_id": owner, "channel": channel, "title": title, "source": "system",
+		}).Error; err != nil {
+			return nil, err
+		}
+		c.UserID = owner
 		c.Channel = channel
 		c.Title = title
 		c.Source = "system"
-		return c, nil
-	}
-
-	c, err = s.repo.GetConversationByChannel(channel)
-	if err == nil && c != nil && c.ID != "" {
-		s.db.Exec("UPDATE conversations SET channel = ?, title = ?, source = 'system' WHERE id = ?", channel, title, c.ID)
-		c.Channel = channel
-		c.Title = title
-		c.Source = "system"
-		return c, nil
+		return &c, nil
+	} else if err != gorm.ErrRecordNotFound {
+		return nil, err
 	}
 
 	now := time.Now().Format("2006-01-02 15:04:05")
-	c = &Conversation{
-		ID:          convID,
+	c = Conversation{
+		ID:          uuid.New().String(),
+		UserID:      owner,
 		CharacterID: "",
 		Title:       title,
 		Channel:     channel,
@@ -112,10 +140,10 @@ func (s *service) EnsureChannelConversation(channel string) (*Conversation, erro
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := s.repo.CreateConversation(c); err != nil {
+	if err := s.persistConversationWithChange(&c, owner); err != nil {
 		return nil, err
 	}
-	return c, nil
+	return &c, nil
 }
 
 func (s *service) RecalculateMessageCounts() (int64, error) {
@@ -125,8 +153,8 @@ func (s *service) RecalculateMessageCounts() (int64, error) {
 
 func (s *service) BackfillMissingConversations() (int64, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
-	result := s.db.Exec(`INSERT OR IGNORE INTO conversations (id, title, channel, source, created_at, updated_at)
-		SELECT DISTINCT m.conversation_id, m.conversation_id,
+	result := s.db.Exec(`INSERT OR IGNORE INTO conversations (id, user_id, title, channel, source, created_at, updated_at)
+		SELECT DISTINCT m.conversation_id, 'default', m.conversation_id,
 		CASE
 			WHEN m.conversation_id LIKE '%wechat%' THEN 'wechat'
 			WHEN m.conversation_id LIKE '%qq%' THEN 'qq'
@@ -162,6 +190,7 @@ func (s *service) DeleteConversationForUser(id string, userID string) (bool, err
 func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, userID string) (bool, error) {
 	var convRow struct {
 		ID          string
+		UserID      string
 		CharacterID string
 		Title       string
 		Channel     string
@@ -170,8 +199,11 @@ func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, userID string)
 		Revision    int64
 	}
 	if err := tx.Table("conversations").Where("id = ? AND deleted_at IS NULL", id).
-		Select("id", "character_id", "title", "channel", "source", "peer_id", "COALESCE(revision, 1) AS revision").Take(&convRow).Error; err != nil {
+		Select("id", "user_id", "character_id", "title", "channel", "source", "peer_id", "COALESCE(revision, 1) AS revision").Take(&convRow).Error; err != nil {
 		return false, err
+	}
+	if !conversationOwnerMatches(convRow.UserID, userID) {
+		return false, gorm.ErrRecordNotFound
 	}
 
 	var messages []struct {
@@ -256,7 +288,7 @@ func (s *service) tombstoneConversationTx(tx *gorm.DB, id string, userID string)
 	if result.RowsAffected == 0 {
 		return false, fmt.Errorf("会话版本冲突")
 	}
-	conversation := &Conversation{ID: convRow.ID, CharacterID: convRow.CharacterID, Title: convRow.Title, Channel: convRow.Channel, Source: convRow.Source, PeerID: convRow.PeerID}
+	conversation := &Conversation{ID: convRow.ID, UserID: convRow.UserID, CharacterID: convRow.CharacterID, Title: convRow.Title, Channel: convRow.Channel, Source: convRow.Source, PeerID: convRow.PeerID}
 	if err := s.recordConversationChangeTx(tx, conversation, sync.OpDelete, newRevision, userID); err != nil {
 		return false, err
 	}
@@ -268,9 +300,11 @@ func (s *service) DeleteAllConversations() error {
 }
 
 func (s *service) DeleteAllConversationsForUser(userID string) error {
+	var ids []string
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		var ids []string
-		if err := tx.Table("conversations").Where("deleted_at IS NULL").Pluck("id", &ids).Error; err != nil {
+		query := tx.Table("conversations").Where("deleted_at IS NULL")
+		query = applyConversationOwnerScope(query, userID)
+		if err := query.Pluck("id", &ids).Error; err != nil {
 			return err
 		}
 		for _, id := range ids {
@@ -283,7 +317,13 @@ func (s *service) DeleteAllConversationsForUser(userID string) error {
 	if err != nil {
 		return err
 	}
-	return pipelinecheckpoint.New(s.db).ResetAll()
+	checkpoint := pipelinecheckpoint.New(s.db)
+	for _, id := range ids {
+		if err := checkpoint.ResetConversation(id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *service) ChangeCharacter(convID, charID string) (*Conversation, error) {
@@ -291,7 +331,14 @@ func (s *service) ChangeCharacter(convID, charID string) (*Conversation, error) 
 }
 
 func (s *service) ChangeCharacterForUser(convID, charID, userID string) (*Conversation, error) {
-	conv, err := s.repo.GetConversation(convID)
+	charID = strings.TrimSpace(charID)
+	if charID == "" {
+		return nil, fmt.Errorf("角色不存在")
+	}
+	if _, err := s.getRoleRuntimeProfileForUser(charID, userID); err != nil {
+		return nil, fmt.Errorf("角色不存在")
+	}
+	conv, err := s.requireConversationOwner(convID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("会话不存在")
 	}
@@ -325,7 +372,7 @@ func (s *service) ChangeCharacterForUser(convID, charID, userID string) (*Conver
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.GetConversation(convID)
+	return s.requireConversationOwner(convID, userID)
 }
 
 func (s *service) GetStats() (*ChatStatsResponse, error) {
@@ -334,6 +381,35 @@ func (s *service) GetStats() (*ChatStatsResponse, error) {
 	var totalConvs int64
 	s.db.Table("conversations").Count(&totalConvs)
 	return &ChatStatsResponse{TodayMessages: todayMessages, TotalConversations: totalConvs}, nil
+}
+
+func (s *service) GetStatsForUser(userID string) (*ChatStatsResponse, error) {
+	convQuery := s.db.Table("conversations").Where("deleted_at IS NULL")
+	convQuery = applyConversationOwnerScope(convQuery, userID)
+	var totalConvs int64
+	if err := convQuery.Count(&totalConvs).Error; err != nil {
+		return nil, err
+	}
+	msgQuery := s.db.Table("messages AS m").Joins("JOIN conversations AS c ON c.id = m.conversation_id").
+		Where("m.deleted_at IS NULL AND c.deleted_at IS NULL AND date(m.created_at) = date('now', 'localtime')")
+	owner := normalizeConversationOwner(userID)
+	if chatLocalSingleUserMode() {
+		msgQuery = msgQuery.Where("c.user_id = ? OR c.user_id = '' OR c.user_id IS NULL OR c.user_id = ?", owner, requestidentity.DefaultUserID)
+	} else {
+		msgQuery = msgQuery.Where("c.user_id = ?", owner)
+	}
+	var todayMessages int64
+	if err := msgQuery.Count(&todayMessages).Error; err != nil {
+		return nil, err
+	}
+	return &ChatStatsResponse{TodayMessages: todayMessages, TotalConversations: totalConvs}, nil
+}
+
+func (s *service) ExportConversationForUser(convID, format, userID string) (string, error) {
+	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+		return "", fmt.Errorf("对话不存在")
+	}
+	return s.ExportConversation(convID, format)
 }
 
 func (s *service) ExportConversation(convID string, format string) (string, error) {

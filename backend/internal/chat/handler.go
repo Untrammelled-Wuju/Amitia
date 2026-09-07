@@ -3,6 +3,7 @@
 package chat
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +25,22 @@ type Handler struct {
 	service       Service
 	deliveryStore DeliveryStore
 	unifiedEntry  *interaction.UnifiedEntry
+}
+
+type conversationReadScopedService interface {
+	ListConversationsForUser(q ConversationQuery, userID string) (*ConversationListResponse, error)
+	GetConversationForUser(id, userID string) (*Conversation, error)
+	GetMessagesForUser(convID, userID string, page, pageSize int) ([]Message, int64, error)
+	SearchMessagesForUser(q MessageSearchQuery, userID string) (*MessageSearchResponse, error)
+	GetStatsForUser(userID string) (*ChatStatsResponse, error)
+	ExportConversationForUser(convID, format, userID string) (string, error)
+}
+
+type summaryReadScopedService interface {
+	GetConversationSummaryForUser(convID, userID string) (*ConversationSummary, error)
+	UpdateConversationSummaryForUser(convID, summaryText, userID string) (*ConversationSummary, error)
+	DeleteConversationSummaryForUser(convID, userID string) error
+	GenerateConversationSummaryForUser(ctx context.Context, convID, userID string) (*ConversationSummary, error)
 }
 
 type conversationChangeScopedService interface {
@@ -59,7 +76,13 @@ func NewHandlerWithUnifiedEntryAndDelivery(srv Service, entry *interaction.Unifi
 func (h *Handler) ListConversations(c *gin.Context) {
 	var q ConversationQuery
 	c.ShouldBindQuery(&q)
-	resp, err := h.service.ListConversations(q)
+	var resp *ConversationListResponse
+	var err error
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		resp, err = scoped.ListConversationsForUser(q, requestidentity.ResolveGin(c, ""))
+	} else {
+		resp, err = h.service.ListConversations(q)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -91,7 +114,14 @@ func (h *Handler) GetMessages(c *gin.Context) {
 	id := c.Param("id")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
-	msgs, total, err := h.service.GetMessages(id, page, pageSize)
+	var msgs []Message
+	var total int64
+	var err error
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		msgs, total, err = scoped.GetMessagesForUser(id, requestidentity.ResolveGin(c, ""), page, pageSize)
+	} else {
+		msgs, total, err = h.service.GetMessages(id, page, pageSize)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -167,7 +197,13 @@ func (h *Handler) SearchMessages(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "关键词不能为空", nil)
 		return
 	}
-	resp, err := h.service.SearchMessages(q)
+	var resp *MessageSearchResponse
+	var err error
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		resp, err = scoped.SearchMessagesForUser(q, requestidentity.ResolveGin(c, ""))
+	} else {
+		resp, err = h.service.SearchMessages(q)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -199,7 +235,13 @@ func (h *Handler) ChangeCharacter(c *gin.Context) {
 }
 
 func (h *Handler) Stats(c *gin.Context) {
-	stats, err := h.service.GetStats()
+	var stats *ChatStatsResponse
+	var err error
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		stats, err = scoped.GetStatsForUser(requestidentity.ResolveGin(c, ""))
+	} else {
+		stats, err = h.service.GetStats()
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -213,6 +255,7 @@ func (h *Handler) Chat(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
+	req.UserID = requestidentity.ResolveGin(c, req.UserID)
 	if h.unifiedEntry != nil {
 		channel := strings.TrimSpace(req.Channel)
 		if channel == "" {
@@ -241,7 +284,7 @@ func (h *Handler) Chat(c *gin.Context) {
 			Channel:        channel,
 			Source:         source,
 			PeerID:         req.PeerID,
-			UserID:         requestidentity.ResolveGin(c, req.UserID),
+			UserID:         req.UserID,
 			DeviceTimezone: deviceTimezone,
 			SessionID:      req.SessionID,
 			RequestID:      req.RequestID,
@@ -303,6 +346,14 @@ func (h *Handler) writeUnifiedEntryError(c *gin.Context, err error) {
 	}
 }
 
+func redactModelConfigForResponse(cfg *ModelConfig) {
+	if cfg == nil {
+		return
+	}
+	cfg.HasAPIKey = cfg.APIKey != ""
+	cfg.APIKey = ""
+}
+
 func (h *Handler) ListModels(c *gin.Context) {
 	models, err := h.service.ListModels()
 	if err != nil {
@@ -314,8 +365,7 @@ func (h *Handler) ListModels(c *gin.Context) {
 		if m.APIType == "doubao-vision" {
 			continue
 		}
-		m.HasAPIKey = m.APIKey != ""
-		m.APIKey = ""
+		redactModelConfigForResponse(&m)
 		filtered = append(filtered, m)
 	}
 	util.SuccessResponse(c, filtered)
@@ -401,8 +451,7 @@ func (h *Handler) CreateModel(c *gin.Context) {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
-	result.HasAPIKey = result.APIKey != ""
-	result.APIKey = ""
+	redactModelConfigForResponse(result)
 	util.SuccessMsgResponse(c, "模型配置已创建", result)
 }
 
@@ -418,6 +467,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
+	redactModelConfigForResponse(result)
 	util.SuccessMsgResponse(c, "模型配置已更新", result)
 }
 
@@ -437,6 +487,7 @@ func (h *Handler) ActivateModel(c *gin.Context) {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
+	redactModelConfigForResponse(result)
 	util.SuccessMsgResponse(c, "模型已激活", result)
 }
 
@@ -486,7 +537,13 @@ func (h *Handler) DetectModels(c *gin.Context) {
 }
 
 func (h *Handler) GetSummary(c *gin.Context) {
-	summary, err := h.service.GetConversationSummary(c.Param("id"))
+	var summary *ConversationSummary
+	var err error
+	if scoped, ok := h.service.(summaryReadScopedService); ok {
+		summary, err = scoped.GetConversationSummaryForUser(c.Param("id"), requestidentity.ResolveGin(c, ""))
+	} else {
+		summary, err = h.service.GetConversationSummary(c.Param("id"))
+	}
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			util.SuccessResponse(c, gin.H{"conversationId": c.Param("id"), "summaryText": ""})
@@ -506,7 +563,13 @@ func (h *Handler) UpdateSummary(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "summaryText 不能为空", nil)
 		return
 	}
-	summary, err := h.service.UpdateConversationSummary(c.Param("id"), body.SummaryText)
+	var summary *ConversationSummary
+	var err error
+	if scoped, ok := h.service.(summaryReadScopedService); ok {
+		summary, err = scoped.UpdateConversationSummaryForUser(c.Param("id"), body.SummaryText, requestidentity.ResolveGin(c, ""))
+	} else {
+		summary, err = h.service.UpdateConversationSummary(c.Param("id"), body.SummaryText)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -515,7 +578,13 @@ func (h *Handler) UpdateSummary(c *gin.Context) {
 }
 
 func (h *Handler) DeleteSummary(c *gin.Context) {
-	if err := h.service.DeleteConversationSummary(c.Param("id")); err != nil {
+	var err error
+	if scoped, ok := h.service.(summaryReadScopedService); ok {
+		err = scoped.DeleteConversationSummaryForUser(c.Param("id"), requestidentity.ResolveGin(c, ""))
+	} else {
+		err = h.service.DeleteConversationSummary(c.Param("id"))
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
@@ -523,7 +592,13 @@ func (h *Handler) DeleteSummary(c *gin.Context) {
 }
 
 func (h *Handler) GenerateSummary(c *gin.Context) {
-	summary, err := h.service.GenerateConversationSummary(c.Request.Context(), c.Param("id"))
+	var summary *ConversationSummary
+	var err error
+	if scoped, ok := h.service.(summaryReadScopedService); ok {
+		summary, err = scoped.GenerateConversationSummaryForUser(c.Request.Context(), c.Param("id"), requestidentity.ResolveGin(c, ""))
+	} else {
+		summary, err = h.service.GenerateConversationSummary(c.Request.Context(), c.Param("id"))
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -597,7 +672,13 @@ func (h *Handler) Export(c *gin.Context) {
 	}
 
 	convID := body.ConversationIDs[0]
-	url, err := h.service.ExportConversation(convID, body.Format)
+	var url string
+	var err error
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		url, err = scoped.ExportConversationForUser(convID, body.Format, requestidentity.ResolveGin(c, ""))
+	} else {
+		url, err = h.service.ExportConversation(convID, body.Format)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -609,7 +690,7 @@ func (h *Handler) GetModel(c *gin.Context) {
 	models, _ := h.service.ListModels()
 	for _, m := range models {
 		if m.ID == id {
-			m.HasAPIKey = m.APIKey != ""
+			redactModelConfigForResponse(&m)
 			util.SuccessResponse(c, m)
 			return
 		}
@@ -704,6 +785,12 @@ func (h *Handler) TestModelStandalone(c *gin.Context) {
 
 func (h *Handler) CompressionStatus(c *gin.Context) {
 	id := c.Param("id")
+	if scoped, ok := h.service.(conversationReadScopedService); ok {
+		if _, err := scoped.GetConversationForUser(id, requestidentity.ResolveGin(c, "")); err != nil {
+			util.ErrorResponse(c, response.NotFound, "会话不存在", nil)
+			return
+		}
+	}
 	status := h.service.GetCompressionStatus(id)
 	util.SuccessResponse(c, status)
 }

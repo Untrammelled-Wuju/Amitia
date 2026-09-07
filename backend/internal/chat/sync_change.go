@@ -2,6 +2,7 @@ package chat
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/requestidentity"
@@ -21,8 +22,12 @@ func (s *service) recordConversationChangeTx(tx *gorm.DB, c *Conversation, op sy
 	if s.changeRecorder == nil || c == nil {
 		return nil
 	}
+	if c.UserID == "" {
+		c.UserID = normalizeChangeUserID(userID)
+	}
 	payload, err := json.Marshal(map[string]interface{}{
 		"id":          c.ID,
+		"userId":      c.UserID,
 		"characterId": c.CharacterID,
 		"title":       c.Title,
 		"channel":     c.Channel,
@@ -57,6 +62,9 @@ func (s *service) recordMessageChangeTx(tx *gorm.DB, m *Message, op syncapi.Oper
 }
 
 func (s *service) persistConversationWithChange(c *Conversation, userID string) error {
+	if c != nil && strings.TrimSpace(c.UserID) == "" {
+		c.UserID = normalizeChangeUserID(userID)
+	}
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(c).Error; err != nil {
 			return err

@@ -43,12 +43,12 @@ func (p *agentTestProcessor) ProcessMessageCtx(ctx context.Context, req *interac
 	return nil, errors.New("unexpected call")
 }
 
-func TestStableWebhookUserIDReturnsDefault(t *testing.T) {
+func TestStableWebhookUserIDUsesAuthenticatedScope(t *testing.T) {
 	if got := stableWebhookUserID(WebhookRequest{}); got != requestidentity.DefaultUserID {
 		t.Fatalf("expected %q, got %q", requestidentity.DefaultUserID, got)
 	}
-	if got := stableWebhookUserID(WebhookRequest{UserID: "web-user"}); got != requestidentity.DefaultUserID {
-		t.Fatalf("expected %q, got %q", requestidentity.DefaultUserID, got)
+	if got := stableWebhookUserID(WebhookRequest{UserID: "web-user"}); got != "web-user" {
+		t.Fatalf("expected %q, got %q", "web-user", got)
 	}
 	if got := stableWebhookUserID(WebhookRequest{SenderID: "wechat-openid"}); got != requestidentity.DefaultUserID {
 		t.Fatalf("expected %q, got %q", requestidentity.DefaultUserID, got)

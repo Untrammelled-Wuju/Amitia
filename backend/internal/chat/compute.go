@@ -44,6 +44,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		requestID = uuid.New().String()
 	}
 	req.RequestID = requestID
+	req.UserID = normalizeConversationOwner(req.UserID)
 	channel := strings.TrimSpace(req.Channel)
 	if channel == "" {
 		channel = "web"
@@ -66,7 +67,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		"has_image":     strings.TrimSpace(req.ImageUrl) != "",
 		"has_video":     strings.TrimSpace(req.VideoUrl) != "",
 	}, "process message input received")
-	runtimeProfile, err := s.getRoleRuntimeProfile(req.CharacterID)
+	runtimeProfile, err := s.getRoleRuntimeProfileForUser(req.CharacterID, req.UserID)
 	if err != nil {
 		applog.TraceError(trace.WithStage("runtime_profile_load_failed"), nil, err, "process message runtime profile load failed")
 		if req.CharacterID != "" {
@@ -79,18 +80,26 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	convID := req.ConversationID
 	if convID == "" {
 		var existing struct{ ID string }
-		err := s.db.Table("conversations").Select("id").Where("character_id = ? AND channel = ?", charID, channel).Order("updated_at DESC").Limit(1).Row().Scan(&existing.ID)
+		query := s.db.Table("conversations").Select("id").Where("deleted_at IS NULL AND character_id = ? AND channel = ?", charID, channel)
+		query = applyConversationOwnerScope(query, req.UserID)
+		err := query.Order("updated_at DESC").Limit(1).Row().Scan(&existing.ID)
 		if err == nil && existing.ID != "" {
 			convID = existing.ID
 		} else {
 			convID = uuid.New().String()
-			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
-			s.db.Table("characters").Where("id = ?", charID).Update("conversation_id", convID)
+			conversation := &Conversation{ID: convID, UserID: req.UserID, CharacterID: charID, Title: req.Message, Channel: channel, Source: source}
+			if err := s.persistConversationWithChange(conversation, req.UserID); err != nil {
+				return nil, err
+			}
+			applyConversationOwnerScope(s.db.Table("characters").Where("id = ?", charID), req.UserID).Update("conversation_id", convID)
 		}
-	} else if err := s.validateConversationScope(convID, charID, channel); err != nil {
+	} else if err := s.validateConversationScope(convID, charID, channel, req.UserID); err != nil {
 		if strings.Contains(err.Error(), "会话不存在") {
-			s.repo.CreateConversation(&Conversation{ID: convID, CharacterID: charID, Title: req.Message, Channel: channel})
-			s.db.Table("characters").Where("id = ?", charID).Update("conversation_id", convID)
+			conversation := &Conversation{ID: convID, UserID: req.UserID, CharacterID: charID, Title: req.Message, Channel: channel, Source: source}
+			if createErr := s.persistConversationWithChange(conversation, req.UserID); createErr != nil {
+				return nil, createErr
+			}
+			applyConversationOwnerScope(s.db.Table("characters").Where("id = ?", charID), req.UserID).Update("conversation_id", convID)
 		} else {
 			applog.TraceError(trace.WithStage("conversation_scope_invalid"), applog.Fields{
 				"conversation_id": convID,

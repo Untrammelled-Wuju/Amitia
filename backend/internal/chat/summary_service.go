@@ -13,6 +13,34 @@ import (
 	"gorm.io/gorm"
 )
 
+func (s *service) GetConversationSummaryForUser(convID, userID string) (*ConversationSummary, error) {
+	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+		return nil, err
+	}
+	return s.GetConversationSummary(convID)
+}
+
+func (s *service) UpdateConversationSummaryForUser(convID, summaryText, userID string) (*ConversationSummary, error) {
+	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+		return nil, err
+	}
+	return s.UpdateConversationSummary(convID, summaryText)
+}
+
+func (s *service) DeleteConversationSummaryForUser(convID, userID string) error {
+	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+		return err
+	}
+	return s.DeleteConversationSummary(convID)
+}
+
+func (s *service) GenerateConversationSummaryForUser(ctx context.Context, convID, userID string) (*ConversationSummary, error) {
+	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+		return nil, err
+	}
+	return s.GenerateConversationSummary(ctx, convID)
+}
+
 func (s *service) GetConversationSummary(convID string) (*ConversationSummary, error) {
 	convID = strings.TrimSpace(convID)
 	if convID == "" {

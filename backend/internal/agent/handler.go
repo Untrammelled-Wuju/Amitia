@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -28,7 +29,15 @@ func (h *Handler) Test(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	result, err := h.service.Test(body.CharacterID, body.Message)
+	var result map[string]interface{}
+	var err error
+	if scoped, ok := h.service.(interface {
+		TestForUser(userID, characterID, message string) (map[string]interface{}, error)
+	}); ok {
+		result, err = scoped.TestForUser(requestidentity.ResolveGin(c, ""), body.CharacterID, body.Message)
+	} else {
+		result, err = h.service.Test(body.CharacterID, body.Message)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.BusinessError, "AI 调用失败: "+err.Error(), nil)
 		return
@@ -60,6 +69,7 @@ func (h *Handler) Webhook(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
+	body.UserID = requestidentity.ResolveGin(c, "")
 	result, err := h.service.Webhook(c.Request.Context(), WebhookRequest{
 		Channel:        body.Channel,
 		AccountID:      body.AccountID,
@@ -89,7 +99,15 @@ func (h *Handler) ContextPreview(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "conversationId 不能为空", nil)
 		return
 	}
-	result, err := h.service.ContextPreview(convID)
+	var result map[string]interface{}
+	var err error
+	if scoped, ok := h.service.(interface {
+		ContextPreviewForUser(userID, convID string) (map[string]interface{}, error)
+	}); ok {
+		result, err = scoped.ContextPreviewForUser(requestidentity.ResolveGin(c, ""), convID)
+	} else {
+		result, err = h.service.ContextPreview(convID)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return

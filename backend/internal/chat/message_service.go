@@ -20,6 +20,13 @@ func (s *service) GetMessages(convID string, page, pageSize int) ([]Message, int
 	return s.repo.GetMessages(convID, page, pageSize)
 }
 
+func (s *service) GetMessagesForUser(convID, userID string, page, pageSize int) ([]Message, int64, error) {
+	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+		return nil, 0, err
+	}
+	return s.repo.GetMessages(convID, page, pageSize)
+}
+
 func (s *service) GetMessagesScoped(convID string, characterID string, page, pageSize int) ([]Message, int64, error) {
 	if err := s.requireConversationCharacter(convID, characterID); err != nil {
 		return nil, 0, err
@@ -47,6 +54,9 @@ func (s *service) DeleteMessages(convID string) error {
 }
 
 func (s *service) DeleteMessagesForUser(convID string, userID string) error {
+	if _, err := s.requireConversationOwner(convID, userID); err != nil {
+		return err
+	}
 	var attachments []MessageAttachment
 	if s.artifactResolver != nil {
 		attachments, _ = s.repo.GetAttachmentsByConv(convID)
@@ -110,18 +120,19 @@ func (s *service) DeleteSingleMessage(id string) error {
 }
 
 func (s *service) DeleteSingleMessageForUser(id string, userID string) error {
-	var msg Message
-	if err := s.db.Where("id = ?", id).First(&msg).Error; err != nil {
+	owned, err := s.requireMessageOwner(id, userID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("消息不存在")
 		}
 		return err
 	}
+	msg := *owned
 	var attachments []MessageAttachment
 	if s.artifactResolver != nil {
 		attachments, _ = s.repo.GetMessageAttachments(id)
 	}
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var revision int64
 		if err := tx.Table("messages").Where("id = ?", id).Select("COALESCE(revision, 1)").Scan(&revision).Error; err != nil {
 			return err
@@ -185,6 +196,17 @@ func (s *service) SearchMessages(q MessageSearchQuery) (*MessageSearchResponse, 
 		items = []Message{}
 	}
 	return &MessageSearchResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
+}
+
+func (s *service) SearchMessagesForUser(q MessageSearchQuery, userID string) (*MessageSearchResponse, error) {
+	q.UserID = normalizeConversationOwner(userID)
+	q.IncludeLegacyDefault = chatLocalSingleUserMode()
+	if q.ConversationID != "" {
+		if _, err := s.requireConversationOwner(q.ConversationID, userID); err != nil {
+			return nil, err
+		}
+	}
+	return s.SearchMessages(q)
 }
 
 func (s *service) SearchMessagesScoped(q MessageSearchQuery, characterID string) (*MessageSearchResponse, error) {
@@ -260,7 +282,7 @@ func (s *service) Chat(req *ChatRequest) (*ChatResponse, error) {
 	}, nil
 }
 
-func (s *service) validateConversationScope(convID, characterID, channel string) error {
+func (s *service) validateConversationScope(convID, characterID, channel, userID string) error {
 	convID = strings.TrimSpace(convID)
 	if convID == "" {
 		return nil
@@ -271,6 +293,9 @@ func (s *service) validateConversationScope(convID, characterID, channel string)
 			return fmt.Errorf("会话不存在")
 		}
 		return err
+	}
+	if !conversationOwnerMatches(conv.UserID, userID) {
+		return fmt.Errorf("%w: user_id", ErrConversationScopeMismatch)
 	}
 	actualCharacterID := strings.TrimSpace(conv.CharacterID)
 	expectedCharacterID := strings.TrimSpace(characterID)

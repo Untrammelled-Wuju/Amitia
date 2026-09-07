@@ -49,6 +49,7 @@ type cleanupPlan struct {
 
 func (s *service) PreviewCleanup(req CleanupRequest, userID string) (*CleanupPreview, error) {
 	query := s.db.Table("conversations").Where("deleted_at IS NULL")
+	query = applyConversationOwnerScope(query, userID)
 	threshold := strings.TrimSpace(req.BeforeDate)
 	if req.OlderThanDays > 0 {
 		candidate := time.Now().Add(-time.Duration(req.OlderThanDays) * 24 * time.Hour).Format("2006-01-02 15:04:05")
@@ -86,7 +87,14 @@ func (s *service) PreviewCleanup(req CleanupRequest, userID string) (*CleanupPre
 			return nil, err
 		}
 		if req.IncludeMemories {
-			if err := s.db.Model(&memorymodel.Memory{}).Where("source_conv_id IN ?", ids).Count(&memoryCount).Error; err != nil {
+			memoryQuery := s.db.Model(&memorymodel.Memory{}).Where("source_conv_id IN ?", ids)
+			owner := normalizeConversationOwner(userID)
+			if chatLocalSingleUserMode() {
+				memoryQuery = memoryQuery.Where("user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default'", owner)
+			} else {
+				memoryQuery = memoryQuery.Where("user_id = ?", owner)
+			}
+			if err := memoryQuery.Count(&memoryCount).Error; err != nil {
 				return nil, err
 			}
 		}
@@ -147,7 +155,14 @@ func (s *service) ConfirmCleanup(previewID, confirmText, userID string) (*Cleanu
 			}
 		}
 		if plan.IncludeMemories && len(plan.ConversationIDs) > 0 {
-			result := tx.Where("source_conv_id IN ?", plan.ConversationIDs).Delete(&memorymodel.Memory{})
+			memoryQuery := tx.Where("source_conv_id IN ?", plan.ConversationIDs)
+			owner := normalizeConversationOwner(userID)
+			if chatLocalSingleUserMode() {
+				memoryQuery = memoryQuery.Where("user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default'", owner)
+			} else {
+				memoryQuery = memoryQuery.Where("user_id = ?", owner)
+			}
+			result := memoryQuery.Delete(&memorymodel.Memory{})
 			if result.Error != nil {
 				return result.Error
 			}

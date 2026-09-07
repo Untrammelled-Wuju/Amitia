@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/u-ai/backend/config"
 )
 
 type Tool struct {
@@ -96,6 +98,23 @@ func UnknownResult(code, content string) ToolCallResult {
 }
 
 type ToolCallFunc func(ctx context.Context, execCtx ToolExecutionContext, args map[string]interface{}) ToolCallResult
+
+func effectiveToolUserID(execCtx ToolExecutionContext) (string, *ToolCallResult) {
+	userID := strings.TrimSpace(execCtx.User)
+	if userID != "" {
+		return userID, nil
+	}
+	if config.AppCfg == nil || strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
+		return "default", nil
+	}
+	result := ErrorResult("missing_user_scope", "ERROR: authenticated user scope is required")
+	result.Audit = map[string]interface{}{
+		"conversation_id": strings.TrimSpace(execCtx.ConversationID),
+		"character_id":    strings.TrimSpace(execCtx.CharacterID),
+		"channel":         strings.TrimSpace(execCtx.Channel),
+	}
+	return "", &result
+}
 
 func requireScopedWrite(execCtx ToolExecutionContext) (ToolExecutionContext, *ToolCallResult) {
 	execCtx.CharacterID = strings.TrimSpace(execCtx.CharacterID)

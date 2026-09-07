@@ -19,7 +19,6 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/psyche"
-	"github.com/u-ai/backend/internal/qdrant"
 	syncapi "github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/temporal"
 	visioncfg "github.com/u-ai/backend/internal/vision"
@@ -396,13 +395,24 @@ func getVisionModelConfig() (*visioncfg.VisionConfig, error) {
 	return cfg, nil
 }
 
+// delegatedDerivedMemoryLayer keeps the diagnostic pipeline honest. Vector and
+// graph writes are already executed by the canonical memory/profile/episodic
+// write paths; running placeholder layers here previously reported "completed"
+// without doing any work. The skipped state tells the UI that these derived
+// projections are delegated to those authoritative write paths.
+type delegatedDerivedMemoryLayer struct {
+	name string
+}
+
+func (l delegatedDerivedMemoryLayer) Name() string { return l.name }
+
+func (l delegatedDerivedMemoryLayer) Process(context.Context, string, []map[string]string, string) error {
+	return memory.ErrSkip
+}
+
 func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPort ProfilePort, epiPort EpisodicPort, wbPort WorldBookPort, comp *Compressor, visionPort VisionPort, graphSvc graph.Service, psycheStore psyche.PsycheStore, recorder ...syncapi.ChangeRecorder) Service {
 	if visionPort != nil {
 		SetVisionModelConfigProvider(visionPort.GetActive)
-	}
-	graphLayer := graphSvc
-	if graphLayer == nil {
-		graphLayer = graph.NewStubService()
 	}
 	wmCache := NewWorkingMemoryCache(30 * time.Minute)
 	stateProvider := NewConversationStateProvider(wmCache)
@@ -411,8 +421,8 @@ func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPo
 		profPort,
 		epiPort,
 		memPort,
-		qdrant.NewQdrantClient(),
-		graphLayer,
+		delegatedDerivedMemoryLayer{name: "向量同步（随记忆写入执行）"},
+		delegatedDerivedMemoryLayer{name: "图谱关系（随记忆写入执行）"},
 	)
 	var r syncapi.ChangeRecorder
 	if len(recorder) > 0 {

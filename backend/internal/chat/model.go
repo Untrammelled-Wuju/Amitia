@@ -68,6 +68,7 @@ type ModelCapabilities = modelprotocol.ModelCapabilities
 
 type Conversation struct {
 	ID           string `gorm:"column:id;primaryKey" json:"id"`
+	UserID       string `gorm:"column:user_id;not null;default:default;index" json:"-"`
 	CharacterID  string `gorm:"column:character_id" json:"characterId"`
 	Title        string `gorm:"column:title" json:"title"`
 	Channel      string `gorm:"column:channel;default:web" json:"channel"`
@@ -249,20 +250,24 @@ type CreateConversationRequest struct {
 }
 
 type ConversationQuery struct {
-	Page        int    `form:"page"`
-	PageSize    int    `form:"pageSize"`
-	Channel     string `form:"channel"`
-	Source      string `form:"source"`
-	CharacterID string `form:"characterId"`
-	Keyword     string `form:"keyword"`
+	UserID               string `form:"-" json:"-"`
+	IncludeLegacyDefault bool   `form:"-" json:"-"`
+	Page                 int    `form:"page"`
+	PageSize             int    `form:"pageSize"`
+	Channel              string `form:"channel"`
+	Source               string `form:"source"`
+	CharacterID          string `form:"characterId"`
+	Keyword              string `form:"keyword"`
 }
 
 type MessageSearchQuery struct {
-	Keyword        string `form:"keyword" binding:"required"`
-	ConversationID string `form:"conversationId"`
-	Sequence       int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
-	Page           int    `form:"page"`
-	PageSize       int    `form:"pageSize"`
+	UserID               string `form:"-" json:"-"`
+	IncludeLegacyDefault bool   `form:"-" json:"-"`
+	Keyword              string `form:"keyword" binding:"required"`
+	ConversationID       string `form:"conversationId"`
+	Sequence             int64  `gorm:"column:sequence;not null;default:0;index" json:"sequence"`
+	Page                 int    `form:"page"`
+	PageSize             int    `form:"pageSize"`
 }
 
 type ChatResponse struct {
