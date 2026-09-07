@@ -3,13 +3,19 @@
 package companion
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 func RegisterCompanionRouter(r *gin.RouterGroup, svc Service) {
 	handler := NewHandler(svc)
 
 	comp := r.Group("/companion")
+	comp.Use(companionCharacterScopeGuard(svc))
 	{
 		comp.GET("/sleep-setting", handler.GetSleepSetting)
 		comp.PUT("/sleep-setting", handler.UpdateSleepSetting)
@@ -65,5 +71,25 @@ func RegisterCompanionRouter(r *gin.RouterGroup, svc Service) {
 		comp.POST("/debug/trigger-daily-regeneration", handler.TriggerDailyRegeneration)
 
 		comp.GET("/rule-logs", handler.GetRuleLogs)
+	}
+}
+
+func companionCharacterScopeGuard(svc Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
+			c.Next()
+			return
+		}
+		characterID := strings.TrimSpace(c.Query("characterId"))
+		if characterID == "" {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "characterId is required in shared cloud mode"})
+			return
+		}
+		owned, err := svc.CharacterOwnedBy(requestidentity.ResolveGin(c, ""), characterID)
+		if err != nil || !owned {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"code": 404, "msg": "character not found"})
+			return
+		}
+		c.Next()
 	}
 }

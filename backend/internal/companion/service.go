@@ -5,21 +5,25 @@ package companion
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/embedding"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
 
 type Service interface {
+	CharacterOwnedBy(userID, characterID string) (bool, error)
 	AttachAssistantContactRecorder(recorder AssistantContactRecorder)
-	DispatchProactiveMessage(ctx context.Context, characterID, conversationID, channel, prompt, requestID string) (string, error)
+	DispatchProactiveMessage(ctx context.Context, userID, characterID, conversationID, channel, prompt, requestID string) (string, error)
 	GetSleepSetting(characterID string) map[string]interface{}
 	UpdateSleepSetting(body map[string]interface{}, characterID string) map[string]interface{}
 	GetSchedule(date string, characterID string) map[string]interface{}
@@ -114,6 +118,25 @@ type burstScopeState struct {
 
 func NewService(ctx *app.AppContext) Service {
 	return &service{db: ctx.DB, embeddingSvc: embedding.NewService(ctx.DB)}
+}
+
+func (s *service) CharacterOwnedBy(userID, characterID string) (bool, error) {
+	characterID = strings.TrimSpace(characterID)
+	if characterID == "" {
+		return false, nil
+	}
+	owner := requestidentity.NormalizeUserID(userID)
+	query := s.db.Table("characters").Where("id = ? AND deleted_at IS NULL", characterID)
+	if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
+		query = query.Where("(user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = ?)", owner, requestidentity.DefaultUserID)
+	} else {
+		query = query.Where("user_id = ?", owner)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (s *service) AttachUnifiedEntry(entry *interaction.UnifiedEntry) {

@@ -25,10 +25,19 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 	}
 	filteredMsgs := filterExtractableMessages(pending)
 	if len(filteredMsgs) == 0 {
-		return manager.AdvanceLeased(convID, "memory", maxSequence, fmt.Sprintf("memory:%s:%d", convID, maxSequence), leaseOwner)
+		if err := manager.AdvanceLeased(convID, "memory", maxSequence, fmt.Sprintf("memory:%s:%d", convID, maxSequence), leaseOwner); err != nil {
+			_ = manager.ReleaseLease(convID, "memory", leaseOwner)
+			return err
+		}
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		_ = manager.ReleaseLease(convID, "memory", leaseOwner)
+		return err
 	}
 	candidates, err := s.generateCandidatesFromMessages(convID, filteredMsgs)
 	if err != nil {
+		_ = manager.ReleaseLease(convID, "memory", leaseOwner)
 		return err
 	}
 	existingByExact := make(map[string]string)
@@ -37,7 +46,10 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 		Key   string
 		Value string
 	}
-	s.db.Table("memories").Select("id, key, value").Where("verified_status NOT IN (?, ?)", "replaced", "tombstone").Find(&existingMemories)
+	if err := s.db.Table("memories").Select("id, key, value").Where("verified_status NOT IN (?, ?)", "replaced", "tombstone").Find(&existingMemories).Error; err != nil {
+		_ = manager.ReleaseLease(convID, "memory", leaseOwner)
+		return fmt.Errorf("load canonical memories before extraction: %w", err)
+	}
 	for _, m := range existingMemories {
 		existingByExact[m.Key+"|"+m.Value] = m.ID
 	}
@@ -49,6 +61,13 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 			continue
 		}
 		exactKey := c.Key + "|" + c.Value
+		if c.DerivationKey != "" {
+			if existing, findErr := s.repo.FindByDerivationKey(c.DerivationKey); findErr == nil && existing != nil && existing.ID != "" {
+				existingByExact[exactKey] = existing.ID
+				_ = s.repo.DeleteCandidate(c.ID)
+				continue
+			}
+		}
 		if existingID := existingByExact[exactKey]; existingID != "" {
 			if _, err := s.reinforceCanonicalMemory(existingID, &c); err == nil {
 				_ = s.repo.DeleteCandidate(c.ID)
@@ -78,7 +97,11 @@ func (s *service) Process(ctx context.Context, convID string, messages []map[str
 		s.consolidationNeeded(convID)
 	}
 
-	return manager.AdvanceLeased(convID, "memory", maxSequence, fmt.Sprintf("memory:%s:%d", convID, maxSequence), leaseOwner)
+	if err := manager.AdvanceLeased(convID, "memory", maxSequence, fmt.Sprintf("memory:%s:%d", convID, maxSequence), leaseOwner); err != nil {
+		_ = manager.ReleaseLease(convID, "memory", leaseOwner)
+		return err
+	}
+	return nil
 }
 
 func (s *service) consolidationNeeded(convID string) {
@@ -132,7 +155,7 @@ func (s *service) runConsolidation(charID string) {
 		uuid.New().String(), charID, now, result.OperationID).Error
 }
 
-func (s *service) logRetrieval(conversationID, characterID, requestID, channel, queryText string, memoryIDs []string, results []HybridSearchResult) {
+func (s *service) logRetrieval(conversationID, characterID, requestID, channel, queryText string, memoryIDs []string, results []HybridSearchResult, userIDs ...string) {
 	id := uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
 	memIDsJSON, _ := json.Marshal(memoryIDs)
@@ -147,6 +170,17 @@ func (s *service) logRetrieval(conversationID, characterID, requestID, channel, 
 		})
 	}
 	detailsJSON, _ := json.Marshal(scoringDetails)
+	userID := "default"
+	if len(userIDs) > 0 {
+		userID = normalizeMemoryOwnerID(userIDs[0])
+	}
+	if s.db.Migrator().HasColumn("retrieval_logs", "user_id") {
+		s.db.Exec(
+			"INSERT INTO retrieval_logs (id, user_id, conversation_id, character_id, request_id, channel, query_text, retrieved_memory_ids, scoring_details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			id, userID, conversationID, characterID, requestID, channel, queryText, string(memIDsJSON), string(detailsJSON), now,
+		)
+		return
+	}
 	s.db.Exec(
 		"INSERT INTO retrieval_logs (id, conversation_id, character_id, request_id, channel, query_text, retrieved_memory_ids, scoring_details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		id, conversationID, characterID, requestID, channel, queryText, string(memIDsJSON), string(detailsJSON), now,

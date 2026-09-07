@@ -17,6 +17,7 @@ import (
 var ErrMemoryVersionConflict = errors.New("memory version conflict")
 
 type canonicalCreateRequest struct {
+	UserID        string
 	CharacterID   string
 	MemoryType    MemoryType
 	MemorySubtype string
@@ -111,6 +112,7 @@ type MemoryEventRecord struct {
 }
 
 type memorySemanticSnapshot struct {
+	UserID      string `json:"userId"`
 	CharacterID string `json:"characterId"`
 
 	MemoryType    string `json:"memoryType"`
@@ -260,6 +262,7 @@ func (s *service) createCanonicalMemory(req canonicalCreateRequest) (*Memory, er
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		m := &Memory{
 			ID:                    memoryID,
+			UserID:                normalizeMemoryOwnerID(req.UserID),
 			CharacterID:           req.CharacterID,
 			MemoryType:            string(memoryType),
 			MemorySubtype:         strings.TrimSpace(req.MemorySubtype),
@@ -502,6 +505,7 @@ func computeMemorySnapshotHashCanonical(m *Memory) string {
 		return ""
 	}
 	snapshot := memorySemanticSnapshot{
+		UserID:                m.UserID,
 		CharacterID:           m.CharacterID,
 		MemoryType:            m.MemoryType,
 		MemorySubtype:         m.MemorySubtype,

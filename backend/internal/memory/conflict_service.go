@@ -51,6 +51,55 @@ func (s *service) CheckConflict(req *CheckConflictRequest) (*CheckConflictRespon
 	}, nil
 }
 
+func (s *service) checkConflictOwned(req *CheckConflictRequest) (*CheckConflictResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("conflict request is required")
+	}
+	var existing []Memory
+	q := s.db.Model(&Memory{}).Where("key = ?", req.Key)
+	q = applyMemoryScopeQuery(q, req.CharacterID, req.UserID)
+	if err := q.Find(&existing).Error; err != nil {
+		return nil, err
+	}
+	conflicts := make([]ConflictItem, 0)
+	for _, m := range existing {
+		if m.ID == "" {
+			continue
+		}
+		if m.Value == req.Value {
+			conflicts = append(conflicts, ConflictItem{Memory: m, Reason: "exact_match"})
+			continue
+		}
+		if sim := jaccardSimilarity(req.Value, m.Value); sim > 0.85 {
+			conflicts = append(conflicts, ConflictItem{Memory: m, Reason: fmt.Sprintf("semantic_similar(%.2f)", sim)})
+			continue
+		}
+		if isContradict, _ := s.llmCheckContradiction(req.Value, m.Value); isContradict {
+			conflicts = append(conflicts, ConflictItem{Memory: m, Reason: "llm_contradiction"})
+		}
+	}
+	return &CheckConflictResponse{HasConflict: len(conflicts) > 0, Conflicts: conflicts}, nil
+}
+
+func (s *service) autoResolveConflictOwned(key, value, characterID, userID string, newConfidence int) (*ResolveConflictResponse, error) {
+	check, err := s.checkConflictOwned(&CheckConflictRequest{UserID: userID, Key: key, Value: value, CharacterID: characterID})
+	if err != nil || check == nil || !check.HasConflict {
+		return nil, err
+	}
+	// Preserve the existing automatic resolution policy, but only after the
+	// conflicting object has been proven to belong to this user.
+	for _, conflict := range check.Conflicts {
+		if conflict.Memory.ID == "" {
+			continue
+		}
+		return s.ResolveConflictForUser(&ResolveConflictRequest{
+			UserID: userID, Action: "replace_old", NewKey: key, NewValue: value,
+			CharacterID: characterID, ConflictID: conflict.Memory.ID, Importance: conflict.Memory.Importance,
+		}, userID)
+	}
+	return nil, nil
+}
+
 func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflictResponse, error) {
 	resp := &ResolveConflictResponse{Resolved: true}
 	var existing *Memory
@@ -118,6 +167,7 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 		}
 		operationID := uuid.New().String()
 		m, err := s.createCanonicalMemory(canonicalCreateRequest{
+			UserID:         req.UserID,
 			CharacterID:    characterID,
 			MemoryType:     memoryType,
 			Source:         "manual",
@@ -143,6 +193,7 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 	case "keep_both":
 		operationID := uuid.New().String()
 		m, err := s.createCanonicalMemory(canonicalCreateRequest{
+			UserID:         req.UserID,
 			CharacterID:    characterID,
 			MemoryType:     memoryType,
 			Source:         "manual",
@@ -190,6 +241,7 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 		}
 		operationID := uuid.New().String()
 		m, err := s.createCanonicalMemory(canonicalCreateRequest{
+			UserID:         req.UserID,
 			CharacterID:    characterID,
 			MemoryType:     memoryType,
 			Source:         "manual",

@@ -24,10 +24,7 @@ func (s *service) syncGraph(m *Memory) {
 		s.deleteGraph(m)
 		return
 	}
-	userID := strings.TrimSpace(m.CharacterID)
-	if m.Scope == "user" && m.CharacterID != "" {
-		userID = m.CharacterID
-	}
+	userID := strings.TrimSpace(m.UserID)
 	if userID == "" || userID == "default" {
 		return
 	}

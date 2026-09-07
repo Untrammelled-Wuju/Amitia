@@ -156,7 +156,7 @@ func (s *service) dynamicRecall(req *VectorSearchRequest) ([]HybridSearchResult,
 	}
 
 	if len(merged) == 0 {
-		s.logRetrieval(req.ConversationID, req.CharacterID, req.RequestID, req.Channel, queryText, nil, nil)
+		s.logRetrieval(req.ConversationID, req.CharacterID, req.RequestID, req.Channel, queryText, nil, nil, req.UserID)
 		return []HybridSearchResult{}, nil
 	}
 
@@ -225,7 +225,7 @@ func (s *service) dynamicRecall(req *VectorSearchRequest) ([]HybridSearchResult,
 	for _, r := range results {
 		memoryIDs = append(memoryIDs, r.Memory.ID)
 	}
-	s.logRetrieval(req.ConversationID, req.CharacterID, req.RequestID, req.Channel, queryText, memoryIDs, results)
+	s.logRetrieval(req.ConversationID, req.CharacterID, req.RequestID, req.Channel, queryText, memoryIDs, results, req.UserID)
 	return results, nil
 }
 
@@ -325,9 +325,6 @@ func (s *service) episodicRecallItems(query string, req *VectorSearchRequest, in
 	}
 	userScope := strings.TrimSpace(req.UserID)
 	if userScope == "" {
-		userScope = strings.TrimSpace(req.CharacterID)
-	}
-	if userScope == "" {
 		return nil
 	}
 	weight := 0.45
@@ -351,7 +348,10 @@ func (s *service) episodicRecallItems(query string, req *VectorSearchRequest, in
 		CreatedAt         string
 	}
 	var rows []row
-	q := s.db.Table("episodic_memories").Select("id, scene_type, title, content, trigger_keywords, sentiment_score, retention_level, memory_strength, strength_updated_at, last_reinforced_at, reinforce_count, decay_state, message_time_start, created_at").Where("user_id IN ?", uniqueRecallScopes(userScope, strings.TrimSpace(req.CharacterID)))
+	q := s.db.Table("episodic_memories").Select("id, scene_type, title, content, trigger_keywords, sentiment_score, retention_level, memory_strength, strength_updated_at, last_reinforced_at, reinforce_count, decay_state, message_time_start, created_at").Where("user_id = ?", userScope)
+	if characterID := strings.TrimSpace(req.CharacterID); characterID != "" {
+		q = q.Where("character_id = ?", characterID)
+	}
 	if !intent.ExplicitMemoryRequest {
 		q = q.Where("(decay_state IS NULL OR decay_state = '' OR decay_state != ?)", DecayStateArchived)
 	}
@@ -375,7 +375,7 @@ func (s *service) episodicRecallItems(query string, req *VectorSearchRequest, in
 		if occurredAt == "" {
 			occurredAt = r.CreatedAt
 		}
-		m := Memory{ID: "episodic:" + r.ID, CharacterID: req.CharacterID, MemoryType: "fact", MemorySubtype: "EPISODIC", Key: r.Title, Value: r.Content, Importance: 6,
+		m := Memory{ID: "episodic:" + r.ID, UserID: userScope, CharacterID: req.CharacterID, MemoryType: "fact", MemorySubtype: "EPISODIC", Key: r.Title, Value: r.Content, Importance: 6,
 			Confidence: 75, Source: "episodic", Scope: "character", RetentionLevel: level, MemoryStrength: strength, StrengthUpdatedAt: r.StrengthUpdatedAt,
 			LastReinforcedAt: r.LastReinforcedAt, ReinforceCount: r.ReinforceCount, DecayState: r.DecayState, CreatedAt: occurredAt}
 		s.maintainEpisodicRetention(r.ID, &m, time.Now())
@@ -395,9 +395,6 @@ func (s *service) graphRecallItems(query string, req *VectorSearchRequest, inten
 		return nil
 	}
 	userScope := strings.TrimSpace(req.UserID)
-	if userScope == "" {
-		userScope = strings.TrimSpace(req.CharacterID)
-	}
 	if userScope == "" {
 		return nil
 	}

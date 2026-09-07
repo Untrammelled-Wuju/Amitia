@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/decision"
+	"github.com/u-ai/backend/internal/requestidentity"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
 	"log"
 	"math/rand"
@@ -300,7 +301,7 @@ func (s *service) persistAndDeliverContext(ctx context.Context, characterID, msg
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	result, err := s.submitProactiveMessage(ctx, characterID, convID, "all", content, msgID)
+	result, err := s.submitProactiveMessage(ctx, requestidentity.DefaultUserID, characterID, convID, "all", content, msgID)
 	if err != nil {
 		return err
 	}

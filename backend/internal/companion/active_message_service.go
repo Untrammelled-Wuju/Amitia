@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/delivery"
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 func (s *service) GetActiveMessageSetting(characterID string) map[string]interface{} {
@@ -237,9 +238,10 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 		return map[string]interface{}{"id": id, "status": "NO_CONVERSATION", "taskType": taskType, "channel": channelSetting}
 	}
 
-	scope := s.resolveProactiveDeliveryScope(convID, channelSetting, characterID)
+	userID := requestidentity.DefaultUserID
+	scope := s.resolveProactiveDeliveryScope(userID, convID, channelSetting, characterID)
 
-	result, err := s.submitProactiveMessage(ctx, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-task", id))
+	result, err := s.submitProactiveMessage(ctx, userID, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-task", id))
 	if err != nil {
 		nowStr := time.Now().Format("2006-01-02 15:04:05")
 		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)

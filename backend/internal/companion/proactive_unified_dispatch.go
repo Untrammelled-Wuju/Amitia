@@ -24,7 +24,7 @@ type proactiveDeliveryScope struct {
 	userID  string
 }
 
-func (s *service) submitProactiveMessage(ctx context.Context, characterID, conversationID, channelSetting, prompt, requestID string) (*interaction.OrchestrationResult, error) {
+func (s *service) submitProactiveMessage(ctx context.Context, userID, characterID, conversationID, channelSetting, prompt, requestID string) (*interaction.OrchestrationResult, error) {
 	if s.unifiedEntry == nil {
 		return nil, errProactiveUnifiedEntryMissing
 	}
@@ -32,7 +32,7 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 		log.Printf("[companion] shouldProactivelyMessage=false, skip proactive dispatch for conversationID=%s", conversationID)
 		return nil, nil
 	}
-	scope := s.resolveProactiveDeliveryScope(conversationID, channelSetting, characterID)
+	scope := s.resolveProactiveDeliveryScope(userID, conversationID, channelSetting, characterID)
 
 	timeCtx := s.buildResolvedProactiveTimeContext(ctx, scope, characterID)
 	if timeCtx.blocked {
@@ -71,7 +71,7 @@ func (s *service) submitProactiveMessage(ctx context.Context, characterID, conve
 	if result != nil && result.Response != nil && s.assistantContactRecorder != nil {
 		if recErr := s.assistantContactRecorder.RecordAssistantContact(
 			context.WithoutCancel(ctx),
-			requestidentity.DefaultUserID,
+			scope.userID,
 			characterID,
 			time.Time{},
 		); recErr != nil {
@@ -409,7 +409,7 @@ func formatGapDuration(totalGapMs int64) string {
 	return fmt.Sprintf("%d 天 %d 小时 %d 分 %d 秒", days, remainHours, remainMins, seconds)
 }
 
-func (s *service) resolveProactiveDeliveryScope(conversationID, channelSetting, characterID string) proactiveDeliveryScope {
+func (s *service) resolveProactiveDeliveryScope(userID, conversationID, channelSetting, characterID string) proactiveDeliveryScope {
 	scope := proactiveDeliveryScope{channel: normalizeProactiveChannel(channelSetting)}
 	var channel, peerID string
 	s.db.Table("conversations").Select("channel, peer_id").Where("id = ?", conversationID).Limit(1).Row().Scan(&channel, &peerID)
@@ -417,7 +417,7 @@ func (s *service) resolveProactiveDeliveryScope(conversationID, channelSetting, 
 		scope.channel = normalizeProactiveChannel(channel)
 	}
 	scope.peerID = strings.TrimSpace(peerID)
-	scope.userID = requestidentity.DefaultUserID
+	scope.userID = requestidentity.NormalizeUserID(userID)
 	if scope.channel == "" {
 		scope.channel = "web"
 	}
@@ -451,8 +451,8 @@ func proactiveRequestID(prefix string, id interface{}) string {
 	return fmt.Sprintf("%s-%v", prefix, id)
 }
 
-func (s *service) DispatchProactiveMessage(ctx context.Context, characterID, conversationID, channel, prompt, requestID string) (string, error) {
-	result, err := s.submitProactiveMessage(ctx, characterID, conversationID, channel, prompt, requestID)
+func (s *service) DispatchProactiveMessage(ctx context.Context, userID, characterID, conversationID, channel, prompt, requestID string) (string, error) {
+	result, err := s.submitProactiveMessage(ctx, userID, characterID, conversationID, channel, prompt, requestID)
 	if err != nil {
 		return "", err
 	}

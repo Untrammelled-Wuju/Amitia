@@ -106,3 +106,71 @@ func TestMemoryProcessAdvancesCheckpointAndSkipsProcessedMessages(t *testing.T) 
 		t.Fatalf("candidate count after second process = %d, want 1", candidateCount)
 	}
 }
+
+func TestGenerateCandidatesFromMessagesIsIdempotentByDerivationKey(t *testing.T) {
+	var calls int32
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{{
+				"message": map[string]string{
+					"content": `[{"key":"饮品","value":"喜欢绿茶","memoryType":"preference","importance":5,"confidence":90}]`,
+				},
+			}},
+			"usage": map[string]int{"total_tokens": 1},
+		})
+	}))
+	defer llm.Close()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&MemoryCandidateModel{}); err != nil {
+		t.Fatalf("migrate candidates: %v", err)
+	}
+	for _, stmt := range []string{
+		`CREATE TABLE conversations (id TEXT PRIMARY KEY, character_id TEXT)`,
+		`CREATE TABLE model_configs (id TEXT PRIMARY KEY, base_url TEXT, api_key TEXT, model_name TEXT, temperature REAL, max_tokens INTEGER, api_type TEXT, is_active INTEGER)`,
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			t.Fatalf("exec schema: %v", err)
+		}
+	}
+	if err := db.Exec(`INSERT INTO conversations (id, character_id) VALUES (?, ?)`, "conv-idem", "char-1").Error; err != nil {
+		t.Fatalf("insert conversation: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO model_configs (id, base_url, api_key, model_name, temperature, max_tokens, is_active, api_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, "model-idem", llm.URL, "test-key", "test-model", 0.1, 128, 1, "openai").Error; err != nil {
+		t.Fatalf("insert model config: %v", err)
+	}
+
+	svc := &service{repo: &repository{db: db}, db: db}
+	messages := []map[string]string{{"role": "user", "content": "我喜欢绿茶"}}
+	first, err := svc.generateCandidatesFromMessages("conv-idem", messages)
+	if err != nil {
+		t.Fatalf("first generate: %v", err)
+	}
+	second, err := svc.generateCandidatesFromMessages("conv-idem", messages)
+	if err != nil {
+		t.Fatalf("second generate: %v", err)
+	}
+	if len(first) != 1 || len(second) != 1 {
+		t.Fatalf("candidate results = %d/%d, want 1/1", len(first), len(second))
+	}
+	if first[0].ID != second[0].ID {
+		t.Fatalf("second generate created duplicate candidate: %s != %s", first[0].ID, second[0].ID)
+	}
+	if first[0].DerivationKey == "" || first[0].DerivationKey != second[0].DerivationKey {
+		t.Fatalf("unexpected derivation keys: %q / %q", first[0].DerivationKey, second[0].DerivationKey)
+	}
+	var count int64
+	if err := db.Model(&MemoryCandidateModel{}).Count(&count).Error; err != nil {
+		t.Fatalf("count candidates: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("candidate count = %d, want 1", count)
+	}
+	if atomic.LoadInt32(&calls) != 2 {
+		t.Fatalf("llm calls = %d, want 2", calls)
+	}
+}

@@ -8,6 +8,8 @@ import (
 	"log"
 	"math/rand"
 	"time"
+
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 func (s *service) GetDebugOverview(characterID string) map[string]interface{} {
@@ -211,7 +213,8 @@ func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, chara
 			failed++
 			continue
 		}
-		dispatchResult, dispatchErr := s.submitProactiveMessage(ctx, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-due", id))
+		userID := requestidentity.DefaultUserID
+			dispatchResult, dispatchErr := s.submitProactiveMessage(ctx, userID, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-due", id))
 		if dispatchErr != nil {
 			retryCount := 0
 			if rc, ok := t["retry_count"]; ok {

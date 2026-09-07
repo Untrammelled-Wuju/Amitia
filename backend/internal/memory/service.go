@@ -98,6 +98,7 @@ type UpdateCandidateRequest struct {
 }
 
 type CheckConflictRequest struct {
+	UserID      string `json:"userId"`
 	Key         string `json:"key"`
 	Value       string `json:"value"`
 	MemoryType  string `json:"memoryType"`
@@ -116,6 +117,7 @@ type ConflictItem struct {
 }
 
 type ResolveConflictRequest struct {
+	UserID      string `json:"userId"`
 	Action      string `json:"action"`
 	NewKey      string `json:"newKey"`
 	NewValue    string `json:"newValue"`
@@ -131,6 +133,7 @@ type ResolveConflictResponse struct {
 }
 type MemoryCandidate struct {
 	ID                    string  `json:"id"`
+	UserID                string  `json:"userId"`
 	Key                   string  `json:"key"`
 	Value                 string  `json:"value"`
 	MemoryType            string  `json:"memoryType"`
@@ -153,9 +156,11 @@ type MemoryCandidate struct {
 	ConversationID        string  `json:"conversationId"`
 	CharacterID           string  `json:"characterId"`
 	CreatedAt             string  `json:"createdAt"`
+	DerivationKey         string  `json:"derivationKey,omitempty"`
 }
 
 type SubmitCandidateRequest struct {
+	UserID                string  `json:"userId"`
 	Key                   string  `json:"key"`
 	Value                 string  `json:"value"`
 	MemoryType            string  `json:"memoryType"`

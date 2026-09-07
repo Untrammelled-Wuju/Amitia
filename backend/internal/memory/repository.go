@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -274,14 +275,15 @@ func (r *repository) GetRankedByImportance(characterID string, limit int) ([]Mem
 func applyMemoryScopeQuery(query *gorm.DB, characterID, userID string) *gorm.DB {
 	characterID = strings.TrimSpace(characterID)
 	userID = strings.TrimSpace(userID)
-	if characterID != "" && userID != "" {
-		return query.Where("((scope IN (?, ?) AND character_id = ?) OR ((scope IS NULL OR scope = '' OR scope NOT IN (?, ?)) AND character_id = ?))", "user", "user_global", userID, "user", "user_global", characterID)
-	}
 	if userID != "" {
-		return query.Where("scope IN (?, ?) AND character_id = ?", "user", "user_global", userID)
+		if config.AppCfg != nil && strings.EqualFold(strings.TrimSpace(config.AppCfg.Security.Mode), "local_single_user") {
+			query = query.Where("(user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default')", userID)
+		} else {
+			query = query.Where("user_id = ?", userID)
+		}
 	}
 	if characterID != "" {
-		return query.Where("character_id = ?", characterID)
+		return query.Where("(scope IN (?, ?) OR character_id = ?)", "user", "user_global", characterID)
 	}
 	return query
 }

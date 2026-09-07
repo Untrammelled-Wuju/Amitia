@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/requestidentity"
 )
 
 func (s *service) ListDelayedReplies(characterID string) []map[string]interface{} {
@@ -104,8 +105,9 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 				channel = "web"
 			}
 
-			requestID := fmt.Sprintf("delayed-reply-%s", uuid.New().String())
-			dispatchResult, dispatchErr := s.submitProactiveMessage(context.Background(), characterID, convID, channel, content, requestID)
+requestID := fmt.Sprintf("delayed-reply-%s", uuid.New().String())
+				userID := requestidentity.DefaultUserID
+				dispatchResult, dispatchErr := s.submitProactiveMessage(context.Background(), userID, characterID, convID, channel, content, requestID)
 			if dispatchErr != nil {
 				retryCount := 0
 				if rc, ok := t["retry_count"]; ok {

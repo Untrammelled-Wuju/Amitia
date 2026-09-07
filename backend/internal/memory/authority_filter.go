@@ -64,21 +64,15 @@ func memoryAllowedForDerivedContent(m Memory, now time.Time) bool {
 func memoryMatchesRetrievalScope(m Memory, characterID, userID string) bool {
 	characterID = strings.TrimSpace(characterID)
 	userID = strings.TrimSpace(userID)
+	if userID != "" && !memoryOwnerMatches(m.UserID, userID) {
+		return false
+	}
 	scope := strings.ToLower(strings.TrimSpace(m.Scope))
 	if scope == "user" || scope == "user_global" {
-		if userID != "" {
-			return m.CharacterID == userID
-		}
-		if characterID != "" {
-			return m.CharacterID == characterID
-		}
-		return true
+		return userID != "" || characterID == ""
 	}
 	if characterID != "" {
-		return m.CharacterID == characterID
-	}
-	if userID != "" {
-		return false
+		return strings.TrimSpace(m.CharacterID) == characterID
 	}
 	return true
 }

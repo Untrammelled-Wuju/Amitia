@@ -184,3 +184,70 @@ func (s *service) InferUserDimensions(characterID string) (map[string]interface{
 
 	return dimensions, nil
 }
+
+func (s *service) getTimelineOwned(page, pageSize int, userID, source, memoryType, timelineType string) ([]map[string]interface{}, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 30
+	}
+	var allEvents []map[string]interface{}
+	if timelineType == "" || timelineType == "memory" || timelineType == "structured" {
+		q := s.db.Table("memory_events AS e").Select("e.*").Joins("JOIN memories AS m ON m.id = e.memory_id")
+		if localSingleUserMode() {
+			q = q.Where("m.user_id = ? OR m.user_id = '' OR m.user_id IS NULL OR m.user_id = 'default'", userID)
+		} else {
+			q = q.Where("m.user_id = ?", userID)
+		}
+		if source != "" {
+			q = q.Where("e.source = ?", source)
+		}
+		if memoryType != "" {
+			q = q.Where("e.memory_type = ?", memoryType)
+		}
+		var events []map[string]interface{}
+		if err := q.Order("e.created_at DESC").Find(&events).Error; err != nil {
+			return nil, 0, err
+		}
+		for _, e := range events {
+			e["timelineType"] = "memory"
+			allEvents = append(allEvents, e)
+		}
+	}
+	if timelineType == "" || timelineType == "episodic" {
+		q := s.db.Table("episodic_memories")
+		if localSingleUserMode() {
+			q = q.Where("user_id = ? OR user_id = '' OR user_id IS NULL OR user_id = 'default'", userID)
+		} else {
+			q = q.Where("user_id = ?", userID)
+		}
+		var episodics []map[string]interface{}
+		if err := q.Order("created_at DESC").Find(&episodics).Error; err != nil {
+			return nil, 0, err
+		}
+		for _, e := range episodics {
+			e["timelineType"] = "episodic"
+			allEvents = append(allEvents, e)
+		}
+	}
+	sort.Slice(allEvents, func(i, j int) bool {
+		ti, _ := allEvents[i]["created_at"].(string)
+		tj, _ := allEvents[j]["created_at"].(string)
+		if ti == "" {
+			ti, _ = allEvents[i]["createdAt"].(string)
+			tj, _ = allEvents[j]["createdAt"].(string)
+		}
+		return ti > tj
+	})
+	total := int64(len(allEvents))
+	start := (page - 1) * pageSize
+	if start >= len(allEvents) {
+		return []map[string]interface{}{}, total, nil
+	}
+	end := start + pageSize
+	if end > len(allEvents) {
+		end = len(allEvents)
+	}
+	return allEvents[start:end], total, nil
+}

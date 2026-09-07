@@ -34,11 +34,15 @@ func rankedMemoryVectorFilters(characterID, userID string) []map[string]interfac
 	characterID = strings.TrimSpace(characterID)
 	userID = strings.TrimSpace(userID)
 	filters := make([]map[string]interface{}, 0, 2)
-	if characterID != "" {
-		filters = append(filters, map[string]interface{}{"character_id": characterID})
+	if userID != "" && characterID != "" {
+		filters = append(filters, map[string]interface{}{"user_id": userID, "character_id": characterID})
 	}
-	if userID != "" && userID != characterID {
+	if userID != "" {
 		filters = append(filters, map[string]interface{}{"user_id": userID, "scope_type": "user"})
+	} else if characterID != "" {
+		// Internal/local legacy callers that have no authenticated user remain
+		// character-scoped. Public handlers always provide userID.
+		filters = append(filters, map[string]interface{}{"character_id": characterID})
 	}
 	if len(filters) == 0 {
 		filters = append(filters, map[string]interface{}{})

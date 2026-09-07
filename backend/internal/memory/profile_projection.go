@@ -62,27 +62,22 @@ func (s *service) profileProjectionScope(m *Memory) (string, string) {
 	if m == nil {
 		return "", ""
 	}
-	userID := ""
+	userID := strings.TrimSpace(m.UserID)
 	characterID := strings.TrimSpace(m.CharacterID)
 	if s != nil && s.db != nil && strings.TrimSpace(m.SourceConvID) != "" {
 		var peerID, convCharacterID string
 		_ = s.db.Table("conversations").Select("peer_id, character_id").Where("id = ?", m.SourceConvID).Row().Scan(&peerID, &convCharacterID)
 		peerID = strings.TrimSpace(peerID)
 		convCharacterID = strings.TrimSpace(convCharacterID)
-		if peerID != "" && peerID != "default" {
+		if userID == "" && peerID != "" && peerID != "default" {
 			userID = peerID
 		}
 		if convCharacterID != "" {
 			characterID = convCharacterID
 		}
 	}
-	if strings.EqualFold(strings.TrimSpace(m.Scope), "user") || strings.EqualFold(strings.TrimSpace(m.Scope), "user_global") {
-		if userID == "" {
-			userID = strings.TrimSpace(m.CharacterID)
-		}
-	}
 	if userID == "" {
-		userID = characterID
+		userID = "default"
 	}
 	return userID, characterID
 }

@@ -4,6 +4,7 @@ package memory
 
 type Memory struct {
 	ID                    string  `gorm:"column:id;primaryKey" json:"id"`
+	UserID                string  `gorm:"column:user_id;not null;default:default;index" json:"userId"`
 	CharacterID           string  `gorm:"column:character_id" json:"characterId"`
 	MemoryType            string  `gorm:"column:memory_type;default:custom" json:"memoryType"`
 	MemorySubtype         string  `gorm:"column:memory_subtype;default:''" json:"memorySubtype"`
@@ -46,6 +47,7 @@ type Memory struct {
 func (Memory) TableName() string { return "memories" }
 
 type CreateMemoryRequest struct {
+	UserID                string  `json:"userId"`
 	CharacterID           string  `json:"characterId"`
 	MemoryType            string  `json:"memoryType"`
 	MemorySubtype         string  `json:"memorySubtype"`
@@ -167,6 +169,7 @@ type MemoryListResponse struct {
 
 type MemoryCandidateModel struct {
 	ID                    string  `gorm:"column:id;primaryKey" json:"id"`
+	UserID                string  `gorm:"column:user_id;not null;default:default;index" json:"userId"`
 	Key                   string  `gorm:"column:key" json:"key"`
 	Value                 string  `gorm:"column:value" json:"value"`
 	MemoryType            string  `gorm:"column:memory_type;default:custom" json:"memoryType"`

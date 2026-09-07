@@ -49,7 +49,7 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 		req.Confidence = 50
 	}
 
-	resp, err := s.AutoResolveConflict(req.Key, req.Value, req.CharacterID, req.Confidence)
+	resp, err := s.autoResolveConflictOwned(req.Key, req.Value, req.CharacterID, req.UserID, req.Confidence)
 	if err == nil && resp != nil && resp.Resolved {
 		// Conflict resolution may reuse an existing canonical memory. Preserve
 		// explicit retention choices from the create request instead of silently
@@ -95,6 +95,7 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 	operationID := uuid.New().String()
 
 	m, err := s.createCanonicalMemory(canonicalCreateRequest{
+		UserID:                req.UserID,
 		CharacterID:           req.CharacterID,
 		MemoryType:            memoryType,
 		MemorySubtype:         req.MemorySubtype,
