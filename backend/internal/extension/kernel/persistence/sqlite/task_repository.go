@@ -349,6 +349,12 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 			query += " OFFSET ?"
 			args = append(args, filter.Offset)
 		}
+	} else if filter.Offset > 0 {
+		// SQLite accepts OFFSET only together with LIMIT. LIMIT -1 means
+		// "all remaining rows", which preserves the public offset-only
+		// ListTasksFilter contract instead of silently ignoring the offset.
+		query += " LIMIT -1 OFFSET ?"
+		args = append(args, filter.Offset)
 	}
 
 	rows, err := ex.QueryContext(ctx, query, args...)

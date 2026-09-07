@@ -42,6 +42,7 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 	)
 	handler.SetExtensionRoot(container.ExtRoot)
 	handler.SetProviderRegistry(container.UIProviderRegistry)
+	handler.SetHostRegistry(container.DeviceRegistry)
 	handler.SetProviderContextResolver(func(r *http.Request, platform string) ui_provider.ResolveContext {
 		resolveContext := ui_provider.ResolveContext{
 			Platform:       platform,

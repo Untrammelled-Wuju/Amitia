@@ -376,6 +376,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	permBroker := permission.NewDefaultPermissionBroker(permDefRegistry, permStorage)
 	permBroker.SetSnapshotStore(permSnapshotStore)
 	permBroker.SetTrustLevelChecker(newRepositoryPermissionTrustChecker(instRepo, defRepo))
+	permBroker.PersistentOverride = map[string]struct{}{
+		permission.PermissionServiceRuntimeExecute: {},
+		permission.PermissionServiceNetworkRequest: {},
+	}
 
 	scopeStore := scope.NewSQLiteScopeStore(db)
 	relationChecker := newRepositoryScopeRelationChecker(db, resourceRepo, opRepo)
@@ -1334,7 +1338,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if conversationID != "" {
 			scopes = append(scopes, scope.NewConversationScope(conversationID))
 		}
-		snapshot := scope.CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation)
+		snapshot := scope.CreateSnapshotWithOwner(invocationID, scopes, resolveSnapshotOwner(db, conversationID, characterID), characterID, conversationID, extensionID, moduleID, generation)
 		if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
 			return "", err
 		}
@@ -1403,7 +1407,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		if conversationID != "" {
 			scopes = append(scopes, scope.NewConversationScope(conversationID))
 		}
-		snapshot := scope.CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation)
+		snapshot := scope.CreateSnapshotWithOwner(invocationID, scopes, resolveSnapshotOwner(db, conversationID, characterID), characterID, conversationID, extensionID, moduleID, generation)
 		if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
 			return "", err
 		}
@@ -1629,7 +1633,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			if conversationID != "" {
 				scopes = append(scopes, scope.NewConversationScope(conversationID))
 			}
-			snapshot := scope.CreateSnapshot(invocationID, scopes, characterID, conversationID, extensionID, moduleID, generation)
+			snapshot := scope.CreateSnapshotWithOwner(invocationID, scopes, resolveSnapshotOwner(db, conversationID, characterID), characterID, conversationID, extensionID, moduleID, generation)
 			if err := scopeStore.SaveSnapshot(context.Background(), snapshot); err != nil {
 				return "", err
 			}

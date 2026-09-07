@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/pkg/sse"
 )
@@ -120,7 +121,7 @@ func (n *SSEUIHostNotifier) SetClientRuntimeDatabase(db *sql.DB) {
 
 func (n *SSEUIHostNotifier) Notify(ctx context.Context, extensionID string, title string, body string, severity string) error {
 	if n.hostRegistry != nil {
-		target, err := n.hostRegistry.FindTargetHostString(ctx, "", host_registry.CapUINotify, "", "")
+		target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostUserID(ctx), host_registry.CapUINotify, "", "")
 		if err != nil {
 			return err
 		}
@@ -167,7 +168,7 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 	}
 
 	if n.hostRegistry != nil {
-		target, err := n.hostRegistry.FindTargetHostString(ctx, "", host_registry.CapUIDialog, "", "")
+		target, err := n.hostRegistry.FindTargetHostString(ctx, uiHostUserID(ctx), host_registry.CapUIDialog, "", "")
 		if err != nil {
 			return "", err
 		}
@@ -231,7 +232,7 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 
 func (n *SSEUIHostNotifier) Navigate(ctx context.Context, extensionID string, target string) error {
 	if n.hostRegistry != nil {
-		host, err := n.hostRegistry.FindTargetHostString(ctx, "", host_registry.CapUINavigate, "", "")
+		host, err := n.hostRegistry.FindTargetHostString(ctx, uiHostUserID(ctx), host_registry.CapUINavigate, "", "")
 		if err != nil {
 			return err
 		}
@@ -907,6 +908,13 @@ func (n *SSEUIHostNotifier) clientRuntimeTargets(ctx context.Context, userID str
 		}
 	}
 	return result, nil
+}
+
+func uiHostUserID(ctx context.Context) string {
+	if actor, ok := auth.FromContext(ctx); ok && actor != nil {
+		return strings.TrimSpace(actor.UserID.String())
+	}
+	return ""
 }
 
 func clientRuntimeScopeFromPayload(payload map[string]interface{}) (string, string) {

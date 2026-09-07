@@ -459,6 +459,7 @@ type EnqueueTaskRequest struct {
 	Input                  json.RawMessage                `json:"input"`
 	Priority               int                            `json:"priority"`
 	ExecutionPlacement     TaskExecutionPlacement         `json:"executionPlacement,omitempty"`
+	DeviceID               string                         `json:"deviceId,omitempty"`
 	TrustedExecutionTarget *TrustedExecutionTargetRequest `json:"-"`
 	OperationID            string                         `json:"operationId"`
 	InvocationID           string                         `json:"invocationId,omitempty"`

@@ -79,6 +79,7 @@ type ScopeBinding struct {
 
 type ScopeSnapshot struct {
 	SnapshotID     string     `json:"snapshotId"`
+	UserID         string     `json:"userId,omitempty"`
 	InvocationID   string     `json:"invocationId"`
 	ResolvedScopes []ScopeRef `json:"resolvedScopes"`
 	CharacterID    string     `json:"characterId"`

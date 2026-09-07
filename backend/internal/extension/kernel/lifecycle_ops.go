@@ -307,12 +307,14 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 			return fmt.Errorf("kernel: list ui contributions: %w", uiErr)
 		}
 		for _, uiDef := range uiDefs {
-			if err := r.container.UIHost.RegisterContribution(uiDef); err != nil {
-				tx.rollback(ctx)
-				r.logEnableStep(operationID, extensionID, "register_ui", "failed", err)
-				return fmt.Errorf("kernel: register ui contribution %s: %w", uiDef.ContributionID, err)
+			if _, err := r.container.UIHost.GetContribution(uiDef.ContributionID); err != nil {
+				if err := r.container.UIHost.RegisterContribution(uiDef); err != nil {
+					tx.rollback(ctx)
+					r.logEnableStep(operationID, extensionID, "register_ui", "failed", err)
+					return fmt.Errorf("kernel: register ui contribution %s: %w", uiDef.ContributionID, err)
+				}
+				tx.uiRegistered = true
 			}
-			tx.uiRegistered = true
 			if uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage {
 				entryKind := extension_page_host.PageKindWeb
 				if uiDef.Kind == ui_contribution.UIContributionSchemaPage {
@@ -343,7 +345,7 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 					Icon:        uiDef.Display.Icon,
 					Permissions: perms,
 				})
-				if err := r.container.PageHost.RegisterPage(ctx, pageDef); err != nil {
+				if err := r.container.PageHost.RegisterPage(ctx, pageDef); err != nil && !errors.Is(err, extension_page_host.ErrPageExists) {
 					tx.rollback(ctx)
 					r.logEnableStep(operationID, extensionID, "register_page", "failed", err)
 					return fmt.Errorf("kernel: register page %s: %w", uiDef.ContributionID, err)

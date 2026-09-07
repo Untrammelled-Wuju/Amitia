@@ -642,6 +642,11 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 			Required:  sr.Required,
 		})
 	}
+	resolvedDomain, err := domain.ResolveExtensionDomain(def.AllContributions())
+	if err != nil {
+		return domain.ExtensionDefinition{}, err
+	}
+	def.Domain = resolvedDomain
 	return def, nil
 }
 

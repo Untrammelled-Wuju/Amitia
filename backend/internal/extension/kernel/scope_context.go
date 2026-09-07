@@ -9,6 +9,7 @@ import (
 type hostAPIScopeContextKey struct{}
 
 type HostAPIScopeContext struct {
+	UserID         string
 	CharacterID    string
 	ConversationID string
 }
@@ -31,6 +32,7 @@ func resolveHostAPIScope(ctx context.Context, store host_api.ScopeSnapshotStore,
 		return ctx
 	}
 	return WithHostAPIScope(ctx, HostAPIScopeContext{
+		UserID:         snap.UserID,
 		CharacterID:    snap.CharacterID,
 		ConversationID: snap.ConversationID,
 	})

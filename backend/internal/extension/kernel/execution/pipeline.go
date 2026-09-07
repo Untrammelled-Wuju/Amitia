@@ -868,6 +868,7 @@ func firstNonNil(errs ...error) error {
 func (p *ExecutionPipeline) createAndStoreScopeSnapshot(ctx context.Context, manager scope.ScopeManager, inv capability.ToolInvocationContext, tool capability.ToolDefinition) (scope.ScopeSnapshot, error) {
 	scopeReq := scope.ScopeResolveRequest{
 		Expression:     inferScopeExpression(tool),
+		UserID:         inv.UserID,
 		CharacterID:    inv.CharacterID,
 		ConversationID: inv.ConversationID,
 		ExtensionID:    inv.ExtensionID,

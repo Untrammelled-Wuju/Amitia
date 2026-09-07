@@ -12,13 +12,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type DialogResolver interface {
@@ -57,6 +61,7 @@ type HTTPHandler struct {
 	dialogResolver        DialogResolver
 	clientRuntimeResolver ClientRuntimeCommandResolver
 	clipboardResolver     ClipboardResolver
+	hostRegistry          *host_registry.HostRegistry
 	extRoot               string
 }
 
@@ -121,6 +126,10 @@ func (h *HTTPHandler) SetClipboardResolver(r ClipboardResolver) {
 	h.clipboardResolver = r
 }
 
+func (h *HTTPHandler) SetHostRegistry(registry *host_registry.HostRegistry) {
+	h.hostRegistry = registry
+}
+
 func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/slots", h.handleSlots)
 	mux.HandleFunc("/api/extensions/ui/contributions", h.handleContributions)
@@ -150,6 +159,9 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/client-runtime-state", h.handleClientRuntimeState)
 	mux.HandleFunc("/api/extensions/ui/client-runtime-session-ack", h.handleClientRuntimeSessionAck)
 	mux.HandleFunc("/api/extensions/ui/clipboard-response", h.handleClipboardResponse)
+	mux.HandleFunc("/api/extensions/ui/host-session", h.handleHostSession)
+	mux.HandleFunc("/api/extensions/ui/host-session/heartbeat", h.handleHostSessionHeartbeat)
+	mux.HandleFunc("/api/extensions/ui/host-session/disconnect", h.handleHostSessionDisconnect)
 }
 
 func (h *HTTPHandler) handleSlots(w http.ResponseWriter, r *http.Request) {
@@ -1211,6 +1223,192 @@ func (h *HTTPHandler) handleComposerAction(w http.ResponseWriter, r *http.Reques
 	}
 	resp := h.invokeAction(r, contributionID, actionID, req.Context, req.Input)
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *HTTPHandler) handleHostSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.hostRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "host_registry_unavailable", "UI host registry not configured")
+		return
+	}
+	actor, ok := auth.FromContext(r.Context())
+	if !ok || actor == nil || strings.TrimSpace(actor.UserID.String()) == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "authenticated user is required")
+		return
+	}
+	var req struct {
+		HostClientID string   `json:"hostClientId"`
+		DeviceID     string   `json:"deviceId"`
+		Platform     string   `json:"platform"`
+		WindowID     string   `json:"windowId"`
+		Features     []string `json:"features"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return
+	}
+	hostClientID := strings.TrimSpace(req.HostClientID)
+	if !validHostClientID(hostClientID) {
+		writeError(w, http.StatusBadRequest, "host_client_id_invalid", "hostClientId is invalid")
+		return
+	}
+	platform, err := runtimeidentity.ParsePlatform(req.Platform)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "platform_invalid", err.Error())
+		return
+	}
+	deviceID := actor.DeviceID
+	if deviceID == "" {
+		deviceID = runtimeidentity.ParseDeviceID(req.DeviceID)
+	}
+	features := normalizeUIHostFeatures(req.Features)
+	if len(features) == 0 {
+		features = []host_registry.EndpointFeature{
+			host_registry.EndpointFeatureUINotify,
+			host_registry.EndpointFeatureUIDialog,
+			host_registry.EndpointFeatureUINavigate,
+		}
+	}
+	now := time.Now().UTC()
+	hostSessionID := "uihs_" + uuid.NewString()
+	entry := &host_registry.HostEntry{
+		EntryID:         hostClientID,
+		Kind:            host_registry.RegistryEntryKindUIHost,
+		UserID:          actor.UserID,
+		DeviceID:        deviceID,
+		Platform:        platform,
+		Features:        features,
+		AuthenticatedAt: now,
+		LastHeartbeat:   now,
+		PresenceState:   host_registry.PresenceStateReady,
+		HostClientID:    hostClientID,
+		HostSessionID:   hostSessionID,
+		WindowID:        strings.TrimSpace(req.WindowID),
+	}
+	if err := h.hostRegistry.RegisterHost(r.Context(), entry); err != nil {
+		writeError(w, http.StatusInternalServerError, "host_register_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"hostClientId":             hostClientID,
+		"hostSessionId":            hostSessionID,
+		"heartbeatIntervalSeconds": 60,
+		"features":                 features,
+	})
+}
+
+func (h *HTTPHandler) handleHostSessionHeartbeat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.hostRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "host_registry_unavailable", "UI host registry not configured")
+		return
+	}
+	hostClientID, _, ok := h.authorizedHostSessionRequest(w, r)
+	if !ok {
+		return
+	}
+	if err := h.hostRegistry.UpdateHeartbeat(r.Context(), hostClientID); err != nil {
+		writeError(w, http.StatusNotFound, "host_session_not_found", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "hostClientId": hostClientID})
+}
+
+func (h *HTTPHandler) handleHostSessionDisconnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.hostRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "host_registry_unavailable", "UI host registry not configured")
+		return
+	}
+	hostClientID, _, ok := h.authorizedHostSessionRequest(w, r)
+	if !ok {
+		return
+	}
+	if err := h.hostRegistry.SetDisconnected(r.Context(), hostClientID); err != nil {
+		writeError(w, http.StatusNotFound, "host_session_not_found", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "hostClientId": hostClientID})
+}
+
+func (h *HTTPHandler) authorizedHostSessionRequest(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+	actor, ok := auth.FromContext(r.Context())
+	if !ok || actor == nil || strings.TrimSpace(actor.UserID.String()) == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "authenticated user is required")
+		return "", "", false
+	}
+	var req struct {
+		HostClientID  string `json:"hostClientId"`
+		HostSessionID string `json:"hostSessionId"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return "", "", false
+	}
+	req.HostClientID = strings.TrimSpace(req.HostClientID)
+	req.HostSessionID = strings.TrimSpace(req.HostSessionID)
+	if req.HostClientID == "" || req.HostSessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing_param", "hostClientId and hostSessionId are required")
+		return "", "", false
+	}
+	entry, err := h.hostRegistry.GetHost(r.Context(), req.HostClientID)
+	if err != nil || entry == nil {
+		writeError(w, http.StatusNotFound, "host_session_not_found", "UI host session not found")
+		return "", "", false
+	}
+	if entry.UserID != actor.UserID || entry.HostSessionID != req.HostSessionID {
+		writeError(w, http.StatusForbidden, "host_session_mismatch", "UI host session does not belong to this actor")
+		return "", "", false
+	}
+	return req.HostClientID, req.HostSessionID, true
+}
+
+func validHostClientID(value string) bool {
+	if len(value) < 3 || len(value) > 160 {
+		return false
+	}
+	for _, ch := range value {
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' || ch == ':' || ch == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func normalizeUIHostFeatures(raw []string) []host_registry.EndpointFeature {
+	allowed := map[host_registry.EndpointFeature]struct{}{
+		host_registry.EndpointFeatureUINotify:       {},
+		host_registry.EndpointFeatureUIDialog:       {},
+		host_registry.EndpointFeatureUINavigate:     {},
+		host_registry.EndpointFeatureClipboardRead:  {},
+		host_registry.EndpointFeatureClipboardWrite: {},
+		host_registry.EndpointFeatureDesktopMenu:    {},
+		host_registry.EndpointFeatureDesktopTray:    {},
+	}
+	seen := map[host_registry.EndpointFeature]struct{}{}
+	result := make([]host_registry.EndpointFeature, 0, len(raw))
+	for _, item := range raw {
+		feature := host_registry.EndpointFeature(strings.TrimSpace(item))
+		if _, ok := allowed[feature]; !ok {
+			continue
+		}
+		if _, duplicate := seen[feature]; duplicate {
+			continue
+		}
+		seen[feature] = struct{}{}
+		result = append(result, feature)
+	}
+	return result
 }
 
 func (h *HTTPHandler) handleDialogResponse(w http.ResponseWriter, r *http.Request) {

@@ -198,9 +198,16 @@ func DefaultMigrations() []Migration {
 		ConversationWorkspaceBindingsMigration(),
 		WorkspaceMountLastUsedMigration(),
 		MemoryDynamicRecallRetentionMigration(),
+		ConversationUserOwnershipMigration(),
+		CharacterUserOwnershipMigration(),
+		MemoryUserOwnershipMigration(),
+		ProactiveRulesConversationIdMigration(),
+		ProactiveUserOwnershipMigration(),
+		WorldBookUserOwnershipMigration(),
 		AuthUserProfileMigration(),
 		ActiveMessageUnrepliedSlowdownMigration(),
 		MemoryContextUseMigration(),
+		TtsClonedVoicesMigration(),
 	}
 }
 

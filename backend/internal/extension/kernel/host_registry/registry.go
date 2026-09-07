@@ -266,36 +266,84 @@ func (r *Registry) SetDisconnected(ctx context.Context, hostClientID string) err
 }
 
 func (r *Registry) FindTargetHost(ctx context.Context, userID runtimeidentity.UserID, capability HostCapability, platform runtimeidentity.Platform, windowID string) (*HostEntry, error) {
+	if userID == "" {
+		return r.findTargetHostForUniqueUser(ctx, capability, platform, windowID)
+	}
 	hosts, err := r.ListHostsByUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
-	var bestMatch *HostEntry
-	for _, h := range hosts {
-		if h.PresenceState != PresenceStateReady {
-			continue
-		}
-		if !h.IsHeartbeatValidAt(now, r.heartbeatValidity) {
-			continue
-		}
-		if h.IsExpiredAt(now) {
-			continue
-		}
-		if !h.HasCapability(capability) {
-			continue
-		}
-		if platform != "" && h.Platform != platform {
-			continue
-		}
-		if windowID != "" && h.WindowID != windowID {
-			continue
-		}
-		if bestMatch == nil || bestMatch.LastHeartbeat.Before(h.LastHeartbeat) {
-			bestMatch = h
+	return r.pickTargetHost(hosts, capability, platform, windowID), nil
+}
+
+// findTargetHostForUniqueUser is a fail-closed fallback for internal Host API
+// invocations that do not carry an HTTP actor context. Amitia Core currently
+// executes those calls inside one user scope, but the registry may still hold
+// stale entries. We therefore route only when every eligible ready UI Host
+// belongs to the same user; if multiple users are present no target is chosen.
+func (r *Registry) findTargetHostForUniqueUser(ctx context.Context, capability HostCapability, platform runtimeidentity.Platform, windowID string) (*HostEntry, error) {
+	entries, err := r.repo.ListAllEntries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hosts := make([]*HostEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry != nil && entry.Kind == RegistryEntryKindUIHost {
+			hosts = append(hosts, entry)
 		}
 	}
-	return bestMatch, nil
+	now := time.Now().UTC()
+	var selectedUser runtimeidentity.UserID
+	hasSelectedUser := false
+	var bestMatch *HostEntry
+	for _, host := range hosts {
+		if !hostEligibleForTarget(host, capability, platform, windowID, now, r.heartbeatValidity) {
+			continue
+		}
+		if !hasSelectedUser {
+			selectedUser = host.UserID
+			hasSelectedUser = true
+		} else if host.UserID != selectedUser {
+			return nil, nil
+		}
+		if bestMatch == nil || bestMatch.LastHeartbeat.Before(host.LastHeartbeat) {
+			bestMatch = host
+		}
+	}
+	return cloneRuntimeEntry(bestMatch), nil
+}
+
+func (r *Registry) pickTargetHost(hosts []*HostEntry, capability HostCapability, platform runtimeidentity.Platform, windowID string) *HostEntry {
+	now := time.Now().UTC()
+	var bestMatch *HostEntry
+	for _, host := range hosts {
+		if !hostEligibleForTarget(host, capability, platform, windowID, now, r.heartbeatValidity) {
+			continue
+		}
+		if bestMatch == nil || bestMatch.LastHeartbeat.Before(host.LastHeartbeat) {
+			bestMatch = host
+		}
+	}
+	return cloneRuntimeEntry(bestMatch)
+}
+
+func hostEligibleForTarget(host *HostEntry, capability HostCapability, platform runtimeidentity.Platform, windowID string, now time.Time, heartbeatValidity time.Duration) bool {
+	if host == nil || host.PresenceState != PresenceStateReady {
+		return false
+	}
+	if !host.IsHeartbeatValidAt(now, heartbeatValidity) || host.IsExpiredAt(now) {
+		return false
+	}
+	if !host.HasCapability(capability) {
+		return false
+	}
+	if platform != "" && host.Platform != platform {
+		return false
+	}
+	if windowID != "" && host.WindowID != windowID {
+		return false
+	}
+	return true
 }
 
 func (r *Registry) FindTargetHostString(ctx context.Context, userID string, capability HostCapability, platform string, windowID string) (*HostEntry, error) {

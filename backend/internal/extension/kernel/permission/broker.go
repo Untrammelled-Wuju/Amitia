@@ -41,6 +41,16 @@ type DefaultPermissionBroker struct {
 	ExecutionPolicy func(ctx context.Context, request PermissionEvaluationRequest, requirement PermissionRequirement, definition PermissionDefinition) (PermissionDecision, bool)
 
 	OnPermissionRevoked func(extensionID, runtimeID string)
+
+	PersistentOverride map[string]struct{}
+}
+
+func (b *DefaultPermissionBroker) allowPersistentOverride(permissionID string) bool {
+	if b.PersistentOverride == nil {
+		return false
+	}
+	_, ok := b.PersistentOverride[permissionID]
+	return ok
 }
 
 func NewDefaultPermissionBroker(registry *PermissionDefinitionRegistry, storage PermissionStorage) *DefaultPermissionBroker {
@@ -382,10 +392,10 @@ func (b *DefaultPermissionBroker) Grant(ctx context.Context, request PermissionG
 		return PermissionGrant{}, fmt.Errorf("scope %s not allowed for permission %s", request.Scope.Type, request.PermissionID)
 	}
 
-	if request.Decision == DecisionAllowPersistent && !def.PersistentGrantable {
+	if request.Decision == DecisionAllowPersistent && !def.PersistentGrantable && !b.allowPersistentOverride(request.PermissionID) {
 		return PermissionGrant{}, fmt.Errorf("persistent grant not allowed for permission %s", request.PermissionID)
 	}
-	if def.RequiresPerUse && request.Decision != DecisionAllowOnce {
+	if def.RequiresPerUse && request.Decision != DecisionAllowOnce && !b.allowPersistentOverride(request.PermissionID) {
 		return PermissionGrant{}, fmt.Errorf("permission %s requires an allow_once grant", request.PermissionID)
 	}
 
@@ -609,12 +619,6 @@ func (b *DefaultPermissionBroker) matchGrants(grants []PermissionGrant, scope Pe
 	matched := make([]PermissionGrant, 0)
 	for _, g := range grants {
 		if !g.IsValid() {
-			continue
-		}
-		// RequiresPerUse permissions must never be satisfied by a legacy/session/
-		// persistent grant. Only an explicit allow_once grant may authorize one
-		// operation.
-		if def.RequiresPerUse && !g.IsOneTime() {
 			continue
 		}
 		if scope.Type != ScopeGlobal && !g.Scope.Contains(scope) {

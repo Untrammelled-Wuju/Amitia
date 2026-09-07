@@ -1154,7 +1154,7 @@ func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, 
 		seen[contrib.ID] = true
 
 		startedAt := time.Now().UTC()
-		if err := i.activateSingle(ctx, contrib); err != nil {
+		if err := i.activateSingle(ctx, contrib, generation); err != nil {
 			i.recordAudit(contrib, operationID, generation, startedAt, "failed", err)
 			for j := len(activated) - 1; j >= 0; j-- {
 				rollbackStart := time.Now().UTC()
@@ -1170,7 +1170,7 @@ func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, 
 	return nil
 }
 
-func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib domain.ContributionDefinition) error {
+func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib domain.ContributionDefinition, generation int64) error {
 	switch contrib.Kind {
 	case domain.ContributionKindTool:
 		return i.activateTool(ctx, contrib)
@@ -1185,7 +1185,7 @@ func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib
 	case domain.ContributionKindWorkflow:
 		return i.activateWorkflow(ctx, contrib)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
-		return i.activateUI(ctx, contrib)
+		return i.activateUI(ctx, contrib, generation)
 	case domain.ContributionKindUIProvider:
 		return i.activateUIProvider(ctx, contrib)
 	case domain.ContributionKindUISlot:
@@ -1478,7 +1478,7 @@ func (i *TypedContributionInstaller) activateWorkflow(ctx context.Context, contr
 	return nil
 }
 
-func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib domain.ContributionDefinition) error {
+func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib domain.ContributionDefinition, generation int64) error {
 	defData, _ := json.Marshal(contrib.Definition)
 	var uiDef ui_contribution.UIContributionDefinition
 	if err := json.Unmarshal(defData, &uiDef); err != nil {
@@ -1494,6 +1494,15 @@ func (i *TypedContributionInstaller) activateUI(ctx context.Context, contrib dom
 		uiDef.ModuleID = ui_contribution.ModuleID(contrib.ModuleID)
 	}
 	if i.container.UIHost != nil {
+		if _, err := i.container.UIHost.GetContribution(uiDef.ContributionID); err != nil {
+			op, buildErr := i.buildUIContributionOp(ctx, contrib, defData, generation)
+			if buildErr != nil {
+				return fmt.Errorf("restore ui contribution %s: %w", uiDef.ContributionID, buildErr)
+			}
+			if installErr := op.doInstall(ctx); installErr != nil {
+				return fmt.Errorf("restore ui contribution %s: %w", uiDef.ContributionID, installErr)
+			}
+		}
 		if err := i.container.UIHost.Mount(uiDef.ContributionID); err != nil {
 			return fmt.Errorf("mount ui contribution %s: %w", uiDef.ContributionID, err)
 		}
@@ -1724,6 +1733,18 @@ func resolveExtensionBundlePath(extRoot, extensionID string) string {
 		return ""
 	}
 	safeID := strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(extensionID)
+	installationsRoot := filepath.Join(extRoot, "installations", safeID)
+	if currentData, err := os.ReadFile(filepath.Join(installationsRoot, "current.json")); err == nil {
+		var current struct {
+			GenerationID string `json:"generationID"`
+		}
+		if json.Unmarshal(currentData, &current) == nil && current.GenerationID != "" {
+			candidate := filepath.Join(installationsRoot, "generations", current.GenerationID)
+			if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
+				return candidate
+			}
+		}
+	}
 	installedRoot := filepath.Join(extRoot, "installed", safeID)
 	entries, err := os.ReadDir(installedRoot)
 	if err != nil {

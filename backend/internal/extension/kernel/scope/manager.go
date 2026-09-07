@@ -123,7 +123,7 @@ func (m *DefaultScopeManager) Snapshot(ctx context.Context, req ScopeResolveRequ
 	if err != nil {
 		return ScopeSnapshot{}, fmt.Errorf("resolve scope: %w", err)
 	}
-	return CreateSnapshot(req.InvocationID, scopes, req.CharacterID, req.ConversationID, req.ExtensionID, req.ModuleID, req.Generation), nil
+	return CreateSnapshotWithOwner(req.InvocationID, scopes, req.UserID, req.CharacterID, req.ConversationID, req.ExtensionID, req.ModuleID, req.Generation), nil
 }
 
 func (m *DefaultScopeManager) Invalidate(ctx context.Context, filter ScopeInvalidationFilter) error {

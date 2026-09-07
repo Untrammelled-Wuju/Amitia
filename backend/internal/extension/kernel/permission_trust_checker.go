@@ -45,6 +45,11 @@ func (c *repositoryPermissionTrustChecker) IsTrusted(subject permission.Permissi
 	if err != nil {
 		return false
 	}
+	if inst.Metadata != nil {
+		if devOnly, ok := inst.Metadata["devOnly"].(bool); ok && devOnly {
+			return true
+		}
+	}
 	switch strings.ToLower(strings.TrimSpace(def.Publisher.TrustLevel)) {
 	case "system", "official", "trusted", "user_trusted":
 		return true

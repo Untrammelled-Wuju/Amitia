@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/pkg/sse"
 )
@@ -41,6 +43,13 @@ func (h *DefaultClipboardHost) WriteText(ctx context.Context, text string) error
 
 func (h *DefaultClipboardHost) ReadText(ctx context.Context) (string, error) {
 	return "", ErrClipboardHostUnavailable
+}
+
+func clipboardHostUserID(ctx context.Context) string {
+	if actor, ok := auth.FromContext(ctx); ok && actor != nil {
+		return strings.TrimSpace(actor.UserID.String())
+	}
+	return ""
 }
 
 type pendingClipboardRequest struct {
@@ -93,7 +102,7 @@ func (h *BridgeClipboardHost) sendClipboardRequest(ctx context.Context, operatio
 	}
 
 	if h.hostRegistry != nil {
-		target, err := h.hostRegistry.FindTargetHostString(ctx, "", capability, "", "")
+		target, err := h.hostRegistry.FindTargetHostString(ctx, clipboardHostUserID(ctx), capability, "", "")
 		if err != nil {
 			return "", nil, err
 		}

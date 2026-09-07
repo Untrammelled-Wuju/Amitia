@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS auth_recovery_grants (
 
 CREATE TABLE IF NOT EXISTS characters (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'default',
     name TEXT NOT NULL,
     avatar TEXT DEFAULT '',
     identity TEXT DEFAULT '',
@@ -165,6 +166,7 @@ CREATE TABLE IF NOT EXISTS character_templates (
 
 CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'default',
     character_id TEXT DEFAULT '',
     title TEXT DEFAULT '',
     channel TEXT DEFAULT 'web',
@@ -314,6 +316,18 @@ CREATE TABLE IF NOT EXISTS tts_configs (
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS tts_cloned_voices (
+    user_id TEXT NOT NULL,
+    speaker_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    tts_config_id INTEGER NOT NULL DEFAULT 0,
+    language INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'ready',
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_tts_cloned_voices_user_created ON tts_cloned_voices(user_id, created_at);
 
 CREATE TABLE IF NOT EXISTS asr_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -510,26 +524,29 @@ CREATE TABLE IF NOT EXISTS active_message_task (
 );
 
 CREATE TABLE IF NOT EXISTS proactive_rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT DEFAULT '',
-    enabled INTEGER DEFAULT 1,
-    channel TEXT DEFAULT 'web',
-    character_id TEXT DEFAULT '',
-    rule_type TEXT DEFAULT 'cron',
-    schedule_cron TEXT DEFAULT '',
-    quiet_start TEXT DEFAULT '',
-    quiet_end TEXT DEFAULT '',
-    max_per_day INTEGER DEFAULT 10,
-    sent_count_today INTEGER DEFAULT 0,
-    prompt_template TEXT DEFAULT '',
-    random_minutes INTEGER DEFAULT 0,
-    last_sent_at TEXT,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     user_id TEXT NOT NULL DEFAULT 'default',
+     name TEXT DEFAULT '',
+     enabled INTEGER DEFAULT 1,
+     channel TEXT DEFAULT 'web',
+     conversation_id TEXT DEFAULT '',
+     character_id TEXT DEFAULT '',
+     rule_type TEXT DEFAULT 'cron',
+     schedule_cron TEXT DEFAULT '',
+     quiet_start TEXT DEFAULT '',
+     quiet_end TEXT DEFAULT '',
+     max_per_day INTEGER DEFAULT 10,
+     sent_count_today INTEGER DEFAULT 0,
+     prompt_template TEXT DEFAULT '',
+     random_minutes INTEGER DEFAULT 0,
+     last_sent_at TEXT,
+     created_at TEXT DEFAULT '',
+     updated_at TEXT DEFAULT ''
+ );
 
 CREATE TABLE IF NOT EXISTS proactive_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'default',
     rule_id INTEGER,
     conversation_id TEXT DEFAULT '',
     message_content TEXT DEFAULT '',
@@ -552,6 +569,7 @@ CREATE TABLE IF NOT EXISTS proactive_messages (
 
 CREATE TABLE IF NOT EXISTS reminders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'default',
     title TEXT DEFAULT '',
     content TEXT DEFAULT '',
     channel TEXT DEFAULT 'web',
@@ -567,6 +585,7 @@ CREATE TABLE IF NOT EXISTS reminders (
 
 CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'default',
     key TEXT DEFAULT '',
     value TEXT DEFAULT '',
     memory_type TEXT DEFAULT 'fact',
@@ -634,6 +653,7 @@ CREATE TABLE IF NOT EXISTS memory_events (
 
 CREATE TABLE IF NOT EXISTS memory_candidates (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'default',
     key TEXT NOT NULL DEFAULT '',
     value TEXT NOT NULL DEFAULT '',
     memory_type TEXT DEFAULT 'custom',
@@ -665,6 +685,8 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     reason TEXT NOT NULL DEFAULT ''
 );
 
+CREATE INDEX IF NOT EXISTS idx_memory_candidates_user ON memory_candidates(user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS memory_derivations (
     id TEXT PRIMARY KEY,
     output_memory_id TEXT NOT NULL,
@@ -682,6 +704,7 @@ CREATE INDEX IF NOT EXISTS idx_memory_derivations_output ON memory_derivations(o
 CREATE INDEX IF NOT EXISTS idx_memory_derivations_input ON memory_derivations(input_memory_id);
 CREATE INDEX IF NOT EXISTS idx_memory_events_operation ON memory_events(operation_id);
 
+CREATE INDEX IF NOT EXISTS idx_memories_user_character ON memories(user_id, character_id);
 CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(character_id, confidence);
 CREATE INDEX IF NOT EXISTS idx_memories_verified ON memories(character_id, verified_status);
 CREATE INDEX IF NOT EXISTS idx_memories_entity ON memories(entity_id, entity_type);
@@ -700,6 +723,7 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
 CREATE TABLE IF NOT EXISTS episodic_memories (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL DEFAULT 'default',
+    character_id TEXT NOT NULL DEFAULT '',
     scene_type TEXT NOT NULL,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -724,6 +748,7 @@ CREATE TABLE IF NOT EXISTS episodic_memories (
 );
 
 CREATE INDEX IF NOT EXISTS idx_episodic_user_id ON episodic_memories(user_id);
+CREATE INDEX IF NOT EXISTS idx_episodic_user_character ON episodic_memories(user_id, character_id);
 CREATE INDEX IF NOT EXISTS idx_episodic_scene_type ON episodic_memories(user_id, scene_type);
 CREATE INDEX IF NOT EXISTS idx_episodic_created ON episodic_memories(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_episodic_retention_state ON episodic_memories(user_id, decay_state, retention_level);
@@ -753,18 +778,25 @@ CREATE INDEX IF NOT EXISTS idx_user_profiles_projection_status ON user_profiles(
 
 CREATE TABLE IF NOT EXISTS world_book (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'default',
     match_type TEXT NOT NULL DEFAULT 'keyword',
     match_pattern TEXT NOT NULL DEFAULT '',
     match_scope TEXT NOT NULL DEFAULT 'full_context',
     inject_content TEXT NOT NULL DEFAULT '',
     priority INTEGER DEFAULT 0,
     hit_count INTEGER DEFAULT 0,
+    character_id TEXT DEFAULT '',
+    config_json TEXT DEFAULT '{}',
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_world_book_match_type ON world_book(match_type);
 CREATE INDEX IF NOT EXISTS idx_world_book_priority ON world_book(priority);
+CREATE INDEX IF NOT EXISTS idx_world_book_character_id ON world_book(character_id);
+CREATE INDEX IF NOT EXISTS idx_world_book_character_priority ON world_book(character_id, priority);
+CREATE INDEX IF NOT EXISTS idx_world_book_user_character ON world_book(user_id, character_id);
+CREATE INDEX IF NOT EXISTS idx_world_book_user_priority ON world_book(user_id, priority);
 
 CREATE TABLE IF NOT EXISTS conversation_summaries (
     id TEXT PRIMARY KEY,
@@ -840,6 +872,8 @@ CREATE INDEX IF NOT EXISTS idx_messages_conv_ctx_role_created ON messages(conver
 CREATE INDEX IF NOT EXISTS idx_messages_request ON messages(conversation_id, role, request_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_conversation ON pipeline_checkpoints(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_checkpoints_updated ON pipeline_checkpoints(updated_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations(user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_character ON conversations(user_id, character_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_channel_peer ON conversations(channel, peer_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_channel_peer_unique ON conversations(channel, peer_id) WHERE peer_id <> '';
@@ -848,6 +882,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_character_updated ON conversations(
 
 CREATE TABLE IF NOT EXISTS retrieval_logs (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'default',
     conversation_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     request_id TEXT NOT NULL DEFAULT '',
@@ -860,6 +895,7 @@ CREATE TABLE IF NOT EXISTS retrieval_logs (
     created_at TEXT DEFAULT ''
 );
 
+CREATE INDEX IF NOT EXISTS idx_retrieval_logs_user_created ON retrieval_logs(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_conv_created ON retrieval_logs(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_request_created ON retrieval_logs(request_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_character_created ON retrieval_logs(character_id, created_at);
@@ -4103,6 +4139,7 @@ updated_at_utc TEXT NOT NULL DEFAULT ''
 -- 来源: trigger_history.go
 CREATE TABLE IF NOT EXISTS trigger_histories (
 				id TEXT PRIMARY KEY,
+				user_id TEXT NOT NULL DEFAULT 'default',
 				trigger_id TEXT NOT NULL DEFAULT '',
 				trigger_type TEXT NOT NULL DEFAULT '',
 				title TEXT NOT NULL DEFAULT '',
@@ -6029,3 +6066,11 @@ CREATE INDEX IF NOT EXISTS idx_dpbmo_claim ON desktop_pet_behavior_mesh_outbox(s
 CREATE INDEX IF NOT EXISTS idx_dpbmo_expiry ON desktop_pet_behavior_mesh_outbox(status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_dpbmo_character ON desktop_pet_behavior_mesh_outbox(cloud_user_id, character_id, status);
 CREATE INDEX IF NOT EXISTS idx_dpbmo_device ON desktop_pet_behavior_mesh_outbox(cloud_user_id, target_device_id, status);
+
+-- Tenant ownership indexes kept in the baseline so fresh installs and upgraded databases converge.
+CREATE INDEX IF NOT EXISTS idx_characters_user_updated ON characters(user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_characters_user_active ON characters(user_id, is_active, is_default);
+CREATE INDEX IF NOT EXISTS idx_proactive_rules_user ON proactive_rules(user_id, character_id, enabled);
+CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, enabled, remind_at);
+CREATE INDEX IF NOT EXISTS idx_proactive_messages_user ON proactive_messages(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_trigger_histories_user ON trigger_histories(user_id, created_at);

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
 func TestGamePluginContributionManifest(t *testing.T) {
@@ -338,6 +340,9 @@ func TestGamePluginPreservedInExtensionDefinition(t *testing.T) {
 	}
 	if string(def.Modules[0].Contributions[0].Kind) != "game_plugin" {
 		t.Errorf("expected contribution kind game_plugin, got %s", def.Modules[0].Contributions[0].Kind)
+	}
+	if def.Domain != domain.ExtensionDomainGame {
+		t.Errorf("expected game domain, got %s", def.Domain)
 	}
 }
 

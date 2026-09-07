@@ -91,33 +91,19 @@ func (p *cutoverMigrationPort) ExecuteLegacyToCanonical(ctx context.Context, ope
 	if p.deps.DB == nil {
 		return nil
 	}
-	tables := []string{
-		"legacy_mcp_metadata",
-		"legacy_plugin_metadata",
-		"legacy_skill_metadata",
-		"legacy_memory_import_state",
-		"legacy_backup_metadata",
-		"legacy_tool_binding_aliases",
+	migrated, err := ArchiveLegacyMetadata(ctx, p.deps.DB, operationID)
+	if err != nil {
+		return err
 	}
-	migrated := 0
-	for _, table := range tables {
-		var count int64
-		if err := p.deps.DB.WithContext(ctx).Table(table).Count(&count).Error; err != nil {
-			continue
-		}
-		if count > 0 {
-			migrated++
-		}
-	}
-	if migrated > 0 {
+	if len(migrated) > 0 {
 		if err := p.deps.DB.WithContext(ctx).Exec(
 			"CREATE TABLE IF NOT EXISTS cutover_migration_log (operation_id TEXT, migrated_tables INTEGER, executed_at TEXT)",
 		).Error; err != nil {
 			return fmt.Errorf("create cutover_migration_log table: %w", err)
 		}
 		if err := p.deps.DB.WithContext(ctx).Exec(
-			"INSERT OR IGNORE INTO cutover_migration_log (operation_id, migrated_tables, executed_at) VALUES (?, ?, ?)",
-			operationID, migrated, time.Now().Format(time.RFC3339),
+			"INSERT INTO cutover_migration_log (operation_id, migrated_tables, executed_at) VALUES (?, ?, ?)",
+			operationID, len(migrated), time.Now().Format(time.RFC3339),
 		).Error; err != nil {
 			return fmt.Errorf("persist cutover migration log: %w", err)
 		}

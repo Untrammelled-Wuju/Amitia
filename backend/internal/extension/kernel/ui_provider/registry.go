@@ -230,8 +230,8 @@ func (d ProviderDefinition) Validate() error {
 			}
 		case EntryWebModule:
 			platformKey := strings.ToLower(strings.TrimSpace(platform))
-			if platformKey == "android" || platformKey == "ios" || platformKey == "mobile" {
-				return fmt.Errorf("ui_provider: web_module cannot target Flutter AOT platform %s; use schema_renderer or sandbox web", platform)
+			if platformKey == "android" || platformKey == "ios" || platformKey == "mobile" || strings.HasPrefix(platformKey, "flutter_") || platformKey == "*" {
+				return fmt.Errorf("ui_provider: web_module cannot target Flutter/mobile/wildcard entry %s; use schema_renderer or sandbox web and reserve web_module for web/Electron hosts", platform)
 			}
 			if strings.TrimSpace(entry.Path) == "" {
 				return fmt.Errorf("ui_provider: web_module path required for %s", platform)
@@ -796,11 +796,33 @@ func supportsPlatform(p *ProviderDefinition, platform string) bool {
 	if _, ok := p.Entries[platform]; ok {
 		return true
 	}
-	if _, ok := p.Entries["mobile"]; ok && (platform == "android" || platform == "ios") {
-		return true
+	if platform == "android" || platform == "ios" {
+		if _, ok := p.Entries["flutter_"+platform]; ok {
+			return true
+		}
+		if _, ok := p.Entries["flutter_mobile"]; ok {
+			return true
+		}
+		if _, ok := p.Entries["mobile"]; ok {
+			return true
+		}
 	}
-	if _, ok := p.Entries["desktop"]; ok && (platform == "windows" || platform == "macos" || platform == "linux") {
-		return true
+	if platform == "windows" || platform == "macos" || platform == "linux" {
+		if _, ok := p.Entries["electron_"+platform]; ok {
+			return true
+		}
+		if _, ok := p.Entries["electron_desktop"]; ok {
+			return true
+		}
+		if _, ok := p.Entries["flutter_"+platform]; ok {
+			return true
+		}
+		if _, ok := p.Entries["flutter_desktop"]; ok {
+			return true
+		}
+		if _, ok := p.Entries["desktop"]; ok {
+			return true
+		}
 	}
 	_, ok := p.Entries["*"]
 	return ok
