@@ -760,12 +760,14 @@ function assertUIProviderEntry(
       }
       return;
     }
-    case "web_module":
-      if (["android", "ios", "mobile"].includes(platform.trim().toLowerCase())) {
-        throw new ValidationError(`web_module cannot be used for Flutter AOT platform ${platform}; use schema_renderer or sandbox web`);
+    case "web_module": {
+      const platformKey = platform.trim().toLowerCase();
+      if (["android", "ios", "mobile", "*"].includes(platformKey) || platformKey.startsWith("flutter_")) {
+        throw new ValidationError(`web_module cannot target Flutter/mobile/wildcard entry ${platform}; use schema_renderer or sandbox web and reserve web_module for web/Electron hosts`);
       }
       if (!entry.path?.trim()) throw new ValidationError(`web_module path required for ${platform}`);
       return;
+    }
     case "schema_renderer":
       if (!entry.contributionId?.trim()) {
         throw new ValidationError(`schema_renderer contributionId required for ${platform}`);

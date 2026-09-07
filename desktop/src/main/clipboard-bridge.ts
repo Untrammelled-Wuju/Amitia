@@ -1,5 +1,6 @@
 import { clipboard, type BrowserWindow } from "electron";
 import { getLocalAdminHeaders } from "./backend-session-client";
+import { getDeviceId } from "./pet/runtime-identity";
 
 const CORE_HOST = "127.0.0.1";
 const CORE_PORT = 18899;
@@ -8,11 +9,23 @@ const CLIPBOARD_RESPONSE_PATH = "/api/extensions/ui/clipboard-response";
 const CLIENT_ID = "electron-main-clipboard";
 const RECONNECT_INTERVAL = 5000;
 const MAX_TEXT_SIZE = 1 * 1024 * 1024;
+const HOST_SESSION_PATH = "/api/extensions/ui/host-session";
+const HOST_HEARTBEAT_PATH = "/api/extensions/ui/host-session/heartbeat";
+const HOST_DISCONNECT_PATH = "/api/extensions/ui/host-session/disconnect";
+const DEFAULT_HEARTBEAT_SECONDS = 60;
 
 interface ClipboardRequestPayload {
   requestId: string;
   operation: string;
   text?: string;
+  hostClientId?: string;
+  hostSessionId?: string;
+}
+
+interface HostSessionResponse {
+  hostClientId: string;
+  hostSessionId: string;
+  heartbeatIntervalSeconds?: number;
 }
 
 export class ClipboardBridge {
@@ -20,6 +33,8 @@ export class ClipboardBridge {
   private stopped = true;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private abortController: AbortController | null = null;
+  private hostSessionId = "";
+  private heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(mainWindow: BrowserWindow) {
     this.mainWindow = mainWindow;
@@ -40,6 +55,8 @@ export class ClipboardBridge {
       this.abortController.abort();
       this.abortController = null;
     }
+    this.stopHeartbeat();
+    void this.disconnectHostSession();
   }
 
   private async getAuthHeaders(): Promise<Record<string, string> | null> {
@@ -49,6 +66,90 @@ export class ClipboardBridge {
     } catch {
       return null;
     }
+  }
+
+  private platformName(): string {
+    switch (process.platform) {
+      case "win32":
+        return "windows";
+      case "darwin":
+        return "darwin";
+      case "linux":
+        return "linux";
+      default:
+        return "";
+    }
+  }
+
+  private async postHostSession<T>(
+    path: string,
+    headers: Record<string, string>,
+    body: Record<string, unknown>,
+  ): Promise<T> {
+    const response = await fetch(`http://${CORE_HOST}:${CORE_PORT}${path}`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`host session request failed: ${response.status}`);
+    }
+    return await response.json() as T;
+  }
+
+  private async registerHostSession(headers: Record<string, string>): Promise<void> {
+    const result = await this.postHostSession<HostSessionResponse>(
+      HOST_SESSION_PATH,
+      headers,
+      {
+        hostClientId: CLIENT_ID,
+        deviceId: getDeviceId(),
+        platform: this.platformName(),
+        windowId: "main",
+        features: ["clipboard.read", "clipboard.write"],
+      },
+    );
+    const sessionId = String(result.hostSessionId ?? "").trim();
+    if (!sessionId) {
+      throw new Error("clipboard host registration returned no hostSessionId");
+    }
+    this.hostSessionId = sessionId;
+    this.stopHeartbeat();
+    const seconds = Math.max(20, Number(result.heartbeatIntervalSeconds ?? DEFAULT_HEARTBEAT_SECONDS) || DEFAULT_HEARTBEAT_SECONDS);
+    this.heartbeatTimer = setInterval(() => {
+      if (this.stopped || !this.hostSessionId) return;
+      void this.postHostSession(
+        HOST_HEARTBEAT_PATH,
+        headers,
+        { hostClientId: CLIENT_ID, hostSessionId: this.hostSessionId },
+      ).catch(() => {
+        // The SSE reconnect path will register a fresh host session.
+      });
+    }, seconds * 1000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  private async disconnectHostSession(): Promise<void> {
+    const sessionId = this.hostSessionId;
+    this.hostSessionId = "";
+    if (!sessionId) return;
+    const headers = await this.getAuthHeaders();
+    if (!headers) return;
+    await this.postHostSession(
+      HOST_DISCONNECT_PATH,
+      headers,
+      { hostClientId: CLIENT_ID, hostSessionId: sessionId },
+    ).catch(() => {});
   }
 
   private async connect(): Promise<void> {
@@ -81,6 +182,7 @@ export class ClipboardBridge {
         return;
       }
 
+      await this.registerHostSession(headers);
       console.log("[ClipboardBridge] SSE 连接成功，开始监听 clipboard_request 事件");
 
       const reader = response.body.getReader();
@@ -106,6 +208,8 @@ export class ClipboardBridge {
     }
 
     if (!this.stopped) {
+      this.stopHeartbeat();
+      this.hostSessionId = "";
       this.scheduleReconnect();
     }
   }
@@ -141,6 +245,8 @@ export class ClipboardBridge {
     }
 
     const { requestId, operation, text } = payload;
+    const responseHostClientId = String(payload.hostClientId ?? CLIENT_ID).trim();
+    const responseHostSessionId = String(payload.hostSessionId ?? this.hostSessionId).trim();
     if (!requestId || !operation) {
       console.warn("[ClipboardBridge] clipboard_request 缺少必要字段");
       return;
@@ -150,22 +256,22 @@ export class ClipboardBridge {
       if (operation === "write") {
         const writeText = text || "";
         if (writeText.length > MAX_TEXT_SIZE) {
-          await this.respond(headers, requestId, "", "clipboard text exceeds maximum size");
+          await this.respond(headers, requestId, "", "clipboard text exceeds maximum size", responseHostClientId, responseHostSessionId);
           return;
         }
         clipboard.writeText(writeText);
-        await this.respond(headers, requestId, "", null);
+        await this.respond(headers, requestId, "", null, responseHostClientId, responseHostSessionId);
       } else if (operation === "read") {
         const clipText = clipboard.readText();
         const truncated = clipText.length > MAX_TEXT_SIZE
           ? clipText.slice(0, MAX_TEXT_SIZE)
           : clipText;
-        await this.respond(headers, requestId, truncated, null);
+        await this.respond(headers, requestId, truncated, null, responseHostClientId, responseHostSessionId);
       } else {
-        await this.respond(headers, requestId, "", `unsupported operation: ${operation}`);
+        await this.respond(headers, requestId, "", `unsupported operation: ${operation}`, responseHostClientId, responseHostSessionId);
       }
     } catch (err) {
-      await this.respond(headers, requestId, "", String(err));
+      await this.respond(headers, requestId, "", String(err), responseHostClientId, responseHostSessionId);
     }
   }
 
@@ -174,11 +280,14 @@ export class ClipboardBridge {
     requestId: string,
     text: string,
     error: string | null,
+    hostClientId: string,
+    hostSessionId: string,
   ): Promise<void> {
     try {
+      const identity = { hostClientId, hostSessionId };
       const body = error
-        ? JSON.stringify({ requestId, error })
-        : JSON.stringify({ requestId, text });
+        ? JSON.stringify({ requestId, error, ...identity })
+        : JSON.stringify({ requestId, text, ...identity });
 
       const response = await fetch(
         `http://${CORE_HOST}:${CORE_PORT}${CLIPBOARD_RESPONSE_PATH}`,
