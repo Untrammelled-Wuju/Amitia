@@ -14,6 +14,11 @@ import (
 	kernelpermission "github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
+var servicePermissionIDs = map[string]struct{}{
+	kernelpermission.PermissionServiceRuntimeExecute: {},
+	kernelpermission.PermissionServiceNetworkRequest: {},
+}
+
 type ApprovalStatus string
 
 const (
@@ -131,7 +136,8 @@ func (c *ApprovalCoordinator) Evaluate(
 		return result
 	}
 	resolver, ok := c.broker.(perUsePermissionResolver)
-	if !ok || !resolver.RequiresPerUse(permissionID) {
+	requiresPerUse := ok && resolver.RequiresPerUse(permissionID)
+	if !requiresPerUse && permissionID != kernelpermission.PermissionServiceNetworkRequest {
 		// Missing persistent/session permissions belong to the normal extension
 		// permission-management flow. GameHost only suspends live operations for
 		// permissions whose canonical definition explicitly requires per-use approval.
@@ -169,44 +175,85 @@ func (c *ApprovalCoordinator) Evaluate(
 		}
 	}
 
-	expires := c.clock().UTC().Add(30 * time.Second)
-	if entry.view.ExpiresAt.Before(expires) {
-		expires = entry.view.ExpiresAt
-	}
-	approvalInput, err := json.Marshal(map[string]string{"gameHostApprovalId": entry.view.ID})
-	if err != nil {
-		c.finish(entry.view.ID, ApprovalStatusRejected, "system", "failed to bind allow_once grant")
-		return kernelpermission.PermissionEvaluationResult{
-			Decision: kernelpermission.DecisionDeny,
-			Reasons: []kernelpermission.PermissionReason{{
-				Code:       "allow_once_binding_failed",
-				Permission: permissionID,
-				Detail:     err.Error(),
-			}},
+	boundRequest := request
+	grantDecision := kernelpermission.DecisionAllowPersistent
+	var grant kernelpermission.PermissionGrant
+	var grantErr error
+	_, isServicePerm := servicePermissionIDs[permissionID]
+	if requiresPerUse && !isServicePerm {
+		expiresAt := c.clock().UTC().Add(30 * time.Second)
+		if entry.view.ExpiresAt.Before(expiresAt) {
+			expiresAt = entry.view.ExpiresAt
+		}
+		approvalInput, err := json.Marshal(map[string]string{"gameHostApprovalId": entry.view.ID})
+		if err != nil {
+			c.finish(entry.view.ID, ApprovalStatusRejected, "system", "failed to bind allow_once grant")
+			return kernelpermission.PermissionEvaluationResult{
+				Decision: kernelpermission.DecisionDeny,
+				Reasons: []kernelpermission.PermissionReason{{
+					Code:       "allow_once_binding_failed",
+					Permission: permissionID,
+					Detail:     err.Error(),
+				}},
+			}
+		}
+		boundRequest.InvocationID = entry.view.ID
+		boundRequest.Input = approvalInput
+		grantDecision = kernelpermission.DecisionAllowOnce
+		perUseGrant, err := c.broker.Grant(ctx, kernelpermission.PermissionGrantRequest{
+			Subject:      request.Subject,
+			PermissionID: permissionID,
+			Scope:        approvalScope(boundRequest),
+			Decision:     grantDecision,
+			InputHash:    approvalInputHash(approvalInput),
+			ExpiresAt:    &expiresAt,
+			IssuedBy:     kernelpermission.IssuerUser,
+			Reason:       "gamehost per-use approval " + entry.view.ID,
+		})
+		if err != nil {
+			c.finish(entry.view.ID, ApprovalStatusRejected, "system", "failed to create allow_once grant")
+			return kernelpermission.PermissionEvaluationResult{
+				Decision: kernelpermission.DecisionDeny,
+				Reasons: []kernelpermission.PermissionReason{{
+					Code:       "allow_once_grant_failed",
+					Permission: permissionID,
+					Detail:     err.Error(),
+				}},
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			_ = c.broker.Revoke(context.Background(), perUseGrant.GrantID)
+			c.finish(entry.view.ID, ApprovalStatusCancelled, "system", err.Error())
+			return kernelpermission.PermissionEvaluationResult{
+				Decision: kernelpermission.DecisionDeny,
+				Reasons: []kernelpermission.PermissionReason{{
+					Code:       "approval_cancelled",
+					Permission: permissionID,
+					Detail:     err.Error(),
+				}},
+			}
 		}
 	}
-	boundRequest := request
-	boundRequest.InvocationID = entry.view.ID
-	boundRequest.Input = approvalInput
-	grant, err := c.broker.Grant(ctx, kernelpermission.PermissionGrantRequest{
-		Subject:      request.Subject,
-		PermissionID: permissionID,
-		Scope:        approvalScope(boundRequest),
-		Decision:     kernelpermission.DecisionAllowOnce,
-		InputHash:    approvalInputHash(approvalInput),
-		ExpiresAt:    &expires,
-		IssuedBy:     kernelpermission.IssuerUser,
-		Reason:       "gamehost per-use approval " + entry.view.ID,
-	})
-	if err != nil {
-		c.finish(entry.view.ID, ApprovalStatusRejected, "system", "failed to create allow_once grant")
-		return kernelpermission.PermissionEvaluationResult{
-			Decision: kernelpermission.DecisionDeny,
-			Reasons: []kernelpermission.PermissionReason{{
-				Code:       "allow_once_grant_failed",
-				Permission: permissionID,
-				Detail:     err.Error(),
-			}},
+	if !requiresPerUse || isServicePerm {
+		grant, grantErr = c.broker.Grant(ctx, kernelpermission.PermissionGrantRequest{
+			Subject:      request.Subject,
+			PermissionID: permissionID,
+			Scope:        approvalScope(boundRequest),
+			Decision:     grantDecision,
+			InputHash:    approvalInputHash(nil),
+			IssuedBy:     kernelpermission.IssuerUser,
+			Reason:       "gamehost approval " + entry.view.ID,
+		})
+		if grantErr != nil {
+			c.finish(entry.view.ID, ApprovalStatusRejected, "system", "failed to create persistent grant")
+			return kernelpermission.PermissionEvaluationResult{
+				Decision: kernelpermission.DecisionDeny,
+				Reasons: []kernelpermission.PermissionReason{{
+					Code:       "persistent_grant_failed",
+					Permission: permissionID,
+					Detail:     grantErr.Error(),
+				}},
+			}
 		}
 	}
 	cleanupGrant := func() {
@@ -229,10 +276,10 @@ func (c *ApprovalCoordinator) Evaluate(
 	// the approved operation resumes. Evaluation itself is intentionally side-effect
 	// free so UI/diagnostic permission checks cannot accidentally consume approval.
 	result = c.broker.Evaluate(ctx, boundRequest)
-	if result.Decision == kernelpermission.DecisionAllowOnce {
+	if requiresPerUse && result.Decision == kernelpermission.DecisionAllowOnce {
 		result = c.consumeAllowOnce(ctx, permissionID, result)
 	}
-	if result.Decision == kernelpermission.DecisionAllow {
+	if result.Decision == kernelpermission.DecisionAllow || result.Decision == kernelpermission.DecisionAllowPersistent {
 		c.finish(entry.view.ID, ApprovalStatusConsumed, entry.view.ResolvedBy, entry.view.Reason)
 		return result
 	}
@@ -274,6 +321,9 @@ func (c *ApprovalCoordinator) consumeAllowOnce(ctx context.Context, permissionID
 }
 
 func approvalInputHash(input []byte) string {
+	if len(input) == 0 {
+		return ""
+	}
 	h := sha256.Sum256(input)
 	return hex.EncodeToString(h[:])
 }

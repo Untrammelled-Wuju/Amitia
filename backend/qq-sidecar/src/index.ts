@@ -250,8 +250,8 @@ qq.onMessage(async (msg: QQMessage) => {
             const sendTarget = last.groupId ? "group:" + last.groupId : "user:" + last.fromUserId
             logLine("Delivery [" + (i+1) + "/" + texts.length + "] to " + sendTarget + " text=" + line.substring(0, 50))
             try {
-              const deliveryResp = await fetch(`${qqSidecarConfig.coreUrl}/api/delivery/submit`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
+              const deliveryResp = await fetch(`${qqSidecarConfig.coreUrl}/internal/delivery/submit`, {
+                method: "POST", headers,
                 body: JSON.stringify({
                   channel: "qq",
                   peerId: last.groupId || last.fromUserId,
@@ -272,8 +272,8 @@ qq.onMessage(async (msg: QQMessage) => {
           const sendTarget = last.groupId ? "group:" + last.groupId : "user:" + last.fromUserId
           logLine("Single reply to " + sendTarget + " via delivery")
           try {
-            const deliveryResp = await fetch(`${qqSidecarConfig.coreUrl}/api/delivery/submit`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
+            const deliveryResp = await fetch(`${qqSidecarConfig.coreUrl}/internal/delivery/submit`, {
+              method: "POST", headers,
               body: JSON.stringify({
                 channel: "qq",
                 peerId: last.groupId || last.fromUserId,

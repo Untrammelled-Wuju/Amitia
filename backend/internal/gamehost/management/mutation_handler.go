@@ -13,6 +13,20 @@ type MutationHandler struct {
 	runtimeSvc *RuntimeMutationService
 }
 
+func extensionIDFromMutationRequest(c *gin.Context) string {
+	extensionID := strings.TrimSpace(c.Param("extensionId"))
+	if extensionID != "" {
+		return extensionID
+	}
+	var request struct {
+		ExtensionID string `json:"extensionId"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(request.ExtensionID)
+}
+
 func NewMutationHandler(packageSvc *PackageMutationService, runtimeSvc *RuntimeMutationService) *MutationHandler {
 	return &MutationHandler{
 		packageSvc: packageSvc,
@@ -50,7 +64,7 @@ func (h *MutationHandler) Enable(c *gin.Context) {
 		return
 	}
 
-	extensionID := strings.TrimSpace(c.Param("extensionId"))
+	extensionID := extensionIDFromMutationRequest(c)
 	if extensionID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required"})
 		return
@@ -79,7 +93,7 @@ func (h *MutationHandler) Disable(c *gin.Context) {
 		return
 	}
 
-	extensionID := strings.TrimSpace(c.Param("extensionId"))
+	extensionID := extensionIDFromMutationRequest(c)
 	if extensionID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required"})
 		return

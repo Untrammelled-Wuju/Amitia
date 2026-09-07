@@ -36,7 +36,7 @@ func NewGameHostStdioProtocolHandler(
 		topology:     topology,
 		plugins:      plugins,
 		readyGate:    readyGate,
-		readyTimeout: 15 * time.Second,
+		readyTimeout: 60 * time.Second,
 	}
 }
 

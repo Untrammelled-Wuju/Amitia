@@ -130,6 +130,9 @@ func (a *RuntimeAdapter) BindAgentContext(ctx context.Context, binding capabilit
 	}
 	peer, err := a.resolvePeer(ctx, binding)
 	if err != nil {
+		if strings.Contains(err.Error(), "has no active generation") {
+			return nil
+		}
 		return err
 	}
 	a.bindInvocationContext(peer, invocation)

@@ -115,6 +115,58 @@ func TestDefinitionMapper_MapToDefinition(t *testing.T) {
 	}
 }
 
+func TestDefinitionMapper_DevelopmentTrustUsesApprovedRuntimeTrust(t *testing.T) {
+	mapper := NewDefinitionMapper()
+	def, err := mapper.MapToDefinition(ServiceRuntimeView{
+		ExtensionID:    "com.example.dev",
+		ModuleID:       "runtime",
+		RuntimeType:    "service",
+		PublisherTrust: "development",
+		EntryPoint:     "./bin/runtime",
+		Network: trusted_service.ServiceNetworkPolicy{
+			Mode:          "unrestricted",
+			Enforce:       true,
+			AllowOutbound: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("MapToDefinition() error = %v", err)
+	}
+	if def.TrustLevel != string(trusted_service.TrustLevelTrusted) {
+		t.Fatalf("development definition trust = %q, want %q", def.TrustLevel, trusted_service.TrustLevelTrusted)
+	}
+	if !def.Executables[0].Signature.Trusted {
+		t.Fatal("development runtime definition must carry trusted executable metadata")
+	}
+	if def.Network.Enforce {
+		t.Fatal("development unrestricted runtime must use the explicitly trusted direct launch path")
+	}
+}
+
+func TestDefinitionMapper_DevelopmentTrustKeepsRestrictedNetworkEnforced(t *testing.T) {
+	mapper := NewDefinitionMapper()
+	def, err := mapper.MapToDefinition(ServiceRuntimeView{
+		ExtensionID:    "com.example.dev",
+		ModuleID:       "runtime",
+		RuntimeType:    "service",
+		PublisherTrust: "development",
+		EntryPoint:     "./bin/runtime",
+		Network: trusted_service.ServiceNetworkPolicy{
+			Mode:         "restricted",
+			Enforce:      true,
+			RequireProxy: true,
+			AllowedIPs:   []string{"127.0.0.1"},
+			AllowedPorts: []int{25565},
+		},
+	})
+	if err != nil {
+		t.Fatalf("MapToDefinition() error = %v", err)
+	}
+	if !def.Network.Enforce {
+		t.Fatal("development restricted runtime must remain network-isolated")
+	}
+}
+
 func TestDefinitionMapper_MapToDefinition_EmptyExtensionID(t *testing.T) {
 	mapper := NewDefinitionMapper()
 

@@ -12,6 +12,8 @@ func RegisterGameCenterRouter(group *gin.RouterGroup, service *GameCenterManagem
 		gameCenter.GET("/health", handler.GetCenterHealth)
 		gameCenter.GET("/developer-access", GetGameHostDeveloperAccess)
 		gameCenter.GET("/plugins", handler.ListPlugins)
+		gameCenter.GET("/plugins/detail", handler.GetPlugin)
+		gameCenter.GET("/plugins/detail/health", handler.GetPluginHealth)
 		gameCenter.GET("/plugins/:pluginId", handler.GetPlugin)
 		gameCenter.GET("/plugins/:pluginId/health", handler.GetPluginHealth)
 
@@ -42,6 +44,8 @@ func RegisterGameCenterMutationRouter(group *gin.RouterGroup, mutationHandler *M
 	gameCenter := group.Group("/game-center")
 	{
 		gameCenter.POST("/plugins/install", mutationHandler.Install)
+		gameCenter.POST("/extensions/enable", mutationHandler.Enable)
+		gameCenter.POST("/extensions/disable", mutationHandler.Disable)
 		gameCenter.POST("/extensions/:extensionId/update", mutationHandler.Update)
 		gameCenter.POST("/extensions/:extensionId/enable", mutationHandler.Enable)
 		gameCenter.POST("/extensions/:extensionId/disable", mutationHandler.Disable)

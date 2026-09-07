@@ -8,6 +8,12 @@ import (
 	kernelpermission "github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
+type trustedPermissionChecker struct{}
+
+func (trustedPermissionChecker) IsTrusted(kernelpermission.PermissionSubject) bool {
+	return true
+}
+
 func TestApprovalCoordinator_ApproveConsumesAllowOnce(t *testing.T) {
 	registry := kernelpermission.NewPermissionDefinitionRegistry()
 	storage := kernelpermission.NewMemoryPermissionStorage()
@@ -33,7 +39,6 @@ func TestApprovalCoordinator_ApproveConsumesAllowOnce(t *testing.T) {
 			PermissionID: kernelpermission.PermissionGameHostControl,
 		}},
 	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	resultCh := make(chan kernelpermission.PermissionEvaluationResult, 1)
@@ -83,6 +88,72 @@ func TestApprovalCoordinator_ApproveConsumesAllowOnce(t *testing.T) {
 	second := broker.Evaluate(context.Background(), request)
 	if second.Decision != kernelpermission.DecisionRequireApproval {
 		t.Fatalf("expected a second operation to require a fresh approval, got %q", second.Decision)
+	}
+}
+
+func TestApprovalCoordinator_PersistsServiceNetworkApproval(t *testing.T) {
+	registry := kernelpermission.NewPermissionDefinitionRegistry()
+	storage := kernelpermission.NewMemoryPermissionStorage()
+	broker := kernelpermission.NewDefaultPermissionBroker(registry, storage)
+	defer broker.Close()
+	broker.SetTrustLevelChecker(trustedPermissionChecker{})
+
+	coordinator, err := NewApprovalCoordinator(broker)
+	if err != nil {
+		t.Fatalf("NewApprovalCoordinator: %v", err)
+	}
+	coordinator.SetTTL(2 * time.Second)
+
+	subject := EffectiveSubject{
+		RuntimeID:   "runtime-network",
+		PluginID:    "plugin-network",
+		ServiceID:   "service-network",
+		ModuleID:    "service-network",
+		ExtensionID: "extension-network",
+	}
+	request := kernelpermission.PermissionEvaluationRequest{
+		Subject: subject.KernelSubject(),
+		Requirements: []kernelpermission.PermissionRequirement{{
+			PermissionID: kernelpermission.PermissionServiceNetworkRequest,
+			Scope:        kernelpermission.PermissionScope{Type: kernelpermission.ScopeModule, ID: subject.ModuleID},
+		}},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	resultCh := make(chan kernelpermission.PermissionEvaluationResult, 1)
+	go func() {
+		resultCh <- coordinator.Evaluate(ctx, subject, kernelpermission.PermissionServiceNetworkRequest, request)
+	}()
+
+	var approval PendingApproval
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		pending := coordinator.ListPending()
+		if len(pending) == 1 {
+			approval = pending[0]
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if approval.ID == "" {
+		t.Fatal("expected one pending approval")
+	}
+	if err := coordinator.Approve(approval.ID, "test-user", "approved network access"); err != nil {
+		t.Fatalf("Approve: %v", err)
+	}
+
+	select {
+	case result := <-resultCh:
+		if result.Decision != kernelpermission.DecisionAllow {
+			t.Fatalf("expected approved network permission to resume with allow, got %q (%v)", result.Decision, result.Reasons)
+		}
+	case <-ctx.Done():
+		t.Fatalf("approval evaluation did not resume: %v", ctx.Err())
+	}
+
+	second := broker.Evaluate(context.Background(), request)
+	if second.Decision != kernelpermission.DecisionAllow {
+		t.Fatalf("expected persistent network approval to allow a later request, got %q", second.Decision)
 	}
 }
 

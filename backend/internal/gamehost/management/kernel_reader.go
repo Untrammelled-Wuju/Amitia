@@ -55,7 +55,16 @@ func (r *KernelReader) ListGameCenterExtensions(ctx context.Context) ([]kerneldo
 		return nil, nil, err
 	}
 
-	filtered := kerneldomain.FilterGameCenter(defs)
+	filtered := make([]kerneldomain.ExtensionDefinition, 0, len(defs))
+	for i := range defs {
+		isGame, err := r.normalizeGameDomain(ctx, &defs[i])
+		if err != nil {
+			return nil, nil, err
+		}
+		if isGame {
+			filtered = append(filtered, defs[i])
+		}
+	}
 
 	insts, err := r.InstallationRepo.ListInstallations(ctx)
 	if err != nil {
@@ -77,10 +86,17 @@ func (r *KernelReader) GetGameCenterExtension(ctx context.Context, extensionID s
 
 	var target *kerneldomain.ExtensionDefinition
 	for i := range defs {
-		if string(defs[i].ID) == extensionID && defs[i].Domain == kerneldomain.ExtensionDomainGame {
-			target = &defs[i]
-			break
+		if string(defs[i].ID) != extensionID {
+			continue
 		}
+		isGame, err := r.normalizeGameDomain(ctx, &defs[i])
+		if err != nil {
+			return nil, nil, err
+		}
+		if isGame {
+			target = &defs[i]
+		}
+		break
 	}
 	if target == nil {
 		return nil, nil, nil
@@ -94,4 +110,26 @@ func (r *KernelReader) GetGameCenterExtension(ctx context.Context, extensionID s
 	}
 
 	return target, nil, nil
+}
+
+func (r *KernelReader) normalizeGameDomain(ctx context.Context, def *kerneldomain.ExtensionDefinition) (bool, error) {
+	if def.Domain == kerneldomain.ExtensionDomainGame {
+		return true, nil
+	}
+	if r.ContributionRepo == nil {
+		return false, nil
+	}
+	contribs, err := r.ContributionRepo.ListContributions(ctx, def.ID)
+	if err != nil {
+		return false, err
+	}
+	resolvedDomain, err := kerneldomain.ResolveExtensionDomain(contribs)
+	if err != nil {
+		return false, err
+	}
+	if resolvedDomain != kerneldomain.ExtensionDomainGame {
+		return false, nil
+	}
+	def.Domain = resolvedDomain
+	return true, nil
 }

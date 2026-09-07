@@ -62,6 +62,12 @@ func (a *HandshakeControllerAdapter) HandleHello(
 }
 
 func (a *HandshakeControllerAdapter) ConfirmReady(connID ipc.ConnectionID) {
+	if a.inner == nil || !a.inner.ConfirmReady(string(connID)) {
+		if a.readyGate != nil {
+			a.readyGate.MarkNotReady(string(connID))
+		}
+		return
+	}
 	if a.readyGate != nil {
 		a.readyGate.MarkReady(string(connID))
 	}

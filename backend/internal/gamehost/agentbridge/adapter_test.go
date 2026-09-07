@@ -157,6 +157,32 @@ func TestRuntimeAdapterBindAgentContextWithoutToolInvocation(t *testing.T) {
 	}
 }
 
+func TestRuntimeAdapterBindAgentContextWithoutActiveGenerationIsBestEffort(t *testing.T) {
+	ctx := context.Background()
+	plugins := registry.NewRegistry()
+	plugin := ghdomain.PluginDescriptor{ID: "example", ExtensionID: "com.example/game", Name: "Example", Version: "1.0.0", ProtocolVersion: protocol.ProtocolVersion, Services: []ghdomain.ServiceDescriptor{{ID: "main", Name: "main", Kind: ghdomain.ServiceKindProcess, Required: true}}}
+	if err := plugins.Register(ctx, plugin); err != nil {
+		t.Fatal(err)
+	}
+	runtimes := ghruntime.NewManager(ghruntime.ManagerOptions{})
+	rt, _, err := runtimes.EnsurePrimaryRuntime(ctx, plugin.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topology := ghruntime.NewTopologyStore()
+	if err := topology.PutRuntimeGraph(rt, plugin, map[ghdomain.ServiceID]string{"main": "def-main"}); err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := NewRuntimeAdapter(plugins, runtimes, topology, &genericControlPlane{}, stubReadiness{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeGameHost, Metadata: map[string]any{"extensionId": "com.example/game", "serviceId": "main"}}
+	if err := adapter.BindAgentContext(ctx, binding, capability.ToolInvocationContext{CharacterID: "character"}); err != nil {
+		t.Fatalf("expected best-effort bind to ignore missing generation: %v", err)
+	}
+}
+
 func TestSessionRegistryDefaultAgentContextEnrichesColdPluginSessions(t *testing.T) {
 	sessions := NewSessionRegistry()
 	sessions.Bind(SessionScope{

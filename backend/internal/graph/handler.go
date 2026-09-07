@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -20,7 +21,7 @@ func NewHandler(svc Service) *Handler {
 func (h *Handler) Neighbors(c *gin.Context) {
 	id := c.Param("id")
 	depth, _ := strconv.Atoi(c.DefaultQuery("depth", "2"))
-	userID := c.DefaultQuery("userId", "default")
+	userID := requestidentity.ResolveGin(c, "")
 	result, err := h.svc.QueryNeighbors(id, depth, userID)
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
@@ -37,7 +38,7 @@ func (h *Handler) FindPath(c *gin.Context) {
 		util.ErrorResponse(c, 400, "from和to不能为空", nil)
 		return
 	}
-	result, err := h.svc.FindPaths(from, to, maxDepth)
+	result, err := h.svc.FindPathsForUser(from, to, maxDepth, requestidentity.ResolveGin(c, ""))
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
@@ -46,7 +47,7 @@ func (h *Handler) FindPath(c *gin.Context) {
 }
 
 func (h *Handler) Stats(c *gin.Context) {
-	userID := c.DefaultQuery("userId", "default")
+	userID := requestidentity.ResolveGin(c, "")
 	result, err := h.svc.GetStats(userID)
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
@@ -57,7 +58,7 @@ func (h *Handler) Stats(c *gin.Context) {
 
 func (h *Handler) DeleteNode(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.svc.DeleteNode(id); err != nil {
+	if err := h.svc.DeleteNodeForUser(id, requestidentity.ResolveGin(c, "")); err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
 	}
@@ -65,7 +66,7 @@ func (h *Handler) DeleteNode(c *gin.Context) {
 }
 
 func (h *Handler) AllNodes(c *gin.Context) {
-	userID := c.DefaultQuery("userId", "default")
+	userID := requestidentity.ResolveGin(c, "")
 	result, err := h.svc.GetAllNodes(userID)
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
@@ -75,7 +76,7 @@ func (h *Handler) AllNodes(c *gin.Context) {
 }
 
 func (h *Handler) AllEdges(c *gin.Context) {
-	userID := c.DefaultQuery("userId", "default")
+	userID := requestidentity.ResolveGin(c, "")
 	result, err := h.svc.GetAllEdges(userID)
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)

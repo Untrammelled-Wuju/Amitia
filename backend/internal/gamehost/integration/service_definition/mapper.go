@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -48,6 +49,10 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 
 	trustLevel := authoritativeServiceTrustLevel(view.PublisherTrust)
 	signatureTrusted := trustLevel.AllowedForService()
+	networkPolicy := resolveNetworkPolicy(view.Network)
+	if view.PublisherTrust == "development" && strings.EqualFold(strings.TrimSpace(networkPolicy.Mode), "unrestricted") {
+		networkPolicy.Enforce = false
+	}
 
 	return &trusted_service.ServiceRuntimeDefinition{
 		ServiceID:   definitionID,
@@ -101,7 +106,7 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 		// enforced (or fail-closed) by the platform supervisor. Never silently drop
 		// a plugin's declared process budget.
 		Limits:              view.Limits,
-		Network:             resolveNetworkPolicy(view.Network),
+		Network:             networkPolicy,
 		SandboxReadOnlyRoot: view.SandboxReadOnlyRoot,
 		ManifestHash:        computeManifestHash(view),
 		DefinitionVersion:   2,
@@ -247,6 +252,8 @@ func authoritativeServiceTrustLevel(raw string) trusted_service.TrustLevel {
 	case "official":
 		return trusted_service.TrustLevelOfficial
 	case "trusted", "user_trusted":
+		return trusted_service.TrustLevelTrusted
+	case "development":
 		return trusted_service.TrustLevelTrusted
 	case "community":
 		return trusted_service.TrustLevelCommunity

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/app"
 )
 
@@ -16,6 +17,7 @@ func SetManager(mgr *Manager) { defaultManager = mgr }
 
 func RegisterQQRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	qqGroup := r.Group("/qq")
+	qqGroup.Use(security.SharedCoreAdminOnly())
 	{
 		qqGroup.POST("/connect", func(c *gin.Context) {
 			var req struct {
@@ -108,6 +110,12 @@ func RegisterQQRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 				return
 			}
 			cfg := mgr.FetchSidecarConfig()
+			_, hasToken := cfg["token"].(string)
+			if token, ok := cfg["token"].(string); ok {
+				hasToken = token != ""
+			}
+			delete(cfg, "token")
+			cfg["hasToken"] = hasToken
 			c.JSON(http.StatusOK, cfg)
 		})
 	}

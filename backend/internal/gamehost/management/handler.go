@@ -70,6 +70,9 @@ func (h *Handler) GetPlugin(c *gin.Context) {
 
 	pluginID := strings.TrimSpace(c.Param("pluginId"))
 	if pluginID == "" {
+		pluginID = strings.TrimSpace(c.Query("pluginId"))
+	}
+	if pluginID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "pluginId required"})
 		return
 	}
@@ -190,6 +193,9 @@ func (h *Handler) GetPluginHealth(c *gin.Context) {
 	}
 
 	pluginID := strings.TrimSpace(c.Param("pluginId"))
+	if pluginID == "" {
+		pluginID = strings.TrimSpace(c.Query("pluginId"))
+	}
 	if pluginID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "pluginId required"})
 		return
