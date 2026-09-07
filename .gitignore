@@ -1,321 +1,44 @@
-node_modules/
-front/node_modules/
-dist/
-front/dist/
+# Local secrets / signing material
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.keystore
+*.jks
+*signing.local*
+
+# Runtime data and local databases
+/AmitiaData/
+/data/
+/surrealdb/
+/qdrant/storage/
 *.db
 *.db-shm
 *.db-wal
 *.db-journal
+*.wal
 
-# Accidental Windows absolute-path artifacts
-**/D:*
-**/D*
-backend/data/data/backups/
-backend/data/migration_backups/
-backend/cmd/data/migration_backups/
-backend/data/app.db.bak_*
-backend/data/app.db
-backend/data/app.db-shm
-backend/data/app.db-wal
+# Build/cache output
+node_modules/
+.dart_tool/
+.pub-cache/
+.gradle/
+build/
+dist/
+coverage/
 *.log
-/logs/
-/backend/logs/
-/front/logs/
-stderr*.txt
-stdout*.txt
-stderr*.log
-stdout*.log
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-.env
-.env.local
-amitia-release.p12
-amitia-signing.local.ps1
-__pycache__/
-*.pyc
-temp_*.py
-backend/data/videos/
-backend/data/tts_cache/
-
-# Qdrant runtime data
-qdrant/storage/
-qdrant/snapshots/
-
-# release runtime data
-release/qdrant/storage/
-release/qdrant/snapshots/
-release/data/migration_backups/
-release/data/backups/
-release/logs/
-release/*.log
-release/qdrant/.qdrant-initialized
-
-backend/qdrant/storage/
-backend/qdrant/qdrant_linux_*
-release/surrealdb/surreal.exe
-release/qdrant/qdrant.exe
-release/server.exe
-release/server.exe~
-backend/server.exe
-desktop/release2/
-desktop-release/
-desktop/build-installer/
-desktop/installer/
-desktop/installer-v2/
-desktop/installer-v3/
-desktop/installer-v4/
-desktop/installer-v5/
-desktop/installer-out/
-desktop/installer-final/
-desktop/release-dist/
-desktop/dist-release/
-desktop/release/
-desktop/build/
-desktop/dist-types/
-desktop/resources/core/
-# Root-level runtime data (not to be committed)
-AmitiaData/
-/data/storage/
-/runtime/storage/
-.qdrant-initialized
-backend/qdrant/
-wechat-chat-extractor/weFlow.zip
-noa.rs-7.cn/
-
-.gocache/
-.php/
-
-.php/
-*.py
-*.extension-key
-backend/surrealdb/surreal.exe
-
-1-10000.txt
-
-backend/cmd/server/server.exe
-backend/node.exe
-server.exe
-android/app/src/main/assets/amitia-backend-arm64
-android/app/src/main/assets/proot_linux_aarch64
-android/app/src/main/assets/qdrant_linux_aarch64
-android/app/src/main/assets/surreal_linux_aarch64
-
-# A25 Android Runtime Candidate staged assets (build-time only, never commit)
-mobile_app/android/app/src/main/assets/amitia-runtime/
-mobile_app/android/amitia-runtime/src/main/jniLibs/
-mobile_app/android/amitia-runtime/src/main/res/raw/proot_artifact.json
-runtime/out/
-
-# Android UI reference (external assets)
-安卓端APPUI参考/
-
-# Backend compiled binaries
-backend/amitia-ext.exe
-backend/amitiax.exe
-backend/extension.test.exe
-
-# Test build artifacts
-backend/testdata/extensions/extension-kernel-repair/dev-hot-reload-*/dist-candidate-*/
-
-# FTP publish config (contains credentials)
-desktop/scripts/.publish-config.json
-
-# Backend large zip archives
-backend/pkg.zip
-
-# TRAE temp files
-.trae-html-share-packages/
-
-# Temp archives
-backend-src.zip
-backend-src.zip.tmp
-backend-source.zip
-
-# QQ sidecar device fingerprints & login artifacts (runtime data)
-**/device.json
-**/qrcode.png
-
-# Test binaries
-backend/worker.test.exe
-
-# State machine refactor acceptance temp
-state-machine-refactor-acceptance/
-
-# WorkBuddy AI working directory
-.workbuddy-ai/
-
-# Merge conflict files
-*.orig
-
-# Backend test/legacy binaries
-backend/kernel.test.exe
-backend/legacy-package-migrate.exe
-
-# Temp build artifacts
-backend/server_*.exe
-backend/tmp/
-temp_*.go
-temp_*.txt
-
-# Runtime build outputs
-runtime/out/
-
-# Local build artifacts and runtime data (not to be committed)
-backend/cmd/server/backend
-backend/cmd/server/backend.exe
-backend/server
-backend/.zip
-backend/dev/
-/data/
-# Backend database runtime data/binaries only; keep source/config/scripts trackable
-backend/qdrant/storage/
-backend/qdrant/qdrant.zip
-backend/qdrant/qdrant.exe
-backend/qdrant/qdrant_linux_*
-backend/surrealdb/data/
-backend/surrealdb/data.sdb
-backend/surrealdb/surreal.zip
-backend/surrealdb/surreal.exe
-/qdrant/
-/surrealdb/
-# Runtime build qdrant/surrealdb component scripts (not backend/qdrant runtime)
-!runtime/build/qdrant/
-!runtime/build/surrealdb/
-# Runtime build scripts (Python)
-!runtime/build/**/*.py
-# Runtime build outputs and caches
-runtime/out/
-runtime/**/.cache/
-runtime/**/.work/
-runtime/**/__pycache__/
-runtime/**/*.pyc
-runtime/build/**/test-local-package/
-test_output.txt
-test_nodeenv_race.txt
-
-# Large source archives (exceed GitHub 100MB limit)
-docs/parity/**/amitia-a14-source.tar
-docs/parity/**/source_archive.*
-docs/**/*.tar
-
-# AI tooling workspace config
-.reasonix/
-reasonix.toml
-
-# Backend runtime data (DB, secrets, migration backups, installed extensions)
-backend/data/
-backend/cmd/data/
-**/migration_backups/
-**/migration_backups_prev/
-**/mcp-secrets.key
-**/local-token
-data.db/
-backend/data.db/
-
-# Backend Linux build artifacts
-backend/server_linux_amd64
-backend/server_linux_arm64
-
-# Backend test build artifacts
-backend/qdrantprocess.test
-backend/qdrantprocess.test.exe
-
-# Temp files at root
-tmp_check.js
-tmp_check_db.js
-TEMPgradle_out.txt
-:TEMPgradle_out.txt
-
-# Erroneous path files
-backend/D:*
-
-# game-plugin SDK node_modules
-backend/pkg/gameplugin/sdk/game-plugin/node_modules/
-
-# Runtime build outputs
-runtime/build/android/
-runtime/build/out/
-
-# Backend build artifacts
-backend/server.exe~
-backend/C:Code*.exe
-backend/D:*.txt
-front/*.err
-U-Ai-source.zip
-/desktop/runtime-artifacts/
-mobile_app/android/.kotlin/
-
-# SDK plugin-sdk build outputs and dependencies
-sdk/plugin-sdk/dist/
-sdk/plugin-sdk/node_modules/
-sdk/plugin-sdk/D:*
-
-b35_test_output.txt
-backend/runtime/
-
-
-backend/server_old.exe.bak
-
-mobile_app/android/amitia-runtime/build/
-mobile_app/android/app/build/
-mobile_app/android/build/
-runtime/mobile_app/
-
-testplugins/
-runtime/build/proot/android-x86_64/
-
-backend/err.txt
-backend/logs.txt
-
-backend/_vet_output.txt
-backend/runtime-artifacts/
-backend/target/
-runtime/build/runtime-package/linux-arm64/
-shaders/
-backend/scripts/prepare/
-mobile_app/android/amitia-runtime/scripts/
-mobile_app/android/docs/
-mobile_app/android/scripts/
-
-D:desktopgo_test_output.txt
-backend/backend.exe
-
-desktopgo_test_output.txt
-
-**/desktopgo_test_output.txt
-
-backend/build_log.txt
-backend/D:桌面跟进项目U-Ai_build_log.txt
-
-build_err.txt
-build_log.txt
+*.tmp
 *.bak
-
-U-Ai-source.tar.gz
-
-build_errors.txt
-
-D:build-errors.txt
-
-runtime-package/
-*.zip
-
-build_out.txt
-
-# GameHost source/package hygiene
-/backend/pkg/gameplugin/sdk/game-plugin/dist/
-/temp_extract/
-/U-Ai/
-# Final source-package hygiene (local audit/build artifacts)
+*.orig
+.tmp-*/
 temp_apk_extract/
 .gradle-proot-build/
-.gradle/
 trace.atrace
 .meituan-catpaw/
-.dart_tool/
-coverage/
-C*/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
