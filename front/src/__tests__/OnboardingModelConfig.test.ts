@@ -23,8 +23,8 @@ describe("引导页模型配置保存", () => {
     expect(onboardingSource).not.toContain('apiType: "vision"');
   });
 
-  it("完成引导后调用公开完成接口并进入聊天页", () => {
-    expect(onboardingSource).toContain('post("/api/public/onboarding/complete"');
+  it("完成引导后调用已认证完成接口并进入聊天页", () => {
+    expect(onboardingSource).toContain('post("/api/onboarding/complete"');
     expect(onboardingSource).toContain('router.push("/chat")');
   });
 

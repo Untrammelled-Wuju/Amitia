@@ -93,6 +93,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <small v-else-if="attachedVideoUrl" class="is-ready"
                   >视频已就绪</small
                 >
+                <small v-else-if="videoUploadError" class="is-error">{{ videoUploadError }}</small>
                 <small v-else>等待上传</small>
               </span>
               <button
@@ -478,6 +479,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                 !generating &&
                 (isInputDisabled ||
                   uploadingVideo ||
+                  !!videoUploadError ||
                   processingImage ||
                   (!text.trim() &&
                     !attachedImagePreview &&
@@ -592,6 +594,7 @@ const {
   attachedVideo,
   attachedVideoUrl,
   uploadingVideo,
+  videoUploadError,
   processingImage,
   handleImageSelect,
   clearImage,
@@ -912,7 +915,10 @@ async function submitComposer(event?: KeyboardEvent) {
   const outgoingText = buildOutgoingText(text.value);
 
   if (attachedVideo.value) {
-    if (!attachedVideoUrl.value) return;
+    if (!attachedVideoUrl.value) {
+      ElMessage.error(videoUploadError.value || "视频尚未上传完成");
+      return;
+    }
     sendWithVideo(outgoingText || "[视频]", attachedVideoUrl.value);
     clearVideo();
     finishSubmit();
@@ -1812,4 +1818,8 @@ defineExpose({ focus, setText, clear: clearText });
   .input-field { max-height: 132px; }
 }
 
+
+.attachment-card .is-error {
+  color: var(--el-color-danger);
+}
 </style>

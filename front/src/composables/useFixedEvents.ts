@@ -152,11 +152,14 @@ export function useFixedEvents() {
   async function setEventEnabled(
     id: number,
     enabled: boolean,
+    characterId?: string,
   ): Promise<FixedEvent> {
     loading.value = true;
     try {
       const data = await post<FixedEvent>(
-        `/api/companion/fixed-events/${id}/enabled`,
+        characterId
+          ? `/api/companion/fixed-events/${id}/enabled?characterId=${encodeURIComponent(characterId)}`
+          : `/api/companion/fixed-events/${id}/enabled`,
         { enabled },
       );
       return data;

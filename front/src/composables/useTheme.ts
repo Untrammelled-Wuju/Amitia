@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, watch } from "vue";
-import { apiClient } from "./useApi";
 
 export type ThemePreset = "system" | "dark" | "light";
 export type CornerStyle = 0 | 1 | 2;
@@ -264,37 +263,18 @@ if (typeof window !== "undefined" && window.matchMedia) {
 }
 
 async function loadFromServer() {
-  try {
-    const res = await apiClient.get("/api/theme");
-    const d = (res.data as any)?.data || res.data;
-    if (d?.preset) state.value.preset = normalizePreset(d.preset);
-    if (typeof d?.accentColor === "string" && d.accentColor.trim()) {
-      state.value.accentColor = normalizeAccentColor(d.accentColor);
-    }
-    applyAppearance();
-  } catch {
-    applyTheme(state.value.preset);
-  } finally {
-    themeLoaded.value = true;
-  }
-}
-
-async function saveToServer() {
-  try {
-    await apiClient.put("/api/theme", {
-      preset: state.value.preset,
-      accentColor: state.value.accentColor,
-    });
-  } catch {
-    // 外观仍保留在本地；服务恢复后下一次修改会重新同步。
-  }
+  // Appearance is a device preference on both Electron and Flutter. Keeping
+  // it local avoids mutating a shared Cloud Core app_settings row for every
+  // user connected to the same deployment. The exported name is retained for
+  // App.vue compatibility.
+  applyAppearance();
+  themeLoaded.value = true;
 }
 
 export function useTheme() {
   function setPreset(preset: ThemePreset) {
     state.value.preset = normalizePreset(preset);
     if (state.value.preset === "light") preferredLight.value = "light";
-    void saveToServer();
   }
 
   function setFontScale(value: number) {
@@ -305,7 +285,6 @@ export function useTheme() {
   function setAccentColor(value: string) {
     state.value.accentColor = normalizeAccentColor(value);
     applyAppearance();
-    void saveToServer();
   }
 
   function setCornerStyle(value: number) {

@@ -498,7 +498,23 @@ export function useWebChatConversation(
     } catch {}
   }
 
-  function fetchConvSummary() {}
+  async function fetchConvSummary(conversationID = convId.value): Promise<string> {
+    const id = String(conversationID || "").trim();
+    if (!id || id === "wechat" || id === "qq") return "";
+    try {
+      const response = await get<any>(
+        `/api/chats/conversations/${encodeURIComponent(id)}/summary`,
+      );
+      return String(
+        response?.summaryText ??
+          response?.summary_text ??
+          response?.summary ??
+          "",
+      ).trim();
+    } catch {
+      return "";
+    }
+  }
 
   return {
     characters,

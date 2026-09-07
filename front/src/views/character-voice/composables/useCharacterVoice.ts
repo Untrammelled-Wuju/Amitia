@@ -11,6 +11,24 @@ interface VoicePreset {
   gender: string;
 }
 
+export interface TtsConfigSummary {
+  id: number;
+  name: string;
+  apiType?: string;
+  resourceId?: string;
+  voiceType?: string;
+  isActive?: number;
+}
+
+interface ClonedVoiceSummary {
+  speakerId: string;
+  name: string;
+  language?: number;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export function useCharacterVoice() {
   const injectedCharacterId = inject<Ref<string | null>>(
     "currentCharacterId",
@@ -18,6 +36,7 @@ export function useCharacterVoice() {
   );
 
   const voicePresets = ref<VoicePreset[]>([]);
+  const voiceConfigs = ref<TtsConfigSummary[]>([]);
   const emotions = [
     { value: "", label: "无" },
     { value: "happy", label: "开心" },
@@ -59,55 +78,35 @@ export function useCharacterVoice() {
   const cloneFileList = ref<any[]>([]);
   const trainLoading = ref(false);
   const trainResult = ref("");
-  const clonedVoices = ref<any[]>([]);
+  const clonedVoices = ref<ClonedVoiceSummary[]>([]);
   const previewCloneId = ref("");
 
-  const globalApiKey = ref("");
-  const cloneForm = reactive({ name: "", refText: "" });
-  const cloneLoading = ref(false);
-  const cloneResult = ref("");
-
   const currentVoiceSupportsEmotion = computed(() => {
+    if (voiceMode.value !== "preset") return false;
     const v = voicePresets.value.find((p) => p.name === form.voiceType);
     return !!v;
   });
 
-  function loadClonedVoices() {
-    const saved = localStorage.getItem("uai-cloned-voices");
-    if (saved) {
-      try {
-        clonedVoices.value = JSON.parse(saved);
-      } catch {}
+  function onModeChange(mode: string) {
+    if (mode !== "preset") {
+      form.emotion = "";
+      form.emotionScale = 4;
     }
   }
-
-  function saveClonedVoices() {
-    localStorage.setItem(
-      "uai-cloned-voices",
-      JSON.stringify(clonedVoices.value),
-    );
-  }
-
-  function onModeChange(_mode: string) {}
 
   function selectCloneVoice(speakerId: string) {
     form.customVoiceId = speakerId;
   }
 
-  function onVoiceTypeChange() {}
+  function onVoiceTypeChange() {
+    if (!currentVoiceSupportsEmotion.value) {
+      form.emotion = "";
+      form.emotionScale = 4;
+    }
+  }
 
   function onCloneFileChange(file: any) {
     cloneFile.value = file?.raw || file;
-  }
-
-  async function loadGlobalApiKey() {
-    try {
-      const configs = await apiClient
-        .get("/api/tts/configs")
-        .then((r: any) => r.data?.data || []);
-      const active = configs.find((c: any) => c.isActive);
-      if (active) globalApiKey.value = active.apiKey || "";
-    } catch {}
   }
 
   async function loadVoicePresets() {
@@ -115,7 +114,30 @@ export function useCharacterVoice() {
       const r = await apiClient.get("/api/tts/voices");
       const data = r.data?.data || r.data;
       if (Array.isArray(data)) voicePresets.value = data;
-    } catch {}
+    } catch {
+      voicePresets.value = [];
+    }
+  }
+
+  async function loadVoiceConfigs() {
+    try {
+      const r = await apiClient.get("/api/tts/config-summaries");
+      const data = r.data?.data || r.data;
+      voiceConfigs.value = Array.isArray(data) ? data : [];
+    } catch {
+      voiceConfigs.value = [];
+    }
+  }
+
+  async function loadClonedVoices() {
+    try {
+      const r = await apiClient.get("/api/tts/voice-clones");
+      const data = r.data?.data || r.data;
+      clonedVoices.value = Array.isArray(data) ? data : [];
+    } catch (err: any) {
+      clonedVoices.value = [];
+      ElMessage.error(err?.message || "加载复刻音色失败");
+    }
   }
 
   async function loadCharacterVoice() {
@@ -130,13 +152,9 @@ export function useCharacterVoice() {
         form.voicePitch = normalizeVoicePitchRatio(data.voicePitch);
         form.voiceVolume = data.voiceVolume ?? 1.0;
         form.customVoiceId = data.customVoiceId || "";
-        form.voiceConfigId = data.voiceConfigId || "";
+        form.voiceConfigId = data.voiceConfigId ? String(data.voiceConfigId) : "";
         form.emotion = data.emotion || "";
         form.emotionScale = data.emotionScale || 4;
-        if (!currentVoiceSupportsEmotion.value) {
-          form.emotion = "";
-          form.emotionScale = 4;
-        }
         form.silenceDuration = data.silenceDuration || 0;
 
         if (data.voiceMode) {
@@ -146,67 +164,61 @@ export function useCharacterVoice() {
         } else {
           voiceMode.value = "preset";
         }
+        if (!currentVoiceSupportsEmotion.value) {
+          form.emotion = "";
+          form.emotionScale = 4;
+        }
 
         Object.assign(originalForm, { ...form, _mode: voiceMode.value });
       }
-    } catch {}
+    } catch (err: any) {
+      ElMessage.error(err?.message || "加载角色音色配置失败");
+    }
   }
 
-  async function submitClone() {
-    if (!cloneFile.value || !cloneForm.name.trim()) return;
-    cloneLoading.value = true;
-    cloneResult.value = "";
+  async function submitTrain() {
+    const speakerId = trainSpeakerId.value.trim();
+    if (!cloneFile.value) {
+      ElMessage.warning("请选择音频文件");
+      return;
+    }
+    trainLoading.value = true;
+    trainResult.value = "";
     try {
+      const displayName = trainVoiceName.value.trim() || speakerId || "角色复刻音色";
       const formData = new FormData();
       formData.append("audio", cloneFile.value);
-      formData.append("name", cloneForm.name.trim());
+      formData.append("name", displayName);
+      if (speakerId) formData.append("speakerId", speakerId);
+      if (form.voiceConfigId.trim()) formData.append("voiceConfigId", form.voiceConfigId.trim());
       formData.append("language", "cn");
-      if (cloneForm.refText.trim())
-        formData.append("refText", cloneForm.refText.trim());
 
-      if (!globalApiKey.value) {
-        ElMessage.warning("请先在音色配置中设置API Key");
-        cloneLoading.value = false;
-        return;
-      }
-      const url =
-        "/api/tts/voice-clone?apiKey=" + encodeURIComponent(globalApiKey.value);
-      const resp = await apiClient.post(url, formData);
+      const resp = await apiClient.post("/api/tts/voice-clone", formData);
       const data: any = resp.data?.data || resp.data;
       if (!data?.speakerId) {
         ElMessage.error((resp.data as any)?.message || "复刻失败");
         return;
       }
-      const newVoice = {
-        speakerId: data.speakerId,
-        name: data.name || cloneForm.name,
-        createdAt: new Date().toISOString(),
-      };
-      clonedVoices.value.unshift(newVoice);
-      saveClonedVoices();
-      form.customVoiceId = data.speakerId;
-      cloneResult.value = "复刻成功: " + data.speakerId;
+      await loadClonedVoices();
+      form.customVoiceId = String(data.speakerId);
+      trainResult.value = `复刻成功: ${data.speakerId}`;
       ElMessage.success("音色复刻成功，已自动选中");
-      cloneForm.name = "";
-      cloneForm.refText = "";
+      trainSpeakerId.value = "";
+      trainVoiceName.value = "";
       cloneFile.value = null;
       cloneFileList.value = [];
     } catch (err: any) {
       ElMessage.error(err?.message || "复刻失败");
     } finally {
-      cloneLoading.value = false;
+      trainLoading.value = false;
     }
-  }
-
-  async function submitTrain() {
-    await submitClone();
   }
 
   async function previewClone(speakerId: string) {
     previewCloneId.value = speakerId;
     try {
       const res: any = await apiClient.post("/api/tts/synthesize", {
-        speakerId: speakerId,
+        speakerId,
         text: "测试",
       });
       const data = res.data?.data || res.data;
@@ -215,8 +227,8 @@ export function useCharacterVoice() {
       } else {
         ElMessage.warning("未能获取音频");
       }
-    } catch {
-      ElMessage.error("试听失败，请检查全局音色配置");
+    } catch (err: any) {
+      ElMessage.error(err?.message || "试听失败，请检查全局音色配置");
     } finally {
       previewCloneId.value = "";
     }
@@ -224,19 +236,21 @@ export function useCharacterVoice() {
 
   async function deleteClone(speakerId: string, name: string) {
     try {
-      await ElMessageBox.confirm('确定删除音色"' + name + '"吗？', "确认", {
+      await ElMessageBox.confirm(`确定删除音色"${name}"吗？`, "确认", {
         type: "warning",
         confirmButtonText: "删除",
       });
-      clonedVoices.value = clonedVoices.value.filter(
-        (v: any) => v.speakerId !== speakerId,
-      );
+      await apiClient.delete("/api/tts/voice-clone", { params: { speakerId } });
       if (form.customVoiceId === speakerId) {
         form.customVoiceId = "";
       }
-      saveClonedVoices();
+      await loadClonedVoices();
       ElMessage.success("已删除");
-    } catch {}
+    } catch (err: any) {
+      if (err !== "cancel" && err !== "close") {
+        ElMessage.error(err?.message || "删除失败");
+      }
+    }
   }
 
   async function doPreview() {
@@ -257,8 +271,8 @@ export function useCharacterVoice() {
       } else {
         ElMessage.warning("未能获取音频，请检查全局音色配置");
       }
-    } catch {
-      ElMessage.warning("试听失败，请检查全局音色配置");
+    } catch (err: any) {
+      ElMessage.warning(err?.message || "试听失败，请检查全局音色配置");
     } finally {
       previewLoading.value = false;
     }
@@ -268,6 +282,10 @@ export function useCharacterVoice() {
     const cid = injectedCharacterId.value;
     if (!cid) {
       ElMessage.warning("未找到角色 ID");
+      return;
+    }
+    if (voiceMode.value === "clone" && !form.customVoiceId.trim()) {
+      ElMessage.warning("请选择一个复刻音色");
       return;
     }
     saving.value = true;
@@ -310,13 +328,17 @@ export function useCharacterVoice() {
   }
 
   onMounted(() => {
-    loadVoicePresets();
-    loadCharacterVoice();
-    loadClonedVoices();
+    void Promise.all([
+      loadVoicePresets(),
+      loadVoiceConfigs(),
+      loadClonedVoices(),
+      loadCharacterVoice(),
+    ]);
   });
 
   return {
     voicePresets,
+    voiceConfigs,
     emotions,
     saving,
     previewLoading,
@@ -333,19 +355,15 @@ export function useCharacterVoice() {
     trainResult,
     clonedVoices,
     previewCloneId,
-    globalApiKey,
-    cloneForm,
-    cloneLoading,
-    cloneResult,
     currentVoiceSupportsEmotion,
     onModeChange,
     selectCloneVoice,
     onVoiceTypeChange,
     onCloneFileChange,
     loadVoicePresets,
+    loadVoiceConfigs,
     loadCharacterVoice,
     loadClonedVoices,
-    submitClone,
     submitTrain,
     previewClone,
     deleteClone,

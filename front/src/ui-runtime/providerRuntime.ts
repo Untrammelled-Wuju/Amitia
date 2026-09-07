@@ -4,6 +4,10 @@ import type { UIProviderDefinition, UIProviderEntry, UIProviderResolveContext } 
 const trustedModuleCache = new Map<string, Component>();
 
 export function selectProviderEntry(provider: UIProviderDefinition, platform: string): UIProviderEntry | null {
+  if (["windows", "macos", "linux"].includes(platform)) {
+    if (provider.entries[`electron_${platform}`]) return provider.entries[`electron_${platform}`];
+    if (provider.entries.electron_desktop) return provider.entries.electron_desktop;
+  }
   if (provider.entries[platform]) return provider.entries[platform];
   if (["android", "ios"].includes(platform) && provider.entries.mobile) return provider.entries.mobile;
   if (["windows", "macos", "linux"].includes(platform) && provider.entries.desktop) return provider.entries.desktop;

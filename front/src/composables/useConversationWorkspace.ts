@@ -106,7 +106,7 @@ export function useConversationWorkspace() {
       return;
     }
     try {
-      const raw = await get<any[]>("/api/local/workspaces");
+      const raw = await get<any[]>("/api/workspaces");
       recentWorkspaces.value = (Array.isArray(raw) ? raw : [])
         .map(normalizeMount)
         .filter((item): item is WorkspaceMountSummary => Boolean(item))
@@ -155,7 +155,7 @@ export function useConversationWorkspace() {
       const binding = await createBindingFromMount(mount);
       currentWorkspace.value = binding;
       try {
-        await post(`/api/local/workspaces/${encodeURIComponent(mount.id)}/touch`);
+        await post(`/api/workspaces/${encodeURIComponent(mount.id)}/touch`);
       } catch {
         // Touch is only an MRU hint; the binding itself remains valid.
       }
@@ -177,7 +177,7 @@ export function useConversationWorkspace() {
     try {
       const selection = await window.amitiaDesktop.selectWorkspaceDirectory();
       if (!selection?.path) return;
-      const created = await post<any>("/api/local/workspaces/local", {
+      const created = await post<any>("/api/workspaces/local", {
         name: String(selection.name || "").trim() || "工作目录",
         localRoot: selection.path,
         readOnly: false,

@@ -53,16 +53,35 @@ SPDX-License-Identifier: AGPL-3.0-only
     ><template #extension-actions><button v-if="hasConversationSidebar && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></UIProviderHost>
     </div>
       <div class="chat-body-wrapper">
-      <ProfileSummaryPanel
-        :visible="showProfiles"
-        @close="showProfiles = false"
-      />
-      <MemoryInjectPanel
-        :visible="showMemInject"
-        :conv-id="convId"
-        :character-id="characterId"
-        @close="showMemInject = false"
-      />
+      <ExtensionSlot
+        slot-id="chat.profile_summary.panel"
+        :context="chatExtensionContext"
+        fallback="default"
+        layout="stack"
+        surface-role="overlay"
+        bare
+      >
+        <ProfileSummaryPanel
+          :visible="showProfiles"
+          :character-id="characterId"
+          @close="showProfiles = false"
+        />
+      </ExtensionSlot>
+      <ExtensionSlot
+        slot-id="chat.memory_context.panel"
+        :context="chatExtensionContext"
+        fallback="default"
+        layout="stack"
+        surface-role="overlay"
+        bare
+      >
+        <MemoryInjectPanel
+          :visible="showMemInject"
+          :conv-id="convId"
+          :character-id="characterId"
+          @close="showMemInject = false"
+        />
+      </ExtensionSlot>
       <UIProviderHost
         capability="conversation.messages"
         :fallback="MessagesArea"
@@ -205,6 +224,7 @@ import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue";
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue";
 import { normalizeRealtimeMessage } from "@/utils/message-order";
 import ChatHeaderExtensionHost from "@/components/extension/chat/ChatHeaderExtensionHost.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import UIProviderHost from "@/components/ui-runtime/UIProviderHost.vue";
@@ -221,29 +241,9 @@ const ttsApiKey = ref("");
 const ttsVoiceType = ref("");
 const ttsResourceId = ref("");
 
-async function fetchTtsConfig() {
-  try {
-    const data: any = await get<any>("/api/tts/configs");
-    const list = Array.isArray(data)
-      ? data
-      : Array.isArray(data?.items)
-        ? data.items
-        : data?.configs || [];
-    const active = list.find((c: any) => c.isActive || c.is_active);
-    if (active) {
-      ttsApiKey.value = active.apiKey || "";
-      ttsVoiceType.value = active.voiceType || "";
-      ttsResourceId.value = active.resourceId || "";
-    }
-  } catch {}
-}
-
-async function handleToggleCall() {
-  await fetchTtsConfig();
-  if (!ttsApiKey.value) {
-    router.push("/model/voice");
-    return;
-  }
+function handleToggleCall() {
+  // Realtime calls use server-side active TTS/realtime credentials.
+  // Clients must not fetch or gate on secret model configuration.
   callActive.value = !callActive.value;
 }
 
@@ -637,10 +637,27 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
 watch(
   convId,
   (conversationId) => {
-    loadConversationWorkspace(conversationId || "");
+    const id = conversationId || "";
+    loadConversationWorkspace(id);
+    const requestedId = id;
+    void fetchConvSummary(requestedId).then((summary) => {
+      if ((convId.value || "") === requestedId) {
+        convSummary.value = summary;
+      }
+    });
   },
   { immediate: true },
 );
+
+watch(showSummary, (visible) => {
+  if (!visible) return;
+  const requestedId = convId.value || "";
+  void fetchConvSummary(requestedId).then((summary) => {
+    if ((convId.value || "") === requestedId) {
+      convSummary.value = summary;
+    }
+  });
+});
 
 provideConversationUIContext({
   conversationId: convId,

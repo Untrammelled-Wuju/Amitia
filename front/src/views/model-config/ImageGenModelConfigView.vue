@@ -77,6 +77,7 @@ const modelConfig = useModelConfig({
   showDetect: false,
   modelPlaceholder: "doubao-seedream-5-0 / dall-e-3 / stable-image-core",
   defaultIsActive: 1,
+  payloadFields: ["name", "apiType", "apiKey", "baseUrl", "modelName", "isActive", "enabled"],
 });
 
 const {

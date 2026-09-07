@@ -6,6 +6,8 @@ import { createAuthenticatedFetchInit } from "../runtime/request-auth";
 import { isNavigationAllowed } from "../navigation/nav-whitelist";
 import { useExtensionUIStore } from "../stores/extensionUI";
 import { browserClientPluginRuntime, type BrowserDeclarativeClientPackage } from "../ui-runtime/clientPluginRuntime";
+import { resolveUIHostDeviceId } from "../ui-runtime/deviceIdentity";
+import { resolveHostEnvironment } from "./useHostEnvironment";
 
 interface SSEEventEnvelope {
   eventType: string;
@@ -15,6 +17,8 @@ interface SSEEventEnvelope {
   payload: Record<string, unknown>;
   expiresAt?: string;
   timestamp: string;
+  hostClientId?: string;
+  hostSessionId?: string;
 }
 
 const severityMap: Record<string, "success" | "warning" | "info" | "error"> = {
@@ -40,6 +44,88 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   const processedRequestIds = new Set<string>();
   const isConnected = connected ?? ref(false);
   let extensionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let hostHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let hostClientId = "";
+  let hostSessionId = "";
+  let notificationSettingsCheckedAt = 0;
+  let notificationsAllowed = false;
+  const proactiveNotificationIds = new Set<string>();
+
+  function getStableHostClientId(): string {
+    if (hostClientId) return hostClientId;
+    const key = "amitia.ui.host-client-id.v1";
+    try {
+      const existing = window.sessionStorage.getItem(key)?.trim();
+      if (existing) {
+        hostClientId = existing;
+        return existing;
+      }
+      const suffix = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+      hostClientId = `ui-host-${suffix}`;
+      window.sessionStorage.setItem(key, hostClientId);
+    } catch {
+      hostClientId = `ui-host-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+    }
+    return hostClientId;
+  }
+
+  async function postHostSession(path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const url = await resolveApiUrl(path);
+    const init = await createAuthenticatedFetchInit(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const response = await fetch(url, init);
+    if (!response.ok) throw new Error(`UI host session request failed: ${response.status}`);
+    return await response.json() as Record<string, unknown>;
+  }
+
+  async function registerHostSession(): Promise<string> {
+    const clientId = getStableHostClientId();
+    const deviceId = await resolveUIHostDeviceId();
+    const environment = resolveHostEnvironment();
+    const result = await postHostSession("/api/extensions/ui/host-session", {
+      hostClientId: clientId,
+      deviceId,
+      platform: environment.platform === "macos" ? "darwin" : environment.platform,
+      windowId: "main",
+      features: ["ui.notify", "ui.dialog", "ui.navigate"],
+    });
+    hostSessionId = String(result.hostSessionId ?? "").trim();
+    if (!hostSessionId) throw new Error("UI host registration returned no hostSessionId");
+    if (hostHeartbeatTimer) clearInterval(hostHeartbeatTimer);
+    const intervalSeconds = Math.max(20, Number(result.heartbeatIntervalSeconds ?? 60) || 60);
+    hostHeartbeatTimer = setInterval(() => {
+      if (!hostSessionId) return;
+      void postHostSession("/api/extensions/ui/host-session/heartbeat", {
+        hostClientId: clientId,
+        hostSessionId,
+      }).catch(() => {});
+    }, intervalSeconds * 1000);
+    return clientId;
+  }
+
+  async function unregisterHostSession(): Promise<void> {
+    if (hostHeartbeatTimer) {
+      clearInterval(hostHeartbeatTimer);
+      hostHeartbeatTimer = null;
+    }
+    const clientId = hostClientId;
+    const sessionId = hostSessionId;
+    hostSessionId = "";
+    if (!clientId || !sessionId) return;
+    try {
+      await postHostSession("/api/extensions/ui/host-session/disconnect", {
+        hostClientId: clientId,
+        hostSessionId: sessionId,
+      });
+    } catch {
+      // Expiration/heartbeat cleanup remains authoritative if the client exits abruptly.
+    }
+  }
 
   function isExpired(expiresAt?: string): boolean {
     if (!expiresAt) return false;
@@ -60,13 +146,23 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     return true;
   }
 
-  async function sendDialogResponse(dialogId: string, result: string): Promise<void> {
+  async function sendDialogResponse(
+    dialogId: string,
+    result: string,
+    responseHostClientId = hostClientId,
+    responseHostSessionId = hostSessionId,
+  ): Promise<void> {
     try {
       const url = await resolveApiUrl("/api/extensions/ui/dialog-response");
       const init = await createAuthenticatedFetchInit("/api/extensions/ui/dialog-response", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dialogId, result }),
+        body: JSON.stringify({
+          dialogId,
+          result,
+          hostClientId: responseHostClientId,
+          hostSessionId: responseHostSessionId,
+        }),
       });
       await fetch(url, init);
     } catch {
@@ -260,6 +356,8 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     if (!shouldProcess(envelope)) return;
     const payload = envelope.payload;
     const dialogId = payload.dialogId as string;
+    const responseHostClientId = String(envelope.hostClientId ?? hostClientId).trim();
+    const responseHostSessionId = String(envelope.hostSessionId ?? hostSessionId).trim();
     const buttons = payload.buttons && (payload.buttons as string[]).length > 0
       ? (payload.buttons as string[])
       : ["确定"];
@@ -271,13 +369,13 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       type: "info",
     })
       .then(() => {
-        void sendDialogResponse(dialogId, buttons[0]);
+        void sendDialogResponse(dialogId, buttons[0], responseHostClientId, responseHostSessionId);
       })
       .catch((action: string) => {
         if (action === "cancel" && buttons.length > 1) {
-          void sendDialogResponse(dialogId, buttons[1]);
+          void sendDialogResponse(dialogId, buttons[1], responseHostClientId, responseHostSessionId);
         } else {
-          void sendDialogResponse(dialogId, "closed");
+          void sendDialogResponse(dialogId, "closed", responseHostClientId, responseHostSessionId);
         }
       });
   }
@@ -337,6 +435,53 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     }, delay);
   }
 
+  async function notificationAllowedForThisDevice(): Promise<boolean> {
+    const now = Date.now();
+    if (now - notificationSettingsCheckedAt < 30000) return notificationsAllowed;
+    notificationSettingsCheckedAt = now;
+    try {
+      const deviceId = await resolveUIHostDeviceId();
+      const path = `/api/notifications/status?deviceId=${encodeURIComponent(deviceId)}`;
+      const url = await resolveApiUrl(path);
+      const init = await createAuthenticatedFetchInit("/api/notifications/status", { method: "GET" });
+      const response = await fetch(url, init);
+      if (!response.ok) throw new Error(`notification status HTTP ${response.status}`);
+      const rawStatus = await response.json() as Record<string, unknown>;
+      const nested = rawStatus.data;
+      const status = nested && typeof nested === "object"
+        ? nested as Record<string, unknown>
+        : rawStatus;
+      notificationsAllowed = status.enabled === true && status.subscribed === true;
+    } catch {
+      notificationsAllowed = false;
+    }
+    return notificationsAllowed;
+  }
+
+  async function handleProactiveNotification(data: string): Promise<void> {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    try {
+      const payload = JSON.parse(data) as Record<string, unknown>;
+      const content = String(payload.content ?? "").trim();
+      if (!content || !await notificationAllowedForThisDevice()) return;
+      const messageId = String(payload.messageId ?? "").trim();
+      if (messageId) {
+        if (proactiveNotificationIds.has(messageId)) return;
+        proactiveNotificationIds.add(messageId);
+        if (proactiveNotificationIds.size > DEDUP_MAX_SIZE) {
+          const first = proactiveNotificationIds.values().next().value;
+          if (first) proactiveNotificationIds.delete(first);
+        }
+      }
+      new Notification("Amitia", {
+        body: content.slice(0, 240),
+        tag: messageId ? `proactive-${messageId}` : undefined,
+      });
+    } catch {
+      // Malformed proactive data must not affect the UI Host stream.
+    }
+  }
+
   function dispatchEvent(eventName: string, data: string) {
     const event = new MessageEvent(eventName, { data });
     switch (eventName) {
@@ -356,6 +501,7 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
         window.dispatchEvent(
           new CustomEvent("amitia:proactive-message", { detail: data }),
         );
+        void handleProactiveNotification(data);
         break;
       case "extension_installed":
       case "extension_uninstalled":
@@ -414,7 +560,8 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     const controller = new AbortController();
     abortController = controller;
     try {
-      const url = await resolveApiUrl(`/api/proactive-sse?clientId=ui-host`);
+      const clientId = getStableHostClientId();
+      const url = await resolveApiUrl(`/api/proactive-sse?clientId=${encodeURIComponent(clientId)}`);
       const init = await createAuthenticatedFetchInit("/api/proactive-sse", {
         headers: { Accept: "text/event-stream" },
         signal: controller.signal,
@@ -423,6 +570,8 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
         throw new Error("SSE 连接未建立");
       }
+      if (version !== connectionVersion || controller.signal.aborted) return;
+      await registerHostSession();
       if (version !== connectionVersion || controller.signal.aborted) return;
       isConnected.value = true;
       reconnectAttempts = 0;
@@ -454,6 +603,10 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       abortController.abort();
       abortController = null;
     }
+    if (hostHeartbeatTimer) {
+      clearInterval(hostHeartbeatTimer);
+      hostHeartbeatTimer = null;
+    }
     isConnected.value = false;
   }
 
@@ -468,6 +621,7 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   }, 60000);
 
   onUnmounted(() => {
+    void unregisterHostSession();
     disconnect();
     if (dedupCleanupTimer) {
       clearInterval(dedupCleanupTimer);

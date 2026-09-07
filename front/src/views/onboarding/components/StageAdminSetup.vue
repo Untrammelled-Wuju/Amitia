@@ -11,7 +11,7 @@
         {{
           deployMode === "local"
             ? "系统将检查后端服务、侧车服务以及各数据库组件的启动状态。"
-            : "本设备不会启动本地服务，只会验证远程地址、服务版本和接口兼容性。"
+            : "业务连接将直达 Cloud Core；本机 Device Agent 仍会保留，用于设备本地 Runtime 能力。"
         }}
       </div>
       <div class="ob-boot-list">
@@ -35,19 +35,23 @@
       <div class="kicker">{{ isLogin ? "账号登录" : "账号注册" }}</div>
       <div class="ob-sheet-title">
         {{
-          deployMode === "remote"
-            ? "登录远程管理账号"
-            : isLogin
-              ? "登录管理账号"
+          isLogin
+            ? deployMode === "remote"
+              ? "登录远程管理账号"
+              : "登录管理账号"
+            : deployMode === "remote"
+              ? "初始化远程管理员"
               : "注册管理账号"
         }}
       </div>
       <div class="ob-account-sheet-desc">
         {{
-          deployMode === "remote"
-            ? "使用远程 Amitia 服务已有的管理账号登录。本设备不会创建新的本地账号。"
-            : isLogin
-              ? "管理账号已经创建。请输入管理员名称和密码，登录后继续设置。"
+          isLogin
+            ? deployMode === "remote"
+              ? "使用 Cloud Core 已有的管理账号登录。"
+              : "管理账号已经创建。请输入管理员名称和密码，登录后继续设置。"
+            : deployMode === "remote"
+              ? "该 Cloud Core 尚无管理员。请输入服务器 AMITIA_SETUP_TOKEN 对应的初始化令牌后创建首个管理员。"
               : "用于进入管理与设置页面，并保护配置、聊天记录和记忆数据。"
         }}
       </div>
@@ -78,6 +82,15 @@
             placeholder="再次输入密码"
           />
         </label>
+        <label v-if="deployMode === 'remote' && !isLogin" class="ob-input-label">
+          初始化令牌
+          <input
+            v-model="setupToken"
+            type="password"
+            autocomplete="off"
+            placeholder="AMITIA_SETUP_TOKEN（至少 32 位）"
+          />
+        </label>
       </div>
       <div class="ob-error">{{ errorMsg }}</div>
     </div>
@@ -103,6 +116,7 @@ const emit = defineEmits<{
       username: string;
       password: string;
       password2: string;
+      setupToken: string;
       isLogin: boolean;
       deployMode: string;
     },
@@ -112,14 +126,13 @@ const emit = defineEmits<{
 const username = ref(props.accountName || "");
 const password = ref("");
 const password2 = ref("");
+const setupToken = ref("");
 const errorMsg = ref("");
 
 const bootRows = ref([
-  { name: "检查后端服务", state: "", stateText: "等待" },
-  { name: "检查微信侧车", state: "", stateText: "等待" },
-  { name: "检查QQ侧车", state: "", stateText: "等待" },
-  { name: "检查Qdrant", state: "", stateText: "等待" },
-  { name: "检查SurrealDB", state: "", stateText: "等待" },
+  { name: "检查本地服务", state: "", stateText: "等待" },
+  { name: "检查运行时就绪状态", state: "", stateText: "等待" },
+  { name: "检查运行时能力", state: "", stateText: "等待" },
 ]);
 
 let abortController: AbortController | null = null;
@@ -159,13 +172,7 @@ watch(
 function updateBootLabels() {
   const local = props.deployMode === "local";
   const names = local
-    ? [
-        "检查后端服务",
-        "检查微信侧车",
-        "检查QQ侧车",
-        "检查Qdrant",
-        "检查SurrealDB",
-      ]
+    ? ["检查本地服务", "检查运行时就绪状态", "检查运行时能力"]
     : ["检查服务地址", "验证服务版本", "确认接口兼容性", "建立远程连接"];
   bootRows.value = names.map((name) => ({
     name,
@@ -220,6 +227,7 @@ async function fetchWithTimeout(
   url: string,
   signal: AbortSignal,
   timeoutMs = 10000,
+  init: RequestInit = {},
 ): Promise<Response> {
   const controller = new AbortController();
   const linkedSignal = controller.signal;
@@ -229,7 +237,7 @@ async function fetchWithTimeout(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, { signal: linkedSignal });
+    const res = await fetch(url, { ...init, signal: linkedSignal });
     return res;
   } finally {
     clearTimeout(timeout);
@@ -255,100 +263,46 @@ async function runLocalChecks(
   signal: AbortSignal,
 ) {
   const apiBase = await getApiBaseURL();
-
-  let healthData: any = null;
-  let breakerData: any = null;
+  const checks = [
+    {
+      path: "/api/public/health",
+      successText: "正常运行",
+      errorText: "服务未就绪",
+    },
+    {
+      path: "/readyz",
+      successText: "已就绪",
+      errorText: "运行时未就绪",
+    },
+    {
+      path: "/api/public/runtime/capabilities",
+      successText: "能力可用",
+      errorText: "能力接口不可用",
+    },
+  ];
 
   for (let i = 0; i < rows.length; i++) {
     if (signal.aborted) return;
+    if (i > 0) {
+      await delay(350, signal);
+    }
+
     const row = rows[i];
+    const check = checks[i];
+    row.state = "running";
+    row.stateText = "处理中";
 
-    if (i === 0) {
-      row.state = "running";
-      row.stateText = "处理中";
-
-      try {
-        const res = await fetchWithTimeout(
-          `${apiBase}/api/health`,
-          signal,
-          8000,
-        );
-        if (res.ok) {
-          healthData = await res.json();
-          const ready =
-            healthData?.data?.ready === true || healthData?.ready === true;
-          row.state = ready ? "done" : "error";
-          row.stateText = ready ? "正常运行" : "异常";
-        } else {
-          row.state = "error";
-          row.stateText = "异常";
-        }
-      } catch {
-        row.state = "error";
-        row.stateText = "无法连接";
-      }
-    } else if (i === 1) {
-      await delay(650, signal);
-      if (signal.aborted) return;
-
-      row.state = "running";
-      row.stateText = "处理中";
-
-      const hd = healthData?.data || healthData || {};
-      const wechatRunning = hd.wechat_running;
-      row.state = wechatRunning === true ? "done" : "error";
-      row.stateText = wechatRunning === true ? "正常运行" : "未启动";
-    } else if (i === 2) {
-      await delay(650, signal);
-      if (signal.aborted) return;
-
-      row.state = "running";
-      row.stateText = "处理中";
-
-      const hd = healthData?.data || healthData || {};
-      const qqRunning = hd.qq_running;
-      row.state = qqRunning === true ? "done" : "error";
-      row.stateText = qqRunning === true ? "正常运行" : "未启动";
-    } else if (i === 3) {
-      await delay(650, signal);
-      if (signal.aborted) return;
-
-      row.state = "running";
-      row.stateText = "处理中";
-
-      try {
-        if (!breakerData) {
-          const res = await fetchWithTimeout(
-            `${apiBase}/api/health/circuit-breakers`,
-            signal,
-            8000,
-          );
-          if (res.ok) {
-            const json = await res.json();
-            breakerData = json?.data || json || [];
-          }
-        }
-        const qdrant = Array.isArray(breakerData)
-          ? breakerData.find((b: any) => b.name === "qdrant")
-          : null;
-        row.state = qdrant?.healthy ? "done" : "error";
-        row.stateText = qdrant?.healthy ? "正常运行" : "未启动";
-      } catch {
-        row.state = "error";
-        row.stateText = "无法连接";
-      }
-    } else if (i === 4) {
-      await delay(650, signal);
-      if (signal.aborted) return;
-
-      row.state = "running";
-      row.stateText = "处理中";
-
-      const surrealdb = Array.isArray(breakerData)
-        ? breakerData.find((b: any) => b.name === "surrealdb")
-        : null;
-      row.state = surrealdb?.healthy ? "done" : "error";
-      row.stateText = surrealdb?.healthy ? "正常运行" : "未启动";
+    try {
+      const res = await fetchWithTimeout(
+        `${apiBase}${check.path}`,
+        signal,
+        8000,
+      );
+      row.state = res.ok ? "done" : "error";
+      row.stateText = res.ok ? check.successText : check.errorText;
+    } catch {
+      row.state = "error";
+      row.stateText = "无法连接";
     }
   }
 }
@@ -369,7 +323,7 @@ async function runRemoteChecks(
 
       try {
         const res = await fetchWithTimeout(
-          `${remoteURL}/api/health`,
+          `${remoteURL}/api/public/health`,
           signal,
           8000,
         );
@@ -393,7 +347,7 @@ async function runRemoteChecks(
 
       try {
         const res = await fetchWithTimeout(
-          `${remoteURL}/api/health`,
+          `${remoteURL}/api/public/health`,
           signal,
           8000,
         );
@@ -419,7 +373,7 @@ async function runRemoteChecks(
 
       try {
         const res = await fetchWithTimeout(
-          `${remoteURL}/api/runtime/health`,
+          `${remoteURL}/api/public/runtime/capabilities`,
           signal,
           8000,
         );
@@ -440,8 +394,26 @@ async function runRemoteChecks(
 
       row.state = "running";
       row.stateText = "处理中";
-      row.state = "done";
-      row.stateText = "已完成";
+      try {
+        const res = await fetchWithTimeout(
+          `${remoteURL}/api/public/auth/status`,
+          signal,
+          8000,
+        );
+        if (!res.ok) {
+          row.state = "error";
+          row.stateText = "认证接口不可用";
+          continue;
+        }
+        const data = await res.json();
+        const status = data?.data ?? data;
+        const valid = typeof status?.hasAdmin === "boolean";
+        row.state = valid ? "done" : "error";
+        row.stateText = valid ? "已完成" : "响应不兼容";
+      } catch {
+        row.state = "error";
+        row.stateText = "无法连接";
+      }
     }
   }
 }
@@ -468,11 +440,17 @@ function handleSubmit() {
     return;
   }
 
+  if (props.deployMode === "remote" && !props.isLogin && setupToken.value.trim().length < 32) {
+    errorMsg.value = "远程首管理员初始化令牌至少 32 位。";
+    return;
+  }
+
   errorMsg.value = "";
   emit("submit", {
     username: name,
     password: pw,
     password2: password2.value,
+    setupToken: setupToken.value.trim(),
     isLogin: props.isLogin,
     deployMode: props.deployMode,
   });

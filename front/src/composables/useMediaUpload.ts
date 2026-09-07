@@ -88,6 +88,7 @@ export function useMediaUpload(
   const attachedVideo = ref<File | null>(null);
   const attachedVideoUrl = ref<string | null>(null);
   const uploadingVideo = ref(false);
+  const videoUploadError = ref<string | null>(null);
   const processingImage = ref(false);
   let imageSelectionVersion = 0;
 
@@ -152,7 +153,10 @@ export function useMediaUpload(
     if (!file) return;
     if (!file.type.startsWith("video/")) return;
     attachedVideo.value = file;
+    attachedVideoUrl.value = null;
+    videoUploadError.value = null;
     uploadingVideo.value = true;
+    onRemoveVideo();
     const formData = new FormData();
     formData.append("video", file);
     Promise.all([
@@ -160,15 +164,26 @@ export function useMediaUpload(
       createAuthenticatedFetchInit("/api/video/upload", { method: "POST", body: formData }),
     ])
       .then(([url, init]) => fetch(url, init))
-      .then((res) => res.json())
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(data?.message || data?.error || `视频上传失败 (${res.status})`);
+        }
+        return data;
+      })
       .then((data) => {
         const videoUrl = data?.data?.videoUrl || data?.videoUrl || "";
-        if (videoUrl) {
-          attachedVideoUrl.value = videoUrl;
-          onVideo(file, videoUrl);
-        }
+        if (!videoUrl) throw new Error("视频上传成功但服务端未返回 videoUrl");
+        attachedVideoUrl.value = videoUrl;
+        videoUploadError.value = null;
+        onVideo(file, videoUrl);
       })
-      .catch(() => {})
+      .catch((error: unknown) => {
+        attachedVideoUrl.value = null;
+        videoUploadError.value =
+          error instanceof Error && error.message ? error.message : "视频上传失败，请重新选择";
+        onRemoveVideo();
+      })
       .finally(() => {
         uploadingVideo.value = false;
       });
@@ -179,6 +194,7 @@ export function useMediaUpload(
     attachedVideo.value = null;
     attachedVideoUrl.value = null;
     uploadingVideo.value = false;
+    videoUploadError.value = null;
     onRemoveVideo();
   }
 
@@ -190,6 +206,7 @@ export function useMediaUpload(
     attachedVideo,
     attachedVideoUrl,
     uploadingVideo,
+    videoUploadError,
     processingImage,
     handleImageSelect,
     clearImage,

@@ -146,6 +146,7 @@
       <el-button size="small" @click="searchMemory">记忆搜索</el-button>
       <el-button size="small" :loading="extracting" @click="extractCandidates">提取待审核候选</el-button>
       <el-button size="small" @click="showGenerateDialog = true">从会话生成候选</el-button>
+      <el-button size="small" @click="showRankedDialog = true">检索排序诊断</el-button>
       <div class="toolbar-spacer"></div>
       <el-button size="small" type="primary" :icon="Plus" @click="showCreate"
         >新建</el-button
@@ -360,6 +361,11 @@
       @update:candidates="candidates = $event"
       @show-candidates="showCandidates = true"
     />
+    <RankedMemoryDialog
+      v-model="showRankedDialog"
+      :character-id="characterFilter || injectedCharacterId || ''"
+      :initial-query="keyword"
+    />
   </div>
 </template>
 
@@ -367,6 +373,7 @@
 import { ref, onMounted, inject, type Ref } from "vue";
 import { Search, Plus } from "@element-plus/icons-vue";
 import CandidateGenerateDialog from "./components/CandidateGenerateDialog.vue";
+import RankedMemoryDialog from "./components/RankedMemoryDialog.vue";
 import MemorySearchDialog from "./components/MemorySearchDialog.vue";
 import CandidateEditorDialog from "./components/CandidateEditorDialog.vue";
 import MemoryEditorDialog from "./components/MemoryEditorDialog.vue";
@@ -504,6 +511,7 @@ const {
   doGlobalSearch,
 } = useMemorySearch();
 const activeTab = ref("list");
+const showRankedDialog = ref(false);
 
 function charName(cid: string) {
   const ch = characters.value.find((c: any) => String(c.id) === String(cid));

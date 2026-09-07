@@ -27,7 +27,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, watch } from "vue";
 import { useProfile } from "@/composables/useProfile";
 
-const props = defineProps<{ visible: boolean }>();
+const props = defineProps<{
+  visible: boolean;
+  characterId?: string;
+}>();
 const emit = defineEmits<{ close: [] }>();
 const { profiles: profData, fetchProfiles, categoryLabel } = useProfile();
 const loading = ref(false);
@@ -49,7 +52,10 @@ async function loadProfiles() {
   const version = ++requestVersion;
   loading.value = true;
   try {
-    await fetchProfiles({ pageSize: 10 });
+    await fetchProfiles({
+      pageSize: 10,
+      characterId: props.characterId || undefined,
+    });
     if (version === requestVersion) items.value = [...profData.value];
   } catch {
     if (version === requestVersion) items.value = [];
@@ -58,7 +64,11 @@ async function loadProfiles() {
   }
 }
 
-watch(() => props.visible, () => void loadProfiles(), { immediate: true });
+watch(
+  () => [props.visible, props.characterId] as const,
+  () => void loadProfiles(),
+  { immediate: true },
+);
 </script>
 
 <style scoped>

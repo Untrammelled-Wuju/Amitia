@@ -655,6 +655,13 @@ export async function installExtensionPackage(
   upgradeId = "",
   managementTarget?: "game-center",
 ) {
+  const targetExtensionId = upgradeId || (preview.currentVersion ? preview.id : "");
+  const operationType = targetExtensionId ? "update" : "install";
+  const operationNonce =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const idempotencyKey = `package:${operationType}:${preview.sessionId}:${operationNonce}`;
   const confirmationMap: Record<string, boolean> = {};
   for (const key of preview.capabilityConfirmations ?? []) {
     confirmationMap[key] = true;
@@ -676,7 +683,7 @@ export async function installExtensionPackage(
     managementTarget ? { headers: { "X-Amitia-Management-Target": managementTarget } } : undefined,
   );
   const response = await apiClient.post(
-    upgradeId
+    targetExtensionId
       ? "/api/extensions/packages/operations/update"
       : "/api/extensions/packages/operations/install",
     {
@@ -684,11 +691,25 @@ export async function installExtensionPackage(
       scopeType: preview.scopeType,
       scopeId: preview.scopeId,
       confirmationToken: confirmed.data.confirmationToken,
-      expectedExtensionId: upgradeId || undefined,
+      expectedExtensionId: targetExtensionId || undefined,
+      idempotencyKey,
     },
-    managementTarget ? { headers: { "X-Amitia-Management-Target": managementTarget } } : undefined,
+    {
+      timeout: 300000,
+      headers: {
+        ...(managementTarget ? { "X-Amitia-Management-Target": managementTarget } : {}),
+        "Idempotency-Key": idempotencyKey,
+      },
+    },
   );
   return response.data as PackageOperationResult;
+}
+export async function setGameCenterExtensionEnabled(extensionId: string, enabled: boolean) {
+  const response = await apiClient.post(
+    `/api/game-center/extensions/${enabled ? "enable" : "disable"}`,
+    { extensionId },
+  );
+  return response.data;
 }
 export async function fetchPackageVersions(
   id: string,

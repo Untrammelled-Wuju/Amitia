@@ -4,7 +4,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "../../../composables/useApi";
 import { useSessionStore } from "../../../stores/session-store";
 import { saveAuthenticatedSession } from "../../../stores/refresh-coordinator";
-import { getApiBaseURL } from "@/runtime/runtime-adapter";
+import { getApiBaseURL, saveDeploymentConfig } from "@/runtime/runtime-adapter";
 
 export function useImmersiveOnboarding() {
   const router = useRouter();
@@ -222,10 +222,27 @@ export function useImmersiveOnboarding() {
     currentStage.value = stage;
   }
 
-  function nextStage() {
-    if (currentStage.value < stageCount - 1) {
-      goToStage(currentStage.value + 1);
+  async function nextStage() {
+    if (currentStage.value >= stageCount - 1) return;
+
+    if (currentStage.value === 0 && window.amitiaDesktop) {
+      try {
+        const config = deployMode.value === "remote"
+          ? {
+              mode: "cloud" as const,
+              serverURL: serverURL.value.trim().replace(/\/+$/, ""),
+            }
+          : { mode: "local" as const };
+        await saveDeploymentConfig(config);
+      } catch (error: any) {
+        const message = error?.message || "部署配置保存失败，请重试";
+        stageError.value = message;
+        ElMessage.error(message);
+        return;
+      }
     }
+
+    goToStage(currentStage.value + 1);
   }
 
   function prevStage() {
@@ -240,7 +257,7 @@ export function useImmersiveOnboarding() {
   }
 
   function isLoginFlow(): boolean {
-    return deployMode.value === "remote" || hasAdmin.value;
+    return hasAdmin.value;
   }
 
   async function checkAdminExists() {
@@ -262,6 +279,7 @@ export function useImmersiveOnboarding() {
     username: string;
     password: string;
     password2: string;
+    setupToken: string;
     isLogin: boolean;
     deployMode: string;
   }) {
@@ -271,35 +289,47 @@ export function useImmersiveOnboarding() {
       accountName.value = data.username;
       accountPassword.value = data.password;
 
+      let loginRes: any;
       if (!data.isLogin) {
         try {
-          await post("/api/public/auth/setup", {
-            username: data.username,
-            password: data.password,
-          });
+          loginRes = await post<any>(
+            "/api/public/auth/setup",
+            {
+              username: data.username,
+              password: data.password,
+            },
+            data.setupToken.trim()
+              ? { headers: { "X-Amitia-Setup-Token": data.setupToken.trim() } }
+              : undefined,
+          );
         } catch (setupErr: any) {
           if (setupErr?.code === 600 || setupErr?.response?.status === 409) {
             hasAdmin.value = true;
+            loginRes = await post<any>("/api/public/auth/login", {
+              username: data.username,
+              password: data.password,
+            });
           } else {
             throw setupErr;
           }
         }
+      } else {
+        loginRes = await post<any>("/api/public/auth/login", {
+          username: data.username,
+          password: data.password,
+        });
       }
-
-      const loginRes = await post<any>("/api/public/auth/login", {
-        username: data.username,
-        password: data.password,
-      });
       if (loginRes?.token || loginRes?.accessToken) {
         const { setSession } = useSessionStore();
         const accessToken = loginRes.accessToken || loginRes.token;
+        const sessionUser = loginRes.user || loginRes;
         setSession({
           accessToken,
           accessTokenExpiresAt: loginRes.accessTokenExpiresAt || null,
           sessionId: loginRes.sessionId || (loginRes.session?.sessionId) || null,
-          userId: loginRes.userId?.toString() || null,
-          username: loginRes.username || data.username || null,
-          role: loginRes.role || null,
+          userId: (sessionUser?.id || loginRes.userId)?.toString() || null,
+          username: sessionUser?.username || loginRes.username || data.username || null,
+          role: sessionUser?.role || loginRes.role || null,
         });
         saveAuthenticatedSession({
           accessToken,
@@ -314,7 +344,7 @@ export function useImmersiveOnboarding() {
 
       accountDone.value = true;
       accountName.value = data.username;
-      nextStage();
+      await nextStage();
     } catch (e: any) {
       const msg =
         e?.response?.data?.message ||
@@ -334,7 +364,7 @@ export function useImmersiveOnboarding() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
-	const res = await post<any>("/api/public/model/detect-models", {
+	const res = await post<any>("/api/model/detect-models", {
 		baseUrl: modelBaseUrl.value,
 		apiKey: modelApiKey.value,
 		apiType: "openai-compatible",
@@ -368,7 +398,7 @@ export function useImmersiveOnboarding() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
-const res = await post<any>("/api/public/model/detect-models", {
+const res = await post<any>("/api/model/detect-models", {
 		baseUrl: visionModelURL.value,
 		apiKey: visionModelKey.value,
 		apiType: "openai-compatible",
@@ -425,7 +455,7 @@ const res = await post<any>("/api/public/model/detect-models", {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
-const res = await post<any>("/api/public/model/detect-models", {
+const res = await post<any>("/api/model/detect-models", {
 		baseUrl: vectorModelURL.value,
 		apiKey: vectorModelKey.value,
 		apiType: "openai-compatible",
@@ -679,7 +709,7 @@ const res = await post<any>("/api/public/model/detect-models", {
         }
       }
 
-      await post("/api/public/onboarding/complete", {
+      await post("/api/onboarding/complete", {
         deployMode:
           deployMode.value === "remote" ? "cloud-web" : "desktop-local",
         serverURL:

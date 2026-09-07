@@ -77,6 +77,7 @@ const modelConfig = useModelConfig({
   showDetect: false,
   modelPlaceholder: "doubao-embedding-vision-251215 / text-embedding-3-large / bge-large-zh-v1.5",
   defaultIsActive: 1,
+  payloadFields: ["name", "apiType", "apiKey", "baseUrl", "modelName", "isActive", "providerConfig", "providerConfigJSON"],
 });
 
 const {

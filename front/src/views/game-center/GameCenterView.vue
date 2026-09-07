@@ -39,7 +39,7 @@
               type="primary"
               size="small"
               :loading="approvalBusy === approval.id"
-              @click="resolveApproval(approval, true)"
+              @click="confirmApproval(approval)"
             >允许一次</el-button>
           </div>
         </article>
@@ -166,10 +166,18 @@
 
           <div class="game-card-footer">
             <span>v{{ plugin.version }}</span>
-            <button class="text-action" type="button" @click.stop="showPluginDetail(plugin)">
-              查看详情
-              <el-icon><ArrowRight /></el-icon>
-            </button>
+            <div class="card-actions">
+              <el-button
+                size="small"
+                :type="plugin.enabled ? 'warning' : 'primary'"
+                :loading="busy === plugin.extensionId"
+                @click.stop="togglePlugin(plugin)"
+              >{{ plugin.enabled ? "禁用" : "启用" }}</el-button>
+              <button class="text-action" type="button" @click.stop="showPluginDetail(plugin)">
+                查看详情
+                <el-icon><ArrowRight /></el-icon>
+              </button>
+            </div>
           </div>
         </article>
 
@@ -296,6 +304,14 @@
           v-else-if="installPreview.errors?.length"
           :title="installPreview.errors.join('；')"
           type="error"
+          show-icon
+          :closable="false"
+        />
+
+        <el-alert
+          v-else-if="previewMatchesInstalledVersion"
+          :title="`版本 ${installPreview.version} 已安装，无需重复安装。`"
+          type="info"
           show-icon
           :closable="false"
         />
@@ -470,6 +486,7 @@ import { useApi } from "@/composables/useApi";
 import {
   installExtensionPackage,
   previewExtensionPackage,
+  setGameCenterExtensionEnabled,
 } from "@/views/extensions/api";
 import type { PackageImportPreview } from "@/views/extensions/types";
 
@@ -592,10 +609,18 @@ const needsInstallAcknowledgement = computed(() => {
     || (preview.warnings?.length || 0) > 0;
 });
 
+const previewMatchesInstalledVersion = computed(() => {
+  const preview = installPreview.value;
+  if (!preview?.currentVersion) return false;
+  return preview.conflict === "same-version-same-content"
+    || preview.currentVersion === preview.version;
+});
+
 const canInstallPreview = computed(() => {
   const preview = installPreview.value;
   if (!preview || previewLoading.value || installLoading.value) return false;
   if (!previewIsGame.value || !preview.compatible || (preview.errors?.length || 0) > 0) return false;
+  if (previewMatchesInstalledVersion.value) return false;
   if (installMode.value === "update" && updateTarget.value && preview.id !== updateTarget.value.extensionId) return false;
   return !needsInstallAcknowledgement.value || installAcknowledged.value;
 });
@@ -647,6 +672,8 @@ async function bindRuntimeAgentContexts(runtimeItems: Runtime[]) {
 async function bindRuntimeAgentContext(runtimeId: string) {
   runtimeId = String(runtimeId || "").trim();
   if (!runtimeId) return;
+  const runtime = runtimes.value.find((item) => item.runtimeId === runtimeId);
+  if (runtime && !runtime.connected && !runtime.ready) return;
   try {
     await api.post(
       `/api/game-center/runtimes/${encodeURIComponent(runtimeId)}/agent-context`,
@@ -689,12 +716,50 @@ async function resolveApproval(approval: PendingApproval, approve: boolean) {
   }
 }
 
+async function confirmApproval(approval: PendingApproval) {
+  if (!approval?.id || approvalBusy.value) return;
+  const isServicePerm = approval.permissionId === "service.runtime.execute"
+    || approval.permissionId === "service.network.request";
+  try {
+    await ElMessageBox.confirm(approvalConfirmationDetail(approval), "确认允许本次操作", {
+      type: "warning",
+      confirmButtonText: isServicePerm ? "授权" : "允许一次",
+      cancelButtonText: "取消",
+      closeOnClickModal: false,
+      closeOnPressEscape: true,
+    });
+  } catch {
+    return;
+  }
+  await resolveApproval(approval, true);
+}
+
+function approvalConfirmationDetail(approval: PendingApproval) {
+  const isServicePerm = approval.permissionId === "service.runtime.execute"
+    || approval.permissionId === "service.network.request";
+  const details = [
+    `操作：${permissionLabel(approval.permissionId)}`,
+    `插件：${approval.pluginId || approval.extensionId}`,
+  ];
+  if (approval.serviceId) details.push(`服务：${approval.serviceId}`);
+  if (approval.target?.path) details.push(`目标目录：${approval.target.path}`);
+  if (approval.target?.url) details.push(`目标地址：${approval.target.url}`);
+  if (isServicePerm) {
+    details.push("授权：永久有效，可在扩展权限管理中撤回");
+  } else {
+    details.push(`有效期：仅本次请求，${approvalExpiryLabel(approval.expiresAt)}`);
+    details.push("确认后将立即执行该请求。");
+  }
+  return details.join("\n");
+}
+
 function permissionLabel(permissionId: string) {
   const labels: Record<string, string> = {
     "gamehost.control": "允许游戏插件执行本次控制操作",
     "gamehost.artifact.deploy": "允许游戏插件执行本次制品部署",
-    "service.runtime.execute": "允许启动本次插件 Runtime",
+    "service.runtime.execute": "允许插件运行 Runtime（持久）",
     "service.process.spawn": "允许本次插件进程操作",
+    "service.network.request": "允许插件网络访问（持久）",
   };
   return labels[permissionId] || `允许一次：${permissionId}`;
 }
@@ -883,6 +948,9 @@ async function buildPackagePreview() {
       "game-center",
     );
     installPreview.value = preview;
+    if (preview.currentVersion) {
+      installMode.value = "update";
+    }
     if (preview.managementTarget !== "game_center" && !preview.contributionKinds?.includes("game_plugin")) {
       ElMessage.error("该 .amitiax 包不是游戏扩展，已阻止从游戏模式安装");
       return;
@@ -902,6 +970,7 @@ async function buildPackagePreview() {
 async function commitPackageInstall() {
   const preview = installPreview.value;
   if (!preview || !canInstallPreview.value) return;
+  const isNewInstall = installMode.value === "install" && !preview.currentVersion;
   installLoading.value = true;
   try {
     const acknowledged = installAcknowledged.value || !needsInstallAcknowledgement.value;
@@ -915,10 +984,13 @@ async function commitPackageInstall() {
         signerChange: acknowledged,
         configMigration: acknowledged,
       },
-      installMode.value === "update" ? updateTarget.value?.extensionId || "" : "",
+      installMode.value === "update" ? updateTarget.value?.extensionId || preview.id : "",
       "game-center",
     );
     await waitForPackageOperation(result.operationId);
+    if (isNewInstall && !result.enabled) {
+      await setGameCenterExtensionEnabled(result.extensionId || preview.id, true);
+    }
     ElMessage.success(installMode.value === "update" ? "游戏扩展已更新" : "游戏扩展已安装");
     installDialogVisible.value = false;
     await refresh();
@@ -972,8 +1044,8 @@ async function showPluginDetail(plugin: Plugin) {
   pluginHealth.value = null;
   try {
     const [detail, healthResult] = await Promise.all([
-      api.get<Record<string, any>>(`/api/game-center/plugins/${encodeURIComponent(plugin.pluginId)}`, { extensionId: plugin.extensionId }),
-      api.get<Record<string, any>>(`/api/game-center/plugins/${encodeURIComponent(plugin.pluginId)}/health`),
+      api.get<Record<string, any>>(`/api/game-center/plugins/detail?pluginId=${encodeURIComponent(plugin.pluginId)}&extensionId=${encodeURIComponent(plugin.extensionId)}`),
+      api.get<Record<string, any>>(`/api/game-center/plugins/detail/health?pluginId=${encodeURIComponent(plugin.pluginId)}`),
     ]);
     pluginDetail.value = detail;
     pluginHealth.value = healthResult;
@@ -1074,7 +1146,7 @@ async function invokeRpc() {
 async function togglePlugin(plugin: Plugin) {
   busy.value = plugin.extensionId;
   try {
-    await api.post(`/api/game-center/extensions/${encodeURIComponent(plugin.extensionId)}/${plugin.enabled ? "disable" : "enable"}`);
+    await setGameCenterExtensionEnabled(plugin.extensionId, !plugin.enabled);
     ElMessage.success(plugin.enabled ? "游戏扩展已禁用" : "游戏扩展已启用");
     await refresh();
   } catch (err: any) {
@@ -1662,6 +1734,12 @@ onBeforeUnmount(() => {
   background: transparent;
   cursor: pointer;
   color: var(--game-text-secondary);
+}
+
+.card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .text-action:hover {

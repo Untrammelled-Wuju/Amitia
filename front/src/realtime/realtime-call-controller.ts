@@ -46,6 +46,7 @@ export interface RealtimeCallControllerOptions {
   onState?: (state: RealtimeCallState, error?: string) => void;
   onConnected?: (info: RealtimeCallConnectedInfo) => void;
   onAssistantText?: (text: string) => void;
+  onAssistantSpeaking?: (speaking: boolean) => void;
   onASRFinal?: (data: Record<string, unknown>) => void;
   onVision?: (data: Record<string, unknown>) => void;
   onMediaState?: (state: RealtimeMediaState) => void;
@@ -94,6 +95,7 @@ export class RealtimeCallController {
   private nextPlayTime = 0;
   private aiSpeaking = false;
   private lastSpeechVisualBoostAt = 0;
+  private failureCleanup: Promise<void> | null = null;
 
   constructor(options: RealtimeCallControllerOptions) {
     this.options = options;
@@ -108,6 +110,11 @@ export class RealtimeCallController {
   }
 
   async start(): Promise<void> {
+    if (this.state === "connecting" || this.state === "connected") return;
+    // A failure cleanup may still be closing the previous microphone/audio
+    // graph. Starting a new call before it settles lets that cleanup race with
+    // the newly-created resources and close the new session by mistake.
+    if (this.failureCleanup) await this.failureCleanup;
     if (this.state === "connecting" || this.state === "connected") return;
     this.setState("connecting");
     try {
@@ -243,14 +250,16 @@ export class RealtimeCallController {
     socket.onopen = () => {
       this.attachAudioProcessor();
     };
-    socket.onmessage = (event) => this.handleControlMessage(event.data);
+    socket.onmessage = (event) => {
+      void this.handleControlMessage(event.data).catch((error) => {
+        void this.fail(error instanceof Error ? error.message : String(error));
+      });
+    };
     socket.onerror = () => {
-      this.setState("error", "实时通话连接失败");
+      void this.fail("实时通话连接失败");
     };
     socket.onclose = () => {
-      if (this.state !== "idle" && this.state !== "error") {
-        void this.cleanup(false).then(() => this.setState("idle"));
-      }
+      if (this.state !== "idle") void this.fail("实时通话连接已断开");
     };
   }
 
@@ -266,7 +275,7 @@ export class RealtimeCallController {
       case "connected": {
         const call = message.call || {};
         if (!call.callId || !call.visualEndpoint || !call.visualTicket) {
-          this.setState("error", "实时通话视觉会话初始化失败");
+          await this.fail("实时通话视觉会话初始化失败");
           return;
         }
         this.connectedInfo = {
@@ -286,7 +295,13 @@ export class RealtimeCallController {
         if (typeof message.data === "string") this.playAudio(message.data);
         break;
       case "tts_ended":
-        this.aiSpeaking = false;
+        // The server has finished sending TTS frames, but queued WebAudio may
+        // still be playing. Let the final AudioBufferSourceNode transition the
+        // UI/runtime back to listening; only clear immediately when nothing is
+        // queued locally.
+        if (!this.playbackContext || this.playbackContext.currentTime + 0.04 >= this.nextPlayTime) {
+          this.setAISpeaking(false);
+        }
         break;
       case "ChatTextResponse":
         if (message.data?.text) this.options.onAssistantText?.(String(message.data.text));
@@ -303,8 +318,7 @@ export class RealtimeCallController {
         }
         break;
       case "error":
-        this.setState("error", String(message.data || "实时通话连接失败"));
-        await this.cleanup(false);
+        await this.fail(String(message.data || "实时通话连接失败"));
         break;
       case "disconnected":
       case "SessionFinished":
@@ -323,15 +337,36 @@ export class RealtimeCallController {
     const socket = new WebSocket(`${endpoint}?${params.toString()}`);
     this.visualSocket = socket;
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("视觉通道连接超时")), 8000);
-      socket.onopen = () => {
+      let settled = false;
+      const rejectConnection = (error: Error) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
+        socket.onopen = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        if (this.visualSocket === socket) this.visualSocket = null;
+        try { socket.close(); } catch {}
+        reject(error);
+      };
+      const timeout = setTimeout(
+        () => rejectConnection(new Error("视觉通道连接超时")),
+        8000,
+      );
+      socket.onopen = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        socket.onerror = () => {
+          void this.fail("视觉通道连接失败");
+        };
+        socket.onclose = () => {
+          if (this.state !== "idle") void this.fail("视觉通道连接已断开");
+        };
         resolve();
       };
-      socket.onerror = () => {
-        clearTimeout(timeout);
-        reject(new Error("视觉通道连接失败"));
-      };
+      socket.onerror = () => rejectConnection(new Error("视觉通道连接失败"));
+      socket.onclose = () => rejectConnection(new Error("视觉通道连接已断开"));
       socket.onmessage = (event) => {
         if (typeof event.data !== "string") return;
         try {
@@ -515,14 +550,32 @@ export class RealtimeCallController {
       this.nextPlayTime = Math.max(now, this.nextPlayTime);
       source.start(this.nextPlayTime);
       this.nextPlayTime += buffer.duration;
-      this.aiSpeaking = true;
+      this.setAISpeaking(true);
       source.addEventListener("ended", () => {
         if (!this.playbackContext) return;
-        if (this.playbackContext.currentTime + 0.04 >= this.nextPlayTime) this.aiSpeaking = false;
+        if (this.playbackContext.currentTime + 0.04 >= this.nextPlayTime) {
+          this.setAISpeaking(false);
+        }
       });
     } catch (error) {
       console.warn("[RealtimeCall] audio playback failed", error);
     }
+  }
+
+  private setAISpeaking(speaking: boolean): void {
+    if (this.aiSpeaking === speaking) return;
+    this.aiSpeaking = speaking;
+    this.options.onAssistantSpeaking?.(speaking);
+  }
+
+  private async fail(message: string): Promise<void> {
+    this.setState("error", message);
+    if (!this.failureCleanup) {
+      this.failureCleanup = this.cleanup(true).finally(() => {
+        this.failureCleanup = null;
+      });
+    }
+    await this.failureCleanup;
   }
 
   private async cleanup(closeSockets: boolean): Promise<void> {
@@ -572,7 +625,7 @@ export class RealtimeCallController {
     this.playbackContext = null;
     this.connectedInfo = null;
     this.nextPlayTime = 0;
-    this.aiSpeaking = false;
+    this.setAISpeaking(false);
     this.mediaState = { audio: false, camera: false, screen: false, muted: false };
     this.emitMediaState();
   }

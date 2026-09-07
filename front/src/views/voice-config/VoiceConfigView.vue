@@ -183,10 +183,17 @@ SPDX-License-Identifier: AGPL-3.0-only
       destroy-on-close
     >
       <el-form :model="cloneForm" label-position="top">
-        <el-form-item label="音色名称（英文）">
-          <el-input v-model="cloneForm.name" placeholder="例如: my_voice_01" />
+        <el-form-item label="显示名称">
+          <el-input v-model="cloneForm.name" placeholder="例如：我的专属音色" />
+          <div class="form-hint">用于本项目内展示，不再混用为服务商 speakerId。</div>
+        </el-form-item>
+        <el-form-item label="复刻槽位 / Speaker ID（可选）">
+          <el-input
+            v-model="cloneForm.speakerId"
+            placeholder="例如：S_xxxxxxxx；按服务商控制台要求填写"
+          />
           <div class="form-hint">
-            8-256位，首字符为英文字母，允许数字、字母、-、_
+            使用需要预购槽位的复刻接口时填写；留空时兼容旧接口，以显示名称作为请求 ID。
           </div>
         </el-form-item>
         <el-form-item label="语言">
@@ -410,9 +417,22 @@ const form = reactive({
   volume: 1.0,
 });
 
+const formRef = ref<FormInstance>();
+
 const rules: FormRules = {
   name: [{ required: true, message: "请输入名称", trigger: "blur" }],
-  apiKey: [{ required: true, message: "请输入 API Key", trigger: "blur" }],
+  apiKey: [
+    {
+      validator: (_rule, value, callback) => {
+        if (!editingId.value && !String(value || "").trim()) {
+          callback(new Error("请输入 API Key"));
+          return;
+        }
+        callback();
+      },
+      trigger: "blur",
+    },
+  ],
   voiceType: [{ required: true, message: "请选择音色", trigger: "change" }],
 };
 
@@ -458,6 +478,9 @@ function showDialog(cfg: TtsConfig | null) {
 }
 
 async function saveConfig() {
+  const valid = await formRef.value?.validate().catch(() => false);
+  if (!valid) return;
+
   saving.value = true;
   try {
     const payload: Record<string, any> = {
@@ -551,6 +574,7 @@ const clonedVoices = ref<any[]>([]);
 const previewCloneId = ref("");
 const cloneForm = reactive({
   name: "",
+  speakerId: "",
   language: "cn",
   refText: "",
   audioFile: null as File | null,
@@ -561,16 +585,13 @@ function onCloneFileChange(file: any) {
 }
 
 async function fetchClonedVoices() {
-  const saved = localStorage.getItem("uai-cloned-voices");
-  if (saved) {
-    try {
-      clonedVoices.value = JSON.parse(saved);
-    } catch {}
+  try {
+    clonedVoices.value =
+      (await get<any[]>("/api/tts/voice-clones")) || [];
+  } catch (err: any) {
+    clonedVoices.value = [];
+    ElMessage.error(err?.message || "加载复刻音色失败");
   }
-}
-
-function saveClonedVoices() {
-  localStorage.setItem("uai-cloned-voices", JSON.stringify(clonedVoices.value));
 }
 
 async function submitClone() {
@@ -580,29 +601,25 @@ async function submitClone() {
     const formData = new FormData();
     formData.append("audio", cloneForm.audioFile);
     formData.append("name", cloneForm.name.trim());
+    if (cloneForm.speakerId.trim())
+      formData.append("speakerId", cloneForm.speakerId.trim());
     formData.append("language", cloneForm.language);
     if (cloneForm.refText.trim())
       formData.append("refText", cloneForm.refText.trim());
 
-    const apiKey = configs.value.find((c: any) => c.hasApiKey)?.apiKey || "";
-    const url =
-      "/api/tts/voice-clone" +
-      (apiKey ? "?apiKey=" + encodeURIComponent(apiKey) : "");
-
-    const resp = await apiClient.post(url, formData);
+    const resp = await apiClient.post("/api/tts/voice-clone", formData);
     const data: any = resp.data?.data || resp.data;
     if (!data?.speakerId) {
       ElMessage.error((resp.data as any)?.message || "复刻失败");
       return;
     }
-    clonedVoices.value.unshift({
-      speakerId: data.speakerId,
-      name: data.name || cloneForm.name,
-      createdAt: new Date().toISOString(),
-    });
-    saveClonedVoices();
+    await fetchClonedVoices();
     ElMessage.success("音色复刻成功！可用于语音合成");
     showCloneDialog.value = false;
+    cloneForm.name = "";
+    cloneForm.speakerId = "";
+    cloneForm.refText = "";
+    cloneForm.audioFile = null;
   } catch (err: any) {
     ElMessage.error(err?.message || "复刻失败");
   } finally {
@@ -613,12 +630,12 @@ async function submitClone() {
 async function previewClone(speakerId: string) {
   previewCloneId.value = speakerId;
   try {
-    const apiKey = configs.value.find((c: any) => c.hasApiKey)?.apiKey || "";
     const res = await post<any>("/api/tts/synthesize", {
-      voiceId: 0,
+      speakerId,
       text: "测试",
     });
     previewAudio.value = (res as any)?.audioUrl || "";
+    if (!previewAudio.value) ElMessage.warning("未能获取音频");
   } catch (err: any) {
     ElMessage.error(err?.message || "试听失败");
   } finally {
@@ -632,10 +649,8 @@ async function deleteClone(speakerId: string, name: string) {
       type: "warning",
       confirmButtonText: "删除",
     });
-    clonedVoices.value = clonedVoices.value.filter(
-      (v: any) => v.speakerId !== speakerId,
-    );
-    saveClonedVoices();
+    await apiClient.delete("/api/tts/voice-clone", { params: { speakerId } });
+    await fetchClonedVoices();
     ElMessage.success("已删除");
   } catch {}
 }

@@ -177,7 +177,7 @@ function checkRemoteConnection() {
   detectingRemote.value = true;
   remoteStatusText.value = "正在检测";
 
-  const healthUrl = url.replace(/\/+$/, "") + "/api/health";
+  const healthUrl = url.replace(/\/+$/, "") + "/api/public/health";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
 

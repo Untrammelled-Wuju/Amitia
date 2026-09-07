@@ -118,6 +118,13 @@ function createController(): RealtimeCallController {
         notifyDesktopPetChatState("assistant_finished", props.conversationId || undefined);
       }
     },
+    onAssistantSpeaking: (speaking) => {
+      if (speaking) {
+        notifyDesktopPetChatState("assistant_speaking", props.conversationId || undefined);
+      } else if (callState.value === "connected") {
+        notifyDesktopPetChatState("assistant_listening", props.conversationId || undefined);
+      }
+    },
     onAssistantText: (text) => emit("message", { role: "assistant", text }),
     onASRFinal: (data) => void forwardASRFinalToLocalWorkflow(data),
     onVision: (data) => {

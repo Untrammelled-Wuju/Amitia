@@ -82,6 +82,7 @@ export interface TaskDefinition {
   definitionHash?: string;
   version?: string;
   maxDuration?: number;
+  executionPlacement?: "local" | "cloud" | "device";
 }
 
 export interface TaskRun {
@@ -113,6 +114,8 @@ export interface TaskRun {
   errorCode?: string;
   errorMessage?: string;
   generation: number;
+  executionPlacement?: "local" | "cloud" | "device";
+  progress?: TaskRunProgress;
 }
 
 export interface TaskRunProgress {
@@ -153,6 +156,7 @@ export interface EnqueueTaskRequest {
   moduleId?: string;
   input?: unknown;
   priority?: number;
+  deviceId?: string;
   operationId?: string;
   scopeSnapshotId?: string;
   permissionSnapshotId?: string;

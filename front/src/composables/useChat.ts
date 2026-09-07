@@ -422,17 +422,6 @@ export function useChat() {
             const exists = messages.value.some((m: any) => m.id === msg.id);
             if (!exists) {
               messages.value.push(msg);
-              // Show browser notification for reminder messages
-              if (
-                (msg.source === "reminder" || msg.source === "proactive") &&
-                "Notification" in window &&
-                Notification.permission === "granted"
-              ) {
-                new Notification("日程提醒", {
-                  body: msg.content.slice(0, 200),
-                  tag: "reminder-" + msg.id,
-                });
-              }
             }
           }
           lastMessageId = items[items.length - 1]?.id || null;

@@ -207,7 +207,31 @@ SPDX-License-Identifier: AGPL-3.0-only
 
         <el-divider content-position="left">语音配置</el-divider>
 
-        <el-form-item label="音色">
+        <el-form-item label="TTS 配置">
+          <el-select
+            v-model="form.voiceConfigId"
+            clearable
+            placeholder="跟随当前全局配置"
+            style="width: 100%"
+          >
+            <el-option label="跟随当前全局配置" value="" />
+            <el-option
+              v-for="cfg in voiceConfigs"
+              :key="cfg.id"
+              :label="cfg.isActive ? `${cfg.name}（当前默认）` : cfg.name"
+              :value="String(cfg.id)"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="音色模式">
+          <el-radio-group v-model="form.voiceMode">
+            <el-radio value="preset">预设音色</el-radio>
+            <el-radio value="clone">复刻音色</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item v-if="form.voiceMode === 'preset'" label="音色">
           <el-select
             v-model="form.voiceType"
             style="width: 100%"
@@ -223,6 +247,27 @@ SPDX-License-Identifier: AGPL-3.0-only
             />
           </el-select>
         </el-form-item>
+
+        <el-form-item v-else label="复刻音色">
+          <el-select
+            v-model="form.customVoiceId"
+            filterable
+            clearable
+            placeholder="选择已复刻音色"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="v in clonedVoices"
+              :key="v.speakerId"
+              :label="`${v.name} · ${v.speakerId}`"
+              :value="v.speakerId"
+            />
+          </el-select>
+          <div v-if="!clonedVoices.length" class="voice-inline-hint">
+            暂无复刻音色。请先在角色语音页或语音模型配置页完成声音复刻。
+          </div>
+        </el-form-item>
+
         <el-form-item label="语速">
           <el-slider
             v-model="form.voiceSpeed"
@@ -245,10 +290,42 @@ SPDX-License-Identifier: AGPL-3.0-only
             style="width: 70%"
           />
         </el-form-item>
-        <el-form-item label="试听">
-          <el-button size="small" @click="testVoice" :loading="testingVoice"
-            >试听</el-button
+        <el-form-item label="音量">
+          <el-slider
+            v-model="form.voiceVolume"
+            :min="0.5"
+            :max="2.0"
+            :step="0.1"
+            show-input
+            style="width: 70%"
+          />
+        </el-form-item>
+        <el-form-item label="情感">
+          <el-select
+            v-model="form.emotion"
+            clearable
+            placeholder="默认"
+            :disabled="form.voiceMode !== 'preset' || !currentVoiceSupportsEmotion"
+            style="width: 240px"
           >
+            <el-option v-for="item in emotionOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="情感强度" v-if="form.emotion">
+          <el-slider v-model="form.emotionScale" :min="1" :max="5" :step="1" style="width: 70%" />
+        </el-form-item>
+        <el-form-item label="句尾静音">
+          <el-slider
+            v-model="form.silenceDuration"
+            :min="0"
+            :max="5000"
+            :step="100"
+            show-input
+            style="width: 70%"
+          />
+        </el-form-item>
+        <el-form-item label="试听">
+          <el-button size="small" @click="testVoice" :loading="testingVoice">试听当前表单参数</el-button>
           <audio
             v-if="testAudioUrl"
             :src="testAudioUrl"
@@ -256,33 +333,6 @@ SPDX-License-Identifier: AGPL-3.0-only
             autoplay
             style="width: 260px; margin-left: 10px; height: 30px"
           />
-        </el-form-item>
-
-        <el-divider content-position="left">声音复刻</el-divider>
-
-        <el-form-item label="复刻音色ID">
-          <el-input
-            v-model="form.customVoiceId"
-            placeholder="输入音色ID，如 S_xxxxxxxx"
-            style="width: 240px"
-            clearable
-          />
-          <span
-            style="
-              font-size: 11px;
-              color: var(--ac-color-text-muted);
-              margin-left: 8px;
-            "
-            >在火山控制台训练后填入</span
-          >
-        </el-form-item>
-        <el-form-item label="试听" v-if="form.customVoiceId">
-          <el-button
-            size="small"
-            @click="previewClone"
-            :loading="previewCloneLoading"
-            >试听</el-button
-          >
         </el-form-item>
       </el-form>
       <template #footer>
@@ -392,6 +442,16 @@ const showDialog = ref(false);
 const editingId = ref<string | null>(null);
 const saving = ref(false);
 const voicePresets = ref<any[]>([]);
+const voiceConfigs = ref<any[]>([]);
+const clonedVoices = ref<any[]>([]);
+const emotionOptions = [
+  { value: "happy", label: "开心" },
+  { value: "sad", label: "悲伤" },
+  { value: "angry", label: "愤怒" },
+  { value: "fearful", label: "恐惧" },
+  { value: "surprised", label: "惊讶" },
+  { value: "neutral", label: "中性" },
+];
 const avatarInputRef = ref<HTMLInputElement>();
 
 function triggerAvatarUpload() {
@@ -420,7 +480,6 @@ const currentVoiceSupportsEmotion = computed(() => {
   const v = voicePresets.value.find((p: any) => p.name === form.voiceType);
   return v?.supportsEmotion ?? false;
 });
-const globalApiKey = ref("");
 
 const form = reactive({
   name: "",
@@ -436,6 +495,8 @@ const form = reactive({
   personalityConfig: "{}",
   chatStyleConfig: "{}",
   sceneRules: "{}",
+  voiceMode: "preset",
+  voiceConfigId: "",
   voiceType: "zh_female_vv_uranus_bigtts",
   voiceSpeed: 1.0,
   voicePitch: 1.0,
@@ -448,12 +509,6 @@ const form = reactive({
 
 const testingVoice = ref(false);
 const testAudioUrl = ref("");
-const cloneFile = ref<File | null>(null);
-const cloneName = ref("");
-const cloneLoading = ref(false);
-const cloneResult = ref("");
-const previewCloneLoading = ref(false);
-
 
 const activeTab = computed(() => {
   const p = route.path;
@@ -476,7 +531,6 @@ const characterExtensionContext = computed(() => ({
 onMounted(async () => {
   await Promise.allSettled([loadPackHistory(), loadTemplates()]);
   await loadVoices();
-  await loadGlobalApiKey();
   await loadCharacters();
   const id = route.params.id as string;
   if (id) {
@@ -532,23 +586,29 @@ async function createFromTemplate(tpl: TemplateItem) {
 }
 
 async function loadVoices() {
-  try {
-    voicePresets.value = await apiClient
-      .get("/api/tts/voices")
-      .then((r) => (Array.isArray(r.data) ? r.data : []));
-  } catch {
+  const [presetsResult, configsResult, clonesResult] = await Promise.allSettled([
+    apiClient.get("/api/tts/voices"),
+    apiClient.get("/api/tts/config-summaries"),
+    apiClient.get("/api/tts/voice-clones"),
+  ]);
+  if (presetsResult.status === "fulfilled") {
+    const data = presetsResult.value.data?.data || presetsResult.value.data;
+    voicePresets.value = Array.isArray(data) ? data : [];
+  } else {
     voicePresets.value = [];
   }
-}
-
-async function loadGlobalApiKey() {
-  try {
-    const configs = await apiClient
-      .get("/api/tts/configs")
-      .then((r) => (Array.isArray(r.data) ? r.data : []));
-    const active = configs.find((c: any) => c.isActive);
-    if (active) globalApiKey.value = active.apiKey || "";
-  } catch {}
+  if (configsResult.status === "fulfilled") {
+    const data = configsResult.value.data?.data || configsResult.value.data;
+    voiceConfigs.value = Array.isArray(data) ? data : [];
+  } else {
+    voiceConfigs.value = [];
+  }
+  if (clonesResult.status === "fulfilled") {
+    const data = clonesResult.value.data?.data || clonesResult.value.data;
+    clonedVoices.value = Array.isArray(data) ? data : [];
+  } else {
+    clonedVoices.value = [];
+  }
 }
 
 async function loadCharacters() {
@@ -583,6 +643,8 @@ function openCreate() {
   form.personalityConfig = "{}";
   form.chatStyleConfig = "{}";
   form.sceneRules = "{}";
+  form.voiceMode = "preset";
+  form.voiceConfigId = "";
   form.voiceType = "zh_female_vv_uranus_bigtts";
   form.voiceSpeed = 1.0;
   form.voicePitch = 1.0;
@@ -591,9 +653,6 @@ function openCreate() {
   form.emotion = "";
   form.emotionScale = 0;
   form.silenceDuration = 0;
-  cloneFile.value = null;
-  cloneName.value = "";
-  cloneResult.value = "";
   showDialog.value = true;
 }
 
@@ -613,6 +672,8 @@ function editCurrent() {
   form.personalityConfig = prettyJson(selectedChar.value.personalityConfig);
   form.chatStyleConfig = prettyJson(selectedChar.value.chatStyleConfig);
   form.sceneRules = prettyJson(selectedChar.value.sceneRules);
+  form.voiceMode = selectedChar.value.voiceMode || (selectedChar.value.customVoiceId ? "clone" : "preset");
+  form.voiceConfigId = selectedChar.value.voiceConfigId ? String(selectedChar.value.voiceConfigId) : "";
   form.voiceType = selectedChar.value.voiceType || "zh_female_vv_uranus_bigtts";
   form.voiceSpeed = selectedChar.value.voiceSpeed ?? 1.0;
   form.voicePitch = normalizeVoicePitchRatio(selectedChar.value.voicePitch);
@@ -621,9 +682,6 @@ function editCurrent() {
   form.emotion = selectedChar.value.emotion || "";
   form.emotionScale = selectedChar.value.emotionScale ?? 0;
   form.silenceDuration = selectedChar.value.silenceDuration ?? 0;
-  cloneFile.value = null;
-  cloneName.value = "";
-  cloneResult.value = "";
   showDialog.value = true;
 }
 
@@ -667,6 +725,8 @@ function copyCurrentCharacter() {
   form.personalityConfig = prettyJson(source.personalityConfig);
   form.chatStyleConfig = prettyJson(source.chatStyleConfig);
   form.sceneRules = prettyJson(source.sceneRules);
+  form.voiceMode = source.voiceMode || (source.customVoiceId ? "clone" : "preset");
+  form.voiceConfigId = source.voiceConfigId ? String(source.voiceConfigId) : "";
   form.voiceType = source.voiceType || "zh_female_vv_uranus_bigtts";
   form.voiceSpeed = source.voiceSpeed ?? 1.0;
   form.voicePitch = normalizeVoicePitchRatio(source.voicePitch);
@@ -693,104 +753,34 @@ async function testVoice() {
   testingVoice.value = true;
   testAudioUrl.value = "";
   try {
-    const res = await apiClient.post("/api/tts/synthesize", {
-      voiceType: form.voiceType,
-      text: "你好，我是你的AI伙伴",
-      speedRatio: form.voiceSpeed,
-      pitchRatio: form.voicePitch,
-      volumeRatio: form.voiceVolume,
-      emotion: form.emotion || undefined,
-      emotionScale: form.emotionScale || undefined,
-      silenceDuration: form.silenceDuration || undefined,
-    });
+    const payload = form.voiceMode === "clone"
+      ? { speakerId: form.customVoiceId, text: "你好，我是你的AI伙伴" }
+      : {
+          voiceConfigId: form.voiceConfigId || "",
+          voiceType: form.voiceType,
+          text: "你好，我是你的AI伙伴",
+          speed: form.voiceSpeed,
+          pitch: normalizeVoicePitchRatio(form.voicePitch),
+          volume: form.voiceVolume,
+          emotion: form.emotion || "",
+          emotionScale: form.emotionScale || 0,
+          silenceDuration: form.silenceDuration || 0,
+        };
+    if (form.voiceMode === "clone" && !form.customVoiceId) {
+      ElMessage.warning("请先选择复刻音色");
+      return;
+    }
+    const res = await apiClient.post(
+      form.voiceMode === "clone" ? "/api/tts/synthesize" : "/api/tts/preview",
+      payload,
+    );
     const json: any = res.data;
     testAudioUrl.value = json?.audioUrl || json?.data?.audioUrl || "";
-  } catch {
-  } finally {
-    testingVoice.value = false;
-  }
-}
-
-async function ensureTtsConfig() {
-  if (!globalApiKey.value) return;
-  const configs = await apiClient
-    .get("/api/tts/configs")
-    .then((r) => (Array.isArray(r.data) ? r.data : []));
-  const existing = configs.find((c: any) => c.isActive);
-  if (existing) {
-    if (!existing.hasApiKey)
-      await apiClient.put(`/api/tts/configs/${existing.id}`, {
-        apiKey: globalApiKey.value,
-      });
-  } else {
-    await apiClient.post("/api/tts/configs", {
-      name: "默认配置",
-      apiKey: globalApiKey.value,
-      voiceType: form.voiceType,
-      isActive: 1,
-    });
-  }
-}
-
-async function submitClone() {
-  if (!cloneFile.value || !cloneName.value.trim()) return;
-  if (!globalApiKey.value) {
-    ElMessage.warning("请先设置API Key");
-    return;
-  }
-  cloneLoading.value = true;
-  cloneResult.value = "";
-  try {
-    const fd = new FormData();
-    fd.append("audio", cloneFile.value);
-    fd.append("name", cloneName.value.trim());
-    fd.append("language", "cn");
-
-    const url =
-      "/api/tts/voice-clone?apiKey=" + encodeURIComponent(globalApiKey.value);
-    const resp = await apiClient.post(url, fd);
-    const json: any = resp.data;
-    const speakerId = json?.speakerId || json?.data?.speakerId || "";
-    if (!speakerId) {
-      ElMessage.error(json?.message || "复刻失败");
-      return;
-    }
-    form.customVoiceId = speakerId;
-    cloneResult.value = "复刻成功: " + speakerId;
-    ElMessage.success("声音复刻成功");
-  } catch (err: any) {
-    ElMessage.error(err?.message || "复刻失败");
-  } finally {
-    cloneLoading.value = false;
-  }
-}
-
-async function previewClone() {
-  if (!form.customVoiceId) return;
-  previewCloneLoading.value = true;
-  testAudioUrl.value = "";
-  try {
-    const configs = await apiClient
-      .get("/api/tts/configs")
-      .then((r) => (Array.isArray(r.data) ? r.data : []));
-    const cfg = configs.find((c: any) => c.isActive) || configs[0];
-    if (!cfg) {
-      ElMessage.warning("未找到音色配置");
-      return;
-    }
-    await apiClient.put(`/api/tts/configs/${cfg.id}`, {
-      voiceType: form.customVoiceId,
-    });
-    const res = await apiClient.post("/api/tts/synthesize", {
-      speakerId: form.customVoiceId,
-      text: "复刻音色试听",
-    });
-    testAudioUrl.value =
-      (res as any)?.data?.audioUrl || (res as any)?.audioUrl || "";
+    if (!testAudioUrl.value) ElMessage.warning("未获取到试听音频");
   } catch (err: any) {
     ElMessage.error(err?.message || "试听失败");
   } finally {
-    previewCloneLoading.value = false;
+    testingVoice.value = false;
   }
 }
 
@@ -799,6 +789,10 @@ async function saveCharacter() {
   try {
     if (!form.name.trim()) {
       ElMessage.warning("请输入角色名称");
+      return;
+    }
+    if (form.voiceMode === "clone" && !form.customVoiceId.trim()) {
+      ElMessage.warning("请选择复刻音色");
       return;
     }
     const personalityConfig = parseJsonObject(form.personalityConfig, "性格配置");
@@ -818,6 +812,8 @@ async function saveCharacter() {
       personalityConfig,
       chatStyleConfig: form.chatStyleConfig || "{}",
       sceneRules: form.sceneRules || "{}",
+      voiceMode: form.voiceMode,
+      voiceConfigId: form.voiceConfigId || "",
       voiceType: form.voiceType,
       voiceSpeed: form.voiceSpeed,
       voicePitch: normalizeVoicePitchRatio(form.voicePitch),
@@ -980,5 +976,11 @@ async function deleteCurrent() {
   font-weight: 600;
   margin: 0;
   flex: 1;
+}
+
+.voice-inline-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ac-color-text-muted);
 }
 </style>

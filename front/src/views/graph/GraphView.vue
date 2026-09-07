@@ -180,12 +180,12 @@ watch(showFullscreen, () => {
 
 async function fetchGraph() {
   try {
-    const s = await get<any>("/api/graph/stats?userId=default");
+    const s = await get<any>("/api/graph/stats");
     stats.value = s;
   } catch {}
   if (searchId.value) {
     try {
-      const url = `/api/graph/node/${encodeURIComponent(searchId.value)}/neighbors?depth=${depth.value}&userId=default`;
+      const url = `/api/graph/node/${encodeURIComponent(searchId.value)}/neighbors?depth=${depth.value}`;
       const data = await get<any>(url);
       var rawNeighbors = data?.neighbors || data?.result || [];
       var neighborIds = new Set();
@@ -199,7 +199,7 @@ async function fetchGraph() {
       allLinks.value = [];
       renderGraph();
       try {
-        var nodesData = await get<any>("/api/graph/nodes?userId=default");
+        var nodesData = await get<any>("/api/graph/nodes");
         var allNodesData = nodesData?.data || nodesData || [];
         if (Array.isArray(allNodesData) && allNodesData.length > 0) {
           allNodes.value = allNodesData.filter(function (n) {
@@ -216,7 +216,7 @@ async function fetchGraph() {
         }
       } catch {}
       try {
-        var edgesData = await get<any>("/api/graph/edges?userId=default");
+        var edgesData = await get<any>("/api/graph/edges");
         var allEdgesData = edgesData?.data || edgesData || [];
         if (Array.isArray(allEdgesData) && allEdgesData.length > 0) {
           var nodeIdSet = new Set(
@@ -239,12 +239,12 @@ async function fetchGraph() {
     }
   } else {
     try {
-      var nodesData = await get<any>("/api/graph/nodes?userId=default");
+      var nodesData = await get<any>("/api/graph/nodes");
       var allNodesArr = nodesData?.data || nodesData || [];
       if (Array.isArray(allNodesArr) && allNodesArr.length > 0) {
         allNodes.value = allNodesArr;
         try {
-          var edgesData = await get<any>("/api/graph/edges?userId=default");
+          var edgesData = await get<any>("/api/graph/edges");
           var allEdgesArr = edgesData?.data || edgesData || [];
           if (Array.isArray(allEdgesArr) && allEdgesArr.length > 0) {
             allLinks.value = allEdgesArr;
