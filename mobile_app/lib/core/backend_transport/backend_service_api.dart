@@ -133,6 +133,42 @@ class BackendServiceApi {
     return _parseResponse<T>(response, fromJson, path);
   }
 
+  Future<Stream<List<int>>> getStream(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _http.send(BackendHttpRequest(
+      method: BackendHttpMethod.get,
+      path: path,
+      queryParameters: queryParameters,
+      headers: headers,
+      streamResponse: true,
+      cancelToken: cancelToken,
+    ));
+    return _responseStream(response, path);
+  }
+
+  Future<Stream<List<int>>> postStream(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _http.send(BackendHttpRequest(
+      method: BackendHttpMethod.post,
+      path: path,
+      queryParameters: queryParameters,
+      headers: headers,
+      body: data,
+      streamResponse: true,
+      cancelToken: cancelToken,
+    ));
+    return _responseStream(response, path);
+  }
+
   Future<T?> postMultipart<T>(
     String path, {
     Map<String, String> fields = const {},
@@ -234,6 +270,18 @@ class BackendServiceApi {
       body: data,
     ));
     return _parseResponse<T>(response, fromJson, path);
+  }
+
+  Stream<List<int>> _responseStream(BackendHttpResponse response, String path) {
+    final data = response.data;
+    if (data is! ResponseBody) {
+      throw ServiceApiException(
+        code: 10000,
+        message: '流式响应格式无效',
+        detail: path,
+      );
+    }
+    return data.stream.map<List<int>>((chunk) => chunk);
   }
 
   T? _parseResponse<T>(

@@ -8,6 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
+import '../widgets/voice_clone_manager.dart';
 
 class ModelConfigPage extends ConsumerStatefulWidget {
   final String modelType;
@@ -206,6 +207,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           SizedBox(height: AppSpacing.sectionGap),
           _buildScenarioRoutes(),
         ],
+        if (widget.modelType == 'voice') ...<Widget>[
+          SizedBox(height: AppSpacing.sectionGap),
+          const VoiceCloneManager(),
+        ],
       ],
     );
   }
@@ -240,6 +245,17 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
           if ((config['baseUrl'] ?? '').toString().isNotEmpty)
             _InfoRow(label: 'API 地址', value: (config['baseUrl'] ?? '').toString()),
           if (config['hasApiKey'] == true) const _InfoRow(label: 'API Key', value: '已配置'),
+          if (_isText) ...<Widget>[
+            _InfoRow(label: '温度', value: ((config['temperature'] as num?)?.toDouble() ?? 0.7).toStringAsFixed(2)),
+            _InfoRow(label: '最大 Token', value: ((config['maxTokens'] as num?)?.toInt() ?? 4096).toString()),
+            _InfoRow(label: '超时', value: '${(config['timeoutSeconds'] as num?)?.toInt() ?? 60}s'),
+            _InfoRow(label: '重试', value: ((config['retryCount'] as num?)?.toInt() ?? 1).toString()),
+          ],
+          if (widget.modelType == 'voice') ...<Widget>[
+            _InfoRow(label: '语速', value: ((config['speed'] as num?)?.toDouble() ?? 1).toStringAsFixed(1)),
+            _InfoRow(label: '音调', value: ((config['pitch'] as num?)?.toDouble() ?? 1).toStringAsFixed(1)),
+            _InfoRow(label: '音量', value: ((config['volume'] as num?)?.toDouble() ?? 1).toStringAsFixed(1)),
+          ],
           SizedBox(height: AppSpacing.md),
           Wrap(
             spacing: AppSpacing.sm,
@@ -441,6 +457,17 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     final apiKeyCtrl = TextEditingController();
     final resourceCtrl = TextEditingController(text: (existing?['resourceId'] ?? '').toString());
     final voiceCtrl = TextEditingController(text: (existing?['voiceType'] ?? '').toString());
+    final temperatureCtrl = TextEditingController(text: ((existing?['temperature'] as num?)?.toDouble() ?? 0.7).toString());
+    final maxTokensCtrl = TextEditingController(text: ((existing?['maxTokens'] as num?)?.toInt() ?? 4096).toString());
+    final timeoutCtrl = TextEditingController(text: ((existing?['timeoutSeconds'] as num?)?.toInt() ?? 60).toString());
+    final retryCtrl = TextEditingController(text: ((existing?['retryCount'] as num?)?.toInt() ?? 1).toString());
+    final speedCtrl = TextEditingController(text: ((existing?['speed'] as num?)?.toDouble() ?? 1.0).toString());
+    final pitchCtrl = TextEditingController(text: ((existing?['pitch'] as num?)?.toDouble() ?? 1.0).toString());
+    final volumeCtrl = TextEditingController(text: ((existing?['volume'] as num?)?.toDouble() ?? 1.0).toString());
+    final cloneResourceCtrl = TextEditingController(text: (existing?['cloneResourceId'] ?? 'volc.megatts.timbre').toString());
+    final realtimeAppIdCtrl = TextEditingController(text: (existing?['realtimeAppId'] ?? '').toString());
+    final realtimeAccessTokenCtrl = TextEditingController();
+    final realtimeSecretKeyCtrl = TextEditingController();
     bool isActive = existing == null ? _configs.isEmpty : _activeOf(existing);
     bool detecting = false;
     List<Map<String, dynamic>> detectedModels = const <Map<String, dynamic>>[];
@@ -508,6 +535,34 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                       _SheetField(label: 'Resource ID', controller: resourceCtrl, hint: '例如 seed-tts-2.0'),
                       SizedBox(height: AppSpacing.md),
                       _SheetField(label: 'Voice Type', controller: voiceCtrl, hint: '声音/音色标识'),
+                      SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: <Widget>[
+                          Expanded(child: _SheetField(label: '语速', controller: speedCtrl, hint: '0.5 - 2.0', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+                          SizedBox(width: AppSpacing.sm),
+                          Expanded(child: _SheetField(label: '音调', controller: pitchCtrl, hint: '0.5 - 2.0', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+                          SizedBox(width: AppSpacing.sm),
+                          Expanded(child: _SheetField(label: '音量', controller: volumeCtrl, hint: '0.1 - 2.0', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+                        ],
+                      ),
+                      SizedBox(height: AppSpacing.md),
+                      _SheetField(label: '复刻 Resource ID', controller: cloneResourceCtrl, hint: 'volc.megatts.timbre'),
+                      SizedBox(height: AppSpacing.md),
+                      _SheetField(label: 'Realtime App ID', controller: realtimeAppIdCtrl, hint: '端到端实时语音 App ID'),
+                      SizedBox(height: AppSpacing.md),
+                      _SheetField(
+                        label: 'Realtime Access Token',
+                        controller: realtimeAccessTokenCtrl,
+                        hint: existing == null ? '输入实时语音 Access Token' : '留空则保持原 Token',
+                        obscure: true,
+                      ),
+                      SizedBox(height: AppSpacing.md),
+                      _SheetField(
+                        label: 'Realtime Secret Key',
+                        controller: realtimeSecretKeyCtrl,
+                        hint: existing == null ? '输入实时语音 Secret Key' : '留空则保持原 Secret',
+                        obscure: true,
+                      ),
                     ] else ...<Widget>[
                       _SheetField(label: '模型名', controller: modelCtrl, hint: (selectedProvider?['defaultModel'] ?? '模型 ID').toString()),
                       if (_isText) ...<Widget>[
@@ -557,6 +612,22 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                             },
                           ),
                         ],
+                        SizedBox(height: AppSpacing.md),
+                        Row(
+                          children: <Widget>[
+                            Expanded(child: _SheetField(label: '温度', controller: temperatureCtrl, hint: '0.0 - 2.0', keyboardType: const TextInputType.numberWithOptions(decimal: true))),
+                            SizedBox(width: AppSpacing.sm),
+                            Expanded(child: _SheetField(label: '最大 Token', controller: maxTokensCtrl, hint: '4096', keyboardType: TextInputType.number)),
+                          ],
+                        ),
+                        SizedBox(height: AppSpacing.md),
+                        Row(
+                          children: <Widget>[
+                            Expanded(child: _SheetField(label: '超时（秒）', controller: timeoutCtrl, hint: '60', keyboardType: TextInputType.number)),
+                            SizedBox(width: AppSpacing.sm),
+                            Expanded(child: _SheetField(label: '重试次数', controller: retryCtrl, hint: '1', keyboardType: TextInputType.number)),
+                          ],
+                        ),
                       ],
                     ],
                     SizedBox(height: AppSpacing.md),
@@ -586,6 +657,17 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                                 apiKey: apiKeyCtrl.text.trim(),
                                 resourceId: resourceCtrl.text.trim(),
                                 voiceType: voiceCtrl.text.trim(),
+                                temperature: temperatureCtrl.text.trim(),
+                                maxTokens: maxTokensCtrl.text.trim(),
+                                timeoutSeconds: timeoutCtrl.text.trim(),
+                                retryCount: retryCtrl.text.trim(),
+                                speed: speedCtrl.text.trim(),
+                                pitch: pitchCtrl.text.trim(),
+                                volume: volumeCtrl.text.trim(),
+                                cloneResourceId: cloneResourceCtrl.text.trim(),
+                                realtimeAppId: realtimeAppIdCtrl.text.trim(),
+                                realtimeAccessToken: realtimeAccessTokenCtrl.text.trim(),
+                                realtimeSecretKey: realtimeSecretKeyCtrl.text.trim(),
                                 isActive: isActive,
                               );
                             },
@@ -606,6 +688,17 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     apiKeyCtrl.dispose();
     resourceCtrl.dispose();
     voiceCtrl.dispose();
+    temperatureCtrl.dispose();
+    maxTokensCtrl.dispose();
+    timeoutCtrl.dispose();
+    retryCtrl.dispose();
+    speedCtrl.dispose();
+    pitchCtrl.dispose();
+    volumeCtrl.dispose();
+    cloneResourceCtrl.dispose();
+    realtimeAppIdCtrl.dispose();
+    realtimeAccessTokenCtrl.dispose();
+    realtimeSecretKeyCtrl.dispose();
   }
 
   Future<void> _saveConfig(
@@ -617,6 +710,17 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
     required String apiKey,
     required String resourceId,
     required String voiceType,
+    required String temperature,
+    required String maxTokens,
+    required String timeoutSeconds,
+    required String retryCount,
+    required String speed,
+    required String pitch,
+    required String volume,
+    required String cloneResourceId,
+    required String realtimeAppId,
+    required String realtimeAccessToken,
+    required String realtimeSecretKey,
     required bool isActive,
   }) async {
     final id = existing == null ? '' : _idOf(existing);
@@ -628,13 +732,26 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
       if (apiKey.isNotEmpty) 'apiKey': apiKey,
     };
     if (widget.modelType == 'voice') {
+      final parsedSpeed = double.tryParse(speed) ?? (existing?['speed'] as num?)?.toDouble() ?? 1.0;
+      final parsedPitch = double.tryParse(pitch) ?? (existing?['pitch'] as num?)?.toDouble() ?? 1.0;
+      final parsedVolume = double.tryParse(volume) ?? (existing?['volume'] as num?)?.toDouble() ?? 1.0;
       data['resourceId'] = resourceId;
       data['voiceType'] = voiceType;
-      data['speed'] = (existing?['speed'] as num?)?.toDouble() ?? 1.0;
-      data['pitch'] = (existing?['pitch'] as num?)?.toDouble() ?? 1.0;
-      data['volume'] = (existing?['volume'] as num?)?.toDouble() ?? 1.0;
+      data['speed'] = parsedSpeed.clamp(0.5, 2.0).toDouble();
+      data['pitch'] = parsedPitch.clamp(0.5, 2.0).toDouble();
+      data['volume'] = parsedVolume.clamp(0.1, 2.0).toDouble();
+      data['cloneResourceId'] = cloneResourceId.isEmpty ? 'volc.megatts.timbre' : cloneResourceId;
+      data['realtimeAppId'] = realtimeAppId;
+      if (realtimeAccessToken.isNotEmpty) data['realtimeAccessToken'] = realtimeAccessToken;
+      if (realtimeSecretKey.isNotEmpty) data['realtimeSecretKey'] = realtimeSecretKey;
     } else {
       data['modelName'] = model;
+      if (_isText) {
+        data['temperature'] = (double.tryParse(temperature) ?? 0.7).clamp(0.0, 2.0).toDouble();
+        data['maxTokens'] = (int.tryParse(maxTokens) ?? 4096).clamp(1, 1048576);
+        data['timeoutSeconds'] = (int.tryParse(timeoutSeconds) ?? 60).clamp(1, 3600);
+        data['retryCount'] = (int.tryParse(retryCount) ?? 1).clamp(0, 10);
+      }
     }
 
     setState(() => _busy = true);
@@ -746,12 +863,14 @@ class _SheetField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final bool obscure;
+  final TextInputType? keyboardType;
 
   const _SheetField({
     required this.label,
     required this.controller,
     required this.hint,
     this.obscure = false,
+    this.keyboardType,
   });
 
   @override
@@ -763,7 +882,7 @@ class _SheetField extends StatelessWidget {
           Text(label, style: AppTypography.label(context)),
           const SizedBox(height: 4),
         ],
-        AmitiaTextField(hintText: hint, controller: controller, obscureText: obscure),
+        AmitiaTextField(hintText: hint, controller: controller, obscureText: obscure, keyboardType: keyboardType),
       ],
     );
   }

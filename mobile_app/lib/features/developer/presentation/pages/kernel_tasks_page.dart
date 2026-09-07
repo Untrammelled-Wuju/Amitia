@@ -146,35 +146,74 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     if (definitionId.isEmpty) return;
     final controller = TextEditingController(text: '{}');
     final priorityController = TextEditingController(text: '0');
+    final needsDevice = (definition['executionPlacement'] ?? '').toString() == 'device';
+    List<Map<String, dynamic>> onlineDevices = const [];
+    String selectedDeviceId = '';
+    if (needsDevice) {
+      try {
+        final devices = await ref.read(extensionServiceProvider).workflowDevices();
+        onlineDevices = devices.where((item) => item['online'] == true && (item['deviceId'] ?? '').toString().trim().isNotEmpty).toList(growable: false);
+        if (onlineDevices.length == 1) selectedDeviceId = (onlineDevices.first['deviceId'] ?? '').toString();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('设备列表加载失败：$e')));
+      }
+    }
+    if (!mounted) {
+      controller.dispose();
+      priorityController.dispose();
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('手动入队 · $definitionId'),
-        content: SizedBox(
-          width: 560,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                minLines: 7,
-                maxLines: 14,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                decoration: const InputDecoration(labelText: 'Input JSON', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: priorityController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Priority', border: OutlineInputBorder()),
-              ),
-            ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text('手动入队 · $definitionId'),
+          content: SizedBox(
+            width: 560,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (needsDevice) ...[
+                  DropdownButtonFormField<String>(
+                    value: selectedDeviceId.isEmpty ? null : selectedDeviceId,
+                    decoration: const InputDecoration(labelText: '执行设备', border: OutlineInputBorder()),
+                    items: onlineDevices.map((device) {
+                      final id = (device['deviceId'] ?? '').toString();
+                      final label = (device['label'] ?? device['platform'] ?? 'device').toString();
+                      return DropdownMenuItem(value: id, child: Text('$label · $id', overflow: TextOverflow.ellipsis));
+                    }).toList(growable: false),
+                    onChanged: (value) => setDialogState(() => selectedDeviceId = value ?? ''),
+                  ),
+                  if (onlineDevices.isEmpty) ...[
+                    const SizedBox(height: 8),
+                    const Align(alignment: Alignment.centerLeft, child: Text('当前没有在线设备，设备任务无法入队。')),
+                  ],
+                  const SizedBox(height: 10),
+                ],
+                TextField(
+                  controller: controller,
+                  minLines: 7,
+                  maxLines: 14,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  decoration: const InputDecoration(labelText: 'Input JSON', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: priorityController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Priority', border: OutlineInputBorder()),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+            FilledButton(
+              onPressed: needsDevice && selectedDeviceId.isEmpty ? null : () => Navigator.pop(dialogContext, true),
+              child: const Text('入队'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('入队')),
-        ],
       ),
     );
     if (confirmed != true) {
@@ -194,6 +233,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
           input: Map<String, dynamic>.from(decoded),
           priority: priority,
           source: 'mobile_kernel_tasks',
+          deviceId: needsDevice ? selectedDeviceId : null,
         );
       });
     } catch (e) {

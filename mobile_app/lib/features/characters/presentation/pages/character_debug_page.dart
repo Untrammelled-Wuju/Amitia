@@ -116,6 +116,22 @@ class CharacterDebugPage extends ConsumerWidget {
             ),
             _buildDebugAction(
               context,
+              '处理全部主动消息',
+              '立即触发当前角色所有待发送主动消息任务',
+              Icons.outgoing_mail,
+              context.accentPrimary,
+              () => _processActiveMessages(context, ref),
+            ),
+            _buildDebugAction(
+              context,
+              '触发每日自动重生',
+              '取消旧任务并按当前日期重新生成日程与主动消息任务',
+              Icons.autorenew_rounded,
+              context.accentPrimary,
+              () => _triggerDailyRegeneration(context, ref),
+            ),
+            _buildDebugAction(
+              context,
               '延迟回复队列',
               '查看等待中的延迟回复，并可取消单条任务',
               Icons.pending_actions_outlined,
@@ -631,6 +647,48 @@ class CharacterDebugPage extends ConsumerWidget {
     }
   }
 
+
+  Future<void> _processActiveMessages(BuildContext context, WidgetRef ref) async {
+    final confirmed = await _showConfirmDialog(
+      context,
+      '处理全部主动消息',
+      '将立即处理当前角色所有待发送的主动消息任务。确定继续吗？',
+    );
+    if (confirmed != true) return;
+    try {
+      final result = await ref.read(companionServiceProvider).processActiveMessagesDebug(characterId: characterId);
+      ref.invalidate(companionStateByCharacterProvider(characterId));
+      ref.invalidate(companionStateProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('主动消息处理器已触发：${_compact(result ?? const <String, dynamic>{})}')),
+        );
+      }
+    } catch (e) {
+      _showError(context, e);
+    }
+  }
+
+  Future<void> _triggerDailyRegeneration(BuildContext context, WidgetRef ref) async {
+    final confirmed = await _showConfirmDialog(
+      context,
+      '触发每日自动重生',
+      '将触发每日自动重生逻辑，取消旧任务并重新生成日程与主动消息任务。确定继续吗？',
+    );
+    if (confirmed != true) return;
+    try {
+      final result = await ref.read(companionServiceProvider).triggerDailyRegenerationDebug(characterId: characterId);
+      ref.invalidate(companionStateByCharacterProvider(characterId));
+      ref.invalidate(companionStateProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('每日自动重生已触发：${_compact(result ?? const <String, dynamic>{})}')),
+        );
+      }
+    } catch (e) {
+      _showError(context, e);
+    }
+  }
 
   Future<void> _showDelayedReplies(BuildContext context, WidgetRef ref) async {
     try {

@@ -22,7 +22,7 @@ import '../features/settings/presentation/pages/ui_provider_settings_page.dart';
 import 'app_routes.dart';
 import 'route_transitions.dart';
 
-final _shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
+final appNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'app-shell');
 
 class AppShell extends ConsumerStatefulWidget {
   final Widget child;
@@ -113,7 +113,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final providerSnapshot = ref.read(uiRuntimeProvider).valueOrNull;
   return GoRouter(
     initialLocation: AppRoutes.chat,
-    navigatorKey: _shellNavigatorKey,
+    navigatorKey: appNavigatorKey,
     redirect: (context, state) async {
       final location = state.matchedLocation;
 

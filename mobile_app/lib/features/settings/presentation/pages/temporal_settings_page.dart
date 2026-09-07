@@ -10,6 +10,8 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/models/character.dart';
+import '../../../../core/native_bridge/device_timezone_cache.dart';
+import '../../../../core/native_bridge/providers/device_timezone_bootstrap_provider.dart';
 import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
@@ -159,6 +161,8 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   late List<TimeAnchor> _anchors;
   String? _selectedReunionCharacterId;
   bool _savingProfile = false;
+  Map<String, dynamic>? _snapshot;
+  bool _snapshotLoading = false;
 
   static const _timezoneModeLabels = <String, String>{
     'follow_device': '跟随设备',
@@ -194,7 +198,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     _applyConfig(widget.config);
     _anchors = List<TimeAnchor>.from(widget.anchors);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _detectDeviceTimezoneSuggestion();
+      _initializeTemporalContext();
     });
   }
 
@@ -238,30 +242,52 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   }
 
 
+  Future<void> _initializeTemporalContext() async {
+    try {
+      await ref.read(deviceTimezoneBootstrapProvider.future);
+    } catch (_) {
+      // Native timezone bootstrap is best-effort. The persisted profile remains
+      // a valid fallback when the platform provider is unavailable.
+    }
+    if (!mounted) return;
+    await _detectDeviceTimezoneSuggestion();
+    if (!mounted) return;
+    await _loadSnapshot();
+  }
+
   Future<void> _detectDeviceTimezoneSuggestion() async {
     if (!mounted || kIsWeb || !_autoDetectTimezone || _timezoneMode != 'follow_device') return;
     if (_pendingTimezoneSuggestion.isNotEmpty) return;
-    final platform = switch (defaultTargetPlatform) {
-      TargetPlatform.android => 'android',
-      TargetPlatform.iOS => 'ios',
-      TargetPlatform.windows => 'windows',
-      _ => null,
-    };
-    if (platform == null) return;
+
+    var candidate = DeviceTimezoneCache.hasValue
+        ? DeviceTimezoneCache.ianaTimezone
+        : '';
     try {
-      final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
-      final response = await dispatcher.execute(<String, dynamic>{
-        'protocolVersion': 1,
-        'requestId': 'temporal-timezone-${DateTime.now().microsecondsSinceEpoch}',
-        'platform': platform,
-        'operation': 'device.timezone.get',
-        'payload': const <String, dynamic>{},
-      });
-      if (!const {'success', 'ok'}.contains((response['status'] ?? '').toString())) return;
-      final rawResult = response['result'];
-      if (rawResult is! Map) return;
-      final result = Map<String, dynamic>.from(rawResult);
-      final candidate = (result['ianaTimezone'] ?? '').toString().trim();
+      if (candidate.isEmpty) {
+        final platform = switch (defaultTargetPlatform) {
+          TargetPlatform.android => 'android',
+          TargetPlatform.iOS => 'ios',
+          TargetPlatform.windows => 'windows',
+          _ => null,
+        };
+        if (platform == null) return;
+        final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
+        final response = await dispatcher.execute(<String, dynamic>{
+          'protocolVersion': 1,
+          'requestId': 'temporal-timezone-${DateTime.now().microsecondsSinceEpoch}',
+          'platform': platform,
+          'operation': 'device.timezone.get',
+          'payload': const <String, dynamic>{},
+        });
+        if (!const {'success', 'ok'}.contains((response['status'] ?? '').toString().toLowerCase())) return;
+        final rawResult = response['result'];
+        if (rawResult is! Map) return;
+        final result = Map<String, dynamic>.from(rawResult);
+        candidate = (result['ianaTimezone'] ?? '').toString().trim();
+        if (candidate.isNotEmpty && _looksLikeIanaTimezone(candidate)) {
+          DeviceTimezoneCache.update(candidate);
+        }
+      }
       if (candidate.isEmpty || !_looksLikeIanaTimezone(candidate) || candidate == _timezone.trim()) return;
       final profile = await ref.read(temporalServiceProvider).suggestTimezone(candidate);
       if (!mounted || profile == null) return;
@@ -303,6 +329,20 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
       if (mounted) _showMessage(_errorText(error), error: true);
     } finally {
       if (mounted) setState(() => _resolvingTimezoneSuggestion = false);
+    }
+  }
+
+  Future<void> _loadSnapshot() async {
+    if (_snapshotLoading) return;
+    setState(() => _snapshotLoading = true);
+    try {
+      final snapshot = await ref.read(temporalServiceProvider).snapshot();
+      if (!mounted) return;
+      setState(() => _snapshot = snapshot);
+    } catch (error) {
+      if (mounted) _showMessage('当前时间快照加载失败：${_errorText(error)}', error: true);
+    } finally {
+      if (mounted) setState(() => _snapshotLoading = false);
     }
   }
 
@@ -465,6 +505,8 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                 setState(() => _autoDetectTimezone = value),
           ),
         ]),
+        SizedBox(height: AppSpacing.sectionGap),
+        _buildSnapshotCard(),
         SizedBox(height: AppSpacing.sectionGap),
         const _SectionLabel(text: '感知策略'),
         SizedBox(height: AppSpacing.sm),
@@ -784,6 +826,87 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
     if (selected != null && selected.isNotEmpty && mounted) {
       setState(() => _timezone = selected);
     }
+  }
+
+  Widget _buildSnapshotCard() {
+    final snapshot = _snapshot;
+    final userTime = snapshot?['userTime'] is Map
+        ? Map<String, dynamic>.from(snapshot!['userTime'] as Map)
+        : const <String, dynamic>{};
+    final characterTime = snapshot?['characterTime'] is Map
+        ? Map<String, dynamic>.from(snapshot!['characterTime'] as Map)
+        : const <String, dynamic>{};
+    final signals = snapshot?['signals'] is Map
+        ? Map<String, dynamic>.from(snapshot!['signals'] as Map)
+        : const <String, dynamic>{};
+    final userLocal = (userTime['localTime'] ?? '—').toString();
+    final characterLocal = (characterTime['localTime'] ?? '—').toString();
+    final daypart = (userTime['daypart'] ?? '—').toString();
+    final season = (userTime['season'] ?? '—').toString();
+    final quietHours = signals['quietHours'] == true ? '是' : '否';
+    final timezone = (userTime['timezone'] ?? _timezone).toString();
+
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: context.surfacePrimary,
+        borderRadius: AppRadius.brMedium,
+        border: Border.all(color: context.borderPrimary, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('当前时间快照', style: AppTypography.cardTitle(context)),
+              ),
+              IconButton(
+                tooltip: '刷新',
+                onPressed: _snapshotLoading ? null : _loadSnapshot,
+                icon: _snapshotLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(Icons.refresh, size: 20, color: context.textSecondary),
+              ),
+            ],
+          ),
+          SizedBox(height: AppSpacing.sm),
+          _snapshotRow('用户当地时间', userLocal),
+          _snapshotRow('角色后备时间', characterLocal),
+          _snapshotRow('IANA 时区', timezone),
+          _snapshotRow('当前时段', daypart),
+          _snapshotRow('季节', season),
+          _snapshotRow('安静时段', quietHours),
+        ],
+      ),
+    );
+  }
+
+  Widget _snapshotRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 104,
+            child: Text(label, style: AppTypography.caption(context)),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: AppTypography.body(context),
+              textAlign: TextAlign.right,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildCard(List<Widget> children) {

@@ -250,8 +250,8 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     await ref.read(mobileDeploymentConfigProvider.notifier).update(next);
     _remoteUriController.text = normalized;
     if (current.mode == MobileDeploymentMode.cloud) {
-      await ref.read(mobileBackendLifecycleProvider).reconcile(next);
       ref.invalidate(backendConnectionProvider);
+      await ref.read(mobileBackendLifecycleProvider).reconcile(next);
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -299,15 +299,14 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
     MobileDeploymentMode newMode, {
     String? remoteUri,
   }) async {
-    final lifecycle = ref.read(mobileBackendLifecycleProvider);
     final config = ref.read(mobileDeploymentConfigProvider);
     final newConfig = MobileDeploymentConfig(
       mode: newMode,
       remoteCoreUri: remoteUri ?? config.remoteCoreUri,
     );
     await ref.read(mobileDeploymentConfigProvider.notifier).update(newConfig);
-    await lifecycle.reconcile(newConfig);
     ref.invalidate(backendConnectionProvider);
+    await ref.read(mobileBackendLifecycleProvider).reconcile(newConfig);
     if (!mounted) return;
     setState(() => _testState = false);
     _remoteUriController.text = newConfig.remoteCoreUri ?? '';

@@ -14,6 +14,7 @@ import '../../runtime/runtime_bridge_state.dart';
 import '../../runtime/backend/mobile_backend_providers.dart';
 import '../../runtime/backend/mobile_deployment_mode.dart';
 import '../../debug/debug_log_service.dart';
+import '../auth/device_local_management_session.dart';
 import '../backend_service_api.dart';
 import '../backend_transport.dart';
 import '../dynamic_backend_service_api.dart';
@@ -23,6 +24,8 @@ import '../http/backend_http_method.dart';
 import '../http/backend_http_request.dart';
 import '../http/backend_http_response.dart';
 import '../http/backend_http_transport.dart';
+import '../http/backend_http_client.dart';
+import '../websocket/backend_websocket_client.dart';
 import '../state/backend_transport_state.dart';
 
 final _transportLogger = Logger();
@@ -280,9 +283,14 @@ class DeviceLocalBackendTransportNotifier
         if (_current == null || _currentGeneration != config.generation) {
           _closeCurrentIfNeeded();
           _currentGeneration = config.generation;
-          _current = DefaultBackendTransport.create(config);
+          final rootHttp = BackendHttpClient(config);
+          _current = DefaultBackendTransport(
+            generation: config.generation,
+            http: DeviceLocalSessionHttpTransport(rootHttp),
+            webSocket: BackendWebSocketClient(config),
+          );
           _transportLogger.d(
-            'DeviceLocalBackendTransport created: generation=${config.generation}',
+            'DeviceLocalBackendTransport created with management session support: generation=${config.generation}',
           );
         }
         return TransportAvailable(generation: config.generation);

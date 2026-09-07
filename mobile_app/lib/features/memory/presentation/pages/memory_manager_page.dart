@@ -388,6 +388,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
               ListTile(leading: const Icon(Icons.analytics_outlined), title: const Text('向量与检索诊断'), onTap: () { Navigator.pop(ctx); _showDiagnostics(); }),
               ListTile(leading: const Icon(Icons.pending_actions_outlined), title: const Text('候选记忆管理'), onTap: () { Navigator.pop(ctx); _showCandidates(); }),
               ListTile(leading: const Icon(Icons.auto_awesome_outlined), title: const Text('提取待审核候选'), onTap: () async { Navigator.pop(ctx); await _extractCandidates(); }),
+              ListTile(leading: const Icon(Icons.forum_outlined), title: const Text('从会话生成候选'), onTap: () async { Navigator.pop(ctx); await _generateCandidatesFromConversation(); }),
               ListTile(leading: const Icon(Icons.sort), title: const Text('查看检索排序结果'), onTap: () { Navigator.pop(ctx); _showRanked(); }),
               ListTile(leading: const Icon(Icons.replay), title: const Text('重建向量嵌入'), onTap: () async { Navigator.pop(ctx); await _runMaintenance('正在重建向量嵌入', () => ref.read(memoryServiceProvider).rebuildEmbeddings()); }),
               ListTile(leading: const Icon(Icons.reorder), title: const Text('重建记忆索引'), onTap: () async { Navigator.pop(ctx); await _runMaintenance('正在重建记忆索引', () => ref.read(memoryServiceProvider).rebuildIndex()); }),
@@ -596,6 +597,82 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('候选提取失败: $e')));
+    }
+  }
+
+  Future<void> _generateCandidatesFromConversation() async {
+    try {
+      final conversations = await ref.read(chatServiceProvider).listConversations();
+      if (!mounted) return;
+      final available = conversations.where((item) => item.id.trim().isNotEmpty).toList(growable: false);
+      if (available.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('暂无可用于生成候选的会话')));
+        return;
+      }
+      String selectedId = available.first.id;
+      var generating = false;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: const Text('从会话生成候选'),
+            content: SizedBox(
+              width: 520,
+              child: DropdownButtonFormField<String>(
+                value: selectedId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: '选择会话', border: OutlineInputBorder()),
+                items: available
+                    .map(
+                      (conversation) => DropdownMenuItem<String>(
+                        value: conversation.id,
+                        child: Text(
+                          conversation.title.trim().isEmpty ? '未命名会话 · ${conversation.id}' : conversation.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: generating ? null : (value) { if (value != null) selectedId = value; },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: generating ? null : () => Navigator.pop(dialogContext),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: generating
+                    ? null
+                    : () async {
+                        setDialogState(() => generating = true);
+                        try {
+                          final candidates = await ref.read(memoryServiceProvider).generateCandidates(selectedId);
+                          if (!dialogContext.mounted) return;
+                          Navigator.pop(dialogContext);
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(candidates.isEmpty ? '该会话没有生成新的候选记忆' : '已生成 ${candidates.length} 条候选记忆')),
+                          );
+                          if (candidates.isNotEmpty) await _showCandidates();
+                        } catch (e) {
+                          if (dialogContext.mounted) {
+                            setDialogState(() => generating = false);
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('生成候选失败: $e')));
+                          }
+                        }
+                      },
+                child: generating
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('生成'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('加载会话失败: $e')));
     }
   }
 

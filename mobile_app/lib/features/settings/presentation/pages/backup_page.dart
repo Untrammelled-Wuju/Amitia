@@ -13,8 +13,6 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
-import '../../../../core/backend_connection/backend_uri_builder.dart';
-import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -91,7 +89,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   }
 
   Future<Dio> _dio() async {
-    final availability = await ref.read(backendConnectionProvider.future);
+    final availability = await ref.read(deviceLocalBackendConnectionProvider.future);
     if (availability is! BackendConnectionAvailable) {
       throw StateError('后端当前不可用');
     }
@@ -209,7 +207,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     await _run('备份', () async {
       final result = await ref.read(backendServiceProvider).post<Map<String, dynamic>>('/api/storage/backups');
       if (result?['ok'] != true) throw StateError((result?['error'] ?? '备份未完成').toString());
-      _show('当前业务 Core 备份已创建');
+      _show('当前设备本地 Runtime 备份已创建');
       await _loadBackups();
     });
   }
@@ -235,8 +233,8 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('恢复 Core 备份'),
-        content: Text('将用「$name」覆盖当前业务 Core 的数据库。Local 模式对应本机 Core，Cloud 模式对应 Cloud Core。是否继续？'),
+        title: const Text('恢复本地 Runtime 备份'),
+        content: Text('将用「$name」覆盖当前设备本地 Runtime 的数据库。Cloud 模式下不会修改 Cloud Core 数据库。是否继续？'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('恢复')),
@@ -308,14 +306,14 @@ class _BackupPageState extends ConsumerState<BackupPage> {
               ),
               SizedBox(height: AppSpacing.sectionGap),
               Text(
-                '备份接口作用于当前业务 Core：Local 模式为本机 Core，Cloud 模式为 Cloud Core；不会把云端数据库误标为当前设备本地数据库。',
+                '备份接口始终作用于当前设备本地 Runtime。Cloud 模式下业务消息仍连接 Cloud Core，但备份/恢复不会直接覆盖共享 Cloud Core 数据库。',
                 style: AppTypography.body(context).copyWith(color: context.textTertiary),
               ),
               SizedBox(height: AppSpacing.md),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Core 备份', style: AppTypography.sectionTitle(context)),
+                  Text('本地 Runtime 备份', style: AppTypography.sectionTitle(context)),
                   IconButton(icon: Icon(Icons.refresh, size: 20, color: context.textTertiary), onPressed: _loadingBackups ? null : _loadBackups),
                 ],
               ),

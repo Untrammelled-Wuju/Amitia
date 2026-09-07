@@ -3,6 +3,7 @@ package com.amitia.amitia_app.nativeprovider.notification
 import android.content.Context
 import android.content.pm.PackageManager
 import android.service.notification.StatusBarNotification
+import com.amitia.amitia_app.MainActivity
 
 internal class NotificationNativeHandler(context: Context) {
 
@@ -12,9 +13,10 @@ internal class NotificationNativeHandler(context: Context) {
     private val poster = NotificationPoster(appContext)
     private val actionExecutor = NotificationActionExecutor()
 
-    fun execute(request: NativeNotificationRequest): NativeNotificationResponse {
+    suspend fun execute(request: NativeNotificationRequest): NativeNotificationResponse {
         return when (request.operation) {
             OP_STATUS -> handleStatus(request)
+            OP_REQUEST_PERMISSION -> handleRequestPermission(request)
             OP_LIST -> handleList(request)
             OP_GET -> handleGet(request)
             OP_POST -> handlePost(request)
@@ -63,6 +65,81 @@ internal class NotificationNativeHandler(context: Context) {
             requestId = request.requestId,
             status = "success",
             result = result,
+        )
+    }
+
+    private suspend fun handleRequestPermission(request: NativeNotificationRequest): NativeNotificationResponse {
+        var state = stateReader.readState()
+        if (state.canPost) {
+            return NativeNotificationResponse(
+                requestId = request.requestId,
+                status = "success",
+                result = mapOf("granted" to true, "alreadyGranted" to true, "canPost" to true),
+            )
+        }
+
+        val activity = MainActivity.currentActivity()
+            ?: return NativeNotificationResponse(
+                requestId = request.requestId,
+                status = "error",
+                error = NativeNotificationError(
+                    code = "NOTIFICATION_POST_PERMISSION_FOREGROUND_REQUIRED",
+                    message = "a foreground activity is required to enable notifications",
+                ),
+            )
+
+        var requestedRuntimePermission = false
+        if (state.postPermissionRequired && !state.postPermissionGranted) {
+            requestedRuntimePermission = true
+            val granted = runCatching { activity.requestNotificationPostPermission() }.getOrDefault(false)
+            state = stateReader.readState()
+            if (!granted || !state.postPermissionGranted) {
+                return NativeNotificationResponse(
+                    requestId = request.requestId,
+                    status = "error",
+                    error = NativeNotificationError(
+                        code = "NOTIFICATION_POST_PERMISSION_REQUIRED",
+                        message = "POST_NOTIFICATIONS permission was not granted",
+                    ),
+                )
+            }
+        }
+
+        if (!state.notificationsEnabled) {
+            runCatching { activity.openAppNotificationSettings() }
+            state = stateReader.readState()
+            if (!state.notificationsEnabled) {
+                return NativeNotificationResponse(
+                    requestId = request.requestId,
+                    status = "error",
+                    error = NativeNotificationError(
+                        code = "NOTIFICATION_POST_DISABLED",
+                        message = "notifications are disabled for this app in system settings",
+                    ),
+                )
+            }
+        }
+
+        state = stateReader.readState()
+        if (!state.canPost) {
+            return NativeNotificationResponse(
+                requestId = request.requestId,
+                status = "error",
+                error = NativeNotificationError(
+                    code = "NOTIFICATION_POST_PERMISSION_REQUIRED",
+                    message = "notification delivery is not available",
+                ),
+            )
+        }
+
+        return NativeNotificationResponse(
+            requestId = request.requestId,
+            status = "success",
+            result = mapOf(
+                "granted" to true,
+                "alreadyGranted" to !requestedRuntimePermission,
+                "canPost" to true,
+            ),
         )
     }
 
@@ -412,6 +489,7 @@ internal class NotificationNativeHandler(context: Context) {
 
     companion object {
         const val OP_STATUS = "notification.status"
+        const val OP_REQUEST_PERMISSION = "notification.request_permission"
         const val OP_LIST = "notification.list"
         const val OP_GET = "notification.get"
         const val OP_POST = "notification.post"

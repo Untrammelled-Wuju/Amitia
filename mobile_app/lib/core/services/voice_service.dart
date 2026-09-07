@@ -12,6 +12,12 @@ class TTSService {
     return resp.map((e) => VoiceConfigDto.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  Future<List<VoiceConfigDto>> listConfigSummaries() async {
+    final resp = await _api.get<List<dynamic>>('/api/tts/config-summaries');
+    if (resp == null) return [];
+    return resp.map((e) => VoiceConfigDto.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   Future<VoiceConfigDto?> createConfig(Map<String, dynamic> data) async {
     final resp = await _api.post<Map<String, dynamic>>('/api/tts/configs', data: data);
     if (resp == null) return null;
@@ -77,6 +83,52 @@ class TTSService {
     return _api.post<Map<String, dynamic>>(
       '/api/tts/synthesize',
       data: {'characterId': characterId, 'text': text},
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listClonedVoices() async {
+    final resp = await _api.get<List<dynamic>>('/api/tts/voice-clones');
+    if (resp == null) return const <Map<String, dynamic>>[];
+    return resp
+        .whereType<Map>()
+        .map((item) => item.cast<String, dynamic>())
+        .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>?> cloneVoice({
+    required String filePath,
+    required String name,
+    String speakerId = '',
+    String voiceConfigId = '',
+    String language = 'cn',
+    String refText = '',
+  }) {
+    return _api.postMultipart<Map<String, dynamic>>(
+      '/api/tts/voice-clone',
+      fields: <String, String>{
+        'name': name,
+        if (speakerId.trim().isNotEmpty) 'speakerId': speakerId.trim(),
+        if (voiceConfigId.trim().isNotEmpty) 'voiceConfigId': voiceConfigId.trim(),
+        'language': language,
+        if (refText.trim().isNotEmpty) 'refText': refText.trim(),
+      },
+      files: <String, List<String>>{
+        'audio': <String>[filePath],
+      },
+    );
+  }
+
+  Future<void> deleteClonedVoice(String speakerId) {
+    return _api.delete(
+      '/api/tts/voice-clone',
+      queryParameters: <String, dynamic>{'speakerId': speakerId},
+    );
+  }
+
+  Future<Map<String, dynamic>?> synthesizeWithSpeaker(String speakerId, String text) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/tts/synthesize',
+      data: <String, dynamic>{'speakerId': speakerId, 'text': text},
     );
   }
 }

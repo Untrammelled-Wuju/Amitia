@@ -5,8 +5,6 @@ import 'backend_topology_resolver.dart';
 import 'mobile_backend_lifecycle.dart';
 import '../embedded/embedded_runtime_controller.dart';
 import '../embedded/android_embedded_runtime_controller.dart';
-import '../../backend_transport/connectivity/backend_connectivity_probe.dart';
-import '../../backend_transport/connectivity/backend_connectivity_providers.dart';
 
 final mobileDeploymentConfigRepositoryProvider =
     Provider<MobileDeploymentConfigRepository>((ref) {
@@ -51,19 +49,11 @@ final mobileBackendLifecycleProvider =
     Provider<MobileBackendLifecycle>((ref) {
   final resolver = ref.watch(backendTopologyResolverProvider);
   final embedded = ref.watch(embeddedRuntimeControllerProvider);
-  final connectivityProbe = ref.watch(backendConnectivityProbeProvider);
-
-  final lifecycle = connectivityProbe != null
-      ? DefaultMobileBackendLifecycle.withProbe(
-          resolver: resolver,
-          embeddedRuntime: embedded,
-          connectivityProbe: connectivityProbe,
-        )
-      : DefaultMobileBackendLifecycle(
-          resolver: resolver,
-          embeddedRuntime: embedded,
-          remoteProbe: _NoopRemoteCoreProbe(),
-        );
+  final lifecycle = DefaultMobileBackendLifecycle(
+    resolver: resolver,
+    embeddedRuntime: embedded,
+    remoteProbe: const DirectRemoteCoreProbe(),
+  );
 
   ref.onDispose(() => lifecycle.shutdown());
   return lifecycle;
@@ -74,10 +64,3 @@ final mobileBackendStatusProvider =
   final lifecycle = ref.watch(mobileBackendLifecycleProvider);
   return lifecycle.statusStream.distinct();
 });
-
-class _NoopRemoteCoreProbe implements RemoteCoreProbe {
-  @override
-  Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout = const Duration(seconds: 5)}) async {
-    return BackendConnectivityResult.unreachable;
-  }
-}

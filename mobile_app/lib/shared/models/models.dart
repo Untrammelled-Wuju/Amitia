@@ -20,6 +20,7 @@ class ChatMessage {
   final String content;
   final DateTime time;
   final MessageStatus status;
+  final String? agentTaskId;
   final String? agentTaskTitle;
   final List<String>? agentTaskSteps;
   final int? agentTaskProgress;
@@ -42,6 +43,7 @@ class ChatMessage {
     required this.content,
     required this.time,
     this.status = MessageStatus.sent,
+    this.agentTaskId,
     this.agentTaskTitle,
     this.agentTaskSteps,
     this.agentTaskProgress,

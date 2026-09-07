@@ -216,14 +216,28 @@ class UIProviderDefinition {
   }
 
   UIProviderEntry? entryFor(String platform) {
-    if (entries[platform] case final direct?) return direct;
+    UIProviderEntry? supported(String key) {
+      final entry = entries[key];
+      if (entry == null || entry.type == UIProviderEntryType.webModule) return null;
+      return entry;
+    }
+
     if (platform == 'android' || platform == 'ios') {
-      if (entries['mobile'] case final mobile?) return mobile;
+      if (supported('flutter_$platform') case final flutterPlatform?) return flutterPlatform;
+      if (supported('flutter_mobile') case final flutterMobile?) return flutterMobile;
     }
     if (platform == 'windows' || platform == 'macos' || platform == 'linux') {
-      if (entries['desktop'] case final desktop?) return desktop;
+      if (supported('flutter_$platform') case final flutterPlatform?) return flutterPlatform;
+      if (supported('flutter_desktop') case final flutterDesktop?) return flutterDesktop;
     }
-    return entries['*'];
+    if (supported(platform) case final direct?) return direct;
+    if (platform == 'android' || platform == 'ios') {
+      if (supported('mobile') case final mobile?) return mobile;
+    }
+    if (platform == 'windows' || platform == 'macos' || platform == 'linux') {
+      if (supported('desktop') case final desktop?) return desktop;
+    }
+    return supported('*');
   }
 }
 

@@ -31,13 +31,15 @@ internal class NotificationStateReader(private val context: Context) {
             notificationsEnabled
         }
 
-        val userActionRequired = !listenerGranted || (postPermissionRequired && !postPermissionGranted)
+        val userActionRequired =
+            !listenerGranted || (postPermissionRequired && !postPermissionGranted) || !notificationsEnabled
 
         val state = when {
             !listenerDeclared -> STATE_LISTENER_NOT_DECLARED
             !listenerGranted -> STATE_LISTENER_NOT_GRANTED
             !listenerConnected -> STATE_LISTENER_NOT_CONNECTED
             postPermissionRequired && !postPermissionGranted -> STATE_POST_PERMISSION_DENIED
+            !notificationsEnabled -> STATE_POST_NOTIFICATIONS_DISABLED
             else -> STATE_LISTENER_CONNECTED
         }
 
@@ -75,6 +77,7 @@ internal class NotificationStateReader(private val context: Context) {
         const val STATE_LISTENER_NOT_GRANTED = "listener_not_granted"
         const val STATE_LISTENER_NOT_CONNECTED = "listener_not_connected"
         const val STATE_POST_PERMISSION_DENIED = "post_permission_denied"
+        const val STATE_POST_NOTIFICATIONS_DISABLED = "post_notifications_disabled"
         const val STATE_LISTENER_CONNECTED = "listener_connected"
     }
 }

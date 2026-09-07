@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/services/character_service.dart';
@@ -273,9 +274,12 @@ class _FakeBackendServiceApi implements BackendServiceApi {
   int get generation => 1;
 
   @override
-  Future<T?> get<T>(String path,
-      {Map<String, dynamic>? queryParameters,
-      T Function(dynamic)? fromJson}) async {
+  Future<T?> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async {
     _record('GET', path);
     final wrapped = _wrapResponse();
     if (wrapped == null) return null;
@@ -285,8 +289,13 @@ class _FakeBackendServiceApi implements BackendServiceApi {
   }
 
   @override
-  Future<T?> post<T>(String path,
-      {Object? data, T Function(dynamic)? fromJson}) async {
+  Future<T?> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async {
     _record('POST', path, data);
     final wrapped = _wrapResponse();
     if (wrapped == null) return null;
@@ -298,8 +307,13 @@ class _FakeBackendServiceApi implements BackendServiceApi {
   }
 
   @override
-  Future<T?> put<T>(String path,
-      {Object? data, T Function(dynamic)? fromJson}) async {
+  Future<T?> put<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async {
     _record('PUT', path, data);
     final wrapped = _wrapResponse();
     if (wrapped == null) return null;
@@ -311,13 +325,21 @@ class _FakeBackendServiceApi implements BackendServiceApi {
   }
 
   @override
-  Future<void> delete(String path) async {
+  Future<void> delete(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+  }) async {
     _record('DELETE', path);
   }
 
   @override
-  Future<T?> deleteWithResponse<T>(String path,
-      {Object? data, T Function(dynamic)? fromJson}) async {
+  Future<T?> deleteWithResponse<T>(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async {
     _record('DELETE', path, data);
     final wrapped = _wrapResponse();
     if (wrapped == null) return null;
@@ -327,6 +349,49 @@ class _FakeBackendServiceApi implements BackendServiceApi {
     }
     return responseData as T?;
   }
+
+  @override
+  Future<Stream<List<int>>> getStream(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async => const Stream<List<int>>.empty();
+
+  @override
+  Future<Stream<List<int>>> postStream(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async => const Stream<List<int>>.empty();
+
+  @override
+  Future<T?> postMultipart<T>(
+    String path, {
+    Map<String, String> fields = const {},
+    Map<String, List<String>> files = const {},
+    Map<String, dynamic>? queryParameters,
+    T Function(dynamic)? fromJson,
+  }) async => null;
+
+  @override
+  Future<T?> postPayload<T>(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
+
+  @override
+  Future<T?> patch<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
 }
 
 class _DynamicFakeBackendServiceApi implements BackendServiceApi {
@@ -343,9 +408,12 @@ class _DynamicFakeBackendServiceApi implements BackendServiceApi {
   int get generation => 1;
 
   @override
-  Future<T?> get<T>(String path,
-      {Map<String, dynamic>? queryParameters,
-      T Function(dynamic)? fromJson}) async {
+  Future<T?> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async {
     requestCount++;
     lastMethod = 'GET';
     lastPath = path;
@@ -356,8 +424,13 @@ class _DynamicFakeBackendServiceApi implements BackendServiceApi {
   }
 
   @override
-  Future<T?> post<T>(String path,
-      {Object? data, T Function(dynamic)? fromJson}) async {
+  Future<T?> post<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async {
     requestCount++;
     lastMethod = 'POST';
     lastPath = path;
@@ -369,8 +442,13 @@ class _DynamicFakeBackendServiceApi implements BackendServiceApi {
   }
 
   @override
-  Future<T?> put<T>(String path,
-      {Object? data, T Function(dynamic)? fromJson}) async {
+  Future<T?> put<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async {
     requestCount++;
     lastMethod = 'PUT';
     lastPath = path;
@@ -379,18 +457,69 @@ class _DynamicFakeBackendServiceApi implements BackendServiceApi {
   }
 
   @override
-  Future<void> delete(String path) async {
+  Future<void> delete(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+  }) async {
     requestCount++;
     lastMethod = 'DELETE';
     lastPath = path;
   }
 
   @override
-  Future<T?> deleteWithResponse<T>(String path,
-      {Object? data, T Function(dynamic)? fromJson}) async {
+  Future<T?> deleteWithResponse<T>(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async {
     requestCount++;
     lastMethod = 'DELETE';
     lastPath = path;
     return null;
   }
+
+  @override
+  Future<Stream<List<int>>> getStream(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async => const Stream<List<int>>.empty();
+
+  @override
+  Future<Stream<List<int>>> postStream(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async => const Stream<List<int>>.empty();
+
+  @override
+  Future<T?> postMultipart<T>(
+    String path, {
+    Map<String, String> fields = const {},
+    Map<String, List<String>> files = const {},
+    Map<String, dynamic>? queryParameters,
+    T Function(dynamic)? fromJson,
+  }) async => null;
+
+  @override
+  Future<T?> postPayload<T>(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
+
+  @override
+  Future<T?> patch<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
 }

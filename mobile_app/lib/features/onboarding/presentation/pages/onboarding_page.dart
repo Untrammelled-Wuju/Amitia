@@ -13,6 +13,8 @@ import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
@@ -45,6 +47,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   final _adminUserController = TextEditingController();
   final _adminPassController = TextEditingController();
+  final _setupTokenController = TextEditingController();
   final _textProviderCtrl = TextEditingController(text: 'OpenAI');
   final _textModelCtrl = TextEditingController(text: 'GPT-4o');
   final _textKeyCtrl = TextEditingController();
@@ -64,12 +67,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   int _deployMode = 0;
   bool _envChecked = false;
+  bool _envChecking = false;
   List<bool> _envResults = [];
   final List<bool> _boundaryAgreed = [false, false, false];
   int _selectedAvatarColor = 0;
   final List<bool> _selectedTraits = List.filled(8, false);
   bool _submitting = false;
   bool _adminInitialized = false;
+  bool _adminExists = false;
   String? _textConfigId;
   String? _visionConfigId;
   String? _ttsConfigId;
@@ -83,6 +88,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   void dispose() {
     _adminUserController.dispose();
     _adminPassController.dispose();
+    _setupTokenController.dispose();
     _textProviderCtrl.dispose();
     _textModelCtrl.dispose();
     _textKeyCtrl.dispose();
@@ -128,36 +134,103 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Future<void> _runEnvCheck() async {
+    if (_envChecking) return;
     setState(() {
+      _envChecking = true;
       _envChecked = false;
-      _envResults = List.filled(5, false);
+      _envResults = const [];
     });
     try {
       final onboarding = ref.read(onboardingServiceProvider);
-      final results = await Future.wait<dynamic>([
-        onboarding.health(),
-        onboarding.runtimeCapabilities(),
-        ref.read(authServiceProvider).hasAdmin(),
+      const localRuntimeUri = 'http://127.0.0.1:18899';
+      final results = await Future.wait<dynamic>(<Future<dynamic>>[
+        onboarding.livenessAt(localRuntimeUri),
+        onboarding.readinessAt(localRuntimeUri),
+        onboarding.runtimeCapabilitiesAt(localRuntimeUri),
       ]);
+      final live = results[0] == true;
+      final ready = results[1] == true;
+      final capabilities = results[2] is Map
+          ? Map<String, dynamic>.from(results[2] as Map)
+          : const <String, dynamic>{};
       if (!mounted) return;
-      final health = results[0] as Map<String, dynamic>;
-      final capabilities = results[1] as Map<String, dynamic>;
+      final profile = (capabilities['runtimeProfile'] ?? '').toString();
+      final capabilityMap = capabilities['capabilities'] is Map
+          ? Map<String, dynamic>.from(capabilities['capabilities'] as Map)
+          : const <String, dynamic>{};
+      final profileReady = switch (profile) {
+        'local' => capabilityMap['localUIEndpoints'] == true,
+        'device-agent' =>
+          capabilityMap['localUIEndpoints'] == true &&
+              capabilityMap['deviceExecutionPlane'] == true,
+        _ => false,
+      };
+      final checked = [live, ready, profileReady];
       setState(() {
-        _envResults = [
-          health.isNotEmpty,
-          capabilities.isNotEmpty,
-          true,
-          true,
-          true,
-        ];
-        _envChecked = _envResults.take(2).every((value) => value);
+        _envResults = checked;
+        _envChecked = checked.every((value) => value);
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _envResults = [false, false, false, false, false];
+        _envResults = [false, false, false];
         _envChecked = false;
       });
+    } finally {
+      if (mounted) {
+        setState(() => _envChecking = false);
+      }
+    }
+  }
+
+  Future<void> _applyDeploymentSelection() async {
+    final config = _deployMode == 0
+        ? MobileDeploymentConfig.local
+        : MobileDeploymentConfig(
+            mode: MobileDeploymentMode.cloud,
+            remoteCoreUri: _remoteCoreCtrl.text.trim(),
+          );
+    final validationError = validateDeploymentConfigForSave(config);
+    if (validationError != null) throw validationError;
+
+    final deploymentNotifier = ref.read(mobileDeploymentConfigProvider.notifier);
+    final previousConfig = ref.read(mobileDeploymentConfigProvider);
+    try {
+      await deploymentNotifier.update(config);
+      ref.invalidate(backendConnectionProvider);
+      ref.invalidate(backendTransportProvider);
+      await ref.read(mobileBackendLifecycleProvider).reconcile(config);
+      if (_deployMode == 0) {
+        await ref.read(backendConnectionProvider.future);
+        await ref.read(backendTransportProvider.future);
+      }
+
+      final onboarding = ref.read(onboardingServiceProvider);
+      final auth = ref.read(authServiceProvider);
+      final health = _deployMode == 0
+          ? await onboarding.health()
+          : await onboarding.healthAt(_remoteCoreCtrl.text.trim());
+      if (health.isEmpty) {
+        throw StateError(_deployMode == 0 ? '本地 Business Core 不可用' : 'Cloud Core 不可用');
+      }
+      final adminExists = _deployMode == 0
+          ? await auth.hasAdmin()
+          : await auth.hasAdminAt(_remoteCoreCtrl.text.trim());
+      if (mounted) {
+        setState(() {
+          _adminExists = adminExists;
+          _adminInitialized = false;
+          _setupTokenController.clear();
+        });
+      }
+    } catch (_) {
+      await deploymentNotifier.update(previousConfig);
+      ref.invalidate(backendConnectionProvider);
+      ref.invalidate(backendTransportProvider);
+      try {
+        await ref.read(mobileBackendLifecycleProvider).reconcile(previousConfig);
+      } catch (_) {}
+      rethrow;
     }
   }
 
@@ -167,17 +240,45 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         if (_deployMode == 1 && _remoteCoreCtrl.text.trim().isEmpty) {
           throw StateError('云端模式必须填写 Cloud Core 地址');
         }
+        await _applyDeploymentSelection();
         return;
       case 3:
         if (_adminInitialized) return;
         final auth = ref.read(authServiceProvider);
         final username = _adminUserController.text.trim();
         final password = _adminPassController.text;
-        if (await auth.hasAdmin()) {
-          await auth.login(username, password);
+        final isCloud = _deployMode == 1;
+        final remoteCore = _remoteCoreCtrl.text.trim();
+        final adminExists = isCloud
+            ? await auth.hasAdminAt(remoteCore)
+            : await auth.hasAdmin();
+        if (adminExists) {
+          if (isCloud) {
+            await auth.loginAt(remoteCore, username, password);
+          } else {
+            await auth.login(username, password);
+          }
         } else {
-          await auth.setupAndLogin(username, password);
+          final setupToken = _setupTokenController.text.trim();
+          if (isCloud) {
+            await auth.setupAndLoginAt(
+              remoteCore,
+              username,
+              password,
+              setupToken: setupToken,
+            );
+          } else {
+            await auth.setupAndLogin(username, password);
+          }
         }
+        if (isCloud) {
+          ref.invalidate(backendConnectionProvider);
+          ref.invalidate(backendTransportProvider);
+          await ref.read(backendConnectionProvider.future);
+          await ref.read(backendTransportProvider.future);
+          await auth.fetchProfile();
+        }
+        _adminExists = true;
         _adminInitialized = true;
         ref.invalidate(currentUserProvider);
         return;
@@ -350,15 +451,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           deployMode: _deployMode == 0 ? 'mobile-local' : 'cloud-web',
           username: _adminUserController.text.trim(),
         );
-    final deploymentNotifier = ref.read(mobileDeploymentConfigProvider.notifier);
-    await deploymentNotifier.update(
-      _deployMode == 0
-          ? MobileDeploymentConfig.local
-          : MobileDeploymentConfig(
-              mode: MobileDeploymentMode.cloud,
-              remoteCoreUri: _remoteCoreCtrl.text.trim(),
-            ),
-    );
     ref.invalidate(characterListProvider);
     ref.read(currentCharacterIdProvider.notifier).state = characterId;
     if (!mounted) return;
@@ -384,7 +476,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     if (p.contains('volc') || p.contains('火山')) {
       return 'https://ark.cn-beijing.volces.com/api/v3';
     }
-    if (p.contains('anthropic')) return 'https://api.anthropic.com/v1';
+    if (p.contains('anthropic')) return 'https://api.anthropic.com';
     return 'https://api.openai.com/v1';
   }
 
@@ -401,7 +493,13 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       case 2:
         return _deployMode == 0 || _remoteCoreCtrl.text.trim().isNotEmpty;
       case 3:
-        return _adminUserController.text.isNotEmpty && _adminPassController.text.isNotEmpty;
+        final credentialsReady =
+            _adminUserController.text.isNotEmpty && _adminPassController.text.isNotEmpty;
+        if (!credentialsReady) return false;
+        if (_deployMode == 1 && !_adminExists) {
+          return _setupTokenController.text.trim().length >= 32;
+        }
+        return true;
       case 4:
         return _boundaryAgreed.every((v) => v);
       case 5:
@@ -663,8 +761,8 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Widget _buildEnvCheck() {
-    final checks = ['后端服务', '数据库 (SurrealDB)', '向量数据库 (Qdrant)', 'MCP Runtime', '系统权限'];
-    final results = ['运行中', '运行中', '运行中', '未启动', '部分授权'];
+    final checks = ['本地 Runtime 进程', 'Runtime 就绪状态', 'Runtime Profile / 本地能力'];
+    final results = ['进程已响应', '编排已就绪', '能力声明有效'];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -672,7 +770,19 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
         SizedBox(height: AppSpacing.sm),
         Text('请确认以下组件状态正常，以确保 Amitia 正常运行。', style: AppTypography.caption(context)),
         SizedBox(height: AppSpacing.lg),
-        if (!_envChecked && _envResults.isEmpty)
+        if (_envChecking)
+          AmitiaCard(
+            child: Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(strokeWidth: 2.5, color: context.accentPrimary),
+                  SizedBox(height: AppSpacing.md),
+                  Text('正在检查环境...', style: AppTypography.caption(context)),
+                ],
+              ),
+            ),
+          )
+        else if (_envResults.isEmpty)
           AmitiaCard(
             child: Column(
               children: [
@@ -687,18 +797,6 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                   onPressed: _runEnvCheck,
                 ),
               ],
-            ),
-          )
-        else if (!_envChecked)
-          AmitiaCard(
-            child: Center(
-              child: Column(
-                children: [
-                  CircularProgressIndicator(strokeWidth: 2.5, color: context.accentPrimary),
-                  SizedBox(height: AppSpacing.md),
-                  Text('正在检查环境...', style: AppTypography.caption(context)),
-                ],
-              ),
             ),
           )
         else ...[
@@ -728,7 +826,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(checks[i], style: AppTypography.body(context)),
-                          Text(results[i], style: AppTypography.label(context)),
+                          Text(ok ? results[i] : '检查失败', style: AppTypography.label(context)),
                         ],
                       ),
                     ),
@@ -750,13 +848,23 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                   SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      '部分组件未就绪，你可以继续配置并在后续启动后再处理。',
+                      '本地 Runtime/Device Agent 尚未就绪。请修复后重新检查，全部通过后再继续。',
                       style: AppTypography.caption(context).copyWith(color: context.warning),
                     ),
                   ),
                 ],
               ),
             ),
+          if (_envResults.any((v) => !v)) ...[
+            SizedBox(height: AppSpacing.sm),
+            AmitiaButton(
+              label: '重新检查',
+              icon: Icons.refresh,
+              isSecondary: true,
+              isFullWidth: true,
+              onPressed: _runEnvCheck,
+            ),
+          ],
         ],
       ],
     );
@@ -848,7 +956,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 ),
                 SizedBox(height: AppSpacing.sm),
                 Text(
-                  '完成初始化后会把该地址写入移动端部署配置，不再只保存在向导页面。',
+                  '点击下一步后会立即切换 Business Core 到该 Cloud Core；设备本地 Runtime / Device Agent 仍会保留。',
                   style: AppTypography.caption(context),
                 ),
               ],
@@ -860,12 +968,23 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   }
 
   Widget _buildAdminInit() {
+    final creatingRemoteAdmin = _deployMode == 1 && !_adminExists;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('管理员账号初始化', style: AppTypography.sectionTitle(context)),
+        Text(
+          _adminExists ? '管理员登录' : '管理员账号初始化',
+          style: AppTypography.sectionTitle(context),
+        ),
         SizedBox(height: AppSpacing.sm),
-        Text('创建管理员账号用于管理 Amitia 平台。', style: AppTypography.caption(context)),
+        Text(
+          _adminExists
+              ? '目标 Business Core 已存在管理员，请登录后继续。'
+              : creatingRemoteAdmin
+                  ? '该 Cloud Core 尚无管理员，需要使用服务器配置的初始化令牌创建首个管理员。'
+                  : '创建管理员账号用于管理 Amitia 平台。',
+          style: AppTypography.caption(context),
+        ),
         SizedBox(height: AppSpacing.lg),
         AmitiaCard(
           child: Column(
@@ -874,19 +993,38 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               Text('用户名', style: AppTypography.label(context)),
               SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
-                hintText: '请输入管理员用户名',
+                hintText: _adminExists ? '请输入管理员用户名' : '设置管理员用户名',
                 controller: _adminUserController,
                 prefixIcon: Icon(Icons.person_outline, size: 20, color: context.textTertiary),
+                onChanged: (_) => setState(() {}),
               ),
               SizedBox(height: AppSpacing.lg),
               Text('密码', style: AppTypography.label(context)),
               SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
-                hintText: '请输入密码',
+                hintText: _adminExists ? '请输入密码' : '设置管理员密码',
                 controller: _adminPassController,
                 obscureText: true,
                 prefixIcon: Icon(Icons.lock_outline, size: 20, color: context.textTertiary),
+                onChanged: (_) => setState(() {}),
               ),
+              if (creatingRemoteAdmin) ...[
+                SizedBox(height: AppSpacing.lg),
+                Text('Cloud 初始化令牌', style: AppTypography.label(context)),
+                SizedBox(height: AppSpacing.xs),
+                AmitiaTextField(
+                  hintText: 'AMITIA_SETUP_TOKEN（至少 32 位）',
+                  controller: _setupTokenController,
+                  obscureText: true,
+                  prefixIcon: Icon(Icons.key_outlined, size: 20, color: context.textTertiary),
+                  onChanged: (_) => setState(() {}),
+                ),
+                SizedBox(height: AppSpacing.sm),
+                Text(
+                  '该值必须与 Cloud Core 环境变量 AMITIA_SETUP_TOKEN 完全一致。',
+                  style: AppTypography.caption(context),
+                ),
+              ],
               SizedBox(height: AppSpacing.lg),
               Container(
                 padding: EdgeInsets.all(AppSpacing.md),
@@ -900,7 +1038,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                     SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
-                        '密码将使用加密存储，仅你本人可登录管理后台。',
+                        _adminExists
+                            ? '登录成功后，后续模型配置和初始化完成操作都会使用该管理员会话。'
+                            : '首管理员创建完成后会直接保存服务端返回的会话，不再额外重复登录。',
                         style: AppTypography.label(context).copyWith(color: context.accentPrimary),
                       ),
                     ),

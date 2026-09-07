@@ -24,6 +24,8 @@ import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
 import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/models/character.dart';
+import '../../../../core/models/memory.dart';
+import '../../../../core/models/profile.dart';
 import '../../../../core/artifact/artifact_model.dart';
 import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/artifact/artifact_service.dart';
@@ -98,6 +100,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _cachedProviderActions = null;
     _cachedProviderActionsCharacterId = '';
     final conversationId = _runtime.conversationId?.trim() ?? '';
+    ref.read(activeConversationIdProvider.notifier).state = conversationId;
     _conversationEventRefreshTimer?.cancel();
     if (conversationId.isNotEmpty) {
       _conversationEventRefreshTimer = Timer(const Duration(milliseconds: 350), () {
@@ -160,6 +163,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
+    final activeId = ref.read(activeConversationIdProvider);
+    final conversationId = _runtime.conversationId?.trim() ?? '';
+    if (activeId == conversationId) {
+      ref.read(activeConversationIdProvider.notifier).state = '';
+    }
     _conversationEventRefreshTimer?.cancel();
     _runtime.removeListener(_onRuntimeChanged);
     _runtime.dispose();
@@ -1085,6 +1093,134 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
   }
 
+  Future<void> _showProfileSummary(BuildContext context) async {
+    final characterId = ref.read(currentCharacterIdProvider).trim();
+    final future = ref.read(profileServiceProvider).list(
+          characterId: characterId,
+          page: 1,
+          pageSize: 10,
+        );
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: FractionallySizedBox(
+          heightFactor: 0.72,
+          child: FutureBuilder<List<ProfileDto>>(
+            future: future,
+            builder: (context, snapshot) => MobileExtensionSlot(
+              slotId: 'chat.profile_summary.panel',
+              context: <String, dynamic>{
+                'conversationId': _runtime.conversationId ?? '',
+                'characterId': characterId,
+                'surface': 'profile-summary',
+              },
+              fallback: _ChatProfileSummarySheet(
+                loading: snapshot.connectionState != ConnectionState.done,
+                error: snapshot.hasError ? snapshot.error : null,
+                profiles: snapshot.data ?? const <ProfileDto>[],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> _loadChatMemoryContext(String conversationId, String characterId) async {
+    Future<List<MemoryDto>> loadMemories() async {
+      try {
+        if (characterId.isEmpty) return const <MemoryDto>[];
+        return await ref.read(memoryServiceProvider).list(characterId: characterId, page: 1, pageSize: 8);
+      } catch (_) {
+        return const <MemoryDto>[];
+      }
+    }
+
+    Future<List<ProfileDto>> loadProfiles() async {
+      try {
+        return await ref.read(profileServiceProvider).list(characterId: characterId, page: 1, pageSize: 5);
+      } catch (_) {
+        return const <ProfileDto>[];
+      }
+    }
+
+    Future<Map<String, dynamic>> loadCompression() async {
+      try {
+        if (conversationId.isEmpty) return const <String, dynamic>{};
+        return await ref.read(systemServiceProvider).chatCompressionStatus(conversationId) ?? const <String, dynamic>{};
+      } catch (_) {
+        return const <String, dynamic>{};
+      }
+    }
+
+    Future<Map<String, dynamic>> loadPipeline() async {
+      try {
+        return await ref.read(systemServiceProvider).pipelineStatus() ?? const <String, dynamic>{};
+      } catch (_) {
+        return const <String, dynamic>{};
+      }
+    }
+
+    final values = await Future.wait<dynamic>([
+      loadMemories(),
+      loadProfiles(),
+      loadCompression(),
+      loadPipeline(),
+    ]);
+    return <String, dynamic>{
+      'memories': values[0] as List<MemoryDto>,
+      'profiles': values[1] as List<ProfileDto>,
+      'compression': values[2] as Map<String, dynamic>,
+      'pipeline': values[3] as Map<String, dynamic>,
+    };
+  }
+
+  Future<void> _showMemoryContext(BuildContext context) async {
+    final conversationId = _runtime.conversationId?.trim() ?? '';
+    final characterId = ref.read(currentCharacterIdProvider).trim();
+    final future = _loadChatMemoryContext(conversationId, characterId);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: FractionallySizedBox(
+          heightFactor: 0.78,
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: future,
+            builder: (context, snapshot) {
+              final data = snapshot.data ?? const <String, dynamic>{};
+              return MobileExtensionSlot(
+                slotId: 'chat.memory_context.panel',
+                context: <String, dynamic>{
+                  'conversationId': conversationId,
+                  'characterId': characterId,
+                  'surface': 'memory-context',
+                },
+                fallback: _ChatMemoryContextSheet(
+                  loading: snapshot.connectionState != ConnectionState.done,
+                  error: snapshot.hasError ? snapshot.error : null,
+                  memories: (data['memories'] as List<MemoryDto>?) ?? const <MemoryDto>[],
+                  profiles: (data['profiles'] as List<ProfileDto>?) ?? const <ProfileDto>[],
+                  compression: (data['compression'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+                  pipeline: (data['pipeline'] as Map<String, dynamic>?) ?? const <String, dynamic>{},
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showChatActionsSheet(BuildContext context) {
     showAmitiaActionSheet<int>(
       context,
@@ -1111,9 +1247,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           value: 3,
         ),
         AmitiaActionSheetItem(
+          icon: Icons.badge_outlined,
+          label: '用户画像摘要',
+          value: 4,
+        ),
+        AmitiaActionSheetItem(
+          icon: Icons.psychology_alt_outlined,
+          label: '记忆上下文',
+          value: 5,
+        ),
+        AmitiaActionSheetItem(
           icon: Icons.cleaning_services_outlined,
           label: '清空聊天记录',
-          value: 4,
+          value: 6,
           isDestructive: true,
         ),
       ],
@@ -1140,6 +1286,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         case 3:
           _showExportSheet(context);
         case 4:
+          await _showProfileSummary(context);
+        case 5:
+          await _showMemoryContext(context);
+        case 6:
           showAmitiaConfirmDialog(
             context,
             title: '清空聊天记录',
@@ -1473,7 +1623,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 userName: userName,
                                 agentActivities: agentActivityProjection.byMessageId[message.id] ??
                                     const <AmitiaAgentActivity>[],
-                                onRetry: message.status == MessageStatus.error
+                                onRetry: _runtime.canRetryMessage(index)
                                     ? () => _retryMessage(index)
                                     : null,
                                 onReply: message.type == MessageType.systemNotice
@@ -1483,7 +1633,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                     ? null
                                     : () => _copyMessage(message),
                                 onAgentTaskTap: isAgentTask
-                                    ? () => context.push(AppRoutes.agent)
+                                    ? () {
+                                        final taskId = message.agentTaskId?.trim() ?? '';
+                                        context.push(taskId.isEmpty
+                                            ? AppRoutes.agent
+                                            : AppRoutes.agentTask(taskId));
+                                      }
                                     : null,
                               ),
                             );
@@ -1699,6 +1854,347 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 }
 
 const double _chatTopBarHeight = 68;
+
+class _ChatProfileSummarySheet extends StatelessWidget {
+  const _ChatProfileSummarySheet({
+    required this.loading,
+    required this.error,
+    required this.profiles,
+  });
+
+  final bool loading;
+  final Object? error;
+  final List<ProfileDto> profiles;
+
+  String _categoryLabel(String category) {
+    const labels = <String, String>{
+      'personal_info': '个人信息',
+      'preference': '偏好',
+      'habit': '习惯',
+      'fear': '顾虑',
+      'relationship': '关系',
+      'health': '健康',
+      'plan': '计划',
+    };
+    return labels[category] ?? (category.isEmpty ? '画像' : category);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.borderPrimary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('用户画像摘要', style: AppTypography.pageTitle(context)),
+          const SizedBox(height: 4),
+          Text('当前角色可用于上下文注入的用户画像事实', style: AppTypography.caption(context)),
+          const SizedBox(height: 16),
+          Expanded(
+            child: loading
+                ? const Center(child: CircularProgressIndicator())
+                : error != null
+                    ? Center(
+                        child: Text(
+                          '画像加载失败：$error',
+                          style: AppTypography.bodySmall(context).copyWith(color: context.error),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : profiles.isEmpty
+                        ? Center(
+                            child: Text(
+                              '暂无画像数据。对话完成后系统会自动提取可用画像。',
+                              style: AppTypography.caption(context),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: profiles.length,
+                            separatorBuilder: (_, _) => const SizedBox(height: 8),
+                            itemBuilder: (context, index) {
+                              final profile = profiles[index];
+                              final confidence = profile.confidence.clamp(0, 100);
+                              return AmitiaCard(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: context.accentPrimary.withValues(alpha: 0.10),
+                                            borderRadius: BorderRadius.circular(999),
+                                          ),
+                                          child: Text(
+                                            _categoryLabel(profile.category),
+                                            style: AppTypography.label(context).copyWith(color: context.accentPrimary),
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          '置信度 $confidence%',
+                                          style: AppTypography.label(context).copyWith(
+                                            color: confidence >= 80 ? context.success : context.warning,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      profile.attributeName.isEmpty ? '未命名画像' : profile.attributeName,
+                                      style: AppTypography.cardTitle(context),
+                                    ),
+                                    if (profile.attributeValue.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(profile.attributeValue, style: AppTypography.bodySmall(context)),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatMemoryContextSheet extends StatelessWidget {
+  const _ChatMemoryContextSheet({
+    required this.loading,
+    required this.error,
+    required this.memories,
+    required this.profiles,
+    required this.compression,
+    required this.pipeline,
+  });
+
+  final bool loading;
+  final Object? error;
+  final List<MemoryDto> memories;
+  final List<ProfileDto> profiles;
+  final Map<String, dynamic> compression;
+  final Map<String, dynamic> pipeline;
+
+  String _memoryTypeLabel(String type) {
+    const labels = <String, String>{
+      'fact': '事实',
+      'preference': '偏好',
+      'episodic': '情景',
+      'relationship': '关系',
+      'custom': '记忆',
+    };
+    return labels[type] ?? (type.isEmpty ? '记忆' : type);
+  }
+
+  int _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.round();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Color _pipelineStatusColor(BuildContext context, String status) {
+    switch (status) {
+      case 'completed':
+        return context.success;
+      case 'failed':
+      case 'cancelled':
+        return context.error;
+      case 'skipped':
+        return context.textTertiary;
+      default:
+        return context.accentPrimary;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            '记忆上下文加载失败：$error',
+            style: AppTypography.bodySmall(context).copyWith(color: context.error),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    final compressedRounds = _asInt(compression['compressedRounds']);
+    final totalRounds = _asInt(compression['totalRounds']);
+    final lastCompressedAt = compression['lastCompressedAt']?.toString().trim() ?? '';
+    final rawLayers = pipeline['layers'];
+    final layers = rawLayers is List
+        ? rawLayers.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList(growable: false)
+        : const <Map<String, dynamic>>[];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.borderPrimary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('记忆上下文', style: AppTypography.pageTitle(context)),
+          const SizedBox(height: 12),
+          Expanded(
+            child: ListView(
+              children: [
+                Text('相关记忆 (${memories.length})', style: AppTypography.sectionTitle(context)),
+                const SizedBox(height: 8),
+                if (memories.isEmpty)
+                  Text('暂无相关记忆', style: AppTypography.caption(context))
+                else
+                  ...memories.map((memory) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: AmitiaCard(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    _memoryTypeLabel(memory.memoryType),
+                                    style: AppTypography.label(context).copyWith(color: context.accentPrimary),
+                                  ),
+                                  const Spacer(),
+                                  Text('置信度 ${memory.confidence.clamp(0, 100)}%', style: AppTypography.label(context)),
+                                ],
+                              ),
+                              if (memory.key.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(memory.key, style: AppTypography.cardTitle(context)),
+                              ],
+                              if (memory.value.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(memory.value, style: AppTypography.bodySmall(context)),
+                              ],
+                            ],
+                          ),
+                        ),
+                      )),
+                const SizedBox(height: 12),
+                Text('用户画像 (${profiles.length})', style: AppTypography.sectionTitle(context)),
+                const SizedBox(height: 8),
+                if (profiles.isEmpty)
+                  Text('暂无用户画像', style: AppTypography.caption(context))
+                else
+                  AmitiaCard(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: Column(
+                      children: profiles
+                          .map((profile) => Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 7),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${profile.attributeName}: ${profile.attributeValue}',
+                                        style: AppTypography.bodySmall(context),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '${profile.confidence.clamp(0, 100)}%',
+                                      style: AppTypography.label(context).copyWith(
+                                        color: profile.confidence >= 80 ? context.success : context.warning,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ))
+                          .toList(growable: false),
+                    ),
+                  ),
+                const SizedBox(height: 18),
+                Text('压缩状态', style: AppTypography.sectionTitle(context)),
+                const SizedBox(height: 8),
+                AmitiaCard(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('已压缩 $compressedRounds / $totalRounds 轮', style: AppTypography.bodySmall(context)),
+                      if (lastCompressedAt.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text('上次压缩：$lastCompressedAt', style: AppTypography.caption(context)),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text('管线状态', style: AppTypography.sectionTitle(context)),
+                const SizedBox(height: 8),
+                if (layers.isEmpty)
+                  Text('暂无管线状态', style: AppTypography.caption(context))
+                else
+                  AmitiaCard(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      children: layers.map((layer) {
+                        final status = layer['status']?.toString() ?? 'unknown';
+                        final name = layer['name']?.toString() ?? '未命名层';
+                        final duration = _asInt(layer['durationMs']);
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 5),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: _pipelineStatusColor(context, status),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(name, style: AppTypography.bodySmall(context))),
+                              Text('$status · ${duration}ms', style: AppTypography.label(context)),
+                            ],
+                          ),
+                        );
+                      }).toList(growable: false),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _ChatScrollFade extends StatelessWidget {
   final Alignment alignment;

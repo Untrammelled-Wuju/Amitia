@@ -140,6 +140,17 @@ final conversationListProvider = FutureProvider.autoDispose<List<ConversationDto
   return svc.listConversations();
 });
 
+
+final activeConversationIdProvider = StateProvider<String>((ref) => '');
+
+/// Authoritative session snapshots pushed by the UI Host SSE path.
+///
+/// Activation commands carry the target snapshot before the server commits the
+/// transition. Exposing that snapshot to the declarative runtime first lets the
+/// host truthfully acknowledge that it has reconciled the requested revision.
+final clientRuntimePushedSessionStateProvider = StateProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, conversationId) => null);
+
 final clientRuntimeSessionStateProvider = StreamProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, conversationId) async* {
   final id = conversationId.trim();
@@ -148,7 +159,12 @@ final clientRuntimeSessionStateProvider = StreamProvider.autoDispose
     return;
   }
   final svc = ref.read(extensionServiceProvider);
+  final pushed = ref.watch(clientRuntimePushedSessionStateProvider(id));
   var lastRevision = -1;
+  if (pushed != null) {
+    lastRevision = (pushed['revision'] as num?)?.toInt() ?? 0;
+    yield pushed;
+  }
   while (true) {
     try {
       var state = await svc.getClientRuntimeSessionState(id);
@@ -159,7 +175,7 @@ final clientRuntimeSessionStateProvider = StreamProvider.autoDispose
         final transition = (package['transitionState'] ?? '').toString().toLowerCase();
         return package['running'] == true &&
             (package['targetVersion'] ?? '').toString().trim().isNotEmpty &&
-            (transition == 'starting' || transition == 'awaiting_client');
+            transition == 'awaiting_client';
       });
       if (hasPendingActivation) {
         try {

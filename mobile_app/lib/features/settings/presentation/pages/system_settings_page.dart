@@ -12,6 +12,7 @@ import '../../../../app/app_routes.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/native_bridge/providers/native_bridge_relay_provider.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
+import '../../../../core/ui_runtime/ui_device_identity.dart';
 
 class SystemSettingsPage extends ConsumerStatefulWidget {
   const SystemSettingsPage({super.key});
@@ -24,6 +25,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
   String _language = '简体中文';
   bool _notifications = true;
   bool _notificationsUpdating = false;
+  String? _notificationDeviceIdValue;
   Map<String, dynamic>? _healthData;
   bool _loadingHealth = true;
   String? _healthError;
@@ -41,6 +43,14 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     _loadSettings();
   }
 
+  Future<String> _notificationDeviceId() async {
+    final cached = _notificationDeviceIdValue;
+    if (cached != null && cached.isNotEmpty) return cached;
+    final resolved = await UIDeviceIdentity().getOrCreate();
+    _notificationDeviceIdValue = resolved;
+    return resolved;
+  }
+
   Future<void> _loadSettings() async {
     setState(() {
       _loadingHealth = true;
@@ -48,9 +58,10 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     });
     try {
       final svc = ref.read(systemServiceProvider);
+      final deviceId = await _notificationDeviceId();
       final results = await Future.wait([
         svc.health(),
-        svc.notificationSettings(),
+        svc.notificationSettings(deviceId: deviceId),
         svc.config(),
       ]);
       final health = results[0];
@@ -67,7 +78,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
       }
       setState(() {
         _healthData = health;
-        _notifications = notifications?['enabled'] != false;
+        _notifications = notifications?['enabled'] == true && notifications?['subscribed'] == true;
         _language = language;
         _loadingHealth = false;
       });
@@ -86,10 +97,14 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     setState(() => _notificationsUpdating = true);
     try {
       final svc = ref.read(systemServiceProvider);
+      final deviceId = await _notificationDeviceId();
+      if (enabled) {
+        await _ensureNativeNotificationPermission();
+      }
       final result = enabled
-          ? await svc.subscribeNotifications()
-          : await svc.unsubscribeNotifications();
-      final settings = await svc.notificationSettings();
+          ? await svc.subscribeNotifications(deviceId: deviceId)
+          : await svc.unsubscribeNotifications(deviceId: deviceId);
+      final settings = await svc.notificationSettings(deviceId: deviceId);
       if (!mounted) return;
       setState(() => _notifications = settings?['enabled'] == true);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -110,6 +125,29 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     }
   }
 
+  Future<void> _ensureNativeNotificationPermission() async {
+    if (kIsWeb) return;
+    final platform = switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      _ => null,
+    };
+    if (platform == null) return;
+    final dispatcher = ref.read(nativeBridgePlatformDispatcherProvider);
+    final response = await dispatcher.execute(<String, dynamic>{
+      'protocolVersion': 1,
+      'requestId': 'settings-notification-permission-${DateTime.now().microsecondsSinceEpoch}',
+      'platform': platform,
+      'operation': 'notification.request_permission',
+      'payload': const <String, dynamic>{},
+    });
+    if (!const {'success', 'ok'}.contains((response['status'] ?? '').toString())) {
+      final error = response['error'];
+      final message = error is Map ? (error['message'] ?? error['code'])?.toString() : null;
+      throw StateError(message?.isNotEmpty == true ? message! : '系统通知权限未授予');
+    }
+  }
+
   Future<void> _setLanguage(String language) async {
     final code = _languageCodes[language];
     if (code == null) return;
@@ -127,7 +165,10 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
 
   Future<void> _testNotification() async {
     try {
-      final backendResult = await ref.read(systemServiceProvider).testNotification();
+      final deviceId = await _notificationDeviceId();
+      final backendResult = await ref
+          .read(systemServiceProvider)
+          .testNotification(deviceId: deviceId);
       final accepted = backendResult?['accepted'] == true;
       final reason = backendResult?['reason']?.toString();
       if (!accepted) {

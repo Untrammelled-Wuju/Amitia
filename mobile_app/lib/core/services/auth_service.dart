@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../auth/account_session_store.dart';
 import '../backend_transport/backend_service_api.dart';
+import '../runtime/backend/backend_topology_resolver.dart';
 
 class AuthResult {
   final String accessToken;
@@ -127,31 +129,7 @@ class AuthService {
     if (resp == null) {
       throw ServiceApiException(code: 10000, message: '登录响应为空');
     }
-
-    final token = resp['token'] as String? ?? resp['accessToken'] as String? ?? '';
-    final refreshToken = resp['refreshToken'] as String?;
-    final accessTokenExpiresAt = resp['accessTokenExpiresAt'] as String?;
-    final sessionData = resp['session'] as Map<String, dynamic>?;
-    final sessionId = sessionData?['sessionId'] as String? ?? resp['sessionId'] as String?;
-    final userInfo = UserInfo.fromJson(resp);
-
-    await saveSession(
-      accessToken: token,
-      refreshToken: refreshToken,
-      sessionId: sessionId,
-      accessTokenExpiresAt: accessTokenExpiresAt,
-      userId: userInfo.id,
-      username: userInfo.username,
-      role: userInfo.role,
-    );
-
-    return AuthResult(
-      accessToken: token,
-      refreshToken: refreshToken,
-      sessionId: sessionId,
-      accessTokenExpiresAt: accessTokenExpiresAt,
-      user: userInfo,
-    );
+    return _persistAuthResponse(resp, fallbackUsername: username);
   }
 
   Future<void> logout() async {
@@ -205,6 +183,161 @@ class AuthService {
     );
   }
 
+  Dio _remoteBootstrapClient(String remoteCoreUri) {
+    final baseUri = normalizeRemoteCoreUri(remoteCoreUri);
+    return Dio(
+      BaseOptions(
+        baseUrl: baseUri.toString().replaceAll(RegExp(r'/+$'), ''),
+        connectTimeout: const Duration(seconds: 8),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: const <String, String>{
+          'Accept': 'application/json',
+          'X-Amitia-Client-Type': 'mobile',
+        },
+      ),
+    );
+  }
+
+  Map<String, dynamic> _unwrapBootstrapResponse(dynamic raw) {
+    if (raw is! Map) {
+      throw ServiceApiException(code: 10000, message: 'Cloud Core 返回了无效响应');
+    }
+    final outer = Map<String, dynamic>.from(raw);
+    final rawCode = outer['code'];
+    if (rawCode is num && rawCode.toInt() != 200) {
+      final detailData = outer['data'];
+      final errorCode = detailData is Map ? detailData['errorCode']?.toString() : null;
+      final message = (outer['message'] ?? outer['msg'] ?? '').toString().trim();
+      throw ServiceApiException(
+        code: rawCode.toInt(),
+        message: message.isEmpty ? 'Cloud Core 请求失败' : message,
+        detail: errorCode,
+      );
+    }
+    final data = outer['data'];
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return outer;
+  }
+
+  Future<AuthResult> _persistAuthResponse(
+    Map<String, dynamic> resp, {
+    required String fallbackUsername,
+  }) async {
+    final token = (resp['token'] ?? resp['accessToken'] ?? '').toString();
+    if (token.isEmpty) {
+      throw ServiceApiException(code: 10000, message: '认证响应未返回访问令牌');
+    }
+    final userRaw = resp['user'];
+    final userMap = userRaw is Map
+        ? Map<String, dynamic>.from(userRaw)
+        : <String, dynamic>{...resp, if ((resp['username'] ?? '').toString().isEmpty) 'username': fallbackUsername};
+    final parsedUser = UserInfo.fromJson(userMap);
+    final user = parsedUser.username.isEmpty
+        ? UserInfo(
+            id: parsedUser.id,
+            username: fallbackUsername,
+            role: parsedUser.role,
+            nickname: parsedUser.nickname,
+            userLabel: parsedUser.userLabel,
+            bio: parsedUser.bio,
+          )
+        : parsedUser;
+    final sessionRaw = resp['session'];
+    final session = sessionRaw is Map
+        ? Map<String, dynamic>.from(sessionRaw)
+        : const <String, dynamic>{};
+    final refreshToken = resp['refreshToken']?.toString();
+    final sessionId = session['sessionId']?.toString() ?? resp['sessionId']?.toString();
+    final accessTokenExpiresAt = resp['accessTokenExpiresAt']?.toString();
+    await saveSession(
+      accessToken: token,
+      refreshToken: refreshToken,
+      sessionId: sessionId,
+      accessTokenExpiresAt: accessTokenExpiresAt,
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+    );
+    return AuthResult(
+      accessToken: token,
+      refreshToken: refreshToken,
+      sessionId: sessionId,
+      accessTokenExpiresAt: accessTokenExpiresAt,
+      user: user,
+    );
+  }
+
+  Future<bool> hasAdminAt(String remoteCoreUri) async {
+    final dio = _remoteBootstrapClient(remoteCoreUri);
+    try {
+      final response = await dio.get<dynamic>('/api/public/auth/status');
+      final data = _unwrapBootstrapResponse(response.data);
+      return data['hasAdmin'] == true;
+    } finally {
+      dio.close(force: true);
+    }
+  }
+
+  Future<AuthResult> loginAt(
+    String remoteCoreUri,
+    String username,
+    String password,
+  ) async {
+    final dio = _remoteBootstrapClient(remoteCoreUri);
+    try {
+      final response = await dio.post<dynamic>(
+        '/api/public/auth/login',
+        data: <String, dynamic>{'username': username, 'password': password},
+      );
+      return _persistAuthResponse(
+        _unwrapBootstrapResponse(response.data),
+        fallbackUsername: username,
+      );
+    } on ServiceApiException {
+      rethrow;
+    } on DioException catch (error) {
+      throw ServiceApiException(
+        code: error.response?.statusCode ?? 10000,
+        message: 'Cloud Core 登录失败',
+      );
+    } finally {
+      dio.close(force: true);
+    }
+  }
+
+  Future<AuthResult> setupAndLoginAt(
+    String remoteCoreUri,
+    String username,
+    String password, {
+    required String setupToken,
+  }) async {
+    final token = setupToken.trim();
+    if (token.length < 32) {
+      throw ServiceApiException(code: 400, message: 'Cloud 初始化令牌至少 32 位');
+    }
+    final dio = _remoteBootstrapClient(remoteCoreUri);
+    try {
+      final response = await dio.post<dynamic>(
+        '/api/public/auth/setup',
+        data: <String, dynamic>{'username': username, 'password': password},
+        options: Options(headers: <String, String>{'X-Amitia-Setup-Token': token}),
+      );
+      return _persistAuthResponse(
+        _unwrapBootstrapResponse(response.data),
+        fallbackUsername: username,
+      );
+    } on ServiceApiException {
+      rethrow;
+    } on DioException catch (error) {
+      throw ServiceApiException(
+        code: error.response?.statusCode ?? 10000,
+        message: 'Cloud Core 首管理员初始化失败',
+      );
+    } finally {
+      dio.close(force: true);
+    }
+  }
+
   Future<bool> hasAdmin() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/public/auth/status');
     return resp?['hasAdmin'] == true;
@@ -224,31 +357,7 @@ class AuthService {
     if (resp == null) {
       throw ServiceApiException(code: 10000, message: '初始化响应为空');
     }
-    final userRaw = resp['user'];
-    final userMap = userRaw is Map ? Map<String, dynamic>.from(userRaw) : resp;
-    final user = UserInfo.fromJson(userMap);
-    final accessToken = (resp['accessToken'] ?? resp['token'] ?? '').toString();
-    if (accessToken.isEmpty) {
-      throw ServiceApiException(code: 10000, message: '初始化未返回访问令牌');
-    }
-    final sessionRaw = resp['session'];
-    final session = sessionRaw is Map ? Map<String, dynamic>.from(sessionRaw) : const <String, dynamic>{};
-    await saveSession(
-      accessToken: accessToken,
-      refreshToken: resp['refreshToken']?.toString(),
-      sessionId: session['sessionId']?.toString() ?? resp['sessionId']?.toString(),
-      accessTokenExpiresAt: resp['accessTokenExpiresAt']?.toString(),
-      userId: user.id,
-      username: user.username,
-      role: user.role,
-    );
-    return AuthResult(
-      accessToken: accessToken,
-      refreshToken: resp['refreshToken']?.toString(),
-      sessionId: session['sessionId']?.toString() ?? resp['sessionId']?.toString(),
-      accessTokenExpiresAt: resp['accessTokenExpiresAt']?.toString(),
-      user: user,
-    );
+    return _persistAuthResponse(resp, fallbackUsername: username);
   }
 
   Future<Map<String, dynamic>?> setup(String username, String password) async {

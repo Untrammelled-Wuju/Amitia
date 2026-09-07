@@ -39,34 +39,66 @@ class SystemService {
     return resp;
   }
 
-  Future<Map<String, dynamic>?> notificationSettings() async {
-    return _api.get<Map<String, dynamic>>('/api/notifications/settings');
+  Future<Map<String, dynamic>?> notificationSettings({String deviceId = ''}) async {
+    return _api.get<Map<String, dynamic>>(
+      '/api/notifications/settings',
+      queryParameters: deviceId.trim().isEmpty
+          ? null
+          : <String, dynamic>{'deviceId': deviceId.trim()},
+    );
   }
 
-  Future<Map<String, dynamic>?> updateNotificationSettings(bool enabled) async {
+  Future<Map<String, dynamic>?> updateNotificationSettings(
+    bool enabled, {
+    String deviceId = '',
+  }) async {
     return _api.put<Map<String, dynamic>>(
       '/api/notifications/settings',
-      data: {'enabled': enabled},
+      data: <String, dynamic>{
+        'enabled': enabled,
+        if (deviceId.trim().isNotEmpty) 'deviceId': deviceId.trim(),
+      },
     );
   }
 
-  Future<Map<String, dynamic>?> notificationStatus() async {
-    return _api.get<Map<String, dynamic>>('/api/notifications/status');
+  Future<Map<String, dynamic>?> notificationStatus({String deviceId = ''}) async {
+    return _api.get<Map<String, dynamic>>(
+      '/api/notifications/status',
+      queryParameters: deviceId.trim().isEmpty
+          ? null
+          : <String, dynamic>{'deviceId': deviceId.trim()},
+    );
   }
 
-  Future<Map<String, dynamic>?> subscribeNotifications({Map<String, dynamic>? subscription}) async {
+  Future<Map<String, dynamic>?> subscribeNotifications({
+    Map<String, dynamic>? subscription,
+    String deviceId = '',
+  }) async {
     return _api.post<Map<String, dynamic>>(
       '/api/notifications/subscribe',
-      data: subscription ?? <String, dynamic>{},
+      data: <String, dynamic>{
+        ...?subscription,
+        if (deviceId.trim().isNotEmpty) 'deviceId': deviceId.trim(),
+      },
     );
   }
 
-  Future<Map<String, dynamic>?> unsubscribeNotifications() async {
-    return _api.post<Map<String, dynamic>>('/api/notifications/unsubscribe');
+  Future<Map<String, dynamic>?> unsubscribeNotifications({String deviceId = ''}) async {
+    return _api.post<Map<String, dynamic>>(
+      '/api/notifications/unsubscribe',
+      data: deviceId.trim().isEmpty
+          ? const <String, dynamic>{}
+          : <String, dynamic>{'deviceId': deviceId.trim()},
+    );
   }
 
-  Future<Map<String, dynamic>?> testNotification() async {
-    return _api.post<Map<String, dynamic>>('/api/notifications/test');
+  Future<Map<String, dynamic>?> testNotification({String deviceId = ''}) async {
+    return _api.post<Map<String, dynamic>>(
+      '/api/notifications/test',
+      data: deviceId.trim().isEmpty
+          ? const <String, dynamic>{}
+          : <String, dynamic>{'deviceId': deviceId.trim()},
+    );
   }
 
   Future<Map<String, dynamic>?> setupStatus() async {

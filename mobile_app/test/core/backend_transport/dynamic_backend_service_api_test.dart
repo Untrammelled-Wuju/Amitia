@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:amitia_app/core/backend_access/business_backend_unavailable.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/backend_transport/dynamic_backend_service_api.dart';
@@ -116,6 +117,32 @@ class _FakeApi implements BackendServiceApi {
     String path, {
     Object? data,
     Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) async => null;
+
+  @override
+  Future<Stream<List<int>>> getStream(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async => const Stream<List<int>>.empty();
+
+  @override
+  Future<Stream<List<int>>> postStream(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async => const Stream<List<int>>.empty();
+
+  @override
+  Future<T?> postMultipart<T>(
+    String path, {
+    Map<String, String> fields = const {},
+    Map<String, List<String>> files = const {},
+    Map<String, dynamic>? queryParameters,
     T Function(dynamic)? fromJson,
   }) async => null;
 }

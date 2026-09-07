@@ -436,7 +436,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
     final id = (event['id'] ?? '').toString();
     if (id.isEmpty) return;
     try {
-      await ref.read(companionServiceProvider).toggleFixedEventEnabled(id);
+      await ref.read(companionServiceProvider).toggleFixedEventEnabled(id, characterId: widget.characterId);
       await _load();
     } catch (e) {
       if (mounted) {

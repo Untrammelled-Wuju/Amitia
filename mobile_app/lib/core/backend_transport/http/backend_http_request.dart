@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import 'backend_http_method.dart';
 
 final class BackendHttpRequest {
@@ -7,6 +9,8 @@ final class BackendHttpRequest {
   final Map<String, String>? headers;
   final Object? body;
   final Duration? timeout;
+  final bool streamResponse;
+  final CancelToken? cancelToken;
 
   BackendHttpRequest({
     required this.method,
@@ -15,5 +19,7 @@ final class BackendHttpRequest {
     this.headers,
     this.body,
     this.timeout,
+    this.streamResponse = false,
+    this.cancelToken,
   });
 }

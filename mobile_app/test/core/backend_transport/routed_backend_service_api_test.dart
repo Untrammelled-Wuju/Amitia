@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:amitia_app/core/backend_transport/backend_service_api.dart';
 import 'package:amitia_app/core/backend_transport/errors/backend_transport_error.dart';
@@ -93,6 +94,44 @@ class _RecordingApi implements BackendServiceApi {
     calls.add(_RoutedCall('DELETE', path, headers, data));
     return null;
   }
+
+  @override
+  Future<Stream<List<int>>> getStream(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async {
+    calls.add(_RoutedCall('GET_STREAM', path, headers, null));
+    return const Stream<List<int>>.empty();
+  }
+
+  @override
+  Future<Stream<List<int>>> postStream(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    CancelToken? cancelToken,
+  }) async {
+    calls.add(_RoutedCall('POST_STREAM', path, headers, data));
+    return const Stream<List<int>>.empty();
+  }
+
+  @override
+  Future<T?> postMultipart<T>(
+    String path, {
+    Map<String, String> fields = const {},
+    Map<String, List<String>> files = const {},
+    Map<String, dynamic>? queryParameters,
+    T Function(dynamic)? fromJson,
+  }) async {
+    calls.add(_RoutedCall('POST_MULTIPART', path, null, <String, Object?>{
+      'fields': fields,
+      'files': files,
+    }));
+    return null;
+  }
 }
 
 class _RoutedCall {
@@ -161,6 +200,41 @@ void main() {
       await proxy.get('/api/desktop-pets/installations', queryParameters: {'active': 'true'});
       expect(deviceLocalApi.calls.length, 1);
       expect(businessApi.calls.length, 0);
+    });
+
+
+    test('chat send stream stays on business core', () async {
+      await proxy.postStream(
+        '/api/web-chat/send-stream',
+        data: const {'message': 'hello'},
+      );
+      expect(businessApi.calls.length, 1);
+      expect(deviceLocalApi.calls.length, 0);
+      expect(businessApi.calls.first.method, 'POST_STREAM');
+      expect(businessApi.calls.first.path, '/api/web-chat/send-stream');
+    });
+
+    test('message events stream stays on business core', () async {
+      await proxy.getStream('/api/messages/events');
+      expect(businessApi.calls.length, 1);
+      expect(deviceLocalApi.calls.length, 0);
+      expect(businessApi.calls.first.method, 'GET_STREAM');
+    });
+
+    test('device-local stream still routes to device agent', () async {
+      await proxy.getStream('/api/local/workflow-runs/run-1/events');
+      expect(deviceLocalApi.calls.length, 1);
+      expect(businessApi.calls.length, 0);
+      expect(deviceLocalApi.calls.first.headers?['X-Amitia-Client-Type'], 'mobile');
+    });
+
+    test('multipart follows the same business/device route classifier', () async {
+      await proxy.postMultipart('/api/characters/avatar', fields: const {'x': '1'});
+      await proxy.postMultipart('/api/storage/upload', fields: const {'x': '2'});
+      expect(businessApi.calls.length, 1);
+      expect(deviceLocalApi.calls.length, 1);
+      expect(businessApi.calls.first.method, 'POST_MULTIPART');
+      expect(deviceLocalApi.calls.first.method, 'POST_MULTIPART');
     });
   });
 

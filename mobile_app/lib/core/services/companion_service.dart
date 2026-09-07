@@ -102,8 +102,11 @@ class CompanionService {
     return true;
   }
 
-  Future<Map<String, dynamic>?> toggleFixedEventEnabled(String id) {
-    return _api.patch<Map<String, dynamic>>('/api/companion/fixed-events/$id/enabled');
+  Future<Map<String, dynamic>?> toggleFixedEventEnabled(String id, {String? characterId}) {
+    return _api.patch<Map<String, dynamic>>(
+      '/api/companion/fixed-events/$id/enabled',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
   }
 
   Future<List<Map<String, dynamic>>> specialEvents({String? characterId}) async {
@@ -311,6 +314,20 @@ class CompanionService {
   Future<Map<String, dynamic>?> processDelayedReplies({String? characterId}) {
     return _api.post<Map<String, dynamic>>(
       '/api/companion/delayed-replies/process',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
+  }
+
+  Future<Map<String, dynamic>?> processActiveMessagesDebug({String? characterId}) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/companion/debug/process-active-messages',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
+  }
+
+  Future<Map<String, dynamic>?> triggerDailyRegenerationDebug({String? characterId}) {
+    return _api.post<Map<String, dynamic>>(
+      '/api/companion/debug/trigger-daily-regeneration',
       queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
     );
   }

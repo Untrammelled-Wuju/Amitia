@@ -1,5 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
+
 import '../backend_transport/backend_service_api.dart';
 import '../models/conversation.dart';
+import '../native_bridge/device_timezone_cache.dart';
 
 class ChatSubmitResult {
   final String conversationId;
@@ -22,6 +28,24 @@ class ChatSubmitResult {
       mergeWindowMs: (json['mergeWindowMs'] as num?)?.toInt() ?? 0,
     );
   }
+}
+
+class ChatStreamCancellation {
+  final CancelToken _token = CancelToken();
+
+  CancelToken get token => _token;
+  bool get isCancelled => _token.isCancelled;
+
+  void cancel([String reason = 'cancelled']) {
+    if (!_token.isCancelled) _token.cancel(reason);
+  }
+}
+
+class ChatStreamEvent {
+  final String type;
+  final Map<String, dynamic> data;
+
+  const ChatStreamEvent(this.type, this.data);
 }
 
 class ConversationWorkspaceDto {
@@ -255,6 +279,133 @@ class ChatService {
     return _api.get<Map<String, dynamic>>('/api/web-chat/message-status/$messageId');
   }
 
+  ChatStreamCancellation createStreamCancellation() => ChatStreamCancellation();
+
+  Stream<ChatStreamEvent> submitMessageStream({
+    required String message,
+    String? conversationId,
+    String? characterId,
+    String? imageUrl,
+    String? audioUrl,
+    double audioDuration = 0,
+    String? videoUrl,
+    String? replyToMessageId,
+    ConversationWorkspaceDto? workspace,
+    required ChatStreamCancellation cancellation,
+  }) async* {
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final requestId = 'mobile-$now';
+    final stream = await _api.postStream(
+      '/api/web-chat/send-stream',
+      data: {
+        'message': message,
+        if (conversationId != null && conversationId.isNotEmpty)
+          'conversationId': conversationId,
+        if (characterId != null && characterId.isNotEmpty)
+          'characterId': characterId,
+        if (imageUrl != null && imageUrl.isNotEmpty) 'imageUrl': imageUrl,
+        if (audioUrl != null && audioUrl.isNotEmpty) ...{
+          'audioUrl': audioUrl,
+          'audioDuration': audioDuration,
+          'voiceMessage': true,
+        },
+        if (videoUrl != null && videoUrl.isNotEmpty) 'videoUrl': videoUrl,
+        if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+          'replyToMessageId': replyToMessageId,
+        if (workspace != null) ...<String, dynamic>{
+          'workspaceId': workspace.workspaceId,
+          'workspaceDeviceId': workspace.deviceId,
+          'workspaceName': workspace.workspaceName,
+          'workspaceKind': workspace.workspaceKind,
+          'workspaceRootUri': workspace.rootUri,
+        },
+        'source': 'mobile',
+        'requestId': requestId,
+        'clientMessageId': requestId,
+        if (DeviceTimezoneCache.hasValue)
+          'deviceTimezone': DeviceTimezoneCache.ianaTimezone,
+      },
+      headers: const {'Accept': 'text/event-stream'},
+      cancelToken: cancellation.token,
+    );
+    yield* _decodeEventStream(stream);
+  }
+
+  Stream<ChatStreamEvent> messageEvents({
+    required ChatStreamCancellation cancellation,
+  }) async* {
+    final stream = await _api.getStream(
+      '/api/messages/events',
+      queryParameters: const {'channel': 'web'},
+      headers: const {'Accept': 'text/event-stream'},
+      cancelToken: cancellation.token,
+    );
+    yield* _decodeEventStream(stream);
+  }
+
+  Stream<ChatStreamEvent> _decodeEventStream(Stream<List<int>> source) async* {
+    final text = source.transform(utf8.decoder);
+    var buffer = '';
+    await for (final chunk in text) {
+      buffer += chunk;
+      while (true) {
+        final boundary = _eventBoundary(buffer);
+        if (boundary == null) break;
+        final block = buffer.substring(0, boundary.$1);
+        buffer = buffer.substring(boundary.$1 + boundary.$2);
+        final event = _parseEventBlock(block);
+        if (event != null) yield event;
+      }
+    }
+    final tail = buffer.trim();
+    if (tail.isEmpty) return;
+    final event = _parseEventBlock(tail);
+    if (event != null) {
+      yield event;
+      return;
+    }
+    final raw = jsonDecode(tail);
+    if (raw is! Map) throw StateError('聊天流返回格式无效');
+    final map = Map<String, dynamic>.from(raw);
+    final payload = map['data'];
+    if (payload is Map && (payload['status'] ?? '').toString() == 'queued') {
+      yield ChatStreamEvent('queued', Map<String, dynamic>.from(payload));
+      return;
+    }
+    final message = (map['message'] ?? map['msg'] ?? '聊天请求失败').toString();
+    throw StateError(message);
+  }
+
+  (int, int)? _eventBoundary(String value) {
+    int? bestIndex;
+    var bestLength = 0;
+    for (final separator in const <String>['\r\n\r\n', '\n\n', '\r\r']) {
+      final index = value.indexOf(separator);
+      if (index >= 0 && (bestIndex == null || index < bestIndex)) {
+        bestIndex = index;
+        bestLength = separator.length;
+      }
+    }
+    return bestIndex == null ? null : (bestIndex, bestLength);
+  }
+
+  ChatStreamEvent? _parseEventBlock(String block) {
+    String? type;
+    final dataLines = <String>[];
+    final normalized = block.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    for (final line in normalized.split('\n')) {
+      if (line.startsWith('event:')) {
+        type = line.substring(6).trim();
+      } else if (line.startsWith('data:')) {
+        dataLines.add(line.substring(5).trimLeft());
+      }
+    }
+    if (type == null || type.isEmpty || dataLines.isEmpty) return null;
+    final decoded = jsonDecode(dataLines.join('\n'));
+    if (decoded is! Map) return null;
+    return ChatStreamEvent(type, Map<String, dynamic>.from(decoded));
+  }
+
   Future<ChatSubmitResult> submitMessage({
     required String message,
     String? conversationId,
@@ -295,7 +446,8 @@ class ChatService {
         'source': 'mobile',
         'requestId': requestId,
         'clientMessageId': requestId,
-        'deviceTimezone': DateTime.now().timeZoneName,
+        if (DeviceTimezoneCache.hasValue)
+          'deviceTimezone': DeviceTimezoneCache.ianaTimezone,
       },
     );
     if (resp == null) {

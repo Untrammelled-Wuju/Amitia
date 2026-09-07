@@ -15,27 +15,47 @@ class AgentTaskDetailPage extends ConsumerWidget {
 
   const AgentTaskDetailPage({super.key, required this.taskId});
 
-  String _statusLabel(AgentTaskStatus s) {
-    switch (s) {
-      case AgentTaskStatus.pending: return '待开始';
-      case AgentTaskStatus.waitingApproval: return '待审批';
+  String _statusLabel(AgentTaskStatus status) {
+    switch (status) {
+      case AgentTaskStatus.created: return '已创建';
+      case AgentTaskStatus.queued: return '排队中';
+      case AgentTaskStatus.starting: return '启动中';
       case AgentTaskStatus.running: return '运行中';
+      case AgentTaskStatus.checkpointing: return '检查点保存中';
+      case AgentTaskStatus.pausing: return '暂停中';
       case AgentTaskStatus.paused: return '已暂停';
-      case AgentTaskStatus.completed: return '已完成';
-      case AgentTaskStatus.failed: return '已失败';
+      case AgentTaskStatus.resuming: return '恢复中';
+      case AgentTaskStatus.cancelling: return '取消中';
       case AgentTaskStatus.cancelled: return '已取消';
+      case AgentTaskStatus.succeeded: return '已成功';
+      case AgentTaskStatus.failed: return '已失败';
+      case AgentTaskStatus.timedOut: return '已超时';
+      case AgentTaskStatus.recoveryRequired: return '需恢复';
+      case AgentTaskStatus.manualIntervention: return '需人工干预';
     }
   }
 
-  BadgeType _badgeType(AgentTaskStatus s) {
-    switch (s) {
-      case AgentTaskStatus.pending: return BadgeType.neutral;
-      case AgentTaskStatus.waitingApproval: return BadgeType.warning;
-      case AgentTaskStatus.running: return BadgeType.accent;
-      case AgentTaskStatus.paused: return BadgeType.neutral;
-      case AgentTaskStatus.completed: return BadgeType.success;
-      case AgentTaskStatus.failed: return BadgeType.error;
-      case AgentTaskStatus.cancelled: return BadgeType.neutral;
+  BadgeType _badgeType(AgentTaskStatus status) {
+    switch (status) {
+      case AgentTaskStatus.succeeded:
+        return BadgeType.success;
+      case AgentTaskStatus.failed:
+      case AgentTaskStatus.timedOut:
+      case AgentTaskStatus.manualIntervention:
+        return BadgeType.error;
+      case AgentTaskStatus.starting:
+      case AgentTaskStatus.running:
+      case AgentTaskStatus.checkpointing:
+      case AgentTaskStatus.pausing:
+      case AgentTaskStatus.resuming:
+      case AgentTaskStatus.recoveryRequired:
+        return BadgeType.warning;
+      case AgentTaskStatus.created:
+      case AgentTaskStatus.queued:
+      case AgentTaskStatus.paused:
+      case AgentTaskStatus.cancelling:
+      case AgentTaskStatus.cancelled:
+        return BadgeType.neutral;
     }
   }
 
@@ -149,14 +169,17 @@ class AgentTaskDetailPage extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(stage.isEmpty ? '执行进度' : stage, style: AppTypography.caption(context)),
-              Text(
-                '${task.progress}%',
-                style: AppTypography.caption(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600),
-              ),
+              if (detail.percentage != null)
+                Text(
+                  '${detail.percentage!.toStringAsFixed(detail.percentage! % 1 == 0 ? 0 : 1)}%',
+                  style: AppTypography.caption(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600),
+                ),
             ],
           ),
-          SizedBox(height: AppSpacing.xs),
-          AmitiaProgressBar(progress: task.progress / 100),
+          if (detail.percentage != null) ...[
+            SizedBox(height: AppSpacing.xs),
+            AmitiaProgressBar(progress: detail.percentage! / 100),
+          ],
           if (message.isNotEmpty) ...[
             SizedBox(height: AppSpacing.sm),
             Text(message, style: AppTypography.bodySmall(context)),
@@ -308,9 +331,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
   }
 
   Widget _buildBottomActions(BuildContext context, AgentTaskItem task, WidgetRef ref) {
-    Future<void> changeStatus(AgentTaskStatus newStatus, String successMessage) async {
+    Future<void> run(Future<void> Function() action, String successMessage) async {
       try {
-        await ref.read(agentTasksProvider.notifier).changeStatus(task.id, newStatus);
+        await action();
         ref.invalidate(agentTaskRuntimeDetailProvider(task.id));
         if (context.mounted) amitiaSnackBar(context, successMessage);
       } catch (e) {
@@ -318,190 +341,71 @@ class AgentTaskDetailPage extends ConsumerWidget {
       }
     }
 
-    Future<void> recover() async {
-      try {
-        await ref.read(agentTasksProvider.notifier).recover(task.id);
-        ref.invalidate(agentTaskRuntimeDetailProvider(task.id));
-        if (context.mounted) amitiaSnackBar(context, '已通过 Kernel recover 提交恢复');
-      } catch (e) {
-        if (context.mounted) amitiaSnackBar(context, '恢复失败：$e');
-      }
+    final notifier = ref.read(agentTasksProvider.notifier);
+    final buttons = <Widget>[];
+    if (task.canPause) {
+      buttons.add(Expanded(
+        child: AmitiaButton(
+          label: '暂停',
+          isSecondary: true,
+          icon: Icons.pause,
+          onPressed: () => run(() => notifier.pause(task.id), '任务已由服务端暂停'),
+        ),
+      ));
+    } else if (task.canResume) {
+      buttons.add(Expanded(
+        child: AmitiaButton(
+          label: '继续',
+          icon: Icons.play_arrow,
+          onPressed: () => run(() => notifier.resume(task.id), '任务已由服务端继续执行'),
+        ),
+      ));
+    } else if (task.canRecover) {
+      buttons.add(Expanded(
+        child: AmitiaButton(
+          label: '恢复任务',
+          icon: Icons.settings_backup_restore,
+          onPressed: () => run(() => notifier.recover(task.id), '已通过 Kernel recover 提交恢复'),
+        ),
+      ));
+    } else if (task.canRetry) {
+      buttons.add(Expanded(
+        child: AmitiaButton(
+          label: task.status == AgentTaskStatus.manualIntervention ? '重新执行' : '重试',
+          icon: Icons.refresh,
+          onPressed: () => run(() => notifier.retry(task.id), '任务已通过 Retry 重新入队'),
+        ),
+      ));
     }
 
-    switch (task.status) {
-      case AgentTaskStatus.pending:
-        return Row(
-          children: [
-            Expanded(
-              child: AmitiaButton(
-                label: '等待 Kernel 调度',
-                icon: Icons.schedule,
-                onPressed: null,
-              ),
-            ),
-            SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: AmitiaButton(
-                label: '取消',
-                isSecondary: true,
-                isDestructive: true,
-                icon: Icons.cancel_outlined,
-                onPressed: () => _confirmDestructive(
-                  context,
-                  title: '取消任务',
-                  message: 'Kernel Task 不提供手动 start 接口；当前任务由队列自动调度。确定取消此排队任务吗？',
-                  confirmLabel: '取消任务',
-                  onConfirm: () => changeStatus(AgentTaskStatus.cancelled, '任务已由服务端取消'),
-                ),
-              ),
-            ),
-          ],
-        );
-      case AgentTaskStatus.waitingApproval:
-        return Row(
-          children: [
-            Expanded(
-              child: AmitiaButton(
-                label: '允许并恢复',
-                icon: Icons.settings_backup_restore,
-                onPressed: recover,
-              ),
-            ),
-            SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: AmitiaButton(
-                label: '拒绝并取消',
-                isSecondary: true,
-                isDestructive: true,
-                icon: Icons.close,
-                onPressed: () => changeStatus(AgentTaskStatus.cancelled, '已拒绝并由服务端取消任务'),
-              ),
-            ),
-          ],
-        );
-      case AgentTaskStatus.running:
-        return Row(
-          children: [
-            Expanded(
-              child: AmitiaButton(
-                label: '暂停',
-                isSecondary: true,
-                icon: Icons.pause,
-                onPressed: () => _confirmDestructive(
-                  context,
-                  title: '暂停任务',
-                  message: '确定要暂停此任务吗？',
-                  confirmLabel: '暂停',
-                  onConfirm: () {
-                    changeStatus(AgentTaskStatus.paused, '任务已由服务端暂停');
-                  },
-                ),
-              ),
-            ),
-            SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: AmitiaButton(
-                label: '停止',
-                isDestructive: true,
-                icon: Icons.stop,
-                onPressed: () => _confirmDestructive(
-                  context,
-                  title: '停止任务',
-                  message: '确定要停止此任务吗？此操作不可撤销。',
-                  confirmLabel: '停止',
-                  onConfirm: () {
-                    changeStatus(AgentTaskStatus.cancelled, '任务已由服务端停止');
-                  },
-                ),
-              ),
-            ),
-          ],
-        );
-      case AgentTaskStatus.paused:
-        return Row(
-          children: [
-            Expanded(
-              child: AmitiaButton(
-                label: '继续',
-                icon: Icons.play_arrow,
-                onPressed: () {
-                  changeStatus(AgentTaskStatus.running, '任务已由服务端继续执行');
-                },
-              ),
-            ),
-            SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: AmitiaButton(
-                label: '停止',
-                isDestructive: true,
-                icon: Icons.stop,
-                onPressed: () => _confirmDestructive(
-                  context,
-                  title: '停止任务',
-                  message: '确定要停止此任务吗？此操作不可撤销。',
-                  confirmLabel: '停止',
-                  onConfirm: () {
-                    changeStatus(AgentTaskStatus.cancelled, '任务已由服务端停止');
-                  },
-                ),
-              ),
-            ),
-          ],
-        );
-      case AgentTaskStatus.completed:
-        return Row(
-          children: [
-            Expanded(
-              child: AmitiaButton(
-                label: '查看结果',
-                isSecondary: true,
-                icon: Icons.description_outlined,
-                onPressed: () {
-                  amitiaSnackBar(context, task.result ?? '任务已完成');
-                },
-              ),
-            ),
-            SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: AmitiaButton(
-                label: '再次执行',
-                icon: Icons.refresh,
-                onPressed: () => changeStatus(AgentTaskStatus.running, '任务已通过 Retry 重新入队'),
-              ),
-            ),
-          ],
-        );
-      case AgentTaskStatus.failed:
-        return Row(
-          children: [
-            Expanded(
-              child: AmitiaButton(
-                label: '查看错误',
-                isSecondary: true,
-                icon: Icons.error_outline,
-                onPressed: () {
-                  amitiaSnackBar(context, task.error ?? '任务执行失败');
-                },
-              ),
-            ),
-            SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: AmitiaButton(
-                label: '重试',
-                icon: Icons.refresh,
-                onPressed: () => changeStatus(AgentTaskStatus.running, '任务已通过 Retry 重新入队'),
-              ),
-            ),
-          ],
-        );
-      case AgentTaskStatus.cancelled:
-        return AmitiaButton(
-          label: '再次执行',
-          icon: Icons.refresh,
-          isFullWidth: true,
-          onPressed: () => changeStatus(AgentTaskStatus.running, '任务已通过 Retry 重新入队'),
-        );
+    if (task.canCancel) {
+      if (buttons.isNotEmpty) buttons.add(SizedBox(width: AppSpacing.sm));
+      buttons.add(Expanded(
+        child: AmitiaButton(
+          label: '取消',
+          isSecondary: true,
+          isDestructive: true,
+          icon: Icons.cancel_outlined,
+          onPressed: () => _confirmDestructive(
+            context,
+            title: '取消任务',
+            message: '确定取消当前 Kernel Task 吗？',
+            confirmLabel: '取消任务',
+            onConfirm: () => run(() => notifier.cancel(task.id), '任务已由服务端取消'),
+          ),
+        ),
+      ));
     }
+
+    if (buttons.isEmpty) {
+      return AmitiaButton(
+        label: _statusLabel(task.status),
+        icon: Icons.info_outline,
+        isFullWidth: true,
+        onPressed: null,
+      );
+    }
+    return Row(children: buttons);
   }
 
   void _confirmDestructive(
@@ -520,100 +424,5 @@ class AgentTaskDetailPage extends ConsumerWidget {
     ).then((confirmed) {
       if (confirmed == true) onConfirm();
     });
-  }
-}
-
-class _TimelineStep extends StatelessWidget {
-  final String name;
-  final String status;
-  final bool isLast;
-
-  const _TimelineStep({required this.name, required this.status, required this.isLast});
-
-  Color _statusColor(BuildContext context) {
-    switch (status) {
-      case '已完成':
-        return context.success;
-      case '执行中':
-        return context.accentPrimary;
-      case '等待中':
-        return context.textTertiary;
-      default:
-        return context.textTertiary;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _statusColor(context);
-    final isCompleted = status == '已完成';
-    final isRunning = status == '执行中';
-
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 24,
-            child: Column(
-              children: [
-                Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: isCompleted ? color : color.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                    border: isRunning ? Border.all(color: color, width: 2) : null,
-                  ),
-                  child: isCompleted
-                      ? const Icon(Icons.check, size: 12, color: Colors.white)
-                      : isRunning
-                          ? Center(
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: color,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            )
-                          : null,
-                ),
-                if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 1.5,
-                      color: context.borderPrimary,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: AppTypography.bodySmall(context).copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: status == '等待中'
-                          ? context.textTertiary
-                          : context.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(status, style: AppTypography.label(context).copyWith(color: color)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

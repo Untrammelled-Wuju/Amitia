@@ -354,7 +354,7 @@ private let supportedProtocolVersions: Set<Int> = [1]
 
 
 @objc public class IOSLocalNotificationNativeHandler: NSObject, IOSNativeOperationHandler {
-    public let operations: Set<String> = ["notification.status", "notification.post"]
+    public let operations: Set<String> = ["notification.status", "notification.request_permission", "notification.post"]
     private let stateLock = NSLock()
     private var cachedAuthorizationStatus: UNAuthorizationStatus = .notDetermined
 
@@ -376,6 +376,8 @@ private let supportedProtocolVersions: Set<Int> = [1]
         switch request.operation {
         case "notification.status":
             return await handleStatus(request)
+        case "notification.request_permission":
+            return await handleRequestPermission(request)
         case "notification.post":
             return await handlePost(request)
         default:
@@ -391,6 +393,28 @@ private let supportedProtocolVersions: Set<Int> = [1]
             "authorizationStatus": authorizationName(settings.authorizationStatus),
             "canPost": isAuthorized(settings.authorizationStatus)
         ])
+    }
+
+    private func handleRequestPermission(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        var settings = await currentSettings()
+        cache(settings.authorizationStatus)
+        if isAuthorized(settings.authorizationStatus) {
+            return success(request, result: ["granted": true, "alreadyGranted": true, "canPost": true])
+        }
+        if settings.authorizationStatus == .denied {
+            return error(request, code: "NOTIFICATION_POST_PERMISSION_REQUIRED", message: "notification permission was denied")
+        }
+        do {
+            let granted = try await requestAuthorization()
+            settings = await currentSettings()
+            cache(settings.authorizationStatus)
+            guard granted && isAuthorized(settings.authorizationStatus) else {
+                return error(request, code: "NOTIFICATION_POST_PERMISSION_REQUIRED", message: "notification permission was not granted")
+            }
+            return success(request, result: ["granted": true, "alreadyGranted": false, "canPost": true])
+        } catch {
+            return self.error(request, code: "NOTIFICATION_POST_PERMISSION_REQUIRED", message: error.localizedDescription)
+        }
     }
 
     private func handlePost(_ request: IOSNativeRequest) async -> IOSNativeResponse {

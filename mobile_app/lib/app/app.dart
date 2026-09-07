@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/native_bridge/providers/native_bridge_relay_bootstrap_provider.dart';
+import '../core/native_bridge/providers/device_timezone_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_phase.dart';
 import '../core/runtime/runtime_bootstrap_snapshot.dart';
@@ -13,8 +14,11 @@ import '../core/debug/debug_log_overlay.dart';
 import '../core/debug/debug_runtime_bridge.dart';
 import '../core/ui_runtime/ui_provider.dart';
 import '../core/ui_runtime/ui_runtime_controller.dart';
+import '../core/ui_runtime/mobile_ui_host_event_client.dart';
+import '../core/ui_runtime/mobile_ui_host_command_host.dart';
 import '../core/ui_runtime/ui_theme.dart';
 import '../core/settings/appearance_preferences.dart';
+import '../core/services/providers.dart' show extensionServiceProvider;
 import '../features/desktop_pet/runtime/desktop_pet_mobile_runtime.dart';
 import '../features/extensions/presentation/widgets/mcp_interaction_guard.dart';
 import 'theme/app_theme.dart';
@@ -309,8 +313,10 @@ class AmitiaApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(deviceTimezoneBootstrapProvider);
     ref.watch(nativeBridgeRelayBootstrapProvider);
     ref.watch(desktopPetMobileRuntimeBootstrapProvider);
+    ref.watch(mobileUIHostEventClientProvider);
     final appearance = ref.watch(appearancePreferencesProvider);
     AppMotion.setAnimationsEnabled(appearance.dynamicEffect && !appearance.reduceAnimation);
     final runtimeSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
@@ -408,12 +414,17 @@ class AmitiaApp extends ConsumerWidget {
         );
         return MediaQuery(
           data: adjustedMedia,
-          child: Stack(
-            children: [
-              if (child case final Widget currentChild) currentChild,
-              const McpInteractionGuard(),
-              const DebugLogOverlay(),
-            ],
+          child: MobileUIHostCommandHost(
+            router: router,
+            navigatorKey: appNavigatorKey,
+            extensionService: ref.read(extensionServiceProvider),
+            child: Stack(
+              children: [
+                if (child case final Widget currentChild) currentChild,
+                const McpInteractionGuard(),
+                const DebugLogOverlay(),
+              ],
+            ),
           ),
         );
       },

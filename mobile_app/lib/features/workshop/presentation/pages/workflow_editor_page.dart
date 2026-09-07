@@ -264,9 +264,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         }
       }
       if (_isDevice) {
-        _runHistory = <Map<String, dynamic>>[];
         _revisions = <Map<String, dynamic>>[];
         _workflowStats = <String, dynamic>{};
+        await _loadRuns();
       } else {
         await Future.wait(<Future<void>>[_loadRuns(), _loadRevisions(), _loadStats()]);
       }
@@ -412,7 +412,9 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         _normalize(latest);
         _conflictNoticeRevision = 0;
       });
-      if (!_isDevice) {
+      if (_isDevice) {
+        await _loadRuns();
+      } else {
         await Future.wait(<Future<void>>[_loadRuns(), _loadRevisions(), _loadStats()]);
       }
     } catch (_) {
@@ -725,7 +727,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         await _confirmPendingRun();
         return;
       }
-      if (!_isDevice) _startPolling();
+      _startPolling();
       _show(_activeRunMode == 'dry_run' ? 'Dry Run 已完成 · $id' : (_isDevice ? '已提交到目标设备运行' : '工作流已开始运行'));
     } catch (error) {
       _show('运行失败：${_message(error)}');
@@ -772,7 +774,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
         if (run.isNotEmpty) _activeRunStatus = (run['status'] ?? _activeRunStatus).toString();
         if (_requiredConfirmations.isEmpty && _activeRunStatus == 'waiting_confirmation') _activeRunStatus = 'running';
       });
-      if (!_isDevice) _startPolling();
+      _startPolling();
       _show(missing.isEmpty ? '确认已提交，继续当前运行' : '仍有 ${missing.length} 个节点等待确认');
     } catch (error) {
       _show('确认失败：${_message(error)}');
@@ -820,7 +822,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
   bool _terminal(String status) => <String>{'succeeded', 'failed', 'cancelled', 'completed', 'compensated', 'compensation_failed', 'manual_intervention_required', 'cancel_timeout', 'cancel_failed', 'dropped'}.contains(status.toLowerCase());
 
   Future<void> _loadRuns() async {
-    if (_workflow == null || _isDevice) return;
+    if (_workflow == null) return;
     try {
       final result = await ref.read(extensionServiceProvider).workflowRuns(widget.workflowId, limit: 30, target: _target);
       final items = _asMapList(result['items']);
@@ -3709,7 +3711,7 @@ class _WorkflowEditorPageState extends ConsumerState<WorkflowEditorPage> {
               const PopupMenuItem(value: 'settings', child: ListTile(leading: Icon(Icons.settings_outlined), title: Text('工作流设置'))),
               const PopupMenuItem(value: 'triggers', child: ListTile(leading: Icon(Icons.bolt_outlined), title: Text('Trigger Center'))),
               const PopupMenuItem(value: 'edges', child: ListTile(leading: Icon(Icons.route_outlined), title: Text('连线配置'))),
-              if (!_isDevice) const PopupMenuItem(value: 'runs', child: ListTile(leading: Icon(Icons.timeline_outlined), title: Text('Execution Trace'))),
+              const PopupMenuItem(value: 'runs', child: ListTile(leading: Icon(Icons.timeline_outlined), title: Text('Execution Trace'))),
               if (!_isDevice) const PopupMenuItem(value: 'versions', child: ListTile(leading: Icon(Icons.history_outlined), title: Text('版本历史'))),
               if (!_isDevice) const PopupMenuItem(value: 'security', child: ListTile(leading: Icon(Icons.security_outlined), title: Text('权限与风险摘要'))),
               const PopupMenuItem(value: 'layout', child: ListTile(leading: Icon(Icons.auto_fix_high_outlined), title: Text('自动布局'))),

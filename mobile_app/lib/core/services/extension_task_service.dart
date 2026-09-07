@@ -31,6 +31,7 @@ class ExtensionTaskService {
     required Map<String, dynamic> input,
     int priority = 0,
     String source = 'mobile',
+    String? deviceId,
   }) {
     return _api.post<Map<String, dynamic>>(
       '/api/extensions/tasks',
@@ -41,6 +42,7 @@ class ExtensionTaskService {
         'input': input,
         'priority': priority,
         'source': source,
+        if ((deviceId ?? '').trim().isNotEmpty) 'deviceId': deviceId!.trim(),
       },
     );
   }

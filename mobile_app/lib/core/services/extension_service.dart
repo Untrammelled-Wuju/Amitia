@@ -141,6 +141,94 @@ class ExtensionService {
         .toList(growable: false);
   }
 
+  Future<Map<String, dynamic>> registerUIHostSession({
+    required String hostClientId,
+    required String deviceId,
+    required String platform,
+    String windowId = 'main',
+    List<String> features = const <String>[
+      'ui.notify',
+      'ui.dialog',
+      'ui.navigate',
+    ],
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/ui/host-session',
+          data: <String, dynamic>{
+            'hostClientId': hostClientId.trim(),
+            'deviceId': deviceId.trim(),
+            'platform': platform.trim(),
+            'windowId': windowId.trim(),
+            'features': features,
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<void> heartbeatUIHostSession({
+    required String hostClientId,
+    required String hostSessionId,
+  }) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/extensions/ui/host-session/heartbeat',
+      data: <String, dynamic>{
+        'hostClientId': hostClientId.trim(),
+        'hostSessionId': hostSessionId.trim(),
+      },
+    );
+  }
+
+  Future<void> disconnectUIHostSession({
+    required String hostClientId,
+    required String hostSessionId,
+  }) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/extensions/ui/host-session/disconnect',
+      data: <String, dynamic>{
+        'hostClientId': hostClientId.trim(),
+        'hostSessionId': hostSessionId.trim(),
+      },
+    );
+  }
+
+  Future<void> sendUIDialogResponse({
+    required String dialogId,
+    required String result,
+    String hostClientId = '',
+    String hostSessionId = '',
+  }) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/extensions/ui/dialog-response',
+      data: <String, dynamic>{
+        'dialogId': dialogId.trim(),
+        'result': result,
+        if (hostClientId.trim().isNotEmpty)
+          'hostClientId': hostClientId.trim(),
+        if (hostSessionId.trim().isNotEmpty)
+          'hostSessionId': hostSessionId.trim(),
+      },
+    );
+  }
+
+  Future<void> sendClientRuntimeResponse({
+    required String commandId,
+    required String hostClientId,
+    required String hostSessionId,
+    Map<String, dynamic> result = const <String, dynamic>{},
+    String error = '',
+  }) async {
+    await _api.post<Map<String, dynamic>>(
+      '/api/extensions/ui/client-runtime-response',
+      data: <String, dynamic>{
+        'commandId': commandId.trim(),
+        'hostClientId': hostClientId.trim(),
+        'hostSessionId': hostSessionId.trim(),
+        'result': result,
+        'error': error.trim(),
+      },
+    );
+  }
+
   Future<Map<String, dynamic>> getClientRuntimeSessionState(String conversationId) async {
     final id = conversationId.trim();
     if (id.isEmpty) {
@@ -973,7 +1061,11 @@ class ExtensionService {
 
   String _workflowRunBase(WorkflowApiTarget target) {
     if (target.isLocal) return '/api/local/workflow-runs';
-    if (target.isDevice) throw StateError('remote device run details are not exposed through the control plane');
+    if (target.isDevice) {
+      final deviceId = target.deviceId.trim();
+      if (deviceId.isEmpty) throw StateError('device workflow target requires deviceId');
+      return '/api/extensions/workflow-devices/${Uri.encodeComponent(deviceId)}/runs';
+    }
     return '/api/extensions/workflow-runs';
   }
 
@@ -1303,9 +1395,8 @@ class ExtensionService {
   }
 
   Future<Map<String, dynamic>> workflowRuns(String id, {int limit = 50, int offset = 0, String status = '', WorkflowApiTarget target = const WorkflowApiTarget.cloud()}) async {
-    final value = _kernelWorkflowTarget(target, 'workflow run history');
     return await _api.get<Map<String, dynamic>>(
-          '${_workflowBase(value)}/${Uri.encodeComponent(id)}/runs',
+          '${_workflowBase(target)}/${Uri.encodeComponent(id)}/runs',
           queryParameters: {'limit': limit.clamp(1, 200), 'offset': offset < 0 ? 0 : offset, if (status.isNotEmpty) 'status': status},
         ) ??
         <String, dynamic>{'items': <dynamic>[], 'total': 0};

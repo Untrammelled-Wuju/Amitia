@@ -1,10 +1,12 @@
 package com.amitia.amitia_app
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import com.amitia.amitia_app.nativeprovider.AndroidNativeBridgePlugin
@@ -30,6 +32,22 @@ class MainActivity : FlutterActivity() {
 
     private var imeInsetsSyncCallback: ImeInsetsSyncCallback? = null
     private var workspaceTreePending: CompletableDeferred<Pair<Uri, Int>?>? = null
+    private var notificationPermissionPending: CompletableDeferred<Boolean>? = null
+    private var notificationSettingsPending: CompletableDeferred<Unit>? = null
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val pending = notificationPermissionPending
+        notificationPermissionPending = null
+        if (pending != null && !pending.isCompleted) pending.complete(granted)
+    }
+    private val notificationSettingsLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        val pending = notificationSettingsPending
+        notificationSettingsPending = null
+        if (pending != null && !pending.isCompleted) pending.complete(Unit)
+    }
     private val workspaceTreeLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -60,6 +78,42 @@ class MainActivity : FlutterActivity() {
         pending.await()
     }
 
+    suspend fun requestNotificationPostPermission(): Boolean = withContext(Dispatchers.Main.immediate) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@withContext true
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return@withContext true
+        }
+        if (notificationPermissionPending != null) {
+            return@withContext notificationPermissionPending!!.await()
+        }
+        val pending = CompletableDeferred<Boolean>()
+        notificationPermissionPending = pending
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        pending.await()
+    }
+
+    suspend fun openAppNotificationSettings() = withContext(Dispatchers.Main.immediate) {
+        val existing = notificationSettingsPending
+        if (existing != null) {
+            existing.await()
+            return@withContext
+        }
+        val pending = CompletableDeferred<Unit>()
+        notificationSettingsPending = pending
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            }
+        } else {
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:$packageName"),
+            )
+        }
+        notificationSettingsLauncher.launch(intent)
+        pending.await()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AndroidNativeCompositionRoot.initialize(applicationContext)
@@ -81,6 +135,14 @@ class MainActivity : FlutterActivity() {
             if (!pending.isCompleted) pending.complete(null)
         }
         workspaceTreePending = null
+        notificationPermissionPending?.let { pending ->
+            if (!pending.isCompleted) pending.complete(false)
+        }
+        notificationPermissionPending = null
+        notificationSettingsPending?.let { pending ->
+            if (!pending.isCompleted) pending.complete(Unit)
+        }
+        notificationSettingsPending = null
         super.onDestroy()
     }
 

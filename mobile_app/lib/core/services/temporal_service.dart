@@ -9,6 +9,19 @@ class TemporalService {
     return _api.get<Map<String, dynamic>>('/api/temporal/profile');
   }
 
+  Future<Map<String, dynamic>?> snapshot({
+    String characterId = '',
+    String channel = 'mobile',
+  }) {
+    return _api.get<Map<String, dynamic>>(
+      '/api/temporal/snapshot',
+      queryParameters: <String, dynamic>{
+        if (characterId.trim().isNotEmpty) 'characterId': characterId.trim(),
+        'channel': channel,
+      },
+    );
+  }
+
   Future<bool> updateConfig(Map<String, dynamic> data) async {
     await _api.put('/api/temporal/profile', data: data);
     return true;

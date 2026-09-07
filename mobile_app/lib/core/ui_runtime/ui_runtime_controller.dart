@@ -36,10 +36,9 @@ class UIRuntimeController
         if (!_loading) unawaited(ensureLoaded(force: true));
       });
     });
-    // Event-driven invalidation is primary. A short periodic reconciliation is
-    // retained as a cloud/offline recovery fallback for mutations that happen
-    // on another device while this app is open.
-    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    // Global UI Host SSE is the primary cross-device invalidation path. Keep a
+    // low-frequency reconciliation only as a recovery net after stream loss.
+    _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       if (state.valueOrNull != null && !_loading) {
         unawaited(ensureLoaded(force: true));
       }
