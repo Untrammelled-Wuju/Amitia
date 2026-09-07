@@ -1166,6 +1166,20 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		DB:                           ctx.DB,
 		NativeBridgeRelay:            newNativeBridgeRelay(),
 	}
+
+	dataPortability, dataPortabilityErr := buildDataPortabilityCoordinator(dataPortabilityDeps{
+		DataDir:   config.AppCfg.Storage.DataDir,
+		DB:        ctx.DB,
+		MemSvc:    memSvc,
+		EpicSvc:   epiSvc,
+		ExtSvc:    extensionRuntime,
+		Workspace: workspaceService,
+	})
+	if dataPortabilityErr != nil {
+		return nil, fmt.Errorf("initialize data portability: %w", dataPortabilityErr)
+	}
+	services.DataPortability = dataPortability
+
 	if _, err := ctx.DB.DB(); err != nil {
 		return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", err)
 	}
@@ -1489,7 +1503,13 @@ func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, mem
 		if payload.Content == "" || len([]rune(payload.Content)) > 4000 {
 			return nil, nil, fmt.Errorf("通知内容长度必须为 1 到 4000 个字符")
 		}
-		conversation, err := chatSvc.GetConversation(scope.ConversationID)
+		scopedChat, ok := chatSvc.(interface {
+			GetConversationForUser(id, userID string) (*chat.Conversation, error)
+		})
+		if !ok {
+			return nil, nil, fmt.Errorf("chat service does not provide user-scoped operations")
+		}
+		conversation, err := scopedChat.GetConversationForUser(scope.ConversationID, scope.UserID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1519,7 +1539,13 @@ func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, mem
 		if err := json.Unmarshal(input, &payload); err != nil {
 			return nil, nil, fmt.Errorf("候选记忆参数无效: %w", err)
 		}
-		candidate, err := memSvc.SubmitCandidate(&memory.SubmitCandidateRequest{Key: payload.Key, Value: payload.Value, MemoryType: payload.MemoryType, Importance: payload.Importance, SourceText: payload.Source, ConversationID: scope.ConversationID, CharacterID: scope.CharacterID})
+		scopedMemory, ok := memSvc.(interface {
+			SubmitCandidateForUser(req *memory.SubmitCandidateRequest, userID string) (*memory.MemoryCandidate, error)
+		})
+		if !ok {
+			return nil, nil, fmt.Errorf("memory service does not provide user-scoped operations")
+		}
+		candidate, err := scopedMemory.SubmitCandidateForUser(&memory.SubmitCandidateRequest{Key: payload.Key, Value: payload.Value, MemoryType: payload.MemoryType, Importance: payload.Importance, SourceText: payload.Source, ConversationID: scope.ConversationID, CharacterID: scope.CharacterID}, scope.UserID)
 		if err != nil {
 			return nil, nil, err
 		}

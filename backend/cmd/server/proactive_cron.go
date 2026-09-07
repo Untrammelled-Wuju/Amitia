@@ -256,7 +256,7 @@ func (a *proactiveDispatchAdapter) DispatchProactive(ctx context.Context, req pr
 	if a.compSvc == nil {
 		return &proactive.ProactiveDispatchResult{Success: false}, nil
 	}
-	content, err := a.compSvc.DispatchProactiveMessage(ctx, req.CharacterID, req.ConversationID, req.Channel, req.Prompt, req.RequestID)
+	content, err := a.compSvc.DispatchProactiveMessage(ctx, req.UserID, req.CharacterID, req.ConversationID, req.Channel, req.Prompt, req.RequestID)
 	if err != nil {
 		log.Printf("[ProactiveCron] DispatchProactive failed: %v", err)
 		return &proactive.ProactiveDispatchResult{Success: false}, nil

@@ -198,7 +198,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	accountsession.RegisterPublicRoutes(public, accountSessionRuntime.Handler)
 
 	public.GET("/onboarding/status", systemHandler.OnboardingStatus)
-	public.POST("/onboarding/complete", systemHandler.OnboardingComplete)
 	public.GET("/health", systemHandler.Health)
 	public.GET("/runtime/capabilities", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -207,9 +206,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			"data": publicRuntimeCapabilities(services),
 		})
 	})
-
-	chatHandler := chat.NewHandlerWithUnifiedEntry(services.Chat, services.UnifiedEntry)
-	public.POST("/model/detect-models", chatHandler.DetectModels)
 
 	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir, localCredentialStore)
 	if err != nil {
@@ -458,6 +454,13 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		mcpapi.RegisterOAuthCallback(r, services.MCPCompatibility.API)
 	}
 
+	// ASR providers such as Volcengine fetch audio by URL. Expose only the
+	// short-lived unguessable provider payload route outside authenticated /api.
+	asr.RegisterPublicAsrRouter(r)
+	if services.DeliveryStore != nil {
+		delivery.RegisterBridgeSubmitRouter(r, services.DeliveryStore)
+	}
+
 	apiGroup := r.Group("/api")
 	apiGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
 		Mode:             config.AppCfg.Security.Mode,
@@ -536,7 +539,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		system.RegisterHealthRouter(apiGroup, services.CircuitBreakers, services.DataLifecycle, services.Reconciliation)
 		ttsRepo := tts.NewRepository(ctx.DB)
 		ttsSvc := tts.NewService(ttsRepo)
-		system.RegisterVoiceEntryRouter(apiGroup, services.VoiceEntry, ttsSvc, services.DeliveryStore)
+		system.RegisterVoiceEntryRouter(apiGroup, ctx.DB, services.VoiceEntry, ttsSvc, services.DeliveryStore)
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)
@@ -643,6 +646,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 						},
 						EmergencyStopFn: func(ctx context.Context, runtimeID string) (control.EmergencyStopResult, error) {
 							return services.KernelContainer.GameHost.EmergencyStopService.Execute(ctx, domain.RuntimeInstanceID(runtimeID))
+						},
+						RearmFn: func(ctx context.Context, runtimeID string) error {
+							return services.KernelContainer.GameHost.EmergencyStopService.ClearEmergencyLatch(ctx, domain.RuntimeInstanceID(runtimeID), "game_center_user")
 						},
 					})
 					management.RegisterGameCenterControlRouter(apiGroup, controlHandler)
@@ -849,7 +855,15 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.NativeBridgeRelay != nil && bootstrap != nil {
 			tryRegisterAndroidBridge(services.NativeBridgeRelay, bootstrap)
 			tryRegisterIOSBridge(services.NativeBridgeRelay, bootstrap)
-			setupNativeBridgeRelayRoutes(services.NativeBridgeRelay, apiGroup)
+			// Native relay is device-local authority. Cloud Core must not accept a
+			// platform-global relay session because multiple devices of the same
+			// platform would contend for one bridge/session. Mobile clients connect
+			// their relay to the local Device Agent instead.
+			if services.RuntimeProfile != runtimeprofile.ProfileCloudCore {
+				setupNativeBridgeRelayBackendActionHandler(services.NativeBridgeRelay, services)
+				setupNativeBridgeRelayRoutes(services.NativeBridgeRelay, apiGroup)
+				setupNativeBridgeBackendActionRoutes(services, apiGroup)
+			}
 
 			if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
 				eventSinkRouter := iosnativebackground.NewTaskRuntimeEventSinkRouter(services.KernelContainer.TaskRuntimeService)

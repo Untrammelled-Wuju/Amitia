@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -44,6 +45,9 @@ func (r *kernelCharacterReader) ReadCharacter(ctx context.Context, characterID s
 	if err != nil || c == nil {
 		return nil, false, nil
 	}
+	if scopeCtx.UserID == "" || (strings.TrimSpace(c.UserID) != "" && strings.TrimSpace(c.UserID) != strings.TrimSpace(scopeCtx.UserID)) {
+		return nil, false, nil
+	}
 	summary := c.Description
 	if utf8.RuneCountInString(summary) > maxCharacterSummaryLength {
 		summary = truncateRunes(summary, maxCharacterSummaryLength)
@@ -83,7 +87,17 @@ func (r *kernelConversationReader) ReadConversation(ctx context.Context, convers
 	if offset > 0 && limit > 0 {
 		page = offset/limit + 1
 	}
-	messages, total, err := r.chatSvc.GetMessages(conversationID, page, limit)
+	if strings.TrimSpace(scopeCtx.UserID) == "" {
+		return []json.RawMessage{}, false, nil
+	}
+	type scopedConversationReader interface {
+		GetMessagesForUser(conversationID, userID string, page, pageSize int) ([]chat.Message, int64, error)
+	}
+	scopedChat, ok := r.chatSvc.(scopedConversationReader)
+	if !ok {
+		return nil, false, fmt.Errorf("chat service does not support authenticated ownership")
+	}
+	messages, total, err := scopedChat.GetMessagesForUser(conversationID, scopeCtx.UserID, page, limit)
 	if err != nil {
 		return nil, false, err
 	}
@@ -126,7 +140,17 @@ func (s *kernelMemoryQueryService) Query(ctx context.Context, extensionID string
 		CharacterID: scopeCtx.CharacterID,
 		Limit:       limit,
 	}
-	memories, err := s.memSvc.Search(req)
+	if strings.TrimSpace(scopeCtx.UserID) == "" {
+		return []json.RawMessage{}, nil
+	}
+	type scopedMemoryReader interface {
+		SearchForUser(req *memory.SearchMemoryRequest, userID string) ([]memory.Memory, error)
+	}
+	scopedMemory, ok := s.memSvc.(scopedMemoryReader)
+	if !ok {
+		return nil, fmt.Errorf("memory service does not support authenticated ownership")
+	}
+	memories, err := scopedMemory.SearchForUser(req, scopeCtx.UserID)
 	if err != nil {
 		return nil, err
 	}

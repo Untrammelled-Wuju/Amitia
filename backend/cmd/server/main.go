@@ -27,7 +27,6 @@ import (
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/database/mysql"
-	surrealdbDB "github.com/u-ai/backend/pkg/database/surrealdb"
 	"github.com/u-ai/backend/pkg/platform"
 	"github.com/u-ai/backend/pkg/util"
 
@@ -260,18 +259,10 @@ func main() {
 			_ = services.DeviceMesh.Stop()
 		}
 	}()
-	if policy.GraphStore && config.AppCfg.Providers.GraphStore.Enabled {
-		surrealdbDB.SetSurrealRestartCallback(func() {
-			newGraphSvc := initGraph()
-			if newGraphSvc != nil {
-				services.Graph = newGraphSvc
-				bootstrap.SetGraphService(newGraphSvc)
-				log.Info("SurrealDB恢复后图谱服务已重新连接")
-			}
-		})
-	}
 	if policy.CoreBusinessServices {
 		agenttool.SetMemoryService(services.Memory)
+		agenttool.SetProfileService(services.Profile)
+		agenttool.SetEpisodicService(services.Episodic)
 		agenttool.SetTemporalService(services.Temporal)
 		temporalScheduler := temporal.NewScheduler(services.Temporal)
 		_ = temporalScheduler

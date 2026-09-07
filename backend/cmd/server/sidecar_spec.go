@@ -5,6 +5,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/config"
@@ -73,6 +75,14 @@ func buildSidecarSpec(
 	args = append(args, artifact.ArgsPrefix...)
 	args = append(args, artifact.EntryPath)
 
+	envValues := map[string]string{
+		"AMITIA_HOST_PLATFORM": string(platform.Get().Descriptor().Host),
+		"CORE_URL":             fmt.Sprintf("http://127.0.0.1:%d", config.AppCfg.Server.Port),
+	}
+	if token := strings.TrimSpace(os.Getenv("BRIDGE_API_TOKEN")); token != "" {
+		envValues["BRIDGE_API_TOKEN"] = token
+	}
+
 	return runtimehost.ProcessSpec{
 		ID:         processID,
 		Executable: nodeEnv.NodeBinary,
@@ -80,9 +90,7 @@ func buildSidecarSpec(
 		WorkingDir: artifact.WorkingDir,
 		Environment: runtimehost.EnvironmentSpec{
 			Policy: runtimehost.EnvPolicyMinimal,
-			Values: map[string]string{
-				"AMITIA_HOST_PLATFORM": string(platform.Get().Descriptor().Host),
-			},
+			Values: envValues,
 		},
 		Ports: []runtimehost.LoopbackPortClaim{
 			{Host: "127.0.0.1", Port: port, Protocol: "tcp"},
