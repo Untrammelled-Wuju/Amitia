@@ -1,9 +1,11 @@
 package management
 
 import (
-	"errors"
-	"net/http"
-	"strings"
+"context"
+"errors"
+"net/http"
+"strings"
+"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -132,7 +134,9 @@ func (h *MutationHandler) StartRuntime(c *gin.Context) {
 		return
 	}
 
-	result, err := h.runtimeSvc.Start(c.Request.Context(), runtimeID)
+	startCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 10*time.Minute)
+	defer cancel()
+	result, err := h.runtimeSvc.Start(startCtx, runtimeID)
 	if err != nil {
 		if errors.Is(err, ErrInvalidInput) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
@@ -202,7 +206,9 @@ func (h *MutationHandler) RestartRuntime(c *gin.Context) {
 		return
 	}
 
-	result, err := h.runtimeSvc.Restart(c.Request.Context(), runtimeID)
+	restartCtx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 10*time.Minute)
+	defer cancel()
+	result, err := h.runtimeSvc.Restart(restartCtx, runtimeID)
 	if err != nil {
 		if errors.Is(err, ErrInvalidInput) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})

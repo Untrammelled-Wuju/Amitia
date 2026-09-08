@@ -40,6 +40,7 @@ type PendingApproval struct {
 	ServiceID    string                            `json:"serviceId,omitempty"`
 	ExtensionID  string                            `json:"extensionId"`
 	PermissionID string                            `json:"permissionId"`
+	PermissionIDs []string                         `json:"permissionIds,omitempty"`
 	Target       kernelpermission.PermissionTarget `json:"target,omitempty"`
 	Status       ApprovalStatus                    `json:"status"`
 	RequestedAt  time.Time                         `json:"requestedAt"`
@@ -50,8 +51,9 @@ type PendingApproval struct {
 }
 
 type approvalEntry struct {
-	view     PendingApproval
-	decision chan ApprovalStatus
+	view       PendingApproval
+	decision   chan ApprovalStatus
+	persistent bool
 }
 
 type keyedApprovalLock struct {
@@ -137,14 +139,15 @@ func (c *ApprovalCoordinator) Evaluate(
 	}
 	resolver, ok := c.broker.(perUsePermissionResolver)
 	requiresPerUse := ok && resolver.RequiresPerUse(permissionID)
-	if !requiresPerUse && permissionID != kernelpermission.PermissionServiceNetworkRequest {
+	if !requiresPerUse && permissionID != kernelpermission.PermissionServiceNetworkRequest && permissionID != kernelpermission.PermissionServiceRuntimeExecute {
 		// Missing persistent/session permissions belong to the normal extension
 		// permission-management flow. GameHost only suspends live operations for
 		// permissions whose canonical definition explicitly requires per-use approval.
 		return result
 	}
 
-	entry := c.createPending(subject, permissionID, request)
+	permissionIDs := approvalPermissionIDs(permissionID)
+	entry := c.createPending(subject, permissionID, permissionIDs, request)
 	status := c.wait(ctx, entry)
 	if status != ApprovalStatusApproved {
 		code := "approval_rejected"
@@ -177,6 +180,9 @@ func (c *ApprovalCoordinator) Evaluate(
 
 	boundRequest := request
 	grantDecision := kernelpermission.DecisionAllowPersistent
+	if !entry.persistent {
+		grantDecision = kernelpermission.DecisionAllowOnce
+	}
 	var grant kernelpermission.PermissionGrant
 	var grantErr error
 	_, isServicePerm := servicePermissionIDs[permissionID]
@@ -257,7 +263,32 @@ func (c *ApprovalCoordinator) Evaluate(
 		}
 	}
 	cleanupGrant := func() {
-		_ = c.broker.Revoke(context.Background(), grant.GrantID)
+		if grant.GrantID != "" {
+			_ = c.broker.Revoke(context.Background(), grant.GrantID)
+		}
+	}
+	for _, additionalPermissionID := range permissionIDs[1:] {
+		_, err := c.broker.Grant(ctx, kernelpermission.PermissionGrantRequest{
+			Subject:      request.Subject,
+			PermissionID: additionalPermissionID,
+			Scope:        approvalScope(boundRequest),
+			Decision:     grantDecision,
+			InputHash:    approvalInputHash(nil),
+			IssuedBy:     kernelpermission.IssuerUser,
+			Reason:       "gamehost approval " + entry.view.ID,
+		})
+		if err != nil {
+			cleanupGrant()
+			c.finish(entry.view.ID, ApprovalStatusRejected, "system", "failed to create bundled permission grant")
+			return kernelpermission.PermissionEvaluationResult{
+				Decision: kernelpermission.DecisionDeny,
+				Reasons: []kernelpermission.PermissionReason{{
+					Code:       "bundled_permission_grant_failed",
+					Permission: additionalPermissionID,
+					Detail:     err.Error(),
+				}},
+			}
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		cleanupGrant()
@@ -276,7 +307,7 @@ func (c *ApprovalCoordinator) Evaluate(
 	// the approved operation resumes. Evaluation itself is intentionally side-effect
 	// free so UI/diagnostic permission checks cannot accidentally consume approval.
 	result = c.broker.Evaluate(ctx, boundRequest)
-	if requiresPerUse && result.Decision == kernelpermission.DecisionAllowOnce {
+	if result.Decision == kernelpermission.DecisionAllowOnce {
 		result = c.consumeAllowOnce(ctx, permissionID, result)
 	}
 	if result.Decision == kernelpermission.DecisionAllow || result.Decision == kernelpermission.DecisionAllowPersistent {
@@ -341,7 +372,7 @@ func approvalScope(request kernelpermission.PermissionEvaluationRequest) kernelp
 	return kernelpermission.ScopeGlobalOnly()
 }
 
-func (c *ApprovalCoordinator) createPending(subject EffectiveSubject, permissionID string, request kernelpermission.PermissionEvaluationRequest) *approvalEntry {
+func (c *ApprovalCoordinator) createPending(subject EffectiveSubject, permissionID string, permissionIDs []string, request kernelpermission.PermissionEvaluationRequest) *approvalEntry {
 	now := c.clock().UTC()
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -353,15 +384,27 @@ func (c *ApprovalCoordinator) createPending(subject EffectiveSubject, permission
 			ServiceID:    subject.ServiceID,
 			ExtensionID:  subject.ExtensionID,
 			PermissionID: permissionID,
+			PermissionIDs: append([]string(nil), permissionIDs...),
 			Target:       request.Target,
 			Status:       ApprovalStatusPending,
 			RequestedAt:  now,
 			ExpiresAt:    now.Add(c.ttl),
 		},
-		decision: make(chan ApprovalStatus, 1),
+		decision:   make(chan ApprovalStatus, 1),
+		persistent: true,
 	}
 	c.entries[entry.view.ID] = entry
 	return entry
+}
+
+func approvalPermissionIDs(permissionID string) []string {
+	if permissionID == kernelpermission.PermissionServiceNetworkRequest {
+		return []string{
+			kernelpermission.PermissionServiceNetworkRequest,
+			kernelpermission.PermissionServiceRuntimeExecute,
+		}
+	}
+	return []string{permissionID}
 }
 
 func (c *ApprovalCoordinator) wait(ctx context.Context, entry *approvalEntry) ApprovalStatus {
@@ -419,14 +462,18 @@ func (c *ApprovalCoordinator) ListPending() []PendingApproval {
 }
 
 func (c *ApprovalCoordinator) Approve(id, actor, reason string) error {
-	return c.resolve(id, ApprovalStatusApproved, actor, reason)
+	return c.ApproveWithPersistence(id, actor, reason, true)
+}
+
+func (c *ApprovalCoordinator) ApproveWithPersistence(id, actor, reason string, persistent bool) error {
+	return c.resolve(id, ApprovalStatusApproved, actor, reason, persistent)
 }
 
 func (c *ApprovalCoordinator) Reject(id, actor, reason string) error {
-	return c.resolve(id, ApprovalStatusRejected, actor, reason)
+	return c.resolve(id, ApprovalStatusRejected, actor, reason, false)
 }
 
-func (c *ApprovalCoordinator) resolve(id string, status ApprovalStatus, actor, reason string) error {
+func (c *ApprovalCoordinator) resolve(id string, status ApprovalStatus, actor, reason string, persistent bool) error {
 	if c == nil {
 		return fmt.Errorf("gamehost approval: coordinator unavailable")
 	}
@@ -468,6 +515,7 @@ func (c *ApprovalCoordinator) resolve(id string, status ApprovalStatus, actor, r
 	entry.view.ResolvedAt = &now
 	entry.view.ResolvedBy = actor
 	entry.view.Reason = strings.TrimSpace(reason)
+	entry.persistent = persistent
 	select {
 	case entry.decision <- status:
 	default:

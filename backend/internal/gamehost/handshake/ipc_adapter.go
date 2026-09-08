@@ -54,7 +54,7 @@ func (a *HandshakeControllerAdapter) HandleHello(
 	resp, err := a.inner.HandleHelloFromEnvelope(ctx, string(connID), peer, payload)
 	if err != nil {
 		if a.readyGate != nil {
-			a.readyGate.MarkNotReady(string(connID))
+			a.readyGate.Reject(string(connID), err)
 		}
 		return nil, err
 	}

@@ -26,7 +26,8 @@ func (h *ApprovalHandler) ListPending(c *gin.Context) {
 }
 
 type approvalDecisionRequest struct {
-	Reason string `json:"reason,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	Persistent bool   `json:"persistent"`
 }
 
 func (h *ApprovalHandler) Approve(c *gin.Context) {
@@ -64,7 +65,7 @@ func (h *ApprovalHandler) resolve(c *gin.Context, approve bool) {
 	}
 	var err error
 	if approve {
-		err = h.coordinator.Approve(id, actor, req.Reason)
+		err = h.coordinator.ApproveWithPersistence(id, actor, req.Reason, req.Persistent)
 	} else {
 		err = h.coordinator.Reject(id, actor, req.Reason)
 	}

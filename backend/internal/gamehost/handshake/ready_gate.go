@@ -11,6 +11,7 @@ var ErrReadyGateRemoved = errors.New("handshake: ready gate entry removed")
 type readyEntry struct {
 	ready   bool
 	removed bool
+	err     error
 	changed chan struct{}
 }
 
@@ -56,9 +57,10 @@ func (g *ReadyGate) Register(key string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	entry := g.ensureEntryLocked(key)
-	if entry.ready || entry.removed {
+	if entry.ready || entry.removed || entry.err != nil {
 		entry.ready = false
 		entry.removed = false
+		entry.err = nil
 		notifyReadyEntry(entry)
 	}
 }
@@ -71,6 +73,7 @@ func (g *ReadyGate) MarkReady(key string) {
 		return
 	}
 	entry.ready = true
+	entry.err = nil
 	notifyReadyEntry(entry)
 }
 
@@ -82,6 +85,17 @@ func (g *ReadyGate) MarkNotReady(key string) {
 		return
 	}
 	entry.ready = false
+	notifyReadyEntry(entry)
+}
+
+func (g *ReadyGate) Reject(key string, err error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	entry := g.ensureEntryLocked(key)
+	if entry.removed || entry.ready {
+		return
+	}
+	entry.err = err
 	notifyReadyEntry(entry)
 }
 
@@ -124,6 +138,11 @@ func (g *ReadyGate) WaitReady(ctx context.Context, key string) error {
 	for {
 		g.mu.Lock()
 		entry := g.ensureEntryLocked(key)
+		if entry.err != nil {
+			err := entry.err
+			g.mu.Unlock()
+			return err
+		}
 		if entry.removed {
 			g.mu.Unlock()
 			return ErrReadyGateRemoved

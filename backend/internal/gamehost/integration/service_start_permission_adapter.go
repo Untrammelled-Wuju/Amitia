@@ -30,24 +30,25 @@ func (a *ServiceStartPermissionAdapter) AuthorizeServiceStart(
 	execCtx runtime.ServiceExecutionContext,
 	definition *trusted_service.ServiceRuntimeDefinition,
 ) error {
-	if err := a.require(ctx, execCtx, kernelpermission.PermissionServiceRuntimeExecute); err != nil {
-		return err
-	}
 	if definition != nil && definition.Network.AllowOutbound {
 		if err := a.require(ctx, execCtx, kernelpermission.PermissionServiceNetworkRequest); err != nil {
 			return err
 		}
 	}
+	if err := a.require(ctx, execCtx, kernelpermission.PermissionServiceRuntimeExecute); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (a *ServiceStartPermissionAdapter) require(ctx context.Context, execCtx runtime.ServiceExecutionContext, permissionID string) error {
-	result := a.effective.CheckServicePermission(
+	result := a.effective.CheckServicePermissionTarget(
 		ctx,
 		string(execCtx.RuntimeID),
 		string(execCtx.PluginID),
 		string(execCtx.ServiceID),
 		permissionID,
+		kernelpermission.PermissionTarget{},
 	)
 	if result.Allowed() {
 		return nil
