@@ -303,10 +303,10 @@ func (r *ToolRegistry) Unregister(ctx context.Context, id string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if err := r.removeUnsafe(id); err != nil {
-		return err
+	if _, ok := r.items[id]; !ok {
+		return nil
 	}
-	return nil
+	return r.removeUnsafe(id)
 }
 
 func (r *ToolRegistry) UnregisterByOwner(ctx context.Context, ownerKey string) ([]string, error) {

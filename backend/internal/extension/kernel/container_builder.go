@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -403,6 +404,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		trustedSvcRoot,
 		trusted_service.NewBinaryVerifierWithManagedNode(newManagedNodeChecker(nodeResolver)),
 	)
+	trustedSupervisor.SetLogger(func(level, msg string, fields map[string]any) {
+		log.Printf("[trusted-service] level=%s service=%v instance=%v source=%v msg=%s", level, fields["service"], fields["instance"], fields["source"], msg)
+	})
 	defProvider := newMemoryDefinitionProvider()
 	trustedFactory := trusted_service.NewTrustedServiceFactory(trustedSupervisor, defProvider, b.extRoot)
 	_ = supervisor.RegisterFactory(trustedFactory)
