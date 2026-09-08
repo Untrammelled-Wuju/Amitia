@@ -28,6 +28,7 @@ func (b *EnvironmentBuilder) addSystemMinimum() {
 	if runtime.GOOS == "windows" {
 		b.vars["SystemRoot"] = os.Getenv("SystemRoot")
 		b.vars["USERPROFILE"] = os.Getenv("USERPROFILE")
+		b.vars["LOCALAPPDATA"] = os.Getenv("LOCALAPPDATA")
 		b.vars["PATHEXT"] = os.Getenv("PATHEXT")
 	}
 }
@@ -115,6 +116,7 @@ func allowedEnvKeys() map[string]bool {
 		"TEMP":                        true,
 		"SystemRoot":                  true,
 		"USERPROFILE":                 true,
+		"LOCALAPPDATA":                true,
 		"PATHEXT":                     true,
 		"AMITIA_RUNTIME_INSTANCE_ID":  true,
 		"AMITIA_EXTENSION_ID":         true,
