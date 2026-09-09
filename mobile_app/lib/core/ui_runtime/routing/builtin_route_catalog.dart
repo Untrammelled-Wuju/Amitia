@@ -41,6 +41,7 @@ import '../../../features/extensions/presentation/pages/extension_page_host_page
 import '../../../features/extensions/presentation/pages/skill_detail_page.dart';
 import '../../../features/extensions/presentation/pages/plugin_detail_page.dart';
 import '../../../features/game_center/presentation/pages/game_center_page.dart';
+import '../../../features/game_center/presentation/pages/plugin_detail_page.dart' as game_center;
 import '../../../features/desktop_pet/presentation/pages/desktop_pet_page.dart';
 import '../../../features/workshop/presentation/pages/workshop_home_page.dart';
 import '../../../features/workshop/presentation/pages/workflow_list_page.dart';
@@ -464,6 +465,17 @@ GoRoute(
   pageBuilder: (context, state) => drawerSlideFadePage(
     state: state,
     child: const GameCenterPage(),
+  ),
+),
+GoRoute(
+  path: AppRoutes.gamePlugin,
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: game_center.PluginDetailPage(
+      pluginId: state.uri.queryParameters['pluginId'] ?? '',
+      extensionId: state.uri.queryParameters['extensionId'] ?? '',
+    ),
   ),
 ),
 GoRoute(

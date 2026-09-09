@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -9,7 +11,6 @@ import '../../../../core/widgets/amitia_misc.dart';
 import '../../domain/game_center_dto.dart';
 import '../controllers/game_center_providers.dart';
 import '../controllers/game_center_controller.dart';
-import 'plugin_detail_page.dart';
 import '../widgets/game_package_confirmation.dart';
 
 class GameCenterPage extends ConsumerStatefulWidget {
@@ -262,18 +263,14 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
           return _PluginCard(
             plugin: plugin,
             onTap: () {
-              ref.read(gameCenterControllerProvider.notifier).selectPlugin(
-                plugin.pluginId,
-                extensionId: plugin.extensionId,
-              );
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => PluginDetailPage(
-                    pluginId: plugin.pluginId,
-                    extensionId: plugin.extensionId,
-                  ),
-                ),
+              context.push(
+                Uri(
+                  path: AppRoutes.gamePlugin,
+                  queryParameters: <String, String>{
+                    'extensionId': plugin.extensionId,
+                    'pluginId': plugin.pluginId,
+                  },
+                ).toString(),
               );
             },
             onEnable: plugin.enabled

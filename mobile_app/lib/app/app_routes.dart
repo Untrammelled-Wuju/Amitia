@@ -79,6 +79,7 @@ abstract final class AppRoutes {
   static const developer = '/developer';
   static const developerKernel = '/developer/kernel';
   static const gameCenter = '/game-center';
+  static const gamePlugin = '/game-center/plugin';
   static const desktopPet = '/desktop-pet';
 
   static String character(String id) => '/characters/$id';

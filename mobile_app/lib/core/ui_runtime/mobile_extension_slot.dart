@@ -20,6 +20,7 @@ class MobileExtensionSlot extends ConsumerWidget {
     super.key,
     required this.slotId,
     this.contributionId,
+    this.extensionId,
     this.dispatchKey,
     this.dispatchOnly,
     this.context = const {},
@@ -31,6 +32,8 @@ class MobileExtensionSlot extends ConsumerWidget {
 
   final String slotId;
   final String? contributionId;
+  /// Restrict this slot to contributions owned by one extension.
+  final String? extensionId;
   final String? dispatchKey;
   final String? dispatchOnly;
   final Map<String, dynamic> context;
@@ -156,10 +159,21 @@ class MobileExtensionSlot extends ConsumerWidget {
         .where((item) => matchesMobileUIContributionVisibility(item, slotContext))
         .toList(growable: false);
 
+    final scopedServer = extensionId != null && extensionId!.isNotEmpty
+        ? serverVisible
+            .where((item) => item.extensionId == extensionId)
+            .toList(growable: false)
+        : serverVisible;
+    final scopedDynamic = extensionId != null && extensionId!.isNotEmpty
+        ? dynamicVisible
+            .where((item) => item.extensionId == extensionId)
+            .toList(growable: false)
+        : dynamicVisible;
+
     var contributions = MobileDynamicRuntime.resolveSlot(
       slot: slot,
-      server: serverVisible,
-      dynamic: dynamicVisible,
+      server: scopedServer,
+      dynamic: scopedDynamic,
       owner: slotContext,
       dispatchKey: dispatchKey ?? _text(this.context['dispatchKey']),
       listOnly: dispatchOnly ?? _text(this.context['dispatchOnly']),
