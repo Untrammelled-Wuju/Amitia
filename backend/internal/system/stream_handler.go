@@ -273,6 +273,10 @@ func (h *Handler) WebChatSendStream(c *gin.Context) {
 	if characterID == "" {
 		h.webChatCharacterQuery(userID).Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
 	}
+	if characterID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "请先创建并启用角色", nil)
+		return
+	}
 
 	if h.unifiedEntry == nil {
 		util.ErrorResponse(c, response.InternalError, "统一入口未初始化", nil)

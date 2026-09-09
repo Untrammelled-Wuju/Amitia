@@ -33,6 +33,10 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 	} else {
 		lifeSnapshot = decision.LifeSnapshot{Energy: 0.7}
 	}
+	trigger := decision.GoalTrigger{}
+	if goalContext.Current != nil {
+		trigger = goalContext.Current.Trigger
+	}
 
 	decisionCtx := decision.CandidateGenerationContext{
 		UserID:             scope.UserID,
@@ -43,7 +47,7 @@ func (p *RuntimePipeline) runDecision(ctx context.Context, scope InteractionScop
 		Relationship:       relSnapshot,
 		Life:               lifeSnapshot,
 		PersonalityWeights: personalityWeights,
-		Trigger:            goalContext.Current.Trigger,
+		Trigger:            trigger,
 		Now:                now,
 	}
 	candidates := decision.GenerateCandidates(decisionCtx, p.candidateRegistry)

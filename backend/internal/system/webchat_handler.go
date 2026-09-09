@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -509,6 +510,10 @@ func (h *Handler) WebChatSend(c *gin.Context) {
 	if characterID == "" {
 		h.webChatCharacterQuery(userID).Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
 	}
+	if characterID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "请先创建并启用角色", nil)
+		return
+	}
 
 	workspaceBinding := h.workspaceBindingForRequest(convID, body, userID)
 	orchResult, err := h.handleUnifiedEntryWithWorkspace(c.Request.Context(), &interaction.UnifiedEntryRequest{
@@ -588,6 +593,10 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	if characterID == "" {
 		h.webChatCharacterQuery(userID).Select("id").Where("is_active = 1").Limit(1).Row().Scan(&characterID)
 	}
+	if characterID == "" {
+		util.ErrorResponse(c, response.InvalidParams, "请先创建并启用角色", nil)
+		return
+	}
 
 	var replyToRole *string
 	var replyToExcerpt *string
@@ -621,7 +630,7 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				applog.Error(fmt.Sprintf("[WebChatSubmitMessage] panic recovered: %v", r))
+				applog.Error(fmt.Sprintf("[WebChatSubmitMessage] panic recovered: %v\n%s", r, debug.Stack()))
 				h.db.Exec("UPDATE messages SET status = 'failed', updated_at = ? WHERE id = ?", time.Now().Format("2006-01-02 15:04:05"), msgID)
 			}
 		}()

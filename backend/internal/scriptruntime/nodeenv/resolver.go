@@ -5,6 +5,7 @@ package nodeenv
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -287,6 +288,9 @@ func (r *nodeEnvResolver) resolveNodeFromRuntimePackage(ctx context.Context, env
 }
 
 func (r *nodeEnvResolver) resolveNodeFromLegacy(ctx context.Context, env *Environment, paths util.RuntimePaths) error {
+	if err := r.installBundledNode(ctx, env.Guest, paths.Root); err != nil {
+		return err
+	}
 	candidates := legacyNodeCandidates(env.Guest, paths.Root, paths.WorkspaceDir)
 	for _, cand := range candidates {
 		if err := ctx.Err(); err != nil {
@@ -313,6 +317,38 @@ func (r *nodeEnvResolver) resolveNodeFromLegacy(ctx context.Context, env *Enviro
 		return nil
 	}
 	return newNodeNotFound(SourceLegacyBundled)
+}
+
+func (r *nodeEnvResolver) installBundledNode(ctx context.Context, guest platform.GuestPlatform, runtimeRoot string) error {
+	if runtimeRoot == "" {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	nodeDir := filepath.Join(runtimeRoot, "node")
+	nodePath := filepath.Join(nodeDir, nodeFileNameForGuest(guest))
+	if info, err := r.inspector.Stat(nodePath); err == nil && !info.IsDir() {
+		return nil
+	}
+
+	for _, archiveName := range []string{"node.exe.zip", "node.zip"} {
+		archivePath := filepath.Join(nodeDir, archiveName)
+		if _, err := r.inspector.Stat(archivePath); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return err
+		}
+		if err := util.UnzipFile(archivePath, nodeDir); err != nil {
+			return fmt.Errorf("nodeenv: extract bundled node archive %s: %w", archivePath, err)
+		}
+		if info, err := r.inspector.Stat(nodePath); err == nil && !info.IsDir() {
+			return nil
+		}
+		return fmt.Errorf("nodeenv: bundled node archive missing binary %s", nodePath)
+	}
+	return nil
 }
 
 func (r *nodeEnvResolver) detectPackageManagers(ctx context.Context, env *Environment, providerCfg config.ScriptRuntimeProviderConfig, distributionRoot string) error {
