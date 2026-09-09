@@ -42,7 +42,7 @@ export default defineConfig({
   root: resolve(__dirname, "../front"),
   publicDir: false,
   server: {
-    port: 5178,
+    port: 15178,
     strictPort: true,
     fs: {
       allow: [

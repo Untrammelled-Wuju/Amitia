@@ -317,6 +317,9 @@ function ensureLocalToken(dataDir: string): void {
 
 function ensureCoreBinaries(dataDir: string): void {
   const resourcesPath = getCoreResourcesPath();
+  const nodeArchive = ["node.exe.zip", "node.zip"]
+    .map((name) => path.join(resourcesPath, "core", "node", name))
+    .find((file) => fs.existsSync(file));
   const binaries = [
     {
       src: path.join(resourcesPath, "qdrant", "qdrant.zip"),
@@ -327,12 +330,19 @@ function ensureCoreBinaries(dataDir: string): void {
       dest: path.join(dataDir, "surrealdb", "surreal.zip"),
     },
   ];
+  if (nodeArchive) {
+    binaries.push({
+      src: nodeArchive,
+      dest: path.join(dataDir, "node", path.basename(nodeArchive)),
+    });
+  }
   for (const { src, dest } of binaries) {
     if (fs.existsSync(dest)) {
       console.log("[CoreManager] 二进制已存在, 跳过复制:", dest);
       continue;
     }
     if (fs.existsSync(src)) {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.copyFileSync(src, dest);
       console.log("[CoreManager] 二进制已复制:", dest);
     } else {
@@ -381,6 +391,7 @@ export function startCore(profile: BundledCoreProfile): void {
     ...process.env,
     CONFIG_PATH: configPath,
     AMITIA_RUN_MODE: "desktop",
+    AMITIA_RUNTIME_ROOT: dataDir,
     AMITIA_DATA_DIR: dataDir,
     AMITIA_EXTENSION_DEV_MODE: isDevMode() ? "true" : "false",
   };
