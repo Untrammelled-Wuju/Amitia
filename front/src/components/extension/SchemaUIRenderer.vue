@@ -314,6 +314,15 @@ function nextBridgeNonce(): string {
   return `${Date.now().toString(36)}-${bridgeNonceSequence.toString(36)}-${random[0].toString(36)}${random[1].toString(36)}`;
 }
 
+class BridgeError extends Error {
+  code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
 async function postBridge(method: string, payload: Record<string, unknown>): Promise<unknown> {
   if (!sessionId.value || !sessionReady.value) {
     const token = ++restartToken;
@@ -321,7 +330,7 @@ async function postBridge(method: string, payload: Record<string, unknown>): Pro
     if (token !== restartToken) return undefined;
   }
   if (!sessionId.value || !sessionReady.value) return undefined;
-  const response = await apiClient.post<{ ok?: boolean; result?: unknown; error?: { message?: string } | string }>(
+  const response = await apiClient.post<{ ok?: boolean; result?: unknown; error?: { code?: string; message?: string } | string }>(
     `/api/extensions/ui/sessions/${sessionId.value}/bridge`,
     {
       method,
@@ -337,7 +346,8 @@ async function postBridge(method: string, payload: Record<string, unknown>): Pro
   const envelope = response.data ?? {};
   if (envelope.ok === false) {
     const detail = typeof envelope.error === "string" ? envelope.error : envelope.error?.message;
-    throw new Error(detail || "Bridge 调用失败");
+    const code = typeof envelope.error === "string" ? undefined : envelope.error?.code;
+    throw new BridgeError(detail || "Bridge 调用失败", code);
   }
   return envelope.result;
 }
@@ -393,14 +403,34 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
       }
       return;
     }
-    const bridgeResult = await postBridge("ui.action.invoke", {
-      action_id: action.action_id,
-      input: {
-        ...(action.input ?? {}),
-        node_id: node.id,
-        form_state: { ...formState },
-      },
-    });
+    const actionInput = {
+      ...(action.input ?? {}),
+      node_id: node.id,
+      form_state: { ...formState },
+    } as Record<string, unknown>;
+    delete actionInput.__amitiaApprovalConfirmed;
+    let bridgeResult: unknown;
+    try {
+      bridgeResult = await postBridge("ui.action.invoke", {
+        action_id: action.action_id,
+        input: actionInput,
+      });
+    } catch (firstError) {
+      if (!(firstError instanceof BridgeError) || firstError.code !== "permission_denied") throw firstError;
+      try {
+        await ElMessageBox.confirm("该操作将调用扩展工具，并仅在本次操作中执行。是否允许？", "确认扩展操作", {
+          type: "warning",
+          confirmButtonText: "允许一次",
+          cancelButtonText: "取消",
+        });
+      } catch {
+        return;
+      }
+      bridgeResult = await postBridge("ui.action.invoke", {
+        action_id: action.action_id,
+        input: { ...actionInput, __amitiaApprovalConfirmed: true },
+      });
+    }
     const data = bridgeResult && typeof bridgeResult === "object" ? bridgeResult as Record<string, unknown> : {};
     if (data && typeof data === "object") {
       if (data.clientExecute === true && typeof data.text === "string") {

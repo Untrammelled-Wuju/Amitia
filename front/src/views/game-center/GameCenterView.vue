@@ -102,7 +102,7 @@
           :key="plugin.extensionId"
           class="game-card"
           :class="{ 'is-active': activePlugin?.extensionId === plugin.extensionId }"
-          @click="showPluginDetail(plugin)"
+          @click="openGamePlugin(plugin)"
         >
           <div class="game-card-top">
             <div class="game-icon">{{ gameInitial(plugin.name) }}</div>
@@ -143,7 +143,7 @@
               <el-button
                 size="small"
                 type="primary"
-                :disabled="pluginRuntime(plugin)?.state === 'running'"
+                :disabled="!isRuntimeStartable(pluginRuntime(plugin)?.state)"
                 :loading="busy === plugin.extensionId"
                 @click.stop="startPlugin(plugin)"
               >启动</el-button>
@@ -732,6 +732,10 @@ function pluginRuntime(plugin: Plugin) {
     || null;
 }
 
+function isRuntimeStartable(state?: string) {
+  return state === "created" || state === "stopped";
+}
+
 function pluginSupportsCapability(plugin: Plugin | null | undefined, capability: string) {
   return Array.isArray(plugin?.capabilities) && plugin.capabilities.includes(capability);
 }
@@ -964,6 +968,13 @@ async function waitForPackageOperation(operationId?: string) {
   throw new Error("扩展包操作等待超时，请刷新游戏中心检查最终状态");
 }
 
+async function openGamePlugin(plugin: Plugin) {
+  await router.push({
+    name: "gamePlugin",
+    query: { extensionId: plugin.extensionId, pluginId: plugin.pluginId },
+  });
+}
+
 async function pluginMenuAction(plugin: Plugin, command: string) {
   if (command === "detail") {
     await showPluginDetail(plugin);
@@ -1096,9 +1107,17 @@ async function startPlugin(plugin: Plugin) {
       ElMessage.warning("插件暂无可用运行连接，无法启动");
       return;
     }
-    if (runtime.state !== "running") {
-      await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtime.runtimeId)}/start`, undefined, { timeout: 125000 });
+    if (!isRuntimeStartable(runtime.state)) {
+      await refresh();
+      const currentRuntime = pluginRuntime(plugin);
+      if (currentRuntime?.state === "running") {
+        ElMessage.success("插件已在运行中");
+        return;
+      }
+      ElMessage.warning(`当前运行时状态为“${stateLabel(currentRuntime?.state)}”，暂不能启动`);
+      return;
     }
+    await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtime.runtimeId)}/start`, undefined, { timeout: 125000 });
     ElMessage.success("启动请求已提交");
     await refresh();
   } catch (err: any) {
@@ -1200,6 +1219,19 @@ async function uninstall(plugin: Plugin) {
 async function runtimeAction(runtimeId: string, action: "start" | "stop" | "restart") {
   busy.value = runtimeId;
   try {
+    if (action === "start") {
+      const runtime = runtimes.value.find((item) => item.runtimeId === runtimeId);
+      if (!isRuntimeStartable(runtime?.state)) {
+        await refresh();
+        const currentRuntime = runtimes.value.find((item) => item.runtimeId === runtimeId);
+        if (currentRuntime?.state === "running") {
+          ElMessage.success("运行时已在运行中");
+        } else {
+          ElMessage.warning(`当前运行时状态为“${stateLabel(currentRuntime?.state)}”，暂不能启动`);
+        }
+        return;
+      }
+    }
     await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtimeId)}/${action}`, undefined, { timeout: 125000 });
     ElMessage.success(action === "start" ? "启动请求已提交" : action === "stop" ? "停止请求已提交" : "重启请求已提交");
     await refresh();

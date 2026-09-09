@@ -314,7 +314,12 @@ export function useWebChatSend(
       ]);
       const res = await fetch(url, init);
       isSubmitting.value = false;
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errorBody = await res.json().catch(() => null);
+        throw new Error(
+          errorBody?.msg || errorBody?.message || `HTTP ${res.status}`,
+        );
+      }
       const data = await res.json();
       const result = data?.data || data;
       const uIdx = messages.value.findIndex(

@@ -77,7 +77,7 @@ watch(
 
 onErrorCaptured((err, _instance, info) => {
   const errorMessage = err instanceof Error ? err.message : String(err);
-  if (errorMessage.includes("Cannot read properties of null") || errorMessage.includes("reading 'type'") || errorMessage.includes("reading 'exposed'")) {
+  if (errorMessage.includes("Cannot read properties of null") || errorMessage.includes("Cannot set properties of null") || errorMessage.includes("reading 'type'") || errorMessage.includes("reading 'exposed'") || errorMessage.includes("setting '__vrv_devtools'")) {
     console.warn("[App] suppressed unmount error:", errorMessage);
     return false;
   }

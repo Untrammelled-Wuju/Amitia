@@ -107,14 +107,10 @@ SPDX-License-Identifier: AGPL-3.0-only
                 </el-select>
                 <span v-if="!characters.length && !characterLoading" class="hint">未找到可用角色,请先在角色管理中启用</span>
               </div>
-              <div class="form-item-half">
-                <label class="form-label">输出尺寸 <span class="required">*</span></label>
-                <el-select v-model="sizePreset" @change="onSizeChange">
-                  <el-option label="512 × 512" value="512x512" />
-                  <el-option label="768 × 768" value="768x768" />
-                  <el-option label="1024 × 1024" value="1024x1024" />
-                </el-select>
-              </div>
+                <div class="form-item-half">
+                  <label class="form-label">输出尺寸</label>
+                  <el-input value="4096 × 4096（模型最大分辨率）" disabled />
+                </div>
             </div>
           </div>
 
@@ -438,15 +434,14 @@ const noModelsAvailable = computed(() => !modelLoading.value && modelConfigs.val
 const referenceFile = ref<File | null>(null);
 const referencePreview = ref("");
 
-const sizePreset = ref("512x512");
 const form = reactive({
   modelConfigId: "" as number | string,
   characterId: "" as number | string,
   name: "",
   prompt: "",
   negativePrompt: "",
-  outputWidth: 512,
-  outputHeight: 512,
+  outputWidth: 4096,
+  outputHeight: 4096,
 });
 
 const step1Valid = computed(
@@ -496,14 +491,6 @@ function isPresetActive(preset: ActionPreset): boolean {
   const set = new Set(selectedKeys.value);
   if (set.size !== preset.actionKeys.length) return false;
   return preset.actionKeys.every((k) => set.has(k));
-}
-
-function onSizeChange(value: string) {
-  const parts = value.split("x");
-  if (parts.length === 2) {
-    form.outputWidth = Number(parts[0]) || 512;
-    form.outputHeight = Number(parts[1]) || 512;
-  }
 }
 
 function onReferenceChange(file: UploadFile) {
@@ -701,9 +688,6 @@ function resetWizard() {
   form.name = "";
   form.prompt = "";
   form.negativePrompt = "";
-  sizePreset.value = "512x512";
-  form.outputWidth = 512;
-  form.outputHeight = 512;
   clearAll();
   actionError.value = "";
 }

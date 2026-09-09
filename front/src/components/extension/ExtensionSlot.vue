@@ -18,6 +18,8 @@ const props = withDefaults(
     startIndex?: number;
     surfaceRole?: ExtensionSurfaceRole;
     contributionId?: string;
+    /** Restrict this slot to contributions owned by one extension. */
+    extensionId?: string;
     /** Keyed-slot dispatch key. */
     dispatchKey?: string;
     /** List-slot cell filter (`renderSlot(..., { only })`). */
@@ -37,6 +39,7 @@ const props = withDefaults(
     startIndex: 0,
     surfaceRole: "main",
     contributionId: undefined,
+    extensionId: undefined,
     dispatchKey: undefined,
     dispatchOnly: undefined,
     chainOverlay: false,
@@ -102,10 +105,14 @@ onBeforeUnmount(() => {
 });
 
 const visibleContributions = computed<UIContributionSummary[]>(() => {
-  if (props.contributionId) {
-    return contributions.value.filter((c) => c.contributionId === props.contributionId);
+  let items = contributions.value;
+  if (props.extensionId) {
+    items = items.filter((c) => c.extensionId === props.extensionId);
   }
-  return contributions.value;
+  if (props.contributionId) {
+    items = items.filter((c) => c.contributionId === props.contributionId);
+  }
+  return items;
 });
 
 const dispatchedClientContributions = computed(() => {
@@ -119,9 +126,14 @@ const dispatchedClientContributions = computed(() => {
     props.dispatchKey,
     props.dispatchOnly,
   );
-  return props.contributionId
-    ? dispatched.filter((item) => item.contribution.contributionId === props.contributionId)
-    : dispatched;
+  let items = dispatched;
+  if (props.extensionId) {
+    items = items.filter((item) => item.contribution.pluginId === props.extensionId);
+  }
+  if (props.contributionId) {
+    items = items.filter((item) => item.contribution.contributionId === props.contributionId);
+  }
+  return items;
 });
 
 type RenderItem = UnifiedSlotItem & { matched?: unknown };
