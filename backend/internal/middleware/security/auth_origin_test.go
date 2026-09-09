@@ -3,7 +3,7 @@ package security
 import "testing"
 
 func TestIsDesktopDevelopmentOrigin(t *testing.T) {
-	for _, origin := range []string{"http://localhost:5178", "http://127.0.0.1:5178", "http://[::1]:5178"} {
+	for _, origin := range []string{"http://localhost:5178", "http://127.0.0.1:5178", "http://[::1]:5178", "http://localhost:15178", "http://127.0.0.1:15178", "http://[::1]:15178"} {
 		if !isDesktopDevelopmentOrigin(origin) {
 			t.Fatalf("origin %s should be trusted", origin)
 		}
@@ -16,7 +16,7 @@ func TestIsDesktopDevelopmentOrigin(t *testing.T) {
 }
 
 func TestIsTrustedDesktopOrigin(t *testing.T) {
-	for _, origin := range []string{"app://amitia", "APP://AMITIA", "http://localhost:5178", "http://127.0.0.1:5178"} {
+	for _, origin := range []string{"app://amitia", "APP://AMITIA", "http://localhost:5178", "http://127.0.0.1:5178", "http://localhost:15178", "http://127.0.0.1:15178"} {
 		if !isTrustedDesktopOrigin(origin) {
 			t.Fatalf("origin %s should be trusted", origin)
 		}
