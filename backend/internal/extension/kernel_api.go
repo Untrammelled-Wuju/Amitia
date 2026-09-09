@@ -3,6 +3,7 @@ package extension
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -71,6 +72,7 @@ type publicUninstallRequest struct {
 	ScopeType         string `json:"scopeType"`
 	ScopeID           string `json:"scopeId"`
 	ConfirmationToken string `json:"confirmationToken" binding:"required"`
+	IdempotencyKey    string `json:"idempotencyKey"`
 }
 
 type publicResumeUninstallRequest struct {
@@ -318,19 +320,6 @@ func (api *KernelAPI) previewUninstall(c *gin.Context) {
 		c.JSON(status, gin.H{"error": msg, "code": code})
 		return
 	}
-	requiredConfirmations := []string{}
-	switch preview.ArtifactPolicy {
-	case kernelruntime.ArtifactPolicyDeleteArtifact:
-		requiredConfirmations = []string{"confirm.uninstall.delete"}
-	case kernelruntime.ArtifactPolicyRetainArtifact:
-		requiredConfirmations = []string{"confirm.uninstall.retain"}
-	case kernelruntime.ArtifactPolicyRetainForRollback:
-		requiredConfirmations = []string{"confirm.uninstall.retain_for_rollback"}
-	case kernelruntime.ArtifactPolicyRetainForExport:
-		requiredConfirmations = []string{"confirm.uninstall.retain_for_export"}
-	default:
-		requiredConfirmations = []string{"confirm.uninstall.delete"}
-	}
 	resp := publicUninstallPreviewResponse{
 		ExtensionID:             preview.ExtensionID,
 		CurrentVersion:          preview.CurrentVersion,
@@ -341,7 +330,7 @@ func (api *KernelAPI) previewUninstall(c *gin.Context) {
 		PreviewHash:             preview.PreviewHash,
 		SecurityPolicyHash:      preview.SecurityPolicyHash,
 		SnapshotRequirementHash: preview.SnapshotRequirementHash,
-		RequiredConfirmations:   requiredConfirmations,
+		RequiredConfirmations:   kernelruntime.RequiredUninstallConfirmations(preview),
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -391,7 +380,14 @@ func (api *KernelAPI) uninstall(c *gin.Context) {
 	if scopeType == "" {
 		scopeType = "global"
 	}
-	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: req.ExtensionID, UserID: kernelAPIUser(c), ScopeType: scopeType, ScopeID: req.ScopeID, ConfirmationToken: req.ConfirmationToken})
+	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
+	if idempotencyKey == "" {
+		idempotencyKey = strings.TrimSpace(c.GetHeader("X-Idempotency-Key"))
+	}
+	if idempotencyKey == "" {
+		idempotencyKey = strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+	}
+	op, err := api.runtime.Kernel.ExecutePackageUninstall(c.Request.Context(), kernelruntime.ExecutePackageUninstallRequest{ExtensionID: req.ExtensionID, UserID: kernelAPIUser(c), ScopeType: scopeType, ScopeID: req.ScopeID, ConfirmationToken: req.ConfirmationToken, IdempotencyKey: idempotencyKey})
 	if err != nil {
 		status, code, msg := kernelruntime.PackageErrorResponse(err)
 		c.JSON(status, gin.H{"error": msg, "code": code})
@@ -456,11 +452,11 @@ func (api *KernelAPI) rollback(c *gin.Context) {
 		return
 	}
 	var body struct {
-		ID                 string `json:"id"`
-		Version            string `json:"version"`
-		ScopeType          string `json:"scopeType"`
-		ScopeID            string `json:"scopeId"`
-		ConfirmationToken  string `json:"confirmationToken"`
+		ID                string `json:"id"`
+		Version           string `json:"version"`
+		ScopeType         string `json:"scopeType"`
+		ScopeID           string `json:"scopeId"`
+		ConfirmationToken string `json:"confirmationToken"`
 	}
 	_ = c.ShouldBindJSON(&body)
 	extID := c.Query("id")

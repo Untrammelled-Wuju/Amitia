@@ -208,29 +208,52 @@ func (s *SQLitePermissionSnapshotStore) RevokeInvalidSnapshots(ctx context.Conte
 	if err != nil {
 		return 0, fmt.Errorf("sqlite: list active snapshots for validation: %w", err)
 	}
-	defer rows.Close()
-
-	revoked := 0
+	type snapshot struct {
+		id           string
+		extensionID  string
+		moduleID     string
+		generation   int64
+		grantedPerms string
+	}
+	snapshots := make([]snapshot, 0)
 	for rows.Next() {
 		var snapshotID, extensionID, moduleID, grantedPermsJSON string
 		var generation int64
 		if err := rows.Scan(&snapshotID, &extensionID, &moduleID, &generation, &grantedPermsJSON); err != nil {
-			return revoked, fmt.Errorf("sqlite: scan snapshot row: %w", err)
+			rows.Close()
+			return 0, fmt.Errorf("sqlite: scan snapshot row: %w", err)
 		}
+		snapshots = append(snapshots, snapshot{
+			id:           snapshotID,
+			extensionID:  extensionID,
+			moduleID:     moduleID,
+			generation:   generation,
+			grantedPerms: grantedPermsJSON,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, fmt.Errorf("sqlite: iterate active snapshots for validation: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, fmt.Errorf("sqlite: close active snapshots for validation: %w", err)
+	}
 
+	revoked := 0
+	for _, item := range snapshots {
 		invalidPerms := false
 		if validator != nil {
-			perms := unmarshalStringList(grantedPermsJSON)
+			perms := unmarshalStringList(item.grantedPerms)
 			invalidPerms = len(validator.ValidateAll(perms)) > 0
 		}
 
 		invalidSubject := false
 		if subjectValidator != nil {
-			invalidSubject = !subjectValidator(extensionID, moduleID, generation)
+			invalidSubject = !subjectValidator(item.extensionID, item.moduleID, item.generation)
 		}
 
 		if invalidPerms || invalidSubject {
-			if err := s.RevokeSnapshot(ctx, snapshotID); err != nil {
+			if err := s.RevokeSnapshot(ctx, item.id); err != nil {
 				continue
 			}
 			revoked++

@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 )
 
@@ -251,6 +252,18 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	r.persistLifecycleStep(ctx, operationID, "commit_enablement", LifecycleStepSucceeded, nil)
 	r.logEnableStep(operationID, extensionID, "promote_generation", "succeeded", nil)
 	r.persistLifecycleStep(ctx, operationID, "promote_generation", LifecycleStepSucceeded, nil)
+
+	if r.container.ScopeManager != nil {
+		if err := r.seedExtensionScopeBindings(ctx, extensionID, modules); err != nil {
+			tx.rollback(ctx)
+			r.logEnableStep(operationID, extensionID, "seed_scope_bindings", "failed", err)
+			r.persistLifecycleStep(ctx, operationID, "seed_scope_bindings", LifecycleStepFailed, err)
+			r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "seed_scope_bindings", err)
+			return fmt.Errorf("kernel: seed scope bindings: %w", err)
+		}
+		r.logEnableStep(operationID, extensionID, "seed_scope_bindings", "succeeded", nil)
+		r.persistLifecycleStep(ctx, operationID, "seed_scope_bindings", LifecycleStepSucceeded, nil)
+	}
 
 	if r.container.ContributionInstaller != nil {
 		if err := r.container.ContributionInstaller.ActivateContributions(ctx, extID); err != nil {
@@ -873,6 +886,11 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf("delete schedules: %w", err))
 		}
 	}
+	if r.container.ScopeManager != nil {
+		if err := r.removeExtensionScopeBindings(ctx, extensionID); err != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("remove scope bindings: %w", err))
+		}
+	}
 	if r.container.TaskRuntimeService != nil {
 		if err := r.container.TaskRuntimeService.DeleteByExtension(ctx, extensionID); err != nil {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf("delete tasks: %w", err))
@@ -990,6 +1008,61 @@ func (r *Runtime) stopInstances(ctx context.Context, instanceIDs []string) error
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("stop instances failed with %d errors: %v", len(errs), errs)
+	}
+	return nil
+}
+
+func (r *Runtime) seedExtensionScopeBindings(ctx context.Context, extensionID string, modules []domain.ModuleDefinition) error {
+	if err := ensureScopeBinding(ctx, r.container.ScopeManager, scope.SubjectExtension, extensionID, scope.NewExtensionScope(extensionID)); err != nil {
+		return err
+	}
+	for _, mod := range modules {
+		if err := ensureScopeBinding(ctx, r.container.ScopeManager, scope.SubjectModule, string(mod.ID), scope.NewModuleScope(extensionID, string(mod.ID))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Runtime) removeExtensionScopeBindings(ctx context.Context, extensionID string) error {
+	if err := deleteScopeBindings(ctx, r.container.ScopeManager, scope.SubjectExtension, extensionID); err != nil {
+		return err
+	}
+	modules, err := r.container.ModuleRepository.ListModules(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		return err
+	}
+	for _, mod := range modules {
+		if err := deleteScopeBindings(ctx, r.container.ScopeManager, scope.SubjectModule, string(mod.ID)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureScopeBinding(ctx context.Context, manager scope.ScopeManager, subjectType scope.ScopeSubjectType, subjectID string, scopeRef scope.ScopeRef) error {
+	existing, err := manager.ListBindings(ctx, scope.ScopeBindingFilter{SubjectType: subjectType, SubjectID: subjectID})
+	if err != nil {
+		return err
+	}
+	for _, b := range existing {
+		if b.IsActive() && b.Scope.Type == scopeRef.Type && b.Scope.ExtensionID == scopeRef.ExtensionID && b.Scope.ModuleID == scopeRef.ModuleID {
+			return nil
+		}
+	}
+	_, err = manager.Bind(ctx, scope.ScopeBindRequest{SubjectType: subjectType, SubjectID: subjectID, Scope: scopeRef, Source: scope.SourceSystem})
+	return err
+}
+
+func deleteScopeBindings(ctx context.Context, manager scope.ScopeManager, subjectType scope.ScopeSubjectType, subjectID string) error {
+	existing, err := manager.ListBindings(ctx, scope.ScopeBindingFilter{SubjectType: subjectType, SubjectID: subjectID})
+	if err != nil {
+		return err
+	}
+	for _, b := range existing {
+		if err := manager.Unbind(ctx, b.BindingID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

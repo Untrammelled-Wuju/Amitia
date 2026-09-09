@@ -90,7 +90,7 @@ func RouteScopeForMethod(method Method) ScopePolicy {
 	case MethodScheduleCreate, MethodScheduleCancel, MethodScheduleList:
 		return ScopePolicy{Namespaced: true}
 	case MethodToolExecute:
-		return ScopePolicy{RequireRoles: []string{"invocation", "tool"}}
+		return ScopePolicy{RequireRoles: []string{"invocation"}}
 	case MethodUINotify, MethodUIDialog, MethodUINavigate:
 		return ScopePolicy{RequireRoles: []string{"session"}}
 	case MethodClipboardWrite, MethodClipboardRead:

@@ -8,6 +8,17 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 )
 
+type permissionEvaluationContextKey struct{}
+
+func withPermissionEvaluationContext(ctx context.Context, request CallRequest) context.Context {
+	return context.WithValue(ctx, permissionEvaluationContextKey{}, request)
+}
+
+func permissionEvaluationRequest(ctx context.Context) (CallRequest, bool) {
+	request, ok := ctx.Value(permissionEvaluationContextKey{}).(CallRequest)
+	return request, ok
+}
+
 type BrokerPermissionChecker struct {
 	Broker permission.PermissionBroker
 }
@@ -37,10 +48,17 @@ func (c *BrokerPermissionChecker) Check(ctx context.Context, identity runtime_su
 		})
 	}
 
-	result := c.Broker.Evaluate(ctx, permission.PermissionEvaluationRequest{
+	evaluation := permission.PermissionEvaluationRequest{
 		Subject:      subject,
 		Requirements: permReqs,
-	})
+	}
+	if request, ok := permissionEvaluationRequest(ctx); ok {
+		evaluation.InvocationID = request.InvocationID
+		evaluation.ScopeSnapshotID = request.ScopeSnapshotID
+		evaluation.ApprovalRecordID = request.ApprovalRecordID
+		evaluation.ExecutionContext = request.ExecutionContext
+	}
+	result := c.Broker.Evaluate(ctx, evaluation)
 
 	if result.Decision != permission.DecisionAllow {
 		return fmt.Errorf("%w: decision=%s missing=%d reasons=%v", ErrPermissionDenied, result.Decision, len(result.Missing), result.Reasons)

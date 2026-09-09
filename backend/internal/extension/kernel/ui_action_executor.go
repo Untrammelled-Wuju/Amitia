@@ -4,15 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type UIActionExecContext struct {
@@ -25,6 +29,8 @@ type UIActionExecContext struct {
 	PermissionSnapshotID string
 	CharacterID          string
 	ConversationID       string
+	UserID               string
+	DeviceID             string
 	TraceID              string
 }
 
@@ -34,15 +40,17 @@ type UIActionExecutor struct {
 	runStore            workflow.RunStore
 	hostCommandRegistry *HostCommandRegistry
 	operationRepo       sqlite.OperationRepository
+	permissionBroker    permission.PermissionBroker
 }
 
-func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository) *UIActionExecutor {
+func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository, permissionBroker permission.PermissionBroker) *UIActionExecutor {
 	return &UIActionExecutor{
 		hostAPIGateway:      gateway,
 		workflowExecutor:    wfExecutor,
 		runStore:            runStore,
 		hostCommandRegistry: hostCmdRegistry,
 		operationRepo:       opRepo,
+		permissionBroker:    permissionBroker,
 	}
 }
 
@@ -79,24 +87,102 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 	if toolID == "" {
 		toolID = action.ActionID
 	}
+	toolInputPayload, approvalConfirmed, err := splitUIActionInput(input)
+	if err != nil {
+		return nil, err
+	}
+	callID := fmt.Sprintf("ui-action-tool-%s-%s", execCtx.SessionID, uuid.NewString())
+	executionContext := uiActionExecutionContext(ctx, execCtx)
+	approvalRecordID := ""
+	if approvalConfirmed {
+		if e.permissionBroker == nil || executionContext.IsEmpty() || !executionContext.IsDeviceExecution() {
+			return nil, fmt.Errorf("%w: unable to bind the approval to the active desktop session", ui_contribution.ErrActionApprovalRequired)
+		}
+		record, recordErr := e.permissionBroker.RecordApproval(ctx, permission.PermissionApprovalRecordRequest{
+			InvocationID:        callID,
+			PermissionIDs:       []string{"tool.invoke"},
+			ScopeSnapshotID:     execCtx.ScopeSnapshotID,
+			Decision:            permission.ApprovalDecisionApproved,
+			ApprovedBy:          executionContext.UserID.String(),
+			ExecutionContext:    executionContext,
+			ExecutionBindingKey: executionContext.BindingKey(),
+			RiskLevel:           "high",
+		})
+		if recordErr != nil {
+			return nil, fmt.Errorf("%w: %v", ui_contribution.ErrActionApprovalRequired, recordErr)
+		}
+		approvalRecordID = record.RecordID
+	}
 	toolInput, _ := json.Marshal(map[string]any{
 		"toolId": toolID,
-		"input":  json.RawMessage(input),
+		"input":  toolInputPayload,
 	})
 	callReq := host_api.CallRequest{
-		CallID:               fmt.Sprintf("ui-action-tool-%s-%s", execCtx.SessionID, uuid.NewString()),
+		CallID:               callID,
 		RuntimeIdentity:      identity,
 		Method:               host_api.MethodToolExecute,
 		Version:              1,
 		Input:                toolInput,
 		ScopeSnapshotID:      execCtx.ScopeSnapshotID,
 		PermissionSnapshotID: execCtx.PermissionSnapshotID,
+		InvocationID:         callID,
+		ApprovalRecordID:     approvalRecordID,
+		ExecutionContext:     executionContext,
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {
+		if result.Error.Code == host_api.ErrorCodePermissionDenied && strings.Contains(result.Error.Message, "decision=require_approval") {
+			return nil, fmt.Errorf("%w: this operation needs confirmation", ui_contribution.ErrActionApprovalRequired)
+		}
 		return nil, fmt.Errorf("action %s failed: %s", action.ActionID, result.Error.Message)
 	}
 	return result.Output, nil
+}
+
+func splitUIActionInput(input json.RawMessage) (json.RawMessage, bool, error) {
+	if len(input) == 0 {
+		return json.RawMessage(`{}`), false, nil
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(input, &payload); err != nil {
+		return nil, false, fmt.Errorf("tool action input invalid: %w", err)
+	}
+	approvedRaw, approved := payload["__amitiaApprovalConfirmed"]
+	delete(payload, "__amitiaApprovalConfirmed")
+	if !approved {
+		output, _ := json.Marshal(payload)
+		return output, false, nil
+	}
+	var confirmed bool
+	if err := json.Unmarshal(approvedRaw, &confirmed); err != nil || !confirmed {
+		return nil, false, fmt.Errorf("tool action approval marker invalid")
+	}
+	output, _ := json.Marshal(payload)
+	return output, true, nil
+}
+
+func uiActionExecutionContext(ctx context.Context, execCtx UIActionExecContext) permission.PermissionExecutionContext {
+	actor, ok := auth.FromContext(ctx)
+	userID := runtimeidentity.ParseUserID(execCtx.UserID)
+	deviceID := runtimeidentity.ParseDeviceID(execCtx.DeviceID)
+	if ok && actor != nil && actor.UserID != "" {
+		userID = actor.UserID
+	}
+	if ok && actor != nil && actor.DeviceID != "" {
+		deviceID = actor.DeviceID
+	}
+	if userID == "" || deviceID == "" {
+		return permission.PermissionExecutionContext{}
+	}
+	return permission.PermissionExecutionContext{
+		Placement:   permission.ExecutionPlacementDevice,
+		UserID:      userID,
+		DeviceID:    deviceID,
+		RuntimeID:   runtimeidentity.ParseRuntimeID(execCtx.SessionID),
+		ExtensionID: execCtx.ExtensionID,
+		ModuleID:    execCtx.ModuleID,
+		Source:      "ui_action",
+	}
 }
 
 func (e *UIActionExecutor) executeWorkflow(ctx context.Context, execCtx UIActionExecContext, action *ui_contribution.UIActionDefinition, input json.RawMessage, identity runtime_supervisor.RuntimeIdentity) (json.RawMessage, error) {

@@ -1237,6 +1237,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				invocation := capability.ToolInvocationContext{
 					InvocationID: req.InvocationID,
 					ParentID:     req.ParentID,
+					UserID:       req.ExecutionContext.UserID.String(),
 					ExtensionID:  string(req.RuntimeIdentity.ExtensionID),
 					ModuleID:     string(req.RuntimeIdentity.ModuleID),
 					Source:       capability.InvocationSourcePlugin,
@@ -1265,12 +1266,20 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					"error":        result.Error,
 				})
 				if result.Status != capability.ToolResultStatusSuccess {
+					message := fmt.Sprintf("tool execution failed: %s", result.Status)
+					code := host_api.ErrorCodeInternal
+					if result.Error != nil {
+						code = result.Error.Code
+						if strings.TrimSpace(result.Error.Message) != "" {
+							message = fmt.Sprintf("%s (%s: %s)", message, result.Error.Code, result.Error.Message)
+						}
+					}
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
 						Output: output,
 						Error: &host_api.Error{
-							Code:    host_api.ErrorCodeInternal,
-							Message: fmt.Sprintf("tool execution failed: %s", result.Status),
+							Code:    code,
+							Message: message,
 						},
 					}, nil
 				}

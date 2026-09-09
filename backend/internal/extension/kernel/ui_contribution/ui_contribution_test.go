@@ -593,6 +593,25 @@ func TestUIHostUnregister(t *testing.T) {
 	}
 }
 
+func TestUIHostUnregisterByExtensionRevokesBridgeSessions(t *testing.T) {
+	h := NewUIHost()
+	def := makeValidDefinition()
+	_ = h.RegisterContribution(def)
+	sess, err := h.Bridge().CreateSession(def, "amitia://ext-1", nil, nil, "web", "char-1", "conv-1", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed := h.UnregisterByExtension(def.ExtensionID); len(removed) != 1 {
+		t.Fatalf("expected one contribution to be removed, got %d", len(removed))
+	}
+	if h.Bridge().SessionCount() != 0 {
+		t.Fatal("expected bridge session to be revoked")
+	}
+	if _, err := h.Bridge().ValidateSession(sess.SessionID, string(def.ContributionID), "amitia://ext-1", 1, sess.Token, sess.Generation, "nonce-uninstalled"); err == nil {
+		t.Fatal("expected uninstalled extension session to be invalid")
+	}
+}
+
 func TestRevokeSessionsByCharacterID(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()

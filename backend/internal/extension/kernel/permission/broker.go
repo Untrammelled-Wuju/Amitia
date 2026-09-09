@@ -227,6 +227,14 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 			}
 		}
 
+		if def.RequiresPerUse && b.validateApprovalRecord(req.PermissionID, request) {
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "per_use_approval_matched",
+				Permission: req.PermissionID,
+			})
+			continue
+		}
+
 		grants := b.cache.GetOrLoad(ctx, request.Subject, req.PermissionID, func() []PermissionGrant {
 			filter := PermissionGrantFilter{
 				Subject:      &request.Subject,

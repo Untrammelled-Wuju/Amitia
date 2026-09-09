@@ -299,6 +299,7 @@ func (h *UIHost) UnregisterByExtension(extensionID ExtensionID) []ContributionID
 	remove(h.contributions)
 	remove(h.pendingContributions)
 	sort.Slice(removed, func(i, j int) bool { return removed[i] < removed[j] })
+	h.bridge.RevokeSessionsByExtension(extensionID)
 	return removed
 }
 
@@ -469,6 +470,8 @@ type BridgeSession struct {
 	Surface              string
 	CharacterID          string
 	ConversationID       string
+	UserID               string
+	DeviceID             string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
 	Token                string
@@ -579,6 +582,18 @@ func (b *UIBridge) CreateSession(def *UIContributionDefinition, origin string, g
 	return sess, nil
 }
 
+func (b *UIBridge) SetSessionExecutionIdentity(sessionID, userID, deviceID string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	sess, ok := b.sessions[sessionID]
+	if !ok {
+		return fmt.Errorf("ui_contribution: bridge session %s not found", sessionID)
+	}
+	sess.UserID = userID
+	sess.DeviceID = deviceID
+	return nil
+}
+
 func (b *UIBridge) ValidateSession(sessionID, contributionID, origin string, contractVersion int, token string, generation int64, nonce string) (*BridgeSession, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -625,6 +640,31 @@ func (b *UIBridge) RevokeSession(sessionID string) {
 	if ok && releaser != nil && (sess.ScopeSnapshotID != "" || sess.PermissionSnapshotID != "") {
 		_ = releaser(sess.ScopeSnapshotID, sess.PermissionSnapshotID)
 	}
+}
+
+func (b *UIBridge) RevokeSessionsByExtension(extensionID ExtensionID) int {
+	b.mu.Lock()
+	releaser := b.snapshotReleaser
+	type snapPair struct{ scope, perm string }
+	pairs := make([]snapPair, 0)
+	count := 0
+	for sessionID, sess := range b.sessions {
+		if sess.ExtensionID != string(extensionID) {
+			continue
+		}
+		delete(b.sessions, sessionID)
+		pairs = append(pairs, snapPair{scope: sess.ScopeSnapshotID, perm: sess.PermissionSnapshotID})
+		count++
+	}
+	b.mu.Unlock()
+	if releaser != nil {
+		for _, pair := range pairs {
+			if pair.scope != "" || pair.perm != "" {
+				_ = releaser(pair.scope, pair.perm)
+			}
+		}
+	}
+	return count
 }
 
 func (b *UIBridge) RevokeSessionsByContext(characterID, conversationID string) int {
@@ -754,6 +794,9 @@ func (b *UIBridge) handleActionInvoke(ctx context.Context, sess *BridgeSession, 
 	}
 	result, err := handler(ctx, sess, action, p.Input)
 	if err != nil {
+		if errors.Is(err, ErrActionApprovalRequired) {
+			return BridgeResponse{OK: false, Error: NewUIError(UIErrPermissionDenied, err.Error(), nil)}
+		}
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrRuntimeUnavailable, err.Error(), nil)}
 	}
 	return BridgeResponse{OK: true, Result: result}

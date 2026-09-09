@@ -13,39 +13,6 @@
 
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
 
-    <section v-if="pendingApprovals.length" class="approval-section" aria-live="polite">
-      <div class="section-heading">
-        <div>
-          <h2>等待权限确认</h2>
-          <p>高风险游戏插件操作不会自动执行。每次确认只允许当前请求执行一次，超时后自动失效。</p>
-        </div>
-        <span class="section-count">{{ pendingApprovals.length }} 个</span>
-      </div>
-      <div class="approval-list">
-        <article v-for="approval in pendingApprovals" :key="approval.id" class="approval-card">
-          <div class="approval-copy">
-            <strong>{{ permissionLabel(approval.permissionId) }}</strong>
-            <span>{{ approval.pluginId }}<template v-if="approval.serviceId"> · {{ approval.serviceId }}</template></span>
-            <small v-if="approval.target?.path" class="approval-target" :title="approval.target.path">目标目录：{{ approval.target.path }}</small>
-            <small>仅本次请求 · {{ approvalExpiryLabel(approval.expiresAt) }}</small>
-          </div>
-          <div class="approval-actions">
-            <el-button
-              size="small"
-              :loading="approvalBusy === approval.id"
-              @click="resolveApproval(approval, false)"
-            >拒绝</el-button>
-            <el-button
-              type="primary"
-              size="small"
-              :loading="approvalBusy === approval.id"
-              @click="confirmApproval(approval)"
-            >允许一次</el-button>
-          </div>
-        </article>
-      </div>
-    </section>
-
     <section class="current-game-card" :class="{ 'is-connected': !!activeRuntime?.connected }">
       <div class="current-game-visual" aria-hidden="true">
         <div class="visual-grid"></div>
@@ -139,7 +106,7 @@
         >
           <div class="game-card-top">
             <div class="game-icon">{{ gameInitial(plugin.name) }}</div>
-            <el-dropdown trigger="click" @command="(command) => pluginMenuAction(plugin, String(command))">
+            <el-dropdown trigger="click" @command="(command: string | number | object) => pluginMenuAction(plugin, String(command))">
               <button class="icon-button" type="button" aria-label="游戏扩展操作" @click.stop>
                 <el-icon><MoreFilled /></el-icon>
               </button>
@@ -147,7 +114,6 @@
                 <el-dropdown-menu>
                   <el-dropdown-item command="detail">扩展详情</el-dropdown-item>
                   <el-dropdown-item command="update">从本地更新</el-dropdown-item>
-                  <el-dropdown-item command="toggle">{{ plugin.enabled ? "禁用" : "启用" }}</el-dropdown-item>
                   <el-dropdown-item command="uninstall" divided>卸载</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -168,13 +134,21 @@
             <span>v{{ plugin.version }}</span>
             <div class="card-actions">
               <el-button
+                v-if="pluginRuntime(plugin)?.state === 'running'"
                 size="small"
-                :type="plugin.enabled ? 'warning' : 'primary'"
+                type="warning"
                 :loading="busy === plugin.extensionId"
-                @click.stop="togglePlugin(plugin)"
-              >{{ plugin.enabled ? "禁用" : "启用" }}</el-button>
-              <button class="text-action" type="button" @click.stop="showPluginDetail(plugin)">
-                查看详情
+                @click.stop="stopPlugin(plugin)"
+              >停止</el-button>
+              <el-button
+                size="small"
+                type="primary"
+                :disabled="pluginRuntime(plugin)?.state === 'running'"
+                :loading="busy === plugin.extensionId"
+                @click.stop="startPlugin(plugin)"
+              >启动</el-button>
+              <button class="text-action" type="button" @click.stop="openPluginRuntimeDetail(plugin)">
+                运行详情
                 <el-icon><ArrowRight /></el-icon>
               </button>
             </div>
@@ -195,49 +169,45 @@
       </button>
     </section>
 
-    <section v-if="runtimes.length" class="content-section runtime-section">
-      <div class="section-heading">
+    <el-dialog
+      v-model="approvalDialogVisible"
+      title="等待权限确认"
+      width="min(640px, calc(100vw - 32px))"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
+      class="approval-dialog"
+    >
+      <div class="approval-dialog-intro">
+        <span class="approval-dialog-count">{{ approvalPermissionCount }}</span>
         <div>
-          <h2>运行连接</h2>
-          <p>这里只展示插件 Runtime 的连接和生命周期状态。协议、权限纪元和原始 Service RPC 仅在开发者访问已启用时开放。</p>
+          <strong>游戏插件正在申请执行敏感操作</strong>
+          <p>请核对下列权限后一次性确认。一次允许仅用于当前启动；永久授权可在扩展权限管理中撤回。</p>
         </div>
-        <span class="section-count">{{ readyRuntimeCount }}/{{ runtimes.length }} 已就绪</span>
       </div>
-
-      <div class="runtime-list">
-        <article v-for="runtime in runtimes" :key="runtime.runtimeId" class="runtime-card">
-          <div class="runtime-main">
-            <span class="runtime-status-dot" :class="runtime.connected ? 'online' : 'offline'"></span>
-            <div class="runtime-copy">
-              <strong>{{ runtimeName(runtime) }}</strong>
-              <span>{{ runtime.connected ? "已连接" : "离线" }} · {{ stateLabel(runtime.state) }} · {{ healthLabel(runtime.health) }}</span>
-            </div>
-          </div>
-
-          <div class="runtime-actions">
-            <el-button
-              v-if="runtime.state !== 'running'"
-              size="small"
-              :loading="busy === runtime.runtimeId"
-              @click="runtimeAction(runtime.runtimeId, 'start')"
-            >启动</el-button>
-            <el-button
-              v-else
-              size="small"
-              :loading="busy === runtime.runtimeId"
-              @click="runtimeAction(runtime.runtimeId, 'restart')"
-            >重启</el-button>
-            <el-button
-              v-if="runtime.state === 'running'"
-              size="small"
-              :loading="busy === runtime.runtimeId"
-              @click="runtimeAction(runtime.runtimeId, 'stop')"
-            >停止</el-button>
-            <el-button size="small" text @click="showRuntimeDetail(runtime)">{{ developerAccess ? "开发者详情" : "运行详情" }}</el-button>
+      <div class="approval-list" role="list" aria-label="待确认权限请求">
+        <article v-for="approval in pendingApprovals" :key="approval.id" class="approval-card" role="listitem">
+          <div class="approval-copy">
+            <strong>本次启动申请以下权限</strong>
+            <ul class="approval-permissions">
+              <li v-for="permissionId in approvalPermissionIds(approval)" :key="permissionId">
+                {{ permissionLabel(permissionId) }}
+              </li>
+            </ul>
+            <span>插件：{{ approval.pluginId || approval.extensionId }}</span>
+            <small v-if="approval.serviceId">服务：{{ approval.serviceId }}</small>
+            <small v-if="approval.target?.path" class="approval-target" :title="approval.target.path">目标目录：{{ approval.target.path }}</small>
+            <small v-if="approval.target?.url" class="approval-target" :title="approval.target.url">目标地址：{{ approval.target.url }}</small>
+            <small>{{ approvalScopeLabel(approval) }}</small>
           </div>
         </article>
       </div>
-    </section>
+      <template #footer>
+        <el-button :disabled="!!approvalBusy" @click="resolveAllApprovals(false)">拒绝</el-button>
+        <el-button :disabled="!!approvalBusy" @click="resolveAllApprovals(true, false)">允许一次</el-button>
+        <el-button type="primary" :loading="!!approvalBusy" @click="resolveAllApprovals(true, true)">永久授权</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="installDialogVisible"
@@ -471,7 +441,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -520,6 +490,7 @@ type PendingApproval = {
   serviceId?: string;
   extensionId: string;
   permissionId: string;
+  permissionIds?: string[];
   target?: { type?: string; id?: string; path?: string; url?: string };
   status: string;
   requestedAt: string;
@@ -537,9 +508,15 @@ const runtimes = ref<Runtime[]>([]);
 const developerAccess = ref(false);
 const pendingApprovals = ref<PendingApproval[]>([]);
 const approvalBusy = ref("");
+const approvalDialogVisible = ref(false);
 let approvalPollTimer: number | undefined;
 
-const readyRuntimeCount = computed(() => runtimes.value.filter((item) => item.ready).length);
+watch(pendingApprovals, (approvals) => {
+  approvalDialogVisible.value = approvals.length > 0;
+});
+
+const approvalPermissionCount = computed(() => pendingApprovals.value
+  .reduce((count, approval) => count + approvalPermissionIds(approval).length, 0));
 const activeRuntime = computed<Runtime | null>(() =>
   runtimes.value.find((item) => item.connected && item.ready)
   || runtimes.value.find((item) => item.connected)
@@ -697,16 +674,17 @@ async function refreshApprovals() {
   }
 }
 
-async function resolveApproval(approval: PendingApproval, approve: boolean) {
-  if (!approval?.id || approvalBusy.value) return;
-  approvalBusy.value = approval.id;
+async function resolveAllApprovals(approve: boolean, persistent = false) {
+  const approvals = pendingApprovals.value.filter((approval) => approval?.id);
+  if (approvals.length === 0 || approvalBusy.value) return;
+  approvalBusy.value = "resolving";
   try {
-    await api.post(
+    await Promise.all(approvals.map((approval) => api.post(
       `/api/game-center/approvals/${encodeURIComponent(approval.id)}/${approve ? "approve" : "reject"}`,
-      { reason: approve ? "approved from Game Center" : "rejected from Game Center" },
+      { reason: approve ? "approved from Game Center" : "rejected from Game Center", persistent },
       { timeout: 10000 },
-    );
-    ElMessage.success(approve ? "已允许本次操作" : "已拒绝本次操作");
+    )));
+    ElMessage.success(approve ? (persistent ? "已永久授权本次启动所需权限" : "已允许本次启动所需权限") : "已拒绝本次启动权限");
     await refreshApprovals();
   } catch (err: any) {
     ElMessage.error(err?.message || "权限确认失败");
@@ -716,48 +694,20 @@ async function resolveApproval(approval: PendingApproval, approve: boolean) {
   }
 }
 
-async function confirmApproval(approval: PendingApproval) {
-  if (!approval?.id || approvalBusy.value) return;
-  const isServicePerm = approval.permissionId === "service.runtime.execute"
-    || approval.permissionId === "service.network.request";
-  try {
-    await ElMessageBox.confirm(approvalConfirmationDetail(approval), "确认允许本次操作", {
-      type: "warning",
-      confirmButtonText: isServicePerm ? "授权" : "允许一次",
-      cancelButtonText: "取消",
-      closeOnClickModal: false,
-      closeOnPressEscape: true,
-    });
-  } catch {
-    return;
-  }
-  await resolveApproval(approval, true);
+function approvalPermissionIds(approval: PendingApproval) {
+  const permissionIds = approval.permissionIds?.filter(Boolean) ?? [];
+  return permissionIds.length > 0 ? permissionIds : [approval.permissionId];
 }
 
-function approvalConfirmationDetail(approval: PendingApproval) {
-  const isServicePerm = approval.permissionId === "service.runtime.execute"
-    || approval.permissionId === "service.network.request";
-  const details = [
-    `操作：${permissionLabel(approval.permissionId)}`,
-    `插件：${approval.pluginId || approval.extensionId}`,
-  ];
-  if (approval.serviceId) details.push(`服务：${approval.serviceId}`);
-  if (approval.target?.path) details.push(`目标目录：${approval.target.path}`);
-  if (approval.target?.url) details.push(`目标地址：${approval.target.url}`);
-  if (isServicePerm) {
-    details.push("授权：永久有效，可在扩展权限管理中撤回");
-  } else {
-    details.push(`有效期：仅本次请求，${approvalExpiryLabel(approval.expiresAt)}`);
-    details.push("确认后将立即执行该请求。");
-  }
-  return details.join("\n");
+function approvalScopeLabel(approval: PendingApproval) {
+  return `等待确认 · ${approvalExpiryLabel(approval.expiresAt)}`;
 }
 
 function permissionLabel(permissionId: string) {
   const labels: Record<string, string> = {
     "gamehost.control": "允许游戏插件执行本次控制操作",
     "gamehost.artifact.deploy": "允许游戏插件执行本次制品部署",
-    "service.runtime.execute": "允许插件运行 Runtime（持久）",
+    "service.runtime.execute": "运行游戏 Runtime",
     "service.process.spawn": "允许本次插件进程操作",
     "service.network.request": "允许插件网络访问（持久）",
   };
@@ -780,11 +730,6 @@ function pluginRuntime(plugin: Plugin) {
   return runtimes.value.find((item) => item.pluginId === plugin.pluginId && item.connected)
     || runtimes.value.find((item) => item.pluginId === plugin.pluginId)
     || null;
-}
-
-function runtimeName(runtime: Runtime) {
-  const plugin = plugins.value.find((item) => item.pluginId === runtime.pluginId);
-  return plugin?.name || runtime.pluginId || "Game Runtime";
 }
 
 function pluginSupportsCapability(plugin: Plugin | null | undefined, capability: string) {
@@ -1028,10 +973,6 @@ async function pluginMenuAction(plugin: Plugin, command: string) {
     openInstallDialog(plugin);
     return;
   }
-  if (command === "toggle") {
-    await togglePlugin(plugin);
-    return;
-  }
   if (command === "uninstall") {
     await uninstall(plugin);
   }
@@ -1143,17 +1084,57 @@ async function invokeRpc() {
   }
 }
 
-async function togglePlugin(plugin: Plugin) {
+async function startPlugin(plugin: Plugin) {
   busy.value = plugin.extensionId;
   try {
-    await setGameCenterExtensionEnabled(plugin.extensionId, !plugin.enabled);
-    ElMessage.success(plugin.enabled ? "游戏扩展已禁用" : "游戏扩展已启用");
+    if (!plugin.enabled) {
+      await setGameCenterExtensionEnabled(plugin.extensionId, true);
+      await refresh();
+    }
+    const runtime = pluginRuntime(plugin);
+    if (!runtime) {
+      ElMessage.warning("插件暂无可用运行连接，无法启动");
+      return;
+    }
+    if (runtime.state !== "running") {
+      await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtime.runtimeId)}/start`, undefined, { timeout: 125000 });
+    }
+    ElMessage.success("启动请求已提交");
     await refresh();
   } catch (err: any) {
-    ElMessage.error(err?.message || "游戏扩展状态更新失败");
+    ElMessage.error(err?.message || "插件启动失败");
+    await refresh();
   } finally {
     busy.value = "";
   }
+}
+
+async function stopPlugin(plugin: Plugin) {
+  busy.value = plugin.extensionId;
+  try {
+    const runtime = pluginRuntime(plugin);
+    if (runtime && runtime.state === "running") {
+      await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtime.runtimeId)}/stop`, undefined, { timeout: 125000 });
+      await refresh();
+    }
+    await setGameCenterExtensionEnabled(plugin.extensionId, false);
+    ElMessage.success("插件已停止并禁用");
+    await refresh();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "插件停止失败");
+    await refresh();
+  } finally {
+    busy.value = "";
+  }
+}
+
+function openPluginRuntimeDetail(plugin: Plugin) {
+  const runtime = pluginRuntime(plugin);
+  if (!runtime) {
+    ElMessage.warning("插件暂无运行连接");
+    return;
+  }
+  void showRuntimeDetail(runtime);
 }
 
 async function uninstall(plugin: Plugin) {
@@ -1329,17 +1310,47 @@ onBeforeUnmount(() => {
   align-items: flex-start;
 }
 
-.approval-section {
-  border: 1px solid var(--game-border);
-  border-radius: 16px;
-  padding: 18px;
-  background: var(--game-panel);
+.approval-dialog-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--game-border-light);
+  border-radius: 12px;
+  background: var(--game-panel-soft);
+}
+
+.approval-dialog-count {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--game-danger);
+  background: var(--game-danger-soft);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.approval-dialog-intro strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.approval-dialog-intro p {
+  margin: 0;
+  color: var(--game-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .approval-list {
   display: grid;
   gap: 10px;
   margin-top: 14px;
+  max-height: 56vh;
+  overflow-y: auto;
 }
 
 .approval-card {
@@ -2180,6 +2191,15 @@ onBeforeUnmount(() => {
 
   .runtime-actions {
     flex-wrap: wrap;
+  }
+
+  .approval-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .approval-actions :deep(.el-button) {
+    flex: 1;
   }
 }
 </style>

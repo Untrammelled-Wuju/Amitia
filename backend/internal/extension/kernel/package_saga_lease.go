@@ -26,10 +26,10 @@ func computePackageIdempotencyKey(operationType, extensionID, version, userID, s
 	return operationType + ":" + hex.EncodeToString(hash[:16])
 }
 
-func computeSimplePackageIdempotencyKey(operationType, extensionID, version, userID, scopeType, scopeID string) string {
-	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s", operationType, extensionID, version, userID, scopeType, scopeID)
+func computePackageIdempotencyKeyFromRequest(op PackageOperationRecord, userID string) string {
+	raw := fmt.Sprintf("%s:%s:%s:%s:%s:%s:%s:%s", op.OperationType, op.ExtensionID, op.TargetVersion, op.ArtifactID, op.PreviewSessionID, op.ScopeType, op.ScopeID, userID)
 	hash := sha256.Sum256([]byte(raw))
-	return operationType + ":" + hex.EncodeToString(hash[:16])
+	return op.OperationType + ":" + hex.EncodeToString(hash[:16])
 }
 
 func computePackageRequestHash(op PackageOperationRecord) string {

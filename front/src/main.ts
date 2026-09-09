@@ -23,11 +23,7 @@ import { restoreSessionOnStartup } from "./stores/refresh-coordinator";
 
 async function bootstrap() {
   await getRuntimeConnection();
-  const initialCapabilities = await initializeRuntimeCapabilities();
   const isAuthenticated = await restoreSessionOnStartup();
-  if (initialCapabilities.runtimeProfile === "unknown") {
-    await initializeRuntimeCapabilities(true);
-  }
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);
@@ -35,6 +31,7 @@ async function bootstrap() {
   app.use(ElementPlus, { locale: zhCn });
   const extensionUI = useExtensionUIStore(pinia);
   if (isAuthenticated) {
+    void initializeRuntimeCapabilities(true);
     await extensionUI.refreshSnapshot().catch(() => undefined);
   }
   await syncBrowserClientSlots(extensionUI.snapshot);

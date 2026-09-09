@@ -1334,6 +1334,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		scopes := []scope.ScopeRef{
 			scope.NewExtensionScope(extensionID),
 			scope.NewModuleScope(extensionID, moduleID),
+			scope.NewInvocationScope(invocationID),
 			scope.NewSessionScope(invocationID),
 		}
 		if characterID != "" {
@@ -1450,7 +1451,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := SetupDefaultHostCommands(hostCmdRegistry, hostAPIGateway); err != nil {
 		return nil, fmt.Errorf("kernel: setup host commands: %w", err)
 	}
-	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo)
+	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo, permBroker)
 	sandboxDispatcher := buildSandboxActionDispatcher(sandboxActionDispatcherDeps{
 		getSession: sandboxHost.GetSession,
 		getContribution: func(contributionID string) (*ui_contribution.UIContributionDefinition, error) {
@@ -1493,6 +1494,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 				PermissionSnapshotID: session.PermissionSnapshotID,
 				CharacterID:          session.CharacterID,
 				ConversationID:       session.ConversationID,
+				UserID:               session.UserID,
+				DeviceID:             session.DeviceID,
 			}, action, input)
 		},
 		func(ctx context.Context, session *ui_contribution.BridgeSession, sourceID string, params json.RawMessage) (json.RawMessage, error) {

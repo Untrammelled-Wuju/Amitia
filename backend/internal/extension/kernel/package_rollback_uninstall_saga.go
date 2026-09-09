@@ -106,7 +106,7 @@ func (r *Runtime) ExecutePackageRollback(ctx context.Context, extensionID, versi
 	if err != nil {
 		return KernelInstallResult{}, err
 	}
-	idempotencyKey := computeSimplePackageIdempotencyKey("rollback", extensionID, version, userID, scopeType, scopeID)
+	idempotencyKey := computePackageIdempotencyKeyFromRequest(PackageOperationRecord{OperationType: "rollback", ExtensionID: extensionID, TargetVersion: version, ArtifactID: artifact.ArtifactID, PreviewSessionID: rollbackClaims.PreviewSessionID, ScopeType: scopeType, ScopeID: scopeID}, userID)
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -778,7 +778,7 @@ func computeUninstallPreviewHash(preview PackageUninstallPreviewResult) string {
 	return "sha256:" + hex.EncodeToString(h[:])
 }
 
-func requiredUninstallConfirmations(preview PackageUninstallPreviewResult) []string {
+func RequiredUninstallConfirmations(preview PackageUninstallPreviewResult) []string {
 	items := []string{"confirm.uninstall"}
 
 	switch preview.ArtifactPolicy {
@@ -803,6 +803,10 @@ func requiredUninstallConfirmations(preview PackageUninstallPreviewResult) []str
 	}
 
 	return items
+}
+
+func requiredUninstallConfirmations(preview PackageUninstallPreviewResult) []string {
+	return RequiredUninstallConfirmations(preview)
 }
 
 func buildUninstallPreviewIdentity(preview PackageUninstallPreviewResult, policyVersion string) PackageUninstallPreviewIdentity {
@@ -917,7 +921,7 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		return PackageOperationRecord{}, NewPackageError(PackageErrCodeConfirmationStale, 409, ErrPackageConfirmationStale)
 	}
 
-	required := requiredUninstallConfirmations(initialPreview)
+	required := RequiredUninstallConfirmations(initialPreview)
 	if err := validateRequiredConfirmations(claims.ConfirmedItems, required); err != nil {
 		return PackageOperationRecord{}, err
 	}
@@ -931,7 +935,10 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	releaseInProcessLock := r.acquirePackageInProcessLock(extensionID)
 	defer releaseInProcessLock()
 
-	idempotencyKey := computeSimplePackageIdempotencyKey("uninstall", extensionID, initialPreview.CurrentVersion, userID, scopeType, scopeID)
+	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
+	if idempotencyKey == "" {
+		idempotencyKey = computePackageIdempotencyKeyFromRequest(PackageOperationRecord{OperationType: "uninstall", ExtensionID: extensionID, TargetVersion: initialPreview.CurrentVersion, ArtifactID: initialPreview.ArtifactID, ScopeType: scopeType, ScopeID: scopeID}, userID)
+	}
 	operationID := "package-operation-" + uuid.NewString()
 	traceID := "package-trace-" + uuid.NewString()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -1081,6 +1088,12 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 		if err := r.container.GameHost.QuiesceExtension(ctx, extensionID); err != nil {
 			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "quiesce_game_runtime", "PACKAGE_GAME_RUNTIME_QUIESCE_FAILED", err.Error(), true, uninstallGuard)
 			return op, errors.Join(fmt.Errorf("kernel: quiesce game runtime before uninstall: %w", err), persistErr)
+		}
+	}
+	if r.container.ContributionInstaller != nil {
+		if err := r.container.ContributionInstaller.UninstallContributions(ctx, domain.ExtensionID(extensionID)); err != nil {
+			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "uninstall_runtime_contributions", "PACKAGE_RUNTIME_CONTRIBUTION_UNINSTALL_FAILED", err.Error(), true, uninstallGuard)
+			return op, errors.Join(fmt.Errorf("kernel: uninstall runtime contributions: %w", err), persistErr)
 		}
 	}
 	if err := leaseGuard.AssertAlive(ctx); err != nil {

@@ -84,6 +84,7 @@ import { ElMessage } from "element-plus";
 import { apiClient } from "../../composables/useApi";
 import { useSessionStore } from "../../stores/session-store";
 import { saveAuthenticatedSession } from "../../stores/refresh-coordinator";
+import { initializeRuntimeCapabilities } from "../../runtime/runtime-capabilities";
 
 const router = useRouter();
 const route = useRoute();
@@ -149,6 +150,7 @@ async function handleLogin() {
       if (window.amitiaDesktop?.setAuthToken) {
         void window.amitiaDesktop.setAuthToken(accessToken);
       }
+      await initializeRuntimeCapabilities(true);
       ElMessage.success(`欢迎回来，${data.user?.username || data.username || name}`);
       const redirect = (route.query.redirect as string) || "/chat";
       router.push(redirect);

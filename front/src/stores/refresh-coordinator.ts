@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { useSessionStore, revokeOnServer } from "./session-store";
 import { refreshToken } from "./session-client";
+import { initializeRuntimeCapabilities } from "../runtime/runtime-capabilities";
 
 const REFRESH_TOKEN_KEY = "amitia-refresh-token-persist";
 const SESSION_KEY = "amitia-session-persist";
@@ -192,6 +193,7 @@ async function performRefresh(): Promise<string> {
         });
         setAccessToken(result.accessToken, result.accessTokenExpiresAt);
         scheduleRefresh(result.accessTokenExpiresAt);
+        void initializeRuntimeCapabilities(true);
         return result.accessToken;
       });
     } catch (err) {

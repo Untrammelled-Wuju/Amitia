@@ -104,6 +104,8 @@ type CallRequest struct {
 	PermissionSnapshotID string
 	TraceID              string
 	InvocationID         string
+	ApprovalRecordID     string
+	ExecutionContext     permission.PermissionExecutionContext
 	ParentID             string
 	Deadline             time.Time
 }

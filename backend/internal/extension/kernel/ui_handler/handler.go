@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -492,17 +493,20 @@ func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusInternalServerError, "authorizer_not_configured", "session authorizer not configured (fail-closed)")
 		return
 	}
-	auth, err := h.authorizer.AuthorizeSession(r.Context(), def, req.CharacterID, req.ConversationID)
+	sessionAuth, err := h.authorizer.AuthorizeSession(r.Context(), def, req.CharacterID, req.ConversationID)
 	if err != nil {
 		writeError(w, http.StatusForbidden, "permission_denied", err.Error())
 		return
 	}
 	origin := fmt.Sprintf("amitia-extension://%s/%s", def.ExtensionID, def.ModuleID)
 	lifetime := time.Hour
-	sess, err := h.uiHost.Bridge().CreateSession(def, origin, auth.GrantedScopes, auth.GrantedPerms, req.Surface, req.CharacterID, req.ConversationID, lifetime)
+	sess, err := h.uiHost.Bridge().CreateSession(def, origin, sessionAuth.GrantedScopes, sessionAuth.GrantedPerms, req.Surface, req.CharacterID, req.ConversationID, lifetime)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "session_create_failed", err.Error())
 		return
+	}
+	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+		_ = h.uiHost.Bridge().SetSessionExecutionIdentity(sess.SessionID, actor.UserID.String(), strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID")))
 	}
 	writeJSON(w, http.StatusOK, bridgeSessionResponse{
 		SessionID:       sess.SessionID,
@@ -618,7 +622,7 @@ func (h *HTTPHandler) handlePageSession(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *HTTPHandler) handleExtensionScoped(w http.ResponseWriter, r *http.Request) {
-	segs := splitPath(r.URL.Path)
+	segs := splitEscapedPath(r.URL.EscapedPath())
 	if len(segs) < 3 {
 		writeError(w, http.StatusNotFound, "not_found", "extension id required")
 		return
@@ -754,7 +758,7 @@ func (h *HTTPHandler) handleSchema(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
-	segs := splitPath(r.URL.Path)
+	segs := splitEscapedPath(r.URL.EscapedPath())
 	if len(segs) < 5 {
 		writeError(w, http.StatusNotFound, "not_found", "extensionId and contributionId required")
 		return
@@ -1675,4 +1679,17 @@ func splitPath(path string) []string {
 		return []string{}
 	}
 	return strings.Split(trimmed, "/")
+}
+
+func splitEscapedPath(path string) []string {
+	segs := splitPath(path)
+	out := make([]string, len(segs))
+	for i, seg := range segs {
+		if decoded, err := url.PathUnescape(seg); err == nil {
+			out[i] = decoded
+		} else {
+			out[i] = seg
+		}
+	}
+	return out
 }

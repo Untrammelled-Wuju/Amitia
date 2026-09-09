@@ -10,6 +10,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 )
 
+var ErrActionApprovalRequired = errors.New("ui action approval required")
+
 type UIContributionKind string
 
 const (

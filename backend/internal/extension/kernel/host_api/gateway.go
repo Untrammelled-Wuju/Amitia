@@ -103,6 +103,7 @@ func (g *DefaultGateway) CloseSession(_ context.Context, sessionID string) error
 }
 
 func (g *DefaultGateway) Call(ctx context.Context, request CallRequest) CallResult {
+	ctx = withPermissionEvaluationContext(ctx, request)
 	route, ok := g.findRoute(request.Method, request.Version)
 	if !ok {
 		result := CallResult{

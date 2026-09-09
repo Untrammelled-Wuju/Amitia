@@ -304,6 +304,7 @@ type ExecutePackageUninstallRequest struct {
 	ScopeType         string `json:"scopeType"`
 	ScopeID           string `json:"scopeId"`
 	ConfirmationToken string `json:"confirmationToken"`
+	IdempotencyKey    string `json:"idempotencyKey"`
 }
 
 type KernelInstallResult struct {
