@@ -95,7 +95,8 @@ export function useWebChatSSE(
     if (!event.messageId && !event.id) return null;
     const metadata =
       event.data && typeof event.data === "object" ? event.data : {};
-    return {
+    const sequence = Number(event.sequence);
+    const message: any = {
       id: event.messageId || event.id,
       conversationId: event.conversationId,
       role: event.role,
@@ -110,6 +111,10 @@ export function useWebChatSSE(
       anchorMessageId: metadata.userMessageId,
       anchorSequence: metadata.userMessageSequence,
     };
+    if (Number.isFinite(sequence) && sequence > 0) {
+      message.sequence = sequence;
+    }
+    return message;
   }
 
   function handleMessageEvent(event: MessageEvent) {

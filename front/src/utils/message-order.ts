@@ -7,6 +7,18 @@ function numericValue(value: unknown): number | null {
   return null;
 }
 
+export function parseMessageTime(value: unknown): number {
+  const raw = numericValue(value);
+  if (raw !== null) return raw;
+  const text = String(value ?? "").trim();
+  if (!text) return 0;
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?(\.\d+)?$/.test(text)
+    ? text.replace(" ", "T")
+    : text;
+  const parsed = Date.parse(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 function field(message: any, camel: string, snake: string) {
   return message?.[camel] ?? message?.[snake];
 }
@@ -64,13 +76,14 @@ export function compareChatMessages(a: any, b: any): number {
     return aSequence - bSequence;
 
   const aTime =
-    numericValue(a?.sortTimestamp) ??
-    (a?.createdAt ? new Date(a.createdAt).getTime() : 0);
+    numericValue(a?.sortTimestamp) ?? parseMessageTime(a?.createdAt);
   const bTime =
-    numericValue(b?.sortTimestamp) ??
-    (b?.createdAt ? new Date(b.createdAt).getTime() : 0);
-  if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime)
-    return aTime - bTime;
+    numericValue(b?.sortTimestamp) ?? parseMessageTime(b?.createdAt);
+  if (aTime !== 0 || bTime !== 0) {
+    if (aTime !== bTime) return aTime - bTime;
+  }
+  if (aSequence !== null && bSequence === null) return -1;
+  if (aSequence === null && bSequence !== null) return 1;
   return 0;
 }
 
@@ -112,7 +125,7 @@ export function insertTransientModelError(messages: any[], incoming: any): void 
     ) + 1;
   const anchorTime =
     anchorIndex >= 0 && messages[anchorIndex]?.createdAt
-      ? new Date(messages[anchorIndex].createdAt).getTime()
+      ? parseMessageTime(messages[anchorIndex].createdAt)
       : 0;
   const previousTime = relatedErrors.reduce(
     (maximum, message) =>

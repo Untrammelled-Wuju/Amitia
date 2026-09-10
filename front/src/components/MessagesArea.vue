@@ -211,12 +211,25 @@ const flowItems = computed<FlowItem[]>(() => {
     });
   }
   return items.sort((a, b) => {
+    const anchorOrder = compareAnchorOrder(a, b);
+    if (anchorOrder !== 0) return anchorOrder;
     const order = compareTimeline(a.sequence, a.timestamp, b.sequence, b.timestamp);
     if (order !== 0) return order;
     if (a.kind !== b.kind) return a.kind === "message" ? -1 : 1;
     return a.key.localeCompare(b.key);
   });
 });
+
+function compareAnchorOrder(a: FlowItem, b: FlowItem): number {
+  if (a.kind !== "message" || b.kind !== "message") return 0;
+  const aId = String(a.message?.id || "");
+  const bId = String(b.message?.id || "");
+  const aAnchor = String(a.message?.anchorMessageId || "");
+  const bAnchor = String(b.message?.anchorMessageId || "");
+  if (aAnchor && aAnchor === bId) return 1;
+  if (bAnchor && bAnchor === aId) return -1;
+  return 0;
+}
 
 function rebuildConversationEventLog() {
   const id = conversationId.value;
