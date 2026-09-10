@@ -76,6 +76,15 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 			if result.Health == "degraded" {
 				health = HealthDegraded
 			}
+			if d.Runtime.RuntimeType == RuntimeTypeGameHost && r.adapters != nil {
+				adapter, ok := r.adapters.Resolve(d.Runtime)
+				if ok && adapter != nil && adapter.Supports(d.Runtime) {
+					health = adapter.Health(context.Background(), d.Runtime)
+					if health != HealthReady && health != HealthDegraded {
+						availability = ProviderAvailabilityUnknown
+					}
+				}
+			}
 		} else if d.Kind == ProviderKindBuiltin && r.adapters != nil {
 			adapter, ok := r.adapters.Resolve(d.Runtime)
 			if !ok || adapter == nil || !adapter.Supports(d.Runtime) {
