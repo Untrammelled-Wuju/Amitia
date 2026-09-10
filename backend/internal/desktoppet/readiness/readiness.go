@@ -426,7 +426,7 @@ func makeSurrealPingChecker() func() (SystemStatus, string) {
 			return StatusBlocked, fmt.Sprintf("surrealdb: use namespace/database failed: %v", err)
 		}
 
-		_, err = surrealdb.Query[any](ctx, db, "SELECT 1", nil)
+		_, err = surrealdb.Query[any](ctx, db, "RETURN 1;", nil)
 		if err != nil {
 			return StatusDegraded, fmt.Sprintf("surrealdb: query test failed: %v", err)
 		}

@@ -239,7 +239,7 @@ func (c *surrealChecker) Check() ([]DoctorFinding, error) {
 		return findings, nil
 	}
 
-	_, err = surrealdb.Query[any](ctx, db, "SELECT 1", nil)
+	_, err = surrealdb.Query[any](ctx, db, "RETURN 1;", nil)
 	if err != nil {
 		findings = append(findings, DoctorFinding{
 			Code:     "surrealdb_query_failed",
