@@ -31,6 +31,8 @@ func (f *RuntimeFactory) SetHostAPI(gateway host_api.Gateway) {
 	f.hostAPI = gateway
 }
 
+const DefaultHostAPIVersion = "1"
+
 type CreateHostRequest struct {
 	ExtensionID          string
 	ModuleID             string
@@ -49,6 +51,9 @@ type CreateHostRequest struct {
 }
 
 func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*PluginHost, error) {
+	if req.HostAPIVersion == "" {
+		req.HostAPIVersion = DefaultHostAPIVersion
+	}
 	if req.ExtensionID == "" {
 		return nil, errors.New("javascript_main: extension id required")
 	}

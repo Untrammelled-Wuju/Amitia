@@ -476,6 +476,8 @@ type BridgeSession struct {
 	PermissionSnapshotID string
 	Token                string
 	UsedNonces           map[string]bool
+	activeRequests       int
+	revoked              bool
 }
 
 type PermissionSnapshotFactory func(sessionID, extensionID, moduleID string, generation int64, characterID, conversationID string, grantedPerms []string, expiresAt time.Time) (string, error)
@@ -597,6 +599,10 @@ func (b *UIBridge) SetSessionExecutionIdentity(sessionID, userID, deviceID strin
 func (b *UIBridge) ValidateSession(sessionID, contributionID, origin string, contractVersion int, token string, generation int64, nonce string) (*BridgeSession, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	return b.validateSessionLocked(sessionID, contributionID, origin, contractVersion, token, generation, nonce)
+}
+
+func (b *UIBridge) validateSessionLocked(sessionID, contributionID, origin string, contractVersion int, token string, generation int64, nonce string) (*BridgeSession, error) {
 	sess, ok := b.sessions[sessionID]
 	if !ok {
 		return nil, NewUIError(UIErrBridgeAuth, "session not found", nil)
@@ -634,10 +640,12 @@ func (b *UIBridge) RevokeSession(sessionID string) {
 	sess, ok := b.sessions[sessionID]
 	if ok {
 		delete(b.sessions, sessionID)
+		sess.revoked = true
 	}
 	releaser := b.snapshotReleaser
+	releaseNow := ok && sess.activeRequests == 0
 	b.mu.Unlock()
-	if ok && releaser != nil && (sess.ScopeSnapshotID != "" || sess.PermissionSnapshotID != "") {
+	if releaseNow && releaser != nil && (sess.ScopeSnapshotID != "" || sess.PermissionSnapshotID != "") {
 		_ = releaser(sess.ScopeSnapshotID, sess.PermissionSnapshotID)
 	}
 }
@@ -653,7 +661,10 @@ func (b *UIBridge) RevokeSessionsByExtension(extensionID ExtensionID) int {
 			continue
 		}
 		delete(b.sessions, sessionID)
-		pairs = append(pairs, snapPair{scope: sess.ScopeSnapshotID, perm: sess.PermissionSnapshotID})
+		sess.revoked = true
+		if sess.activeRequests == 0 {
+			pairs = append(pairs, snapPair{scope: sess.ScopeSnapshotID, perm: sess.PermissionSnapshotID})
+		}
 		count++
 	}
 	b.mu.Unlock()
@@ -676,8 +687,11 @@ func (b *UIBridge) RevokeSessionsByContext(characterID, conversationID string) i
 	for id, sess := range b.sessions {
 		if (characterID != "" && sess.CharacterID == characterID) ||
 			(conversationID != "" && sess.ConversationID == conversationID) {
-			pairs = append(pairs, snapPair{scope: sess.ScopeSnapshotID, perm: sess.PermissionSnapshotID})
 			delete(b.sessions, id)
+			sess.revoked = true
+			if sess.activeRequests == 0 {
+				pairs = append(pairs, snapPair{scope: sess.ScopeSnapshotID, perm: sess.PermissionSnapshotID})
+			}
 			count++
 		}
 	}
@@ -720,10 +734,16 @@ func (b *UIBridge) Handle(ctx context.Context, msg BridgeMessage) BridgeResponse
 	if !msg.Method.Valid() {
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrPayloadInvalid, "invalid method", nil)}
 	}
-	sess, err := b.ValidateSession(msg.SessionID, msg.ContributionID, msg.Origin, msg.ContractVersion, msg.Token, msg.Generation, msg.Nonce)
+	b.mu.Lock()
+	sess, err := b.validateSessionLocked(msg.SessionID, msg.ContributionID, msg.Origin, msg.ContractVersion, msg.Token, msg.Generation, msg.Nonce)
+	if err == nil {
+		sess.activeRequests++
+	}
+	b.mu.Unlock()
 	if err != nil {
 		return BridgeResponse{OK: false, Error: err.(*UIError)}
 	}
+	defer b.finishRequest(sess)
 	switch msg.Method {
 	case BridgeUIReady:
 		return b.handleReady(ctx, sess)
@@ -745,6 +765,22 @@ func (b *UIBridge) Handle(ctx context.Context, msg BridgeMessage) BridgeResponse
 		return b.handleDataSubscribe(ctx, sess, msg.Payload)
 	}
 	return BridgeResponse{OK: false, Error: NewUIError(UIErrPayloadInvalid, "method not implemented", nil)}
+}
+
+func (b *UIBridge) finishRequest(sess *BridgeSession) {
+	if sess == nil {
+		return
+	}
+	b.mu.Lock()
+	if sess.activeRequests > 0 {
+		sess.activeRequests--
+	}
+	releaseNow := sess.revoked && sess.activeRequests == 0
+	releaser := b.snapshotReleaser
+	b.mu.Unlock()
+	if releaseNow && releaser != nil && (sess.ScopeSnapshotID != "" || sess.PermissionSnapshotID != "") {
+		_ = releaser(sess.ScopeSnapshotID, sess.PermissionSnapshotID)
+	}
 }
 
 func (b *UIBridge) handleReady(ctx context.Context, sess *BridgeSession) BridgeResponse {

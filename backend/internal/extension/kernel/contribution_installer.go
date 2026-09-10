@@ -22,6 +22,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/schedule"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
@@ -476,9 +477,9 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 	if len(def.Permissions) > 0 {
 		_ = json.Unmarshal(def.Permissions, &perms)
 	}
-	var scope capability.ScopeRule
+	var scopeRule capability.ScopeRule
 	if len(def.Scope) > 0 {
-		_ = json.Unmarshal(def.Scope, &scope)
+		_ = json.Unmarshal(def.Scope, &scopeRule)
 	}
 
 	toolSource := capability.ToolSourcePlugin
@@ -511,7 +512,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		RiskLevel:    capability.RiskLevel(def.RiskLevel),
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,
-		Scope:        scope,
+		Scope:        scopeRule,
 		Runtime:      runtimeBinding,
 	}
 
@@ -1060,6 +1061,19 @@ func canonicalGameHostToolID(extensionID, toolID string) string {
 	return prefix + toolID
 }
 
+func canonicalGameHostPluginID(extensionID, pluginID string) string {
+	extensionID = strings.Trim(strings.TrimSpace(extensionID), "/")
+	pluginID = strings.Trim(strings.TrimSpace(pluginID), "/")
+	if extensionID == "" || pluginID == "" {
+		return pluginID
+	}
+	prefix := extensionID + "/"
+	if strings.HasPrefix(pluginID, prefix) {
+		return pluginID
+	}
+	return prefix + pluginID
+}
+
 // enrichGameHostToolRuntimeBinding preserves GameHost route selectors from a
 // tool definition. The generic RuntimeBinding fields do not carry pluginId or
 // serviceId, but those selectors are required to route deterministically when
@@ -1074,6 +1088,10 @@ func enrichGameHostToolRuntimeBinding(binding capability.RuntimeBinding, runtime
 	for _, key := range []string{"pluginId", "serviceId"} {
 		value, _ := runtimeDef[key].(string)
 		value = strings.TrimSpace(value)
+		if key == "pluginId" {
+			extensionID, _ := binding.Metadata["extensionId"].(string)
+			value = canonicalGameHostPluginID(extensionID, value)
+		}
 		if value != "" {
 			binding.Metadata[key] = value
 		}
@@ -1323,9 +1341,9 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 	if len(def.Permissions) > 0 {
 		_ = json.Unmarshal(def.Permissions, &perms)
 	}
-	var scope capability.ScopeRule
+	var scopeRule capability.ScopeRule
 	if len(def.Scope) > 0 {
-		_ = json.Unmarshal(def.Scope, &scope)
+		_ = json.Unmarshal(def.Scope, &scopeRule)
 	}
 	toolSource := capability.ToolSourcePlugin
 	if isSystemBuiltin(contrib.Metadata) {
@@ -1363,11 +1381,17 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		RiskLevel:    capability.RiskLevel(def.RiskLevel),
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,
-		Scope:        scope,
+		Scope:        scopeRule,
 		Runtime:      runtimeBinding,
 	}
 	if err := i.container.ToolRegistry.Replace(ctx, toolDef); err != nil {
 		return fmt.Errorf("activate tool %s: %w", toolID, err)
+	}
+	if i.container.ScopeManager != nil {
+		if err := ensureScopeBinding(ctx, i.container.ScopeManager, scope.SubjectTool, toolID, scope.NewExtensionScope(string(contrib.ExtensionID))); err != nil {
+			_ = i.container.ToolRegistry.Unregister(ctx, toolID)
+			return fmt.Errorf("bind tool scope %s: %w", toolID, err)
+		}
 	}
 	return nil
 }
@@ -1635,6 +1659,11 @@ func (i *TypedContributionInstaller) deactivateTool(ctx context.Context, contrib
 	}
 	if contributionUsesGameHostRuntime(contrib, defData) && !isSystemBuiltin(contrib.Metadata) {
 		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
+	}
+	if i.container.ScopeManager != nil {
+		if err := deleteScopeBindings(ctx, i.container.ScopeManager, scope.SubjectTool, toolID); err != nil {
+			return fmt.Errorf("remove tool scope %s: %w", toolID, err)
+		}
 	}
 	if err := i.container.ToolRegistry.Unregister(ctx, toolID); err != nil {
 		return fmt.Errorf("deactivate tool %s: %w", toolID, err)
@@ -2232,6 +2261,11 @@ func (i *TypedContributionInstaller) discardTool(ctx context.Context, contrib do
 	}
 	if contributionUsesGameHostRuntime(contrib, defData) && !isSystemBuiltin(contrib.Metadata) {
 		toolID = canonicalGameHostToolID(string(contrib.ExtensionID), toolID)
+	}
+	if i.container.ScopeManager != nil {
+		if err := deleteScopeBindings(ctx, i.container.ScopeManager, scope.SubjectTool, toolID); err != nil {
+			return err
+		}
 	}
 	_ = i.container.ToolRegistry.Unregister(ctx, toolID)
 	return nil

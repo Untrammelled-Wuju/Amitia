@@ -4,16 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
+	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -41,9 +44,11 @@ type UIActionExecutor struct {
 	hostCommandRegistry *HostCommandRegistry
 	operationRepo       sqlite.OperationRepository
 	permissionBroker    permission.PermissionBroker
+	toolRegistry        *capability.ToolRegistry
+	scopeManager        scope.ScopeManager
 }
 
-func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository, permissionBroker permission.PermissionBroker) *UIActionExecutor {
+func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository, permissionBroker permission.PermissionBroker, toolRegistry *capability.ToolRegistry, scopeManager scope.ScopeManager) *UIActionExecutor {
 	return &UIActionExecutor{
 		hostAPIGateway:      gateway,
 		workflowExecutor:    wfExecutor,
@@ -51,6 +56,8 @@ func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.
 		hostCommandRegistry: hostCmdRegistry,
 		operationRepo:       opRepo,
 		permissionBroker:    permissionBroker,
+		toolRegistry:        toolRegistry,
+		scopeManager:        scopeManager,
 	}
 }
 
@@ -87,6 +94,10 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 	if toolID == "" {
 		toolID = action.ActionID
 	}
+	toolID = e.resolveToolID(ctx, execCtx.ExtensionID, toolID)
+	if err := e.ensureToolScope(ctx, execCtx.ExtensionID, toolID); err != nil {
+		return nil, err
+	}
 	toolInputPayload, approvalConfirmed, err := splitUIActionInput(input)
 	if err != nil {
 		return nil, err
@@ -95,6 +106,7 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 	executionContext := uiActionExecutionContext(ctx, execCtx)
 	approvalRecordID := ""
 	if approvalConfirmed {
+		log.Printf("[ui-action] approval confirm: action=%s call=%s ctxEmpty=%v deviceExec=%v bindingKey=%q scopeSnapshot=%q", action.ActionID, callID, executionContext.IsEmpty(), executionContext.IsDeviceExecution(), executionContext.BindingKey(), execCtx.ScopeSnapshotID)
 		if e.permissionBroker == nil || executionContext.IsEmpty() || !executionContext.IsDeviceExecution() {
 			return nil, fmt.Errorf("%w: unable to bind the approval to the active desktop session", ui_contribution.ErrActionApprovalRequired)
 		}
@@ -131,12 +143,42 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {
+		log.Printf("[ui-action] gateway call failed: action=%s call=%s code=%s msg=%s", action.ActionID, callID, result.Error.Code, result.Error.Message)
 		if result.Error.Code == host_api.ErrorCodePermissionDenied && strings.Contains(result.Error.Message, "decision=require_approval") {
 			return nil, fmt.Errorf("%w: this operation needs confirmation", ui_contribution.ErrActionApprovalRequired)
 		}
 		return nil, fmt.Errorf("action %s failed: %s", action.ActionID, result.Error.Message)
 	}
 	return result.Output, nil
+}
+
+func (e *UIActionExecutor) resolveToolID(ctx context.Context, extensionID, toolID string) string {
+	if e.toolRegistry == nil || toolID == "" {
+		return toolID
+	}
+	if _, ok := e.toolRegistry.Get(ctx, toolID); ok {
+		return toolID
+	}
+	candidate := canonicalGameHostToolID(extensionID, toolID)
+	definition, ok := e.toolRegistry.Get(ctx, candidate)
+	if !ok || definition.ExtensionID != extensionID {
+		return toolID
+	}
+	return candidate
+}
+
+func (e *UIActionExecutor) ensureToolScope(ctx context.Context, extensionID, toolID string) error {
+	if e.scopeManager == nil || e.toolRegistry == nil || extensionID == "" || toolID == "" {
+		return nil
+	}
+	definition, ok := e.toolRegistry.Get(ctx, toolID)
+	if !ok || definition.ExtensionID != extensionID {
+		return nil
+	}
+	if err := ensureScopeBinding(ctx, e.scopeManager, scope.SubjectTool, toolID, scope.NewExtensionScope(extensionID)); err != nil {
+		return fmt.Errorf("bind tool scope %s: %w", toolID, err)
+	}
+	return nil
 }
 
 func splitUIActionInput(input json.RawMessage) (json.RawMessage, bool, error) {

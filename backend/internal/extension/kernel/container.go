@@ -344,7 +344,16 @@ func (c *Container) Recover(ctx context.Context) error {
 				_ = c.EnablementStore.SetEnablement(ctx, extSubject, enablement.EnablementDisabled)
 			}
 		}
-		if inst.EnablementState == domain.EnablementEnabled {
+		if inst.EnablementState == domain.EnablementEnabled || inst.EnablementState == domain.EnablementRequiresRecovery {
+			if inst.EnablementState == domain.EnablementRequiresRecovery {
+				inst.EnablementState = domain.EnablementEnabled
+				inst.UpdatedAt = time.Now().UTC()
+				if err := c.InstallationRepository.PutInstallation(ctx, inst); err != nil {
+					recoverErrs = append(recoverErrs, fmt.Errorf("kernel: reset recovery state for %s: %w", inst.ExtensionID, err))
+					c.markRequiresRecovery(ctx, inst)
+					continue
+				}
+			}
 			modules, err := c.ModuleRepository.ListModules(ctx, inst.ExtensionID)
 			if err != nil {
 				recoverErrs = append(recoverErrs, fmt.Errorf("kernel: list modules for %s: %w", inst.ExtensionID, err))
@@ -360,20 +369,32 @@ func (c *Container) Recover(ctx context.Context) error {
 				_ = c.EnablementStore.SetEnablement(ctx, modSubject, enablement.EnablementEnabled)
 			}
 
+			gameHostOwned := make(map[domain.ModuleID]struct{})
+			for _, cd := range contribs {
+				if cd.Kind != domain.ContributionKindGamePlugin {
+					continue
+				}
+				moduleIDs, err := gameHostContributionRuntimeModules(cd)
+				if err != nil {
+					continue
+				}
+				for _, moduleID := range moduleIDs {
+					gameHostOwned[moduleID] = struct{}{}
+				}
+			}
+
+			c.ensureGameHostServicePermissionGrants(ctx, inst.ExtensionID, gameHostOwned, modules)
+
 			runtimeFailed := false
 			if c.RuntimeSupervisor != nil {
 				for _, mod := range modules {
+					if isGameHostOwnedRuntimeModule(gameHostOwned, mod.ID) {
+						continue
+					}
 					if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
-						defID := runtime_supervisor.BuildRuntimeDefinitionID(string(inst.ExtensionID), string(mod.ID), mod.Runtime.Type)
-						spec := runtime_supervisor.InstanceSpec{
-							DefinitionID: defID,
-							ExtensionID:  inst.ExtensionID,
-							ModuleID:     mod.ID,
-							RuntimeType:  mod.Runtime.Type,
-							Generation:   inst.Generation,
-						}
+						spec := buildModuleInstanceSpec(inst.ExtensionID, mod.ID, mod.Runtime, inst.Generation)
 						result := c.RuntimeSupervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
-							DefinitionID: defID,
+							DefinitionID: spec.DefinitionID,
 							Desired:      runtime_supervisor.DesiredRunning,
 							Spec:         spec,
 						})

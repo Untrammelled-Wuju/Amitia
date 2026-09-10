@@ -13,3 +13,12 @@ func TestCanonicalGameHostToolIDNamespacesThirdPartyTools(t *testing.T) {
 		t.Fatalf("independent extensions collided: %q", a)
 	}
 }
+
+func TestCanonicalGameHostPluginIDNamespacesLocalPluginID(t *testing.T) {
+	if got := canonicalGameHostPluginID("vendor/game-a", "plugin-a"); got != "vendor/game-a/plugin-a" {
+		t.Fatalf("unexpected canonical plugin id %q", got)
+	}
+	if got := canonicalGameHostPluginID("vendor/game-a", "vendor/game-a/plugin-a"); got != "vendor/game-a/plugin-a" {
+		t.Fatalf("already canonical plugin id changed: %q", got)
+	}
+}

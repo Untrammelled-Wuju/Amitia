@@ -618,7 +618,7 @@ func (r *Registry) BindRuntimeSession(ctx context.Context, binding RuntimeSessio
 	if entry.ConnectionGeneration > binding.ConnectionGeneration {
 		return nil, ErrStaleRuntimeSessionBinding
 	}
-	if entry.ConnectionGeneration == binding.ConnectionGeneration && entry.RuntimeSessionID != binding.RuntimeSessionID {
+	if entry.ConnectionGeneration == binding.ConnectionGeneration && entry.RuntimeSessionID != binding.RuntimeSessionID && entry.PresenceState != PresenceStateDisconnected {
 		return nil, ErrRuntimeSessionBindingConflict
 	}
 

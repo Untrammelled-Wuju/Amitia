@@ -135,16 +135,9 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 				continue
 			}
 			if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
-				defID := runtime_supervisor.BuildRuntimeDefinitionID(extensionID, string(mod.ID), mod.Runtime.Type)
-				spec := runtime_supervisor.InstanceSpec{
-					DefinitionID: defID,
-					ExtensionID:  extID,
-					ModuleID:     mod.ID,
-					RuntimeType:  mod.Runtime.Type,
-					Generation:   candidateGeneration,
-				}
+				spec := buildModuleInstanceSpec(extID, mod.ID, mod.Runtime, candidateGeneration)
 				result := r.container.RuntimeSupervisor.Reconcile(ctx, runtime_supervisor.ReconcileRequest{
-					DefinitionID: defID,
+					DefinitionID: spec.DefinitionID,
 					Desired:      runtime_supervisor.DesiredRunning,
 					Spec:         spec,
 				})
@@ -368,6 +361,8 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	}
 	r.logEnableStep(operationID, extensionID, "register_ui", "succeeded", nil)
 	r.persistLifecycleStep(ctx, operationID, "register_ui", LifecycleStepSucceeded, nil)
+
+	r.container.ensureGameHostServicePermissionGrants(ctx, extID, gameHostOwnedModules, modules)
 
 	if err := r.reconcileGameHostExtension(ctx, extensionID); err != nil {
 		tx.rollback(ctx)

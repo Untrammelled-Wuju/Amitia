@@ -200,7 +200,7 @@ func TestEnrichGameHostToolRuntimeBindingPreservesSelectors(t *testing.T) {
 		"pluginId":    "plugin-a",
 		"serviceId":   "service-b",
 	})
-	if got.Metadata["pluginId"] != "plugin-a" || got.Metadata["serviceId"] != "service-b" {
+	if got.Metadata["pluginId"] != "com.example.game/plugin-a" || got.Metadata["serviceId"] != "service-b" {
 		t.Fatalf("selectors were not preserved: %+v", got.Metadata)
 	}
 }
