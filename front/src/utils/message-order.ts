@@ -161,21 +161,54 @@ export function normalizeRealtimeMessage(payload: any): any {
     ["deliverySequence", "delivery_sequence"],
     ["emoteDecisionStatus", "emote_decision_status"],
     ["createdAt", "created_at"],
+    ["requestId", "request_id"],
+    ["clientMessageId", "client_message_id"],
   ] as const;
   for (const [target, fallback] of mappings) {
     const value = payload?.[target] ?? payload?.[fallback];
     if (value !== undefined && value !== null) message[target] = value;
   }
+  if (!message.clientMessageId && message.role === "user" && message.requestId) {
+    message.clientMessageId = message.requestId;
+  }
   return message;
+}
+
+export function getClientMessageId(message: any): string {
+  const explicit = String(message?.clientMessageId || "").trim();
+  if (explicit) return explicit;
+  if (message?.role !== "user") return "";
+  return String(message?.requestId || "").trim();
+}
+
+export function getMessageUIKey(message: any, index = 0): string {
+  const uiKey = String(message?.uiKey || "").trim();
+  if (uiKey) return uiKey;
+  const clientMessageId = getClientMessageId(message);
+  if (clientMessageId) return `client:${clientMessageId}`;
+  const id = String(message?.id || "").trim();
+  if (id) return `server:${id}`;
+  return `fallback:${String(message?.role || "unknown")}:${String(message?.createdAt || message?.timestamp || "")}:${index}`;
 }
 
 export function mergeChatMessage(messages: any[], incoming: any): boolean {
   const id = String(incoming?.id || "");
-  if (!id) return false;
+  const clientMessageId = getClientMessageId(incoming);
+  if (!id && !clientMessageId) return false;
   const index = messages.findIndex(
-    (message) => String(message?.id || "") === id,
+    (message) =>
+      (!!id && String(message?.id || "") === id) ||
+      (!!clientMessageId && getClientMessageId(message) === clientMessageId),
   );
   if (index < 0) return false;
-  messages[index] = { ...messages[index], ...incoming };
+  const current = messages[index];
+  messages[index] = {
+    ...current,
+    ...incoming,
+    clientMessageId:
+      getClientMessageId(incoming) || getClientMessageId(current) || undefined,
+    uiKey: current?.uiKey || incoming?.uiKey,
+    animateIn: current?.animateIn ?? incoming?.animateIn,
+  };
   return true;
 }

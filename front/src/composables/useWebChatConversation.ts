@@ -6,6 +6,8 @@ import { useApi } from "./useApi";
 import { useCachedApi } from "./useCachedApi";
 import {
   compareChatMessages,
+  getClientMessageId,
+  getMessageUIKey,
   normalizeRealtimeMessage,
 } from "@/utils/message-order";
 
@@ -85,10 +87,29 @@ export function useWebChatConversation(
     if (pendingMsg && !serverMap.has(String(pendingMsg.id)) && !localOnly.some((m: any) => m.id === pendingMsg.id)) {
       localOnly.push(pendingMsg);
     }
+    const currentById = new Map<string, any>();
+    const currentByClientMessageId = new Map<string, any>();
+    for (const current of messages.value) {
+      const id = String(current?.id || "");
+      const clientMessageId = getClientMessageId(current);
+      if (id) currentById.set(id, current);
+      if (clientMessageId) currentByClientMessageId.set(clientMessageId, current);
+    }
     const merged = serverItems.map((raw: any) => {
       const m = normalizeRealtimeMessage(raw);
-      if (m.imageUrl && m.content === "[图片]") return { ...m, content: "" };
-      return m;
+      const existing =
+        currentById.get(String(m.id || "")) ||
+        currentByClientMessageId.get(getClientMessageId(m));
+      const next = {
+        ...existing,
+        ...m,
+        clientMessageId:
+          getClientMessageId(m) || getClientMessageId(existing) || undefined,
+        uiKey: existing?.uiKey || getMessageUIKey(m),
+        animateIn: existing?.animateIn ?? false,
+      };
+      if (next.imageUrl && next.content === "[图片]") return { ...next, content: "" };
+      return next;
     });
     for (const local of localOnly) {
       if (!serverMap.has(String(local.id))) {

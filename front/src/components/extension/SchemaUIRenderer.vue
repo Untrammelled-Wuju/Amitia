@@ -57,6 +57,49 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+function unwrapActionResult(value: unknown): Record<string, unknown> {
+  const result = asRecord(value);
+  const structured = asRecord(result.structured);
+  return Object.keys(structured).length > 0 ? { ...result, ...structured } : result;
+}
+
+function findActionFailure(value: unknown): string {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = findActionFailure(item);
+      if (message) return message;
+    }
+    return "";
+  }
+  const data = asRecord(value);
+  const status = typeof data.status === "string" ? data.status.toLowerCase() : "";
+  if (["failed", "error", "rejected", "denied"].includes(status)) {
+    for (const key of ["message", "errorMessage", "reason"]) {
+      if (typeof data[key] === "string" && data[key]) return data[key] as string;
+    }
+    const error = asRecord(data.error);
+    if (typeof error.message === "string" && error.message) return error.message;
+  }
+  for (const child of Object.values(data)) {
+    const message = findActionFailure(child);
+    if (message) return message;
+  }
+  return "";
+}
+
+function formatActionMessage(value: string): string {
+  try {
+    const parsed = JSON.parse(value) as { message?: unknown; with?: unknown };
+    if (typeof parsed.message === "string" && parsed.message) return parsed.message;
+    if (Array.isArray(parsed.with)) {
+      const messages = parsed.with.filter((item): item is string => typeof item === "string" && item.length > 0);
+      if (messages.length > 0) return messages.join(" ");
+    }
+  } catch {
+  }
+  return value;
+}
+
 const groupedDataSources = computed(() => {
   const groups: Record<string, Record<string, unknown>> = {};
   for (const source of schema.value?.dataSources ?? []) {
@@ -203,11 +246,39 @@ async function loadSchema() {
     } else {
       schema.value = data;
     }
+    const roots: SchemaUINodeType[] = data.root ? [data.root] : data.children ?? [];
+    for (const r of roots) initializeFormDefaults(r);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
     loading.value = false;
   }
+}
+
+function initializeFormDefaults(node: SchemaUINodeType) {
+  if (node.type === "select") {
+    const nodeProps = node.props ?? {};
+    const options = Array.isArray(nodeProps.options) ? (nodeProps.options as Record<string, unknown>[]) : [];
+    for (const binding of node.bindings ?? []) {
+      if (binding.source !== "form" || !binding.path) continue;
+      const current = formState[binding.path];
+      if (current !== undefined && current !== null && current !== "") continue;
+      if (binding.default !== undefined && binding.default !== null && binding.default !== "") {
+        formState[binding.path] = binding.default;
+        continue;
+      }
+      const propDefault = nodeProps.defaultValue ?? nodeProps.default_value;
+      if (propDefault !== undefined && propDefault !== null && propDefault !== "") {
+        formState[binding.path] = propDefault;
+        continue;
+      }
+      const first = options[0];
+      if (first && first.value !== undefined && first.value !== null && first.value !== "") {
+        formState[binding.path] = first.value;
+      }
+    }
+  }
+  for (const child of node.children ?? []) initializeFormDefaults(child);
 }
 
 let restartToken = 0;
@@ -431,7 +502,7 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
         input: { ...actionInput, __amitiaApprovalConfirmed: true },
       });
     }
-    const data = bridgeResult && typeof bridgeResult === "object" ? bridgeResult as Record<string, unknown> : {};
+    const data = unwrapActionResult(bridgeResult);
     if (data && typeof data === "object") {
       if (data.clientExecute === true && typeof data.text === "string") {
         try {
@@ -459,7 +530,10 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
       if (data.reload_schema === true) {
         await loadSchema();
       }
-      if (typeof data.message === "string" && data.message) {
+      const failureMessage = findActionFailure(data);
+      if (failureMessage) {
+        ElMessage.error(formatActionMessage(failureMessage));
+      } else if (typeof data.message === "string" && data.message) {
         ElMessage.success(data.message);
       }
     }

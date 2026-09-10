@@ -287,17 +287,6 @@ async function copyContent() {
   gap: 10px;
   padding: 8px 0;
   align-items: flex-start;
-  animation: bubbleIn 0.25s ease;
-}
-@keyframes bubbleIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .chat-bubble.user {

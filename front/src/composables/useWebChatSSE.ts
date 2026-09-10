@@ -70,6 +70,7 @@ export function useWebChatSSE(
     const delay = calcTypingDelay(raw.content || "");
     typingTimer = setTimeout(() => {
       raw.typingDone = true;
+      raw.animateIn = true;
       messages.value.push(raw);
       sortMessages();
       lastPolledMsgId = raw.id || lastPolledMsgId;
@@ -143,6 +144,7 @@ export function useWebChatSSE(
           insertTransientModelError(messages.value, {
             ...msg,
             typingDone: true,
+            animateIn: true,
           });
           lastPolledMsgId = msg.id || lastPolledMsgId;
           sortMessages();
@@ -265,6 +267,7 @@ export function useWebChatSSE(
               messages.value.push({
                 ...msg,
                 createdAt: msg.createdAt || new Date().toISOString(),
+                animateIn: true,
               });
               sortMessages();
             }

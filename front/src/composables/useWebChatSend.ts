@@ -222,6 +222,8 @@ export function useWebChatSend(
     isSubmitting.value = true;
     const requestEnvelope = createRequestEnvelope();
     const userMsgLocalId = "user-" + Date.now();
+    const clientMessageId = requestEnvelope.requestId;
+    const uiKey = `client:${clientMessageId}`;
     const imgUrl = pendingImageBase64.value;
     const finalAudioUrl = audioUrl || pendingAudioUrl.value;
     const finalVideoUrl = videoUrl || pendingVideoUrl.value;
@@ -250,13 +252,16 @@ export function useWebChatSend(
     messages.value.push({
       id: userMsgLocalId,
       requestId: requestEnvelope.requestId,
+      clientMessageId,
+      uiKey,
+      animateIn: true,
       role: "user",
       content: sendContent,
       imageUrl: imgUrl || undefined,
       audioUrl: finalAudioUrl || undefined,
       audioDuration: 0,
       videoUrl: finalVideoUrl || undefined,
-      status: "sent",
+      status: "sending",
       conversationId: convId.value,
       createdAt: new Date().toISOString(),
       replyToMessageId: replyTarget?.value?.id || undefined,
@@ -270,13 +275,16 @@ export function useWebChatSend(
           JSON.stringify({
             id: userMsgLocalId,
             requestId: requestEnvelope.requestId,
+            clientMessageId,
+            uiKey,
+            animateIn: false,
             role: "user",
             content: sendContent,
             imageUrl: imgUrl || undefined,
             audioUrl: finalAudioUrl || undefined,
             audioDuration: 0,
             videoUrl: finalVideoUrl || undefined,
-            status: "sent",
+            status: "sending",
             conversationId: convId.value,
             createdAt: new Date().toISOString(),
             replyToMessageId: replyTarget?.value?.id || undefined,
@@ -294,6 +302,7 @@ export function useWebChatSend(
     try {
       const payload = {
         ...requestEnvelope,
+        clientMessageId,
         conversationId: convId.value || undefined,
         characterId: characterId.value || undefined,
         message: sendContent,
@@ -327,6 +336,8 @@ export function useWebChatSend(
       );
       if (uIdx >= 0 && result.userMessageId) {
         messages.value[uIdx].id = result.userMessageId;
+        messages.value[uIdx].clientMessageId =
+          result.clientMessageId || clientMessageId;
         messages.value[uIdx].status = "queued";
         const duplicates = messages.value.filter(
           (m: any, i: number) => i !== uIdx && m.id === result.userMessageId,

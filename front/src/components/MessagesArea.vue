@@ -32,6 +32,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         v-if="item.kind === 'message'"
         :data-message-id="item.message.id"
         class="conversation-flow-item conversation-flow-item--message"
+        :class="{ 'conversation-flow-item--entering': item.message.animateIn === true }"
+        @animationend="finishMessageEntrance(item.message, $event)"
       >
         <ExtensionSlot
           v-if="hasMessageSlotRenderer(item.message)"
@@ -125,6 +127,7 @@ import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
 import { acknowledgeClientRuntimeSessionState, fetchClientRuntimeSessionState, fetchConversationUIEventsBeforeSequence } from "@/api/extension";
 import { createConversationUIEventStream } from "@/composables/useConversationUIEventStream";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
+import { getMessageUIKey } from "@/utils/message-order";
 import {
   ConversationNodeAssembler,
   compareTimeline,
@@ -193,7 +196,7 @@ type FlowItem =
 const flowItems = computed<FlowItem[]>(() => {
   const items: FlowItem[] = props.messages.map((message, index) => ({
     kind: "message",
-    key: `message:${String(message?.id ?? index)}`,
+    key: `message:${getMessageUIKey(message, index)}`,
     message,
     sequence: finiteNumber(message?.seq ?? message?.sequence),
     timestamp: String(message?.createdAt ?? message?.timestamp ?? ""),
@@ -407,6 +410,11 @@ function finiteNumber(value: unknown): number | undefined {
   return Number.isFinite(number) ? number : undefined;
 }
 
+function finishMessageEntrance(message: any, event: AnimationEvent) {
+  if (event.target !== event.currentTarget) return;
+  message.animateIn = false;
+}
+
 function scrollToMessage(messageId: string) {
   if (!rootEl.value) return;
   const el = rootEl.value.querySelector(`[data-message-id="${messageId}"]`);
@@ -480,6 +488,13 @@ defineExpose({ rootEl });
 .empty-chat :deep(.extension-slot) { width: min(100%, 680px); margin-top: 20px; }
 
 .messages-area > [data-message-id] { width: min(100%, 820px); margin: 0 auto; }
+.conversation-flow-item--entering { animation: conversationMessageIn 0.25s ease-out; }
+
+@keyframes conversationMessageIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @media (max-width: 768px) { .messages-area { padding: 12px 8px; } }
 
 .scroll-btn {
