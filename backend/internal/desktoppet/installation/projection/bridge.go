@@ -350,7 +350,7 @@ func (b *ProjectionBridge) completeRecenterOperationFromACK(ctx context.Context,
 }
 
 func (b *ProjectionBridge) markDelivered(ctx context.Context, eventID string) error {
-	result := b.db.WithContext(ctx).Model(&RuntimeEventRecord{}).Where("id = ? AND delivered = 0").Updates(map[string]interface{}{
+	result := b.db.WithContext(ctx).Model(&RuntimeEventRecord{}).Where("id = ? AND delivered = 0", eventID).Updates(map[string]interface{}{
 		"delivered":    1,
 		"delivered_at": time.Now().UTC().Format(time.RFC3339),
 	})

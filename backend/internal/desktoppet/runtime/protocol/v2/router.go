@@ -423,10 +423,12 @@ func (ctx *wsConnContext) readLoop() {
 
 		if env.MessageType == MessageTypeHello {
 			if err := env.ValidateBase(); err != nil {
+				log.Warn("[v2-ws] hello base validation failed: ", err)
 				return
 			}
 		} else {
 			if err := env.ValidateEstablishedSession(); err != nil {
+				log.Warn("[v2-ws] envelope session validation failed: ", err)
 				return
 			}
 		}
@@ -434,6 +436,7 @@ func (ctx *wsConnContext) readLoop() {
 		if env.UserID != ctx.conn.UserID ||
 			env.DeviceID != ctx.conn.DeviceID ||
 			env.RuntimeID != ctx.conn.RuntimeID {
+			log.Warn("[v2-ws] envelope identity mismatch: type=", env.MessageType)
 			return
 		}
 
@@ -448,6 +451,7 @@ func (ctx *wsConnContext) readLoop() {
 		}
 
 		if !env.VerifyPayloadHash() {
+			log.Warn("[v2-ws] payload hash mismatch: type=", env.MessageType, " clientHash=", env.PayloadHash, " serverHash=", protocol.ComputePayloadHash(env.Payload))
 			return
 		}
 		if env.MessageType != MessageTypeHello {
@@ -460,10 +464,12 @@ func (ctx *wsConnContext) readLoop() {
 		case MessageTypeHello:
 			var payload HelloPayload
 			if err := json.Unmarshal(env.Payload, &payload); err != nil {
+				log.Warn("[v2-ws] hello payload unmarshal failed: ", err)
 				return
 			}
 			ack, err := ctx.handler.HandleHello(ctx.conn, &payload)
 			if err != nil || ack == nil {
+				log.Warn("[v2-ws] hello rejected: ", err)
 				return
 			}
 			if ctx.config != nil {
@@ -476,6 +482,7 @@ func (ctx *wsConnContext) readLoop() {
 			}
 			ackEnv, err := ctx.handler.CreateEnvelope(MessageTypeHelloAck, "hello_ack", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()), ack, ctx.conn.UserID, ctx.conn.DeviceID)
 			if err != nil || ackEnv == nil {
+				log.Warn("[v2-ws] hello_ack envelope create failed: ", err)
 				return
 			}
 			if err := ctx.SendEnvelope(ackEnv, time.Now().Format("2006-01-02 15:04:05")); err != nil {
