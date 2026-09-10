@@ -188,9 +188,9 @@ func buildTestAdapter(broker *fakeBroker, policy ghpermission.PermissionDecision
 
 func TestCheck_AllAllow(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionAllow)
-	broker.addGrant("runtime:rt-1", "gamehost.channel.use", kernelpermission.DecisionAllow)
-	broker.addGrant("runtime:rt-1", "gamehost.host_api.invoke", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.channel.use", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.host_api.invoke", kernelpermission.DecisionAllow)
 
 	adapter, resolver, _ := buildTestAdapter(broker, nil)
 	resolver.addPlugin("plugin-1", "ext-1")
@@ -320,7 +320,7 @@ func TestCheck_PluginMismatch(t *testing.T) {
 
 func TestCheck_HostPolicyDeny(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionAllow)
 
 	policy := func(ctx context.Context, subject ghpermission.EffectiveSubject, permID string) (bool, bool) {
 		return false, true
@@ -341,7 +341,7 @@ func TestCheck_HostPolicyDeny(t *testing.T) {
 
 func TestCheck_PolicyUnhandled(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionAllow)
 
 	policy := func(ctx context.Context, subject ghpermission.EffectiveSubject, permID string) (bool, bool) {
 		return false, false
@@ -359,7 +359,7 @@ func TestCheck_PolicyUnhandled(t *testing.T) {
 
 func TestCheck_ServiceLevel_Isolation(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.channel.use", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.channel.use", kernelpermission.DecisionAllow)
 
 	adapter, resolver, _ := buildTestAdapter(broker, nil)
 	resolver.addPlugin("plugin-1", "ext-1")
@@ -380,7 +380,7 @@ func TestCheck_ServiceLevel_Isolation(t *testing.T) {
 
 func TestCheck_ServiceRevokeByRuntime(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.channel.use", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.channel.use", kernelpermission.DecisionAllow)
 
 	adapter, resolver, b := buildTestAdapter(broker, nil)
 	resolver.addPlugin("plugin-1", "ext-1")
@@ -392,7 +392,7 @@ func TestCheck_ServiceRevokeByRuntime(t *testing.T) {
 		t.Fatalf("expected ALLOW before revoke, got DENY reason=%s", result1.Reason)
 	}
 
-	b.addGrant("runtime:rt-1", "gamehost.channel.use", kernelpermission.DecisionDeny)
+	b.addGrant("extension:ext-1", "gamehost.channel.use", kernelpermission.DecisionDeny)
 
 	result2 := adapter.CheckServicePermission(context.Background(), "rt-1", "plugin-1", "svc-1", "gamehost.channel.use")
 	if result2.Allowed() {
@@ -402,7 +402,7 @@ func TestCheck_ServiceRevokeByRuntime(t *testing.T) {
 
 func TestCheck_CrossRuntimeSpoof(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionAllow)
 
 	adapter, resolver, _ := buildTestAdapter(broker, nil)
 	resolver.addPlugin("plugin-1", "ext-1")
@@ -433,7 +433,7 @@ func TestCheck_CrossServiceSpoof(t *testing.T) {
 
 func TestCheck_PermissionRevoke(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionAllow)
 
 	adapter, resolver, b := buildTestAdapter(broker, nil)
 	resolver.addPlugin("plugin-1", "ext-1")
@@ -444,7 +444,7 @@ func TestCheck_PermissionRevoke(t *testing.T) {
 		t.Fatalf("expected ALLOW before revoke, got DENY reason=%s", result1.Reason)
 	}
 
-	b.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionDeny)
+	b.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionDeny)
 
 	result2 := adapter.CheckRuntimePermission(context.Background(), "rt-1", "plugin-1", "gamehost.control")
 	if result2.Allowed() {
@@ -454,7 +454,7 @@ func TestCheck_PermissionRevoke(t *testing.T) {
 
 func TestResolveRuntimePermissions_SubsetRelation(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionAllow)
 
 	adapter, resolver, _ := buildTestAdapter(broker, nil)
 	resolver.addPlugin("plugin-1", "ext-1")
@@ -474,7 +474,7 @@ func TestResolveRuntimePermissions_SubsetRelation(t *testing.T) {
 
 func TestConcurrentCheck_NoRace(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionAllow)
 
 	adapter, resolver, _ := buildTestAdapter(broker, nil)
 	resolver.addPlugin("plugin-1", "ext-1")
@@ -496,8 +496,8 @@ func TestConcurrentCheck_NoRace(t *testing.T) {
 
 func TestEffectiveView_AllowedPermissions(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionAllow)
-	broker.addGrant("runtime:rt-1", "gamehost.channel.use", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.channel.use", kernelpermission.DecisionAllow)
 
 	adapter, resolver, _ := buildTestAdapter(broker, nil)
 	resolver.addPlugin("plugin-1", "ext-1")
@@ -546,7 +546,7 @@ func TestMapServiceSubjectRejectsEmptyServiceID(t *testing.T) {
 
 func TestEffectiveViewRevisionStableAndOrderIndependent(t *testing.T) {
 	broker := newFakeBroker()
-	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionAllow)
+	broker.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionAllow)
 	adapter, resolver, _ := buildTestAdapter(broker, nil)
 	resolver.addPlugin("plugin-1", "ext-1")
 	resolver.addRuntime("rt-1", "plugin-1", domain.RuntimeStateRunning)
@@ -562,7 +562,7 @@ func TestEffectiveViewRevisionStableAndOrderIndependent(t *testing.T) {
 		t.Fatalf("same effective permission state must have stable revision: %q vs %q", first.Revision, second.Revision)
 	}
 
-	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionDeny)
+	broker.addGrant("extension:ext-1", "gamehost.control", kernelpermission.DecisionDeny)
 	third := adapter.ResolveRuntimePermissions(context.Background(), subject, "gamehost.control", "gamehost.channel.use")
 	if third.Revision == first.Revision {
 		t.Fatalf("permission decision change must change revision: %q", third.Revision)

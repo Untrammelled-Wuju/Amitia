@@ -927,6 +927,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("compose game agent bridge: %w", err)
 	}
+	gameAgentBridge.SetRuntimeStarter(runtimeExecutor)
 	agentEventSink := notification.NewAgentEventSink(gameAgentBridge.SessionRegistry())
 	notifComposite.Add(agentEventSink)
 

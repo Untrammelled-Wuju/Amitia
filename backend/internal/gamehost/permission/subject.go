@@ -22,11 +22,6 @@ func (s EffectiveSubject) KernelSubject() permission.PermissionSubject {
 		ID:          s.ExtensionID,
 		ExtensionID: s.ExtensionID,
 	}
-	if s.RuntimeID != "" {
-		subj.Type = permission.SubjectRuntime
-		subj.ID = s.RuntimeID
-		subj.ExtensionID = s.ExtensionID
-	}
 	if moduleID := s.EffectiveModuleID(); moduleID != "" {
 		subj.ModuleID = moduleID
 	}
