@@ -37,6 +37,7 @@ interface ActionDefinitionsPayload {
 const sharedCategories = ref<ActionCategory[]>([]);
 const sharedPresets = ref<ActionPreset[]>([]);
 const sharedLoading = ref(false);
+const sharedError = ref("");
 let loadPromise: Promise<void> | null = null;
 
 export function useActionDefinitions() {
@@ -46,6 +47,7 @@ export function useActionDefinitions() {
   async function load(force = false): Promise<void> {
     if (loadPromise && !force) return loadPromise;
     sharedLoading.value = true;
+    sharedError.value = "";
     loadPromise = (async () => {
       try {
         const data = await get<ActionDefinitionsPayload>(
@@ -53,8 +55,17 @@ export function useActionDefinitions() {
         );
         sharedCategories.value = data?.categories || [];
         sharedPresets.value = data?.presets || [];
+        if (!sharedCategories.value.length) {
+          sharedError.value = "动作目录为空，请重试或检查桌宠服务";
+        }
+      } catch (err: any) {
+        sharedCategories.value = [];
+        sharedPresets.value = [];
+        sharedError.value = err?.message || "动作目录加载失败";
+        throw err;
       } finally {
         sharedLoading.value = false;
+        loadPromise = null;
       }
     })();
     return loadPromise;
@@ -180,6 +191,7 @@ export function useActionDefinitions() {
     categories: sharedCategories,
     presets: sharedPresets,
     loading: sharedLoading,
+    error: sharedError,
     selectedKeys,
     load,
     isSelected,

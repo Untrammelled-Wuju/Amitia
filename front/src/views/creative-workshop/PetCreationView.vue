@@ -7,7 +7,12 @@ SPDX-License-Identifier: AGPL-3.0-only
     <ExtensionPageHeader title="桌宠制作" description="创建和定制你的桌面陪伴角色" grandparent-title="创意工坊" grandparent-path="/creative-workshop" parent-title="桌宠" parent-path="/creative-workshop/pet" />
 
 
-    <div v-if="noModelsAvailable" class="no-models-banner">
+    <div v-if="modelLoadError" class="load-error-banner">
+      <el-alert :title="modelLoadError" type="error" show-icon :closable="false" />
+      <el-button type="primary" @click="loadModelConfigs">重新加载</el-button>
+    </div>
+
+    <div v-else-if="noModelsAvailable" class="no-models-banner">
       <el-result icon="warning" title="未配置生图模型" sub-title="需要先配置至少一个已启用的生图模型才能制作桌宠">
         <template #extra>
           <el-button type="primary" @click="goToImageGenConfig">前往配置生图模型</el-button>
@@ -89,7 +94,7 @@ SPDX-License-Identifier: AGPL-3.0-only
                     :value="m.id"
                   />
                 </el-select>
-                <span v-if="!modelConfigs.length && !modelLoading" class="hint">未找到已启用的生图模型,请先在设置中配置</span>
+                <span v-if="!modelConfigs.length && !modelLoading && !modelLoadError" class="hint">未找到已启用的生图模型,请先在设置中配置</span>
               </div>
               <div class="form-item-half">
                 <label class="form-label">绑定角色 <span class="required">*</span></label>
@@ -105,7 +110,11 @@ SPDX-License-Identifier: AGPL-3.0-only
                     :value="c.id"
                   />
                 </el-select>
-                <span v-if="!characters.length && !characterLoading" class="hint">未找到可用角色,请先在角色管理中启用</span>
+                <div v-if="characterLoadError" class="field-error-row">
+                  <span>{{ characterLoadError }}</span>
+                  <el-button text type="primary" @click="loadCharacters">重试</el-button>
+                </div>
+                <span v-else-if="!characters.length && !characterLoading" class="hint">未找到可用角色,请先在角色管理中启用</span>
               </div>
                 <div class="form-item-half">
                   <label class="form-label">输出尺寸</label>
@@ -145,14 +154,16 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
 
       <div v-show="step === 1" class="step-panel">
-        <el-alert
-          v-if="actionError"
-          :title="actionError"
-          type="warning"
-          show-icon
-          :closable="false"
-          class="action-alert"
-        />
+        <div v-if="displayedActionError" class="action-error-row">
+          <el-alert
+            :title="displayedActionError"
+            :type="actionDefinitionsError ? 'error' : 'warning'"
+            show-icon
+            :closable="false"
+            class="action-alert"
+          />
+          <el-button v-if="actionDefinitionsError" type="primary" :loading="loading" @click="reloadActions">重新加载动作</el-button>
+        </div>
 
         <div class="action-toolbar">
           <div class="preset-group">
@@ -202,7 +213,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
         </div>
 
-        <el-empty v-if="!categories.length && !loading" description="暂无可用动作" />
+        <el-empty v-if="!categories.length && !loading && !actionDefinitionsError" description="暂无可用动作" />
 
         <div class="category-list">
           <div v-for="cat in categories" :key="cat.key" class="category-section">
@@ -375,6 +386,7 @@ const {
   categories,
   presets,
   loading,
+  error: actionDefinitionsError,
   selectedKeys,
   load: loadActions,
   isSelected,
@@ -428,8 +440,15 @@ const modelConfigs = ref<ModelConfig[]>([]);
 const characters = ref<Character[]>([]);
 const modelLoading = ref(false);
 const characterLoading = ref(false);
+const modelLoadError = ref("");
+const characterLoadError = ref("");
 
-const noModelsAvailable = computed(() => !modelLoading.value && modelConfigs.value.length === 0);
+const noModelsAvailable = computed(
+  () => !modelLoading.value && !modelLoadError.value && modelConfigs.value.length === 0,
+);
+const displayedActionError = computed(
+  () => actionDefinitionsError.value || actionError.value,
+);
 
 const referenceFile = ref<File | null>(null);
 const referencePreview = ref("");
@@ -574,11 +593,13 @@ function onDragEnd() {
 
 async function loadModelConfigs() {
   modelLoading.value = true;
+  modelLoadError.value = "";
   try {
     const list = (await get<ModelConfig[]>("/api/imagegen/configs")) || [];
     modelConfigs.value = list.filter((m) => Number(m.enabled) === 1);
-  } catch {
+  } catch (err: any) {
     modelConfigs.value = [];
+    modelLoadError.value = err?.message || "生图模型加载失败";
   } finally {
     modelLoading.value = false;
   }
@@ -590,15 +611,26 @@ function goToImageGenConfig() {
 
 async function loadCharacters() {
   characterLoading.value = true;
+  characterLoadError.value = "";
   try {
     const list = (await get<Character[]>("/api/characters")) || [];
     characters.value = list.filter(
       (c) => c.status === "enabled" || c.isActive === true || c.isActive === 1,
     );
-  } catch {
+  } catch (err: any) {
     characters.value = [];
+    characterLoadError.value = err?.message || "角色列表加载失败";
   } finally {
     characterLoading.value = false;
+  }
+}
+
+async function reloadActions() {
+  actionError.value = "";
+  try {
+    await loadActions(true);
+  } catch {
+    return;
   }
 }
 
@@ -693,7 +725,7 @@ function resetWizard() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadModelConfigs(), loadCharacters(), loadActions()]);
+  await Promise.allSettled([loadModelConfigs(), loadCharacters(), loadActions()]);
 });
 
 onUnmounted(() => {
@@ -804,6 +836,30 @@ onUnmounted(() => {
 
 .no-models-banner {
   margin: 24px 0;
+}
+
+.load-error-banner,
+.action-error-row,
+.field-error-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.load-error-banner,
+.action-error-row {
+  margin: 16px 0;
+}
+
+.load-error-banner .el-alert,
+.action-error-row .el-alert {
+  flex: 1;
+}
+
+.field-error-row {
+  margin-top: 6px;
+  color: var(--el-color-danger);
+  font-size: 12px;
 }
 
 /* ===== 步骤主体 ===== */
