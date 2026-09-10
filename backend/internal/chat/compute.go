@@ -196,7 +196,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	if req.ImageContext != "" {
 		userContent = req.ImageContext + "\n\n用户问：" + req.Message
 	}
-	if source == "proactive" {
+	if (source == "proactive" || source == "runtime") && strings.TrimSpace(req.ProactiveTaskInstruction) != "" {
 		userContent = req.ProactiveTaskInstruction
 	}
 
