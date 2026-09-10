@@ -563,6 +563,10 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 		convID = "web-" + uuid.New().String()[:8]
 	}
 	requestID := resolveRequestID(c, body.RequestID, body.ClientMessageID, body.MessageID)
+	clientMessageID := strings.TrimSpace(body.ClientMessageID)
+	if clientMessageID == "" {
+		clientMessageID = requestID
+	}
 	sessionID := resolveRequestBackedValue(c, body.SessionID, "X-Session-ID", "sessionId", "session_id")
 	if sessionID == "" {
 		sessionID = convID
@@ -687,10 +691,12 @@ func (h *Handler) WebChatSubmitMessage(c *gin.Context) {
 	}()
 
 	util.SuccessResponse(c, gin.H{
-		"conversationId": convID,
-		"userMessageId":  msgID,
-		"status":         "queued",
-		"mergeWindowMs":  config.AppCfg.Chat.MergeWindowMs,
+		"conversationId":  convID,
+		"userMessageId":   msgID,
+		"clientMessageId": clientMessageID,
+		"requestId":       requestID,
+		"status":          "queued",
+		"mergeWindowMs":   config.AppCfg.Chat.MergeWindowMs,
 	})
 }
 
