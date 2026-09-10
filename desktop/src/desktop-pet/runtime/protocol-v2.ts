@@ -246,7 +246,7 @@ function backendCanonicalJSON(value: unknown): string {
   }
   if (value !== null && typeof value === "object") {
     const input = value as Record<string, unknown>;
-    return `{${Object.keys(input).sort().map((key) =>
+    return `{${Object.keys(input).filter((key) => input[key] !== undefined).sort().map((key) =>
       // deviceruntime/protocol.marshalCanonical writes protocol field names
       // directly. Runtime payload keys are schema-owned ASCII identifiers.
       `"${key}":${backendCanonicalJSON(input[key])}`
