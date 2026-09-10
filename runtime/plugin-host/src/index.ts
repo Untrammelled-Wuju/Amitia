@@ -20,19 +20,24 @@ async function main(): Promise<void> {
   const invocations = new Map<string, InvocationState>();
   let extension: LoadedExtension | null = null;
 
-  const instanceId = randomBytes(8).toString("hex");
-  const nonce = randomBytes(8).toString("hex");
+  const instanceId = process.env.AMITIA_RUNTIME_INSTANCE_ID || randomBytes(8).toString("hex");
+  const nonce = process.env.AMITIA_NONCE || randomBytes(8).toString("hex");
 
   setState("starting");
   rpc.sendNotification("runtime.hello", { instanceId, nonce });
 
   rpc.on("runtime.initialize", async (message: JsonRpcMessage) => {
+    if (message.id === undefined) {
+      return;
+    }
     try {
       const spec: BootstrapSpec = (message.params || {}) as BootstrapSpec;
       extension = await bootstrap(spec, rpc, registry);
       setState("ready");
+      rpc.sendResult(message.id, { instanceId });
       rpc.sendNotification("runtime.ready", { instanceId });
     } catch (e) {
+      rpc.sendError(message.id, -32603, (e as Error).message || "initialize failed");
       setState("failed");
       rpc.sendNotification("log.write", {
         level: "error",
