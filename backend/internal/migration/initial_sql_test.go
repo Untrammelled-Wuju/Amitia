@@ -254,6 +254,13 @@ func TestApplyBaselineOnEmptyDatabase(t *testing.T) {
 	if tableCount < 10 {
 		t.Fatalf("table count = %d, want >= 10 after baseline", tableCount)
 	}
+	var actionCount int64
+	if err := db.Raw("SELECT COUNT(*) FROM desktop_pet_action_definitions WHERE enabled = 1").Scan(&actionCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if actionCount == 0 {
+		t.Fatal("desktop pet action catalog is empty after baseline")
+	}
 }
 
 func TestApplyBaselineAfterEmbeddedBaseline(t *testing.T) {

@@ -12,7 +12,10 @@ import (
 var baselineSQL string
 
 func ApplyBaseline(db *gorm.DB) error {
-	return ApplyInitialSQL(db, baselineSQL)
+	if err := ApplyInitialSQL(db, baselineSQL); err != nil {
+		return err
+	}
+	return applyDesktopPetCatalogBaseline(db)
 }
 
 func MarkAllMigrationsApplied(db *gorm.DB, migrations []Migration) error {

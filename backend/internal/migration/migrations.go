@@ -208,6 +208,7 @@ func DefaultMigrations() []Migration {
 		ActiveMessageUnrepliedSlowdownMigration(),
 		MemoryContextUseMigration(),
 		TtsClonedVoicesMigration(),
+		DesktopPetCatalogRepairMigration(),
 	}
 }
 
