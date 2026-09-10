@@ -44,9 +44,14 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 			channel = "web"
 		}
 		if !event.IsInternal {
+			metadata := map[string]interface{}{
+				"userMessageId":       event.UserMessageID,
+				"userMessageSequence": event.UserMessageSequence,
+				"requestId":           event.RequestID,
+			}
 			if event.MessagePlan != nil {
 				for _, item := range event.MessagePlan.Items {
-					bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", item.Content, nowStr)
+					bus.PublishMessageCreated(event.ConversationID, item.MessageID, channel, "outbound", "assistant", item.Content, nowStr, event.Sequences[item.MessageID], metadata)
 				}
 				return
 			}
@@ -55,7 +60,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 				if i < len(event.Lines) {
 					content = event.Lines[i]
 				}
-				bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", content, nowStr)
+				bus.PublishMessageCreated(event.ConversationID, msgID, channel, "outbound", "assistant", content, nowStr, event.Sequences[msgID], metadata)
 			}
 		}
 	})

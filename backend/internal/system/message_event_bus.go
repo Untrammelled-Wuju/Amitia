@@ -21,6 +21,7 @@ type MessageEvent struct {
 	Type           MessageEventType `json:"type"`
 	ConversationID string           `json:"conversationId"`
 	MessageID      string           `json:"messageId,omitempty"`
+	Sequence       int64            `json:"sequence,omitempty"`
 	Channel        string           `json:"channel"`
 	Direction      string           `json:"direction,omitempty"`
 	Role           string           `json:"role,omitempty"`
@@ -135,16 +136,18 @@ func (bus *MessageEventBus) PublishContext(ctx context.Context, event MessageEve
 	_ = payload
 }
 
-func (bus *MessageEventBus) PublishMessageCreated(convID, msgID, channel, direction, role, content, createdAt string) {
+func (bus *MessageEventBus) PublishMessageCreated(convID, msgID, channel, direction, role, content, createdAt string, sequence int64, data interface{}) {
 	bus.Publish(MessageEvent{
 		Type:           EventMessageCreated,
 		ConversationID: convID,
 		MessageID:      msgID,
+		Sequence:       sequence,
 		Channel:        channel,
 		Direction:      direction,
 		Role:           role,
 		Content:        content,
 		CreatedAt:      createdAt,
+		Data:           data,
 	})
 }
 
