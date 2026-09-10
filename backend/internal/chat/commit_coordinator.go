@@ -65,20 +65,22 @@ type MessagePlanningDecision struct {
 }
 
 type MessageCommitEvent struct {
-	ConversationID string
-	CharacterID    string
-	Channel        string
-	Source         string
-	MessageIDs     []string
-	UserMessageID  string
-	UserMessage    string
-	Reply          string
-	Lines          []string
-	UserID         string
-	PeerID         string
-	RequestID      string
-	MessagePlan    *interaction.MessagePlan
-	IsInternal     bool
+	ConversationID      string
+	CharacterID         string
+	Channel             string
+	Source              string
+	MessageIDs          []string
+	Sequences           map[string]int64
+	UserMessageID       string
+	UserMessageSequence int64
+	UserMessage         string
+	Reply               string
+	Lines               []string
+	UserID              string
+	PeerID              string
+	RequestID           string
+	MessagePlan         *interaction.MessagePlan
+	IsInternal          bool
 }
 type messageCommitPlan struct {
 	Request         *ProcessMessageRequest
@@ -162,6 +164,8 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		plan.LeaseOwnerToken = ownerToken
 	}
 
+	messageSequences := make(map[string]int64)
+	var userMessageSequence int64
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := s.acquireAndValidateCommitTokenTx(tx, &plan); err != nil {
 			return err
@@ -192,6 +196,7 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 				if err := s.recordMessageChangeTx(tx, emoteMessage, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
 					return err
 				}
+				messageSequences[emoteMessage.ID] = emoteMessage.Sequence
 				result.LastSequence = emoteMessage.Sequence
 				items = append(items, interaction.MessagePlanItem{MessageID: emoteMessage.ID, Sequence: sequence, Type: "emote", Content: planned.Content, EmoteID: planned.EmoteID, AltText: planned.AltText, IsAnimated: planned.IsAnimated == 1, Width: planned.Width, Height: planned.Height, OriginalAssetReference: planned.Original, FallbackAssetReference: planned.Fallback})
 				emoteInserted = true
@@ -210,6 +215,7 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 			if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
 				return err
 			}
+			messageSequences[aiMsgID] = aiMsg.Sequence
 			result.MessageIDs = append(result.MessageIDs, aiMsgID)
 			result.LastSequence = aiMsg.Sequence
 			items = append(items, interaction.MessagePlanItem{MessageID: aiMsgID, Sequence: sequence, Type: "text", Content: text})
@@ -223,6 +229,11 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 			}
 		}
 		now := time.Now().Format("2006-01-02 15:04:05")
+		if plan.UserMessageID != "" {
+			if err := tx.Model(&Message{}).Where("id = ?", plan.UserMessageID).Select("sequence").Scan(&userMessageSequence).Error; err != nil {
+				userMessageSequence = 0
+			}
+		}
 		if err := tx.Model(&Message{}).Where("id = ?", plan.UserMessageID).Updates(map[string]interface{}{"status": "sent", "updated_at": now}).Error; err != nil {
 			if plan.Source != "proactive" {
 				return err
@@ -276,20 +287,22 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 	}
 	if len(messageCommitHooks) > 0 {
 		event := &MessageCommitEvent{
-			ConversationID: plan.Conversation,
-			CharacterID:    plan.Character,
-			Channel:        plan.Request.Channel,
-			Source:         plan.Source,
-			MessageIDs:     result.MessageIDs,
-			UserMessageID:  plan.UserMessageID,
-			UserMessage:    plan.Request.Message,
-			Reply:          plan.Reply,
-			Lines:          plan.Lines,
-			UserID:         plan.Request.UserID,
-			PeerID:         plan.Request.PeerID,
-			RequestID:      plan.Request.RequestID,
-			MessagePlan:    result.MessagePlan,
-			IsInternal:     plan.Request.IsInternal,
+			ConversationID:      plan.Conversation,
+			CharacterID:         plan.Character,
+			Channel:             plan.Request.Channel,
+			Source:              plan.Source,
+			MessageIDs:          result.MessageIDs,
+			Sequences:           messageSequences,
+			UserMessageID:       plan.UserMessageID,
+			UserMessageSequence: userMessageSequence,
+			UserMessage:         plan.Request.Message,
+			Reply:               plan.Reply,
+			Lines:               plan.Lines,
+			UserID:              plan.Request.UserID,
+			PeerID:              plan.Request.PeerID,
+			RequestID:           plan.Request.RequestID,
+			MessagePlan:         result.MessagePlan,
+			IsInternal:          plan.Request.IsInternal,
 		}
 		for _, hook := range messageCommitHooks {
 			hook(event)
