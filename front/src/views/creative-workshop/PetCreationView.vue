@@ -118,7 +118,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               </div>
                 <div class="form-item-half">
                   <label class="form-label">输出尺寸</label>
-                  <el-input value="4096 × 4096（模型最大分辨率）" disabled />
+                  <el-input value="4096 × 3072（固定，12 帧 4×3 网格）" disabled />
                 </div>
             </div>
           </div>
@@ -460,7 +460,7 @@ const form = reactive({
   prompt: "",
   negativePrompt: "",
   outputWidth: 4096,
-  outputHeight: 4096,
+  outputHeight: 3072,
 });
 
 const step1Valid = computed(
