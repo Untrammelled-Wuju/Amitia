@@ -304,7 +304,7 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 			DefinitionVersion:         a.DefinitionVersion,
 			SupportsDefaultIdle:       a.SupportsDefaultIdle,
 			SortOrder:                 a.SortOrder,
-			FrameCount:                a.DefaultFrameCount,
+			FrameCount:                specs.FixedFrameCount,
 			EstimatedGenerationCount:  a.EstimatedGenerationCount,
 			Status:                    "pending",
 			Progress:                  0,
