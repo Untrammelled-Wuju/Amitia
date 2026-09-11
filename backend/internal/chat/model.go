@@ -350,6 +350,7 @@ type ProcessMessageRequest struct {
 	Runtime                  *interaction.RuntimeAssembly `json:"-"`
 	ExecContext              *coreexec.ExecutionContext   `json:"-"`
 	IsInternal               bool                         `json:"-"`
+	SuppressReplyPersistence bool                         `json:"-"`
 }
 
 type ProcessMessageResponse struct {

@@ -112,6 +112,9 @@ type messageCommitResult struct {
 
 func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResult, error) {
 	result := &messageCommitResult{}
+	if plan.Request.SuppressReplyPersistence {
+		plan.Lines = nil
+	}
 
 	log.Printf("[commitInteraction] enter InteractionID=%s HasRuntime=%v ExpectedVersion=%d Lines=%d", plan.Request.InteractionID, plan.Request.Runtime != nil, plan.Request.ExpectedStatusVersion, len(plan.Lines))
 
@@ -123,7 +126,7 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		responseGroupID = uuid.New().String()
 	}
 	var planningDecision *MessagePlanningDecision
-	if messagePlanningHook != nil {
+	if messagePlanningHook != nil && !plan.Request.SuppressReplyPersistence {
 		planningDecision = messagePlanningHook(&MessagePlanningEvent{
 			ConversationID: plan.Conversation,
 			CharacterID:    plan.Character,

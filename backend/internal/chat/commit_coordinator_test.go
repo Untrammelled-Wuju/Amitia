@@ -168,6 +168,43 @@ func TestCommitInteractionPersistsMessagesStateRelationshipAndOutboxAtomically(t
 	}
 }
 
+func TestCommitInteractionSuppressesReplyPersistence(t *testing.T) {
+	db, svc, convID := setupCommitCoordinatorTest(t, false)
+	req := &ProcessMessageRequest{
+		CharacterID:              "char-commit",
+		ConversationID:           convID,
+		Channel:                  "web",
+		Source:                   "runtime",
+		RequestID:                "req-commit",
+		InteractionID:            "interaction-commit",
+		ExpectedStatusVersion:    2,
+		SuppressReplyPersistence: true,
+	}
+	result, err := svc.commitInteraction(messageCommitPlan{
+		Request:       req,
+		Conversation:  convID,
+		Character:     "char-commit",
+		CharacterName: "Amitia",
+		UserMessageID: "user-commit",
+		Reply:         "sent through plugin",
+		Lines:         []string{"sent through plugin"},
+		Source:        "runtime",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.MessageIDs) != 0 || len(result.MessagePlan.Items) != 0 {
+		t.Fatalf("suppressed reply created messages: %+v", result)
+	}
+	var assistantCount int64
+	if err := db.Model(&Message{}).Where("conversation_id = ? AND role = ?", convID, "assistant").Count(&assistantCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if assistantCount != 0 {
+		t.Fatalf("expected no assistant messages, got %d", assistantCount)
+	}
+}
+
 func TestCommitInteractionRollsBackWhenOutboxCommitFails(t *testing.T) {
 	db, svc, convID := setupCommitCoordinatorTest(t, false)
 	req := &ProcessMessageRequest{

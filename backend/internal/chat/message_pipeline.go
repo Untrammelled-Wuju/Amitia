@@ -104,6 +104,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		Runtime:                  req.Runtime,
 		ExecContext:              req.ExecContext,
 		IsInternal:               req.IsInternal,
+		SuppressReplyPersistence: req.SuppressReplyPersistence,
 		ProactiveTimeContext:     req.ProactiveTimeContext,
 		ProactiveRecentContext:   req.ProactiveRecentContext,
 		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
