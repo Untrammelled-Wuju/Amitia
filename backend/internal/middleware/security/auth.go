@@ -118,7 +118,12 @@ func isTrustedDesktopOrigin(origin string) bool {
 
 func isDesktopDevelopmentOrigin(origin string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(origin))
-	if err != nil || parsed.Scheme != "http" || (parsed.Port() != "5178" && parsed.Port() != "15178") {
+	if err != nil || parsed.Scheme != "http" {
+		return false
+	}
+	switch parsed.Port() {
+	case "5178", "15177", "15178":
+	default:
 		return false
 	}
 	host := strings.ToLower(parsed.Hostname())

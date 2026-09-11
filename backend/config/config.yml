@@ -30,6 +30,8 @@ security:
   allowedOrigins:
     - "http://localhost:5178"
     - "http://127.0.0.1:5178"
+    - "http://localhost:15177"
+    - "http://127.0.0.1:15177"
 
 providers:
   scriptRuntime:
