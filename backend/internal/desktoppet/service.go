@@ -689,7 +689,7 @@ func (s *service) GetTaskSourceImageRef(taskID string, userID string) (security.
 	return security.ArtifactReference{
 		ArtifactID:  taskID,
 		OwnerUserID: userID,
-		RootKind:    security.RootGenerationArtifacts,
+		RootKind:    security.RootDesktopPets,
 		StorageKey:  storageKey,
 		ContentHash: task.SourceImageHash,
 		ByteSize:    int64(task.SourceImageSize),
@@ -809,7 +809,7 @@ func (s *service) GetFrameImageRef(taskID, actionKey string, frameIndex int, use
 	return security.ArtifactReference{
 		ArtifactID:  taskID + ":" + actionKey + ":" + strconv.Itoa(frameIndex),
 		OwnerUserID: userID,
-		RootKind:    security.RootGenerationArtifacts,
+		RootKind:    security.RootDesktopPets,
 		StorageKey:  storageKey,
 		ContentHash: target.ResultHash,
 		ByteSize:    int64(target.ResultSize),
@@ -1522,7 +1522,7 @@ func (s *service) GetActionImageRef(taskID, actionKey string, userID string) (se
 	return security.ArtifactReference{
 		ArtifactID:  taskID + ":" + actionKey + ":primary",
 		OwnerUserID: userID,
-		RootKind:    security.RootGenerationArtifacts,
+		RootKind:    security.RootDesktopPets,
 		StorageKey:  storageKey,
 		ContentHash: artifact.Hash,
 		ByteSize:    artifact.Size,

@@ -23,6 +23,7 @@ import (
 type StorageRootKind string
 
 const (
+	RootDesktopPets         StorageRootKind = "desktop_pets"
 	RootGenerationArtifacts StorageRootKind = "generation_artifacts"
 	RootProcessingRevisions StorageRootKind = "processing_revisions"
 	RootEditingAssets       StorageRootKind = "editing_assets"
@@ -37,6 +38,7 @@ const (
 )
 
 var requiredRootKinds = []StorageRootKind{
+	RootDesktopPets,
 	RootGenerationArtifacts,
 	RootProcessingRevisions,
 	RootEditingAssets,
@@ -57,6 +59,7 @@ func AllRequiredRootKinds() []StorageRootKind {
 }
 
 var defaultRelativePaths = map[StorageRootKind]string{
+	RootDesktopPets:         "desktop-pets",
 	RootGenerationArtifacts: "desktop-pets/generation-artifacts",
 	RootProcessingRevisions: "desktop-pets/processing-revisions",
 	RootEditingAssets:       "desktop-pets/editing-assets",
