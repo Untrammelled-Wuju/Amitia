@@ -134,6 +134,7 @@ type UnifiedEntryRequest struct {
 	RequestID                string          `json:"requestId,omitempty"`
 	SessionID                string          `json:"sessionId,omitempty"`
 	IsInternal               bool            `json:"-"`
+	SuppressReplyPersistence bool            `json:"-"`
 }
 
 type UnifiedEntry struct {
@@ -256,6 +257,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		ImageContext:             req.ImageContext,
 		ReplyToMessageID:         req.ReplyToMessageID,
 		IsInternal:               req.IsInternal,
+		SuppressReplyPersistence: req.SuppressReplyPersistence,
 		ProactiveTaskInstruction: req.ProactiveTaskInstruction,
 		ProactiveTimeContext:     req.ProactiveTimeContext,
 		ProactiveRecentContext:   req.ProactiveRecentContext,
