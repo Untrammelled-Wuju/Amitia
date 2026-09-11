@@ -209,6 +209,7 @@ func DefaultMigrations() []Migration {
 		MemoryContextUseMigration(),
 		TtsClonedVoicesMigration(),
 		DesktopPetCatalogRepairMigration(),
+		DesktopPetGenerationModeSnapshotRepairMigration(),
 	}
 }
 
@@ -218,6 +219,46 @@ func SyncSequenceSeedMigration() Migration {
 		Name:    "seed_sync_sequence_initial_row",
 		Up: func(s *Step) error {
 			s.Execute("INSERT OR IGNORE INTO sync_sequence (id, seq) VALUES (1, 0)")
+			return nil
+		},
+	}
+}
+
+func DesktopPetGenerationModeSnapshotRepairMigration() Migration {
+	return Migration{
+		Version: "20260911001",
+		Name:    "repair_generation_action_mode_snapshot",
+		Up: func(s *Step) error {
+			s.Execute(`UPDATE desktop_pet_generation_task_actions SET
+				generation_mode = (
+					SELECT a.mode FROM desktop_pet_action_generation_attempts a
+					WHERE a.task_action_id = desktop_pet_generation_task_actions.id
+						AND a.status = 'succeeded' AND a.mode != '' AND a.mode != 'legacy_frame'
+					ORDER BY a.attempt_number DESC LIMIT 1
+				),
+				active_attempt_id = (
+					SELECT a.id FROM desktop_pet_action_generation_attempts a
+					WHERE a.task_action_id = desktop_pet_generation_task_actions.id
+						AND a.status = 'succeeded' AND a.mode != '' AND a.mode != 'legacy_frame'
+					ORDER BY a.attempt_number DESC LIMIT 1
+				),
+				active_attempt_number = (
+					SELECT a.attempt_number FROM desktop_pet_action_generation_attempts a
+					WHERE a.task_action_id = desktop_pet_generation_task_actions.id
+						AND a.status = 'succeeded' AND a.mode != '' AND a.mode != 'legacy_frame'
+					ORDER BY a.attempt_number DESC LIMIT 1
+				)
+				WHERE (generation_mode IS NULL OR generation_mode = '' OR generation_mode = 'legacy_frame')
+					AND EXISTS (
+						SELECT 1 FROM desktop_pet_action_generation_attempts a
+						WHERE a.task_action_id = desktop_pet_generation_task_actions.id
+							AND a.status = 'succeeded' AND a.mode != '' AND a.mode != 'legacy_frame'
+					)
+					AND EXISTS (
+						SELECT 1 FROM desktop_pet_generation_artifacts g
+						WHERE g.task_action_id = desktop_pet_generation_task_actions.id
+							AND g.is_primary = 1 AND g.status IN ('persisted', 'saved', 'verified')
+					)`)
 			return nil
 		},
 	}
