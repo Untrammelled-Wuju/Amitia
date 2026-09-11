@@ -191,6 +191,7 @@ func (w *Worker) pollLoop(ctx context.Context) {
 func (w *Worker) pollOnce(ctx context.Context) {
 	if w.lastRecoveryScan.IsZero() || time.Since(w.lastRecoveryScan) >= taskRecoveryInterval {
 		w.recoverExpiredTasks(ctx)
+		w.recoverStuckCancellingTasks(ctx)
 		w.lastRecoveryScan = time.Now()
 	}
 	tasks, err := w.repo.ListQueuedTasks()
@@ -1109,6 +1110,7 @@ func (w *Worker) finalizeTask(ctx context.Context, task *desktoppet.GenerationTa
 
 func (w *Worker) RecoverOnStartup(ctx context.Context) {
 	w.recoverExpiredTasks(ctx)
+	w.recoverStuckCancellingTasks(ctx)
 	w.lastRecoveryScan = time.Now()
 }
 
@@ -1215,6 +1217,99 @@ func (w *Worker) recoverExpiredTasks(ctx context.Context) {
 	}
 	if recovered > 0 || deferred > 0 {
 		log.Logger.Infof("desktoppet recovery scan complete: recovered=%d deferred_to_generation_recovery=%d", recovered, deferred)
+	}
+}
+
+func (w *Worker) recoverStuckCancellingTasks(ctx context.Context) {
+	tasks, err := w.repo.ListStuckCancellingTasks()
+	if err != nil {
+		log.Logger.Errorf("desktoppet recover stuck cancelling tasks failed: %v", err)
+		return
+	}
+	recovered := 0
+	deferred := 0
+	for i := range tasks {
+		task := &tasks[i]
+		if task.GenerationPlanVersion > 0 {
+			hasRecoverableAttempt, checkErr := w.taskHasRecoverableGenerationAttempts(task.ID)
+			if checkErr != nil {
+				log.Logger.Errorf("desktoppet inspect recoverable attempts for cancelling task %s failed: %v", task.ID, checkErr)
+				continue
+			}
+			if hasRecoverableAttempt {
+				deferred++
+				continue
+			}
+		}
+
+		now := time.Now().Format(workerTimeFormat)
+		applied := false
+		err := w.db.Transaction(func(tx *gorm.DB) error {
+			result := tx.Model(&desktoppet.GenerationTask{}).
+				Where("id = ? AND status = ?", task.ID, "cancelling").
+				Updates(map[string]interface{}{
+					"status":             "queued",
+					"current_stage":      "queued",
+					"status_reason":      string(contracts.ReasonSystemRecovered),
+					"last_transition_at": now,
+					"updated_at":         now,
+					"row_version":        gorm.Expr("row_version + 1"),
+				})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return nil
+			}
+			if err := tx.Model(&desktoppet.GenerationTaskAction{}).
+				Where("task_id = ? AND status = ?", task.ID, "running").
+				Updates(map[string]interface{}{
+					"status":     "pending",
+					"progress":   0,
+					"started_at": "",
+					"updated_at": now,
+				}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&desktoppet.GenerationFrame{}).
+				Where("task_id = ? AND status = ?", task.ID, "running").
+				Updates(map[string]interface{}{
+					"status":     "pending",
+					"started_at": "",
+					"updated_at": now,
+				}).Error; err != nil {
+				return err
+			}
+			applied = true
+			return nil
+		})
+		if err != nil {
+			log.Logger.Errorf("desktoppet recover cancelling task %s transaction failed: %v", task.ID, err)
+			continue
+		}
+		if !applied {
+			continue
+		}
+		recovered++
+		if err := w.stateStore.WriteAudit(ctx, taskstate.AuditRecord{
+			ID:          taskstate.NewAuditID(),
+			EntityType:  contracts.EntityGenerationTask,
+			EntityID:    task.ID,
+			FromStatus:  contracts.StatusCancelling,
+			ToStatus:    contracts.StatusQueued,
+			ToStage:     contracts.StageQueued,
+			ReasonCode:  contracts.ReasonSystemRecovered,
+			ActorType:   contracts.ActorRecovery,
+			ActorID:     "system",
+			ExecutionID: task.ExecutionID,
+			CreatedAt:   now,
+		}); err != nil {
+			log.Logger.Errorf("desktoppet recover cancelling task %s audit write failed: %v", task.ID, err)
+		}
+		log.Logger.Infof("desktoppet requeued stuck cancelling task %s; cancel request remains active so remaining actions will be skipped", task.ID)
+	}
+	if recovered > 0 || deferred > 0 {
+		log.Logger.Infof("desktoppet cancelling recovery scan complete: requeued=%d deferred_to_generation_recovery=%d", recovered, deferred)
 	}
 }
 
@@ -1357,7 +1452,6 @@ func isTransientError(code string) bool {
 	switch code {
 	case desktoppet.ErrCodeImageGenerationTimeout,
 		desktoppet.ErrCodeImageGenerationRateLimited,
-		desktoppet.ErrCodeImageGenerationProviderRejected,
 		desktoppet.ErrCodeImageResultDownloadFailed:
 		return true
 	default:
@@ -1369,6 +1463,7 @@ func isNonRetriableError(code string) bool {
 	switch code {
 	case desktoppet.ErrCodeImageGenerationAuthFailed,
 		desktoppet.ErrCodeImageGenerationRequestInvalid,
+		desktoppet.ErrCodeImageGenerationProviderRejected,
 		desktoppet.ErrCodeImageModelCapabilityUnsupported,
 		desktoppet.ErrCodeImageModelCredentialMissing:
 		return true

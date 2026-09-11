@@ -979,7 +979,6 @@ func TestIsTransientError_Codes(t *testing.T) {
 	transient := []string{
 		desktoppet.ErrCodeImageGenerationTimeout,
 		desktoppet.ErrCodeImageGenerationRateLimited,
-		desktoppet.ErrCodeImageGenerationProviderRejected,
 		desktoppet.ErrCodeImageResultDownloadFailed,
 	}
 	for _, code := range transient {
@@ -990,6 +989,7 @@ func TestIsTransientError_Codes(t *testing.T) {
 	nonTransient := []string{
 		desktoppet.ErrCodeImageGenerationAuthFailed,
 		desktoppet.ErrCodeImageGenerationRequestInvalid,
+		desktoppet.ErrCodeImageGenerationProviderRejected,
 		desktoppet.ErrCodeImageModelCapabilityUnsupported,
 		desktoppet.ErrCodeImageModelCredentialMissing,
 		"",
@@ -1006,6 +1006,7 @@ func TestIsNonRetriableError_Codes(t *testing.T) {
 	nonRetriable := []string{
 		desktoppet.ErrCodeImageGenerationAuthFailed,
 		desktoppet.ErrCodeImageGenerationRequestInvalid,
+		desktoppet.ErrCodeImageGenerationProviderRejected,
 		desktoppet.ErrCodeImageModelCapabilityUnsupported,
 		desktoppet.ErrCodeImageModelCredentialMissing,
 	}
@@ -1017,7 +1018,6 @@ func TestIsNonRetriableError_Codes(t *testing.T) {
 	retriable := []string{
 		desktoppet.ErrCodeImageGenerationTimeout,
 		desktoppet.ErrCodeImageGenerationRateLimited,
-		desktoppet.ErrCodeImageGenerationProviderRejected,
 		"",
 	}
 	for _, code := range retriable {
@@ -1201,7 +1201,10 @@ func TestRunActions_ActionIsolationOneFailureDoesNotBlockOthers(t *testing.T) {
 	action2 := insertAction(t, db, taskID, "idle_normal", "act-2", 2)
 
 	w := NewWorker(db, repo, registry)
-	results := w.runActions(context.Background(), task)
+	results, runErr := w.runActions(context.Background(), task)
+	if runErr != nil {
+		t.Fatalf("runActions returned error: %v", runErr)
+	}
 	if len(results) != 2 {
 		t.Fatalf("results count = %d, want 2", len(results))
 	}
@@ -1253,7 +1256,10 @@ func TestRunActions_SkipsAlreadyCompletedActions(t *testing.T) {
 	pendingSpec, _ := specs.GetSpec("idle_normal")
 
 	w := NewWorker(db, repo, registry)
-	results := w.runActions(context.Background(), task)
+	results, runErr := w.runActions(context.Background(), task)
+	if runErr != nil {
+		t.Fatalf("runActions returned error: %v", runErr)
+	}
 	if len(results) != 2 {
 		t.Fatalf("results count = %d, want 2", len(results))
 	}
@@ -1287,7 +1293,10 @@ func TestRunActions_CancelledTaskSkipsPendingActions(t *testing.T) {
 	insertAction(t, db, taskID, "idle_blink", "act-1", 1)
 
 	w := NewWorker(db, repo, registry)
-	results := w.runActions(context.Background(), task)
+	results, runErr := w.runActions(context.Background(), task)
+	if runErr != nil {
+		t.Fatalf("runActions returned error: %v", runErr)
+	}
 	if len(results) != 1 {
 		t.Fatalf("results count = %d, want 1", len(results))
 	}

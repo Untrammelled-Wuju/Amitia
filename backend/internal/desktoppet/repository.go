@@ -36,6 +36,7 @@ type Repository interface {
 	UpdateHeartbeat(taskID string, now string) error
 	RefreshLease(taskID string, leaseExpiresAt string, now string) error
 	ListRecoverableTasks() ([]GenerationTask, error)
+	ListStuckCancellingTasks() ([]GenerationTask, error)
 	ListQueuedTasks() ([]GenerationTask, error)
 	UpdateTaskStatus(tx *gorm.DB, taskID string, updates map[string]interface{}) error
 	UpdateTaskStatusNoTx(taskID string, updates map[string]interface{}) error
@@ -282,6 +283,18 @@ func (r *repository) ListRecoverableTasks() ([]GenerationTask, error) {
 	now := time.Now().Format(desktopPetTimeFormat)
 	var tasks []GenerationTask
 	err := r.db.Where("status = ? AND lease_expires_at < ?", "processing", now).
+		Order("lease_expires_at ASC").
+		Find(&tasks).Error
+	if tasks == nil {
+		tasks = []GenerationTask{}
+	}
+	return tasks, err
+}
+
+func (r *repository) ListStuckCancellingTasks() ([]GenerationTask, error) {
+	now := time.Now().Format(desktopPetTimeFormat)
+	var tasks []GenerationTask
+	err := r.db.Where("status = ? AND (lease_expires_at = '' OR lease_expires_at < ?)", "cancelling", now).
 		Order("lease_expires_at ASC").
 		Find(&tasks).Error
 	if tasks == nil {
