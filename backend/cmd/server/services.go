@@ -390,10 +390,15 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	mcpRepository := mcp.NewRepository(ctx.DB)
 	mcpAcquisitionRuntime := newMCPAcquisitionRuntime(canonicalStdioRegistry, canonicalRemoteRegistry)
 	agentAdminController := newServerAgentAdminController(chatSvc, charRepo, ctx.DB, graphSvc, extensionRuntime.Kernel, mcpRepository)
+	scopeRelationDB, err := ctx.DB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("scope relation database unavailable: %w", err)
+	}
 
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithWorkshopModelGenerator(chatSvc).
 		WithDBPath(kernelDBPath).
+		WithScopeRelationDB(scopeRelationDB).
 		WithExtensionRoot(kernelRoot).
 		WithCharacterReader(kernelCharReader).
 		WithConversationReader(kernelConvReader).
