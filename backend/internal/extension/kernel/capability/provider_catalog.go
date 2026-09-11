@@ -1,6 +1,8 @@
 package capability
 
 import (
+	"context"
+
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -92,4 +94,12 @@ func NewRuntimeAdapterCatalogAdapter(registry *RuntimeAdapterRegistry) *RuntimeA
 func (a *RuntimeAdapterCatalogAdapter) Supports(runtimeType RuntimeType) bool {
 	_, ok := a.registry.Resolve(RuntimeBinding{RuntimeType: runtimeType})
 	return ok
+}
+
+func (a *RuntimeAdapterCatalogAdapter) ProbeRuntimeHealth(ctx context.Context, binding RuntimeBinding) (HealthStatus, bool) {
+	adapter, ok := a.registry.Resolve(binding)
+	if !ok || adapter == nil || !adapter.Supports(binding) {
+		return HealthUnknown, false
+	}
+	return adapter.Health(ctx, binding), true
 }

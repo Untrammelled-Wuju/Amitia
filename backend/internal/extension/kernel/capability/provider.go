@@ -102,7 +102,7 @@ func ParseProviderPlacement(raw string) ProviderPlacement {
 type RoutingMode string
 
 const (
-	RoutingModeLegacy          RoutingMode = "legacy"
+	RoutingModeLegacy            RoutingMode = "legacy"
 	RoutingModeProviderPreferred RoutingMode = "provider_preferred"
 	RoutingModeProviderRequired  RoutingMode = "provider_required"
 )

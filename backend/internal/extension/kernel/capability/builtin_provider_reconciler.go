@@ -8,9 +8,9 @@ import (
 )
 
 type BuiltinProviderReconciler struct {
-	registry          *ProviderRegistry
-	lifecycle         *ProviderLifecycleService
-	adapterRegistry   *RuntimeAdapterRegistry
+	registry        *ProviderRegistry
+	lifecycle       *ProviderLifecycleService
+	adapterRegistry *RuntimeAdapterRegistry
 }
 
 func NewBuiltinProviderReconciler(registry *ProviderRegistry, lifecycle *ProviderLifecycleService, adapterRegistry *RuntimeAdapterRegistry) *BuiltinProviderReconciler {
