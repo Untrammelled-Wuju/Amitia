@@ -100,6 +100,7 @@ type ContainerBuilder struct {
 	dbPath                       string
 	extRoot                      string
 	db                           *sql.DB
+	scopeRelationDB              *sql.DB
 	characterReader              CharacterReader
 	conversationReader           ConversationReader
 	memoryQueryService           MemoryQueryService
@@ -161,6 +162,11 @@ func (b *ContainerBuilder) WithExtensionRoot(root string) *ContainerBuilder {
 
 func (b *ContainerBuilder) WithDB(db *sql.DB) *ContainerBuilder {
 	b.db = db
+	return b
+}
+
+func (b *ContainerBuilder) WithScopeRelationDB(db *sql.DB) *ContainerBuilder {
+	b.scopeRelationDB = db
 	return b
 }
 
@@ -383,7 +389,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	scopeStore := scope.NewSQLiteScopeStore(db)
-	relationChecker := newRepositoryScopeRelationChecker(db, resourceRepo, opRepo)
+	relationChecker := newRepositoryScopeRelationChecker(db, b.scopeRelationDB, resourceRepo, opRepo)
 	scopeEvaluator := scope.NewScopeEvaluator(scopeStore, relationChecker)
 	scopeManager := scope.NewScopeManager(scopeStore, scopeEvaluator)
 

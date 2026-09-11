@@ -574,6 +574,9 @@ func (f *ToolFacade) SetCapabilityService(svc *capability.CapabilityService) {
 }
 
 func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.ToolDefinition, scope LegacyScope) resolvedExecution {
+	if def.Runtime.RuntimeType == capability.RuntimeTypeGameHost {
+		return resolvedExecution{}
+	}
 	if f.capabilityResolver == nil {
 		return resolvedExecution{legacyUnresolved: true}
 	}
