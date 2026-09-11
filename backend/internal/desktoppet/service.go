@@ -53,6 +53,7 @@ type Service interface {
 	RetryAction(taskID, actionKey string) (*TaskActionResponse, error)
 	GetFrameImage(taskID, actionKey string, frameIndex int) (fullPath string, mimeType string, err error)
 	GetFrameImageRef(taskID, actionKey string, frameIndex int, userID string) (security.ArtifactReference, error)
+	GetActionImageRef(taskID, actionKey string, userID string) (security.ArtifactReference, error)
 	GetTaskTransitions(taskID string, limit int) ([]taskstate.AuditRecord, error)
 }
 
@@ -1456,4 +1457,75 @@ func (s *service) GetTaskTransitions(taskID string, limit int) ([]taskstate.Audi
 		return nil, err
 	}
 	return records, nil
+}
+
+func (s *service) GetActionImageRef(taskID, actionKey string, userID string) (security.ArtifactReference, error) {
+	if _, err := s.repo.GetTaskByID(taskID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeGenerationTaskNotFound, "任务不存在")
+		}
+		return security.ArtifactReference{}, err
+	}
+	actions, err := s.repo.ListActionsByTaskID(taskID)
+	if err != nil {
+		return security.ArtifactReference{}, err
+	}
+	var actionID string
+	for _, a := range actions {
+		if a.ActionKey == actionKey {
+			actionID = a.ID
+			break
+		}
+	}
+	if actionID == "" {
+		return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeActionNotFound, "动作不存在")
+	}
+	var attempt struct {
+		ID string `gorm:"column:id"`
+	}
+	err = s.repo.DB().Table("desktop_pet_action_generation_attempts").
+		Select("id").
+		Where("task_action_id = ? AND status = ?", actionID, "succeeded").
+		Order("attempt_number DESC").
+		First(&attempt).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeFrameNotFound, "动作没有成功的生成结果")
+		}
+		return security.ArtifactReference{}, err
+	}
+	var artifact struct {
+		RelativePath string `gorm:"column:relative_path"`
+		MIME         string `gorm:"column:mime"`
+		Hash         string `gorm:"column:hash"`
+		Size         int64  `gorm:"column:size"`
+	}
+	err = s.repo.DB().Table("desktop_pet_generation_artifacts").
+		Select("relative_path, mime, hash, size").
+		Where("attempt_id = ? AND task_action_id = ? AND is_primary = 1 AND status IN ?", attempt.ID, actionID, []string{"persisted", "saved", "verified"}).
+		Order("candidate_index ASC, segment_index ASC").
+		First(&artifact).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeFrameNotFound, "动作结果图片不存在")
+		}
+		return security.ArtifactReference{}, err
+	}
+	if strings.TrimSpace(artifact.RelativePath) == "" || strings.TrimSpace(artifact.Hash) == "" || artifact.Size <= 0 {
+		return security.ArtifactReference{}, NewBusinessError(response.BusinessError, ErrCodeArtifactUntrusted, "动作结果图片信息不完整，拒绝提供")
+	}
+	mime := strings.TrimSpace(artifact.MIME)
+	if mime == "" {
+		mime = "image/jpeg"
+	}
+	storageKey := strings.TrimPrefix(artifact.RelativePath, "desktop-pets/")
+	return security.ArtifactReference{
+		ArtifactID:  taskID + ":" + actionKey + ":primary",
+		OwnerUserID: userID,
+		RootKind:    security.RootGenerationArtifacts,
+		StorageKey:  storageKey,
+		ContentHash: artifact.Hash,
+		ByteSize:    artifact.Size,
+		MIME:        mime,
+	}, nil
 }

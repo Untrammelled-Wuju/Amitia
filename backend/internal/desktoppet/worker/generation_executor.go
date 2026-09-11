@@ -319,6 +319,8 @@ func (e *GenerationExecutor) Execute(
 		PrimaryArtifactID: persistResult.PrimaryArtifact.ID,
 		ArtifactHash:      persistResult.PrimaryArtifact.Hash,
 		ExecutionID:       task.ExecutionID,
+		Mode:              plan.Mode,
+		AttemptNumber:     attempt.AttemptNumber,
 		ActualCost:        actualCost,
 		ActualInputUnits:  actualInputUnits,
 		ActualOutputUnits: actualOutputUnits,

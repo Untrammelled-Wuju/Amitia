@@ -266,6 +266,26 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 	h.safeResponder.ServeArtifact(c, actor, ref)
 }
 
+func (h *Handler) ActionImage(c *gin.Context) {
+	taskID := c.Param("taskId")
+	actionKey := c.Param("actionKey")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireGenerationTask(c.Request.Context(), actor, taskID); err != nil {
+		writeOwnershipError(c, err)
+		return
+	}
+	ref, err := h.service.GetActionImageRef(taskID, actionKey, string(actor.UserID))
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	h.safeResponder.ServeArtifact(c, actor, ref)
+}
+
 func (h *Handler) GetTaskTransitions(c *gin.Context) {
 	taskID := c.Param("taskId")
 	actor, err := middleware.GetActorFromContext(c)
