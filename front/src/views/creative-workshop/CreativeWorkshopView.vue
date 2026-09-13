@@ -2,10 +2,6 @@
 SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
-<!--
-Creative Workshop is the user-facing creation hub. Legacy Skill creation is
-retained for compatibility; Workflow creation below is backed by Extension Kernel.
--->
 <template>
   <main class="center-page">
     <header>
@@ -30,19 +26,13 @@ retained for compatibility; Workflow creation below is backed by Extension Kerne
   </main>
 </template>
 <script setup lang="ts">
-import { ArrowRight, MagicStick, Share, Star } from "@element-plus/icons-vue";
+import { ArrowRight, Share, Star } from "@element-plus/icons-vue";
 const entries = [
   {
     to: "/creative-workshop/workflows",
     title: "工作流",
     description: "可视化拖拽创建 DAG 自动化工作流",
     icon: Share,
-  },
-  {
-    to: "/creative-workshop/skills",
-    title: "技能制作",
-    description: "创建声明式 Skill",
-    icon: MagicStick,
   },
   {
     to: "/creative-workshop/pet",

@@ -27,7 +27,6 @@ export type InstallationRuntimeStatus =
 export interface DesktopPetInstallation {
   id: string;
   userId?: string;
-  characterId: string;
   packageId: string;
   packageVersion: string;
   name: string;
@@ -98,7 +97,7 @@ export interface InstallationDetail extends DesktopPetInstallation {
     releaseId?: string;
     version?: string;
     name?: string;
-    binding?: { policy?: string; sourceCharacterId?: string };
+    binding?: { policy?: string };
     canvas?: { width?: number; height?: number; coordinateSystem?: string };
     defaultAction?: string;
     preview?: string;
@@ -110,13 +109,11 @@ export interface InstallationDetail extends DesktopPetInstallation {
       audio?: boolean;
     };
   };
-  characterName?: string;
 }
 
 export interface InstallParams {
   petId: string;
   releaseId: string;
-  characterId?: string;
 }
 
 export interface UpdateSettingsParams {
@@ -239,14 +236,13 @@ export function useDesktopPetInstallations() {
   async function install(
     petId: string,
     releaseId: string,
-    characterId?: string,
   ): Promise<InstallationOperationResult> {
     submitting.value = true;
     try {
       const idempotencyKey = createIdempotencyKey();
       const data = await post<InstallationOperationResult>(
         `/api/desktop-pets/pets/${encodeURIComponent(petId)}/releases/${encodeURIComponent(releaseId)}/install`,
-        { characterId: characterId || "", idempotencyKey },
+        { idempotencyKey },
         { headers: { "Idempotency-Key": idempotencyKey } },
       );
       const tracked = await trackOperation(data);

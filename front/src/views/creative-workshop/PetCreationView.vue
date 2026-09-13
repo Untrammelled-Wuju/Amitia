@@ -97,29 +97,9 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <span v-if="!modelConfigs.length && !modelLoading && !modelLoadError" class="hint">未找到已启用的生图模型,请先在设置中配置</span>
               </div>
               <div class="form-item-half">
-                <label class="form-label">绑定角色 <span class="required">*</span></label>
-                <el-select
-                  v-model="form.characterId"
-                  placeholder="选择绑定的角色"
-                  :loading="characterLoading"
-                >
-                  <el-option
-                    v-for="c in characters"
-                    :key="c.id"
-                    :label="c.name"
-                    :value="c.id"
-                  />
-                </el-select>
-                <div v-if="characterLoadError" class="field-error-row">
-                  <span>{{ characterLoadError }}</span>
-                  <el-button text type="primary" @click="loadCharacters">重试</el-button>
-                </div>
-                <span v-else-if="!characters.length && !characterLoading" class="hint">未找到可用角色,请先在角色管理中启用</span>
+                <label class="form-label">输出尺寸</label>
+                <el-input value="4096 × 3072（固定，12 帧 4×3 网格）" disabled />
               </div>
-                <div class="form-item-half">
-                  <label class="form-label">输出尺寸</label>
-                  <el-input value="4096 × 3072（固定，12 帧 4×3 网格）" disabled />
-                </div>
             </div>
           </div>
 
@@ -274,10 +254,6 @@ SPDX-License-Identifier: AGPL-3.0-only
                 <span class="summary-value">{{ form.name }}</span>
               </div>
               <div class="summary-item">
-                <span class="summary-label">绑定角色</span>
-                <span class="summary-value">{{ selectedCharacterName || "—" }}</span>
-              </div>
-              <div class="summary-item">
                 <span class="summary-label">生图模型</span>
                 <span class="summary-value">{{ selectedModelName || "—" }}</span>
               </div>
@@ -429,19 +405,9 @@ interface ModelConfig {
   enabled?: number | boolean;
   isActive?: number | boolean;
 }
-interface Character {
-  id: number | string;
-  name: string;
-  status?: string;
-  isActive?: number | boolean;
-}
-
 const modelConfigs = ref<ModelConfig[]>([]);
-const characters = ref<Character[]>([]);
 const modelLoading = ref(false);
-const characterLoading = ref(false);
 const modelLoadError = ref("");
-const characterLoadError = ref("");
 
 const noModelsAvailable = computed(
   () => !modelLoading.value && !modelLoadError.value && modelConfigs.value.length === 0,
@@ -455,7 +421,6 @@ const referencePreview = ref("");
 
 const form = reactive({
   modelConfigId: "" as number | string,
-  characterId: "" as number | string,
   name: "",
   prompt: "",
   negativePrompt: "",
@@ -467,14 +432,8 @@ const step1Valid = computed(
   () =>
     !!referenceFile.value &&
     !!form.modelConfigId &&
-    !!form.name.trim() &&
-    !!form.characterId,
+    !!form.name.trim(),
 );
-
-const selectedCharacterName = computed(() => {
-  const c = characters.value.find((item) => item.id === form.characterId);
-  return c?.name || "";
-});
 
 const selectedModelName = computed(() => {
   const m = modelConfigs.value.find((item) => item.id === form.modelConfigId);
@@ -609,22 +568,6 @@ function goToImageGenConfig() {
   router.push("/settings/model/imagegen");
 }
 
-async function loadCharacters() {
-  characterLoading.value = true;
-  characterLoadError.value = "";
-  try {
-    const list = (await get<Character[]>("/api/characters")) || [];
-    characters.value = list.filter(
-      (c) => c.status === "enabled" || c.isActive === true || c.isActive === 1,
-    );
-  } catch (err: any) {
-    characters.value = [];
-    characterLoadError.value = err?.message || "角色列表加载失败";
-  } finally {
-    characterLoading.value = false;
-  }
-}
-
 async function reloadActions() {
   actionError.value = "";
   try {
@@ -639,7 +582,7 @@ async function submit() {
     ElMessage.error("请先上传参考图");
     return;
   }
-  if (!form.modelConfigId || !form.name.trim() || !form.characterId) {
+  if (!form.modelConfigId || !form.name.trim()) {
     ElMessage.error("请补全基础配置");
     return;
   }
@@ -650,7 +593,6 @@ async function submit() {
   submitting.value = true;
   try {
     const fd = new FormData();
-    fd.append("characterId", String(form.characterId));
     fd.append("modelConfigId", String(form.modelConfigId));
     fd.append("name", form.name.trim());
     fd.append("referenceImage", referenceFile.value, referenceFile.value.name);
@@ -716,7 +658,6 @@ function resetWizard() {
   createdTaskId.value = null;
   clearReference();
   form.modelConfigId = "";
-  form.characterId = "";
   form.name = "";
   form.prompt = "";
   form.negativePrompt = "";
@@ -725,7 +666,7 @@ function resetWizard() {
 }
 
 onMounted(async () => {
-  await Promise.allSettled([loadModelConfigs(), loadCharacters(), loadActions()]);
+  await Promise.allSettled([loadModelConfigs(), loadActions()]);
 });
 
 onUnmounted(() => {

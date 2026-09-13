@@ -11,6 +11,14 @@ SPDX-License-Identifier: AGPL-3.0-only
         支持语音、摄像头和屏幕共享。视觉画面采用变化检测与关键帧采样，不会把完整视频逐帧发送给模型。
       </template>
     </el-alert>
+    <el-alert
+      v-if="realtimeReady === false"
+      type="error"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 14px"
+      :title="realtimeError || '实时语音服务尚未配置完整'"
+    />
 
     <el-card>
       <template #header>会话配置</template>
@@ -42,7 +50,14 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
 
       <div class="call-controls">
-        <el-button v-if="connectionStatus !== 'connected'" type="primary" size="large" :loading="connecting" @click="startCall">
+        <el-button
+          v-if="connectionStatus !== 'connected'"
+          type="primary"
+          size="large"
+          :loading="connecting"
+          :disabled="realtimeReady === false"
+          @click="startCall"
+        >
           开始通话
         </el-button>
         <template v-else>
@@ -64,8 +79,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { nextTick, onUnmounted, reactive, ref } from "vue";
+import { nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
+import { useApi } from "../../composables/useApi";
 import { publishLocalVoiceASRFinal } from "../../runtime/runtime-adapter";
 import {
   RealtimeCallController,
@@ -74,16 +90,22 @@ import {
 } from "../../realtime/realtime-call-controller";
 
 const voiceList = [
-  { name: "zh_female_vv_jupiter_bigtts", label: "vv - 活泼灵动女声" },
-  { name: "zh_female_xiaohe_jupiter_bigtts", label: "xiaohe - 甜美活泼女声" },
-  { name: "zh_male_yunzhou_jupiter_bigtts", label: "yunzhou - 清爽沉稳男声" },
-  { name: "zh_male_xiaotian_jupiter_bigtts", label: "xiaotian - 清爽磁性男声" },
+  { name: "zh_female_vv_uranus_bigtts", label: "Vivi 2.0 - 通用女声" },
+  { name: "zh_female_xiaohe_uranus_bigtts", label: "小何 2.0 - 通用女声" },
+  { name: "zh_female_tianmeixiaoyuan_uranus_bigtts", label: "甜美小源 2.0 - 通用女声" },
+  { name: "zh_female_sajiaoxuemei_uranus_bigtts", label: "撒娇学妹 2.0 - 角色扮演" },
+  { name: "zh_female_gaolengyujie_uranus_bigtts", label: "高冷御姐 2.0 - 角色扮演" },
+  { name: "zh_female_wenroumama_uranus_bigtts", label: "温柔妈妈 2.0 - 通用女声" },
+  { name: "zh_male_m191_uranus_bigtts", label: "云舟 2.0 - 通用男声" },
+  { name: "zh_male_taocheng_uranus_bigtts", label: "小天 2.0 - 通用男声" },
+  { name: "zh_male_yangguangqingnian_uranus_bigtts", label: "阳光青年 2.0 - 通用男声" },
+  { name: "zh_male_aojiaobazong_uranus_bigtts", label: "傲娇霸总 2.0 - 角色扮演" },
 ];
 
 const config = reactive({
   conversationId: "",
-  resourceId: "volc.speech.dialog",
-  voiceType: "zh_female_vv_jupiter_bigtts",
+  resourceId: "seed-tts-2.0",
+  voiceType: "zh_female_vv_uranus_bigtts",
 });
 const connecting = ref(false);
 const connectionStatus = ref<RealtimeCallState>("idle");
@@ -92,10 +114,24 @@ const visionStatus = ref("");
 const callDuration = ref(0);
 const messages = ref<{ role: string; text: string }[]>([]);
 const media = ref<RealtimeMediaState>({ audio: false, camera: false, screen: false, muted: false });
+const realtimeReady = ref<boolean | null>(null);
+const realtimeError = ref("");
 const cameraPreview = ref<HTMLVideoElement | null>(null);
 const screenPreview = ref<HTMLVideoElement | null>(null);
 let controller: RealtimeCallController | null = null;
 let durationTimer: ReturnType<typeof setInterval> | null = null;
+const { get } = useApi();
+
+async function loadRealtimeReadiness() {
+  try {
+    const status = await get<{ cascadeReady?: boolean; cascadeError?: string }>("/api/voice/status");
+    realtimeReady.value = status?.cascadeReady === true;
+    realtimeError.value = status?.cascadeError || "";
+  } catch (error) {
+    realtimeReady.value = false;
+    realtimeError.value = error instanceof Error ? error.message : String(error);
+  }
+}
 
 function buildController(): RealtimeCallController {
   return new RealtimeCallController({
@@ -204,6 +240,7 @@ function formatTime(seconds: number): string {
   return `${minutes}:${rest}`;
 }
 
+onMounted(loadRealtimeReadiness);
 onUnmounted(() => { void stopCall(); });
 </script>
 

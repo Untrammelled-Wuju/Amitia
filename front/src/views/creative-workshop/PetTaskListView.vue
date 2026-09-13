@@ -273,11 +273,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           </template>
         </el-table-column>
         <el-table-column prop="name" label="任务名称" min-width="160" />
-        <el-table-column label="角色" min-width="120">
-          <template #default="{ row }">{{
-            row.characterName || "—"
-          }}</template>
-        </el-table-column>
         <el-table-column label="模型" min-width="140">
           <template #default="{ row }">{{
             row.modelName || "—"
@@ -427,8 +422,6 @@ const { get, post } = useApi();
 interface TaskItem {
   id: string | number;
   name: string;
-  characterId?: string | number;
-  characterName?: string;
   modelConfigId?: string | number;
   modelName?: string;
   status: string;
@@ -1116,7 +1109,6 @@ async function expandTaskFromQuery() {
       row = {
         id: idStr,
         name: data?.name || "未命名任务",
-        characterName: (data as any)?.characterName,
         modelName: data?.modelName,
         status: data?.status || "pending",
         currentStage: data?.currentStage,

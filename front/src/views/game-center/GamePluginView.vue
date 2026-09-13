@@ -212,6 +212,8 @@ onMounted(() => {
 
 .game-surface-shell {
   min-width: 0;
+  height: calc(100vh - 190px);
+  min-height: 560px;
 }
 
 .game-surface-shell :deep(.extension-slot),

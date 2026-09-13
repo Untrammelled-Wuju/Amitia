@@ -104,10 +104,6 @@ SPDX-License-Identifier: AGPL-3.0-only
             </div>
             <div class="meta">
               <div class="meta-row">
-                <span class="meta-label">绑定角色</span>
-                <span class="meta-value">{{ characterLabelOf(item) }}</span>
-              </div>
-              <div class="meta-row">
                 <span class="meta-label">默认动作</span>
                 <span class="meta-value">{{ item.defaultActionKey || "—" }}</span>
               </div>
@@ -423,28 +419,13 @@ SPDX-License-Identifier: AGPL-3.0-only
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="绑定角色">
-          <el-select
-            v-model="installForm.characterId"
-            placeholder="请选择角色"
-            style="width: 100%"
-            filterable
-          >
-            <el-option
-              v-for="char in characters"
-              :key="char.id"
-              :label="char.name"
-              :value="String(char.id)"
-            />
-          </el-select>
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="installDialogVisible = false">取消</el-button>
         <el-button
           type="primary"
           :loading="installSubmitting"
-          :disabled="!installForm.releaseId || !installForm.characterId"
+          :disabled="!installForm.releaseId"
           @click="submitInstall"
           >安装</el-button
         >
@@ -467,14 +448,6 @@ import {
   type InstallationRuntimeStatus,
 } from "../../composables/useDesktopPetInstallations";
 import { useAssetUrl } from "../../composables/useAssetUrl";
-
-interface CharacterOption {
-  id: string | number;
-  name: string;
-  status?: string;
-  isActive?: number | boolean;
-  isDefault?: number | boolean;
-}
 
 interface PackageOption {
   id: string;
@@ -509,8 +482,6 @@ const {
 
 const actionTargetId = ref<string | null>(null);
 const disablingAll = ref(false);
-const characters = ref<CharacterOption[]>([]);
-const characterMap = reactive<Record<string, CharacterOption>>({});
 const previewFailedSet = reactive<Set<string>>(new Set());
 const playActionLoadingKey = ref<string>("");
 
@@ -542,7 +513,7 @@ const defaultActionForm = reactive({
 const installDialogVisible = ref(false);
 const installSubmitting = ref(false);
 const availablePackages = ref<PackageOption[]>([]);
-const installForm = reactive({ petId: "", releaseId: "", characterId: "" });
+const installForm = reactive({ petId: "", releaseId: "" });
 
 const upgradeDialogVisible = ref(false);
 const upgradeForm = reactive({
@@ -751,12 +722,6 @@ function onPreviewError(item: DesktopPetInstallation) {
   previewFailedSet.add(item.id);
 }
 
-function characterLabelOf(item: DesktopPetInstallation): string {
-  if (!item.characterId) return "—";
-  const c = characterMap[String(item.characterId)];
-  return c?.name || String(item.characterId);
-}
-
 function contentHashOf(item: DesktopPetInstallation): string {
   return item.installedContentHash || item.packageHash || "";
 }
@@ -777,24 +742,12 @@ function formatTime(value?: string): string {
   )} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-async function loadCharacters() {
-  try {
-    const list = (await get<CharacterOption[]>("/api/characters")) || [];
-    characters.value = list;
-    for (const c of list) {
-      characterMap[String(c.id)] = c;
-    }
-  } catch {
-    characters.value = [];
-  }
-}
-
 async function loadList() {
   await listInstallations();
 }
 
 async function refreshAll() {
-  await Promise.all([loadCharacters(), loadList()]);
+  await loadList();
 }
 
 async function onEnable(item: DesktopPetInstallation) {
@@ -1105,7 +1058,7 @@ async function onReinstall(item: DesktopPetInstallation) {
       ElMessage.warning("无法确定桌宠信息,请使用修复功能");
       return;
     }
-    await install(petId, releaseId, item.characterId);
+    await install(petId, releaseId);
     await refresh();
   } catch (err: any) {
     ElMessage.error(err?.message || "重新安装失败");
@@ -1149,8 +1102,6 @@ function goToTasks() {
 async function openInstallDialog() {
   installForm.petId = "";
   installForm.releaseId = "";
-  installForm.characterId = "";
-  await loadCharacters();
   await loadAvailablePackages();
   installDialogVisible.value = true;
 }
@@ -1172,13 +1123,13 @@ function onInstallPackageChange() {
 }
 
 async function submitInstall() {
-  if (!installForm.petId || !installForm.releaseId || !installForm.characterId) {
-    ElMessage.warning("请选择资源包和角色");
+  if (!installForm.petId || !installForm.releaseId) {
+    ElMessage.warning("请选择资源包");
     return;
   }
   installSubmitting.value = true;
   try {
-    await install(installForm.petId, installForm.releaseId, installForm.characterId);
+    await install(installForm.petId, installForm.releaseId);
     installDialogVisible.value = false;
     await refresh();
   } catch (err: any) {

@@ -106,6 +106,9 @@
         style="width: 100%"
         empty-text="暂无已安装扩展包"
       >
+        <el-table-column label="名称" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.name || '-' }}</template>
+        </el-table-column>
         <el-table-column prop="extensionId" label="扩展ID" min-width="200" show-overflow-tooltip />
         <el-table-column prop="version" label="版本" width="100" />
         <el-table-column label="状态" width="120">
@@ -115,62 +118,52 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="启用" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.enablement === 'enabled' ? 'success' : 'info'" size="small">
-              {{ row.enablement === 'enabled' ? '已启用' : '已禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column prop="installedAt" label="安装时间" width="180">
           <template #default="{ row }">
             {{ formatDate(row.installedAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="520" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button
-              v-if="row.enablement !== 'enabled'"
-              size="small"
-              type="success"
-              @click="toggleEnable(row, true)"
-            >启用</el-button>
-            <el-button
-              v-else
-              size="small"
-              type="warning"
-              @click="toggleEnable(row, false)"
-            >禁用</el-button>
-            <el-button
-              v-if="row.enablement === 'enabled'"
-              size="small"
-              type="info"
-              @click="doPause(row)"
-            >暂停</el-button>
-            <el-button
-              size="small"
-              type="primary"
-              :loading="updateChecking[row.extensionId]"
-              @click="checkRowUpdate(row)"
-            >更新</el-button>
-            <el-button
-              size="small"
-              @click="doRollback(row)"
-            >回滚</el-button>
-            <el-button
-              size="small"
-              @click="goDiagnose"
-            >诊断</el-button>
-            <el-button
-              size="small"
-              type="primary"
-              @click="openDetail(row)"
-            >详情</el-button>
-            <el-button
-              size="small"
-              type="danger"
-              @click="doUninstall(row)"
-            >卸载</el-button>
+            <div class="operation-cell">
+              <el-switch
+                :model-value="row.enablement === 'enabled'"
+                :loading="toggleUpdating[row.extensionId]"
+                :disabled="listLoading"
+                :aria-label="row.enablement === 'enabled' ? '停用扩展' : '启用扩展'"
+                @change="(value: string | number | boolean) => toggleEnable(row, Boolean(value))"
+              />
+              <el-button
+                size="small"
+                type="primary"
+                @click="openDetail(row)"
+              >详情</el-button>
+              <el-dropdown
+                trigger="click"
+                @command="(command: string | number | object) => handleRowCommand(row, String(command))"
+              >
+                <el-button size="small" :icon="MoreFilled" aria-label="更多操作" />
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      command="pause"
+                      :disabled="row.enablement !== 'enabled'"
+                    >暂停</el-dropdown-item>
+                    <el-dropdown-item
+                      command="update"
+                      :disabled="updateChecking[row.extensionId]"
+                    >更新</el-dropdown-item>
+                    <el-dropdown-item command="rollback">回滚</el-dropdown-item>
+                    <el-dropdown-item command="diagnose">诊断</el-dropdown-item>
+                    <el-dropdown-item
+                      command="uninstall"
+                      divided
+                      :disabled="row.systemManaged"
+                    >卸载</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -238,6 +231,7 @@
     <el-dialog v-model="detailVisible" title="扩展详情" width="820px">
       <div v-if="detail">
         <el-descriptions :column="2" border>
+          <el-descriptions-item label="名称">{{ detail.name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="扩展ID">{{ detail.extensionId }}</el-descriptions-item>
           <el-descriptions-item label="版本">{{ detail.version }}</el-descriptions-item>
           <el-descriptions-item label="安装ID">{{ detail.installationId }}</el-descriptions-item>
@@ -385,7 +379,7 @@
             <el-descriptions-item label="发布者">{{ updateMeta.publisherId }}</el-descriptions-item>
             <el-descriptions-item label="包大小">{{ formatSize(updateMeta.packageSize) }}</el-descriptions-item>
             <el-descriptions-item label="发布时间">{{ formatDate(updateMeta.publishedAt) }}</el-descriptions-item>
-            <el-descriptions-item label="Manifest版本">{{ updateMeta.manifestVersion }}</el-descriptions-item>
+            <el-descriptions-item label="包格式版本">{{ updateMeta.manifestVersion }}</el-descriptions-item>
           </el-descriptions>
           <div class="update-actions">
             <el-button type="primary" :loading="updateActionLoading" @click="doDownloadUpdate">下载</el-button>
@@ -417,7 +411,7 @@
 import { defineAsyncComponent, onMounted, ref, shallowRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { UploadFilled, Loading } from "@element-plus/icons-vue";
+import { UploadFilled, Loading, MoreFilled } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "../components/ExtensionPageHeader.vue";
 import {
   getKernelStatus,
@@ -468,6 +462,7 @@ const installLoading = ref(false);
 
 const detailVisible = ref(false);
 const detail = ref<KernelExtensionDetail | null>(null);
+const toggleUpdating = ref<Record<string, boolean>>({});
 
 const packageInput = ref<HTMLInputElement>();
 
@@ -623,6 +618,8 @@ async function doInstall() {
 }
 
 async function toggleEnable(row: KernelExtension, enable: boolean) {
+  if (toggleUpdating.value[row.extensionId]) return;
+  toggleUpdating.value[row.extensionId] = true;
   try {
     if (enable) {
       await enableExtension(row.extensionId);
@@ -636,10 +633,13 @@ async function toggleEnable(row: KernelExtension, enable: boolean) {
     await refreshList();
   } catch (e: any) {
     ElMessage.error("操作失败: " + (e?.message || e));
+  } finally {
+    toggleUpdating.value[row.extensionId] = false;
   }
 }
 
 async function doUninstall(row: KernelExtension) {
+  if (row.systemManaged) return;
   try {
     await ElMessageBox.confirm(
       `确定要卸载扩展 ${row.extensionId} v${row.version} 吗？`,
@@ -672,6 +672,27 @@ async function doPause(row: KernelExtension) {
     if (e !== "cancel" && e?.message !== "cancel") {
       ElMessage.error("暂停失败: " + (e?.message || e));
     }
+  }
+}
+
+async function handleRowCommand(row: KernelExtension, command: string) {
+  switch (command) {
+    case "pause":
+      await doPause(row);
+      break;
+    case "update":
+      await checkRowUpdate(row);
+      break;
+    case "rollback":
+      await doRollback(row);
+      break;
+    case "diagnose":
+      goDiagnose();
+      break;
+    case "uninstall":
+      if (row.systemManaged) return;
+      await doUninstall(row);
+      break;
   }
 }
 
@@ -991,6 +1012,12 @@ p {
   gap: 12px;
   margin-top: 12px;
   flex-wrap: wrap;
+}
+.operation-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 .sr-only {
   position: absolute;

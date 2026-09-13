@@ -47,7 +47,7 @@
         <el-descriptions-item label="发布者">{{ updateMeta.publisherId }}</el-descriptions-item>
         <el-descriptions-item label="包大小">{{ formatSize(updateMeta.packageSize) }}</el-descriptions-item>
         <el-descriptions-item label="发布时间">{{ formatDate(updateMeta.publishedAt) }}</el-descriptions-item>
-        <el-descriptions-item label="Manifest版本">{{ updateMeta.manifestVersion }}</el-descriptions-item>
+        <el-descriptions-item label="包格式版本">{{ updateMeta.manifestVersion }}</el-descriptions-item>
         <el-descriptions-item label="包SHA256" :span="2">{{ updateMeta.packageSha256 }}</el-descriptions-item>
         <el-descriptions-item label="最低宿主版本">{{ updateMeta.minimumHostVersion || '-' }}</el-descriptions-item>
         <el-descriptions-item label="最高宿主版本">{{ updateMeta.maximumHostVersion || '-' }}</el-descriptions-item>

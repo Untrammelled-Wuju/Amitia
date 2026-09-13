@@ -43,6 +43,7 @@ export interface UIContributionSummary {
   runtimeReady: boolean;
   permissions?: string[];
   sandbox?: string;
+  runtimeId?: string;
   entryPath?: string;
   schemaPath?: string;
   dataContract?: Record<string, unknown>;

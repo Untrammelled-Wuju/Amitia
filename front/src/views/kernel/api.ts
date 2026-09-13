@@ -10,11 +10,13 @@ export interface KernelStatus {
 }
 
 export interface KernelExtension {
+  name?: string;
   extensionId: string;
   version: string;
   installationId: string;
   state: string;
   enablement: string;
+  systemManaged?: boolean;
   installedAt: string;
   updatedAt: string;
   generation: number;

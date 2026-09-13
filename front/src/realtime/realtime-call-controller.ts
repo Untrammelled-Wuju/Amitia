@@ -6,6 +6,7 @@ import {
   resolveWebSocketUrl,
 } from "../runtime/runtime-adapter";
 import { createAuthenticatedFetchInit } from "../runtime/request-auth";
+import { RealtimeVoiceActivityDetector } from "./realtime-vad";
 
 export type RealtimeCallState = "idle" | "connecting" | "connected" | "error";
 export type RealtimeVisualSource = "camera" | "screen";
@@ -94,8 +95,17 @@ export class RealtimeCallController {
   private connectedInfo: RealtimeCallConnectedInfo | null = null;
   private nextPlayTime = 0;
   private aiSpeaking = false;
+  private activeSources = new Set<AudioBufferSourceNode>();
+  private sourcePlayback = new Map<AudioBufferSourceNode, { generation: number; durationMs: number }>();
+  private playbackGeneration = 0;
+  private receivedAudioMs = 0;
+  private playedAudioMs = 0;
+  private ttsEndedGeneration = 0;
+  private progressTimer: ReturnType<typeof setInterval> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private lastSpeechVisualBoostAt = 0;
   private failureCleanup: Promise<void> | null = null;
+  private readonly vad = new RealtimeVoiceActivityDetector();
 
   constructor(options: RealtimeCallControllerOptions) {
     this.options = options;
@@ -109,14 +119,19 @@ export class RealtimeCallController {
     return this.mediaState;
   }
 
+  private isActive(): boolean {
+    return this.state === "connecting" || this.state === "connected";
+  }
+
   async start(): Promise<void> {
-    if (this.state === "connecting" || this.state === "connected") return;
+    if (this.isActive()) return;
     // A failure cleanup may still be closing the previous microphone/audio
     // graph. Starting a new call before it settles lets that cleanup race with
     // the newly-created resources and close the new session by mistake.
     if (this.failureCleanup) await this.failureCleanup;
-    if (this.state === "connecting" || this.state === "connected") return;
+    if (this.isActive()) return;
     this.setState("connecting");
+    this.vad.reset();
     try {
       this.audioStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -161,6 +176,11 @@ export class RealtimeCallController {
   }
 
   async setMuted(muted: boolean): Promise<void> {
+    const socket = this.controlSocket;
+    if (muted && this.vad.isSpeechActive && socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ event: "speech_end" }));
+    }
+    if (muted) this.vad.reset();
     this.mediaState.muted = muted;
     this.emitMediaState();
   }
@@ -249,6 +269,7 @@ export class RealtimeCallController {
   private bindControlSocket(socket: WebSocket): void {
     socket.onopen = () => {
       this.attachAudioProcessor();
+      this.startHeartbeat();
     };
     socket.onmessage = (event) => {
       void this.handleControlMessage(event.data).catch((error) => {
@@ -259,6 +280,7 @@ export class RealtimeCallController {
       void this.fail("实时通话连接失败");
     };
     socket.onclose = () => {
+      this.stopHeartbeat();
       if (this.state !== "idle") void this.fail("实时通话连接已断开");
     };
   }
@@ -292,19 +314,40 @@ export class RealtimeCallController {
         break;
       }
       case "audio":
-        if (typeof message.data === "string") this.playAudio(message.data);
+        if (typeof message.data === "string") {
+          this.playAudio(message.data, Number(message.generationId) || 0, message.microReaction === true);
+        }
         break;
+      case "speaking":
+        this.setAISpeaking(true);
+        break;
+      case "listening":
+        this.setAISpeaking(false);
+        break;
+      case "interrupted":
+        this.flushPlayback();
+        break;
+      case "pong":
+        break;
+      case "turn_error":
+        this.flushPlayback();
+        break;
+      case "assistant_text": {
+        const data = (message.data || {}) as Record<string, unknown>;
+        if (data.delta === true) break;
+        const text = typeof data.text === "string" ? data.text.trim() : "";
+        if (text) this.options.onAssistantText?.(text);
+        break;
+      }
       case "tts_ended":
         // The server has finished sending TTS frames, but queued WebAudio may
-        // still be playing. Let the final AudioBufferSourceNode transition the
-        // UI/runtime back to listening; only clear immediately when nothing is
-        // queued locally.
+        // still be playing. Report the real playback end only after the local
+        // queue drains, so interrupted turns commit the text that was heard.
+        this.ttsEndedGeneration = Number(message.generationId) || 0;
+        this.reportPlaybackEndedIfDrained();
         if (!this.playbackContext || this.playbackContext.currentTime + 0.04 >= this.nextPlayTime) {
           this.setAISpeaking(false);
         }
-        break;
-      case "ChatTextResponse":
-        if (message.data?.text) this.options.onAssistantText?.(String(message.data.text));
         break;
       case "asr_final":
         if (message.data && typeof message.data === "object") {
@@ -319,11 +362,6 @@ export class RealtimeCallController {
         break;
       case "error":
         await this.fail(String(message.data || "实时通话连接失败"));
-        break;
-      case "disconnected":
-      case "SessionFinished":
-        await this.cleanup(false);
-        this.setState("idle");
         break;
     }
   }
@@ -384,7 +422,7 @@ export class RealtimeCallController {
     this.audioContext = new AudioContext({ sampleRate: AUDIO_SAMPLE_RATE });
     this.playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE });
     const source = this.audioContext.createMediaStreamSource(this.audioStream);
-    this.audioNode = this.audioContext.createScriptProcessor(4096, 1, 1);
+    this.audioNode = this.audioContext.createScriptProcessor(2048, 1, 1);
     this.silenceGain = this.audioContext.createGain();
     this.silenceGain.gain.value = 0;
     source.connect(this.audioNode);
@@ -399,15 +437,24 @@ export class RealtimeCallController {
       if (
         !socket ||
         socket.readyState !== WebSocket.OPEN ||
-        this.aiSpeaking ||
         this.mediaState.muted
       ) {
         return;
       }
       const input = event.inputBuffer.getChannelData(0);
-      let energy = 0;
-      for (let i = 0; i < input.length; i += 16) energy += Math.abs(input[i]);
-      if (energy > 0.08 && performance.now() - this.lastSpeechVisualBoostAt > 900) {
+      let sumSquares = 0;
+      for (let i = 0; i < input.length; i++) {
+        sumSquares += input[i] * input[i];
+      }
+      const rms = Math.sqrt(sumSquares / input.length);
+      const vadEvent = this.vad.process(rms);
+      if (vadEvent === "speech_start") {
+        this.flushPlayback();
+        socket.send(JSON.stringify({ event: "speech_start" }));
+      } else if (vadEvent === "speech_end") {
+        socket.send(JSON.stringify({ event: "speech_end" }));
+      }
+      if (rms >= 0.02 && performance.now() - this.lastSpeechVisualBoostAt > 900) {
         this.lastSpeechVisualBoostAt = performance.now();
         this.requestImmediateVisualFrame();
       }
@@ -529,7 +576,7 @@ export class RealtimeCallController {
     );
   }
 
-  private playAudio(base64Data: string): void {
+  private playAudio(base64Data: string, generation: number, microReaction: boolean): void {
     try {
       if (!this.playbackContext || this.playbackContext.state === "closed") {
         this.playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE });
@@ -550,16 +597,112 @@ export class RealtimeCallController {
       this.nextPlayTime = Math.max(now, this.nextPlayTime);
       source.start(this.nextPlayTime);
       this.nextPlayTime += buffer.duration;
+      this.activeSources.add(source);
+      if (!microReaction && generation > 0) {
+        this.trackPlayback(source, generation, buffer.duration * 1000);
+      }
       this.setAISpeaking(true);
       source.addEventListener("ended", () => {
+        this.activeSources.delete(source);
+        this.settlePlayback(source);
+        try { source.disconnect(); } catch {}
         if (!this.playbackContext) return;
         if (this.playbackContext.currentTime + 0.04 >= this.nextPlayTime) {
           this.setAISpeaking(false);
         }
+        this.reportPlaybackEndedIfDrained();
       });
     } catch (error) {
       console.warn("[RealtimeCall] audio playback failed", error);
     }
+  }
+
+  private trackPlayback(source: AudioBufferSourceNode, generation: number, durationMs: number): void {
+    if (this.playbackGeneration !== generation) {
+      this.playbackGeneration = generation;
+      this.receivedAudioMs = 0;
+      this.playedAudioMs = 0;
+      this.sourcePlayback.clear();
+    }
+    this.receivedAudioMs += durationMs;
+    this.sourcePlayback.set(source, { generation, durationMs });
+    this.startProgressTimer();
+  }
+
+  private settlePlayback(source: AudioBufferSourceNode): void {
+    const info = this.sourcePlayback.get(source);
+    if (!info) return;
+    this.sourcePlayback.delete(source);
+    this.playedAudioMs += info.durationMs;
+    this.sendPlaybackProgress(info.generation);
+  }
+
+  private startProgressTimer(): void {
+    if (this.progressTimer) return;
+    this.progressTimer = setInterval(() => {
+      if (!this.playbackGeneration) return;
+      this.sendPlaybackProgress(this.playbackGeneration);
+    }, 400);
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      const socket = this.controlSocket;
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ event: "ping" }));
+      }
+    }, 15000);
+  }
+
+  private stopHeartbeat(): void {
+    if (!this.heartbeatTimer) return;
+    clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+  }
+
+  private stopProgressTimer(): void {
+    if (!this.progressTimer) return;
+    clearInterval(this.progressTimer);
+    this.progressTimer = null;
+  }
+
+  private sendPlaybackProgress(generation: number): void {
+    const socket = this.controlSocket;
+    if (!socket || socket.readyState !== WebSocket.OPEN || generation <= 0) return;
+    socket.send(
+      JSON.stringify({
+        event: "playback_progress",
+        generationId: generation,
+        played_audio_ms: Math.round(this.playedAudioMs),
+        received_audio_ms: Math.round(this.receivedAudioMs),
+      }),
+    );
+  }
+
+  private reportPlaybackEndedIfDrained(): void {
+    const generation = this.ttsEndedGeneration;
+    if (!generation || this.activeSources.size > 0) return;
+    const socket = this.controlSocket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    this.ttsEndedGeneration = 0;
+    this.sendPlaybackProgress(generation);
+    socket.send(JSON.stringify({ event: "tts_playback_ended", generationId: generation }));
+    this.stopProgressTimer();
+  }
+
+  private flushPlayback(): void {
+    if (this.playbackGeneration > 0) this.sendPlaybackProgress(this.playbackGeneration);
+    for (const source of this.activeSources) {
+      try { source.stop(); } catch {}
+      try { source.disconnect(); } catch {}
+    }
+    this.activeSources.clear();
+    this.sourcePlayback.clear();
+    this.nextPlayTime = this.playbackContext ? this.playbackContext.currentTime : 0;
+    this.ttsEndedGeneration = 0;
+    this.stopProgressTimer();
+    this.setAISpeaking(false);
   }
 
   private setAISpeaking(speaking: boolean): void {
@@ -625,6 +768,14 @@ export class RealtimeCallController {
     this.playbackContext = null;
     this.connectedInfo = null;
     this.nextPlayTime = 0;
+    this.activeSources.clear();
+    this.sourcePlayback.clear();
+    this.playbackGeneration = 0;
+    this.receivedAudioMs = 0;
+    this.playedAudioMs = 0;
+    this.ttsEndedGeneration = 0;
+    this.stopHeartbeat();
+    this.stopProgressTimer();
     this.setAISpeaking(false);
     this.mediaState = { audio: false, camera: false, screen: false, muted: false };
     this.emitMediaState();

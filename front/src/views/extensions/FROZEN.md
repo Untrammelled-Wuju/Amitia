@@ -25,25 +25,12 @@
 被冻结的入口文件与子模块：
 
 - `ExtensionCenterView.vue`：扩展中心主入口；
-- `PluginListView.vue`：插件列表页；
-- `PluginDetailView.vue`：插件详情页；
-- `SkillListView.vue`：技能列表页；
-- `SkillDetailView.vue`：技能详情页；
-- `RunHistoryView.vue`：执行记录页；
 - `packages/PackageManagerView.vue`：扩展包管理页；
 - `agent-skills/AgentSkillListView.vue`：Agent Skill 列表页；
-- `workshop/WorkshopListView.vue`：工坊列表页；
-- `workshop/WorkshopSessionView.vue`：工坊会话页；
 - `api.ts`：扩展中心 API Client；
 - `types.ts`：扩展中心类型定义；
 - `components/`：扩展中心共用组件，包括：
   - `ExtensionPageHeader.vue`
-  - `PermissionDialog.vue`
-  - `SchemaSurfaceRenderer.vue`
-  - `SurfaceAction.vue`
-  - `SurfaceForm.vue`
-  - `SurfaceStatus.vue`
-  - `SurfaceTable.vue`
 
 ### 2. MCP 页面（`front/src/views/mcp/`）
 
@@ -96,8 +83,8 @@
 3. **禁止新增旧系统数据库表**：不得为旧系统新增 Skill、Plugin、MCP、Workflow、Package、Hook、UI Contribution、Provider 等业务表，也不得新增重复审计表或重复启用状态表。迁移辅助表必须满足命名、删除计划、不承载永久业务功能、明确清理步骤等条件。
 4. **禁止新增平行 Registry**：不得新增第二套 Tool/Skill/MCP Tool/Plugin/Workflow/UI Registry、第二套权限中心或第二套执行器。
 5. **禁止新增永久兼容层**：不得为了新功能增加新旧字段双写、新旧状态同步、新旧接口桥接、新旧 Registry 双注册、新旧权限双判定、新旧数据双存储。后续允许存在一次性迁移适配器，但必须可删除并有明确退出条件。
-6. **禁止增加旧 Plugin 能力**：不得继续扩展当前 Go 内置 Plugin 模型，包括新 Host API、新 Hook、新 Surface、新事件、新定时任务类型、新动态加载方式、新第三方 Plugin 入口。
-7. **禁止让 `.amitiax` v1 承担新职责**：不得让旧 `.amitiax` 支持第三方运行时代码、JavaScript、WASM、UI 页面、Electron 扩展、Provider、后台服务、消息渲染器、桌面组件。这些能力必须在后续 `.amitiax` Manifest v2 中统一设计。
+6. **禁止恢复旧 Plugin 能力**：不得恢复已删除的系统插件列表页、插件详情页、旧 Plugin API Client、旧 Plugin 类型定义和旧 Plugin Surface 渲染组件。
+7. **禁止让 `.amitiax` v1 承担新职责**：不得让旧 `.amitiax` 支持第三方运行时代码、JavaScript、WASM、UI 页面、Electron 扩展、Provider、后台服务、消息渲染器、桌面组件。这些能力必须在后续 `.amitiax` Manifest v1 中统一设计。
 8. **禁止前端继续增加分散入口**：不得新增独立 Skill 子页面、独立 MCP 子系统入口、独立 Plugin 子系统入口、独立 Workflow 子系统入口、新的扩展包入口、新的重复运行记录页面。旧页面只允许修复无法使用、数据错误和安全问题。
 
 ---
@@ -108,13 +95,13 @@
 - 冻结总说明：`docs/extension-kernel/01-system-freeze.md`；
 - 第 1 步实施文档：`.trae/Amitia_扩展系统重构_第1步_冻结现有扩展系统功能开发.md`。
 
-新 Extension Kernel 与 `.amitiax` Manifest v2 的具体设计在后续步骤中统一进行，本步骤不提前实现。
+新 Extension Kernel 与 `.amitiax` Manifest v1 的具体设计在后续步骤中统一进行，本步骤不提前实现。
 
 ---
 
 ## 六、旧系统预计删除说明
 
-本文件覆盖的前端旧页面、路由和 API Client 在重构期间保留，目的是兼容、维护、测试和迁移到 Extension Kernel。
+旧 Skill 页面、Workshop 页面、执行记录页面及对应路由和 API Client 已完成迁移并物理删除。Agent Skill 与 Workflow 页面使用 Extension Kernel 主链。
 
 - 旧系统不立即删除，避免在重构期间破坏现有用户可见功能；
 - 旧系统预计在新 Extension Kernel 完成对应能力并完成数据迁移、用户引导迁移后，按总体规划文档中的步骤分批下线；
@@ -149,7 +136,7 @@
 
 出现以下任意情况，PR 应直接拒绝：
 
-- 在旧 Plugin 上增加第三方插件能力；
+- 恢复已删除的旧 Plugin 页面、路由、API Client 或类型定义；
 - 在旧 `.amitiax` 中增加代码运行时；
 - 新建另一套 Tool/Skill Registry；
 - 新增重复权限系统；

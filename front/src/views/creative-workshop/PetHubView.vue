@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <main class="pet-hub">
-    <ExtensionPageHeader title="桌宠" description="管理桌宠制作、安装与记录" parent-title="创意工坊" parent-path="/creative-workshop" />
+    <ExtensionPageHeader title="桌宠" description="桌宠系统 v1 · 管理桌宠制作、安装与记录" parent-title="创意工坊" parent-path="/creative-workshop" />
 
     <section class="entry-grid">
       <router-link

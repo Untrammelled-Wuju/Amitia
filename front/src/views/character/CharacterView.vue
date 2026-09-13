@@ -94,22 +94,16 @@ SPDX-License-Identifier: AGPL-3.0-only
               :key="`timeline-${selectedId}`"
             />
           </el-tab-pane>
-          <el-tab-pane label="主动消息" name="proactive">
-            <ProactiveRulesView
-              v-if="activeTab === 'proactive'"
-              :key="`pro-${selectedId}`"
-            />
-          </el-tab-pane>
-          <el-tab-pane label="调试" name="debug">
-            <CompanionDebugView
-              v-if="activeTab === 'debug'"
-              :key="`dbg-${selectedId}`"
-            />
-          </el-tab-pane>
-          <el-tab-pane label="心理状态" name="psyche">
-            <CharacterPsycheView
-              v-if="activeTab === 'psyche'"
-              :key="`psyche-${selectedId}`"
+          <el-tab-pane
+            v-for="tab in characterExtensionTabs"
+            :key="tab.contributionId"
+            :label="tab.title"
+            :name="tab.entryKey || tab.contributionId"
+          >
+            <ExtensionContributionRenderer
+              :contribution="tab"
+              :context="characterExtensionContext"
+              slot-id="character.detail.tab"
             />
           </el-tab-pane>
         </el-tabs>
@@ -374,18 +368,17 @@ import { apiClient } from "@/composables/useApi";
 import {
   AiCharacterSettingsView,
   CharacterVoiceView,
-  ProactiveRulesView,
-  CompanionDebugView,
 } from "../../ui-index";
-import CharacterPsycheView from "./CharacterPsycheView.vue";
 import MemoryManagerView from "@/views/memory-manager/MemoryManagerView.vue";
 import MemoryTimeline from "@/views/memory-timeline/MemoryTimeline.vue";
 import ImportPackDialog from "@/views/character-config/components/ImportPackDialog.vue";
 import TemplatePickerDialog from "@/views/character-config/components/TemplatePickerDialog.vue";
 import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
+import ExtensionContributionRenderer from "@/components/extension/ExtensionContributionRenderer.vue";
 import type { TemplateItem } from "@/views/character-config/composables/types";
 import { normalizeVoicePitchRatio } from "@/utils/voicePitch";
 import { useCharacterImportExport } from "@/views/character-config/composables/useCharacterImportExport";
+import { useCharacterExtensionTabs } from "./composables/useCharacterExtensionTabs";
 
 const router = useRouter();
 const route = useRoute();
@@ -516,7 +509,8 @@ const activeTab = computed(() => {
   if (p.endsWith("/memory")) return "memory";
   if (p.endsWith("/timeline")) return "timeline";
   if (p.endsWith("/proactive")) return "proactive";
-  if (p.endsWith("/debug")) return "debug";
+  if (p.endsWith("/life-system")) return "life-system";
+  if (p.endsWith("/debug")) return "life-system";
   if (p.endsWith("/psyche")) return "psyche";
   return "life-rules";
 });
@@ -527,6 +521,7 @@ const characterExtensionContext = computed(() => ({
   activeTab: activeTab.value,
   surface: "character-detail",
 }));
+const { tabs: characterExtensionTabs } = useCharacterExtensionTabs(characterExtensionContext);
 
 onMounted(async () => {
   await Promise.allSettled([loadPackHistory(), loadTemplates()]);

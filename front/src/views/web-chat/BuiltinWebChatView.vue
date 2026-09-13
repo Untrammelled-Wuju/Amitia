@@ -13,17 +13,14 @@ SPDX-License-Identifier: AGPL-3.0-only
   />
   <div v-else class="webchat-page">
     <section class="chat-surface">
-    <ChatBanners
+<ChatBanners
       :model-missing="modelMissing"
       :is-offline="isOffline"
       :model-error="modelError"
       :import-context="importContext"
       :show-import-detail="showImportDetail"
-      :conv-summary="convSummary"
-      :show-summary="showSummary"
       @close-error="modelError = ''"
       @close-import="importContext = null"
-      @toggle-summary="showSummary = !showSummary"
     />
 
     <div class="chat-header-region">
@@ -42,6 +39,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :show-profiles="showProfiles"
       :show-mem-inject="showMemInject"
       :call-active="callActive"
+      :has-summary="!!convSummary"
       @toggle-drawer="showDrawer = true"
       @regenerate="handleRegenerate"
       @clear="handleClear"
@@ -49,7 +47,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       @toggle-char-picker="showCharPicker = true"
       @toggle-profiles="toggleProfiles"
       @toggle-mem-inject="toggleMemInject"
-      @toggle-call="handleToggleCall"
+      @toggle-call="handleEndCall"
+      @start-call="handleStartCall"
+      @view-summary="handleViewSummary"
     ><template #extension-actions><button v-if="hasConversationSidebar && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></UIProviderHost>
     </div>
       <div class="chat-body-wrapper">
@@ -137,11 +137,6 @@ SPDX-License-Identifier: AGPL-3.0-only
         :ui-context-value="chatExtensionContext"
         :call-active="callActive"
         :has-status-extensions="hasStatusExtensions"
-        :api-key="ttsApiKey"
-        :voice-type="ttsVoiceType"
-        :resource-id="ttsResourceId"
-        :conversation-id="convId"
-        @state-change="handleCallStateChange"
       />
     </div>
     <div class="composer-region"><UIProviderHost
@@ -196,6 +191,23 @@ SPDX-License-Identifier: AGPL-3.0-only
     />
 
     <MemoryPanel v-model:visible="showMemories" :memories="memories" />
+
+    <el-drawer v-model="showSummaryDrawer" title="会话摘要" direction="rtl" size="420px">
+      <div v-if="convSummary" class="summary-drawer-text">{{ convSummary }}</div>
+      <el-empty v-else description="暂无会话摘要" :image-size="88" />
+    </el-drawer>
+
+    <RealtimeCallDialog
+      v-if="callActive"
+      :mode="callMode"
+      :voice-type="ttsVoiceType"
+      :resource-id="ttsResourceId"
+      :conversation-id="convId"
+      :char-name="charName"
+      :char-avatar="charAvatar"
+      @state-change="handleCallStateChange"
+      @close="callActive = false"
+    />
     </section>
   </div>
 </template>
@@ -219,7 +231,7 @@ import ChatInput from "../../components/ChatInput.vue";
 import ConversationDrawer from "../../components/ConversationDrawer.vue";
 import CharacterPickerDialog from "../../components/CharacterPickerDialog.vue";
 import MemoryPanel from "../../components/MemoryPanel.vue";
-import RealtimeCallWidget from "../../components/RealtimeCallWidget.vue";
+import RealtimeCallDialog from "../../components/RealtimeCallDialog.vue";
 import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue";
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue";
 import { normalizeRealtimeMessage } from "@/utils/message-order";
@@ -237,18 +249,21 @@ import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
 
 const router = useRouter();
 const callActive = ref(false);
-const ttsApiKey = ref("");
+const callMode = ref<"voice" | "video" | "screen">("voice");
 const ttsVoiceType = ref("");
 const ttsResourceId = ref("");
 
-function handleToggleCall() {
-  // Realtime calls use server-side active TTS/realtime credentials.
-  // Clients must not fetch or gate on secret model configuration.
-  callActive.value = !callActive.value;
+function handleStartCall(mode: "voice" | "video" | "screen") {
+  callMode.value = mode;
+  callActive.value = true;
+}
+
+function handleEndCall() {
+  callActive.value = false;
 }
 
 function handleCallStateChange(state: string) {
-  if (state === "idle" || state === "error") {
+  if (state === "idle") {
     callActive.value = false;
   }
 }
@@ -298,7 +313,7 @@ const showMemInject = ref(false);
 const importContext = ref<any>(null);
 const showImportDetail = ref(false);
 const convSummary = ref("");
-const showSummary = ref(false);
+const showSummaryDrawer = ref(false);
 const replyTarget = ref<any>(null);
 const chatExtensionContext = computed(() => {
   const env = resolveHostEnvironment();
@@ -649,7 +664,7 @@ watch(
   { immediate: true },
 );
 
-watch(showSummary, (visible) => {
+watch(showSummaryDrawer, (visible) => {
   if (!visible) return;
   const requestedId = convId.value || "";
   void fetchConvSummary(requestedId).then((summary) => {
@@ -658,6 +673,10 @@ watch(showSummary, (visible) => {
     }
   });
 });
+
+function handleViewSummary() {
+  showSummaryDrawer.value = true;
+}
 
 provideConversationUIContext({
   conversationId: convId,
@@ -828,6 +847,12 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   width: 100%;
+}
+.summary-drawer-text {
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
 }
 .chat-surface { display: flex; flex-direction: column; width: min(100%, 1440px); height: 100%; min-height: 0; margin: 0 auto; overflow: hidden; border-radius: var(--radius-lg); background: var(--chat-surface-bg); }
 .chat-header-region { order: 1; flex: 0 0 auto; }

@@ -3,7 +3,7 @@
     <header class="page-head">
       <div class="page-copy">
 <h1>游戏模式</h1>
-        <p>通过游戏插件连接目标游戏。GameHost 只负责插件运行、权限与连接生命周期，具体感知和控制能力由插件提供。</p>
+        <p>游戏系统 v1 · 通过游戏插件连接目标游戏。GameHost 只负责插件运行、权限与连接生命周期，具体感知和控制能力由插件提供。</p>
       </div>
       <div class="head-actions">
         <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>

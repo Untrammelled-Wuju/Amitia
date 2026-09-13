@@ -44,6 +44,7 @@ function transformContribution(def: BackendUIContributionDefinition): UIContribu
     runtimeReady: true,
     permissions: perms,
     sandbox: def.sandbox?.type,
+    runtimeId: def.entry?.runtime_id,
     entryPath: def.entry?.path,
     schemaPath: def.entry?.schema_path,
     dataContract: def.data_contract && typeof def.data_contract === "object"
