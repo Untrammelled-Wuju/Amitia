@@ -335,7 +335,7 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
       builder: (ctx) => AlertDialog(
         title: const Text('安装游戏插件'),
         content: const Text(
-          '请选择 .gamex 或 .amitiax 游戏扩展包。安装将使用统一的扩展包预览、确认与事务生命周期。',
+          '请选择 .gamex 游戏扩展包。安装将使用统一的扩展包预览、确认与事务生命周期。',
         ),
         actions: [
           TextButton(
@@ -348,7 +348,7 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
               final result = await FilePicker.platform.pickFiles(
                 allowMultiple: false,
                 type: FileType.custom,
-                allowedExtensions: const ['gamex', 'amitiax'],
+                allowedExtensions: const ['gamex'],
               );
               final path = result?.files.single.path;
               if (path == null || path.isEmpty) return;

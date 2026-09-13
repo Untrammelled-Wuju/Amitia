@@ -32,11 +32,8 @@ class GameCenterPackageLifecycleClient {
     try {
       dio = await _dio();
       final fileName = archivePath.split(RegExp(r'[/\\]')).last;
-      if (!RegExp(
-        r'\.(gamex|amitiax)$',
-        caseSensitive: false,
-      ).hasMatch(fileName)) {
-        throw StateError('请选择 .gamex 或 .amitiax 游戏扩展包');
+      if (!RegExp(r'\.gamex$', caseSensitive: false).hasMatch(fileName)) {
+        throw StateError('请选择 .gamex 游戏扩展包');
       }
       final response = await dio.post(
         '/api/extensions/packages/artifacts',
@@ -235,9 +232,7 @@ class GameCenterPackageLifecycleClient {
     final kinds = ((preview['contributionKinds'] as List?) ?? const [])
         .map((e) => e.toString())
         .toSet();
-    if (target != 'game_center' &&
-        !kinds.contains('gamex') &&
-        !kinds.contains('game_plugin')) {
+    if (target != 'game_center' && !kinds.contains('gamex')) {
       throw StateError('该扩展包不是游戏扩展，已阻止从游戏中心安装');
     }
     if (preview['installable'] == false || preview['compatible'] == false) {

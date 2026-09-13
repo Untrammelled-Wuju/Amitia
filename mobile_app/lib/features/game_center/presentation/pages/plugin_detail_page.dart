@@ -421,7 +421,7 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: false,
       type: FileType.custom,
-      allowedExtensions: const ['gamex', 'amitiax'],
+      allowedExtensions: const ['gamex'],
     );
     final path = result?.files.single.path;
     if (path == null || path.isEmpty) return;
