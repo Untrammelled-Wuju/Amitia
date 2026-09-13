@@ -52,8 +52,25 @@ func (c *ManagerScopeChecker) Check(ctx context.Context, identity runtime_superv
 	}
 
 	if scopeSnapshotID == "" {
-		if !isGlobalRoute(policy) {
-			return fmt.Errorf("%w: empty scope snapshot for non-global route", ErrScopeDenied)
+		if isGlobalRoute(policy) {
+			return nil
+		}
+		if len(policy.RequireRoles) > 0 {
+			return fmt.Errorf("%w: empty scope snapshot for role-scoped route", ErrScopeDenied)
+		}
+		subjectType, subjectID := ScopeSubjectTypeFromIdentity(identity)
+		if subjectType == "" || subjectID == "" {
+			return fmt.Errorf("%w: cannot derive scope subject", ErrScopeDenied)
+		}
+		decision := c.Manager.Evaluate(ctx, scope.ScopeEvaluationRequest{
+			SubjectType: toScopeSubjectType(subjectType),
+			SubjectID:   subjectID,
+			ExtensionID: string(identity.ExtensionID),
+			ModuleID:    string(identity.ModuleID),
+			Generation:  identity.Generation,
+		})
+		if !decision.Allowed {
+			return fmt.Errorf("%w: scope manager denied (reasons=%v)", ErrScopeDenied, decision.Reasons)
 		}
 		return nil
 	}

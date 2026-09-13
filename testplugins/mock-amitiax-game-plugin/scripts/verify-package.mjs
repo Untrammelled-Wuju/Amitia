@@ -133,8 +133,8 @@ try {
   const companionArtifact = gameContribution?.spec?.artifacts
     ?.find(artifact => artifact?.id === 'worldgame-companion-file');
   if (!manifest?.modules?.some(module => module?.id === 'world-game-support')) errors.push('world-game-support module missing from canonical manifest');
-  if (!services.some(service => service?.id === 'world-game-support' && service?.required === true)) errors.push('required world-game-support service missing from canonical game_plugin spec');
-  if (!companionArtifact) errors.push('worldgame-companion-file declaration missing from canonical game_plugin spec');
+  if (!services.some(service => service?.id === 'world-game-support' && service?.required === true)) errors.push('required world-game-support service missing from canonical gamex spec');
+  if (!companionArtifact) errors.push('worldgame-companion-file declaration missing from canonical gamex spec');
   else if (Boolean(companionArtifact.required) !== expectRequiredArtifact) errors.push(`worldgame-companion-file required=${Boolean(companionArtifact.required)} does not match expected ${expectRequiredArtifact}`);
   if (manifest?.integrity?.algorithm !== 'sha256') errors.push('manifest integrity algorithm must be sha256');
   if (manifest?.integrity?.contentTreeHash !== '') errors.push('manifest contentTreeHash must be empty for canonical tree binding');
