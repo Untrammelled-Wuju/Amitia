@@ -104,7 +104,7 @@
         <el-button :loading="previewLoading" @click="choosePackage">
           {{ installFile ? "重新选择" : "选择文件" }}
         </el-button>
-        <input ref="packageInput" class="sr-only" type="file" accept=".petx,.amitiax" @change="onPackageFile" />
+        <input ref="packageInput" class="sr-only" type="file" accept=".petx" @change="onPackageFile" />
       </div>
 
       <el-progress
@@ -244,9 +244,7 @@ const packageInput = ref<HTMLInputElement | null>(null);
 const previewIsPetPlugin = computed(() => {
   const preview = installPreview.value;
   if (!preview) return false;
-  return preview.managementTarget === "pet_center"
-    || preview.contributionKinds?.includes("pet_plugin") === true
-    || preview.contributionKinds?.includes("desktop_pet_plugin") === true;
+  return preview.managementTarget === "pet_center" || preview.contributionKinds?.includes("petx") === true;
 });
 
 const previewMatchesInstalledVersion = computed(() => {
@@ -339,8 +337,8 @@ async function onPackageDrop(event: DragEvent) {
 }
 
 async function setPackageFile(file: File) {
-  if (!/\.(petx|amitiax)$/i.test(file.name)) {
-    ElMessage.warning("请选择 .petx 或 .amitiax 桌宠插件包");
+  if (!/\.petx$/i.test(file.name)) {
+    ElMessage.warning("请选择 .petx 桌宠插件包");
     return;
   }
   installFile.value = file;
