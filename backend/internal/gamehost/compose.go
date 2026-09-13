@@ -352,17 +352,6 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		opts.EffectivePermission = permission.NewEffectivePermissionAdapter(opts.PermissionBroker, nil, subjectMapper)
 	}
 
-	var permissionApprovals *permission.ApprovalCoordinator
-	if opts.KernelPermissionBroker != nil {
-		permissionApprovals, err = permission.NewApprovalCoordinator(opts.KernelPermissionBroker)
-		if err != nil {
-			return nil, fmt.Errorf("compose gamehost permission approval coordinator: %w", err)
-		}
-		if opts.EffectivePermission != nil {
-			opts.EffectivePermission.SetApprovalCoordinator(permissionApprovals)
-		}
-	}
-
 	permChecker := integration.NewControlPermissionAdapter(opts.EffectivePermission)
 	channelNotificationSink.SetPermissionChecker(opts.EffectivePermission)
 
@@ -967,10 +956,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		HostAPIGateway:           opts.HostAPIGateway,
 		HostAPIInvocationTracker: emergencyHostAPITracker,
 
-		ResourceAdapter:     resourceAdapter,
-		ResourceViewer:      resourceViewer,
-		ResourceLifecycle:   resourceLifecycle,
-		PermissionApprovals: permissionApprovals,
+		ResourceAdapter:   resourceAdapter,
+		ResourceViewer:    resourceViewer,
+		ResourceLifecycle: resourceLifecycle,
 
 		AuthorityManager:     controlManager,
 		OutputGate:           pluginOutputGate,

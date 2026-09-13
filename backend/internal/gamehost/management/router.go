@@ -30,16 +30,6 @@ func RegisterGameCenterRouter(group *gin.RouterGroup, service *GameCenterManagem
 	}
 }
 
-func RegisterGameCenterApprovalRouter(group *gin.RouterGroup, handler *ApprovalHandler) {
-	if handler == nil {
-		return
-	}
-	gameCenter := group.Group("/game-center")
-	gameCenter.GET("/approvals", handler.ListPending)
-	gameCenter.POST("/approvals/:approvalId/approve", handler.Approve)
-	gameCenter.POST("/approvals/:approvalId/reject", handler.Reject)
-}
-
 func RegisterGameCenterMutationRouter(group *gin.RouterGroup, mutationHandler *MutationHandler) {
 	gameCenter := group.Group("/game-center")
 	{
