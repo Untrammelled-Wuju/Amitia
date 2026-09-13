@@ -186,7 +186,7 @@ export function registerIpcHandlers(
     const window = BrowserWindow.fromWebContents(event.sender);
     const options = {
       properties: ["openFile"] as Array<"openFile">,
-      filters: [{ name: "Amitia 扩展包", extensions: ["amitiax", "zip"] }],
+      filters: [{ name: "Amitia 扩展包", extensions: ["amitiax", "gamex", "petx", "zip"] }],
     };
     const result = window
       ? await dialog.showOpenDialog(window, options)
@@ -220,7 +220,7 @@ export function registerIpcHandlers(
       const suggestedName = path
         .basename(request.suggestedName)
         .replace(/[^A-Za-z0-9._-]/g, "-");
-      if (!suggestedName || !/\.(amitiax|zip)$/i.test(suggestedName))
+      if (!suggestedName || !/\.(amitiax|gamex|petx|zip)$/i.test(suggestedName))
         throw new Error("导出文件名无效");
       const content = Buffer.from(request.base64, "base64");
       if (!content.length || content.length > 100 * 1024 * 1024)
@@ -228,7 +228,7 @@ export function registerIpcHandlers(
       const window = BrowserWindow.fromWebContents(event.sender);
       const options = {
         defaultPath: suggestedName,
-        filters: [{ name: "Amitia 扩展包", extensions: ["amitiax", "zip"] }],
+        filters: [{ name: "Amitia 扩展包", extensions: ["amitiax", "gamex", "petx", "zip"] }],
       };
       const result = window
         ? await dialog.showSaveDialog(window, options)
