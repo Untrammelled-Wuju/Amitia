@@ -3,7 +3,6 @@ import { ref, onMounted, onBeforeUnmount, watch, computed } from "vue";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { apiClient } from "@/composables/useApi";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
-import { ElMessageBox } from "element-plus";
 import ExtensionRenderState from "./ExtensionRenderState.vue";
 
 const props = defineProps<{
@@ -265,37 +264,12 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
   try {
     const res = await apiClient.post(`/api/extension/webui/bridge/${sessionId.value}`, msg);
     const data = res.data as Record<string, unknown>;
-    if (data?.ok === false && typeof data.error === "string" && data.error.includes("needs confirmation")) {
-      sendBridgeResponse(msg, await retryActionWithApproval(msg));
-      return;
-    }
     sendBridgeResponse(msg, data);
   } catch (e) {
     sendBridgeResponse(msg, {
       ok: false,
       error: e instanceof Error ? e.message : String(e),
     });
-  }
-}
-
-async function retryActionWithApproval(msg: Record<string, unknown>): Promise<Record<string, unknown>> {
-  try {
-    await ElMessageBox.confirm("该操作将调用扩展工具，并仅在本次操作中执行。是否允许？", "确认扩展操作", {
-      type: "warning",
-      confirmButtonText: "允许一次",
-      cancelButtonText: "取消",
-    });
-  } catch {
-    return { ok: false, error: "用户取消了该操作" };
-  }
-  const payload = (msg.input ?? {}) as Record<string, unknown>;
-  const inner = { ...((payload.input ?? {}) as Record<string, unknown>), __amitiaApprovalConfirmed: true };
-  const retryMsg = { ...msg, input: { ...payload, input: inner } };
-  try {
-    const res = await apiClient.post(`/api/extension/webui/bridge/${sessionId.value}`, retryMsg);
-    return res.data as Record<string, unknown>;
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 

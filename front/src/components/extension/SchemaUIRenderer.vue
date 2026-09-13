@@ -479,29 +479,10 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
       node_id: node.id,
       form_state: { ...formState },
     } as Record<string, unknown>;
-    delete actionInput.__amitiaApprovalConfirmed;
-    let bridgeResult: unknown;
-    try {
-      bridgeResult = await postBridge("ui.action.invoke", {
-        action_id: action.action_id,
-        input: actionInput,
-      });
-    } catch (firstError) {
-      if (!(firstError instanceof BridgeError) || firstError.code !== "permission_denied") throw firstError;
-      try {
-        await ElMessageBox.confirm("该操作将调用扩展工具，并仅在本次操作中执行。是否允许？", "确认扩展操作", {
-          type: "warning",
-          confirmButtonText: "允许一次",
-          cancelButtonText: "取消",
-        });
-      } catch {
-        return;
-      }
-      bridgeResult = await postBridge("ui.action.invoke", {
-        action_id: action.action_id,
-        input: { ...actionInput, __amitiaApprovalConfirmed: true },
-      });
-    }
+    const bridgeResult = await postBridge("ui.action.invoke", {
+      action_id: action.action_id,
+      input: actionInput,
+    });
     const data = unwrapActionResult(bridgeResult);
     if (data && typeof data === "object") {
       if (data.clientExecute === true && typeof data.text === "string") {
