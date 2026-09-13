@@ -29,7 +29,8 @@ class CharacterDetailPage extends ConsumerStatefulWidget {
   const CharacterDetailPage({super.key, required this.characterId});
 
   @override
-  ConsumerState<CharacterDetailPage> createState() => _CharacterDetailPageState();
+  ConsumerState<CharacterDetailPage> createState() =>
+      _CharacterDetailPageState();
 }
 
 class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
@@ -82,8 +83,12 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     _descriptionController.text = character.description;
     _promptController.text = character.basePrompt;
     const encoder = JsonEncoder.withIndent('  ');
-    _personalityConfigController.text = encoder.convert(character.personalityConfig);
-    _chatStyleConfigController.text = encoder.convert(character.chatStyleConfig);
+    _personalityConfigController.text = encoder.convert(
+      character.personalityConfig,
+    );
+    _chatStyleConfigController.text = encoder.convert(
+      character.chatStyleConfig,
+    );
     _sceneRulesController.text = encoder.convert(character.sceneRules);
   }
 
@@ -91,28 +96,39 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   Widget build(BuildContext context) {
     final characterAsync = ref.watch(characterListProvider);
     final memoriesAsync = ref.watch(memoryListProvider);
-    final isDevMode = ref.watch(isDeveloperModeProvider);
-    final backendAvailability = ref.watch(backendConnectionProvider).valueOrNull;
+    final backendAvailability = ref
+        .watch(backendConnectionProvider)
+        .valueOrNull;
     final uiSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    final featurePluginEnablement =
+        ref.watch(kernelExtensionEnablementProvider).valueOrNull ??
+        const <String, bool>{};
+    final proactiveEnabled =
+        featurePluginEnablement['com.amitia.builtin.proactive'] ?? false;
+    final emotionEnabled =
+        featurePluginEnablement['com.amitia.builtin.emotion'] ?? false;
+    final lifestyleEnabled =
+        featurePluginEnablement['com.amitia.builtin.lifestyle'] ?? false;
     final hasExtensionTab =
-        uiSnapshot?.contributionsForSlot('character.detail.tab').isNotEmpty ?? false;
+        uiSnapshot
+            ?.contributionsForSlot('character.detail.tab')
+            .where((item) => !item.runtimeId.startsWith('host.character.'))
+            .isNotEmpty ??
+        false;
 
     return characterAsync.when(
       loading: () => const AmitiaScaffold(
         body: Center(child: CircularProgressIndicator()),
       ),
-      error: (err, _) => AmitiaScaffold(
-        body: Center(child: Text('加载失败: $err')),
-      ),
+      error: (err, _) =>
+          AmitiaScaffold(body: Center(child: Text('加载失败: $err'))),
       data: (characters) {
         final character = characters.cast<CharacterDto?>().firstWhere(
           (c) => c?.id == widget.characterId,
           orElse: () => null,
         );
         if (character == null) {
-          return const AmitiaScaffold(
-            body: Center(child: Text('角色不存在')),
-          );
+          return const AmitiaScaffold(body: Center(child: Text('角色不存在')));
         }
         _syncControllers(character);
 
@@ -120,14 +136,25 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           loading: () => const AmitiaScaffold(
             body: Center(child: CircularProgressIndicator()),
           ),
-          error: (_, __) => _buildScaffold(context, character, [], isDevMode, hasExtensionTab, backendAvailability),
+          error: (_, __) => _buildScaffold(
+            context,
+            character,
+            [],
+            hasExtensionTab,
+            backendAvailability,
+            proactiveEnabled,
+            emotionEnabled,
+            lifestyleEnabled,
+          ),
           data: (memories) => _buildScaffold(
             context,
             character,
             memories.take(5).toList(),
-            isDevMode,
             hasExtensionTab,
             backendAvailability,
+            proactiveEnabled,
+            emotionEnabled,
+            lifestyleEnabled,
           ),
         );
       },
@@ -135,22 +162,24 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   }
 
   Map<String, dynamic> _characterSlotContext(CharacterDto character) => {
-        'characterId': character.id,
-        'character': {
-          'id': character.id,
-          'name': character.name,
-          'status': character.status,
-          'identity': character.identity,
-        },
-      };
+    'characterId': character.id,
+    'character': {
+      'id': character.id,
+      'name': character.name,
+      'status': character.status,
+      'identity': character.identity,
+    },
+  };
 
   Widget _buildScaffold(
     BuildContext context,
     CharacterDto character,
     List<MemoryDto> memories,
-    bool isDevMode,
     bool hasExtensionTab,
     BackendConnectionAvailability? backendAvailability,
+    bool proactiveEnabled,
+    bool emotionEnabled,
+    bool lifestyleEnabled,
   ) {
     final tabs = <String>[..._tabs, if (hasExtensionTab) '扩展'];
     final selectedTab = _selectedTab < tabs.length ? _selectedTab : 0;
@@ -208,8 +237,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 context,
                 character,
                 memories,
-                isDevMode,
                 hasExtensionTab,
+                proactiveEnabled,
+                emotionEnabled,
+                lifestyleEnabled,
               ),
             ),
           ],
@@ -224,7 +255,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     BackendConnectionAvailability? backendAvailability,
   ) {
     final normalizedStatus = character.status.toLowerCase();
-    final isOnline = character.isActive == 1 || normalizedStatus == '在线' || normalizedStatus == 'enabled';
+    final isOnline =
+        character.isActive == 1 ||
+        normalizedStatus == '在线' ||
+        normalizedStatus == 'enabled';
     final initial = character.name.isNotEmpty ? character.name[0] : '?';
     final avatarUrl = _resolveAvatarUrl(character.avatar, backendAvailability);
 
@@ -292,23 +326,30 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                             padding: EdgeInsets.all(5),
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Icon(Icons.edit, size: 13, color: context.textSecondary),
+                        : Icon(
+                            Icons.edit,
+                            size: 13,
+                            color: context.textSecondary,
+                          ),
                   ),
                 ),
-              if (isOnline)
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 18,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: context.success,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: context.surfacePrimary, width: 2.5),
+                if (isOnline)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        color: context.success,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: context.surfacePrimary,
+                          width: 2.5,
+                        ),
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -317,7 +358,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(character.name, style: AppTypography.sectionTitle(context)),
+                Text(
+                  character.name,
+                  style: AppTypography.sectionTitle(context),
+                ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -358,7 +402,8 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     if (avatar.isEmpty) return '';
     final uri = Uri.tryParse(avatar);
     if (uri != null && uri.hasScheme) return avatar;
-    if (!avatar.startsWith('/') || availability is! BackendConnectionAvailable) {
+    if (!avatar.startsWith('/') ||
+        availability is! BackendConnectionAvailable) {
       return avatar;
     }
     return BackendUriBuilder().http(availability.config, avatar).toString();
@@ -368,50 +413,62 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     if (_savingSettings) return;
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('角色名称不能为空')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('角色名称不能为空')));
       return;
     }
     Map<String, dynamic> personalityConfig;
     Map<String, dynamic> chatStyleConfig;
     Map<String, dynamic> sceneRules;
     try {
-      personalityConfig = _decodeJsonObject(_personalityConfigController.text, '人格参数');
-      chatStyleConfig = _decodeJsonObject(_chatStyleConfigController.text, '聊天风格配置');
+      personalityConfig = _decodeJsonObject(
+        _personalityConfigController.text,
+        '人格参数',
+      );
+      chatStyleConfig = _decodeJsonObject(
+        _chatStyleConfigController.text,
+        '聊天风格配置',
+      );
       sceneRules = _decodeJsonObject(_sceneRulesController.text, '场景规则');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('FormatException: ', ''))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('FormatException: ', '')),
+        ),
+      );
       return;
     }
     setState(() => _savingSettings = true);
     try {
-      await ref.read(characterServiceProvider).update(character.id, <String, dynamic>{
-        'name': name,
-        'identity': _identityController.text.trim(),
-        'personality': _personalityController.text.trim(),
-        'speakingStyle': _speakingStyleController.text.trim(),
-        'relationshipStyle': _relationshipStyleController.text.trim(),
-        'characterBase': _characterBaseController.text.trim(),
-        'boundaryRules': _boundaryRulesController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'basePrompt': _promptController.text.trim(),
-        'personalityConfig': personalityConfig,
-        'chatStyleConfig': jsonEncode(chatStyleConfig),
-        'sceneRules': jsonEncode(sceneRules),
-      });
+      await ref
+          .read(characterServiceProvider)
+          .update(character.id, <String, dynamic>{
+            'name': name,
+            'identity': _identityController.text.trim(),
+            'personality': _personalityController.text.trim(),
+            'speakingStyle': _speakingStyleController.text.trim(),
+            'relationshipStyle': _relationshipStyleController.text.trim(),
+            'characterBase': _characterBaseController.text.trim(),
+            'boundaryRules': _boundaryRulesController.text.trim(),
+            'description': _descriptionController.text.trim(),
+            'basePrompt': _promptController.text.trim(),
+            'personalityConfig': personalityConfig,
+            'chatStyleConfig': jsonEncode(chatStyleConfig),
+            'sceneRules': jsonEncode(sceneRules),
+          });
       _loadedCharacterId = '';
       ref.invalidate(characterListProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('角色设定已保存')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('角色设定已保存')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败：$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存失败：$e')));
       }
     } finally {
       if (mounted) setState(() => _savingSettings = false);
@@ -436,15 +493,17 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     final path = picked.files.single.path;
     if (path == null || path.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法读取所选头像文件')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('无法读取所选头像文件')));
       }
       return;
     }
     setState(() => _uploadingAvatar = true);
     try {
-      final result = await ref.read(characterDetailServiceProvider).uploadAvatar(character.id, path);
+      final result = await ref
+          .read(characterDetailServiceProvider)
+          .uploadAvatar(character.id, path);
       final avatarUrl = (result?['avatarUrl'] ?? '').toString();
       if (avatarUrl.isEmpty) {
         throw StateError('后端未返回头像地址');
@@ -452,15 +511,15 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       _loadedCharacterId = '';
       ref.invalidate(characterListProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('头像已更新')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('头像已更新')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('头像上传失败：$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('头像上传失败：$e')));
       }
     } finally {
       if (mounted) setState(() => _uploadingAvatar = false);
@@ -471,12 +530,21 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     BuildContext context,
     CharacterDto character,
     List<MemoryDto> memories,
-    bool isDevMode,
     bool hasExtensionTab,
+    bool proactiveEnabled,
+    bool emotionEnabled,
+    bool lifestyleEnabled,
   ) {
     switch (_selectedTab) {
       case 0:
-        return _buildOverviewTab(context, character, memories, isDevMode);
+        return _buildOverviewTab(
+          context,
+          character,
+          memories,
+          proactiveEnabled,
+          emotionEnabled,
+          lifestyleEnabled,
+        );
       case 1:
         return _buildSettingsTab(context, character);
       case 2:
@@ -505,7 +573,14 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     }
   }
 
-  Widget _buildOverviewTab(BuildContext context, CharacterDto character, List<MemoryDto> memories, bool isDevMode) {
+  Widget _buildOverviewTab(
+    BuildContext context,
+    CharacterDto character,
+    List<MemoryDto> memories,
+    bool proactiveEnabled,
+    bool emotionEnabled,
+    bool lifestyleEnabled,
+  ) {
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
@@ -548,7 +623,13 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           ),
         ),
         SizedBox(height: AppSpacing.sm),
-        _buildManagementSection(context, character, isDevMode),
+        _buildManagementSection(
+          context,
+          character,
+          proactiveEnabled,
+          emotionEnabled,
+          lifestyleEnabled,
+        ),
       ],
     );
   }
@@ -565,12 +646,48 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               SizedBox(height: AppSpacing.md),
               _buildLabeledField(context, '名字', _nameController, '角色名称'),
               _buildLabeledField(context, '身份', _identityController, '角色身份'),
-              _buildLabeledField(context, '性格', _personalityController, '角色性格', maxLines: 3),
-              _buildLabeledField(context, '说话方式', _speakingStyleController, '说话风格', maxLines: 3),
-              _buildLabeledField(context, '关系风格', _relationshipStyleController, '与用户相处和建立关系的方式', maxLines: 3),
-              _buildLabeledField(context, '角色基础设定', _characterBaseController, '不可轻易变化的角色基础信息', maxLines: 4),
-              _buildLabeledField(context, '边界规则', _boundaryRulesController, '角色需要长期遵守的行为边界', maxLines: 4),
-              _buildLabeledField(context, '简介', _descriptionController, '角色简介', maxLines: 3),
+              _buildLabeledField(
+                context,
+                '性格',
+                _personalityController,
+                '角色性格',
+                maxLines: 3,
+              ),
+              _buildLabeledField(
+                context,
+                '说话方式',
+                _speakingStyleController,
+                '说话风格',
+                maxLines: 3,
+              ),
+              _buildLabeledField(
+                context,
+                '关系风格',
+                _relationshipStyleController,
+                '与用户相处和建立关系的方式',
+                maxLines: 3,
+              ),
+              _buildLabeledField(
+                context,
+                '角色基础设定',
+                _characterBaseController,
+                '不可轻易变化的角色基础信息',
+                maxLines: 4,
+              ),
+              _buildLabeledField(
+                context,
+                '边界规则',
+                _boundaryRulesController,
+                '角色需要长期遵守的行为边界',
+                maxLines: 4,
+              ),
+              _buildLabeledField(
+                context,
+                '简介',
+                _descriptionController,
+                '角色简介',
+                maxLines: 3,
+              ),
             ],
           ),
         ),
@@ -596,9 +713,27 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             children: [
               Text('高级人格与场景配置', style: AppTypography.cardTitle(context)),
               SizedBox(height: AppSpacing.sm),
-              _buildLabeledField(context, '人格参数 JSON', _personalityConfigController, '{}', maxLines: 8),
-              _buildLabeledField(context, '聊天风格 JSON', _chatStyleConfigController, '{}', maxLines: 6),
-              _buildLabeledField(context, '场景规则 JSON', _sceneRulesController, '{}', maxLines: 6),
+              _buildLabeledField(
+                context,
+                '人格参数 JSON',
+                _personalityConfigController,
+                '{}',
+                maxLines: 8,
+              ),
+              _buildLabeledField(
+                context,
+                '聊天风格 JSON',
+                _chatStyleConfigController,
+                '{}',
+                maxLines: 6,
+              ),
+              _buildLabeledField(
+                context,
+                '场景规则 JSON',
+                _sceneRulesController,
+                '{}',
+                maxLines: 6,
+              ),
             ],
           ),
         ),
@@ -607,7 +742,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           label: _savingSettings ? '保存中...' : '保存角色设定',
           icon: Icons.save_outlined,
           isFullWidth: true,
-          onPressed: _savingSettings ? null : () => _saveCharacterSettings(character),
+          onPressed: _savingSettings
+              ? null
+              : () => _saveCharacterSettings(character),
         ),
       ],
     );
@@ -659,7 +796,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
 
   Widget _buildRelationTab(BuildContext context, CharacterDto character) {
     return FutureBuilder<Map<String, dynamic>?>(
-      future: ref.read(temporalServiceProvider).relationshipTimeState(character.id),
+      future: ref
+          .read(temporalServiceProvider)
+          .relationshipTimeState(character.id),
       builder: (context, snapshot) {
         final state = snapshot.data ?? const <String, dynamic>{};
         return ListView(
@@ -671,7 +810,11 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                   children: [
                     _buildStatItem(context, character.createdAt, '创建时间'),
                     VerticalDivider(width: 1, color: context.borderPrimary),
-                    _buildStatItem(context, character.isActive == 1 ? '是' : '否', '活跃状态'),
+                    _buildStatItem(
+                      context,
+                      character.isActive == 1 ? '是' : '否',
+                      '活跃状态',
+                    ),
                   ],
                 ),
               ),
@@ -683,25 +826,75 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Text('关系时间状态', style: AppTypography.cardTitle(context))),
+                      Expanded(
+                        child: Text(
+                          '关系时间状态',
+                          style: AppTypography.cardTitle(context),
+                        ),
+                      ),
                       if (snapshot.connectionState == ConnectionState.waiting)
-                        const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                     ],
                   ),
                   SizedBox(height: AppSpacing.sm),
                   if (snapshot.hasError)
-                    Text('加载失败：${snapshot.error}', style: AppTypography.caption(context).copyWith(color: context.error))
-                  else if (state.isEmpty && snapshot.connectionState != ConnectionState.waiting)
-                    Text('尚未产生可展示的关系时间状态', style: AppTypography.caption(context))
+                    Text(
+                      '加载失败：${snapshot.error}',
+                      style: AppTypography.caption(
+                        context,
+                      ).copyWith(color: context.error),
+                    )
+                  else if (state.isEmpty &&
+                      snapshot.connectionState != ConnectionState.waiting)
+                    Text(
+                      '尚未产生可展示的关系时间状态',
+                      style: AppTypography.caption(context),
+                    )
                   else ...[
-                    _buildInfoRow(context, '首次互动', _displayTime(state['firstInteractionAt'])),
-                    _buildInfoRow(context, '关系持续', '${_intValue(state['relationshipAgeDays'])} 天'),
-                    _buildInfoRow(context, '互动次数', '${_intValue(state['interactionCount'])}'),
-                    _buildInfoRow(context, '会话次数', '${_intValue(state['sessionCount'])}'),
-                    _buildInfoRow(context, '最近互动', _displayTime(state['lastSuccessfulExchangeAt'])),
-                    _buildInfoRow(context, '期望间隔', _formatDuration(state['expectedGapSeconds'])),
-                    _buildInfoRow(context, '连续性', _formatScore(state['continuityScore'])),
-                    _buildInfoRow(context, '重新适应', '${_intValue(state['reacclimationTurnsLeft'])} 回合'),
+                    _buildInfoRow(
+                      context,
+                      '首次互动',
+                      _displayTime(state['firstInteractionAt']),
+                    ),
+                    _buildInfoRow(
+                      context,
+                      '关系持续',
+                      '${_intValue(state['relationshipAgeDays'])} 天',
+                    ),
+                    _buildInfoRow(
+                      context,
+                      '互动次数',
+                      '${_intValue(state['interactionCount'])}',
+                    ),
+                    _buildInfoRow(
+                      context,
+                      '会话次数',
+                      '${_intValue(state['sessionCount'])}',
+                    ),
+                    _buildInfoRow(
+                      context,
+                      '最近互动',
+                      _displayTime(state['lastSuccessfulExchangeAt']),
+                    ),
+                    _buildInfoRow(
+                      context,
+                      '期望间隔',
+                      _formatDuration(state['expectedGapSeconds']),
+                    ),
+                    _buildInfoRow(
+                      context,
+                      '连续性',
+                      _formatScore(state['continuityScore']),
+                    ),
+                    _buildInfoRow(
+                      context,
+                      '重新适应',
+                      '${_intValue(state['reacclimationTurnsLeft'])} 回合',
+                    ),
                     if ((state['reunion'] as Map?)?.isNotEmpty == true)
                       _buildInfoRow(
                         context,
@@ -733,7 +926,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   Widget _buildAbilityTab(BuildContext context, CharacterDto character) {
     final configsAsync = ref.watch(modelConfigListProvider);
     final configs = configsAsync.valueOrNull ?? const [];
-    final activeModels = configs.where((item) => item.isActive == 1).toList(growable: false);
+    final activeModels = configs
+        .where((item) => item.isActive == 1)
+        .toList(growable: false);
     final activeModel = activeModels.isEmpty ? null : activeModels.first;
     final modelLabel = activeModel == null
         ? (configsAsync.isLoading ? '加载中...' : '未配置激活模型')
@@ -741,9 +936,19 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
-        _buildAbilitySection(context, '模型', modelLabel, Icons.psychology_outlined),
+        _buildAbilitySection(
+          context,
+          '模型',
+          modelLabel,
+          Icons.psychology_outlined,
+        ),
         SizedBox(height: AppSpacing.sm),
-        _buildAbilitySection(context, '语音类型', character.voiceType ?? '默认', Icons.record_voice_over_outlined),
+        _buildAbilitySection(
+          context,
+          '语音类型',
+          character.voiceType ?? '默认',
+          Icons.record_voice_over_outlined,
+        ),
         SizedBox(height: AppSpacing.sm),
         _buildAbilitySection(
           context,
@@ -758,7 +963,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             children: [
               Text('Emote AI 策略', style: AppTypography.cardTitle(context)),
               SizedBox(height: AppSpacing.xs),
-              Text('控制 AI 回复时自动发送角色表情的概率、频率与冷却规则。', style: AppTypography.caption(context)),
+              Text(
+                '控制 AI 回复时自动发送角色表情的概率、频率与冷却规则。',
+                style: AppTypography.caption(context),
+              ),
               SizedBox(height: AppSpacing.md),
               AmitiaButton(
                 label: '配置表情策略',
@@ -777,15 +985,50 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
   Future<void> _showEmoteSettings(CharacterDto character) async {
     try {
       final service = ref.read(emoteServiceProvider);
-      final raw = await service.getSettings(character.id) ?? const <String, dynamic>{};
+      final raw =
+          await service.getSettings(character.id) ?? const <String, dynamic>{};
       if (!mounted) return;
       var enabled = _boolValue(raw['enabled'], fallback: true);
       var allowEmoteOnly = _boolValue(raw['allowEmoteOnly']);
-      final baseController = TextEditingController(text: ((_doubleValue(raw['baseProbability']) == 0 && !raw.containsKey('baseProbability')) ? 0.10 : _doubleValue(raw['baseProbability'])).toString());
-      final maxController = TextEditingController(text: ((_doubleValue(raw['maxProbability']) == 0 && !raw.containsKey('maxProbability')) ? 0.30 : _doubleValue(raw['maxProbability'])).toString());
-      final perHourController = TextEditingController(text: (_intValue(raw['maxPerHour']) == 0 && !raw.containsKey('maxPerHour') ? 5 : _intValue(raw['maxPerHour'])).toString());
-      final gapController = TextEditingController(text: (_intValue(raw['minReplyGap']) == 0 && !raw.containsKey('minReplyGap') ? 3 : _intValue(raw['minReplyGap'])).toString());
-      final cooldownController = TextEditingController(text: (_intValue(raw['sameEmoteCooldownMinutes']) == 0 && !raw.containsKey('sameEmoteCooldownMinutes') ? 30 : _intValue(raw['sameEmoteCooldownMinutes'])).toString());
+      final baseController = TextEditingController(
+        text:
+            ((_doubleValue(raw['baseProbability']) == 0 &&
+                        !raw.containsKey('baseProbability'))
+                    ? 0.10
+                    : _doubleValue(raw['baseProbability']))
+                .toString(),
+      );
+      final maxController = TextEditingController(
+        text:
+            ((_doubleValue(raw['maxProbability']) == 0 &&
+                        !raw.containsKey('maxProbability'))
+                    ? 0.30
+                    : _doubleValue(raw['maxProbability']))
+                .toString(),
+      );
+      final perHourController = TextEditingController(
+        text:
+            (_intValue(raw['maxPerHour']) == 0 && !raw.containsKey('maxPerHour')
+                    ? 5
+                    : _intValue(raw['maxPerHour']))
+                .toString(),
+      );
+      final gapController = TextEditingController(
+        text:
+            (_intValue(raw['minReplyGap']) == 0 &&
+                        !raw.containsKey('minReplyGap')
+                    ? 3
+                    : _intValue(raw['minReplyGap']))
+                .toString(),
+      );
+      final cooldownController = TextEditingController(
+        text:
+            (_intValue(raw['sameEmoteCooldownMinutes']) == 0 &&
+                        !raw.containsKey('sameEmoteCooldownMinutes')
+                    ? 30
+                    : _intValue(raw['sameEmoteCooldownMinutes']))
+                .toString(),
+      );
       var saving = false;
       try {
         await showDialog<void>(
@@ -799,9 +1042,21 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 base = base.clamp(0, 1).toDouble();
                 max = max.clamp(0, 1).toDouble();
                 if (max < base) max = base;
-                final maxPerHour = (int.tryParse(perHourController.text.trim()) ?? 5).clamp(1, 100);
-                final minReplyGap = (int.tryParse(gapController.text.trim()) ?? 3).clamp(0, 1000);
-                final cooldown = (int.tryParse(cooldownController.text.trim()) ?? 30).clamp(0, 1440);
+                final maxPerHour =
+                    (int.tryParse(perHourController.text.trim()) ?? 5).clamp(
+                      1,
+                      100,
+                    );
+                final minReplyGap =
+                    (int.tryParse(gapController.text.trim()) ?? 3).clamp(
+                      0,
+                      1000,
+                    );
+                final cooldown =
+                    (int.tryParse(cooldownController.text.trim()) ?? 30).clamp(
+                      0,
+                      1440,
+                    );
                 setDialogState(() => saving = true);
                 try {
                   await service.saveSettings(character.id, <String, dynamic>{
@@ -814,10 +1069,15 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                     'allowEmoteOnly': allowEmoteOnly,
                   });
                   if (dialogContext.mounted) Navigator.pop(dialogContext);
-                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('表情策略已保存')));
+                  if (mounted)
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('表情策略已保存')));
                 } catch (e) {
                   if (dialogContext.mounted) {
-                    ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('保存失败：$e')));
+                    ScaffoldMessenger.of(
+                      dialogContext,
+                    ).showSnackBar(SnackBar(content: Text('保存失败：$e')));
                     setDialogState(() => saving = false);
                   }
                 }
@@ -835,27 +1095,70 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                           contentPadding: EdgeInsets.zero,
                           title: const Text('启用 AI 自动表情'),
                           value: enabled,
-                          onChanged: saving ? null : (value) => setDialogState(() => enabled = value),
+                          onChanged: saving
+                              ? null
+                              : (value) =>
+                                    setDialogState(() => enabled = value),
                         ),
-                        _buildDialogNumberField(baseController, '基础发送概率', '0.00 - 1.00', enabled && !saving),
-                        _buildDialogNumberField(maxController, '最大发送概率', '0.00 - 1.00', enabled && !saving),
-                        _buildDialogNumberField(perHourController, '每小时最多发送', '次数', enabled && !saving, decimal: false),
-                        _buildDialogNumberField(gapController, '最小回复间隔', '回复轮数', enabled && !saving, decimal: false),
-                        _buildDialogNumberField(cooldownController, '同一表情冷却', '分钟', enabled && !saving, decimal: false),
+                        _buildDialogNumberField(
+                          baseController,
+                          '基础发送概率',
+                          '0.00 - 1.00',
+                          enabled && !saving,
+                        ),
+                        _buildDialogNumberField(
+                          maxController,
+                          '最大发送概率',
+                          '0.00 - 1.00',
+                          enabled && !saving,
+                        ),
+                        _buildDialogNumberField(
+                          perHourController,
+                          '每小时最多发送',
+                          '次数',
+                          enabled && !saving,
+                          decimal: false,
+                        ),
+                        _buildDialogNumberField(
+                          gapController,
+                          '最小回复间隔',
+                          '回复轮数',
+                          enabled && !saving,
+                          decimal: false,
+                        ),
+                        _buildDialogNumberField(
+                          cooldownController,
+                          '同一表情冷却',
+                          '分钟',
+                          enabled && !saving,
+                          decimal: false,
+                        ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('允许仅发送表情'),
                           subtitle: const Text('关闭时优先在文字回复之后发送表情'),
                           value: allowEmoteOnly,
-                          onChanged: !enabled || saving ? null : (value) => setDialogState(() => allowEmoteOnly = value),
+                          onChanged: !enabled || saving
+                              ? null
+                              : (value) => setDialogState(
+                                  () => allowEmoteOnly = value,
+                                ),
                         ),
                       ],
                     ),
                   ),
                 ),
                 actions: [
-                  TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: const Text('取消')),
-                  TextButton(onPressed: saving ? null : save, child: Text(saving ? '保存中...' : '保存')),
+                  TextButton(
+                    onPressed: saving
+                        ? null
+                        : () => Navigator.pop(dialogContext),
+                    child: const Text('取消'),
+                  ),
+                  TextButton(
+                    onPressed: saving ? null : save,
+                    child: Text(saving ? '保存中...' : '保存'),
+                  ),
                 ],
               );
             },
@@ -869,7 +1172,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         cooldownController.dispose();
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('表情策略加载失败：$e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('表情策略加载失败：$e')));
     }
   }
 
@@ -903,9 +1209,15 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
       builder: (context, snapshot) {
         final values = snapshot.data ?? const <dynamic>[];
         final state = values.isNotEmpty ? values[0] : null;
-        final schedule = values.length > 1 && values[1] is Map ? Map<String, dynamic>.from(values[1] as Map) : const <String, dynamic>{};
-        final work = values.length > 2 && values[2] is Map ? Map<String, dynamic>.from(values[2] as Map) : const <String, dynamic>{};
-        final sleep = values.length > 3 && values[3] is Map ? Map<String, dynamic>.from(values[3] as Map) : const <String, dynamic>{};
+        final schedule = values.length > 1 && values[1] is Map
+            ? Map<String, dynamic>.from(values[1] as Map)
+            : const <String, dynamic>{};
+        final work = values.length > 2 && values[2] is Map
+            ? Map<String, dynamic>.from(values[2] as Map)
+            : const <String, dynamic>{};
+        final sleep = values.length > 3 && values[3] is Map
+            ? Map<String, dynamic>.from(values[3] as Map)
+            : const <String, dynamic>{};
         return ListView(
           padding: EdgeInsets.all(AppSpacing.pagePadding),
           children: [
@@ -915,16 +1227,33 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Text('当前状态', style: AppTypography.cardTitle(context))),
+                      Expanded(
+                        child: Text(
+                          '当前状态',
+                          style: AppTypography.cardTitle(context),
+                        ),
+                      ),
                       if (snapshot.connectionState == ConnectionState.waiting)
-                        const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                     ],
                   ),
                   SizedBox(height: AppSpacing.sm),
-                  _buildInfoRow(context, '状态', state?.state ?? character.status),
+                  _buildInfoRow(
+                    context,
+                    '状态',
+                    state?.state ?? character.status,
+                  ),
                   _buildInfoRow(context, '当前活动', state?.currentActivity ?? '-'),
                   _buildInfoRow(context, '下一活动', state?.nextActivity ?? '-'),
-                  _buildInfoRow(context, '睡眠中', state?.isSleeping == true ? '是' : '否'),
+                  _buildInfoRow(
+                    context,
+                    '睡眠中',
+                    state?.isSleeping == true ? '是' : '否',
+                  ),
                   _buildInfoRow(context, '生活场景', character.lifeIdentity),
                 ],
               ),
@@ -936,15 +1265,36 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 children: [
                   Text('今日作息', style: AppTypography.cardTitle(context)),
                   SizedBox(height: AppSpacing.sm),
-                  if (schedule.isEmpty && snapshot.connectionState != ConnectionState.waiting)
+                  if (schedule.isEmpty &&
+                      snapshot.connectionState != ConnectionState.waiting)
                     Text('暂无作息数据', style: AppTypography.caption(context))
                   else ...[
-                    _buildScheduleItem(context, _clock(schedule['wakeTime']), '起床'),
-                    _buildScheduleItem(context, _clock(schedule['lunchTime']), '午饭'),
+                    _buildScheduleItem(
+                      context,
+                      _clock(schedule['wakeTime']),
+                      '起床',
+                    ),
+                    _buildScheduleItem(
+                      context,
+                      _clock(schedule['lunchTime']),
+                      '午饭',
+                    ),
                     if (schedule['hasNap'] == true)
-                      _buildScheduleItem(context, '${_clock(schedule['napStartTime'])} - ${_clock(schedule['napEndTime'])}', '午睡'),
-                    _buildScheduleItem(context, _clock(schedule['dinnerTime']), '晚饭'),
-                    _buildScheduleItem(context, _clock(schedule['sleepTime']), '睡觉'),
+                      _buildScheduleItem(
+                        context,
+                        '${_clock(schedule['napStartTime'])} - ${_clock(schedule['napEndTime'])}',
+                        '午睡',
+                      ),
+                    _buildScheduleItem(
+                      context,
+                      _clock(schedule['dinnerTime']),
+                      '晚饭',
+                    ),
+                    _buildScheduleItem(
+                      context,
+                      _clock(schedule['sleepTime']),
+                      '睡觉',
+                    ),
                   ],
                 ],
               ),
@@ -956,10 +1306,26 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 children: [
                   Text('工作与睡眠配置', style: AppTypography.cardTitle(context)),
                   SizedBox(height: AppSpacing.sm),
-                  _buildInfoRow(context, '工作状态', work['enabled'] == true ? '启用' : '未启用'),
-                  _buildInfoRow(context, '工作时间', '${work['workStartTime'] ?? '-'} - ${work['workEndTime'] ?? '-'}'),
-                  _buildInfoRow(context, '睡眠规则', sleep['enabled'] == false ? '关闭' : '启用'),
-                  _buildInfoRow(context, '睡眠时间', '${sleep['bedTime'] ?? '-'} - ${sleep['wakeTime'] ?? '-'}'),
+                  _buildInfoRow(
+                    context,
+                    '工作状态',
+                    work['enabled'] == true ? '启用' : '未启用',
+                  ),
+                  _buildInfoRow(
+                    context,
+                    '工作时间',
+                    '${work['workStartTime'] ?? '-'} - ${work['workEndTime'] ?? '-'}',
+                  ),
+                  _buildInfoRow(
+                    context,
+                    '睡眠规则',
+                    sleep['enabled'] == false ? '关闭' : '启用',
+                  ),
+                  _buildInfoRow(
+                    context,
+                    '睡眠时间',
+                    '${sleep['bedTime'] ?? '-'} - ${sleep['wakeTime'] ?? '-'}',
+                  ),
                 ],
               ),
             ),
@@ -981,7 +1347,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           ),
           SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Text(value.isEmpty ? '-' : value, style: AppTypography.bodySmall(context)),
+            child: Text(
+              value.isEmpty ? '-' : value,
+              style: AppTypography.bodySmall(context),
+            ),
           ),
         ],
       ),
@@ -994,7 +1363,9 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         children: [
           Text(
             value.isEmpty ? '-' : value,
-            style: AppTypography.sectionTitle(context).copyWith(color: context.accentPrimary),
+            style: AppTypography.sectionTitle(
+              context,
+            ).copyWith(color: context.accentPrimary),
           ),
           const SizedBox(height: 2),
           Text(label, style: AppTypography.label(context)),
@@ -1076,7 +1447,11 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  Widget _buildScheduleItem(BuildContext context, String time, String activity) {
+  Widget _buildScheduleItem(
+    BuildContext context,
+    String time,
+    String activity,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
@@ -1117,8 +1492,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     if (value is bool) return value;
     if (value is num) return value != 0;
     final normalized = value?.toString().trim().toLowerCase();
-    if (normalized == 'true' || normalized == '1' || normalized == 'yes') return true;
-    if (normalized == 'false' || normalized == '0' || normalized == 'no') return false;
+    if (normalized == 'true' || normalized == '1' || normalized == 'yes')
+      return true;
+    if (normalized == 'false' || normalized == '0' || normalized == 'no')
+      return false;
     return fallback;
   }
 
@@ -1153,7 +1530,13 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildManagementSection(BuildContext context, CharacterDto character, bool isDevMode) {
+  Widget _buildManagementSection(
+    BuildContext context,
+    CharacterDto character,
+    bool proactiveEnabled,
+    bool emotionEnabled,
+    bool lifestyleEnabled,
+  ) {
     final entries = <_ManageEntry>[
       _ManageEntry(
         title: '生活规则',
@@ -1175,20 +1558,22 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         icon: Icons.timeline_outlined,
         route: AppRoutes.characterTimeline(widget.characterId),
       ),
-      _ManageEntry(
-        title: '主动消息',
-        icon: Icons.send_outlined,
-        route: AppRoutes.characterProactive(widget.characterId),
-      ),
-      _ManageEntry(
-        title: '心理状态',
-        icon: Icons.psychology_outlined,
-        route: AppRoutes.characterPsyche(widget.characterId),
-      ),
-      if (isDevMode)
+      if (proactiveEnabled)
         _ManageEntry(
-          title: '调试与诊断',
-          icon: Icons.bug_report_outlined,
+          title: '主动消息',
+          icon: Icons.send_outlined,
+          route: AppRoutes.characterProactive(widget.characterId),
+        ),
+      if (emotionEnabled)
+        _ManageEntry(
+          title: '心理状态',
+          icon: Icons.psychology_outlined,
+          route: AppRoutes.characterPsyche(widget.characterId),
+        ),
+      if (lifestyleEnabled)
+        _ManageEntry(
+          title: '生活系统',
+          icon: Icons.tune_outlined,
           route: AppRoutes.characterDebug(widget.characterId),
         ),
     ];
@@ -1203,12 +1588,18 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             child: Text('角色管理', style: AppTypography.cardTitle(context)),
           ),
           SizedBox(height: AppSpacing.xs),
-          ...entries.map((e) => AmitiaListTile(
-                leading: _buildManagementIcon(context, e.icon),
-                title: e.title,
-                trailing: Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
-                onTap: () => context.push(e.route),
-              )),
+          ...entries.map(
+            (e) => AmitiaListTile(
+              leading: _buildManagementIcon(context, e.icon),
+              title: e.title,
+              trailing: Icon(
+                Icons.chevron_right,
+                color: context.textTertiary,
+                size: 20,
+              ),
+              onTap: () => context.push(e.route),
+            ),
+          ),
         ],
       ),
     );
@@ -1226,11 +1617,16 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
-  void _showCharacterActionsSheet(BuildContext context, CharacterDto character) {
+  void _showCharacterActionsSheet(
+    BuildContext context,
+    CharacterDto character,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (sheetContext) {
         return SafeArea(
           child: Padding(
@@ -1254,7 +1650,11 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 Text('角色操作', style: AppTypography.pageTitle(context)),
                 const SizedBox(height: 16),
                 AmitiaListTile(
-                  leading: _buildActionIcon(context, Icons.star_outline, context.accentPrimary),
+                  leading: _buildActionIcon(
+                    context,
+                    Icons.star_outline,
+                    context.accentPrimary,
+                  ),
                   title: '设为当前角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -1262,7 +1662,11 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                   },
                 ),
                 AmitiaListTile(
-                  leading: _buildActionIcon(context, Icons.copy_outlined, context.accentPrimary),
+                  leading: _buildActionIcon(
+                    context,
+                    Icons.copy_outlined,
+                    context.accentPrimary,
+                  ),
                   title: '复制角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -1270,7 +1674,11 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                   },
                 ),
                 AmitiaListTile(
-                  leading: _buildActionIcon(context, Icons.file_download_outlined, context.accentPrimary),
+                  leading: _buildActionIcon(
+                    context,
+                    Icons.file_download_outlined,
+                    context.accentPrimary,
+                  ),
                   title: '导出角色卡',
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -1278,7 +1686,11 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                   },
                 ),
                 AmitiaListTile(
-                  leading: _buildActionIcon(context, Icons.delete_outline, context.error),
+                  leading: _buildActionIcon(
+                    context,
+                    Icons.delete_outline,
+                    context.error,
+                  ),
                   title: '删除角色',
                   onTap: () {
                     Navigator.pop(sheetContext);
@@ -1312,27 +1724,29 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     await svc.setActive(widget.characterId);
     ref.invalidate(characterListProvider);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已将「${character.name}」设为当前角色')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('已将「${character.name}」设为当前角色')));
     }
   }
 
   Future<void> _copyCharacter(CharacterDto character) async {
     try {
-      final created = await ref.read(characterServiceProvider).duplicate(character.id);
+      final created = await ref
+          .read(characterServiceProvider)
+          .duplicate(character.id);
       if (created == null) throw StateError('后端未返回复制后的角色');
       ref.invalidate(characterListProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已复制为「${created.name}」')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已复制为「${created.name}」')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('复制角色失败：$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('复制角色失败：$e')));
       }
     }
   }
@@ -1361,11 +1775,15 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         queryParameters: const {'format': 'v3_charx', 'download': 'true'},
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已导出角色卡：${character.name}')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('已导出角色卡：${character.name}')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导出失败：$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导出失败：$e')));
       }
     } finally {
       dio.close(force: true);
@@ -1387,7 +1805,10 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: Text('取消', style: TextStyle(color: dialogContext.textSecondary)),
+              child: Text(
+                '取消',
+                style: TextStyle(color: dialogContext.textSecondary),
+              ),
             ),
             TextButton(
               onPressed: () async {
@@ -1421,9 +1842,5 @@ class _ManageEntry {
   final IconData icon;
   final String route;
 
-  _ManageEntry({
-    required this.title,
-    required this.icon,
-    required this.route,
-  });
+  _ManageEntry({required this.title, required this.icon, required this.route});
 }

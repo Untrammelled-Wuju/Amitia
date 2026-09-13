@@ -33,13 +33,11 @@ import '../../../features/extensions/presentation/pages/mcp_list_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_detail_page.dart';
 import '../../../features/extensions/presentation/pages/mcp_edit_page.dart';
 import '../../../features/extensions/presentation/pages/agent_skills_page.dart';
-import '../../../features/extensions/presentation/pages/system_plugins_page.dart';
 import '../../../features/extensions/presentation/pages/compatible_skills_page.dart';
 import '../../../features/extensions/presentation/pages/execution_runs_page.dart';
 import '../../../features/extensions/presentation/pages/extension_run_detail_page.dart';
 import '../../../features/extensions/presentation/pages/extension_page_host_page.dart';
 import '../../../features/extensions/presentation/pages/skill_detail_page.dart';
-import '../../../features/extensions/presentation/pages/plugin_detail_page.dart';
 import '../../../features/game_center/presentation/pages/game_center_page.dart';
 import '../../../features/game_center/presentation/pages/plugin_detail_page.dart' as game_center;
 import '../../../features/desktop_pet/presentation/pages/desktop_pet_page.dart';
@@ -415,22 +413,6 @@ GoRoute(
     context: context,
     state: state,
     child: SkillDetailPage(skillId: state.pathParameters['id']!),
-  ),
-),
-GoRoute(
-  path: '/extensions/plugins',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: const SystemPluginsPage(),
-  ),
-),
-GoRoute(
-  path: '/extensions/plugins/:id',
-  pageBuilder: (context, state) => slideFadePage(
-    context: context,
-    state: state,
-    child: PluginDetailPage(pluginId: state.pathParameters['id']!),
   ),
 ),
 GoRoute(

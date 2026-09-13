@@ -24,7 +24,6 @@ abstract final class AppRoutes {
   static const extensionsMcp = '/extensions/mcp';
   static const extensionsMcpNew = '/extensions/mcp/new';
   static const extensionsAgentSkills = '/extensions/agent-skills';
-  static const extensionsPlugins = '/extensions/plugins';
   static const extensionsSkills = '/extensions/skills';
   static const extensionsRuns = '/extensions/runs';
   static const workshop = '/workshop';
@@ -94,7 +93,6 @@ abstract final class AppRoutes {
   static String mcpDetail(String id) => '/extensions/mcp/$id';
   static String mcpEdit(String id) => '/extensions/mcp/$id/edit';
   static String skillDetail(String id) => '/extensions/skills/$id';
-  static String pluginDetail(String id) => '/extensions/plugins/$id';
   static String extensionPage(String pageId, {String? extensionId}) => extensionId == null || extensionId.isEmpty
       ? '/extension/page/$pageId'
       : '/extension/page/$pageId?extensionId=${Uri.encodeQueryComponent(extensionId)}';

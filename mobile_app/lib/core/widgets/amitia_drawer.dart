@@ -281,12 +281,8 @@ class _DrawerMainPanel extends StatelessWidget {
             name: extension.displayName,
             status: extension.status,
             isEnabled: extension.enabled,
-            isSelected: isRouteFamily(
-              currentRoute,
-              AppRoutes.pluginDetail(extension.extensionId),
-            ),
-            onTap: () =>
-                onNavigate(AppRoutes.pluginDetail(extension.extensionId)),
+            isSelected: isRouteFamily(currentRoute, AppRoutes.extensionsPackages),
+            onTap: () => onNavigate(AppRoutes.extensionsPackages),
           ),
         ),
       ],

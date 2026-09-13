@@ -26,10 +26,10 @@ class ExtensionCenterPage extends ConsumerWidget {
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '扩展中心',
+        title: '扩展中心 v1',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
-          const ConstrainedBox(
+          ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 180),
             child: MobileExtensionSlot(
               slotId: 'extension.center.header.action',
@@ -68,7 +68,6 @@ class ExtensionCenterPage extends ConsumerWidget {
             _CenterEntry(label: 'MCP', icon: Icons.hub_outlined, onTap: () => context.push(AppRoutes.extensionsMcp)),
             _CenterEntry(label: 'Agent Skill', icon: Icons.auto_awesome_outlined, onTap: () => context.push(AppRoutes.extensionsAgentSkills)),
             _CenterEntry(label: '兼容 Skill', icon: Icons.psychology_outlined, onTap: () => context.push(AppRoutes.extensionsSkills)),
-            _CenterEntry(label: '系统插件', icon: Icons.extension_outlined, onTap: () => context.push(AppRoutes.extensionsPlugins)),
             _CenterEntry(label: '执行记录', icon: Icons.receipt_long_outlined, onTap: () => context.push(AppRoutes.extensionsRuns)),
           ],
         ),

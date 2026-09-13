@@ -10,7 +10,6 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../runtime/desktop_pet_mobile_runtime.dart';
@@ -59,7 +58,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage>
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '桌宠中心',
+        title: '桌宠中心 v1',
         navigation: AmitiaAppBarNavigation.back,
       ),
       body: SafeArea(
@@ -332,7 +331,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage>
     if (runtime.currentActionKey.isNotEmpty) {
       return '动作：${runtime.currentActionKey}';
     }
-    return runtime.visible ? '已连接本机 Runtime V2' : '悬浮窗当前隐藏';
+    return runtime.visible ? '已连接本机桌宠系统 v1' : '悬浮窗当前隐藏';
   }
 
   Future<void> _requestPermission() async {

@@ -9,6 +9,8 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/services/providers.dart';
+import '../../../desktop_pet/infrastructure/desktop_pet_plugin_dto.dart';
+import '../../../desktop_pet/presentation/controllers/desktop_pet_plugin_controller_provider.dart';
 
 class PetCenterPage extends ConsumerStatefulWidget {
   const PetCenterPage({super.key});
@@ -19,7 +21,7 @@ class PetCenterPage extends ConsumerStatefulWidget {
 
 class _PetCenterPageState extends ConsumerState<PetCenterPage> {
   List<Map<String, dynamic>> _sessions = [];
-  List<Map<String, dynamic>> _plugins = [];
+  List<DesktopPetPluginSummary> _plugins = [];
   bool _loading = true;
   String? _error;
 
@@ -33,14 +35,15 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
     setState(() { _loading = true; _error = null; });
     try {
       final svc = ref.read(extensionServiceProvider);
+      final desktopPetApi = ref.read(desktopPetPluginApiProvider);
       final results = await Future.wait([
         svc.workshopSessions(),
-        svc.plugins(),
+        desktopPetApi.list(),
       ]);
       if (mounted) {
         setState(() {
           _sessions = results[0] as List<Map<String, dynamic>>;
-          _plugins = results[1] as List<Map<String, dynamic>>;
+          _plugins = (results[1] as DesktopPetPluginList).plugins;
           _loading = false;
         });
       }
@@ -62,7 +65,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
       );
     }
 
-    final running = _plugins.where((p) => p['isRunning'] == true || p['enabled'] == true).toList();
+    final running = _plugins.where((p) => p.enabled).toList();
     final runningPet = running.isNotEmpty ? running.first : null;
 
     final activeSessions = _sessions.where((s) {
@@ -107,12 +110,8 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
     );
   }
 
-  Widget _buildRunningPetCard(BuildContext context, Map<String, dynamic> pet) {
-    final name = pet['name']?.toString() ?? '';
-    final characterName = pet['characterName']?.toString() ?? pet['character']?.toString() ??'';
-    final petActions = pet['actions'];
-    final actionsList = petActions is List ? petActions : <dynamic>[];
-    final scale = (pet['scale'] is num) ? (pet['scale'] as num).toDouble() : 1.0;
+  Widget _buildRunningPetCard(BuildContext context, DesktopPetPluginSummary pet) {
+    final name = pet.name;
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
@@ -145,7 +144,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
                   Text(name, style: AppTypography.cardTitle(context)),
                   const SizedBox(height: 2),
                   Text(
-                    '$characterName · ${actionsList.length} 个动作 · 缩放 ${(scale * 100).round()}%',
+                    '${pet.description} · v${pet.version}',
                     style: AppTypography.caption(context),
                   ),
                 ],
@@ -287,7 +286,6 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
     final characterName = task['characterName']?.toString() ?? task['character']?.toString() ?? '';
     final createdAt = task['createdAt']?.toString() ?? '';
     final status = task['status']?.toString() ?? '';
-    final progress = (task['progress'] is num) ? (task['progress'] as num).toInt() : 0;
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 10),

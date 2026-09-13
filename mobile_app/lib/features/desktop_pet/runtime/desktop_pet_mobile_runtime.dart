@@ -18,19 +18,19 @@ import '../../../core/native_bridge/providers/native_bridge_relay_provider.dart'
 import '../../../core/ui_runtime/ui_client_info.dart';
 import '../../../core/ui_runtime/ui_runtime_controller.dart';
 
-const _runtimeVersion = '2.0.0';
-const _runtimeContractVersion = '2.0.0';
+const _runtimeVersion = '1.0.0';
+const _runtimeContractVersion = '1.0.0';
 const _runtimeProtocol = 'amitia.desktop-pet.runtime';
-const _runtimeWsSubprotocol = 'amitia.runtime.v2';
+const _runtimeWsSubprotocol = 'amitia.runtime.v1';
 const _runtimeBootstrapPrefix = 'amitia.runtime.bootstrap.';
 const _runtimeWsPath = '/internal/desktop-pet/runtime/ws';
 const _prefsAlpha = 'desktopPet.mobile.alpha.v1';
 const _defaultAlpha = 0.85;
 
 const _mandatoryCapabilities = <String>[
-  'runtime.sync_desired_v2',
-  'runtime.play_action_v2',
-  'runtime.renderer_ack_v2',
+  'runtime.sync_desired_v1',
+  'runtime.play_action_v1',
+  'runtime.renderer_ack_v1',
   'runtime.expiry_rfc3339_v1',
   'platform:android',
 ];
@@ -206,7 +206,7 @@ final desktopPetMobileRuntimeProvider = StateNotifierProvider<
   return notifier;
 });
 
-/// Keeps the Android Runtime V2 renderer attached to the embedded Device Agent
+/// Keeps the Android Runtime V1 renderer attached to the embedded Device Agent
 /// even when the desktop-pet page is not open.
 final desktopPetMobileRuntimeBootstrapProvider = Provider<int?>((ref) {
   if (kIsWeb || !Platform.isAndroid) {
@@ -575,7 +575,7 @@ class DesktopPetMobileRuntimeNotifier
   }
 
   void _validateServerEnvelope(Map<String, dynamic> envelope) {
-    if (envelope['envelopeVersion'] != 2 || envelope['protocol'] != _runtimeProtocol) {
+    if (envelope['envelopeVersion'] != 1 || envelope['protocol'] != _runtimeProtocol) {
       throw const FormatException('invalid runtime protocol envelope');
     }
     if (envelope['userId']?.toString() != _userId ||
@@ -665,7 +665,7 @@ class DesktopPetMobileRuntimeNotifier
     _startHeartbeat();
 
     // A local renderer/status API failure after a valid hello_ack is not a
-    // Runtime-v2 protocol violation. Keep the healthy socket and report the
+    // Runtime-v1 protocol violation. Keep the healthy socket and report the
     // local degradation so the periodic snapshot/recovery path can retry.
     try {
       await _flushPendingPosition();
@@ -722,7 +722,7 @@ class DesktopPetMobileRuntimeNotifier
         cached: cached,
       );
       if (cached['ok'] == true) {
-        // Mirror the canonical Electron Runtime V2 replay sequence. Successful
+        // Mirror the canonical Electron Runtime V1 replay sequence. Successful
         // durable replays may repeat received/accepted before desired_applied.
         await _sendCommandAck(commandId, commandSequence, 'runtime_received');
         await _sendCommandAck(commandId, commandSequence, 'runtime_accepted');
@@ -1181,7 +1181,7 @@ class DesktopPetMobileRuntimeNotifier
     if (expectedManifestHash.isEmpty || expectedContentRootHash.isEmpty) {
       throw const _RuntimeCommandFailure(
         'PACKAGE_INTEGRITY_AUTHORITY_MISSING',
-        'authoritative Package V2 integrity hashes are missing',
+        'authoritative Package V1 integrity hashes are missing',
       );
     }
 
@@ -1208,7 +1208,7 @@ class DesktopPetMobileRuntimeNotifier
     final prefs = await SharedPreferences.getInstance();
     final alpha = (prefs.getDouble(_prefsAlpha) ?? state.alpha).clamp(0.2, 1.0).toDouble();
 
-    // Runtime V2 desiredHash covers the complete canonical RuntimeSettings
+    // Runtime V1 desiredHash covers the complete canonical RuntimeSettings
     // object. Android must never silently project unsupported desktop-only
     // values and still acknowledge that canonical hash as applied.
     final alwaysOnTop = _int(settings['alwaysOnTop'], 1);
@@ -1389,7 +1389,7 @@ class DesktopPetMobileRuntimeNotifier
       );
     }
     if (_playback != null && queuePolicy == 'enqueue') {
-      // Runtime V2 currently exposes one physical Android lane. Until an action
+      // Runtime V1 currently exposes one physical Android lane. Until an action
       // has a renderer-owned playback identity, claiming queue admission would
       // create an unverifiable lifecycle. Reject truthfully so the scheduler can
       // retry/re-plan rather than leaving a command stuck in runtime_accepted.
@@ -1491,7 +1491,7 @@ class DesktopPetMobileRuntimeNotifier
     } catch (error) {
       if (!_disposed) {
         // Do not manufacture a renderer failure when local execution already
-        // settled and only lifecycle/snapshot delivery failed. Runtime V2
+        // settled and only lifecycle/snapshot delivery failed. Runtime V1
         // fences ephemeral lifecycle across reconnects; the next authoritative
         // snapshot/cursor reconciliation is responsible for convergence.
         state = state.copyWith(
@@ -1882,7 +1882,7 @@ class DesktopPetMobileRuntimeNotifier
     }
     _outboundSequence = max(_outboundSequence, sequence);
     final envelope = <String, dynamic>{
-      'envelopeVersion': 2,
+      'envelopeVersion': 1,
       'protocol': _runtimeProtocol,
       'messageType': messageType,
       'messageName': messageName,

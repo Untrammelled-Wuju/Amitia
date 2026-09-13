@@ -32,11 +32,11 @@ import java.util.UUID
 import kotlin.math.roundToInt
 
 /**
- * Android Runtime V2 renderer for one device-scoped desktop pet.
+ * Android Runtime V1 renderer for one device-scoped desktop pet.
  *
- * State/command authority stays in the Go Runtime V2 service. This class owns
- * only the Android WindowManager surface, Package V2 frame decoding/playback,
- * and direct manipulation facts that Runtime V2 reports back as actual state.
+ * State/command authority stays in the Go Runtime V1 service. This class owns
+ * only the Android WindowManager surface, Package V1 frame decoding/playback,
+ * and direct manipulation facts that Runtime V1 reports back as actual state.
  * Package paths are resolved beneath filesDir/amitia/data and traversal fails
  * closed.
  */
@@ -508,7 +508,7 @@ internal class DesktopPetRendererNativeHandler(
         }
         val schema = manifest.optInt("schemaVersion", 0)
         require(schema == PACKAGE_SCHEMA_VERSION) {
-            "unsupported desktop pet manifest schemaVersion=$schema; Package V2 is required"
+            "unsupported desktop pet manifest schemaVersion=$schema; Package V1 is required"
         }
         require(manifest.optString("manifestFormat") == PACKAGE_MANIFEST_FORMAT) {
             "invalid desktop pet manifestFormat"
@@ -581,7 +581,7 @@ internal class DesktopPetRendererNativeHandler(
         val bindingCharacterId = binding.optString("sourceCharacterId").trim()
         val characterId = authoritativeCharacterId.trim()
         require(characterId.isNotEmpty()) { "installation character identity is missing" }
-        if (bindingPolicy == "bound" || bindingPolicy == "legacy_inferred") {
+        if (bindingPolicy == "bound") {
             require(bindingCharacterId.isNotEmpty() && bindingCharacterId == characterId) {
                 "package binding character does not match installation authority"
             }
@@ -729,7 +729,7 @@ internal class DesktopPetRendererNativeHandler(
         require(value.isFinite()) { "non-finite manifest number is invalid" }
         val asLong = value.toLong()
         if (value == asLong.toDouble()) return asLong.toString()
-        // Package V2 currently contains integer numeric fields. Keep a stable
+        // Package V1 currently contains integer numeric fields. Keep a stable
         // representation for forward-compatible finite decimals without locale
         // dependence.
         return java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
@@ -1014,7 +1014,7 @@ internal class DesktopPetRendererNativeHandler(
         }
         animationRunnable = runnable
         // execute() runs on Dispatchers.Main.immediate. Render the first frame
-        // before returning so Runtime V2 action_started reflects a physical
+        // before returning so Runtime V1 action_started reflects a physical
         // first-frame fact rather than mere command submission.
         runnable.run()
     }
@@ -1457,11 +1457,11 @@ internal class DesktopPetRendererNativeHandler(
     }
 
     companion object {
-        private const val PACKAGE_SCHEMA_VERSION = 2
+        private const val PACKAGE_SCHEMA_VERSION = 1
         private const val PACKAGE_MANIFEST_FORMAT = "amitia-desktop-pet"
-        private const val INTEGRITY_ALGORITHM = "amitia-package-sha256-v2"
+        private const val INTEGRITY_ALGORITHM = "amitia-package-sha256-v1"
         private const val MANIFEST_PSEUDO_ENTRY_PATH = "@manifest"
-        private const val RUNTIME_VERSION = "2.0.0"
+        private const val RUNTIME_VERSION = "1.0.0"
         private const val MAX_CANVAS_PX = 4096
         private const val DEFAULT_HASH_BUFFER_BYTES = 64 * 1024
         private const val MIN_FRAME_DURATION_MS = 8L
@@ -1476,7 +1476,7 @@ internal class DesktopPetRendererNativeHandler(
         private const val MAX_INTERACTION_EVENTS = 128
         private val SUPPORTED_PLAYBACK_MODES = setOf("loop", "once", "hold", "ping_pong")
         private val SUPPORTED_RETURN_TYPES = setOf("default", "previous", "current_activity", "none", "action")
-        private val SUPPORTED_BINDING_POLICIES = setOf("bound", "unbound", "legacy_inferred")
+        private val SUPPORTED_BINDING_POLICIES = setOf("bound", "unbound")
         private const val HEX_DIGITS = "0123456789abcdef"
         private val SHA256_RE = Regex("^[0-9a-f]{64}$")
         private val SEMVER_RE = Regex("^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?$")

@@ -128,6 +128,10 @@ class RealtimeAudioPlugin : FlutterPlugin,
                 enqueuePlayback(bytes)
                 result.success(null)
             }
+            "stopPlayback" -> {
+                stopPlayback()
+                result.success(null)
+            }
             "reset" -> {
                 resetAudio()
                 result.success(null)

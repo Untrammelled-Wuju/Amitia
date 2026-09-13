@@ -14,8 +14,8 @@ import '../../../../core/backend_transport/websocket/backend_websocket_client.da
 import '../../../../core/backend_transport/websocket/backend_websocket_message.dart';
 import '../../../../core/backend_transport/websocket/backend_websocket_session.dart';
 import '../../../../core/realtime/realtime_audio_bridge.dart';
+import '../../../../core/realtime/realtime_voice_activity_detector.dart';
 import '../../../../core/realtime/realtime_visual_bridge.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 
 enum RealtimeCallMode { voice, video, screen }
@@ -33,10 +33,12 @@ class RealtimeVoiceCallSheet extends ConsumerStatefulWidget {
   final RealtimeCallMode initialMode;
 
   @override
-  ConsumerState<RealtimeVoiceCallSheet> createState() => _RealtimeVoiceCallSheetState();
+  ConsumerState<RealtimeVoiceCallSheet> createState() =>
+      _RealtimeVoiceCallSheetState();
 }
 
-class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet> {
+class _RealtimeVoiceCallSheetState
+    extends ConsumerState<RealtimeVoiceCallSheet> {
   final RealtimeAudioBridge _audio = RealtimeAudioBridge();
   final RealtimeVisualBridge _visual = RealtimeVisualBridge();
 
@@ -48,6 +50,8 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<RealtimeVisualFrame>? _visualFrameSubscription;
   Timer? _durationTimer;
+  Timer? _heartbeatTimer;
+  final RealtimeVoiceActivityDetector _vad = RealtimeVoiceActivityDetector();
 
   String _state = 'connecting';
   String? _error;
@@ -61,10 +65,12 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
   bool _initialMediaApplied = false;
   int _seconds = 0;
   String? _dialogId;
-  String? _callId;
   Uint8List? _latestCameraFrame;
   Uint8List? _latestScreenFrame;
-  DateTime _lastSpeechVisualBoostAt = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  DateTime _lastSpeechVisualBoostAt = DateTime.fromMillisecondsSinceEpoch(
+    0,
+    isUtc: true,
+  );
 
   @override
   void initState() {
@@ -79,7 +85,9 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
   }
 
   Future<void> _connect() async {
-    if ((_state == 'connected' || _state == 'connecting') && _session != null) return;
+    if ((_state == 'connected' || _state == 'connecting') && _session != null) {
+      return;
+    }
     if (mounted) {
       setState(() {
         _state = 'connecting';
@@ -121,32 +129,55 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
         onDone: () {
           if (mounted && _state != 'idle' && _state != 'error') {
             setState(() => _state = 'idle');
+            unawaited(_shutdown(sendStop: false));
           }
         },
       );
 
-      _audioSubscription = _audio.inputPcm.listen(
-        (pcm) {
-          final active = _session;
-          if (_state != 'connected' || _aiSpeaking || _muted || active == null) return;
-          final now = DateTime.now().toUtc();
-          if ((_cameraActive || _screenActive) &&
-              now.difference(_lastSpeechVisualBoostAt) >= const Duration(milliseconds: 900) &&
-              _pcmHasSpeechEnergy(pcm)) {
-            _lastSpeechVisualBoostAt = now;
-            if (_cameraActive) unawaited(_visual.requestImmediateFrame('camera'));
-            if (_screenActive) unawaited(_visual.requestImmediateFrame('screen'));
-          }
+      _audioSubscription = _audio.inputPcm.listen((pcm) {
+        final active = _session;
+        if (_state != 'connected' || _muted || active == null) return;
+        final vadEvent = _vad.process(pcm);
+        if (vadEvent == RealtimeVadEvent.speechStart) {
+          _aiSpeaking = false;
+          unawaited(_audio.stopPlayback());
           unawaited(
             active.send(
               WebSocketTextMessage(
-                jsonEncode(<String, dynamic>{'event': 'audio', 'data': base64Encode(pcm)}),
+                jsonEncode(<String, dynamic>{'event': 'speech_start'}),
               ),
             ),
           );
-        },
-        onError: (Object error) => _fail('麦克风采集失败：$error'),
-      );
+          if (mounted) setState(() {});
+        } else if (vadEvent == RealtimeVadEvent.speechEnd) {
+          unawaited(
+            active.send(
+              WebSocketTextMessage(
+                jsonEncode(<String, dynamic>{'event': 'speech_end'}),
+              ),
+            ),
+          );
+        }
+        final now = DateTime.now().toUtc();
+        if ((_cameraActive || _screenActive) &&
+            now.difference(_lastSpeechVisualBoostAt) >=
+                const Duration(milliseconds: 900) &&
+            _vad.rms >= 0.02) {
+          _lastSpeechVisualBoostAt = now;
+          if (_cameraActive) unawaited(_visual.requestImmediateFrame('camera'));
+          if (_screenActive) unawaited(_visual.requestImmediateFrame('screen'));
+        }
+        unawaited(
+          active.send(
+            WebSocketTextMessage(
+              jsonEncode(<String, dynamic>{
+                'event': 'audio',
+                'data': base64Encode(pcm),
+              }),
+            ),
+          ),
+        );
+      }, onError: (Object error) => _fail('麦克风采集失败：$error'));
 
       _visualFrameSubscription = _visual.frames.listen(
         _handleVisualFrame,
@@ -174,14 +205,15 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
       endpoint,
       queryParameters: <String, dynamic>{'callId': callId, 'ticket': ticket},
     );
-    _callId = callId;
     _visualSession = visualSession;
     _visualWsSubscription = visualSession.messages.listen(
       (message) {
         if (message is! WebSocketTextMessage) return;
         try {
           final decoded = jsonDecode(message.data);
-          if (decoded is Map && decoded['event'] == 'visual.rejected' && mounted) {
+          if (decoded is Map &&
+              decoded['event'] == 'visual.rejected' &&
+              mounted) {
             setState(() => _visionStatus = '视觉帧被拒绝');
           }
         } catch (_) {}
@@ -240,26 +272,59 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
             _fail('实时通话缺少视觉会话信息');
             return;
           }
-          unawaited(
-            _connectVisualSession(call).then((_) async {
+          unawaited(() async {
+            try {
+              await _connectVisualSession(call);
               if (!mounted) return;
               setState(() => _state = 'connected');
-              _durationTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
-                if (mounted && _state == 'connected') setState(() => _seconds++);
+              _durationTimer ??= Timer.periodic(const Duration(seconds: 1), (
+                _,
+              ) {
+                if (mounted && _state == 'connected') {
+                  setState(() => _seconds++);
+                }
+              });
+              _heartbeatTimer ??= Timer.periodic(const Duration(seconds: 15), (
+                _,
+              ) {
+                final session = _session;
+                if (session == null || _state != 'connected') return;
+                unawaited(
+                  session.send(
+                    WebSocketTextMessage(
+                      jsonEncode(const <String, dynamic>{'event': 'ping'}),
+                    ),
+                  ),
+                );
               });
               await _applyInitialMediaMode();
               _publishSources();
-            }).catchError((Object error) => _fail(error.toString())),
-          );
+            } catch (error) {
+              _fail(error.toString());
+            }
+          }());
         case 'audio':
           final payload = decoded['data']?.toString() ?? '';
           if (payload.isEmpty) return;
           _aiSpeaking = true;
           unawaited(_audio.playPcm(Uint8List.fromList(base64Decode(payload))));
           if (mounted) setState(() {});
+        case 'speaking':
+          _aiSpeaking = true;
+          if (mounted) setState(() {});
         case 'tts_ended':
           _aiSpeaking = false;
           if (mounted) setState(() {});
+        case 'listening':
+          _aiSpeaking = false;
+          if (mounted) setState(() {});
+        case 'interrupted':
+        case 'turn_error':
+          _aiSpeaking = false;
+          unawaited(_audio.stopPlayback());
+          if (mounted) setState(() {});
+        case 'pong':
+          break;
         case 'asr_final':
           final data = decoded['data'];
           if (data is! Map) return;
@@ -309,16 +374,23 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
   Future<void> _shutdown({required bool sendStop}) async {
     _durationTimer?.cancel();
     _durationTimer = null;
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _vad.reset();
     final session = _session;
     final visualSession = _visualSession;
     _session = null;
     _visualSession = null;
     if (sendStop) {
       try {
-        await session?.send(WebSocketTextMessage(jsonEncode(const {'event': 'stop'})));
+        await session?.send(
+          WebSocketTextMessage(jsonEncode(const {'event': 'stop'})),
+        );
       } catch (_) {}
       try {
-        await visualSession?.send(WebSocketTextMessage(jsonEncode(const {'event': 'stop'})));
+        await visualSession?.send(
+          WebSocketTextMessage(jsonEncode(const {'event': 'stop'})),
+        );
       } catch (_) {}
     }
     await _audioSubscription?.cancel();
@@ -329,19 +401,28 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
     _wsSubscription = null;
     await _visualWsSubscription?.cancel();
     _visualWsSubscription = null;
-    try { await _audio.reset(); } catch (_) {}
-    try { await _visual.reset(); } catch (_) {}
-    try { await visualSession?.close(); } catch (_) {}
-    try { await session?.close(); } catch (_) {}
+    try {
+      await _audio.reset();
+    } catch (_) {}
+    try {
+      await _visual.reset();
+    } catch (_) {}
+    try {
+      await visualSession?.close();
+    } catch (_) {}
+    try {
+      await session?.close();
+    } catch (_) {}
     final client = _client;
     _client = null;
-    try { await client?.close(); } catch (_) {}
+    try {
+      await client?.close();
+    } catch (_) {}
     _aiSpeaking = false;
     _muted = false;
     _cameraActive = false;
     _screenActive = false;
     _initialMediaApplied = false;
-    _callId = null;
     _latestCameraFrame = null;
     _latestScreenFrame = null;
   }
@@ -370,7 +451,10 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _visionStatus = '初始媒体采集失败：${error.toString().replaceFirst('Bad state: ', '')}');
+        setState(
+          () => _visionStatus =
+              '初始媒体采集失败：${error.toString().replaceFirst('Bad state: ', '')}',
+        );
       }
     }
   }
@@ -381,6 +465,15 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
       if (_muted) {
         await _audio.startCapture();
       } else {
+        final session = _session;
+        if (_vad.isSpeechActive && session != null) {
+          await session.send(
+            WebSocketTextMessage(
+              jsonEncode(const <String, dynamic>{'event': 'speech_end'}),
+            ),
+          );
+        }
+        _vad.reset();
         await _audio.stopCapture();
       }
       if (mounted) setState(() => _muted = !_muted);
@@ -460,78 +553,89 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
     return '$minutes:$seconds';
   }
 
-  bool _pcmHasSpeechEnergy(Uint8List pcm) {
-    if (pcm.length < 2) return false;
-    final data = ByteData.sublistView(pcm);
-    var total = 0;
-    var samples = 0;
-    for (var offset = 0; offset + 1 < pcm.length; offset += 32) {
-      total += data.getInt16(offset, Endian.little).abs();
-      samples++;
-    }
-    return samples > 0 && total / samples >= 850;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final name = widget.characterName.trim().isEmpty ? 'Amitia' : widget.characterName.trim();
+    final name = widget.characterName.trim().isEmpty
+        ? 'Amitia'
+        : widget.characterName.trim();
     final initial = name.characters.first;
     final connected = _state == 'connected';
     final callMode = _screenActive
         ? '屏幕通话'
         : _cameraActive
-            ? '视频通话'
-            : switch (widget.initialMode) {
-                RealtimeCallMode.video => '视频通话',
-                RealtimeCallMode.screen => '屏幕通话',
-                RealtimeCallMode.voice => '语音通话',
-              };
+        ? '视频通话'
+        : switch (widget.initialMode) {
+            RealtimeCallMode.video => '视频通话',
+            RealtimeCallMode.screen => '屏幕通话',
+            RealtimeCallMode.voice => '语音通话',
+          };
     final statusText = _state == 'connecting'
         ? '正在连接实时通话…'
         : connected
-            ? (_aiSpeaking ? '对方正在说话' : (_muted ? '麦克风已静音' : '$callMode中'))
-            : _state == 'error'
-                ? (_error ?? '连接失败')
-                : '通话已结束';
+        ? (_aiSpeaking ? '对方正在说话' : (_muted ? '麦克风已静音' : '$callMode中'))
+        : _state == 'error'
+        ? (_error ?? '连接失败')
+        : '通话已结束';
 
     return SafeArea(
       top: false,
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.82,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.lg),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
           child: Column(
             children: [
               Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(
+                  color: context.borderPrimary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
               const SizedBox(height: 18),
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   callMode,
-                  style: AppTypography.bodySmall(context).copyWith(color: context.textSecondary, fontWeight: FontWeight.w600),
+                  style: AppTypography.bodySmall(context).copyWith(
+                    color: context.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const SizedBox(height: 14),
-              Expanded(
-                child: _buildVisualStage(context, initial),
-              ),
+              Expanded(child: _buildVisualStage(context, initial)),
               const SizedBox(height: 14),
               Text(name, style: AppTypography.pageTitle(context)),
               const SizedBox(height: 7),
               Text(
-                connected ? '$statusText · $_duration${_visionStatus == null ? '' : ' · $_visionStatus'}' : statusText,
+                connected
+                    ? '$statusText · $_duration${_visionStatus == null ? '' : ' · $_visionStatus'}'
+                    : statusText,
                 textAlign: TextAlign.center,
-                style: AppTypography.bodySmall(context).copyWith(color: _state == 'error' ? context.error : context.textSecondary),
+                style: AppTypography.bodySmall(context).copyWith(
+                  color: _state == 'error'
+                      ? context.error
+                      : context.textSecondary,
+                ),
               ),
               const SizedBox(height: 18),
               if (_state == 'error')
                 Row(
                   children: [
-                    Expanded(child: AmitiaButton(label: '关闭', isSecondary: true, onPressed: () => Navigator.of(context).pop())),
+                    Expanded(
+                      child: AmitiaButton(
+                        label: '关闭',
+                        isSecondary: true,
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: AmitiaButton(
@@ -551,7 +655,9 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _RealtimeCallControl(
-                        icon: _muted ? Icons.mic_off_outlined : Icons.mic_none_outlined,
+                        icon: _muted
+                            ? Icons.mic_off_outlined
+                            : Icons.mic_none_outlined,
                         label: _muted ? '取消静音' : '静音',
                         selected: _muted,
                         enabled: connected,
@@ -559,7 +665,9 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
                       ),
                       const SizedBox(width: 18),
                       _RealtimeCallControl(
-                        icon: _cameraActive ? Icons.videocam_off_outlined : Icons.videocam_outlined,
+                        icon: _cameraActive
+                            ? Icons.videocam_off_outlined
+                            : Icons.videocam_outlined,
                         label: _cameraActive ? '关闭视频' : '视频',
                         selected: _cameraActive,
                         enabled: connected && _cameraSupported,
@@ -567,7 +675,9 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
                       ),
                       const SizedBox(width: 18),
                       _RealtimeCallControl(
-                        icon: _screenActive ? Icons.stop_screen_share_outlined : Icons.screen_share_outlined,
+                        icon: _screenActive
+                            ? Icons.stop_screen_share_outlined
+                            : Icons.screen_share_outlined,
                         label: _screenActive ? '停止共享' : '共享屏幕',
                         selected: _screenActive,
                         enabled: connected && _screenSupported,
@@ -593,7 +703,11 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
   }
 
   Widget _buildVisualStage(BuildContext context, String initial) {
-    final primary = _screenActive ? _latestScreenFrame : _cameraActive ? _latestCameraFrame : null;
+    final primary = _screenActive
+        ? _latestScreenFrame
+        : _cameraActive
+        ? _latestCameraFrame
+        : null;
     if (primary == null) {
       return Center(
         child: AnimatedContainer(
@@ -601,14 +715,28 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
           width: 104,
           height: 104,
           decoration: BoxDecoration(
-            color: _state == 'error' ? context.error.withValues(alpha: 0.12) : context.accentPrimary,
+            color: _state == 'error'
+                ? context.error.withValues(alpha: 0.12)
+                : context.accentPrimary,
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: _aiSpeaking ? context.accentPrimary : context.borderPrimary, width: _aiSpeaking ? 4 : 1),
+            border: Border.all(
+              color: _aiSpeaking
+                  ? context.accentPrimary
+                  : context.borderPrimary,
+              width: _aiSpeaking ? 4 : 1,
+            ),
           ),
           alignment: Alignment.center,
           child: _state == 'error'
               ? Icon(Icons.error_outline, size: 38, color: context.error)
-              : Text(initial, style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700)),
+              : Text(
+                  initial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
         ),
       );
     }
@@ -618,7 +746,11 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
         fit: StackFit.expand,
         children: [
           Container(color: Colors.black),
-          Image.memory(primary, fit: _screenActive ? BoxFit.contain : BoxFit.cover, gaplessPlayback: true),
+          Image.memory(
+            primary,
+            fit: _screenActive ? BoxFit.contain : BoxFit.cover,
+            gaplessPlayback: true,
+          ),
           if (_screenActive && _cameraActive && _latestCameraFrame != null)
             Positioned(
               right: 12,
@@ -628,8 +760,15 @@ class _RealtimeVoiceCallSheetState extends ConsumerState<RealtimeVoiceCallSheet>
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: DecoratedBox(
-                  decoration: BoxDecoration(border: Border.all(color: Colors.white24), color: Colors.black),
-                  child: Image.memory(_latestCameraFrame!, fit: BoxFit.cover, gaplessPlayback: true),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white24),
+                    color: Colors.black,
+                  ),
+                  child: Image.memory(
+                    _latestCameraFrame!,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  ),
                 ),
               ),
             ),
@@ -661,15 +800,15 @@ class _RealtimeCallControl extends StatelessWidget {
     final background = destructive
         ? context.error
         : selected
-            ? context.accentSoft
-            : context.surfaceSecondary;
+        ? context.accentSoft
+        : context.surfaceSecondary;
     final foreground = destructive
         ? Colors.white
         : selected
-            ? context.accentPrimary
-            : enabled
-                ? context.textPrimary
-                : context.textTertiary;
+        ? context.accentPrimary
+        : enabled
+        ? context.textPrimary
+        : context.textTertiary;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: enabled ? onTap : null,
@@ -684,13 +823,19 @@ class _RealtimeCallControl extends StatelessWidget {
               decoration: BoxDecoration(
                 color: background,
                 shape: BoxShape.circle,
-                border: destructive ? null : Border.all(color: context.borderPrimary),
+                border: destructive
+                    ? null
+                    : Border.all(color: context.borderPrimary),
               ),
               alignment: Alignment.center,
               child: Icon(icon, size: 23, color: foreground),
             ),
             const SizedBox(height: 7),
-            Text(label, style: AppTypography.label(context).copyWith(color: foreground), textAlign: TextAlign.center),
+            Text(
+              label,
+              style: AppTypography.label(context).copyWith(color: foreground),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),

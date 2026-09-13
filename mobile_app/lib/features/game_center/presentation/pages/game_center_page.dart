@@ -53,7 +53,7 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '游戏中心',
+        title: '游戏中心 v1',
         navigation: AmitiaAppBarNavigation.back,
         actions: [
           IconButton(
