@@ -130,11 +130,11 @@ func packageGamePluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, requ
 	}
 	switch {
 	case errors.Is(err, gamehostnetworkpolicy.ErrPermissionRequired):
-		return trusted_service.ServiceNetworkPolicy{}, "game_plugin_network_permission_required", err
+		return trusted_service.ServiceNetworkPolicy{}, "gamex_network_permission_required", err
 	case errors.Is(err, gamehostnetworkpolicy.ErrPlatformUnsupported):
-		return trusted_service.ServiceNetworkPolicy{}, "game_plugin_network_platform_unsupported", err
+		return trusted_service.ServiceNetworkPolicy{}, "gamex_network_platform_unsupported", err
 	default:
-		return trusted_service.ServiceNetworkPolicy{}, "game_plugin_network_policy_invalid", err
+		return trusted_service.ServiceNetworkPolicy{}, "gamex_network_policy_invalid", err
 	}
 }
 
@@ -159,7 +159,7 @@ func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manife
 			policy, code, policyErr := packageGamePluginNetworkPolicy(spec.Network, contribution.RequiredPermissions)
 			if policyErr == nil && validateHost != nil && !devMode {
 				if hostErr := validateHost(policy); hostErr != nil {
-					code = "game_plugin_network_sandbox_unavailable"
+					code = "gamex_network_sandbox_unavailable"
 					policyErr = fmt.Errorf("game plugin network sandbox prerequisites are unavailable on this host: %w", hostErr)
 				}
 			}
@@ -211,7 +211,7 @@ func appendGamePluginArtifactPackageIssues(pkg *amitiax.Package, preview *Instal
 				}
 				preview.Issues = append(preview.Issues, PreviewIssue{
 					Category: PreviewNotInstallable,
-					Code:     "game_plugin_artifact_source_missing",
+					Code:     "gamex_artifact_source_missing",
 					Message:  fmt.Sprintf("game plugin artifact %q source %q is missing from the package", artifact.ID, artifact.Source),
 					Path:     fmt.Sprintf("modules[%d].contributions[%d].spec.artifacts[%d].source", moduleIndex, contributionIndex, artifactIndex),
 				})

@@ -39,7 +39,7 @@ func TestManifestAcceptsDesktopPetPluginContribution(t *testing.T) {
 	}
 	report := m.Validate()
 	if report.HasErrors() {
-		t.Errorf("expected desktop_pet_plugin to pass Validate(), got errors: %v", report.Errors)
+		t.Errorf("expected petx to pass Validate(), got errors: %v", report.Errors)
 	}
 }
 
@@ -74,7 +74,7 @@ func TestSchemaAcceptsDesktopPetPluginContribution(t *testing.T) {
 	}
 	report := m.ValidateWithSchema()
 	if report.HasErrors() {
-		t.Errorf("expected desktop_pet_plugin to pass ValidateWithSchema(), got errors: %v", report.Errors)
+		t.Errorf("expected petx to pass ValidateWithSchema(), got errors: %v", report.Errors)
 	}
 }
 
@@ -108,7 +108,7 @@ func TestPetPluginRequiresID(t *testing.T) {
 	}
 	report := m.Validate()
 	if !report.HasErrors() {
-		t.Errorf("expected desktop_pet_plugin without id to be rejected")
+		t.Errorf("expected petx without id to be rejected")
 	}
 }
 
@@ -144,7 +144,7 @@ func TestDesktopPetPluginRuntimeModuleMustExist(t *testing.T) {
 	}
 	report := m.Validate()
 	if !report.HasErrors() {
-		t.Errorf("expected desktop_pet_plugin referencing nonexistent module to be rejected")
+		t.Errorf("expected petx referencing nonexistent module to be rejected")
 	}
 }
 
@@ -179,7 +179,7 @@ func TestDesktopPetPluginWithoutRuntimeModule(t *testing.T) {
 	}
 	report := m.Validate()
 	if report.HasErrors() {
-		t.Errorf("expected desktop_pet_plugin without runtimeModuleId to pass, got errors: %v", report.Errors)
+		t.Errorf("expected petx without runtimeModuleId to pass, got errors: %v", report.Errors)
 	}
 }
 
@@ -219,7 +219,7 @@ func TestDuplicateDesktopPetPluginIDRejected(t *testing.T) {
 	}
 	report := m.Validate()
 	if !report.HasErrors() {
-		t.Errorf("expected duplicate desktop_pet_plugin ID to be rejected")
+		t.Errorf("expected duplicate petx ID to be rejected")
 	}
 }
 
@@ -259,7 +259,7 @@ func TestMultipleDesktopPetPluginContributionsAllowed(t *testing.T) {
 	}
 	report := m.Validate()
 	if report.HasErrors() {
-		t.Errorf("expected multiple desktop_pet_plugin contributions to pass, got errors: %v", report.Errors)
+		t.Errorf("expected multiple petx contributions to pass, got errors: %v", report.Errors)
 	}
 }
 
@@ -341,8 +341,8 @@ func TestDesktopPetPluginJSONRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if !strings.Contains(string(data), `"desktop_pet_plugin"`) {
-		t.Errorf("expected desktop_pet_plugin in JSON output, got: %s", string(data))
+	if !strings.Contains(string(data), `"petx"`) {
+		t.Errorf("expected petx in JSON output, got: %s", string(data))
 	}
 }
 
@@ -379,7 +379,7 @@ func TestDomainMappingDesktopPetPlugin(t *testing.T) {
 	if report.HasErrors() {
 		t.Fatalf("Validate errors: %v", report.Errors)
 	}
-	if m.Modules[0].Contributions[0].Kind != "desktop_pet_plugin" {
-		t.Errorf("expected desktop_pet_plugin kind, got %s", m.Modules[0].Contributions[0].Kind)
+	if m.Modules[0].Contributions[0].Kind != "petx" {
+		t.Errorf("expected petx kind, got %s", m.Modules[0].Contributions[0].Kind)
 	}
 }

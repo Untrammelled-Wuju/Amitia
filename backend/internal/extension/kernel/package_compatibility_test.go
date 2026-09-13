@@ -81,7 +81,7 @@ func TestPackageGamePluginNetworkPreflightMatchesRuntimePermissionBoundary(t *te
 		AllowedDomains: []string{"example.com"},
 		AllowedPorts:   []int{443},
 	}, nil)
-	if err == nil || code != "game_plugin_network_permission_required" {
+	if err == nil || code != "gamex_network_permission_required" {
 		t.Fatalf("restricted network without permission = code %q err %v", code, err)
 	}
 
@@ -100,7 +100,7 @@ func TestPackageGamePluginNetworkPreflightRejectsMissingHostSandboxPrerequisite(
 		Type: "service",
 		Contributions: []manifest_v1.ContributionMeta{{
 			ID:   "game-plugin",
-			Kind: "game_plugin",
+			Kind: "gamex",
 			Spec: map[string]any{
 				"protocolVersion": "amitia-game-host/1",
 				"runtimeModuleId": "runtime",
@@ -119,7 +119,7 @@ func TestPackageGamePluginNetworkPreflightRejectsMissingHostSandboxPrerequisite(
 		t.Fatalf("network prerequisite issues = %+v, want exactly one", preview.Issues)
 	}
 	issue := preview.Issues[0]
-	if issue.Category != PreviewNotInstallable || issue.Code != "game_plugin_network_sandbox_unavailable" {
+	if issue.Category != PreviewNotInstallable || issue.Code != "gamex_network_sandbox_unavailable" {
 		t.Fatalf("unexpected prerequisite issue: %+v", issue)
 	}
 	if !strings.Contains(issue.Message, trusted_service.ErrNetworkSandboxUnavailable.Error()) {
@@ -136,7 +136,7 @@ func TestPackageCompatibilityExecuteRecheckUsesHostSandboxPrerequisites(t *testi
 		Type: "service",
 		Contributions: []manifest_v1.ContributionMeta{{
 			ID:   "game-plugin",
-			Kind: "game_plugin",
+			Kind: "gamex",
 			Spec: map[string]any{
 				"protocolVersion": "amitia-game-host/1",
 				"runtimeModuleId": "runtime",
@@ -151,7 +151,7 @@ func TestPackageCompatibilityExecuteRecheckUsesHostSandboxPrerequisites(t *testi
 	})
 	found := false
 	for _, issue := range preview.Issues {
-		if issue.Code == "game_plugin_network_sandbox_unavailable" {
+		if issue.Code == "gamex_network_sandbox_unavailable" {
 			found = true
 			break
 		}
@@ -168,7 +168,7 @@ func TestPackageGamePluginArtifactSourcesMustExistInArchive(t *testing.T) {
 			Type: "service",
 			Contributions: []manifest_v1.ContributionMeta{{
 				ID:   "game-plugin",
-				Kind: "game_plugin",
+				Kind: "gamex",
 				Spec: map[string]any{
 					"protocolVersion": "amitia-game-host/1",
 					"runtimeModuleId": "runtime",
@@ -194,7 +194,7 @@ func TestPackageGamePluginArtifactSourcesMustExistInArchive(t *testing.T) {
 	if len(preview.Issues) != 1 {
 		t.Fatalf("artifact source issues = %+v, want exactly one missing source", preview.Issues)
 	}
-	if issue := preview.Issues[0]; issue.Code != "game_plugin_artifact_source_missing" || issue.Path != "modules[0].contributions[0].spec.artifacts[0].source" {
+	if issue := preview.Issues[0]; issue.Code != "gamex_artifact_source_missing" || issue.Path != "modules[0].contributions[0].spec.artifacts[0].source" {
 		t.Fatalf("unexpected artifact source issue: %+v", issue)
 	}
 }

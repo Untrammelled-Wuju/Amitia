@@ -53,7 +53,7 @@ func TestGamePluginContributionManifest(t *testing.T) {
 	}
 	report := m.Validate()
 	if report.HasErrors() {
-		t.Errorf("expected game_plugin contribution to pass Validate(), got errors: %v", report.Errors)
+		t.Errorf("expected gamex contribution to pass Validate(), got errors: %v", report.Errors)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestGamePluginContributionSchema(t *testing.T) {
 	}
 	report := m.ValidateWithSchema()
 	if report.HasErrors() {
-		t.Errorf("expected game_plugin contribution to pass ValidateWithSchema(), got errors: %v", report.Errors)
+		t.Errorf("expected gamex contribution to pass ValidateWithSchema(), got errors: %v", report.Errors)
 	}
 }
 
@@ -134,7 +134,7 @@ func TestGamePluginRequiresID(t *testing.T) {
 	}
 	report := m.Validate()
 	if !report.HasErrors() {
-		t.Errorf("expected game_plugin without id to be rejected")
+		t.Errorf("expected gamex without id to be rejected")
 	}
 }
 
@@ -169,7 +169,7 @@ func TestGamePluginRequiresProtocolVersion(t *testing.T) {
 	}
 	report := m.Validate()
 	if !report.HasErrors() {
-		t.Errorf("expected game_plugin without protocolVersion to be rejected")
+		t.Errorf("expected gamex without protocolVersion to be rejected")
 	}
 }
 
@@ -208,7 +208,7 @@ func TestGamePluginRuntimeModuleMustExist(t *testing.T) {
 	}
 	report := m.Validate()
 	if !report.HasErrors() {
-		t.Errorf("expected game_plugin referencing nonexistent module to be rejected")
+		t.Errorf("expected gamex referencing nonexistent module to be rejected")
 	}
 }
 
@@ -250,7 +250,7 @@ func TestDuplicateGamePluginIDRejected(t *testing.T) {
 	}
 	report := m.Validate()
 	if !report.HasErrors() {
-		t.Errorf("expected duplicate game_plugin ID to be rejected")
+		t.Errorf("expected duplicate gamex ID to be rejected")
 	}
 }
 
@@ -293,7 +293,7 @@ func TestMultipleGamePluginsAllowed(t *testing.T) {
 	}
 	report := m.Validate()
 	if report.HasErrors() {
-		t.Errorf("expected multiple game_plugin contributions to pass, got errors: %v", report.Errors)
+		t.Errorf("expected multiple gamex contributions to pass, got errors: %v", report.Errors)
 	}
 }
 
@@ -383,8 +383,8 @@ func TestGamePluginJSONRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if !strings.Contains(string(data), `"game_plugin"`) {
-		t.Errorf("expected game_plugin in JSON output, got: %s", string(data))
+	if !strings.Contains(string(data), `"gamex"`) {
+		t.Errorf("expected gamex in JSON output, got: %s", string(data))
 	}
 }
 
@@ -423,8 +423,8 @@ func TestDomainMappingGamePlugin(t *testing.T) {
 	if report.HasErrors() {
 		t.Fatalf("Validate errors: %v", report.Errors)
 	}
-	if m.Modules[0].Contributions[0].Kind != "game_plugin" {
-		t.Errorf("expected game_plugin kind, got %s", m.Modules[0].Contributions[0].Kind)
+	if m.Modules[0].Contributions[0].Kind != "gamex" {
+		t.Errorf("expected gamex kind, got %s", m.Modules[0].Contributions[0].Kind)
 	}
 }
 
@@ -639,11 +639,11 @@ func TestGamePluginCloudExtensionRejectedEvenBeforeNormalization(t *testing.T) {
 	}
 	report := m.Validate()
 	if !report.HasErrors() {
-		t.Fatal("expected cloud extension containing game_plugin to be rejected before compatibility normalization")
+		t.Fatal("expected cloud extension containing gamex to be rejected before compatibility normalization")
 	}
 	found := false
 	for _, item := range report.Errors {
-		if strings.Contains(item.Message, "game_plugin extensions cannot use placement cloud") {
+		if strings.Contains(item.Message, "gamex extensions cannot use placement cloud") {
 			found = true
 			break
 		}

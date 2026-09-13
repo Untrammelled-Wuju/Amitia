@@ -830,7 +830,7 @@ func validateGamePluginContribution(spec map[string]any, requiredPermissions []s
 				}
 			}
 			if !declared {
-				return fmt.Errorf("game_plugin network mode %s requires requiredPermissions to include %s", mode, networkPermission)
+				return fmt.Errorf("gamex network mode %s requires requiredPermissions to include %s", mode, networkPermission)
 			}
 		}
 	}
@@ -844,27 +844,27 @@ func validateGamePluginContribution(spec map[string]any, requiredPermissions []s
 	}
 	for moduleID := range moduleRefs {
 		if !moduleIDs[moduleID] {
-			return fmt.Errorf("game_plugin references unknown module: %s", moduleID)
+			return fmt.Errorf("gamex references unknown module: %s", moduleID)
 		}
 		placement := strings.ToLower(strings.TrimSpace(modulePlacements[moduleID]))
 		if placement != "" && placement != "device" {
-			return fmt.Errorf("game_plugin runtime module %s must use placement device, got %q", moduleID, placement)
+			return fmt.Errorf("gamex runtime module %s must use placement device, got %q", moduleID, placement)
 		}
 		runtime := moduleRuntimes[moduleID]
 		if runtime == nil {
-			return fmt.Errorf("game_plugin runtime module %s has no runtime definition", moduleID)
+			return fmt.Errorf("gamex runtime module %s has no runtime definition", moduleID)
 		}
 		if strings.TrimSpace(runtime.EntryPoint) == "" {
-			return fmt.Errorf("game_plugin runtime module %s requires runtime.entryPoint", moduleID)
+			return fmt.Errorf("gamex runtime module %s requires runtime.entryPoint", moduleID)
 		}
 		switch runtime.Type {
 		case "service", "javascript":
 		default:
-			return fmt.Errorf("game_plugin runtime module %s uses unsupported runtime type %q", moduleID, runtime.Type)
+			return fmt.Errorf("gamex runtime module %s uses unsupported runtime type %q", moduleID, runtime.Type)
 		}
 	}
 	if strings.EqualFold(strings.TrimSpace(extensionPlacement), "cloud") {
-		return fmt.Errorf("game_plugin extensions cannot use placement cloud; use device or hybrid")
+		return fmt.Errorf("gamex extensions cannot use placement cloud; use device or hybrid")
 	}
 	return nil
 }

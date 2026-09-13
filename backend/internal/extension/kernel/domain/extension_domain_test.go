@@ -55,11 +55,11 @@ func TestNormalizeExtensionDomain(t *testing.T) {
 	if d := NormalizeExtensionDomain("foobar"); d != "foobar" {
 		t.Errorf("expected foobar to stay foobar, got %s", d)
 	}
-	if d := NormalizeExtensionDomain("game"); d != ExtensionDomainGame {
-		t.Errorf("expected legacy game to normalize to gamex, got %s", d)
+	if d := NormalizeExtensionDomain("game"); d != "game" {
+		t.Errorf("expected legacy game to remain invalid, got %s", d)
 	}
-	if d := NormalizeExtensionDomain("desktop_pet"); d != ExtensionDomainDesktopPet {
-		t.Errorf("expected legacy desktop_pet to normalize to petx, got %s", d)
+	if d := NormalizeExtensionDomain("desktop_pet"); d != "desktop_pet" {
+		t.Errorf("expected legacy desktop_pet to remain invalid, got %s", d)
 	}
 }
 
@@ -225,9 +225,8 @@ func TestExtensionDomainJSONDeserialization(t *testing.T) {
 	if err := json.Unmarshal(data, &def); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	def.Domain = NormalizeExtensionDomain(def.Domain)
-	if def.Domain != ExtensionDomainDesktopPet {
-		t.Errorf("expected petx, got %s", def.Domain)
+	if def.Domain == ExtensionDomainDesktopPet {
+		t.Errorf("legacy desktop_pet must not normalize to petx")
 	}
 }
 
@@ -265,8 +264,8 @@ func TestDomainFromContributionKinds(t *testing.T) {
 	if d := DomainFromContributionKinds([]ContributionKind{ContributionKindTool, ContributionKindDesktopPetPlugin}); d != ExtensionDomainDesktopPet {
 		t.Errorf("expected petx when pet_plugin present, got %s", d)
 	}
-	if d := DomainFromContributionKinds([]ContributionKind{"desktop_pet_plugin"}); d != ExtensionDomainDesktopPet {
-		t.Errorf("expected petx for legacy desktop_pet_plugin, got %s", d)
+	if d := DomainFromContributionKinds([]ContributionKind{"desktop_pet_plugin"}); d != ExtensionDomainGeneral {
+		t.Errorf("expected legacy desktop_pet_plugin to be unsupported, got %s", d)
 	}
 }
 
