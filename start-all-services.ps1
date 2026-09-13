@@ -9,6 +9,9 @@ $qdrantExe = Join-Path $backendDir "qdrant\qdrant.exe"
 $serverExe = Join-Path $backendDir "server.exe"
 $surrealPass = "AmitiaSurrealDBRootPassword20260831Securex"
 
+$env:AMITIA_RUNTIME_ROOT = $root
+$env:AMITIA_WORKSPACE_DIR = $root
+
 function Stop-ProjectProcess {
     param([int]$ProcessId)
     $process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
