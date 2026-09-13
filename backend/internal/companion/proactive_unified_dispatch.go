@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/prompt/textlib"
 	"github.com/u-ai/backend/internal/requestidentity"
@@ -26,9 +25,6 @@ type proactiveDeliveryScope struct {
 }
 
 func (s *service) submitProactiveMessage(ctx context.Context, userID, characterID, conversationID, channelSetting, prompt, requestID string) (*interaction.OrchestrationResult, error) {
-	if !runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
-		return nil, errProactiveSuppressed
-	}
 	if s.unifiedEntry == nil {
 		return nil, errProactiveUnifiedEntryMissing
 	}

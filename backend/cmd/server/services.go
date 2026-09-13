@@ -403,6 +403,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithConversationReader(kernelConvReader).
 		WithMemoryQueryService(kernelMemQuerySvc).
 		WithAgentAdminController(agentAdminController).
+		WithProactiveDispatcher(compSvc).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
 		WithSearchConfig(search.DefaultConfig()).

@@ -494,16 +494,21 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			c.JSON(200, gin.H{"code": 200, "data": services.Chat.GetPipelineStatus(), "msg": "\u64cd\u4f5c\u6210\u529f"})
 		})
 		profile.RegisterProfileRouter(apiGroup, services.Profile)
-		proHandler := proactive.RegisterProactiveRouterWithCompanion(apiGroup, ctx, services.Companion)
+		var agentToolFacade *extensionkernel.ToolFacade
+		if services.KernelContainer != nil {
+			agentToolFacade = services.KernelContainer.ToolFacade
+		}
+		proHandler := proactive.RegisterProactiveRouterWithPlugin(
+			apiGroup,
+			ctx,
+			services.Companion,
+			proactive.KernelPluginToolExecutor{Facade: agentToolFacade},
+		)
 		proactive.RegisterRemindersRouter(apiGroup, proHandler)
 		episodic.RegisterEpisodicRouter(apiGroup, services.Episodic)
 		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
-		var agentToolFacade *extensionkernel.ToolFacade
-		if services.KernelContainer != nil {
-			agentToolFacade = services.KernelContainer.ToolFacade
-		}
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)
 		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service)
 		companion.RegisterCompanionRouter(apiGroup, services.Companion)

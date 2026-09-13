@@ -39,7 +39,6 @@ func NewProactiveCron(db *gorm.DB, compSvc companion.Service, queueStore *queue.
 		db:                 db,
 		compSvc:            compSvc,
 		executor:           exec,
-		scheduler:          proactive.NewSafeScheduler(db, exec),
 		scheduled:          make(map[int]int),
 		queueStore:         queueStore,
 		lastRegenerateDate: time.Now().Format("2006-01-02"),
@@ -56,17 +55,9 @@ func (c *ProactiveCron) Start() {
 	c.stopCh = make(chan struct{})
 	c.mu.Unlock()
 
-	c.scheduler.Start()
 	go c.runReminderScanner()
-	go c.runActiveTaskScanner()
-	go c.runDailyRegenerator()
-	go c.runRandomBurstTrigger()
 
-	log.Println("[ProactiveCron] 规则扫描已启动（SafeScheduler Timer模式）")
 	log.Println("[ProactiveCron] 提醒扫描已启动（每 10s）")
-	log.Println("[ProactiveCron] 主动任务扫描已启动（每 30s）")
-	log.Println("[ProactiveCron] 每日重生成已启动（每 60s）")
-	log.Println("[ProactiveCron] 随机突发已启动（每 60s）")
 }
 
 func (c *ProactiveCron) Stop() {
@@ -76,9 +67,8 @@ func (c *ProactiveCron) Stop() {
 		return
 	}
 	c.running = false
-	c.scheduler.Stop()
 	close(c.stopCh)
-	log.Println("[ProactiveCron] 所有扫描器已停止")
+	log.Println("[ProactiveCron] 提醒扫描器已停止")
 }
 
 func (c *ProactiveCron) runReminderScanner() {
@@ -93,9 +83,7 @@ func (c *ProactiveCron) runReminderScanner() {
 	for {
 		select {
 		case <-ticker.C:
-			if !runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
-				continue
-			}
+			c.executor.ScanReminders()
 			c.cleanupOldReminders()
 		case <-c.stopCh:
 			return

@@ -28,17 +28,6 @@ func RegisterProactiveRouterWithCompanion(r *gin.RouterGroup, ctx *app.AppContex
 	proactiveGroup.DELETE("/rules/:id", handler.DeleteRule)
 	proactiveGroup.POST("/rules/:id/toggle", handler.ToggleRule)
 	proactiveGroup.GET("/status", handler.Status)
-	proactiveGroup.GET("/reminders", handler.ListReminders)
-	proactiveGroup.POST("/reminders", handler.CreateReminder)
-	proactiveGroup.PUT("/reminders/:id", handler.UpdateReminder)
-	proactiveGroup.DELETE("/reminders/:id", handler.DeleteReminder)
-	proactiveGroup.POST("/reminders/:id/toggle", handler.ToggleReminder)
-	proactiveGroup.POST("/reminders/test/:id", handler.TestReminder)
-	proactiveGroup.POST("/reminders/:id/trigger", handler.TriggerReminder)
-	proactiveGroup.POST("/reminders/cancel-latest", handler.CancelLatestReminder)
-	proactiveGroup.GET("/reminders/status", handler.ReminderStatus)
-	proactiveGroup.GET("/reminders/pending", handler.PendingReminders)
-	proactiveGroup.DELETE("/reminders", handler.CancelRemindersByQuery)
 	proactiveGroup.GET("/history", handler.ListTriggerHistory)
 	proactiveGroup.GET("/queue-summary", handler.QueueSummary)
 	proactiveGroup.GET("/prospective", handler.Prospective)
@@ -46,14 +35,36 @@ func RegisterProactiveRouterWithCompanion(r *gin.RouterGroup, ctx *app.AppContex
 	proactiveGroup.POST("/rules/:id/trigger", handler.TriggerRule)
 	proactiveGroup.POST("/presets/reset", handler.ResetPresets)
 	proactiveGroup.GET("/rules/:id/messages", handler.RuleMessages)
-	proactiveGroup.GET("/settings/cleanup", security.SharedCoreAdminOnly(), handler.GetCleanupConfig)
-	proactiveGroup.POST("/settings/cleanup", security.SharedCoreAdminOnly(), handler.SetCleanupConfig)
 	return handler
+}
+
+func RegisterProactiveRouterWithPlugin(r *gin.RouterGroup, ctx *app.AppContext, compSvc ProactiveDispatcher, pluginExecutor PluginToolExecutor) *Handler {
+	repo := NewRepository(ctx)
+	svc := NewService(repo, ctx)
+	reminderHandler := NewHandler(svc, ctx.DB, compSvc)
+	pluginHandler := NewPluginHandler(pluginExecutor, ctx.DB)
+	proactiveGroup := r.Group("/proactive")
+	proactiveGroup.Use(proactivePluginGuard())
+
+	proactiveGroup.GET("/rules", pluginHandler.ListRules)
+	proactiveGroup.POST("/rules", pluginHandler.CreateRule)
+	proactiveGroup.PUT("/rules/:id", pluginHandler.UpdateRule)
+	proactiveGroup.DELETE("/rules/:id", pluginHandler.DeleteRule)
+	proactiveGroup.POST("/rules/:id/toggle", pluginHandler.ToggleRule)
+	proactiveGroup.POST("/rules/test/:id", pluginHandler.TestRule)
+	proactiveGroup.POST("/rules/:id/trigger", pluginHandler.TriggerRule)
+	proactiveGroup.GET("/rules/:id/messages", pluginHandler.RuleMessages)
+	proactiveGroup.POST("/presets/reset", pluginHandler.ResetPresets)
+	proactiveGroup.GET("/status", pluginHandler.Status)
+	proactiveGroup.GET("/history", pluginHandler.ListTriggerHistory)
+	proactiveGroup.GET("/queue-summary", pluginHandler.QueueSummary)
+	proactiveGroup.GET("/settings", pluginHandler.GetSettings)
+	proactiveGroup.PUT("/settings", pluginHandler.UpdateSettings)
+	return reminderHandler
 }
 
 func RegisterRemindersRouter(r *gin.RouterGroup, h *Handler) {
 	reminders := r.Group("/reminders")
-	reminders.Use(proactivePluginGuard())
 	reminders.GET("", h.ListReminders)
 	reminders.POST("", h.CreateReminder)
 	reminders.PUT("/:id", h.UpdateReminder)

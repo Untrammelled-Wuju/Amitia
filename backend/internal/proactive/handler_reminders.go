@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/sse"
@@ -169,8 +168,8 @@ func (h *Handler) TriggerReminder(c *gin.Context) {
 		return
 	}
 	msgID, convID := h.triggerReminderNow(rem, userID)
-	if convID == "" {
-		util.ErrorResponse(c, response.OperationFailed, "无可用对话", nil)
+	if convID == "" || msgID == "" {
+		util.ErrorResponse(c, response.OperationFailed, "提醒未发送", nil)
 		return
 	}
 	h.broadcastReminderChange(userID)
@@ -206,17 +205,29 @@ func (h *Handler) triggerReminderNow(rem *Reminder, userID string) (msgID, convI
 	requestID := fmt.Sprintf("proactive-reminder-now-%d-%d", rem.ID, now.UnixNano())
 	generatedContent, err := h.compSvc.DispatchProactiveMessage(context.Background(), owner, rem.CharacterID, convID, rem.Channel, content, requestID)
 	if err != nil || generatedContent == "" {
-		generatedContent = content
+		return "", ""
 	}
 
-	lines := util.SplitLongMessage(generatedContent, util.MaxWebMessageLen)
-	for _, line := range lines {
-		msgID = uuid.New().String()
-		h.db.Exec("INSERT INTO messages (id, conversation_id, role, content, msg_type, source, safety_level, status, include_in_context, created_at) VALUES (?, ?, 'assistant', ?, 'text', 'proactive', 'normal', 'pending', 1, ?)", msgID, convID, line, nowStr)
-		h.db.Exec("INSERT INTO proactive_messages (user_id, rule_id, conversation_id, message_content, channel, status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)", owner, rem.ID, convID, line, rem.Channel, nowStr)
+	type storedMessage struct {
+		ID      string
+		Content string
+	}
+	var stored []storedMessage
+	h.db.Table("messages").
+		Select("id, content").
+		Where("conversation_id = ? AND request_id = ? AND role = ?", convID, requestID, "assistant").
+		Order("sequence ASC").
+		Scan(&stored)
+	if len(stored) == 0 {
+		return "", ""
+	}
+	for _, message := range stored {
+		if msgID == "" {
+			msgID = message.ID
+		}
+		h.db.Exec("INSERT INTO proactive_messages (user_id, rule_id, conversation_id, message_content, channel, status, request_id, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)", owner, rem.ID, convID, message.Content, rem.Channel, requestID, nowStr)
 	}
 	proactiveOwnerQuery(h.db.Table("conversations").Where("id = ?", convID), owner).Updates(map[string]interface{}{"updated_at": nowStr})
-	h.db.Exec("UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ? AND user_id = ?", convID, convID, owner)
 	proactiveOwnerQuery(h.db.Table("reminders").Where("id = ?", rem.ID), owner).Updates(map[string]interface{}{"enabled": 0, "last_triggered_at": nowStr, "updated_at": nowStr})
 	sse.Global.BroadcastToUser(owner, "proactive_message", map[string]interface{}{"userId": owner, "conversationId": convID, "messageId": msgID, "content": generatedContent, "role": "assistant", "source": "proactive", "createdAt": nowStr})
 	return msgID, convID
@@ -307,7 +318,7 @@ func (h *Handler) ReminderStatus(c *gin.Context) {
 			dueNow++
 		}
 	}
-	util.SuccessResponse(c, gin.H{"schedulerRunning": SchedulerRunning && runtimegate.IsEnabled(runtimegate.ProactiveExtensionID), "total": total, "enabled": enabled, "dueNow": dueNow})
+	util.SuccessResponse(c, gin.H{"schedulerRunning": SchedulerRunning, "total": total, "enabled": enabled, "dueNow": dueNow})
 }
 
 func (h *Handler) PendingReminders(c *gin.Context) {
