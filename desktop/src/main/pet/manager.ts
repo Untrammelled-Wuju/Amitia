@@ -2526,6 +2526,7 @@ export class DesktopPetManager {
   }
 
   private resolveBehaviorEventSource(semantic: string): DesktopPetActionRequest["source"] {
+    if (semantic === "manual") return EventSources.MANUAL;
     if (semantic.includes("speaking")) return EventSources.CHAT_SPEAKING;
     if (semantic.includes("listening")) return EventSources.CHAT_LISTENING;
     if (semantic.includes("thinking") || semantic.includes("processing")) {
@@ -2547,6 +2548,7 @@ export class DesktopPetManager {
       return Math.max(0, Math.floor(backendPriority));
     }
     if (semantic.includes("drag")) return ActionPriorities.DRAG;
+    if (semantic === "manual") return ActionPriorities.MANUAL;
     if (semantic.includes("drop") || semantic.includes("fall")) return ActionPriorities.FALL;
     if (semantic.includes("speaking")) return ActionPriorities.SPEAKING;
     if (semantic.includes("listening") || semantic.includes("thinking") || semantic.startsWith("tool_")) {

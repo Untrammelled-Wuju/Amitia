@@ -76,6 +76,7 @@ export const EventSources = {
 export const ActionPriorities = {
   DRAG: 100,
   FALL: 90,
+  MANUAL: 80,
   CLICK: 80,
   SPEAKING: 70,
   THINKING: 60,

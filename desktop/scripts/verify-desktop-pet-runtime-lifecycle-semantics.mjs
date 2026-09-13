@@ -30,7 +30,6 @@ const renderer = await read("desktop/src/renderer/pet-main.ts");
 const engine = await read("desktop/src/desktop-pet/animation/animation-engine.ts");
 const gateway = await read("desktop/src/desktop-pet/animation/command-gateway.ts");
 const queue = await read("desktop/src/desktop-pet/animation/action-queue.ts");
-const characterWatcher = await read("desktop/src/main/pet/character-watcher.ts");
 const eventBridge = await read("desktop/src/main/pet/event-bridge.ts");
 const dragController = await read("desktop/src/main/pet/drag-controller.ts");
 const worldController = await read("desktop/src/main/pet/world-controller.ts");
@@ -201,8 +200,6 @@ assert(
     manager.includes("currentRequestRuntimeCommandId") &&
     manager.includes("MISSING_OR_INVALID_EXPIRY") &&
     manager.includes("INSTALLATION_MISMATCH") &&
-    manager.includes("MISSING_CHARACTER_ID") &&
-    manager.includes("CHARACTER_MISMATCH") &&
     manager.includes("MISSING_PET_INSTANCE_ID") &&
     manager.includes("PET_INSTANCE_MISMATCH") &&
     manager.includes("lastAppliedDesiredHash") &&
@@ -223,12 +220,6 @@ assert(
     manager.indexOf("this.playbackCommandIds.clear();", manager.indexOf("onHelloAck")) <
       manager.indexOf('this.scheduler?.forceInterrupt("runtime_stop")', manager.indexOf("onHelloAck")),
   "runtime reconnect must clear old playback identity before stopping old-session work and suppress synchronous old-session reports",
-);
-assert(
-  characterWatcher.includes("hasObservedCharacter") &&
-    characterWatcher.includes("string | null") &&
-    manager.includes("handleCharacterSwitched(characterId: string | null)"),
-  "active-character authority must represent and apply an explicit no-character state",
 );
 assert(
   dragController.includes('this.onEvent("drag-cancel"') &&

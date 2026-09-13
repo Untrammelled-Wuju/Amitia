@@ -113,9 +113,6 @@ const runtimePolicy = await read("backend/internal/runtimeprofile/policy.go");
 const deviceAgentRouter = await read("backend/cmd/server/device_agent_router.go");
 const securityCors = await read("backend/internal/middleware/security/cors.go");
 const securityCorsTests = await read("backend/internal/middleware/security/cors_test.go");
-const characterWatcher = await read("desktop/src/main/pet/character-watcher.ts");
-const managerTests = await read("desktop/src/main/pet/__tests__/manager.test.ts");
-const characterWatcherTests = await read("desktop/src/main/pet/__tests__/character-watcher.test.ts");
 const behaviorBindingValidator = await read("backend/internal/desktoppet/behavior/bindings/validator.go");
 const frontendRuntimeAdapter = await read("front/src/runtime/runtime-adapter.ts");
 const frontendApi = await read("front/src/composables/useApi.ts");
@@ -420,10 +417,8 @@ assert(
 assert(
   manager.includes("await this.runLifecycleMutation(() => this.shutdownInternal())") &&
     manager.includes("await this.runLifecycleMutation(() => this.recoverRuntimeInternal(reason))") &&
-    manager.includes("this.initializeInternal(options.restoreActiveInstallation ?? true)") &&
-    manager.includes("async handleCharacterSwitched(characterId: string | null)") &&
-    manager.includes("await this.handleCharacterSwitchedInternal(normalized)"),
-  "initialize, character reconciliation, shutdown and runtime recovery must share the serialized lifecycle mutation queue",
+    manager.includes("this.initializeInternal(options.restoreActiveInstallation ?? true)"),
+  "initialize, shutdown and runtime recovery must share the serialized lifecycle mutation queue",
 );
 assert(
   viteConfig.includes('"pet-main": resolve(__dirname, "src/renderer/pet-main.ts")') &&
@@ -476,12 +471,10 @@ assert(
     deploymentLifecycle.includes("await this.stopLocalPetIntegrations()") &&
     deploymentLifecycle.includes("await this.startLocalPetIntegrations()") &&
     deploymentLifecycle.includes("if (localRuntimeAvailable)") &&
-    deploymentLifecycle.includes("coreBaseURL: this.topology.businessCore.baseURL") &&
-    deploymentLifecycle.includes("getBackendSessionClient().getMainProcessAuthHeaders()") &&
-    deploymentLifecycle.includes("await this.desktopPetManager.initialize({ restoreActiveInstallation: false })") &&
+    deploymentLifecycle.includes("await this.desktopPetManager.initialize({ restoreActiveInstallation: true })") &&
     deploymentLifecycle.includes("await this.desktopPetManager.shutdown()") &&
     deploymentLifecycle.includes("await this.reconcileChain"),
-  "deployment lifecycle must keep the desktop-pet body local in local/cloud modes and reconcile its character authority correctly",
+  "deployment lifecycle must keep the desktop-pet body local in local/cloud modes and restore it independently of characters",
 );
 
 assert(
@@ -570,7 +563,8 @@ assert(
 assert(
   mobileDesktopPetRuntime.includes("_runtimeWsSubprotocol = 'amitia.runtime.v1'") &&
     mobileDesktopPetRuntime.includes("desktopPetMobileRuntimeBootstrapProvider") &&
-    mobileDesktopPetRuntime.includes("CHARACTER_MISMATCH") &&
+    !mobileDesktopPetRuntime.includes("CHARACTER_MISMATCH") &&
+    !mobileDesktopPetRuntime.includes("characterId") &&
     mobileDesktopPetRuntime.includes("lastCompletedPlaybackId") &&
     mobileDesktopPetRuntime.includes("Runtime identity and cursor are incarnation-scoped") &&
     mobileDesktopPetRuntime.includes("runtime envelope sequence is stale or duplicated") &&
@@ -642,29 +636,12 @@ assert(
 );
 
 assert(
-  characterWatcher.includes("authHeadersProvider") &&
-    characterWatcher.includes("await this.onActiveCharacterChanged?.(characterId)") &&
-    characterWatcher.includes("this.lastCharacterId = characterId") &&
-    characterWatcher.includes("首次角色同步失败，将继续重试") &&
-    characterWatcher.includes("this.timer = setInterval") &&
-    !characterWatcher.includes("if (!previous) return"),
-  "character watcher must authenticate, reconcile the initial character, and keep retrying after transient startup failures",
-);
-
-assert(
   manager.includes("const previousInstallationId") &&
     manager.includes("switchInstallation.restorePrevious") &&
     manager.includes("PET_SWITCH_FAILED_AND_ROLLBACK_FAILED") &&
-    manager.includes("selectInstallationForCharacter") &&
-    manager.includes("INSTALLATION_STATUS_INSTALLED") &&
-    manager.includes("this.parseTimestamp(right.lastEnabledAt)") &&
-    manager.includes("角色切换时查询安装列表失败:") &&
-    manager.includes("角色切换后切换桌宠失败:") &&
-    managerTests.includes("propagates installation lookup failures so CharacterWatcher can retry") &&
-    managerTests.includes("selects the most recently enabled usable pet for a newly active character") &&
-    managerTests.includes("propagates switch failures so CharacterWatcher does not commit the new character") &&
-    characterWatcherTests.includes("keeps retrying when initial reconciliation fails and only commits after success"),
-  "desktop-pet switching must roll back failed targets and propagate character reconciliation failures for retry",
+    !manager.includes("handleCharacterSwitched") &&
+    !manager.includes("selectInstallationForCharacter"),
+  "desktop-pet switching must roll back failed targets without character-bound reconciliation",
 );
 
 assert(
@@ -941,5 +918,5 @@ assert(
 );
 
 console.log(
-  "[verify-desktop-pet-finalization] PASSED: Runtime V1 behavior, cloud-local pet authority, character reconciliation, rollback, and startup authority are frozen",
+  "[verify-desktop-pet-finalization] PASSED: Runtime V1 behavior, cloud-local pet authority, rollback, and character-independent startup authority are frozen",
 );

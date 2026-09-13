@@ -682,7 +682,7 @@ describe("DesktopPetManager lifecycle serialization", () => {
     await Promise.resolve();
     expect(internal.stopRuntime).not.toHaveBeenCalled();
 
-    releaseMutation?.();
+    (releaseMutation as () => void)();
     await mutation;
     await shutdown;
 
@@ -723,7 +723,7 @@ describe("DesktopPetManager lifecycle serialization", () => {
     await Promise.resolve();
     expect(calls).toEqual(["mutation-start"]);
 
-    releaseMutation?.();
+    (releaseMutation as () => void)();
     await mutation;
     await recovery;
 
@@ -835,7 +835,9 @@ describe("DesktopPetManager Runtime v1 play command validation", () => {
       activeInstallation: Record<string, never>;
       loadedInstallation: { actions: Map<string, { key: string; available: boolean }> };
       scheduler: { submit: typeof submit };
-      buildRuntimeHooks: () => {
+      bridgeStarted: boolean;
+      bridgeGeneration: number;
+      buildRuntimeHooks: (generation: number, isCurrent: () => boolean) => {
         onCommand: (command: unknown, envelope: unknown) => Promise<{
           status: string;
           errorCode: string;
@@ -844,12 +846,14 @@ describe("DesktopPetManager Runtime v1 play command validation", () => {
     };
     internal.activeInstallationId = "install-1";
     internal.activeInstallation = {};
+    internal.bridgeStarted = true;
+    internal.bridgeGeneration = 1;
     internal.loadedInstallation = {
       actions: new Map([["wave", { key: "wave", available: true }]]),
     };
     internal.scheduler = { submit };
 
-    const result = await internal.buildRuntimeHooks().onCommand(
+    const result = await internal.buildRuntimeHooks(1, () => true).onCommand(
       {
         commandId: "cmd-1",
         commandType: "runtime.command.play_action",
@@ -880,7 +884,9 @@ describe("DesktopPetManager Runtime v1 play command validation", () => {
       activeInstallation: Record<string, never>;
       loadedInstallation: { actions: Map<string, { key: string; available: boolean }> };
       scheduler: { submit: typeof submit };
-      buildRuntimeHooks: () => {
+      bridgeStarted: boolean;
+      bridgeGeneration: number;
+      buildRuntimeHooks: (generation: number, isCurrent: () => boolean) => {
         onCommand: (command: unknown, envelope: unknown) => Promise<{
           status: string;
           errorCode: string;
@@ -889,12 +895,14 @@ describe("DesktopPetManager Runtime v1 play command validation", () => {
     };
     internal.activeInstallationId = "install-1";
     internal.activeInstallation = {};
+    internal.bridgeStarted = true;
+    internal.bridgeGeneration = 1;
     internal.loadedInstallation = {
       actions: new Map([["wave", { key: "wave", available: true }]]),
     };
     internal.scheduler = { submit };
 
-    const result = await internal.buildRuntimeHooks().onCommand(
+    const result = await internal.buildRuntimeHooks(1, () => true).onCommand(
       {
         commandId: "cmd-2",
         commandType: "runtime.command.play_action",
@@ -956,7 +964,7 @@ describe("DesktopPetManager Runtime report rejection safety", () => {
     await Promise.resolve();
 
     expect(warning).toHaveBeenCalledWith(
-      "[DesktopPetManager] 上报单击事件失败:",
+      "[DesktopPetManager] 上报单击事件失败，降级为本地反馈:",
       "runtime socket not open",
     );
     warning.mockRestore();
