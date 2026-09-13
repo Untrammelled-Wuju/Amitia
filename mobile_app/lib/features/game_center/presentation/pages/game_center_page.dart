@@ -66,7 +66,9 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
             onPressed: state.pluginsRefreshing
                 ? null
                 : () async {
-                    final controller = ref.read(gameCenterControllerProvider.notifier);
+                    final controller = ref.read(
+                      gameCenterControllerProvider.notifier,
+                    );
                     await controller.refreshPlugins();
                     await controller.loadCenterHealth();
                   },
@@ -87,7 +89,9 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
 
   Future<void> _loadPendingApprovals() async {
     try {
-      final items = await ref.read(gameCenterApiProvider).listPendingApprovals();
+      final items = await ref
+          .read(gameCenterApiProvider)
+          .listPendingApprovals();
       if (!mounted) return;
       final current = items.map((item) => item.id).join('|');
       final previous = _pendingApprovals.map((item) => item.id).join('|');
@@ -99,21 +103,26 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
     }
   }
 
-  Future<void> _resolveApproval(GameHostPendingApproval approval, bool approve) async {
+  Future<void> _resolveApproval(
+    GameHostPendingApproval approval,
+    bool approve,
+  ) async {
     if (_approvalBusyId != null) return;
     setState(() => _approvalBusyId = approval.id);
     try {
-      await ref.read(gameCenterApiProvider).resolveApproval(approval.id, approve: approve);
+      await ref
+          .read(gameCenterApiProvider)
+          .resolveApproval(approval.id, approve: approve);
       await _loadPendingApprovals();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(approve ? '已允许本次操作' : '已拒绝本次操作')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(approve ? '已允许本次操作' : '已拒绝本次操作')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('权限确认失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('权限确认失败: $e')));
       await _loadPendingApprovals();
     } finally {
       if (mounted) setState(() => _approvalBusyId = null);
@@ -123,7 +132,12 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
   Widget _buildApprovalPanel(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, 0),
+      margin: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        0,
+      ),
       padding: EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -145,7 +159,10 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_permissionLabel(approval.permissionId), style: AppTypography.label(context)),
+                        Text(
+                          _permissionLabel(approval.permissionId),
+                          style: AppTypography.label(context),
+                        ),
                         Text(
                           approval.serviceId.isEmpty
                               ? approval.pluginId
@@ -163,13 +180,21 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
                     ),
                   ),
                   TextButton(
-                    onPressed: _approvalBusyId == null ? () => _resolveApproval(approval, false) : null,
+                    onPressed: _approvalBusyId == null
+                        ? () => _resolveApproval(approval, false)
+                        : null,
                     child: const Text('拒绝'),
                   ),
                   FilledButton(
-                    onPressed: _approvalBusyId == null ? () => _resolveApproval(approval, true) : null,
+                    onPressed: _approvalBusyId == null
+                        ? () => _resolveApproval(approval, true)
+                        : null,
                     child: _approvalBusyId == approval.id
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Text('允许一次'),
                   ),
                 ],
@@ -200,7 +225,8 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
     if (state.pluginsError != null) {
       return AmitiaErrorState(
         message: '加载失败: ${state.pluginsError}',
-        onRetry: () => ref.read(gameCenterControllerProvider.notifier).loadPlugins(),
+        onRetry: () =>
+            ref.read(gameCenterControllerProvider.notifier).loadPlugins(),
       );
     }
     if (state.plugins.isEmpty) {
@@ -234,13 +260,19 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
                 padding: EdgeInsets.all(AppSpacing.md),
                 child: Row(
                   children: [
-                    Icon(Icons.monitor_heart_outlined, color: Theme.of(context).colorScheme.primary),
+                    Icon(
+                      Icons.monitor_heart_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Game Center Runtime', style: AppTypography.cardTitle(context)),
+                          Text(
+                            'Game Center Runtime',
+                            style: AppTypography.cardTitle(context),
+                          ),
                           Text(
                             state.centerHealthLoading
                                 ? '正在检查运行状态...'
@@ -251,8 +283,12 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
                       ),
                     ),
                     AmitiaStatusBadge(
-                      label: center?.status == 'healthy' ? '正常' : (center?.status ?? '未知'),
-                      type: center?.status == 'healthy' ? BadgeType.success : BadgeType.neutral,
+                      label: center?.status == 'healthy'
+                          ? '正常'
+                          : (center?.status ?? '未知'),
+                      type: center?.status == 'healthy'
+                          ? BadgeType.success
+                          : BadgeType.neutral,
                     ),
                   ],
                 ),
@@ -275,12 +311,18 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
             },
             onEnable: plugin.enabled
                 ? null
-                : () => ref.read(gameCenterControllerProvider.notifier).enable(plugin.extensionId),
+                : () => ref
+                      .read(gameCenterControllerProvider.notifier)
+                      .enable(plugin.extensionId),
             onDisable: plugin.enabled
-                ? () => ref.read(gameCenterControllerProvider.notifier).disable(plugin.extensionId)
+                ? () => ref
+                      .read(gameCenterControllerProvider.notifier)
+                      .disable(plugin.extensionId)
                 : null,
             onUninstall: () => _confirmUninstall(context, plugin),
-            isOperating: ref.read(gameCenterControllerProvider.notifier).hasPackageOp(plugin.extensionId),
+            isOperating: ref
+                .read(gameCenterControllerProvider.notifier)
+                .hasPackageOp(plugin.extensionId),
           );
         },
       ),
@@ -292,7 +334,9 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('安装游戏插件'),
-        content: const Text('请选择 .amitiax 游戏扩展包。安装将使用统一的扩展包预览、确认与事务生命周期。'),
+        content: const Text(
+          '请选择 .gamex 或 .amitiax 游戏扩展包。安装将使用统一的扩展包预览、确认与事务生命周期。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -304,7 +348,7 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
               final result = await FilePicker.platform.pickFiles(
                 allowMultiple: false,
                 type: FileType.custom,
-                allowedExtensions: const ['amitiax'],
+                allowedExtensions: const ['gamex', 'amitiax'],
               );
               final path = result?.files.single.path;
               if (path == null || path.isEmpty) return;
@@ -315,20 +359,31 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
                 final accepted = await showGamePackagePreviewConfirmation(
                   context,
                   preview,
-                  actionLabel: (preview['currentVersion'] ?? '').toString().isEmpty ? '安装' : '更新',
+                  actionLabel:
+                      (preview['currentVersion'] ?? '').toString().isEmpty
+                      ? '安装'
+                      : '更新',
                 );
                 if (!accepted) return;
                 final operationId = await lifecycle.commitPackage(preview);
-                await ref.read(gameCenterControllerProvider.notifier).refreshPlugins();
+                await ref
+                    .read(gameCenterControllerProvider.notifier)
+                    .refreshPlugins();
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(operationId.isEmpty ? '游戏插件操作已完成' : '游戏插件操作已完成 · $operationId')),
+                  SnackBar(
+                    content: Text(
+                      operationId.isEmpty
+                          ? '游戏插件操作已完成'
+                          : '游戏插件操作已完成 · $operationId',
+                    ),
+                  ),
                 );
               } catch (e) {
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('游戏插件安装失败: $e')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('游戏插件安装失败: $e')));
               }
             },
             child: const Text('选择文件'),
@@ -338,7 +393,10 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
     );
   }
 
-  Future<void> _confirmUninstall(BuildContext context, GamePluginSummary plugin) async {
+  Future<void> _confirmUninstall(
+    BuildContext context,
+    GamePluginSummary plugin,
+  ) async {
     final lifecycle = ref.read(gameCenterPackageLifecycleProvider);
     try {
       final preview = await lifecycle.previewUninstall(plugin.extensionId);
@@ -356,14 +414,14 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
         clearSelectionAfterSuccess: true,
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? '游戏插件卸载完成' : '游戏插件卸载失败')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(ok ? '游戏插件卸载完成' : '游戏插件卸载失败')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('游戏插件卸载失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('游戏插件卸载失败: $e')));
     }
   }
 }
@@ -403,9 +461,15 @@ class _PluginCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(plugin.name, style: AppTypography.cardTitle(context)),
+                        Text(
+                          plugin.name,
+                          style: AppTypography.cardTitle(context),
+                        ),
                         const SizedBox(height: 2),
-                        Text('v${plugin.version}', style: AppTypography.caption(context)),
+                        Text(
+                          'v${plugin.version}',
+                          style: AppTypography.caption(context),
+                        ),
                       ],
                     ),
                   ),
@@ -438,22 +502,13 @@ class _PluginCard extends StatelessWidget {
                     )
                   else ...[
                     if (onEnable != null)
-                      AmitiaButtonOutline(
-                        label: '启用',
-                        onPressed: onEnable,
-                      ),
+                      AmitiaButtonOutline(label: '启用', onPressed: onEnable),
                     if (onDisable != null) ...[
                       SizedBox(width: AppSpacing.sm),
-                      AmitiaButtonOutline(
-                        label: '禁用',
-                        onPressed: onDisable,
-                      ),
+                      AmitiaButtonOutline(label: '禁用', onPressed: onDisable),
                     ],
                     SizedBox(width: AppSpacing.sm),
-                    AmitiaButtonOutline(
-                      label: '卸载',
-                      onPressed: onUninstall,
-                    ),
+                    AmitiaButtonOutline(label: '卸载', onPressed: onUninstall),
                   ],
                 ],
               ),

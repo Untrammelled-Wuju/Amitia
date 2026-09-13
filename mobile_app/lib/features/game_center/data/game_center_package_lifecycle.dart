@@ -32,8 +32,11 @@ class GameCenterPackageLifecycleClient {
     try {
       dio = await _dio();
       final fileName = archivePath.split(RegExp(r'[/\\]')).last;
-      if (!fileName.toLowerCase().endsWith('.amitiax')) {
-        throw StateError('请选择 .amitiax 游戏扩展包');
+      if (!RegExp(
+        r'\.(gamex|amitiax)$',
+        caseSensitive: false,
+      ).hasMatch(fileName)) {
+        throw StateError('请选择 .gamex 或 .amitiax 游戏扩展包');
       }
       final response = await dio.post(
         '/api/extensions/packages/artifacts',
@@ -80,7 +83,8 @@ class GameCenterPackageLifecycleClient {
       if (token.isEmpty) throw StateError('安装确认令牌缺失');
 
       final extensionId = (preview['id'] ?? '').toString().trim();
-      final isUpdate = expectedExtensionId.trim().isNotEmpty ||
+      final isUpdate =
+          expectedExtensionId.trim().isNotEmpty ||
           (preview['currentVersion'] ?? '').toString().trim().isNotEmpty;
       final operationResponse = await dio.post(
         isUpdate
@@ -91,12 +95,18 @@ class GameCenterPackageLifecycleClient {
           'scopeType': (preview['scopeType'] ?? 'global').toString(),
           'scopeId': (preview['scopeId'] ?? '').toString(),
           'confirmationToken': token,
-          if (isUpdate) 'expectedExtensionId': expectedExtensionId.trim().isNotEmpty ? expectedExtensionId.trim() : extensionId,
-          'idempotencyKey': 'mobile-game-package-${DateTime.now().microsecondsSinceEpoch}',
+          if (isUpdate)
+            'expectedExtensionId': expectedExtensionId.trim().isNotEmpty
+                ? expectedExtensionId.trim()
+                : extensionId,
+          'idempotencyKey':
+              'mobile-game-package-${DateTime.now().microsecondsSinceEpoch}',
         },
       );
       final operation = _unwrapData(operationResponse.data);
-      final operationId = operation is Map ? (operation['operationId'] ?? '').toString().trim() : '';
+      final operationId = operation is Map
+          ? (operation['operationId'] ?? '').toString().trim()
+          : '';
       if (operationId.isNotEmpty) {
         await _waitForOperation(dio, operationId);
       }
@@ -108,7 +118,12 @@ class GameCenterPackageLifecycleClient {
 
   Future<Map<String, dynamic>> previewUninstall(String extensionId) async {
     final id = extensionId.trim();
-    if (id.isEmpty) throw ArgumentError.value(extensionId, 'extensionId', 'must not be empty');
+    if (id.isEmpty)
+      throw ArgumentError.value(
+        extensionId,
+        'extensionId',
+        'must not be empty',
+      );
     Dio? dio;
     try {
       dio = await _dio();
@@ -129,11 +144,17 @@ class GameCenterPackageLifecycleClient {
     Map<String, dynamic> preview,
   ) async {
     final id = extensionId.trim();
-    if (id.isEmpty) throw ArgumentError.value(extensionId, 'extensionId', 'must not be empty');
+    if (id.isEmpty)
+      throw ArgumentError.value(
+        extensionId,
+        'extensionId',
+        'must not be empty',
+      );
     if (preview['uninstallable'] == false) throw StateError('后端判定当前游戏扩展不可卸载');
 
     final confirmations = <String, bool>{};
-    for (final value in (preview['requiredConfirmations'] as List?) ?? const []) {
+    for (final value
+        in (preview['requiredConfirmations'] as List?) ?? const []) {
       final key = value.toString().trim();
       if (key.isNotEmpty) confirmations[key] = true;
     }
@@ -165,7 +186,9 @@ class GameCenterPackageLifecycleClient {
         },
       );
       final operation = _unwrapData(uninstallResponse.data);
-      final operationId = operation is Map ? (operation['operationId'] ?? '').toString().trim() : '';
+      final operationId = operation is Map
+          ? (operation['operationId'] ?? '').toString().trim()
+          : '';
       if (operationId.isNotEmpty) {
         await _waitForOperation(dio, operationId);
       }
@@ -177,12 +200,15 @@ class GameCenterPackageLifecycleClient {
 
   Map<String, bool> buildConfirmations(Map<String, dynamic> preview) {
     final result = <String, bool>{};
-    for (final value in (preview['capabilityConfirmations'] as List?) ?? const []) {
+    for (final value
+        in (preview['capabilityConfirmations'] as List?) ?? const []) {
       final key = value.toString().trim();
       if (key.isNotEmpty) result[key] = true;
     }
     final signature = preview['signature'];
-    final signatureStatus = signature is Map ? (signature['status'] ?? '').toString() : '';
+    final signatureStatus = signature is Map
+        ? (signature['status'] ?? '').toString()
+        : '';
     if (signatureStatus == 'unsigned') result['confirm.unsigned_dev'] = true;
     final scriptCount = (preview['scripts'] as num?)?.toInt() ?? 0;
     if (scriptCount > 0) result['confirm.scripts'] = true;
@@ -195,7 +221,8 @@ class GameCenterPackageLifecycleClient {
     if (preview['upgradeDiff'] is Map) {
       final diff = preview['upgradeDiff'] as Map;
       if (diff['signerChanged'] == true) result['confirm.signer_change'] = true;
-      if (diff['configMigrationRequired'] == true) result['confirm.config_migration'] = true;
+      if (diff['configMigrationRequired'] == true)
+        result['confirm.config_migration'] = true;
     }
     return result;
   }
@@ -208,8 +235,10 @@ class GameCenterPackageLifecycleClient {
     final kinds = ((preview['contributionKinds'] as List?) ?? const [])
         .map((e) => e.toString())
         .toSet();
-    if (target != 'game_center' && !kinds.contains('gamex') && !kinds.contains('game_plugin')) {
-      throw StateError('该 .amitiax 包不是游戏扩展，已阻止从游戏中心安装');
+    if (target != 'game_center' &&
+        !kinds.contains('gamex') &&
+        !kinds.contains('game_plugin')) {
+      throw StateError('该扩展包不是游戏扩展，已阻止从游戏中心安装');
     }
     if (preview['installable'] == false || preview['compatible'] == false) {
       throw StateError('该游戏扩展当前不可安装或与当前 Amitia 不兼容');
@@ -238,7 +267,8 @@ class GameCenterPackageLifecycleClient {
         final status = (raw['status'] ?? '').toString().toLowerCase();
         if (status == 'completed') return;
         if (status == 'failed' || status == 'requires_recovery') {
-          final code = (raw['errorCode'] ?? raw['error'] ?? '扩展包操作失败').toString();
+          final code = (raw['errorCode'] ?? raw['error'] ?? '扩展包操作失败')
+              .toString();
           throw StateError(code);
         }
       }

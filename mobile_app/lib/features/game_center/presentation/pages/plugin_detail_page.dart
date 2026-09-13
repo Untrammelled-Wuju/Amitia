@@ -45,12 +45,12 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
   }
 
   Future<void> _loadPlugin({bool refreshUi = false}) async {
-    if (widget.pluginId.trim().isEmpty || widget.extensionId.trim().isEmpty) return;
+    if (widget.pluginId.trim().isEmpty || widget.extensionId.trim().isEmpty)
+      return;
     await Future.wait([
-      ref.read(gameCenterControllerProvider.notifier).selectPlugin(
-        widget.pluginId,
-        extensionId: widget.extensionId,
-      ),
+      ref
+          .read(gameCenterControllerProvider.notifier)
+          .selectPlugin(widget.pluginId, extensionId: widget.extensionId),
       ref.read(uiRuntimeProvider.notifier).ensureLoaded(force: refreshUi),
     ]);
   }
@@ -61,7 +61,8 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
     final state = ref.watch(gameCenterControllerProvider);
 
     final detail = state.pluginDetail;
-    final isCurrentDetail = detail?.pluginId == widget.pluginId &&
+    final isCurrentDetail =
+        detail?.pluginId == widget.pluginId &&
         detail?.extensionId == widget.extensionId;
     final visibleDetail = isCurrentDetail ? detail : null;
     final isLoading = state.pluginDetailLoading;
@@ -82,7 +83,16 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
       ),
       body: SafeArea(
         top: false,
-        child: _buildBody(context, ref, visibleDetail, isLoading, error, hasOp, controller, state),
+        child: _buildBody(
+          context,
+          ref,
+          visibleDetail,
+          isLoading,
+          error,
+          hasOp,
+          controller,
+          state,
+        ),
       ),
     );
   }
@@ -193,7 +203,11 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
             if (detail.provider != null)
               _buildInfoRow(context, 'Provider', detail.provider!),
             if (detail.packageRevision != null)
-              _buildInfoRow(context, 'PackageRevision', detail.packageRevision!),
+              _buildInfoRow(
+                context,
+                'PackageRevision',
+                detail.packageRevision!,
+              ),
             if (detail.permissions.isNotEmpty) ...[
               SizedBox(height: AppSpacing.sm),
               Text('权限', style: AppTypography.caption(context)),
@@ -202,7 +216,9 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
                 spacing: 4,
                 runSpacing: 4,
                 children: detail.permissions
-                    .map((p) => AmitiaStatusBadge(label: p, type: BadgeType.info))
+                    .map(
+                      (p) => AmitiaStatusBadge(label: p, type: BadgeType.info),
+                    )
                     .toList(),
               ),
             ],
@@ -256,13 +272,15 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
                     label: '更新',
                     isSecondary: true,
                     height: 36,
-                    onPressed: () => _pickUpdate(context, ref, controller, detail),
+                    onPressed: () =>
+                        _pickUpdate(context, ref, controller, detail),
                   ),
                   AmitiaButton(
                     label: '卸载',
                     isDestructive: true,
                     height: 36,
-                    onPressed: () => _confirmUninstall(context, ref, controller, detail),
+                    onPressed: () =>
+                        _confirmUninstall(context, ref, controller, detail),
                   ),
                 ],
               ),
@@ -272,56 +290,70 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
     );
   }
 
-  Widget _buildRuntimesSection(BuildContext context, GamePluginDetail detail, GameCenterState state) {
+  Widget _buildRuntimesSection(
+    BuildContext context,
+    GamePluginDetail detail,
+    GameCenterState state,
+  ) {
     return Card(
       child: Padding(
         padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('运行实例 (${detail.runtimes.length})', style: AppTypography.sectionTitle(context)),
+            Text(
+              '运行实例 (${detail.runtimes.length})',
+              style: AppTypography.sectionTitle(context),
+            ),
             SizedBox(height: AppSpacing.sm),
             if (detail.runtimes.isEmpty)
               Text('尚无运行实例', style: AppTypography.caption(context))
             else
-              ...detail.runtimes.map((rt) => InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => RuntimeDetailPage(
-                            runtimeId: rt.runtimeId,
-                            pluginId: rt.pluginId,
+              ...detail.runtimes.map(
+                (rt) => InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => RuntimeDetailPage(
+                          runtimeId: rt.runtimeId,
+                          pluginId: rt.pluginId,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                rt.runtimeId,
+                                style: AppTypography.bodySmall(context),
+                              ),
+                              Text(
+                                '状态: ${_stateLabel(rt.state)} | 控制: ${_modeLabel(rt.controlMode)}',
+                                style: AppTypography.caption(context),
+                              ),
+                            ],
                           ),
                         ),
-                      );
-                    },
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(rt.runtimeId, style: AppTypography.bodySmall(context)),
-                                Text(
-                                  '状态: ${_stateLabel(rt.state)} | 控制: ${_modeLabel(rt.controlMode)}',
-                                  style: AppTypography.caption(context),
-                                ),
-                              ],
-                            ),
-                          ),
-                          AmitiaStatusBadge(
-                            label: rt.connected ? (rt.ready ? 'Ready' : 'Connected') : 'Disconnected',
-                            type: rt.connected
-                                ? (rt.ready ? BadgeType.success : BadgeType.info)
-                                : BadgeType.neutral,
-                          ),
-                        ],
-                      ),
+                        AmitiaStatusBadge(
+                          label: rt.connected
+                              ? (rt.ready ? 'Ready' : 'Connected')
+                              : 'Disconnected',
+                          type: rt.connected
+                              ? (rt.ready ? BadgeType.success : BadgeType.info)
+                              : BadgeType.neutral,
+                        ),
+                      ],
                     ),
-                  )),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -389,7 +421,7 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: false,
       type: FileType.custom,
-      allowedExtensions: const ['amitiax'],
+      allowedExtensions: const ['gamex', 'amitiax'],
     );
     final path = result?.files.single.path;
     if (path == null || path.isEmpty) return;
@@ -414,14 +446,14 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
         ),
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? '插件更新完成' : '插件更新失败')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(ok ? '插件更新完成' : '插件更新失败')));
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('插件更新失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('插件更新失败: $e')));
     }
   }
 
@@ -447,15 +479,15 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
         clearSelectionAfterSuccess: true,
       );
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? '插件卸载完成' : '插件卸载失败')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(ok ? '插件卸载完成' : '插件卸载失败')));
       if (ok && context.mounted) Navigator.of(context).maybePop();
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('插件卸载失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('插件卸载失败: $e')));
     }
   }
 }

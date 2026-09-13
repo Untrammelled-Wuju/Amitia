@@ -12,10 +12,12 @@ class DesktopPetPluginSection extends ConsumerStatefulWidget {
   const DesktopPetPluginSection({super.key});
 
   @override
-  ConsumerState<DesktopPetPluginSection> createState() => _DesktopPetPluginSectionState();
+  ConsumerState<DesktopPetPluginSection> createState() =>
+      _DesktopPetPluginSectionState();
 }
 
-class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSection> {
+class _DesktopPetPluginSectionState
+    extends ConsumerState<DesktopPetPluginSection> {
   @override
   void initState() {
     super.initState();
@@ -118,17 +120,27 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
                   padding: EdgeInsets.all(AppSpacing.sm),
                   child: Row(
                     children: [
-                      Icon(Icons.warning_amber_rounded, size: 16, color: context.error),
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 16,
+                        color: context.error,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           '刷新失败',
-                          style: AppTypography.caption(context).copyWith(color: context.error),
+                          style: AppTypography.caption(
+                            context,
+                          ).copyWith(color: context.error),
                         ),
                       ),
                       GestureDetector(
                         onTap: () => controller.refresh(),
-                        child: Icon(Icons.refresh, size: 16, color: context.accentPrimary),
+                        child: Icon(
+                          Icons.refresh,
+                          size: 16,
+                          color: context.accentPrimary,
+                        ),
                       ),
                     ],
                   ),
@@ -140,7 +152,12 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
             child: Column(
               children: [
                 for (int i = 0; i < state.plugins.length; i++) ...[
-                  _buildPluginItem(context, state.plugins[i], state, controller),
+                  _buildPluginItem(
+                    context,
+                    state.plugins[i],
+                    state,
+                    controller,
+                  ),
                   if (i < state.plugins.length - 1)
                     Divider(height: 1, color: context.borderSecondary),
                 ],
@@ -239,7 +256,7 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
           controller: textController,
           decoration: const InputDecoration(
             labelText: '安装包路径',
-            hintText: '输入或粘贴包路径',
+            hintText: '输入或粘贴 .petx 包路径',
           ),
         ),
         actions: [
@@ -250,7 +267,8 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
           ValueListenableBuilder<TextEditingValue>(
             valueListenable: textController,
             builder: (context, value, _) => TextButton(
-              onPressed: value.text.trim().isEmpty || controller.state.installing
+              onPressed:
+                  value.text.trim().isEmpty || controller.state.installing
                   ? null
                   : () {
                       Navigator.pop(dialogCtx);
@@ -373,7 +391,11 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
             _buildInfoRow(context, '插件ID', widget.pluginId),
             _buildInfoRow(context, '版本', 'v${widget.version}'),
             _buildInfoRow(context, '状态', widget.enabled ? '已启用' : '已禁用'),
-            _buildInfoRow(context, '安装状态', _installStateLabel(widget.installState)),
+            _buildInfoRow(
+              context,
+              '安装状态',
+              _installStateLabel(widget.installState),
+            ),
             if (_loading)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
@@ -381,7 +403,10 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                   child: SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: context.accentPrimary),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: context.accentPrimary,
+                    ),
                   ),
                 ),
               ),
@@ -416,7 +441,10 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                                   );
                                   if (mounted) {
                                     Navigator.pop(context);
-                                    _showSnackBar(context, ok ? '禁用成功' : '操作失败');
+                                    _showSnackBar(
+                                      context,
+                                      ok ? '禁用成功' : '操作失败',
+                                    );
                                   }
                                 },
                         )
@@ -432,7 +460,10 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                                   );
                                   if (mounted) {
                                     Navigator.pop(context);
-                                    _showSnackBar(context, ok ? '启用成功' : '操作失败');
+                                    _showSnackBar(
+                                      context,
+                                      ok ? '启用成功' : '操作失败',
+                                    );
                                   }
                                 },
                         ),
@@ -494,7 +525,9 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
           ValueListenableBuilder<TextEditingValue>(
             valueListenable: textController,
             builder: (context, value, _) => TextButton(
-              onPressed: value.text.trim().isEmpty || widget.controller.hasOperation(widget.pluginId)
+              onPressed:
+                  value.text.trim().isEmpty ||
+                      widget.controller.hasOperation(widget.pluginId)
                   ? null
                   : () {
                       Navigator.pop(dialogCtx);
@@ -502,12 +535,12 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                       widget.controller
                           .update(widget.pluginId, widget.extensionId, path)
                           .then((ok) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(ok ? '更新成功' : '更新失败')),
-                          );
-                        }
-                      });
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(ok ? '更新成功' : '更新失败')),
+                              );
+                            }
+                          });
                     },
               child: Text('更新'),
             ),
@@ -518,9 +551,9 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
   }
 
   void _showSnackBar(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _showUninstallConfirm(BuildContext context) {
@@ -542,9 +575,9 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                 widget.extensionId,
               );
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(ok ? '卸载成功' : '卸载失败')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(ok ? '卸载成功' : '卸载失败')));
               }
             },
             child: const Text('卸载'),
