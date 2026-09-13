@@ -98,13 +98,13 @@
           <span>{{ formatBytes(installFile.size) }} · {{ previewLoading ? `正在检查 ${uploadProgress}%` : "已选择" }}</span>
         </template>
         <template v-else>
-          <strong>选择或拖入 .amitiax 桌宠插件</strong>
+          <strong>选择或拖入 .petx 桌宠插件</strong>
           <span>插件将安装到当前设备并支持桌面端与 Android 端</span>
         </template>
         <el-button :loading="previewLoading" @click="choosePackage">
           {{ installFile ? "重新选择" : "选择文件" }}
         </el-button>
-        <input ref="packageInput" class="sr-only" type="file" accept=".amitiax" @change="onPackageFile" />
+        <input ref="packageInput" class="sr-only" type="file" accept=".petx,.amitiax" @change="onPackageFile" />
       </div>
 
       <el-progress
@@ -339,8 +339,8 @@ async function onPackageDrop(event: DragEvent) {
 }
 
 async function setPackageFile(file: File) {
-  if (!file.name.toLowerCase().endsWith(".amitiax")) {
-    ElMessage.warning("请选择 .amitiax 桌宠插件包");
+  if (!/\.(petx|amitiax)$/i.test(file.name)) {
+    ElMessage.warning("请选择 .petx 或 .amitiax 桌宠插件包");
     return;
   }
   installFile.value = file;
@@ -367,7 +367,7 @@ async function buildPackagePreview() {
     installPreview.value = preview;
     if (preview.currentVersion) installMode.value = "update";
     if (!previewIsPetPlugin.value) {
-      ElMessage.error("该 .amitiax 包不是桌宠插件，已阻止安装");
+      ElMessage.error("该扩展包不是桌宠插件，已阻止安装");
       return;
     }
     if (updateTarget.value && preview.id !== updateTarget.value.extensionId) {
