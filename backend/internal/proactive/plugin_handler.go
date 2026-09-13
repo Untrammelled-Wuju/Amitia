@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const ProactiveCommandToolID = "com.amitia.proactive/command"
+const ProactiveCommandToolID = "com.amitia/proactive/command"
 
 type PluginToolExecutor interface {
 	ExecuteTool(ctx context.Context, toolID string, input json.RawMessage, scope PluginExecutionScope, externalCallID string, idempotencyKey string) (PluginToolResult, bool)
