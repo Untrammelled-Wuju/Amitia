@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	kernel "github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/util"
@@ -57,7 +58,7 @@ func (e KernelPluginToolExecutor) ExecuteTool(ctx context.Context, toolID string
 	if definition.Runtime.RuntimeType == "" || definition.Runtime.HandlerName == "" {
 		return PluginToolResult{Status: "failed", ErrorCode: "RUNTIME_BINDING_INVALID", ErrorText: toolID}, false
 	}
-	definitionID := runtime_supervisor.BuildRuntimeDefinitionID(string(definition.ExtensionID), string(definition.ModuleID), string(definition.Runtime.RuntimeType))
+	definitionID := runtime_supervisor.BuildRuntimeDefinitionID(string(definition.ExtensionID), string(definition.ModuleID), domain.RuntimeType(definition.Runtime.RuntimeType))
 	snapshot := e.Container.RuntimeSupervisor.Snapshot(ctx, definitionID)
 	instanceID := ""
 	for _, instance := range snapshot.Instances {
