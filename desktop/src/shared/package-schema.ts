@@ -773,7 +773,7 @@ export class CanonicalPackageReader implements StrictPackageContractReader {
       "PACKAGE_MANIFEST_INVALID",
       "binding is required",
     );
-    const binding = bindingRaw as { policy?: string; sourceCharacterId?: string };
+    const binding = bindingRaw as { policy?: string };
     assertCondition(
       typeof binding.policy === "string" && ["bound", "unbound"].includes(binding.policy),
       "PACKAGE_MANIFEST_INVALID",
