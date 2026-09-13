@@ -875,7 +875,7 @@ func validateDesktopPetPluginContribution(spec map[string]any, cpath string, mod
 	}
 	if runtimeModuleID, ok := spec["runtimeModuleId"].(string); ok && runtimeModuleID != "" {
 		if !moduleIDs[runtimeModuleID] {
-			return fmt.Errorf("pet_plugin references unknown module: %s", runtimeModuleID)
+			return fmt.Errorf("petx references unknown module: %s", runtimeModuleID)
 		}
 	}
 	return nil

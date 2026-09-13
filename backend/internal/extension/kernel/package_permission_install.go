@@ -37,10 +37,18 @@ func installationPermissionExtensionID(subject permission.PermissionSubject) str
 		return ""
 	}
 	if strings.TrimSpace(subject.ExtensionID) != "" {
-		return strings.TrimSpace(subject.ExtensionID)
+		extensionID := strings.TrimSpace(subject.ExtensionID)
+		if strings.HasPrefix(extensionID, "com.amitia.builtin.") {
+			return ""
+		}
+		return extensionID
 	}
 	if subject.Type == permission.SubjectExtension {
-		return strings.TrimSpace(subject.ID)
+		extensionID := strings.TrimSpace(subject.ID)
+		if strings.HasPrefix(extensionID, "com.amitia.builtin.") {
+			return ""
+		}
+		return extensionID
 	}
 	return ""
 }

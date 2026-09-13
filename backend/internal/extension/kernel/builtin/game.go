@@ -154,7 +154,7 @@ func BuildDesktopPetExtension(version string) Definition {
 func buildDesktopPetContributions(extID domain.ExtensionID, modID domain.ModuleID) []domain.ContributionDefinition {
 	return []domain.ContributionDefinition{
 		{
-			ID:          domain.ContributionID("pet_plugin"),
+			ID:          domain.ContributionID("petx"),
 			ModuleID:    modID,
 			ExtensionID: extID,
 			Kind:        domain.ContributionKindPetPlugin,

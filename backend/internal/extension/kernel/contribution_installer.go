@@ -546,13 +546,13 @@ func (i *TypedContributionInstaller) buildGamePluginOp(ctx context.Context, cont
 	}
 	spec, err := gameprotocol.ParsePluginHostSpec(raw)
 	if err != nil {
-		return installOp{}, fmt.Errorf("game_plugin: %w", err)
+		return installOp{}, fmt.Errorf("gamex: %w", err)
 	}
 	if err := spec.Validate(); err != nil {
-		return installOp{}, fmt.Errorf("game_plugin: %w", err)
+		return installOp{}, fmt.Errorf("gamex: %w", err)
 	}
 	if contrib.ID == "" {
-		return installOp{}, fmt.Errorf("game_plugin: id required")
+		return installOp{}, fmt.Errorf("gamex: id required")
 	}
 	return installOp{
 		kind: domain.ContributionKindGamePlugin,

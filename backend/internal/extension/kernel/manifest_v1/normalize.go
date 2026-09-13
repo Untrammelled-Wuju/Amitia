@@ -307,7 +307,7 @@ func (m Manifest) NormalizeCompatibility() (Manifest, ValidationReport) {
 				mod.Placement = "device"
 				report.AddWarningCode(
 					fmt.Sprintf("modules[%d].placement", i),
-					"game_plugin_runtime_placement_defaulted_to_device",
+					"gamex_runtime_placement_defaulted_to_device",
 					fmt.Sprintf("game plugin runtime module %q placement defaulted to device", mod.ID),
 				)
 			} else {

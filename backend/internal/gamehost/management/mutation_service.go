@@ -286,7 +286,7 @@ var (
 	ErrKernelUnavailable          = errors.New("game-center: extension kernel unavailable")
 	ErrRuntimeExecutorUnavailable = errors.New("game-center: runtime executor unavailable")
 	ErrInvalidInput               = errors.New("game-center: invalid input")
-	ErrNotGamePlugin              = errors.New("game-center: extension is not a game_plugin")
+	ErrNotGamePlugin              = errors.New("game-center: extension is not a gamex")
 	ErrRuntimeNotGameCenter       = errors.New("game-center: runtime does not belong to game_center")
 	ErrManagementTargetMismatch   = errors.New("game-center: package management target mismatch")
 	ErrPackageIdentityMismatch    = errors.New("game-center: package identity mismatch")

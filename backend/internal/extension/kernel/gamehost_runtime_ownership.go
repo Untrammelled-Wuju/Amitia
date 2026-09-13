@@ -41,10 +41,10 @@ func (r *Runtime) gameHostOwnedRuntimeModules(ctx context.Context, extensionID d
 func gameHostContributionRuntimeModules(contribution domain.ContributionDefinition) ([]domain.ModuleID, error) {
 	spec, err := gameprotocol.ParsePluginHostSpec(contribution.Definition)
 	if err != nil {
-		return nil, fmt.Errorf("game_plugin %s has invalid host spec: %w", contribution.ID, err)
+		return nil, fmt.Errorf("gamex %s has invalid host spec: %w", contribution.ID, err)
 	}
 	if err := spec.Validate(); err != nil {
-		return nil, fmt.Errorf("game_plugin %s has invalid host spec: %w", contribution.ID, err)
+		return nil, fmt.Errorf("gamex %s has invalid host spec: %w", contribution.ID, err)
 	}
 	seen := make(map[domain.ModuleID]struct{})
 	if runtimeModuleID := strings.TrimSpace(spec.RuntimeModuleID); runtimeModuleID != "" {
@@ -57,7 +57,7 @@ func gameHostContributionRuntimeModules(contribution domain.ContributionDefiniti
 		}
 	}
 	if len(seen) == 0 {
-		return nil, fmt.Errorf("game_plugin %s does not declare any runtime module", contribution.ID)
+		return nil, fmt.Errorf("gamex %s does not declare any runtime module", contribution.ID)
 	}
 	result := make([]domain.ModuleID, 0, len(seen))
 	for moduleID := range seen {
