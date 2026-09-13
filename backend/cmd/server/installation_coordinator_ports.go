@@ -212,7 +212,7 @@ func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, dev
 	if p.installations == nil {
 		return fmt.Errorf("play action installation lookup unavailable")
 	}
-	inst, err := p.installations.GetInstallation(ctx, deviceCtx.UserID, deviceCtx.DeviceID, installationID)
+	_, err = p.installations.GetInstallation(ctx, deviceCtx.UserID, deviceCtx.DeviceID, installationID)
 	if err != nil {
 		return fmt.Errorf("resolve play action installation: %w", err)
 	}

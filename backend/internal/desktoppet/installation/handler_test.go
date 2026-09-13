@@ -152,9 +152,8 @@ type stubHandlerService struct {
 }
 
 type installCall struct {
-	PackageID   string
-	UserID      string
-	CharacterID string
+	PackageID string
+	UserID    string
 }
 
 type actionCall struct {
@@ -179,15 +178,15 @@ type playCall struct {
 	ActionKey      string
 }
 
-func (s *stubHandlerService) InstallPackage(packageId, userId, characterId string) (*Installation, error) {
-	s.installCalls = append(s.installCalls, installCall{PackageID: packageId, UserID: userId, CharacterID: characterId})
+func (s *stubHandlerService) InstallPackage(packageId, userId string) (*Installation, error) {
+	s.installCalls = append(s.installCalls, installCall{PackageID: packageId, UserID: userId})
 	if s.installErr != nil {
 		return nil, s.installErr
 	}
 	if s.installResult != nil {
 		return s.installResult, nil
 	}
-	return &Installation{ID: "inst_default", UserID: userId, CharacterID: characterId, PackageID: packageId, Status: StatusInstalled}, nil
+	return &Installation{ID: "inst_default", UserID: userId, PackageID: packageId, Status: StatusInstalled}, nil
 }
 
 func (s *stubHandlerService) Uninstall(userId, installationId string) error {
@@ -297,7 +296,7 @@ type stubCoordinator struct {
 }
 
 func (s *stubCoordinator) Install(ctx context.Context, req coordinator.InstallRequest) (*coordinator.InstallResult, error) {
-	inst, err := s.svc.InstallPackage(req.TargetReleaseID, req.DeviceCtx.UserID, req.CharacterID)
+	inst, err := s.svc.InstallPackage(req.TargetReleaseID, req.DeviceCtx.UserID)
 	if err != nil {
 		return nil, mapInstallErr(err)
 	}
@@ -742,24 +741,12 @@ func TestHandler_InstallPackage_EmptyPackageID_InvalidParams(t *testing.T) {
 	}
 }
 
-func TestHandler_InstallPackage_EmptyCharacterID_InvalidParams(t *testing.T) {
+func TestHandler_InstallPackage_WithoutCharacterID_OK(t *testing.T) {
 	svc := &stubHandlerService{}
 	r := newHandlerTestRouter(svc)
 
 	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/packages/"+testPackageID+"/install", gin.H{"character_id": ""})
-	assertHTTPCode(t, w, response.InvalidParams, ErrCodeInstallationFailed)
-}
-
-func TestHandler_InstallPackage_InvalidJSON_InvalidParams(t *testing.T) {
-	svc := &stubHandlerService{}
-	r := newHandlerTestRouter(svc)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/desktop-pets/packages/"+testPackageID+"/install", bytes.NewReader([]byte("not json")))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-
-	assertHTTPCode(t, w, response.InvalidParams, ErrCodeInstallationFailed)
+	assertHTTPCode(t, w, response.OK, "")
 }
 
 func TestHandler_InstallPackage_PackageNotReady_InvalidParams(t *testing.T) {
@@ -822,16 +809,6 @@ func TestHandler_InstallPackage_DefaultActionInvalid_InvalidParams(t *testing.T)
 	assertHTTPCode(t, w, response.InvalidParams, ErrCodePackageDefaultActionInvalid)
 }
 
-func TestHandler_InstallPackage_CharacterNotFound_NotFound(t *testing.T) {
-	svc := &stubHandlerService{
-		installErr: NewInstallationError(ErrCodeCharacterNotFound, "character not found", ErrCharacterNotFound),
-	}
-	r := newHandlerTestRouter(svc)
-
-	w := doRequest(t, r, http.MethodPost, "/api/desktop-pets/packages/"+testPackageID+"/install", gin.H{"character_id": testCharacterID})
-	assertHTTPCode(t, w, response.NotFound, ErrCodeCharacterNotFound)
-}
-
 func TestHandler_InstallPackage_Duplicate_BusinessError(t *testing.T) {
 	svc := &stubHandlerService{
 		installErr: NewInstallationError(ErrCodeInstallationDuplicate, "duplicate", ErrInstallationDuplicate),
@@ -856,7 +833,6 @@ func TestHandler_InstallPackage_Success_OK(t *testing.T) {
 	expected := &Installation{
 		ID:               "inst_123",
 		UserID:           "default",
-		CharacterID:      testCharacterID,
 		PackageID:        testPackageID,
 		PackageVersion:   "1",
 		Name:             "测试包",
@@ -891,9 +867,6 @@ func TestHandler_InstallPackage_Success_OK(t *testing.T) {
 	}
 	if svc.installCalls[0].PackageID != testPackageID {
 		t.Fatalf("PackageID = %s, 期望 %s", svc.installCalls[0].PackageID, testPackageID)
-	}
-	if svc.installCalls[0].CharacterID != testCharacterID {
-		t.Fatalf("CharacterID = %s, 期望 %s", svc.installCalls[0].CharacterID, testCharacterID)
 	}
 }
 

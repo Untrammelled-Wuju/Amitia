@@ -16,7 +16,7 @@ func TestManifestBuildManifestFields(t *testing.T) {
 		BuildManifestAction("idle_normal", "正常待机"),
 		BuildManifestAction("wave", "挥手"),
 	}
-	m := BuildManifest("pkg-1", "测试包", "char-1", "task-1", 3, 512, 512, "idle_normal", actions)
+	m := BuildManifest("pkg-1", "测试包", "task-1", 3, 512, 512, "idle_normal", actions)
 
 	if m.SchemaVersion != ManifestSchemaVersion {
 		t.Errorf("expected schemaVersion %d, got %d", ManifestSchemaVersion, m.SchemaVersion)
@@ -26,9 +26,6 @@ func TestManifestBuildManifestFields(t *testing.T) {
 	}
 	if m.Name != "测试包" {
 		t.Errorf("expected name 测试包, got %s", m.Name)
-	}
-	if m.CharacterID != "char-1" {
-		t.Errorf("expected characterId char-1, got %s", m.CharacterID)
 	}
 	if m.GenerationTaskID != "task-1" {
 		t.Errorf("expected generationTaskId task-1, got %s", m.GenerationTaskID)
@@ -78,7 +75,7 @@ func TestManifestWriteManifest(t *testing.T) {
 	actions := []ManifestAction{
 		BuildManifestAction("idle_normal", "正常待机"),
 	}
-	m := BuildManifest("pkg-1", "测试包", "char-1", "task-1", 3, 512, 512, "idle_normal", actions)
+	m := BuildManifest("pkg-1", "测试包", "task-1", 3, 512, 512, "idle_normal", actions)
 
 	relPath, err := b.WriteManifest("task-1", "pkg-1", m)
 	if err != nil {
@@ -109,7 +106,7 @@ func TestManifestWriteManifest(t *testing.T) {
 }
 
 func TestManifestValidateSchemaVersionError(t *testing.T) {
-	m := BuildManifest("pkg-1", "测试包", "char-1", "task-1", 3, 512, 512, "idle_normal", []ManifestAction{
+	m := BuildManifest("pkg-1", "测试包", "task-1", 3, 512, 512, "idle_normal", []ManifestAction{
 		BuildManifestAction("idle_normal", "正常待机"),
 	})
 	m.SchemaVersion = 999
@@ -119,7 +116,7 @@ func TestManifestValidateSchemaVersionError(t *testing.T) {
 }
 
 func TestManifestValidateDefaultActionNotFound(t *testing.T) {
-	m := BuildManifest("pkg-1", "测试包", "char-1", "task-1", 3, 512, 512, "missing_action", []ManifestAction{
+	m := BuildManifest("pkg-1", "测试包", "task-1", 3, 512, 512, "missing_action", []ManifestAction{
 		BuildManifestAction("idle_normal", "正常待机"),
 	})
 	if err := ValidateManifest(m); err == nil {
@@ -128,7 +125,7 @@ func TestManifestValidateDefaultActionNotFound(t *testing.T) {
 }
 
 func TestManifestValidateDefaultActionEmpty(t *testing.T) {
-	m := BuildManifest("pkg-1", "测试包", "char-1", "task-1", 3, 512, 512, "", []ManifestAction{
+	m := BuildManifest("pkg-1", "测试包", "task-1", 3, 512, 512, "", []ManifestAction{
 		BuildManifestAction("idle_normal", "正常待机"),
 	})
 	if err := ValidateManifest(m); err == nil {
@@ -153,7 +150,7 @@ func TestManifestValidatePathTraversal(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			m := BuildManifest("pkg-1", "测试包", "char-1", "task-1", 3, 512, 512, "idle_normal", []ManifestAction{
+			m := BuildManifest("pkg-1", "测试包", "task-1", 3, 512, 512, "idle_normal", []ManifestAction{
 				{Key: "idle_normal", Name: "正常待机", Config: c.config},
 			})
 			m.Preview = c.preview
@@ -165,7 +162,7 @@ func TestManifestValidatePathTraversal(t *testing.T) {
 }
 
 func TestManifestValidateSuccess(t *testing.T) {
-	m := BuildManifest("pkg-1", "测试包", "char-1", "task-1", 3, 512, 512, "idle_normal", []ManifestAction{
+	m := BuildManifest("pkg-1", "测试包", "task-1", 3, 512, 512, "idle_normal", []ManifestAction{
 		BuildManifestAction("idle_normal", "正常待机"),
 		BuildManifestAction("wave", "挥手"),
 	})
@@ -210,7 +207,7 @@ func TestManifestIsSafeRelativePath(t *testing.T) {
 func TestManifestWriteManifestPathFormat(t *testing.T) {
 	tmp := t.TempDir()
 	b := NewManifestBuilder(tmp)
-	m := BuildManifest("pkg-1", "测试包", "char-1", "task-1", 3, 512, 512, "idle_normal", []ManifestAction{
+	m := BuildManifest("pkg-1", "测试包", "task-1", 3, 512, 512, "idle_normal", []ManifestAction{
 		BuildManifestAction("idle_normal", "正常待机"),
 	})
 	relPath, err := b.WriteManifest("task-1", "pkg-1", m)

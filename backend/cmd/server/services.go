@@ -1489,14 +1489,7 @@ type characterOwnerPort struct {
 }
 
 func (p *characterOwnerPort) ResolveUserID(ctx context.Context, characterID string) string {
-	if p.installRepo == nil {
-		return ""
-	}
-	insts, err := p.installRepo.ListInstallationsByCharacter(characterID)
-	if err != nil || len(insts) == 0 {
-		return ""
-	}
-	return insts[0].UserID
+	return ""
 }
 
 type petInfoPort struct {
@@ -1508,7 +1501,7 @@ func (p *petInfoPort) ResolvePetInfo(ctx context.Context, petInstanceID string) 
 		return "", ""
 	}
 	if inst, err := p.installRepo.GetInstallation(petInstanceID); err == nil && inst != nil {
-		return inst.UserID, inst.CharacterID
+		return inst.UserID, ""
 	}
 	return "", ""
 }
@@ -1818,7 +1811,7 @@ func (s *BehaviorRuntimeEventSink) submitPlaybackEvent(ctx context.Context, even
 }
 
 func (s *BehaviorRuntimeEventSink) resolveCharacterAndPet(event runtime.RuntimeDomainEvent) (string, string) {
-	characterID := event.CharacterID
+	characterID := ""
 	petInstanceID := ""
 
 	if len(event.Payload) > 0 {
@@ -1832,13 +1825,6 @@ func (s *BehaviorRuntimeEventSink) resolveCharacterAndPet(event runtime.RuntimeD
 
 	if petInstanceID == "" {
 		petInstanceID = event.RuntimeID
-	}
-
-	if characterID == "" && event.InstallationID != "" && s.installRepo != nil {
-		inst, err := s.installRepo.GetInstallation(event.InstallationID)
-		if err == nil && inst != nil {
-			characterID = inst.CharacterID
-		}
 	}
 
 	return characterID, petInstanceID
