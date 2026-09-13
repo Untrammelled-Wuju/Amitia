@@ -20,12 +20,9 @@ export type QualityVerdict =
   | "needs_review"
   | "rejected";
 
-export type LegacyQualityVerdict = "pass" | "warning" | "fail" | "skipped";
-
-export const INTEGRITY_ALGORITHM_V2 = "amitia-package-sha256-v2";
-export const INTEGRITY_ALGORITHM_V1_LEGACY = "amitia-tree-sha256-v1";
+export const INTEGRITY_ALGORITHM_V1 = "amitia-package-sha256-v1";
 export const MANIFEST_FORMAT_CANONICAL = "amitia-desktop-pet";
-export const MANIFEST_SCHEMA_VERSION = 2;
+export const MANIFEST_SCHEMA_VERSION = 1;
 export const MANIFEST_PSEUDO_ENTRY_PATH = "@manifest";
 
 export interface RuntimeAnchor {
@@ -76,7 +73,7 @@ export interface RuntimeIntegrityFile {
 }
 
 export interface RuntimePetPackage {
-  schemaVersion: 2;
+  schemaVersion: 1;
   petId: string;
   releaseId: string;
   packageRoot: string;
@@ -98,10 +95,9 @@ export interface RuntimePetPackage {
     totalBytes: number;
     files: RuntimeIntegrityFile[];
   };
-  sourceSchemaVersion: 1 | 2;
 }
 
-export interface LegacyWarning {
+export interface PackageWarning {
   code: string;
   message: string;
   path?: string;
@@ -168,18 +164,18 @@ export interface NormalizedManifestData {
     maxRuntimeVersion: string | null;
     renderMode: "sprite";
   };
-  binding: { policy: string; sourceCharacterId?: string };
+  binding: { policy: string };
   integrity: NormalizedIntegrity;
 }
 
 export interface ManifestReadResult {
   data: NormalizedManifestData;
-  warnings: LegacyWarning[];
+  warnings: PackageWarning[];
 }
 
 export interface ActionReadResult {
   action: RuntimeAction;
-  warnings: LegacyWarning[];
+  warnings: PackageWarning[];
 }
 
 export interface PackageReader {
@@ -330,7 +326,7 @@ function requirePackagePath(value: unknown, field: string): string {
   } catch (error) {
     throw createPackageError(
       "PACKAGE_PATH_INVALID" as PackageErrorCode,
-      `${field} is not a canonical Package V2 path: ${error instanceof Error ? error.message : String(error)}`,
+      `${field} is not a canonical Package V1 path: ${error instanceof Error ? error.message : String(error)}`,
       { path: raw },
     );
   }
@@ -381,7 +377,7 @@ function assertNoUnknownTopLevelFields(
 }
 
 
-const V2_MANIFEST_TOP_LEVEL_FIELDS = [
+const CANONICAL_MANIFEST_TOP_LEVEL_FIELDS = [
   "schemaVersion",
   "manifestFormat",
   "petId",
@@ -402,7 +398,7 @@ const V2_MANIFEST_TOP_LEVEL_FIELDS = [
   "provenance",
 ] as const;
 
-const V2_ACTION_TOP_LEVEL_FIELDS = [
+const CANONICAL_ACTION_TOP_LEVEL_FIELDS = [
   "schemaVersion",
   "actionKey",
   "displayName",
@@ -424,32 +420,7 @@ const V2_ACTION_TOP_LEVEL_FIELDS = [
   "frames",
 ] as const;
 
-function normalizePlaybackModeValue(
-  raw: unknown,
-  actionKey: string,
-): PlaybackMode {
-  if (typeof raw !== "string" || raw.length === 0) {
-    throw createPackageError(
-      "PACKAGE_MANIFEST_INVALID",
-      `playbackMode is required (action: ${actionKey})`,
-      { actionKey },
-    );
-  }
-  const lt = raw.toLowerCase().trim();
-  if (lt === "ping-pong" || lt === "pingpong") {
-    return "ping_pong";
-  }
-  if ((VALID_PLAYBACK_MODES as readonly string[]).includes(lt)) {
-    return lt as PlaybackMode;
-  }
-  throw createPackageError(
-    "PACKAGE_MANIFEST_INVALID",
-    `UNKNOWN_PLAYBACK_MODE: ${raw} (action: ${actionKey})`,
-    { actionKey, actual: raw },
-  );
-}
-
-function requireV2PlaybackMode(raw: unknown, actionKey: string): PlaybackMode {
+function requireCanonicalPlaybackMode(raw: unknown, actionKey: string): PlaybackMode {
   assertCondition(
     typeof raw === "string" && (VALID_PLAYBACK_MODES as readonly string[]).includes(raw),
     "PACKAGE_MANIFEST_INVALID",
@@ -605,22 +576,7 @@ function normalizeFramesStrict(
   return result;
 }
 
-function mapLegacyQualityVerdict(verdict: string): QualityVerdict {
-  switch (verdict) {
-    case "pass":
-      return "accepted";
-    case "warning":
-      return "accepted_with_warning";
-    case "fail":
-      return "rejected";
-    case "skipped":
-      return "needs_review";
-    default:
-      return verdict as QualityVerdict;
-  }
-}
-
-export class Schema2PackageReader implements StrictPackageContractReader {
+export class CanonicalPackageReader implements StrictPackageContractReader {
   readManifest(raw: unknown): ManifestReadResult {
     assertCondition(
       raw !== null && typeof raw === "object",
@@ -628,14 +584,14 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       "manifest is missing or not an object",
     );
     const m = raw as Record<string, unknown>;
-    assertNoUnknownTopLevelFields(m, V2_MANIFEST_TOP_LEVEL_FIELDS, "manifest");
+    assertNoUnknownTopLevelFields(m, CANONICAL_MANIFEST_TOP_LEVEL_FIELDS, "manifest");
 
     const schemaVersion = m.schemaVersion;
     assertCondition(
-      typeof schemaVersion === "number" && Number.isInteger(schemaVersion) && schemaVersion === 2,
+      typeof schemaVersion === "number" && Number.isInteger(schemaVersion) && schemaVersion === 1,
       "PACKAGE_SCHEMA_UNSUPPORTED",
-      `schemaVersion must be 2, got ${schemaVersion}`,
-      { expected: "2", actual: String(schemaVersion) },
+      `schemaVersion must be 1, got ${schemaVersion}`,
+      { expected: "1", actual: String(schemaVersion) },
     );
 
     const manifestFormat = m.manifestFormat;
@@ -735,7 +691,7 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       const key = requireString(ae.key, `actions[${i}].key`, "PACKAGE_MANIFEST_INVALID");
       const name = requireString(ae.name, `actions[${i}].name`, "PACKAGE_MANIFEST_INVALID");
       const config = requirePackagePath(ae.config, `actions[${i}].config`);
-      const playbackMode = requireV2PlaybackMode(ae.playbackMode, key);
+      const playbackMode = requireCanonicalPlaybackMode(ae.playbackMode, key);
       const fps = requireInteger(ae.fps, `actions[${i}].fps`, "PACKAGE_MANIFEST_INVALID");
       assertCondition(fps >= 1 && fps <= 120, "PACKAGE_MANIFEST_INVALID", `actions[${i}].fps must be between 1 and 120`);
       const frameCount = requireInteger(ae.frameCount, `actions[${i}].frameCount`, "PACKAGE_MANIFEST_INVALID");
@@ -819,15 +775,11 @@ export class Schema2PackageReader implements StrictPackageContractReader {
     );
     const binding = bindingRaw as { policy?: string; sourceCharacterId?: string };
     assertCondition(
-      typeof binding.policy === "string" && ["bound", "unbound", "legacy_inferred"].includes(binding.policy),
+      typeof binding.policy === "string" && ["bound", "unbound"].includes(binding.policy),
       "PACKAGE_MANIFEST_INVALID",
-      "binding.policy must be one of bound, unbound, legacy_inferred",
+      "binding.policy must be one of bound, unbound",
       { actual: String(binding.policy) },
     );
-    if (binding.sourceCharacterId !== undefined) {
-      assertCondition(typeof binding.sourceCharacterId === "string", "PACKAGE_MANIFEST_INVALID", "binding.sourceCharacterId must be a string");
-    }
-
     const capabilitiesRaw = m.capabilities;
     assertCondition(
       capabilitiesRaw !== null && typeof capabilitiesRaw === "object",
@@ -864,10 +816,10 @@ export class Schema2PackageReader implements StrictPackageContractReader {
     const ig = integrityRaw as Record<string, unknown>;
     const algorithm = requireString(ig.algorithm, "integrity.algorithm", "PACKAGE_INTEGRITY_ALGORITHM_UNSUPPORTED");
     assertCondition(
-      algorithm === INTEGRITY_ALGORITHM_V2,
+      algorithm === INTEGRITY_ALGORITHM_V1,
       "PACKAGE_INTEGRITY_ALGORITHM_UNSUPPORTED",
-      `integrity.algorithm must be ${INTEGRITY_ALGORITHM_V2}`,
-      { expected: INTEGRITY_ALGORITHM_V2, actual: algorithm },
+      `integrity.algorithm must be ${INTEGRITY_ALGORITHM_V1}`,
+      { expected: INTEGRITY_ALGORITHM_V1, actual: algorithm },
     );
     const manifestHash = requireString(ig.manifestHash, "integrity.manifestHash", "PACKAGE_MANIFEST_HASH_MISSING");
     assertCondition(
@@ -938,7 +890,7 @@ export class Schema2PackageReader implements StrictPackageContractReader {
     }
 
     const data: NormalizedManifestData = {
-      schemaVersion: 2,
+      schemaVersion: 1,
       manifestFormat,
       petId,
       releaseId,
@@ -952,7 +904,6 @@ export class Schema2PackageReader implements StrictPackageContractReader {
       compatibility: { minRuntimeVersion, maxRuntimeVersion, renderMode: "sprite" },
       binding: {
         policy: binding.policy,
-        sourceCharacterId: typeof binding.sourceCharacterId === "string" ? binding.sourceCharacterId : undefined,
       },
       integrity: {
         algorithm,
@@ -977,17 +928,17 @@ export class Schema2PackageReader implements StrictPackageContractReader {
     const a = raw as Record<string, unknown>;
     assertNoUnknownTopLevelFields(
       a,
-      V2_ACTION_TOP_LEVEL_FIELDS,
+      CANONICAL_ACTION_TOP_LEVEL_FIELDS,
       `action config ${actionKey}`,
       actionKey,
     );
 
     const sv = a.schemaVersion;
     assertCondition(
-      typeof sv === "number" && Number.isInteger(sv) && sv === 2,
+      typeof sv === "number" && Number.isInteger(sv) && sv === 1,
       "PACKAGE_ACTION_CONFIG_SCHEMA_UNSUPPORTED",
-      `action.schemaVersion must be 2 (action: ${actionKey})`,
-      { actionKey, expected: "2", actual: String(sv) },
+      `action.schemaVersion must be 1 (action: ${actionKey})`,
+      { actionKey, expected: "1", actual: String(sv) },
     );
 
     const key = requireString(a.actionKey, "actionKey", "PACKAGE_ACTION_KEY_MISMATCH");
@@ -1001,7 +952,7 @@ export class Schema2PackageReader implements StrictPackageContractReader {
     const displayName = requireString(a.displayName, "displayName", "PACKAGE_MANIFEST_INVALID");
     const version = requireInteger(a.version, "version", "PACKAGE_MANIFEST_INVALID");
     assertCondition(version >= 1, "PACKAGE_MANIFEST_INVALID", `version must be >= 1 (action: ${actionKey})`);
-    const playbackMode = requireV2PlaybackMode(a.playbackMode, actionKey);
+    const playbackMode = requireCanonicalPlaybackMode(a.playbackMode, actionKey);
     const fps = requireInteger(a.fps, "fps", "PACKAGE_MANIFEST_INVALID");
     assertCondition(fps >= 1 && fps <= 120, "PACKAGE_MANIFEST_INVALID", `fps must be between 1 and 120 (action: ${actionKey})`);
     const interruptible = requireBoolean(a.interruptible, "interruptible", "PACKAGE_MANIFEST_INVALID");
@@ -1066,336 +1017,8 @@ export class Schema2PackageReader implements StrictPackageContractReader {
   }
 }
 
-export class Schema1PackageReader implements PackageReader {
-  readManifest(raw: unknown): ManifestReadResult {
-    const warnings: LegacyWarning[] = [];
-    const m = (raw ?? {}) as Record<string, unknown>;
-
-    const schemaVersion = typeof m.schemaVersion === "number" ? m.schemaVersion : 1;
-    if (typeof m.schemaVersion !== "number") {
-      warnings.push({
-        code: "LEGACY_SCHEMA_VERSION_MISSING",
-        message: "schemaVersion missing, defaulting to 1",
-      });
-    }
-
-    let petId = "";
-    if (typeof m.petId === "string" && m.petId) {
-      petId = m.petId;
-    } else if (typeof m.packageId === "string" && m.packageId) {
-      petId = m.packageId;
-      warnings.push({
-        code: "LEGACY_PET_ID_FALLBACK",
-        message: "petId missing, falling back to packageId",
-      });
-    }
-
-    const releaseId = typeof m.releaseId === "string" ? m.releaseId : "";
-    const displayName = typeof m.name === "string" ? m.name : "";
-    const description = typeof m.description === "string" ? m.description : "";
-    const defaultActionKey = typeof m.defaultAction === "string" ? m.defaultAction : "";
-    const preview = typeof m.preview === "string" ? m.preview : null;
-
-    let canvasWidth = 0;
-    let canvasHeight = 0;
-    if (m.canvas && typeof m.canvas === "object") {
-      const cv = m.canvas as { width?: number; height?: number };
-      canvasWidth = typeof cv.width === "number" ? cv.width : 0;
-      canvasHeight = typeof cv.height === "number" ? cv.height : 0;
-    }
-
-    const actionEntries: ManifestActionEntry[] = [];
-    if (Array.isArray(m.actions)) {
-      for (const entry of m.actions) {
-        if (!entry || typeof entry !== "object") continue;
-        const ae = entry as Record<string, unknown>;
-        const key = typeof ae.key === "string" ? ae.key : "";
-        if (!key) continue;
-        const name = typeof ae.name === "string" ? ae.name : key;
-        const config = typeof ae.config === "string" ? ae.config : `actions/${key}/action.json`;
-        const playbackMode = normalizePlaybackModeValue(
-          ae.playbackMode ?? ae.loopType,
-          key,
-        );
-        const fps = typeof ae.fps === "number" ? ae.fps : 0;
-        const frameCount = typeof ae.frameCount === "number" ? ae.frameCount : 0;
-        actionEntries.push({
-          key,
-          name,
-          config,
-          playbackMode,
-          fps,
-          frameCount,
-          supportsDefaultIdle: typeof ae.supportsDefaultIdle === "boolean" ? ae.supportsDefaultIdle : true,
-          isStableStateCandidate: typeof ae.isStableStateCandidate === "boolean" ? ae.isStableStateCandidate : playbackMode === "loop",
-          isTransitionOnly: typeof ae.isTransitionOnly === "boolean" ? ae.isTransitionOnly : false,
-        });
-      }
-    }
-
-    let minRuntimeVersion = "0.0.0";
-    let maxRuntimeVersion: string | null = null;
-    if (m.compatibility && typeof m.compatibility === "object") {
-      const compat = m.compatibility as Record<string, unknown>;
-      if (typeof compat.minimumRuntimeVersion === "string") {
-        minRuntimeVersion = compat.minimumRuntimeVersion;
-      } else if (typeof compat.minRuntimeVersion === "string") {
-        minRuntimeVersion = compat.minRuntimeVersion;
-        warnings.push({
-          code: "LEGACY_COMPAT_FIELD",
-          message: "compatibility.minimumRuntimeVersion missing, using minRuntimeVersion",
-        });
-      }
-      if (typeof compat.maxRuntimeVersion === "string") {
-        maxRuntimeVersion = compat.maxRuntimeVersion;
-      }
-    }
-
-    const binding = { policy: "legacy_inferred" };
-
-    let integrity: NormalizedIntegrity = {
-      algorithm: INTEGRITY_ALGORITHM_V1_LEGACY,
-      manifestHash: "",
-      contentRootHash: "",
-      fileCount: 0,
-      totalBytes: 0,
-      files: [],
-    };
-    if (m.integrity && typeof m.integrity === "object") {
-      const ig = m.integrity as Record<string, unknown>;
-      const contentRootHash = typeof ig.contentRootHash === "string" ? ig.contentRootHash : "";
-      const manifestHash = typeof ig.manifestHash === "string" ? ig.manifestHash : "";
-      const algorithm = typeof ig.algorithm === "string" ? ig.algorithm : INTEGRITY_ALGORITHM_V1_LEGACY;
-      const fileCount = typeof ig.fileCount === "number" ? ig.fileCount : 0;
-      const totalBytes = typeof ig.totalBytes === "number" ? ig.totalBytes : 0;
-      const files: RuntimeIntegrityFile[] = [];
-      if (Array.isArray(ig.files)) {
-        for (const f of ig.files) {
-          if (!f || typeof f !== "object") continue;
-          const fe = f as Record<string, unknown>;
-          const fpath = typeof fe.path === "string" ? fe.path : "";
-          if (!fpath) continue;
-          const sha256 =
-            typeof fe.sha256 === "string" ? fe.sha256 : typeof fe.hash === "string" ? fe.hash : "";
-          files.push({
-            path: fpath,
-            sha256,
-            bytes: typeof fe.bytes === "number" ? fe.bytes : 0,
-            mediaType: typeof fe.mediaType === "string" ? fe.mediaType : "",
-            role: typeof fe.role === "string" ? fe.role : "",
-            actionKey: typeof fe.actionKey === "string" ? fe.actionKey : undefined,
-            frameId: typeof fe.frameId === "string" ? fe.frameId : undefined,
-          });
-        }
-      }
-      integrity = { algorithm, manifestHash, contentRootHash, fileCount, totalBytes, files };
-    }
-
-    const data: NormalizedManifestData = {
-      schemaVersion,
-      manifestFormat: MANIFEST_FORMAT_CANONICAL,
-      petId,
-      releaseId,
-      version: "0.0.0",
-      displayName,
-      description,
-      defaultActionKey,
-      preview,
-      canvas: { width: canvasWidth, height: canvasHeight, coordinateSystem: "top-left" },
-      actionEntries,
-      compatibility: { minRuntimeVersion, maxRuntimeVersion, renderMode: "sprite" },
-      binding,
-      integrity,
-    };
-
-    return { data, warnings };
-  }
-
-  readAction(raw: unknown, actionKey: string, configPath: string): ActionReadResult {
-    const warnings: LegacyWarning[] = [];
-    const a = (raw ?? {}) as Record<string, unknown>;
-
-    const key = typeof a.actionKey === "string" ? a.actionKey : typeof a.key === "string" ? a.key : actionKey;
-    const displayName =
-      typeof a.displayName === "string" ? a.displayName :
-      typeof a.actionName === "string" ? a.actionName :
-      typeof a.name === "string" ? a.name : key;
-
-    if (a.loopType !== undefined && a.playbackMode === undefined) {
-      warnings.push({
-        code: "LEGACY_LOOP_TYPE",
-        message: `loopType used instead of playbackMode (action: ${key})`,
-        actionKey: key,
-      });
-    }
-
-    const playbackMode = normalizePlaybackModeValue(a.playbackMode ?? a.loopType, key);
-    const fps = typeof a.fps === "number" ? a.fps : typeof a.defaultFps === "number" ? a.defaultFps : 0;
-    const version = typeof a.version === "number" ? a.version : 1;
-    const interruptible = typeof a.interruptible === "boolean" ? a.interruptible : true;
-    const interruptAfterMs = typeof a.interruptAfterMs === "number" ? a.interruptAfterMs : undefined;
-    const priority = typeof a.priority === "number" ? a.priority : 50;
-    const cooldownMs = typeof a.cooldownMs === "number" ? a.cooldownMs : 0;
-    const minimumPlayMs = typeof a.minimumPlayMs === "number" ? a.minimumPlayMs : 0;
-    // Legacy packages historically used a missing/zero maximumPlayMs and an
-    // empty mutexGroup to mean "not constrained". Preserve that meaning when
-    // mapping into the V2 runtime contract so the stricter V2 zero/null
-    // semantics do not turn old actions into 0 ms actions or one shared mutex.
-    const maximumPlayMs =
-      typeof a.maximumPlayMs === "number" && a.maximumPlayMs > 0
-        ? a.maximumPlayMs
-        : null;
-    const mutexGroup =
-      typeof a.mutexGroup === "string" && a.mutexGroup.trim().length > 0
-        ? a.mutexGroup
-        : null;
-    const supportsDefaultIdle = typeof a.supportsDefaultIdle === "boolean" ? a.supportsDefaultIdle : true;
-    const isStableStateCandidate = typeof a.isStableStateCandidate === "boolean" ? a.isStableStateCandidate : playbackMode === "loop";
-    const isTransitionOnly = typeof a.isTransitionOnly === "boolean" ? a.isTransitionOnly : false;
-
-    const returnTo = normalizeReturnToRuleLegacy(a.returnTo, a.returnAction, key);
-    const anchor = normalizeAnchorLegacy(a.anchor, key);
-
-    const frameDurationMs = computeFrameDurationMs(fps, a.frameDurationMs);
-    const frames = normalizeFramesLegacy(a.frames, frameDurationMs, key);
-
-    const action: RuntimeAction = {
-      actionKey: key,
-      displayName,
-      fps,
-      playbackMode,
-      interruptible,
-      interruptAfterMs,
-      priority,
-      cooldownMs,
-      minimumPlayMs,
-      maximumPlayMs,
-      mutexGroup,
-      returnTo,
-      anchor,
-      frames,
-      configPath,
-      version,
-      supportsDefaultIdle,
-      isStableStateCandidate,
-      isTransitionOnly,
-    };
-
-    return { action, warnings };
-  }
-}
-
-function normalizeReturnToRuleLegacy(
-  returnTo: unknown,
-  returnAction: unknown,
-  actionKey: string,
-): ReturnToRule {
-  if (returnTo && typeof returnTo === "object") {
-    const rt = returnTo as { type?: string; actionKey?: string };
-    const type = rt.type ?? "default";
-    switch (type) {
-      case "action":
-        if (rt.actionKey && typeof rt.actionKey === "string") {
-          return { type: "action", actionKey: rt.actionKey };
-        }
-        return { type: "default" };
-      case "default":
-        return { type: "default" };
-      case "previous":
-        return { type: "previous" };
-      case "current_activity":
-        return { type: "current_activity" };
-      case "none":
-        return { type: "none" };
-      default:
-        return { type: "default" };
-    }
-  }
-  if (typeof returnAction === "string" && returnAction.trim()) {
-    return { type: "action", actionKey: returnAction };
-  }
-  return { type: "default" };
-}
-
-function normalizeAnchorLegacy(
-  anchor: unknown,
-  actionKey: string,
-): RuntimeAnchor {
-  if (!anchor || typeof anchor !== "object") {
-    return { x: 0.5, y: 1.0, coordinateSpace: "normalized_canvas" };
-  }
-  const a = anchor as { x?: number; y?: number; coordinateSpace?: string };
-  const x = typeof a.x === "number" ? a.x : 0.5;
-  const y = typeof a.y === "number" ? a.y : 1.0;
-  return { x, y, coordinateSpace: "normalized_canvas" };
-}
-
-function computeFrameDurationMs(
-  fps: number,
-  frameDurationMs: unknown,
-): number {
-  if (
-    typeof frameDurationMs === "number" &&
-    Number.isFinite(frameDurationMs) &&
-    frameDurationMs > 0
-  ) {
-    return frameDurationMs;
-  }
-  if (fps > 0) {
-    return 1000 / fps;
-  }
-  return 100;
-}
-
-function normalizeFramesLegacy(
-  frames: unknown,
-  defaultDurationMs: number,
-  actionKey: string,
-): RuntimeFrame[] {
-  if (!Array.isArray(frames)) return [];
-  const result: RuntimeFrame[] = [];
-  for (let i = 0; i < frames.length; i++) {
-    const item = frames[i];
-    if (typeof item === "string") {
-      if (item) {
-        result.push({
-          frameId: `${actionKey}_frame_${i}`,
-          index: i,
-          file: item,
-          durationMs: defaultDurationMs,
-          assetId: `${actionKey}_asset_${i}`,
-          contentHash: "",
-        });
-      }
-      continue;
-    }
-    if (item && typeof item === "object") {
-      const f = item as {
-        frameId?: string;
-        index?: number;
-        file?: string;
-        durationMs?: number;
-        assetId?: string;
-        contentHash?: string;
-      };
-      if (typeof f.file === "string" && f.file) {
-        result.push({
-          frameId: f.frameId ?? `${actionKey}_frame_${i}`,
-          index: f.index ?? i,
-          file: f.file,
-          durationMs: f.durationMs ?? defaultDurationMs,
-          assetId: f.assetId ?? `${actionKey}_asset_${i}`,
-          contentHash: f.contentHash ?? "",
-        });
-      }
-    }
-  }
-  return result;
-}
-
 export class RuntimePackageNormalizer {
-  private schema1Reader = new Schema1PackageReader();
-  private schema2Reader = new Schema2PackageReader();
+  private canonicalReader = new CanonicalPackageReader();
 
   normalize(
     manifestRaw: unknown,
@@ -1416,21 +1039,7 @@ export class RuntimePackageNormalizer {
       "schemaVersion is required",
     );
 
-    let reader: PackageReader;
-    switch (schemaVersion) {
-      case 1:
-        reader = this.schema1Reader;
-        break;
-      case 2:
-        reader = this.schema2Reader;
-        break;
-      default:
-        throw createPackageError(
-          "PACKAGE_SCHEMA_UNSUPPORTED",
-          `unsupported schemaVersion: ${schemaVersion}`,
-          { expected: "1 or 2", actual: String(schemaVersion) },
-        );
-    }
+    const reader = this.getReader(schemaVersion);
 
     const manifestResult = reader.readManifest(manifestRaw);
     const manifest = manifestResult.data;
@@ -1473,7 +1082,7 @@ export class RuntimePackageNormalizer {
     }
 
     return {
-      schemaVersion: 2,
+      schemaVersion: 1,
       petId: manifest.petId,
       releaseId: manifest.releaseId,
       packageRoot,
@@ -1495,16 +1104,13 @@ export class RuntimePackageNormalizer {
         totalBytes: manifest.integrity.totalBytes,
         files: manifest.integrity.files,
       },
-      sourceSchemaVersion: (schemaVersion === 2 ? 2 : 1) as 1 | 2,
     };
   }
 
   getReader(schemaVersion: number): PackageReader {
     switch (schemaVersion) {
       case 1:
-        return this.schema1Reader;
-      case 2:
-        return this.schema2Reader;
+        return this.canonicalReader;
       default:
         throw createPackageError(
           "PACKAGE_SCHEMA_UNSUPPORTED",

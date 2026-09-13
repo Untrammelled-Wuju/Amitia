@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { caseFoldPackagePath, decodePackagePathFromUrl, encodePackagePathForUrl, normalizePackagePath, resolveActionResourcePackagePath } from "./package-path";
 
-describe("Package V2 portable path contract", () => {
+describe("Package V1 portable path contract", () => {
   it("accepts canonical Unicode, spaces, percent/hash and ordinary double dots", () => {
     for (const value of ["actions/idle/action.json", "actions/待机/帧 01.png", "actions/idle/frame#01.png", "actions/idle/100%.png", "actions/idle/frame..png", "actions/idle/..frame.png"]) {
       expect(normalizePackagePath(value)).toBe(value);

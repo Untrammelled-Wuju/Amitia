@@ -51,7 +51,7 @@ describe("resolveActionFramePath", () => {
     ).toBe("actions/idle/..frame.png");
   });
 
-  it("Package V2 拒绝反斜杠和其他非规范路径", () => {
+  it("Package V1 拒绝反斜杠和其他非规范路径", () => {
     expect(() =>
       resolveActionFramePath("actions/idle/action.json", "sprites\\f0.png", "/pkg"),
     ).toThrow("FRAME_PATH_OUTSIDE_PACKAGE");

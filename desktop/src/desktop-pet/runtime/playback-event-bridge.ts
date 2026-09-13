@@ -1,13 +1,13 @@
 import type { PlaybackEvent } from "../animation/contracts";
-import type { DesktopRuntimeHandlerV2 } from "./runtime-handler-v2";
-import type { PlaybackEventPayload, StateSnapshotPayload } from "./protocol-v2";
+import type { DesktopRuntimeHandlerV1 } from "./runtime-handler-v1";
+import type { PlaybackEventPayload, StateSnapshotPayload } from "./protocol-v1";
 
 export interface PlaybackEventBridgeHooks {
   shouldReportEvent: (event: PlaybackEvent) => boolean;
 }
 
 export class PlaybackEventBridge {
-  private readonly runtime: DesktopRuntimeHandlerV2;
+  private readonly runtime: DesktopRuntimeHandlerV1;
   private readonly hooks: PlaybackEventBridgeHooks;
   private lastPlaybackId = "";
   private lastCommandId = "";
@@ -19,7 +19,7 @@ export class PlaybackEventBridge {
    * is owned exclusively by DesktopPetManager.handlePlaybackEvent(). Keeping
    * this adapter fail-closed outside tests prevents accidental double reports.
    */
-  constructor(runtime: DesktopRuntimeHandlerV2, hooks: PlaybackEventBridgeHooks = {
+  constructor(runtime: DesktopRuntimeHandlerV1, hooks: PlaybackEventBridgeHooks = {
     shouldReportEvent: () => true,
   }) {
     if (process.env.NODE_ENV !== "test") {

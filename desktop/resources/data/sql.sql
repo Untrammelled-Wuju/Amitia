@@ -232,6 +232,20 @@ CREATE TABLE IF NOT EXISTS asr_configs (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS emotion_states (
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    user_affect_json TEXT NOT NULL DEFAULT '{}',
+    relationship_emotion_json TEXT NOT NULL DEFAULT '{}',
+    signals_json TEXT NOT NULL DEFAULT '{}',
+    baseline_json TEXT NOT NULL DEFAULT '{}',
+    version INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (user_id, character_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_emotion_states_character ON emotion_states(character_id);
+
 CREATE TABLE IF NOT EXISTS vision_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,

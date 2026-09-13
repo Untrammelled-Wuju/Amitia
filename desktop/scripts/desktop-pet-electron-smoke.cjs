@@ -117,7 +117,7 @@ const waveConfig = actionConfig("wave", {
 const packageSnapshot = Object.freeze({
   packageId: PACKAGE_ID,
   packageRevision: PACKAGE_REVISION,
-  schemaVersion: 2,
+  schemaVersion: 1,
   canvas: { width: 64, height: 64 },
   defaultActionKey: "idle",
   interpolationMode: "nearest",
@@ -165,7 +165,7 @@ function pass() {
   finished = true;
   if (timeoutHandle) clearTimeout(timeoutHandle);
   console.log(
-    "[desktop-pet-electron-smoke] PASS: real Package V2 -> RuntimeReady -> first frame -> action switch/completion -> hit mask -> click/drag -> renderer reload recovery verified",
+    "[desktop-pet-electron-smoke] PASS: real Package V1 -> RuntimeReady -> first frame -> action switch/completion -> hit mask -> click/drag -> renderer reload recovery verified",
   );
   app.exit(0);
 }

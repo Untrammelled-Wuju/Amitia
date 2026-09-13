@@ -30,7 +30,7 @@ function makeLoaded(actions: RuntimeAction[], defaultKey: string): LoadedInstall
     installationId: "install-test",
     manifest: {
       packageId: "package-test",
-      schemaVersion: 2,
+      schemaVersion: 1,
       name: "Test Pet",
       characterId: "character-test",
       canvas: { width: 64, height: 64 },

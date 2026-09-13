@@ -1,4 +1,4 @@
-import type { RuntimeEnvelope } from "../../desktop-pet/runtime/protocol-v2";
+import type { RuntimeEnvelope } from "../../desktop-pet/runtime/protocol-v1";
 
 export type CommandExecutionStatus =
   | "accepted"
@@ -25,16 +25,16 @@ export type RuntimeCommandExecutor = (
   envelope: RuntimeEnvelope,
 ) => Promise<RuntimeCommandExecutionResult>;
 
-export interface RuntimeV2CommandAdapterOptions {
+export interface RuntimeV1CommandAdapterOptions {
   executor: RuntimeCommandExecutor;
   onError?: (err: Error, commandId: string) => void;
 }
 
-export class RuntimeV2CommandAdapter {
+export class RuntimeV1CommandAdapter {
   private executor: RuntimeCommandExecutor;
   private onError?: (err: Error, commandId: string) => void;
 
-  constructor(options: RuntimeV2CommandAdapterOptions) {
+  constructor(options: RuntimeV1CommandAdapterOptions) {
     this.executor = options.executor;
     this.onError = options.onError;
   }
@@ -66,6 +66,6 @@ export class RuntimeV2CommandAdapter {
 export function createCommandAdapter(
   executor: RuntimeCommandExecutor,
   onError?: (err: Error, commandId: string) => void,
-): RuntimeV2CommandAdapter {
-  return new RuntimeV2CommandAdapter({ executor, onError });
+): RuntimeV1CommandAdapter {
+  return new RuntimeV1CommandAdapter({ executor, onError });
 }

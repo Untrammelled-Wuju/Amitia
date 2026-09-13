@@ -71,7 +71,7 @@ export class ResourceCache {
         const canonicalPath = normalizePackagePath(entry.path);
         if (!lookup.has(canonicalPath)) lookup.set(canonicalPath, entry);
       } catch {
-        // Strict Package V2 parsing rejects invalid entries before cache use.
+        // Strict Package V1 parsing rejects invalid entries before cache use.
       }
     }
     return lookup;
@@ -123,7 +123,7 @@ export class ResourceCache {
         this.maxFramesPerAction,
         integrityLookup,
         loaded.installPath,
-        loaded.manifest.schemaVersion >= 2,
+        loaded.manifest.schemaVersion >= 1,
       );
       if (frames.length === 0) return;
       this.ensureActionCapacity(1);
@@ -170,7 +170,7 @@ export class ResourceCache {
       frameIndex,
       loaded.installPath,
       integrityLookup,
-      loaded.manifest.schemaVersion >= 2,
+      loaded.manifest.schemaVersion >= 1,
     );
     if (!frame) return null;
 
@@ -284,7 +284,7 @@ export class ResourceCache {
         if (actualHash !== entry.sha256) return null;
       }
 
-      // Decode the exact bytes that were read and, for Package V2, integrity-
+      // Decode the exact bytes that were read and, for Package V1, integrity-
       // checked. createFromPath would reopen the file and create a TOCTOU gap.
       const image = nativeImage.createFromBuffer(content);
       if (image.isEmpty()) return null;

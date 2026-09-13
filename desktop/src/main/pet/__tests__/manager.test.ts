@@ -196,7 +196,7 @@ describe("DesktopPetManager runtime settings", () => {
     expect(internal.lastAppliedSettingsRevision).toBe(7);
   });
 
-  it("does not apply public settings mutations before Runtime v2 convergence", async () => {
+  it("does not apply public settings mutations before Runtime v1 convergence", async () => {
     const manager = makeManager();
     const initial = settings({ settingsRevision: 3, scale: 1 });
     const callUpdateSettingsApi = vi.fn(async () => ({
@@ -265,7 +265,7 @@ describe("DesktopPetManager runtime settings", () => {
 });
 
 describe("DesktopPetManager app-start restore policy", () => {
-  it("disables authoritative desired state before Runtime v2 connects when restore is off", async () => {
+  it("disables authoritative desired state before Runtime v1 connects when restore is off", async () => {
     const manager = makeManager();
     const internal = manager as never as {
       listInstallations: ReturnType<typeof vi.fn>;
@@ -417,7 +417,7 @@ describe("DesktopPetManager desired-state convergence", () => {
     expect(internal.activeSettings.settingsRevision).toBe(7);
   });
 
-  it("does not apply a public default-action mutation before Runtime v2 convergence", async () => {
+  it("does not apply a public default-action mutation before Runtime v1 convergence", async () => {
     const manager = makeManager();
     const callUpdateDefaultActionApi = vi.fn(async () => ({
       operationId: "opin-default",
@@ -732,7 +732,7 @@ describe("DesktopPetManager lifecycle serialization", () => {
 });
 
 describe("DesktopPetManager manual play authority", () => {
-  it("publishes a manual action only through the Runtime v2 backend path", async () => {
+  it("publishes a manual action only through the Runtime v1 backend path", async () => {
     const manager = makeManager();
     const schedulerSubmit = vi.fn();
     const callPlayActionApi = vi.fn(async () => undefined);
@@ -944,7 +944,7 @@ describe("DesktopPetManager character reconciliation", () => {
   });
 });
 
-describe("DesktopPetManager Runtime v2 play command validation", () => {
+describe("DesktopPetManager Runtime v1 play command validation", () => {
   it("rejects legacy queue policy before scheduling", async () => {
     const manager = makeManager();
     const submit = vi.fn(() => "played" as const);

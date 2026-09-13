@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DesktopRuntimeHandlerV2 } from "../runtime-handler-v2";
-import type { RuntimeCommandReplayEntry, RuntimePendingOutboundEntry } from "../runtime-handler-v2";
-import { buildEnvelope, computePayloadHash } from "../protocol-v2";
-import type { RuntimeEnvelope } from "../protocol-v2";
-import type { RuntimeCommandExecutionResult } from "../../../main/pet/runtime-v2-command-adapter";
+import { DesktopRuntimeHandlerV1 } from "../runtime-handler-v1";
+import type { RuntimeCommandReplayEntry, RuntimePendingOutboundEntry } from "../runtime-handler-v1";
+import { buildEnvelope, computePayloadHash } from "../protocol-v1";
+import type { RuntimeEnvelope } from "../protocol-v1";
+import type { RuntimeCommandExecutionResult } from "../../../main/pet/runtime-v1-command-adapter";
 
 class FakeWebSocket {
   static readonly CONNECTING = 0;
@@ -85,7 +85,7 @@ function pastExpiry(offsetMs = 1_000): string {
 
 // Cross-language golden vector from backend/internal/deviceruntime/protocol.
 // It covers Go HTML escaping, U+2028/U+2029 and negative-zero formatting.
-describe("Runtime V2 payload hashing", () => {
+describe("Runtime V1 payload hashing", () => {
   it("matches the Go canonical payload hash for escaped scalar values", () => {
     expect(computePayloadHash({
       text: "A<&>\u2028\u2029",
@@ -127,8 +127,8 @@ async function connectHandler(
   helloAckOverrides: Record<string, unknown> = {},
   replayEntries: readonly RuntimeCommandReplayEntry[] = [],
   pendingOutboundEntries: readonly RuntimePendingOutboundEntry[] = [],
-): Promise<{ handler: DesktopRuntimeHandlerV2; ws: FakeWebSocket; hello: RuntimeEnvelope }> {
-  const handler = new DesktopRuntimeHandlerV2(
+): Promise<{ handler: DesktopRuntimeHandlerV1; ws: FakeWebSocket; hello: RuntimeEnvelope }> {
+  const handler = new DesktopRuntimeHandlerV1(
     {
       url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
       bootstrapTicket: "ticket-1",
@@ -180,7 +180,7 @@ async function connectHandler(
   return { handler, ws, hello };
 }
 
-describe("DesktopRuntimeHandlerV2", () => {
+describe("DesktopRuntimeHandlerV1", () => {
   beforeEach(() => {
     FakeWebSocket.instances = [];
     vi.stubGlobal("WebSocket", FakeWebSocket);
@@ -201,7 +201,7 @@ describe("DesktopRuntimeHandlerV2", () => {
 
     expect(new URL(ws.url).searchParams.has("ticket")).toBe(false);
     expect(ws.protocols).toEqual([
-      "amitia.runtime.v2",
+      "amitia.runtime.v1",
       "amitia.runtime.bootstrap.ticket-1",
     ]);
     handler.disconnect();
@@ -224,7 +224,7 @@ describe("DesktopRuntimeHandlerV2", () => {
   it("keeps the handshake deadline armed until hello_ack", async () => {
     vi.useFakeTimers();
     try {
-      const handler = new DesktopRuntimeHandlerV2(
+      const handler = new DesktopRuntimeHandlerV1(
         {
           url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
           bootstrapTicket: "ticket-1",
@@ -251,8 +251,9 @@ describe("DesktopRuntimeHandlerV2", () => {
       ws.open();
       await flushAsync();
       expect(ws.sent.length).toBe(1);
+      const timeoutRejection = expect(connecting).rejects.toThrow("hello_ack timeout");
       await vi.advanceTimersByTimeAsync(1001);
-      await expect(connecting).rejects.toThrow("hello_ack timeout");
+      await timeoutRejection;
       expect(handler.getState()).not.toBe("connected");
     } finally {
       vi.useRealTimers();
@@ -319,7 +320,7 @@ describe("DesktopRuntimeHandlerV2", () => {
       payload: { commandId: "cmd-replay-fail", desiredRevision: 9, desiredHash: "sha256:desired" },
       replayAcrossReconnect: true,
     }];
-    const handler = new DesktopRuntimeHandlerV2(
+    const handler = new DesktopRuntimeHandlerV1(
       {
         url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
         bootstrapTicket: "ticket-1",
@@ -781,7 +782,7 @@ describe("DesktopRuntimeHandlerV2", () => {
   });
 
   it("settles a pending auto-reconnect delay when disconnect cancels it", async () => {
-    const handler = new DesktopRuntimeHandlerV2(
+    const handler = new DesktopRuntimeHandlerV1(
       {
         url: "ws://127.0.0.1/runtime?deviceId=device-1&runtimeId=runtime-1",
         bootstrapTicket: "ticket-1",
@@ -1108,7 +1109,7 @@ describe("DesktopRuntimeHandlerV2", () => {
     await flushAsync();
     expect(firstExecutor).toHaveBeenCalledTimes(1);
 
-    // Ephemeral commands are physically owned by one Runtime-v2 session. Their
+    // Ephemeral commands are physically owned by one Runtime-v1 session. Their
     // local same-session idempotency cache must not be exported to a replacement
     // handler; the Backend supersedes those commands at the reconnect fence.
     expect(first.handler.getReplayEntries()).toEqual([]);

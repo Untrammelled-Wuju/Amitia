@@ -47,7 +47,7 @@ function makePackageSnapshot(overrides?: Partial<PackagePlaybackSnapshot>): Pack
   return {
     packageId: "test-pkg",
     packageRevision: 1,
-    schemaVersion: 2,
+    schemaVersion: 1,
     canvas: { width: 256, height: 256 },
     defaultActionKey: "idle",
     actions: [{ actionKey: "idle", configUrl: "file:///idle/config.json" }],

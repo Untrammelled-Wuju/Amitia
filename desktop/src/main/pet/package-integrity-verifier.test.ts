@@ -15,7 +15,7 @@ import {
   PackageIntegrityVerifier,
 } from "./package-integrity-verifier";
 
-describe("PackageIntegrityVerifier Package v2 hash compatibility", () => {
+describe("PackageIntegrityVerifier Package v1 hash compatibility", () => {
   it("matches the Go tree-hash byte stream", () => {
     const hash = computeTreeHash([
       {
@@ -56,10 +56,10 @@ describe("PackageIntegrityVerifier Package v2 hash compatibility", () => {
 
   it("matches Go Manifest zero-value projection before canonical hashing", () => {
     const raw = JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 1,
       name: "Hash Test",
       integrity: {
-        algorithm: "amitia-package-sha256-v2",
+        algorithm: "amitia-package-sha256-v1",
         manifestHash: "1".repeat(64),
         contentRootHash: "2".repeat(64),
         fileCount: 0,
@@ -86,7 +86,7 @@ describe("PackageIntegrityVerifier filesystem verification", () => {
       const frameDir = join(actionDir, "frames");
       await mkdir(frameDir, { recursive: true });
 
-      const actionBytes = Buffer.from('{"schemaVersion":2,"actionKey":"idle"}', "utf8");
+      const actionBytes = Buffer.from('{"schemaVersion":1,"actionKey":"idle"}', "utf8");
       const frameBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
       const previewBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01]);
       await writeFile(join(actionDir, "action.json"), actionBytes);
@@ -122,7 +122,7 @@ describe("PackageIntegrityVerifier filesystem verification", () => {
       const totalBytes = files.reduce((sum, file) => sum + file.bytes, 0);
 
       const rawManifest: Record<string, unknown> = {
-        schemaVersion: 2,
+        schemaVersion: 1,
         manifestFormat: "amitia-desktop-pet",
         petId: "integrity-test-pet",
         releaseId: "integrity-test-release",
@@ -145,10 +145,10 @@ describe("PackageIntegrityVerifier filesystem verification", () => {
             isTransitionOnly: false,
           },
         ],
-        compatibility: { minRuntimeVersion: "2.0.0", renderMode: "sprite" },
+        compatibility: { minRuntimeVersion: "1.0.0", renderMode: "sprite" },
         binding: { policy: "unbound" },
         integrity: {
-          algorithm: "amitia-package-sha256-v2",
+          algorithm: "amitia-package-sha256-v1",
           manifestHash: "",
           contentRootHash: "",
           fileCount: files.length,
@@ -180,7 +180,7 @@ describe("PackageIntegrityVerifier filesystem verification", () => {
       await writeFile(manifestPath, manifestRawText, "utf8");
 
       const manifest: NormalizedManifestData = {
-        schemaVersion: 2,
+        schemaVersion: 1,
         manifestFormat: "amitia-desktop-pet",
         petId: "integrity-test-pet",
         releaseId: "integrity-test-release",
@@ -204,13 +204,13 @@ describe("PackageIntegrityVerifier filesystem verification", () => {
           },
         ],
         compatibility: {
-          minRuntimeVersion: "2.0.0",
+          minRuntimeVersion: "1.0.0",
           maxRuntimeVersion: null,
           renderMode: "sprite",
         },
         binding: { policy: "unbound" },
         integrity: {
-          algorithm: "amitia-package-sha256-v2",
+          algorithm: "amitia-package-sha256-v1",
           manifestHash,
           contentRootHash,
           fileCount: files.length,

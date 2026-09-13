@@ -25,7 +25,7 @@ export const DESKTOP_PET_RUNTIME_VERSION = requireSemVer(
 );
 
 /**
- * Desktop counterpart of the backend runtime-v2 schema version. Build
+ * Desktop counterpart of the backend runtime-v1 schema version. Build
  * verification checks that this value stays aligned with the Go contract.
  */
 export const DESKTOP_PET_RUNTIME_CONTRACT_VERSION = requireSemVer(

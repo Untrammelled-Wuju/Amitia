@@ -83,12 +83,12 @@ const configStore = await read("desktop/src/main/config-store.ts");
 const desktopIndex = await read("desktop/src/main/index.ts");
 const ipcHandlers = await read("desktop/src/main/ipc-handlers.ts");
 const tray = await read("desktop/src/main/tray.ts");
-const runtimeCommandService = await read("backend/internal/desktoppet/runtime/protocol/v2/command_service.go");
-const runtimeDispatcher = await read("backend/internal/desktoppet/runtime/protocol/v2/command_dispatcher.go");
-const runtimeRouter = await read("backend/internal/desktoppet/runtime/protocol/v2/router.go");
-const runtimeFacade = await read("backend/internal/desktoppet/runtime/protocol/v2/facade.go");
-const runtimeReconciler = await read("backend/internal/desktoppet/runtime/protocol/v2/reconciler.go");
-const runtimeHandler = await read("desktop/src/desktop-pet/runtime/runtime-handler-v2.ts");
+const runtimeCommandService = await read("backend/internal/desktoppet/runtime/protocol/v1/command_service.go");
+const runtimeDispatcher = await read("backend/internal/desktoppet/runtime/protocol/v1/command_dispatcher.go");
+const runtimeRouter = await read("backend/internal/desktoppet/runtime/protocol/v1/router.go");
+const runtimeFacade = await read("backend/internal/desktoppet/runtime/protocol/v1/facade.go");
+const runtimeReconciler = await read("backend/internal/desktoppet/runtime/protocol/v1/reconciler.go");
+const runtimeHandler = await read("desktop/src/desktop-pet/runtime/runtime-handler-v1.ts");
 const animationEngine = await read("desktop/src/desktop-pet/animation/animation-engine.ts");
 const animationPlayerState = await read("desktop/src/desktop-pet/animation/player-state-machine.ts");
 const animationPlayerStateTests = await read("desktop/src/desktop-pet/animation/__tests__/player-state-machine.test.ts");
@@ -123,11 +123,11 @@ const frontendRequestAuth = await read("front/src/runtime/request-auth.ts");
 const authenticatedSSE = await read("front/src/runtime/authenticated-sse.ts");
 const generationTask = await read("front/src/composables/useGenerationTask.ts");
 const processingTask = await read("front/src/composables/useProcessingTask.ts");
-const realtimeCallWidget = await read("front/src/components/RealtimeCallWidget.vue");
+const realtimeCallDialog = await read("front/src/components/RealtimeCallDialog.vue");
 const frontendPetChatState = await read("front/src/runtime/desktop-pet-chat-state.ts");
 const desktopPreload = await read("desktop/src/preload/index.ts");
-const runtimeProtocolV2 = await read("desktop/src/desktop-pet/runtime/protocol-v2.ts");
-const runtimeProtocolV2Tests = await read("desktop/src/desktop-pet/runtime/__tests__/runtime-handler-v2.test.ts");
+const runtimeProtocolV2 = await read("desktop/src/desktop-pet/runtime/protocol-v1.ts");
+const runtimeProtocolV2Tests = await read("desktop/src/desktop-pet/runtime/__tests__/runtime-handler-v1.test.ts");
 const appProtocol = await read("desktop/src/main/app-protocol.ts");
 const desktopWindow = await read("desktop/src/main/window.ts");
 const desktopConfigTemplate = await read("desktop/resources/config-template/config.yaml");
@@ -146,14 +146,14 @@ const sourceGitignore = await read(".gitignore");
 assert(
   runtimeDispatcher.includes("ListCommandsToDispatchForConnection(") &&
     !runtimeDispatcher.includes("ListCommandsToDispatch(100)"),
-  "Runtime V2 dispatch must be scoped per connected user/device/runtime",
+  "Runtime V1 dispatch must be scoped per connected user/device/runtime",
 );
 assert(
   runtimeCommandService.includes("MarkFailedRetryable") &&
     runtimeCommandService.includes("CommandStatusFailedRetryable") &&
     runtimeReconciler.includes('"ACK_TIMEOUT"') &&
     runtimeReconciler.includes("if cmd.IsDurable() {"),
-  "Runtime V2 durable commands must have retryable delivery semantics",
+  "Runtime V1 durable commands must have retryable delivery semantics",
 );
 assert(
   runtimeCommandService.includes("ReconcileDesiredStateOnHello(") &&
@@ -177,7 +177,7 @@ assert(
     runtimeHandler.includes("replayCachedCommand") &&
     runtimeHandler.includes("this.lastProcessedCommandSequence = Math.max(this.lastProcessedCommandSequence, sequence)") &&
     !runtimeHandler.includes("commandSequence <= this.lastProcessedCommandSequence"),
-  "Runtime V2 client must replay by command identity/revision, never assume a sequence high-water mark proves lower commands executed",
+  "Runtime V1 client must replay by command identity/revision, never assume a sequence high-water mark proves lower commands executed",
 );
 assert(
   manager.includes("runtimeCommandReplayEntries") &&
@@ -189,7 +189,7 @@ assert(
 assert(
   manager.includes("if (this.bridgeReconnectTimer) return;") &&
     manager.includes("this.bridgeReconnectAttempts += 1"),
-  "Runtime V2 bridge reconnect must coalesce duplicate failure signals before incrementing backoff attempts",
+  "Runtime V1 bridge reconnect must coalesce duplicate failure signals before incrementing backoff attempts",
 );
 assert(
   !actionScheduler.includes("idleRepeatCount") &&
@@ -267,7 +267,7 @@ assert(
     !mobileDesktopPetRuntime.includes("_cursor.lastEventSequence = _outboundSequence") &&
     runtimeRouter.includes("sendCommittedEventAck") &&
     runtimeSessionService.includes("client_cursor_ahead"),
-  "Runtime V2 client event cursors must be server-committed and durable desired terminal events must survive ACK-loss reconnects",
+  "Runtime V1 client event cursors must be server-committed and durable desired terminal events must survive ACK-loss reconnects",
 );
 assert(
   runtimeHandler.includes('const fullResume = ack.resumeMode === "full"') &&
@@ -360,7 +360,7 @@ assert(
     migrationBaseline.includes("target_installation_id TEXT NOT NULL DEFAULT ''") &&
     migrationBaseline.includes("idx_dpbmo_claim") &&
     migrationBaseline.includes("idx_dpbmo_expiry"),
-  "Runtime V2 geometry and behavior-mesh durability schema must be present in both upgrade migration and new-database baseline",
+  "Runtime V1 geometry and behavior-mesh durability schema must be present in both upgrade migration and new-database baseline",
 );
 
 assert(
@@ -369,7 +369,7 @@ assert(
 );
 assert(
   manager.includes("private async applyDesiredStateCommand("),
-  "Runtime V2 desired-state convergence helper is missing",
+  "Runtime V1 desired-state convergence helper is missing",
 );
 assert(
   manager.includes("payload.settingsSnapshot"),
@@ -395,7 +395,7 @@ assert(
     !manager.includes('case "update_settings"') &&
     !manager.includes('case "recenter"') &&
     !manager.includes('case "sync"'),
-  "Runtime V2 handler must not retain compatibility command aliases",
+  "Runtime V1 handler must not retain compatibility command aliases",
 );
 assert(
   !manager.includes("this.markSettingsRevisionApplied(command?.settingsRevision") &&
@@ -440,28 +440,28 @@ assert(
 );
 assert(
   packageSchema.includes("Number.isInteger(numberValue)") &&
-    packageSchema.includes("requireV2PlaybackMode") &&
+    packageSchema.includes("requireCanonicalPlaybackMode") &&
     packageSchema.includes("maximumPlayMs: number | null") &&
     resourceLoader.includes("maximumPlayMs: action.maximumPlayMs ?? null") &&
     resourceLoader.includes("interruptAfterMs: action.interruptAfterMs") &&
     backendPackageValidator.includes("DecodeStrictTopLevelJSON(data, &cfg, actionConfigAllowedFields)") &&
-    backendPackageValidator.includes("validateV2ActionNestedRequiredFields") &&
+    backendPackageValidator.includes("validateCanonicalActionNestedRequiredFields") &&
     backendPackageValidator.includes("ErrCodePackageResourceHashMismatch") &&
-    backendPackageValidator.includes("validateLegacyActionConfigLayer") &&
-    backendSchemaRegistry.includes("v2ManifestRequiredFields") &&
+    !backendPackageValidator.includes("validateLegacyActionConfigLayer") &&
+    backendSchemaRegistry.includes("canonicalManifestRequiredFields") &&
     backendSchemaRegistry.includes("isJSONNull"),
-  "Package V2 readers must preserve null/zero semantics, enforce nested/hash integrity, and retain real V1 compatibility",
+  "Package V1 readers must preserve null/zero semantics and enforce nested/hash integrity",
 );
 assert(
-  backendPackageValidator.includes("expectedIntegrityAlgorithm := IntegrityAlgorithmV2") &&
-    backendPackageValidator.includes("isLegacyV1 && action.QualityVerdict == QualityVerdictSkipped") &&
-    backendPackageManifest.includes('Builder:    "amitia-packageformat-v2"') &&
+  backendPackageValidator.includes("expectedIntegrityAlgorithm := IntegrityAlgorithmV1") &&
+    !backendPackageValidator.includes("legacy_v1") &&
+    backendPackageManifest.includes('Builder:    "amitia-packageformat-v1"') &&
     backendReleaseService.includes('"maximumPlayMs":          nil') &&
     backendReleaseService.includes('"mutexGroup":             nil') &&
     backendReleaseService.includes('"supportsDefaultIdle":    supportsDefaultIdle') &&
     backendReleaseService.includes('"isStableStateCandidate": isStableStateCandidate') &&
     backendReleaseService.includes('"isTransitionOnly":       isTransitionOnly'),
-  "V2 package producers and validators must emit and enforce the same canonical semantic fields",
+  "V1 package producers and validators must emit and enforce the same canonical semantic fields",
 );
 assert(
   visualSurface.includes('anchorType === "normalized_canvas"') &&
@@ -512,17 +512,17 @@ assert(
     deviceAgentRouter.includes('security.RequirePermission("system.shutdown")') &&
     deviceAgentRouter.includes("desktoppet.RegisterDesktopPetRouter") &&
     deviceAgentRouter.includes("desktoppet.RegisterDesktopPetWriteRouter") &&
-    deviceAgentRouter.includes("runtimev2.RegisterUserRoutes") &&
-    deviceAgentRouter.includes("runtimev2.RegisterInternalRoutes") &&
+    deviceAgentRouter.includes("runtimev1.RegisterUserRoutes") &&
+    deviceAgentRouter.includes("runtimev1.RegisterInternalRoutes") &&
     !deviceAgentRouter.includes("setupRouter(ctx"),
-  "device-agent must expose authenticated local pet/session/Runtime-v2 plus graceful local-admin shutdown without opening the full business router",
+  "device-agent must expose authenticated local pet/session/Runtime-v1 plus graceful local-admin shutdown without opening the full business router",
 );
 
 assert(
   securityCors.includes('"X-Amitia-Device-ID"') &&
     securityCors.includes('"X-Amitia-Client-Type"') &&
     securityCors.includes('"Idempotency-Key"') &&
-    securityCorsTests.includes("AllowsDesktopDeviceHeadersForLoopbackPetRequests") &&
+    securityCorsTests.includes("AllowsDesktopDevelopmentUploadPreflight") &&
     securityCorsTests.includes('"idempotency-key"') &&
     securityCorsTests.includes("AllowsPackagedAppOrigin"),
   "cloud-to-loopback desktop-pet requests must pass CORS preflight with device and idempotency headers",
@@ -556,7 +556,7 @@ assert(
     androidOverlay.includes("WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY") &&
     androidOverlay.includes("windowManager.addView") &&
     androidOverlay.includes("Settings.ACTION_MANAGE_OVERLAY_PERMISSION") &&
-    androidPetRenderer.includes("PACKAGE_SCHEMA_VERSION = 2") &&
+    androidPetRenderer.includes("PACKAGE_SCHEMA_VERSION = 1") &&
     androidPetRenderer.includes('PACKAGE_MANIFEST_FORMAT = "amitia-desktop-pet"') &&
     androidPetRenderer.includes("windowManager.addView") &&
     androidPetRenderer.includes("lastCompletedPlaybackId") &&
@@ -564,11 +564,11 @@ assert(
     androidPetRenderer.includes("canonicalManifestData(manifest)") &&
     androidPetRenderer.includes("computeContentRootHash(") &&
     androidCompositionRoot.includes("DesktopPetRendererNativeHandler(context)"),
-  "Android desktop-pet host must provide a real WindowManager overlay and Package V2 renderer",
+  "Android desktop-pet host must provide a real WindowManager overlay and Package V1 renderer",
 );
 
 assert(
-  mobileDesktopPetRuntime.includes("_runtimeWsSubprotocol = 'amitia.runtime.v2'") &&
+  mobileDesktopPetRuntime.includes("_runtimeWsSubprotocol = 'amitia.runtime.v1'") &&
     mobileDesktopPetRuntime.includes("desktopPetMobileRuntimeBootstrapProvider") &&
     mobileDesktopPetRuntime.includes("CHARACTER_MISMATCH") &&
     mobileDesktopPetRuntime.includes("lastCompletedPlaybackId") &&
@@ -597,7 +597,7 @@ assert(
     mobileDesktopPetPage.includes("desktopPetMobileRuntimeProvider") &&
     !mobileDesktopPetPage.includes("companionStateProvider") &&
     !mobileDesktopPetPage.includes("心情很好"),
-  "mobile desktop-pet center and Runtime V2 transport must use real renderer facts with strict per-connection sequencing",
+  "mobile desktop-pet center and Runtime V1 transport must use real renderer facts with strict per-connection sequencing",
 );
 
 assert(
@@ -605,7 +605,7 @@ assert(
     runtimeProtocolV2.includes("Object.is(value, -0)") &&
     runtimeProtocolV2.includes('case "<": return "\\\\u003c"') &&
     runtimeProtocolV2Tests.includes("b7e059caca7f51b074a58adda59aaa8943450b4d78e80b4cb5aed992a5fe6e0a"),
-  "Electron Runtime V2 payload hashing must match the Go canonical JSON golden vector",
+  "Electron Runtime V1 payload hashing must match the Go canonical JSON golden vector",
 );
 
 assert(
@@ -613,7 +613,7 @@ assert(
     mobileDesktopPetRuntime.includes("value == 0 && value.isNegative") &&
     mobileDesktopPetRuntime.includes("replaceAll('<', r'\\u003c')") &&
     mobileDesktopPetRuntime.includes("replaceAll('&', r'\\u0026')"),
-  "mobile Runtime V2 payload hashing must reproduce the Go server canonical JSON escaping and number semantics",
+  "mobile Runtime V1 payload hashing must reproduce the Go server canonical JSON escaping and number semantics",
 );
 
 assert(
@@ -700,7 +700,7 @@ assert(
     behaviorEnvelope.includes('return "runtime.drag.completed"') &&
     behaviorEnvelope.includes('builder.PayloadField("interactionType", evt.GestureType)') &&
     serverServices.includes('"runtime.drag.cancelled"'),
-  "Runtime V2, behavior adapters, schema, bindings, sink, and reducer must share one canonical event vocabulary",
+  "Runtime V1, behavior adapters, schema, bindings, sink, and reducer must share one canonical event vocabulary",
 );
 
 assert(
@@ -723,8 +723,8 @@ assert(
     (await read("front/src/composables/useWebChatSend.ts")).includes("let completed = false") &&
     (await read("front/src/composables/useWebChatSend.ts")).includes("if (completed)") &&
     (await read("front/src/composables/useWebChatSSE.ts")).includes('notifyDesktopPetChatState("assistant_speaking"') &&
-    realtimeCallWidget.includes('"assistant_speaking"') &&
-    realtimeCallWidget.includes('"assistant_listening"'),
+    realtimeCallDialog.includes('"assistant_speaking"') &&
+    realtimeCallDialog.includes('"assistant_listening"'),
   "cloud/local text and realtime voice lifecycles must drive the local pet speaking/thinking/listening state through Electron IPC",
 );
 
@@ -789,7 +789,7 @@ assert(
     publicUpdateSettings.includes("return this.callUpdateSettingsApi") &&
     !publicUpdateSettings.includes("applyRuntimeSettingsLocal") &&
     !publicUpdateSettings.includes("markSettingsRevisionApplied"),
-  "public settings mutations must submit desired state only; Runtime V2 is the sole runtime/apply authority",
+  "public settings mutations must submit desired state only; Runtime V1 is the sole runtime/apply authority",
 );
 
 const updateDefaultStart = manager.indexOf("async updateDefaultAction(");
@@ -800,7 +800,7 @@ assert(
     applyDefaultStart > updateDefaultStart &&
     publicUpdateDefault.includes("return this.callUpdateDefaultActionApi") &&
     !publicUpdateDefault.includes("applyDefaultActionLocal"),
-  "public default-action mutations must not bypass Runtime V2 desired-state convergence",
+  "public default-action mutations must not bypass Runtime V1 desired-state convergence",
 );
 
 const persistPositionStart = manager.indexOf("private async persistRuntimePosition()");
@@ -812,7 +812,7 @@ assert(
     persistPositionBody.includes("await this.callUpdateSettingsApi") &&
     !persistPositionBody.includes("markSettingsRevisionApplied") &&
     !persistPositionBody.includes("this.activeSettings ="),
-  "physical drag persistence must not claim a backend settings revision is locally applied before Runtime V2 ACK",
+  "physical drag persistence must not claim a backend settings revision is locally applied before Runtime V1 ACK",
 );
 
 assert(
@@ -861,7 +861,7 @@ await verifyFreezeManifest(repoRoot);
 
 try {
   await fs.lstat(path.join(repoRoot, "desktop/src/shared/runtime-protocol.ts"));
-  assert(false, "legacy desktop/src/shared/runtime-protocol.ts contract must be removed; Runtime V2 protocol-v2.ts is canonical");
+  assert(false, "legacy desktop/src/shared/runtime-protocol.ts contract must be removed; Runtime V1 protocol-v1.ts is canonical");
 } catch (error) {
   if (error?.code !== "ENOENT") throw error;
 }
@@ -941,5 +941,5 @@ assert(
 );
 
 console.log(
-  "[verify-desktop-pet-finalization] PASSED: Runtime V2 behavior, cloud-local pet authority, character reconciliation, rollback, and startup authority are frozen",
+  "[verify-desktop-pet-finalization] PASSED: Runtime V1 behavior, cloud-local pet authority, character reconciliation, rollback, and startup authority are frozen",
 );

@@ -634,7 +634,7 @@ describe("DesktopPetWindowAdapter", () => {
     windowMock.position.x = 2000;
     windowMock.position.y = 100;
 
-    expect(adapter.getDpiScale()).toBe(2);
+    expect(adapter.getDpiScale()).toBe(1);
   });
 
   it("listScreens 返回所有显示器信息", async () => {

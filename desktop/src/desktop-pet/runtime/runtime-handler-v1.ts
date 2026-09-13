@@ -7,14 +7,14 @@ import type {
   StateSnapshotPayload,
   CommandStatus,
   RuntimeMessageType,
-} from "./protocol-v2";
+} from "./protocol-v1";
 import {
   buildHelloPayload,
   buildEnvelope,
   isCommandTerminal,
   computePayloadHash,
-} from "./protocol-v2";
-import type { RuntimeCommandExecutionResult } from "../../main/pet/runtime-v2-command-adapter";
+} from "./protocol-v1";
+import type { RuntimeCommandExecutionResult } from "../../main/pet/runtime-v1-command-adapter";
 import { DESKTOP_PET_RUNTIME_VERSION } from "../../shared/desktop-pet-runtime-version";
 
 export type RuntimeHandlerState =
@@ -41,7 +41,6 @@ export interface RuntimeCapabilities {
 
 export interface RuntimeEventContext {
   installationId?: string;
-  characterId?: string;
   petInstanceId?: string;
   decisionId?: string;
 }
@@ -131,8 +130,8 @@ const DEFAULT_MAX_RECONNECT = 5;
 const DEFAULT_RECONNECT_BASE_MS = 1000;
 const DEFAULT_RECONNECT_MAX_MS = 30000;
 
-export const RUNTIME_V2_WEBSOCKET_SUBPROTOCOL = "amitia.runtime.v2";
-export const RUNTIME_V2_BOOTSTRAP_SUBPROTOCOL_PREFIX = "amitia.runtime.bootstrap.";
+export const RUNTIME_V1_WEBSOCKET_SUBPROTOCOL = "amitia.runtime.v1";
+export const RUNTIME_V1_BOOTSTRAP_SUBPROTOCOL_PREFIX = "amitia.runtime.bootstrap.";
 
 function buildRuntimeWebSocketProtocols(ticket: string): string[] {
   const normalized = ticket.trim();
@@ -143,8 +142,8 @@ function buildRuntimeWebSocketProtocols(ticket: string): string[] {
     throw new Error("runtime bootstrap ticket contains invalid websocket protocol characters");
   }
   return [
-    RUNTIME_V2_WEBSOCKET_SUBPROTOCOL,
-    `${RUNTIME_V2_BOOTSTRAP_SUBPROTOCOL_PREFIX}${normalized}`,
+    RUNTIME_V1_WEBSOCKET_SUBPROTOCOL,
+    `${RUNTIME_V1_BOOTSTRAP_SUBPROTOCOL_PREFIX}${normalized}`,
   ];
 }
 
@@ -200,7 +199,7 @@ function sanitizeCursor(value: number | undefined): number {
     : 0;
 }
 
-export class DesktopRuntimeHandlerV2 {
+export class DesktopRuntimeHandlerV1 {
   private readonly config: Required<Omit<RuntimeHandlerConfig, "resumeCursor" | "replayEntries" | "pendingOutboundEntries">>;
   private readonly hooks: RuntimeHandlerHooks;
 
@@ -814,7 +813,7 @@ export class DesktopRuntimeHandlerV2 {
   }
 
   private validateServerEnvelope(envelope: RuntimeEnvelope): void {
-    if (!envelope || envelope.envelopeVersion !== 2 || envelope.protocol !== "amitia.desktop-pet.runtime") {
+    if (!envelope || envelope.envelopeVersion !== 1 || envelope.protocol !== "amitia.desktop-pet.runtime") {
       throw new Error("invalid runtime server envelope protocol");
     }
     if (envelope.userId !== this.config.userId ||
@@ -1284,7 +1283,7 @@ export class DesktopRuntimeHandlerV2 {
 
   private handleStateSnapshot(snapshot: StateSnapshotPayload): void {
     this.hooks.onEvent({
-      envelopeVersion: 2,
+      envelopeVersion: 1,
       protocol: "amitia.desktop-pet.runtime",
       messageType: "state_snapshot",
       messageName: "state_snapshot",
@@ -1470,7 +1469,7 @@ export class DesktopRuntimeHandlerV2 {
     if (c.supportsHighDpi) caps.push("high_dpi");
     if (c.supportsHitTest) caps.push("hit_test");
     if (c.supportsShadow) caps.push("shadow");
-    caps.push("runtime.sync_desired_v2", "runtime.play_action_v2", "runtime.renderer_ack_v2", "runtime.expiry_rfc3339_v1");
+    caps.push("runtime.sync_desired_v1", "runtime.play_action_v1", "runtime.renderer_ack_v1", "runtime.expiry_rfc3339_v1");
     caps.push(`platform:${c.platform}`);
     return caps;
   }

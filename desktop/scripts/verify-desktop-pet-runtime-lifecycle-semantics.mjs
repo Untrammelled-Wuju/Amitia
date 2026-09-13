@@ -15,12 +15,12 @@ function assert(condition, message) {
   }
 }
 
-const commandModel = await read("backend/internal/desktoppet/runtime/protocol/v2/command.go");
-const commandService = await read("backend/internal/desktoppet/runtime/protocol/v2/command_service.go");
-const dispatcher = await read("backend/internal/desktoppet/runtime/protocol/v2/command_dispatcher.go");
-const handler = await read("backend/internal/desktoppet/runtime/protocol/v2/handler.go");
-const envelope = await read("backend/internal/desktoppet/runtime/protocol/v2/envelope.go");
-const runtimeHandler = await read("desktop/src/desktop-pet/runtime/runtime-handler-v2.ts");
+const commandModel = await read("backend/internal/desktoppet/runtime/protocol/v1/command.go");
+const commandService = await read("backend/internal/desktoppet/runtime/protocol/v1/command_service.go");
+const dispatcher = await read("backend/internal/desktoppet/runtime/protocol/v1/command_dispatcher.go");
+const handler = await read("backend/internal/desktoppet/runtime/protocol/v1/handler.go");
+const envelope = await read("backend/internal/desktoppet/runtime/protocol/v1/envelope.go");
+const runtimeHandler = await read("desktop/src/desktop-pet/runtime/runtime-handler-v1.ts");
 const manager = await read("desktop/src/main/pet/manager.ts");
 const mainIndex = await read("desktop/src/main/index.ts");
 const scheduler = await read("desktop/src/main/pet/action-scheduler.ts");
@@ -43,7 +43,7 @@ assert(
     commandModel.includes("func (c *RuntimeCommand) HasValidClassification() bool") &&
     commandService.includes("unsupported durable runtime command type") &&
     commandService.includes("unsupported ephemeral runtime command type"),
-  "unknown or mismatched command types must not be classified or persisted as Runtime-v2 work",
+  "unknown or mismatched command types must not be classified or persisted as Runtime-v1 work",
 );
 assert(
   commandService.includes("unbound ephemeral command creation is disabled") &&
@@ -80,9 +80,9 @@ assert(
 );
 assert(
   envelope.includes("CurrentRuntimeVersion = contracts.RuntimeVersion") &&
-    envelope.includes("CapabilitySyncDesiredV2") &&
-    envelope.includes("CapabilityPlayActionV2") &&
-    envelope.includes("CapabilityRendererAckV2") &&
+    envelope.includes("CapabilitySyncDesiredV1") &&
+    envelope.includes("CapabilityPlayActionV1") &&
+    envelope.includes("CapabilityRendererAckV1") &&
     envelope.includes("CapabilityExpiryRFC3339"),
   "runtime version and mandatory capability IDs must have one backend authority",
 );
@@ -117,14 +117,14 @@ assert(
     runtimeHandler.includes('errorCode: "COMMAND_EXPIRY_INVALID"') &&
     runtimeHandler.includes('errorCode: "COMMAND_EXPIRED"') &&
     runtimeCommandAckWindow.includes("validateAuthoritativeExpiry(command.expiresAt)"),
-  "all Runtime-v2 Ephemeral commands must validate authoritative expiresAt before local execution",
+  "all Runtime-v1 Ephemeral commands must validate authoritative expiresAt before local execution",
 );
 assert(
-  runtimeHandler.includes('"runtime.sync_desired_v2"') &&
-    runtimeHandler.includes('"runtime.play_action_v2"') &&
-    runtimeHandler.includes('"runtime.renderer_ack_v2"') &&
+  runtimeHandler.includes('"runtime.sync_desired_v1"') &&
+    runtimeHandler.includes('"runtime.play_action_v1"') &&
+    runtimeHandler.includes('"runtime.renderer_ack_v1"') &&
     runtimeHandler.includes('"runtime.expiry_rfc3339_v1"'),
-  "desktop hello must advertise all mandatory Runtime-v2 capabilities",
+  "desktop hello must advertise all mandatory Runtime-v1 capabilities",
 );
 assert(
   runtimeCommandAckWindow.includes('"runtime_received"') &&

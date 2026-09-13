@@ -5,7 +5,7 @@ import {
 } from "../../shared/desktop-pet-runtime-version";
 
 export const RUNTIME_PROTOCOL_VERSION = "amitia.desktop-pet.runtime";
-export const RUNTIME_ENVELOPE_VERSION = 2;
+export const RUNTIME_ENVELOPE_VERSION = 1;
 export const RUNTIME_CONTRACT_VERSION = DESKTOP_PET_RUNTIME_CONTRACT_VERSION;
 
 export type RuntimeMessageType =
@@ -157,7 +157,6 @@ export interface PlaybackEventPayload {
   actionKey?: string;
   triggerSource?: string;
   installationId?: string;
-  characterId?: string;
   petInstanceId?: string;
   frameIndex?: number;
   cycleIndex?: number;
@@ -226,7 +225,7 @@ function goJSONScalar(value: unknown): string {
     return encoded;
   }
   // Go encoding/json uses HTML escaping by default and always escapes the two
-  // JavaScript line-separator code points. Runtime V2 payload hashes are
+  // JavaScript line-separator code points. Runtime V1 payload hashes are
   // authored by the Go server, so Electron must reproduce those bytes exactly.
   return encoded.replace(/[<>&\u2028\u2029]/g, (char) => {
     switch (char) {

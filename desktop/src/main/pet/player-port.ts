@@ -5,7 +5,7 @@ export type PlayerState = "idle" | "loading" | "playing" | "paused" | "stopped";
 
 /**
  * Immutable identity and execution semantics passed from the scheduler to the
- * renderer playback command. Runtime-v2 supplied values must not be replaced
+ * renderer playback command. Runtime-v1 supplied values must not be replaced
  * by bridge defaults while crossing the main-process boundary.
  */
 export interface PlayerSwitchContext {

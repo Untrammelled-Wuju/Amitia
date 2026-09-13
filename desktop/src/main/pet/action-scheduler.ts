@@ -136,7 +136,7 @@ const SOURCE_COOLDOWN_MS: Record<EventSource, number> = {
 };
 
 function nowTimestamp(): number {
-  // Runtime-v2 expiry is an absolute wall-clock timestamp. Scheduler cooldowns
+  // Runtime-v1 expiry is an absolute wall-clock timestamp. Scheduler cooldowns
   // and minimum-play windows use the same epoch domain so values can never be
   // compared against performance.now() by accident.
   return Date.now();
@@ -670,7 +670,7 @@ export class DesktopPetActionScheduler {
     this.currentActionStartedAt = 0;
     this.currentPlaybackInstanceId = null;
     this.currentCommandId = effectiveRequest.metadata?.runtimeCommandId ?? null;
-    // Runtime-v2 may tighten the package action's interruptibility for this
+    // Runtime-v1 may tighten the package action's interruptibility for this
     // concrete playback. It can never make a package-declared uninterruptible
     // action interruptible. Pass the effective action to both Player and the
     // renderer so subsequent interruption decisions observe the same truth.
