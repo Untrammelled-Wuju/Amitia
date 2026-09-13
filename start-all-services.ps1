@@ -79,7 +79,7 @@ Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
     Format-Table LocalPort, OwningProcess -AutoSize
 
 try {
-    $health = Invoke-RestMethod -Uri "http://127.0.0.1:18899/health" -TimeoutSec 5
+    $health = Invoke-RestMethod -Uri "http://127.0.0.1:18899/api/health" -TimeoutSec 5
     Write-Host "后端健康检查: $($health | ConvertTo-Json -Compress)" -ForegroundColor Green
 } catch {
     Write-Host "后端健康检查失败: $($_.Exception.Message)" -ForegroundColor Red
