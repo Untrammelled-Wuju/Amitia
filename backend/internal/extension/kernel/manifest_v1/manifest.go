@@ -412,7 +412,7 @@ func (m Manifest) Validate() ValidationReport {
 		"schedule": true, "background_task": true,
 		"ui_page": true, "ui_panel": true, "ui_chat": true,
 		"ui_context_action": true, "ui_desktop": true, "ui_provider": true, "ui_slot": true,
-		"gamex": true, "game_plugin": true, "pet_plugin": true, "desktop_pet_plugin": true,
+		"gamex": true, "petx": true,
 	}
 	contributionIDs := make(map[string]bool)
 	for i, mod := range m.Modules {
@@ -474,14 +474,14 @@ func (m Manifest) Validate() ValidationReport {
 			if c.Name.Default == "" {
 				report.AddError(cpath+".name.default", "missing", "contribution name required")
 			}
-			if c.Kind == "gamex" || c.Kind == "game_plugin" {
+			if c.Kind == "gamex" {
 				if err := validateGamePluginContribution(c.Spec, c.RequiredPermissions, cpath, m.Placement, allModuleIDs, allModuleRuntimes, allModulePlacements); err != nil {
-					report.AddError(cpath+".spec", "invalid_game_plugin", err.Error())
+					report.AddError(cpath+".spec", "invalid_gamex", err.Error())
 				}
 			}
-			if c.Kind == "pet_plugin" || c.Kind == "desktop_pet_plugin" {
+			if c.Kind == "petx" {
 				if err := validateDesktopPetPluginContribution(c.Spec, cpath, moduleIDs); err != nil {
-					report.AddError(cpath+".spec", "invalid_pet_plugin", err.Error())
+					report.AddError(cpath+".spec", "invalid_petx", err.Error())
 				}
 			}
 			if c.Kind == "mcp_server" {

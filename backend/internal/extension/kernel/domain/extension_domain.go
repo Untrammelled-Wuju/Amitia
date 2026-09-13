@@ -23,8 +23,6 @@ func IsValidExtensionDomain(domain ExtensionDomain) bool {
 		ExtensionDomainMemory, ExtensionDomainProfile, ExtensionDomainEpisodic,
 		ExtensionDomainWorldbook, ExtensionDomainCompanion:
 		return true
-	case "game", "desktop_pet":
-		return true
 	default:
 		return false
 	}
@@ -34,10 +32,6 @@ func NormalizeExtensionDomain(domain ExtensionDomain) ExtensionDomain {
 	switch domain {
 	case "":
 		return ExtensionDomainGeneral
-	case "game":
-		return ExtensionDomainGame
-	case "desktop_pet":
-		return ExtensionDomainDesktopPet
 	default:
 		return domain
 	}

@@ -21,9 +21,6 @@ func IsValidManagementTarget(target ManagementTarget) bool {
 }
 
 func NormalizeManagementTarget(target ManagementTarget) ManagementTarget {
-	if target == "desktop_pet_center" {
-		return ManagementTargetPetCenter
-	}
 	return target
 }
 

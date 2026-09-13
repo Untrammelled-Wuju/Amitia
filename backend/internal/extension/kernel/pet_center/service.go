@@ -17,7 +17,7 @@ const managementTarget = "pet_center"
 var (
 	ErrKernelUnavailable        = errors.New("pet_center: extension kernel unavailable")
 	ErrExtensionNotFound        = errors.New("pet_center: extension not found")
-	ErrNotDesktopPetPlugin      = errors.New("pet_center: extension is not a pet_plugin")
+	ErrNotDesktopPetPlugin      = errors.New("pet_center: extension is not a petx")
 	ErrInvalidInput             = errors.New("pet_center: invalid input")
 	ErrManagementTargetMismatch = errors.New("pet_center: package management target mismatch")
 	ErrPackageIdentityMismatch  = errors.New("pet_center: package identity mismatch")

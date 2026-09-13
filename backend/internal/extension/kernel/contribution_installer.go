@@ -584,7 +584,7 @@ func (i *TypedContributionInstaller) buildGamePluginOp(ctx context.Context, cont
 
 func (i *TypedContributionInstaller) buildDesktopPetPluginOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
 	if contrib.ID == "" {
-		return installOp{}, fmt.Errorf("pet_plugin: id required")
+		return installOp{}, fmt.Errorf("petx: id required")
 	}
 	return installOp{
 		kind: domain.ContributionKindPetPlugin,

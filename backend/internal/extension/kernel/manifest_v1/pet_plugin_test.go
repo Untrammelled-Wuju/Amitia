@@ -24,7 +24,7 @@ func TestManifestAcceptsDesktopPetPluginContribution(t *testing.T) {
 				"contributions": [
 					{
 						"id": "pet-overlay",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Pet Overlay"},
 						"spec": {"runtimeModuleId": "pet-runtime"}
 					}
@@ -60,7 +60,7 @@ func TestSchemaAcceptsDesktopPetPluginContribution(t *testing.T) {
 				"contributions": [
 					{
 						"id": "pet-interaction",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Pet Interaction"}
 					}
 				]
@@ -94,7 +94,7 @@ func TestPetPluginRequiresID(t *testing.T) {
 				"type": "javascript",
 				"contributions": [
 					{
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Pet Plugin"}
 					}
 				]
@@ -129,7 +129,7 @@ func TestDesktopPetPluginRuntimeModuleMustExist(t *testing.T) {
 				"contributions": [
 					{
 						"id": "pet-1",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Pet"},
 						"spec": {"runtimeModuleId": "nonexistent-module"}
 					}
@@ -165,7 +165,7 @@ func TestDesktopPetPluginWithoutRuntimeModule(t *testing.T) {
 				"contributions": [
 					{
 						"id": "pet-no-runtime",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Pet Without Runtime"}
 					}
 				]
@@ -200,12 +200,12 @@ func TestDuplicateDesktopPetPluginIDRejected(t *testing.T) {
 				"contributions": [
 					{
 						"id": "pet-dup",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Pet 1"}
 					},
 					{
 						"id": "pet-dup",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Pet 2"}
 					}
 				]
@@ -240,12 +240,12 @@ func TestMultipleDesktopPetPluginContributionsAllowed(t *testing.T) {
 				"contributions": [
 					{
 						"id": "pet-overlay",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Overlay"}
 					},
 					{
 						"id": "pet-interaction",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Interaction"}
 					}
 				]
@@ -280,7 +280,7 @@ func TestDesktopPetPluginPreservedInExtensionDefinition(t *testing.T) {
 				"contributions": [
 					{
 						"id": "pet-1",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Pet Plugin"}
 					}
 				]
@@ -302,8 +302,8 @@ func TestDesktopPetPluginPreservedInExtensionDefinition(t *testing.T) {
 	if len(def.Modules[0].Contributions) != 1 {
 		t.Fatalf("expected 1 contribution, got %d", len(def.Modules[0].Contributions))
 	}
-	if string(def.Modules[0].Contributions[0].Kind) != "pet_plugin" {
-		t.Errorf("expected contribution kind pet_plugin, got %s", def.Modules[0].Contributions[0].Kind)
+	if string(def.Modules[0].Contributions[0].Kind) != "petx" {
+		t.Errorf("expected contribution kind petx, got %s", def.Modules[0].Contributions[0].Kind)
 	}
 }
 
@@ -324,7 +324,7 @@ func TestDesktopPetPluginJSONRoundTrip(t *testing.T) {
 				"contributions": [
 					{
 						"id": "pet-1",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Pet"},
 						"spec": {"runtimeModuleId": "main"}
 					}
@@ -363,7 +363,7 @@ func TestDomainMappingDesktopPetPlugin(t *testing.T) {
 				"contributions": [
 					{
 						"id": "pet-1",
-						"kind": "desktop_pet_plugin",
+						"kind": "petx",
 						"name": {"default": "Pet"}
 					}
 				]

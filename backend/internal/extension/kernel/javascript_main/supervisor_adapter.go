@@ -146,6 +146,14 @@ func (m *managedPluginHost) Invoke(ctx context.Context, request runtime_supervis
 	if len(input) == 0 {
 		input = []byte(`{}`)
 	}
+	var invocationInput any
+	if err := json.Unmarshal(input, &invocationInput); err != nil {
+		return runtime_supervisor.InvocationResult{
+			InvocationID: request.InvocationID,
+			Status:       "failed",
+			Error:        fmt.Errorf("javascript_main: decode invocation input: %w", err),
+		}
+	}
 
 	invCtx := ctx
 	if !request.Deadline.IsZero() {
@@ -154,7 +162,7 @@ func (m *managedPluginHost) Invoke(ctx context.Context, request runtime_supervis
 		defer cancel()
 	}
 
-	output, err := m.host.Invoke(invCtx, request.Operation, input)
+	output, err := m.host.Invoke(invCtx, request.Operation, invocationInput)
 	if err != nil {
 		return runtime_supervisor.InvocationResult{
 			InvocationID: request.InvocationID,

@@ -32,7 +32,7 @@ func TestGamePluginContributionManifest(t *testing.T) {
 				"contributions": [
 					{
 						"id": "example-game",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Example Game"},
 						"spec": {
 							"protocolVersion": "amitia-game-host/1",
@@ -78,7 +78,7 @@ func TestGamePluginContributionSchema(t *testing.T) {
 				"contributions": [
 					{
 						"id": "example-game",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Example Game"},
 						"spec": {
 							"protocolVersion": "amitia-game-host/1",
@@ -119,7 +119,7 @@ func TestGamePluginRequiresID(t *testing.T) {
 				"type": "javascript",
 				"contributions": [
 					{
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Game"},
 						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					}
@@ -155,7 +155,7 @@ func TestGamePluginRequiresProtocolVersion(t *testing.T) {
 				"contributions": [
 					{
 						"id": "game-1",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Game"}
 					}
 				]
@@ -190,7 +190,7 @@ func TestGamePluginRuntimeModuleMustExist(t *testing.T) {
 				"contributions": [
 					{
 						"id": "game-1",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Game"},
 						"spec": {
 							"protocolVersion": "amitia-game-host/1",
@@ -229,13 +229,13 @@ func TestDuplicateGamePluginIDRejected(t *testing.T) {
 				"contributions": [
 					{
 						"id": "game-1",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Game 1"},
 						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					},
 					{
 						"id": "game-1",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Game 2"},
 						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					}
@@ -272,13 +272,13 @@ func TestMultipleGamePluginsAllowed(t *testing.T) {
 				"contributions": [
 					{
 						"id": "plugin-a",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Plugin A"},
 						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					},
 					{
 						"id": "plugin-b",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Plugin B"},
 						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					}
@@ -315,7 +315,7 @@ func TestGamePluginPreservedInExtensionDefinition(t *testing.T) {
 				"contributions": [
 					{
 						"id": "game-1",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Game"},
 						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					}
@@ -363,7 +363,7 @@ func TestGamePluginJSONRoundTrip(t *testing.T) {
 				"contributions": [
 					{
 						"id": "game-1",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Game"},
 						"spec": {
 							"protocolVersion": "amitia-game-host/1",
@@ -406,7 +406,7 @@ func TestDomainMappingGamePlugin(t *testing.T) {
 				"contributions": [
 					{
 						"id": "game-1",
-						"kind": "game_plugin",
+						"kind": "gamex",
 						"name": {"default": "Game"},
 						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					}
@@ -440,7 +440,7 @@ func TestGamePluginUnrestrictedNetworkRequiresPermission(t *testing.T) {
 			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
 			"contributions": [{
 				"id": "game",
-				"kind": "game_plugin",
+				"kind": "gamex",
 				"name": {"default": "Game"},
 				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "unrestricted"}}
 			}]
@@ -475,7 +475,7 @@ func TestGamePluginRestrictedNetworkRequiresPermission(t *testing.T) {
 			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
 			"contributions": [{
 				"id": "game",
-				"kind": "game_plugin",
+				"kind": "gamex",
 				"name": {"default": "Game"},
 				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "restricted", "allowedDomains": ["api.example.com"], "allowedPorts": [443]}}
 			}]
@@ -507,7 +507,7 @@ func TestNormalizeGamePluginRuntimeDefaultsToDevice(t *testing.T) {
 			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
 			"contributions": [{
 				"id": "game",
-				"kind": "game_plugin",
+				"kind": "gamex",
 				"name": {"default": "Game"},
 				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "none"}}
 			}]
@@ -542,7 +542,7 @@ func TestGamePluginRuntimeDeclaredLaterIsAllowed(t *testing.T) {
 				"type": "data_only",
 				"contributions": [{
 					"id": "game",
-					"kind": "game_plugin",
+					"kind": "gamex",
 					"name": {"default": "Game"},
 					"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "none"}}
 				}]
@@ -586,7 +586,7 @@ func TestGamePluginRuntimeExplicitCloudPlacementRejected(t *testing.T) {
 			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
 			"contributions": [{
 				"id": "game",
-				"kind": "game_plugin",
+				"kind": "gamex",
 				"name": {"default": "Game"},
 				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "none"}}
 			}]
@@ -626,7 +626,7 @@ func TestGamePluginCloudExtensionRejectedEvenBeforeNormalization(t *testing.T) {
 			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
 			"contributions": [{
 				"id": "game",
-				"kind": "game_plugin",
+				"kind": "gamex",
 				"name": {"default": "Game"},
 				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "none"}}
 			}]

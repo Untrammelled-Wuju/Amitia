@@ -368,7 +368,7 @@ func (r *Runtime) Install(ctx context.Context, archivePath string) (InstalledExt
 		extID := domain.ExtensionID(pkg.Manifest.Extension.ID)
 		version := pkg.Manifest.Extension.Version
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionInstalled(ctx, extID, version, ""); err != nil {
-			log.Printf("[install] pet_plugin boundary error: %v", err)
+			log.Printf("[install] petx boundary error: %v", err)
 		}
 	}
 
@@ -383,7 +383,7 @@ func (r *Runtime) Update(ctx context.Context, archivePath string) (InstalledExte
 	if r.container != nil && r.container.DesktopPetPluginBoundary != nil {
 		extID := domain.ExtensionID(item.ID)
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionUpdated(ctx, extID, "", item.Version, ""); err != nil {
-			log.Printf("[update] pet_plugin boundary error: %v", err)
+			log.Printf("[update] petx boundary error: %v", err)
 		}
 	}
 	return item, nil
