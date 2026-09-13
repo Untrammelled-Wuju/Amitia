@@ -338,8 +338,8 @@ func TestGamePluginPreservedInExtensionDefinition(t *testing.T) {
 	if len(def.Modules[0].Contributions) != 1 {
 		t.Fatalf("expected 1 contribution, got %d", len(def.Modules[0].Contributions))
 	}
-	if string(def.Modules[0].Contributions[0].Kind) != "game_plugin" {
-		t.Errorf("expected contribution kind game_plugin, got %s", def.Modules[0].Contributions[0].Kind)
+	if string(def.Modules[0].Contributions[0].Kind) != "gamex" {
+		t.Errorf("expected contribution kind gamex, got %s", def.Modules[0].Contributions[0].Kind)
 	}
 	if def.Domain != domain.ExtensionDomainGame {
 		t.Errorf("expected game domain, got %s", def.Domain)

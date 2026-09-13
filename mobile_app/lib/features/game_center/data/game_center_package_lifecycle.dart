@@ -9,7 +9,7 @@ import '../../../core/backend_connection/providers/backend_connection_providers.
 ///
 /// Game Center intentionally does not own a second installer. A game plugin is
 /// an .amitiax extension whose preview targets `game_center` (or contributes a
-/// `game_plugin`). All package writes flow through preview -> confirmation ->
+/// `gamex`). All package writes flow through preview -> confirmation ->
 /// package operation, exactly like the Extension Center.
 class GameCenterPackageLifecycleClient {
   final Ref _ref;
@@ -208,7 +208,7 @@ class GameCenterPackageLifecycleClient {
     final kinds = ((preview['contributionKinds'] as List?) ?? const [])
         .map((e) => e.toString())
         .toSet();
-    if (target != 'game_center' && !kinds.contains('game_plugin')) {
+    if (target != 'game_center' && !kinds.contains('gamex') && !kinds.contains('game_plugin')) {
       throw StateError('该 .amitiax 包不是游戏扩展，已阻止从游戏中心安装');
     }
     if (preview['installable'] == false || preview['compatible'] == false) {

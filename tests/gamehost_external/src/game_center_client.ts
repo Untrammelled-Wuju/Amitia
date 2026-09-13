@@ -351,8 +351,8 @@ export class GameCenterClient {
 
   private validateGamePreview(preview: PackageImportPreview, expectedExtensionId = ''): void {
     const kinds = new Set((preview.contributionKinds ?? []).map(String));
-    if (preview.managementTarget !== 'game_center' && !kinds.has('game_plugin')) {
-      throw new Error('package preview is not a GameHost/game_plugin extension');
+    if (preview.managementTarget !== 'game_center' && !kinds.has('gamex') && !kinds.has('game_plugin')) {
+      throw new Error('package preview is not a GameHost/gamex extension');
     }
     if (preview.compatible === false) {
       throw new Error('package preview is not compatible/installable on this host');

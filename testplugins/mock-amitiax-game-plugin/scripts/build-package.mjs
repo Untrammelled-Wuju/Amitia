@@ -129,7 +129,7 @@ function createPayloadLayout() {
   if (requireCompanionArtifact) {
     const gameContribution = manifest.modules
       ?.flatMap(module => module.contributions || [])
-      .find(contribution => contribution.kind === 'game_plugin');
+      .find(contribution => contribution.kind === 'gamex');
     const artifact = gameContribution?.spec?.artifacts
       ?.find(item => item.id === 'worldgame-companion-file');
     if (!artifact) throw new Error('required-artifact fixture needs mock-companion-file in canonical source manifest');

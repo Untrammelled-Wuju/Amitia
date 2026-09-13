@@ -50,7 +50,7 @@ No internal Amitia packages are referenced.
 mock-amitiax-game-plugin/
 ├── package.json              # Independent project manifest
 ├── tsconfig.json             # TypeScript configuration
-├── amitia-extension.json     # Manifest V1 (target: game_plugin)
+├── amitia-extension.json     # Manifest V1 (target: gamex)
 ├── fault-matrix.yaml         # G37 Fault Matrix definition
 ├── src/
 │   ├── index.ts              # Entry point

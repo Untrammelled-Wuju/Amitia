@@ -49,7 +49,7 @@
       "contributions": [
         {
           "id": "world-game-plugin-contribution",
-          "kind": "game_plugin",
+          "kind": "gamex",
           "name": {
             "default": "World Game Plugin"
           },

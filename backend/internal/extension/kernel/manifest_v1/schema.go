@@ -105,7 +105,7 @@ const manifestSchema = `{
               "required": ["id", "kind", "name"],
               "properties": {
                 "id": {"type": "string", "minLength": 1},
-                "kind": {"type": "string", "enum": ["tool", "agent_skill", "workflow", "mcp_server", "provider", "hook", "event_subscription", "schedule", "background_task", "ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop", "ui_provider", "ui_slot", "game_plugin", "pet_plugin", "desktop_pet_plugin"]},
+                "kind": {"type": "string", "enum": ["tool", "agent_skill", "workflow", "mcp_server", "provider", "hook", "event_subscription", "schedule", "background_task", "ui_page", "ui_panel", "ui_chat", "ui_context_action", "ui_desktop", "ui_provider", "ui_slot", "gamex", "game_plugin", "pet_plugin", "desktop_pet_plugin"]},
                 "name": {
                   "type": "object",
                   "required": ["default"],

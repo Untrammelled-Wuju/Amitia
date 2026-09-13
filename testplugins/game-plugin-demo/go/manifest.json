@@ -52,7 +52,7 @@
       "contributions": [
         {
           "id": "mock-go-game-plugin",
-          "kind": "game_plugin",
+          "kind": "gamex",
           "name": {
             "default": "Mock Game Plugin Go Contribution (G37)"
           },

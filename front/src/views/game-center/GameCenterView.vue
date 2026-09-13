@@ -573,7 +573,9 @@ const installAcknowledged = ref(false);
 const previewIsGame = computed(() => {
   const preview = installPreview.value;
   if (!preview) return false;
-  return preview.managementTarget === "game_center" || preview.contributionKinds?.includes("game_plugin") === true;
+  return preview.managementTarget === "game_center"
+    || preview.contributionKinds?.includes("gamex") === true
+    || preview.contributionKinds?.includes("game_plugin") === true;
 });
 
 const needsInstallAcknowledgement = computed(() => {
@@ -900,7 +902,11 @@ async function buildPackagePreview() {
     if (preview.currentVersion) {
       installMode.value = "update";
     }
-    if (preview.managementTarget !== "game_center" && !preview.contributionKinds?.includes("game_plugin")) {
+    if (
+      preview.managementTarget !== "game_center"
+      && !preview.contributionKinds?.includes("gamex")
+      && !preview.contributionKinds?.includes("game_plugin")
+    ) {
       ElMessage.error("该 .amitiax 包不是游戏扩展，已阻止从游戏模式安装");
       return;
     }

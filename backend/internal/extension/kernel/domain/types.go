@@ -479,7 +479,7 @@ const (
 	ContributionKindBackgroundService ContributionKind = "background_task"
 	// Deprecated: legacy manifest input only. Production definitions must use Module.Provider.
 	ContributionKindProvider         ContributionKind = "provider"
-	ContributionKindGamePlugin       ContributionKind = "game_plugin"
+	ContributionKindGamePlugin       ContributionKind = "gamex"
 	ContributionKindPetPlugin        ContributionKind = "pet_plugin"
 	ContributionKindDesktopPetPlugin                  = ContributionKindPetPlugin
 )
@@ -488,6 +488,8 @@ func NormalizeContributionKind(kind ContributionKind) ContributionKind {
 	switch kind {
 	case "background_service":
 		return ContributionKindBackgroundTask
+	case "game_plugin":
+		return ContributionKindGamePlugin
 	case "desktop_pet_plugin":
 		return ContributionKindPetPlugin
 	default:

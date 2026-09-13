@@ -128,7 +128,7 @@ try {
   if (manifest?.extension?.id !== 'com.amitia/world-game-plugin') errors.push('unexpected extension id');
   const gameContribution = manifest?.modules
     ?.flatMap(module => module?.contributions || [])
-    .find(contribution => contribution?.kind === 'game_plugin');
+    .find(contribution => contribution?.kind === 'gamex');
   const services = gameContribution?.spec?.services || [];
   const companionArtifact = gameContribution?.spec?.artifacts
     ?.find(artifact => artifact?.id === 'worldgame-companion-file');

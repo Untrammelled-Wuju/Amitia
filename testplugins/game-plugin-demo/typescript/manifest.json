@@ -52,7 +52,7 @@
       "contributions": [
         {
           "id": "mock-ts-game-plugin",
-          "kind": "game_plugin",
+          "kind": "gamex",
           "name": {
             "default": "Mock Game Plugin TS Contribution (G37)"
           },

@@ -266,7 +266,7 @@ func gamePluginRuntimeModuleIDs(m Manifest) map[string]struct{} {
 	ids := make(map[string]struct{})
 	for _, mod := range m.Modules {
 		for _, contribution := range mod.Contributions {
-			if normalizeContributionKind(contribution.Kind) != "game_plugin" {
+			if normalizeContributionKind(contribution.Kind) != "gamex" {
 				continue
 			}
 			spec, err := gameprotocol.ParsePluginHostSpec(contribution.Spec)

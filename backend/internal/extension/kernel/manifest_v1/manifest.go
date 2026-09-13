@@ -412,7 +412,7 @@ func (m Manifest) Validate() ValidationReport {
 		"schedule": true, "background_task": true,
 		"ui_page": true, "ui_panel": true, "ui_chat": true,
 		"ui_context_action": true, "ui_desktop": true, "ui_provider": true, "ui_slot": true,
-		"game_plugin": true, "pet_plugin": true, "desktop_pet_plugin": true,
+		"gamex": true, "game_plugin": true, "pet_plugin": true, "desktop_pet_plugin": true,
 	}
 	contributionIDs := make(map[string]bool)
 	for i, mod := range m.Modules {
@@ -474,7 +474,7 @@ func (m Manifest) Validate() ValidationReport {
 			if c.Name.Default == "" {
 				report.AddError(cpath+".name.default", "missing", "contribution name required")
 			}
-			if c.Kind == "game_plugin" {
+			if c.Kind == "gamex" || c.Kind == "game_plugin" {
 				if err := validateGamePluginContribution(c.Spec, c.RequiredPermissions, cpath, m.Placement, allModuleIDs, allModuleRuntimes, allModulePlacements); err != nil {
 					report.AddError(cpath+".spec", "invalid_game_plugin", err.Error())
 				}

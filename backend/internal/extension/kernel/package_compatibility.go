@@ -149,7 +149,7 @@ func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manife
 	devMode := packageDevelopmentModeEnabled()
 	for moduleIndex, mod := range manifest.Modules {
 		for contributionIndex, contribution := range mod.Contributions {
-			if strings.TrimSpace(string(contribution.Kind)) != "game_plugin" {
+			if domain.NormalizeContributionKind(domain.ContributionKind(strings.TrimSpace(string(contribution.Kind)))) != domain.ContributionKindGamePlugin {
 				continue
 			}
 			spec, err := gameprotocol.ParsePluginHostSpec(contribution.Spec)
@@ -197,7 +197,7 @@ func appendGamePluginArtifactPackageIssues(pkg *amitiax.Package, preview *Instal
 
 	for moduleIndex, mod := range pkg.Manifest.Modules {
 		for contributionIndex, contribution := range mod.Contributions {
-			if strings.TrimSpace(string(contribution.Kind)) != "game_plugin" {
+			if domain.NormalizeContributionKind(domain.ContributionKind(strings.TrimSpace(string(contribution.Kind)))) != domain.ContributionKindGamePlugin {
 				continue
 			}
 			spec, err := gameprotocol.ParsePluginHostSpec(contribution.Spec)
