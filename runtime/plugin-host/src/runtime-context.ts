@@ -31,7 +31,11 @@ export function createRuntimeContext(rpc: RpcConnection, registry: HandlerRegist
     },
     host: {
       call: (method: string, params?: any) => {
-        return rpc.sendRequest("host.call", { method, params });
+        return rpc.sendRequest("host.call", {
+          method,
+          version: 1,
+          input: params ?? {},
+        });
       },
     },
     log: {

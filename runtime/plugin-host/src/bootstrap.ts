@@ -23,7 +23,9 @@ export async function bootstrap(
   const context = createRuntimeContext(rpc, registry);
   const extension = loadExtension(spec.entry);
   if (typeof extension.activate !== "function") {
-    throw new Error("Extension activate is not a function");
+    throw new Error(
+      `Extension activate is not a function: type=${typeof extension} activateType=${typeof (extension as any).activate} keys=${Object.keys(extension).join(",")} entry=${spec.entry}`
+    );
   }
   await extension.activate(context);
   return extension;
