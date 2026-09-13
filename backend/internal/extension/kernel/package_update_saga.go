@@ -293,6 +293,15 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	targetRequirements := packageManifestRequirements(current.ExtensionID, confirmed.preview.Manifest.Permissions)
 	targetResources := packageManifestResources(current.ExtensionID, confirmed.preview.Manifest.Resources, targetGeneration.GenerationPath)
 	targetGrants := packageManifestGrantRecords(current.ExtensionID, targetRequirements)
+	currentGrantStates := make(map[string]string, len(currentGrants))
+	for _, grant := range currentGrants {
+		currentGrantStates[grant.PermissionName] = grant.State
+	}
+	for i := range targetGrants {
+		if currentGrantStates[targetGrants[i].PermissionName] == "revoked" {
+			targetGrants[i].State = "revoked"
+		}
+	}
 	current.InstalledVersion = targetDefinition.Version
 	current.PackageID = confirmed.artifact.ArtifactID
 	current.Generation++

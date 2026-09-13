@@ -92,7 +92,37 @@ func restorePackagePermissionsFromDefinition(ctx context.Context, repo sqlite.Pe
 	if len(specs) == 0 {
 		specs = installedPermissionRequirementsFromDefinition(extensionID, definition)
 	}
-	return persistInstalledPackagePermissions(ctx, repo, extensionID, specs)
+	return restoreInstalledPackagePermissions(ctx, repo, extensionID, specs)
+}
+
+func restoreInstalledPackagePermissions(ctx context.Context, repo sqlite.PermissionRepository, extensionID domain.ExtensionID, requirements []sqlite.PermissionRequirement) error {
+	normalized := normalizeInstalledPermissionRequirements(extensionID, requirements)
+	existingGrants, err := repo.ListGrants(ctx, extensionID)
+	if err != nil {
+		return err
+	}
+	stateByName := make(map[string]struct{}, len(existingGrants))
+	for _, grant := range existingGrants {
+		stateByName[grant.PermissionName] = struct{}{}
+	}
+	grantedAt := time.Now().UTC()
+	for _, requirement := range normalized {
+		if err := repo.PutRequirement(ctx, requirement); err != nil {
+			return err
+		}
+		if _, exists := stateByName[requirement.PermissionName]; exists {
+			continue
+		}
+		if err := repo.PutGrant(ctx, sqlite.PermissionGrant{
+			ExtensionID:    extensionID,
+			PermissionName: requirement.PermissionName,
+			State:          "granted",
+			GrantedAt:      grantedAt,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func persistInstalledPackagePermissions(ctx context.Context, repo sqlite.PermissionRepository, extensionID domain.ExtensionID, requirements []sqlite.PermissionRequirement) error {

@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
 type KernelAPI struct {
@@ -34,7 +35,22 @@ func (api *KernelAPI) RegisterRoutes(group *gin.RouterGroup) {
 	kernel.POST("/extensions/resume-uninstall", api.resumeUninstall)
 	kernel.POST("/extensions/pause", api.pause)
 	kernel.POST("/extensions/rollback", api.rollback)
+	kernel.POST("/extensions/permissions", api.updateExtensionPermission)
 	kernel.GET("/status", api.status)
+}
+
+type extensionPermissionView struct {
+	Name     string `json:"name"`
+	Scope    string `json:"scope,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	Required bool   `json:"required"`
+	Granted  bool   `json:"granted"`
+}
+
+type updateExtensionPermissionRequest struct {
+	ExtensionID string `json:"extensionId" binding:"required"`
+	Permission  string `json:"permission" binding:"required"`
+	Granted     bool   `json:"granted"`
 }
 
 type publicUninstallPreviewRequest struct {
@@ -248,6 +264,27 @@ func (api *KernelAPI) getExtension(c *gin.Context) {
 		})
 	}
 
+	permissionList := make([]extensionPermissionView, 0)
+	if container.PermissionRepository != nil {
+		requirements, requirementsErr := container.PermissionRepository.ListRequirements(ctx, inst.ExtensionID)
+		grants, grantsErr := container.PermissionRepository.ListGrants(ctx, inst.ExtensionID)
+		if requirementsErr == nil && grantsErr == nil {
+			grantStates := make(map[string]string, len(grants))
+			for _, grant := range grants {
+				grantStates[grant.PermissionName] = grant.State
+			}
+			for _, requirement := range requirements {
+				permissionList = append(permissionList, extensionPermissionView{
+					Name:     requirement.PermissionName,
+					Scope:    requirement.Scope,
+					Reason:   requirement.Reason,
+					Required: requirement.Required,
+					Granted:  grantStates[requirement.PermissionName] == "granted",
+				})
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"name":           name,
 		"extensionId":    string(inst.ExtensionID),
@@ -261,7 +298,69 @@ func (api *KernelAPI) getExtension(c *gin.Context) {
 		"generation":     inst.Generation,
 		"modules":        moduleList,
 		"contributions":  contribList,
+		"permissions":    permissionList,
 	})
+}
+
+func (api *KernelAPI) updateExtensionPermission(c *gin.Context) {
+	if api.runtime == nil || api.runtime.Kernel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "kernel unavailable"})
+		return
+	}
+	container := api.runtime.Kernel.Container()
+	if container == nil || container.PermissionRepository == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "permission repository unavailable"})
+		return
+	}
+	var req updateExtensionPermissionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	extensionID := strings.TrimSpace(req.ExtensionID)
+	permissionID := strings.TrimSpace(req.Permission)
+	if extensionID == "" || permissionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "extensionId and permission are required"})
+		return
+	}
+	ctx := c.Request.Context()
+	requirements, err := container.PermissionRepository.ListRequirements(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var target *extensionPermissionView
+	for _, requirement := range requirements {
+		if requirement.PermissionName != permissionID {
+			continue
+		}
+		target = &extensionPermissionView{
+			Name:     requirement.PermissionName,
+			Scope:    requirement.Scope,
+			Reason:   requirement.Reason,
+			Required: requirement.Required,
+			Granted:  req.Granted,
+		}
+		break
+	}
+	if target == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "declared permission not found"})
+		return
+	}
+	state := "revoked"
+	if req.Granted {
+		state = "granted"
+	}
+	if err := container.PermissionRepository.PutGrant(ctx, sqlite.PermissionGrant{
+		ExtensionID:    domain.ExtensionID(extensionID),
+		PermissionName: permissionID,
+		State:          state,
+		GrantedAt:      time.Now().UTC(),
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, target)
 }
 
 func installationStateForView(inst domain.ExtensionInstallation) string {
