@@ -1,50 +1,86 @@
-# 完整的 U-Ai 项目启动脚本
-# 根据修复后的配置启动所有服务
+$ErrorActionPreference = "Stop"
 
-$backendDir = "D:\桌面\跟进项目\U-Ai\backend"
-$frontDir = "D:\桌面\跟进项目\U-Ai\front"
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$backendDir = Join-Path $root "backend"
+$frontDir = Join-Path $root "front"
+$nodeExe = Join-Path $root "desktop\resources\core\node\node.exe"
+$surrealExe = Join-Path $backendDir "surrealdb\surreal.exe"
+$qdrantExe = Join-Path $backendDir "qdrant\qdrant.exe"
+$serverExe = Join-Path $backendDir "server.exe"
+$surrealPass = "AmitiaSurrealDBRootPassword20260831Securex"
+
+function Stop-ProjectProcess {
+    param([int]$ProcessId)
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
+    if ($null -eq $process -or [string]::IsNullOrWhiteSpace($process.ExecutablePath)) {
+        return
+    }
+    if (-not $process.ExecutablePath.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
 
 Write-Host "=== U-Ai 完整启动脚本 ===" -ForegroundColor Cyan
 
-# 第一步：清理旧进程
-Write-Host "`n[1/5] 清理旧进程..." -ForegroundColor Yellow
-$processes = @("server", "qdrant", "surreal", "node", "vite", "electron")
-foreach ($proc in $processes) {
-    Get-Process -Name $proc -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Write-Host "`n[1/5] 清理项目旧进程..." -ForegroundColor Yellow
+$projectNames = @("server", "AmitiaCore", "qdrant", "surreal", "node", "electron")
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Name -and [System.IO.Path]::GetFileNameWithoutExtension($_.Name) -in $projectNames -and
+        $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)
+    } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
+foreach ($port in @(18899, 18000, 19178, 5178)) {
+    Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue |
+        ForEach-Object { Stop-ProjectProcess -ProcessId $_.OwningProcess }
 }
 Start-Sleep -Seconds 3
 
-# 第二步：启动 SurrealDB
 Write-Host "`n[2/5] 启动 SurrealDB..." -ForegroundColor Yellow
-$surrealPass = "AmitiaSurrealDBRootPassword20260831Securex"
-Set-Location "$backendDir\surrealdb"
-if (Test-Path "data\data.sdb") {
-    Remove-Item -Path "data\data.sdb" -Recurse -Force -ErrorAction SilentlyContinue
-}
-Start-Process -FilePath "surreal.exe" -ArgumentList "start","surrealkv:data","--bind","127.0.0.1:18000","--user","root","--pass",$surrealPass -WindowStyle Hidden
+Start-Process -FilePath $surrealExe `
+    -ArgumentList "start", "surrealkv:data", "--bind", "127.0.0.1:18000", "--user", "root", "--pass", $surrealPass `
+    -WorkingDirectory (Join-Path $backendDir "surrealdb") `
+    -WindowStyle Hidden
 Start-Sleep -Seconds 5
 
-# 第三步：启动 Qdrant
 Write-Host "`n[3/5] 启动 Qdrant..." -ForegroundColor Yellow
-Set-Location "$backendDir\qdrant"
-Start-Process -FilePath "qdrant.exe" -ArgumentList "--config-path","config\config.yaml" -WindowStyle Hidden
+Start-Process -FilePath $qdrantExe `
+    -ArgumentList "--config-path", "config\config.yaml" `
+    -WorkingDirectory (Join-Path $backendDir "qdrant") `
+    -WindowStyle Hidden
 Start-Sleep -Seconds 5
 
-# 第四步：启动后端 Server
 Write-Host "`n[4/5] 启动后端 Server..." -ForegroundColor Yellow
-Set-Location $backendDir
-Start-Process -FilePath "server.exe" -WindowStyle Hidden
+$env:PATH = "$(Split-Path -Parent $nodeExe);$env:PATH"
+Start-Process -FilePath $serverExe -WorkingDirectory $backendDir -WindowStyle Hidden
 Start-Sleep -Seconds 20
 
-# 第五步：启动前端
 Write-Host "`n[5/5] 启动前端..." -ForegroundColor Yellow
-Set-Location $frontDir
-Start-Process -FilePath "cmd.exe" -ArgumentList "/c","pnpm dev" -WindowStyle Hidden
+$viteEntry = Join-Path $frontDir "node_modules\vite\bin\vite.js"
+Start-Process -FilePath $nodeExe `
+    -ArgumentList $viteEntry, "--host", "127.0.0.1", "--port", "5178" `
+    -WorkingDirectory $frontDir `
+    -WindowStyle Hidden
 Start-Sleep -Seconds 10
 
-# 验证
 Write-Host "`n=== 验证服务状态 ===" -ForegroundColor Cyan
-Get-Process | Where-Object {$_.ProcessName -match "server|qdrant|surreal|node"} | Select-Object Id, ProcessName | Format-Table -AutoSize
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Name -and [System.IO.Path]::GetFileNameWithoutExtension($_.Name) -in @("server", "AmitiaCore", "qdrant", "surreal", "node") -and
+        $_.ExecutablePath -and $_.ExecutablePath.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)
+    } |
+    Select-Object ProcessId, Name, ExecutablePath |
+    Format-Table -AutoSize
 
-Write-Host "`n端口监听状态:" -ForegroundColor Yellow
-Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object {$_.LocalPort -in 18899, 18000, 19178, 5178} | Format-Table LocalPort, OwningProcess -AutoSize
+Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+    Where-Object { $_.LocalPort -in 18899, 18000, 19178, 5178 } |
+    Format-Table LocalPort, OwningProcess -AutoSize
+
+try {
+    $health = Invoke-RestMethod -Uri "http://127.0.0.1:18899/health" -TimeoutSec 5
+    Write-Host "后端健康检查: $($health | ConvertTo-Json -Compress)" -ForegroundColor Green
+} catch {
+    Write-Host "后端健康检查失败: $($_.Exception.Message)" -ForegroundColor Red
+}

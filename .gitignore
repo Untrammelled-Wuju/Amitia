@@ -12,7 +12,11 @@
 /AmitiaData/
 /data/
 /surrealdb/
+/qdrant/
 /qdrant/storage/
+/data/storage/
+/runtime/storage/
+.qdrant-initialized
 *.db
 *.db-shm
 *.db-wal
@@ -36,6 +40,7 @@ temp_apk_extract/
 .gradle-proot-build/
 trace.atrace
 .meituan-catpaw/
+.workbuddy-ai/
 
 # IDE / OS
 .vscode/

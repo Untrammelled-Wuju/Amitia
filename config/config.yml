@@ -80,10 +80,6 @@ providers:
       dataPath: "data/graph.db"
 
 components:
-  pluginHost:
-    enabled: true
-    entryUri: ""
-    workUri: ""
   taskHost:
     enabled: true
     entryUri: ""
@@ -108,10 +104,6 @@ runtime:
     binaryPath: ""
     npmPath: ""
     npxPath: ""
-    workDir: ""
-  pluginHost:
-    enabled: true
-    entryPath: ""
     workDir: ""
   taskHost:
     enabled: true
