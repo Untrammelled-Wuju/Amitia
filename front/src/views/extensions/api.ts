@@ -21,6 +21,8 @@ import type {
   TaskRunPage,
 } from "./types";
 
+export type { PackageImportPreview, PackageOperationResult } from "./types";
+
 export async function fetchCharacterOptions() {
   const response = await apiClient.get("/api/characters");
   const characters = response.data?.data || response.data;
@@ -154,7 +156,7 @@ export async function previewExtensionPackage(
   scopeId: string,
   extensionId = "",
   onProgress?: (percent: number) => void,
-  managementTarget?: "game-center",
+  managementTarget?: "game-center" | "pet-center",
 ) {
   const data = new FormData();
   data.append("file", file);
@@ -212,7 +214,7 @@ export async function installExtensionPackage(
     configMigration: boolean;
   },
   upgradeId = "",
-  managementTarget?: "game-center",
+  managementTarget?: "game-center" | "pet-center",
 ) {
   const targetExtensionId = upgradeId || (preview.currentVersion ? preview.id : "");
   const operationType = targetExtensionId ? "update" : "install";

@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   <main class="pet-installations">
     <ExtensionPageHeader
       title="安装管理"
-      description="管理已安装的桌宠、启用停用、运行配置与动作"
+      description="管理已安装的桌宠、运行配置以及桌宠扩展插件"
       grandparent-title="创意工坊"
       grandparent-path="/creative-workshop"
       parent-title="桌宠"
@@ -57,6 +57,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         </div>
       </div>
     </el-card>
+
+    <PetPluginManager />
 
     <el-card shadow="never" class="table-card">
       <el-empty
@@ -439,6 +441,7 @@ import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Back, Refresh, Picture, Plus } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "../extensions/components/ExtensionPageHeader.vue";
+import PetPluginManager from "./components/PetPluginManager.vue";
 import { useApi } from "../../composables/useApi";
 import {
   useDesktopPetInstallations,

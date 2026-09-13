@@ -4,7 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <main class="pet-creation">
-    <ExtensionPageHeader title="桌宠制作" description="创建和定制你的桌面陪伴角色" grandparent-title="创意工坊" grandparent-path="/creative-workshop" parent-title="桌宠" parent-path="/creative-workshop/pet" />
+    <ExtensionPageHeader title="桌宠制作" description="创建和定制你的桌面陪伴宠物" grandparent-title="创意工坊" grandparent-path="/creative-workshop" parent-title="桌宠" parent-path="/creative-workshop/pet" />
 
 
     <div v-if="modelLoadError" class="load-error-banner">

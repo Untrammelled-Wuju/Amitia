@@ -220,7 +220,7 @@ export function useProactiveRules() {
       if (injectedCharacterId?.value)
         params.characterId = injectedCharacterId.value;
       const res: any = await request.get(
-        "/api/companion/active-message/setting",
+        "/api/proactive/settings",
         { params },
       );
       if (res) Object.assign(activeMsgSettings.value, res);
@@ -230,7 +230,7 @@ export function useProactiveRules() {
   async function saveActiveMsgSettings() {
     savingSettings.value = true;
     try {
-      let url = "/api/companion/active-message/setting";
+      let url = "/api/proactive/settings";
       if (injectedCharacterId?.value)
         url += "?characterId=" + encodeURIComponent(injectedCharacterId.value);
       await request.put(url, activeMsgSettings.value);

@@ -202,7 +202,7 @@ export interface PackageImportPreview {
   errors: string[];
   conflict: string;
   availableActions: string[];
-  managementTarget?: "extension_center" | "game_center" | "desktop_pet_center" | string;
+  managementTarget?: "extension_center" | "game_center" | "pet_center" | string;
   contributionKinds?: string[];
   currentVersion?: string;
   rollbackVersion?: string;
