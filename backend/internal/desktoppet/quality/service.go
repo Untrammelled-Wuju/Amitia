@@ -115,7 +115,6 @@ func (s *qualityService) CreateEvaluation(ctx context.Context, req CreateEvaluat
 	eval := &QualityEvaluation{
 		ID:                   evaluationID,
 		UserID:               req.UserID,
-		CharacterID:          req.CharacterID,
 		ProcessingTaskID:     req.ProcessingTaskID,
 		ProcessingActionID:   req.ProcessingActionID,
 		ActionRevisionID:     req.ActionRevisionID,
@@ -203,7 +202,6 @@ func (s *qualityService) Reevaluate(ctx context.Context, req ReevaluateRequest) 
 	newEval := &QualityEvaluation{
 		ID:                     uuid.NewString(),
 		UserID:                 oldEval.UserID,
-		CharacterID:            oldEval.CharacterID,
 		ProcessingTaskID:       oldEval.ProcessingTaskID,
 		ProcessingActionID:     oldEval.ProcessingActionID,
 		ActionRevisionID:       oldEval.ActionRevisionID,

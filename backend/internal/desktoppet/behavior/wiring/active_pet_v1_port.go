@@ -202,7 +202,6 @@ func (a *V1ActivePetAdapter) resolveActivePet(ctx context.Context, userID, chara
 		InstallationID: selected.ID,
 		ReleaseID:      selected.CurrentReleaseID,
 		PetInstanceID:  selectedRuntimeID,
-		CharacterID:    selected.CharacterID,
 		RuntimeOnline:  runtimeOnline,
 		StateRevision:  stateRevision,
 		DefaultAction:  selected.DefaultActionKey,
@@ -242,7 +241,7 @@ func v2InstallationMatches(candidate *installation.Installation, userID, charact
 	if candidate == nil || candidate.UserID != userID || candidate.Status != installation.StatusEnabled || candidate.IsActive != 1 {
 		return false
 	}
-	return characterID == "" || candidate.CharacterID == characterID
+	return true
 }
 
 func v2ReadManifestFromDisk(installPath, manifestPath string) (*processing.Manifest, error) {

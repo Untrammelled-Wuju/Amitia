@@ -156,7 +156,6 @@ func (s *service) ensureDraftSnapshot(ctx context.Context, session *EditSession)
 		SessionID:                session.ID,
 		SessionVersion:           session.SessionVersion,
 		UserID:                   session.UserID,
-		CharacterID:              session.CharacterID,
 		ActionStreamID:           session.ActionStreamID,
 		ActionKey:                session.ActionKey,
 		BaseRevisionID:           session.BaseRevisionID,

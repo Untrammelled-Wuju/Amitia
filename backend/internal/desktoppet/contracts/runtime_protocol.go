@@ -168,7 +168,6 @@ type HeartbeatPayload struct {
 
 type InstallationSnapshot struct {
 	InstallationID   string `json:"installationId"`
-	CharacterID      string `json:"characterId"`
 	PackageID        string `json:"packageId"`
 	PackageVersion   string `json:"packageVersion"`
 	InstallRoot      string `json:"installRoot"`

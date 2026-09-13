@@ -130,7 +130,6 @@ type TaskInfo struct {
 	OutputWidth       int
 	OutputHeight      int
 	DefaultFPS        int
-	CharacterID       string
 	PackageName       string
 	UserID            string
 }

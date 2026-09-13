@@ -13,7 +13,6 @@ type ProcessingSourceManifestRecord struct {
 	ID                            string `gorm:"column:id;primaryKey" json:"id"`
 	SchemaVersion                 int    `gorm:"column:schema_version" json:"schemaVersion"`
 	UserID                        string `gorm:"column:user_id;default:''" json:"userId,omitempty"`
-	CharacterID                   string `gorm:"column:character_id;default:''" json:"characterId,omitempty"`
 	ProcessingTaskID              string `gorm:"column:processing_task_id" json:"processingTaskId"`
 	ProcessingActionID            string `gorm:"column:processing_action_id" json:"processingActionId"`
 	GenerationTaskID              string `gorm:"column:generation_task_id" json:"generationTaskId"`
@@ -186,7 +185,6 @@ func (b *ManifestBuilder) Build(req BuildManifestRequest) (*ProcessingSourceMani
 		ID:                            req.ID,
 		SchemaVersion:                 1,
 		UserID:                        req.UserID,
-		CharacterID:                   req.CharacterID,
 		ProcessingTaskID:              req.ProcessingTaskID,
 		ProcessingActionID:            req.ProcessingActionID,
 		GenerationTaskID:              req.GenerationTaskID,
@@ -229,7 +227,6 @@ func (b *ManifestBuilder) Build(req BuildManifestRequest) (*ProcessingSourceMani
 type BuildManifestRequest struct {
 	ID                            string
 	UserID                        string
-	CharacterID                   string
 	ProcessingTaskID              string
 	ProcessingActionID            string
 	GenerationTaskID              string

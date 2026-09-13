@@ -269,7 +269,6 @@ type RevisionDetail struct {
 type ActionStreamSummary struct {
 	ID                   string `json:"id"`
 	UserID               string `json:"userId"`
-	CharacterID          string `json:"characterId"`
 	ActionKey            string `json:"actionKey"`
 	RootProcessingTaskID string `json:"rootProcessingTaskId"`
 	StreamKey            string `json:"streamKey"`

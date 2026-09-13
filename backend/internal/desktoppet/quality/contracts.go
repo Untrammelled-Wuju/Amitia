@@ -100,7 +100,6 @@ type QualityInputRepository interface {
 
 type QualityActionInput struct {
 	UserID               string
-	CharacterID          string
 	ProcessingTaskID     string
 	ProcessingActionID   string
 	ActionKey            string

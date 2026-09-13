@@ -194,7 +194,7 @@ func (s *CandidateAcceptanceService) finalizeAccepted(ctx context.Context, op *C
 	if err := s.repo.UpdateCandidateAcceptanceOperation(op.ID, "completed", ""); err != nil {
 		return err
 	}
-	_ = s.audit.Log(ctx, "candidate.accepted", userID, session.CharacterID, session.ActionKey,
+	_ = s.audit.Log(ctx, "candidate.accepted", userID, session.ActionKey,
 		candidate.SessionID, candidate.JobID, session.BaseRevisionID, candidate.CandidateRevisionID,
 		previousRevisionID, newRevisionID, "candidate.accepted")
 	return nil
@@ -255,7 +255,7 @@ func (s *CandidateAcceptanceService) RejectCandidate(ctx context.Context, candid
 	if err := s.repo.UpdateCandidateAcceptanceOperation(op.ID, "completed", ""); err != nil {
 		return err
 	}
-	_ = s.audit.Log(ctx, "candidate.rejected", userID, session.CharacterID, session.ActionKey,
+	_ = s.audit.Log(ctx, "candidate.rejected", userID, session.ActionKey,
 		candidate.SessionID, candidate.JobID, session.BaseRevisionID, candidate.CandidateRevisionID,
 		"", "", reason)
 	return nil

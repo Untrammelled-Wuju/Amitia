@@ -73,10 +73,6 @@ func (v *unifiedSourceValidator) Validate(ctx context.Context, manifest *Process
 		return fmt.Errorf("%w: source artifact id is empty", ErrSourceInvalid)
 	}
 
-	if manifest.CharacterID == "" {
-		return fmt.Errorf("%w: character id is empty", ErrSourceInvalid)
-	}
-
 	if err := v.validateOwnership(manifest, userID); err != nil {
 		return err
 	}

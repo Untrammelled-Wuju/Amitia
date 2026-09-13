@@ -33,7 +33,6 @@ type Manifest struct {
 	SchemaVersion     int                  `json:"schemaVersion"`
 	PackageID         string               `json:"packageId"`
 	Name              string               `json:"name"`
-	CharacterID       string               `json:"characterId"`
 	GenerationTaskID  string               `json:"generationTaskId"`
 	ProcessingVersion int                  `json:"processingVersion"`
 	CreatedAt         string               `json:"createdAt"`
@@ -52,12 +51,11 @@ func NewManifestBuilder(dataDir string) *ManifestBuilder {
 	return &ManifestBuilder{dataDir: dataDir}
 }
 
-func BuildManifest(packageID, name, characterID, generationTaskID string, processingVersion int, canvasWidth, canvasHeight int, defaultAction string, actions []ManifestAction) *Manifest {
+func BuildManifest(packageID, name, generationTaskID string, processingVersion int, canvasWidth, canvasHeight int, defaultAction string, actions []ManifestAction) *Manifest {
 	return &Manifest{
 		SchemaVersion:     ManifestSchemaVersion,
 		PackageID:         packageID,
 		Name:              name,
-		CharacterID:       characterID,
 		GenerationTaskID:  generationTaskID,
 		ProcessingVersion: processingVersion,
 		CreatedAt:         time.Now().UTC().Format(time.RFC3339),

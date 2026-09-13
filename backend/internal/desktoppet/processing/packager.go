@@ -66,7 +66,6 @@ func (e *PackageError) Unwrap() error { return e.Err }
 type PackageBuildRequest struct {
 	ProcessingTaskID  string
 	UserID            string
-	CharacterID       string
 	GenerationTaskID  string
 	PackageName       string
 	DefaultAction     string
@@ -154,7 +153,6 @@ func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bo
 	manifest := BuildManifest(
 		packageID,
 		req.PackageName,
-		req.CharacterID,
 		req.GenerationTaskID,
 		req.ProcessingVersion,
 		req.CanvasWidth,
@@ -180,7 +178,6 @@ func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bo
 	pkg := &Package{
 		ID:               packageID,
 		UserID:           req.UserID,
-		CharacterID:      req.CharacterID,
 		GenerationTaskID: req.GenerationTaskID,
 		ProcessingTaskID: req.ProcessingTaskID,
 		Name:             req.PackageName,

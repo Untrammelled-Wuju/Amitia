@@ -18,7 +18,6 @@ import (
 type actionRevisionRow struct {
 	ID                         string `gorm:"column:id"`
 	UserID                     string `gorm:"column:user_id"`
-	CharacterID                string `gorm:"column:character_id"`
 	ActionStreamID             string `gorm:"column:action_stream_id"`
 	ProcessingTaskID           string `gorm:"column:processing_task_id"`
 	ProcessingActionID         string `gorm:"column:processing_action_id"`
@@ -202,7 +201,6 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 	snapshot := &quality.EvaluationInputSnapshot{
 		ID:                   "is-" + uuid.NewString(),
 		UserID:               rev.UserID,
-		CharacterID:          rev.CharacterID,
 		ActionStreamID:       rev.ActionStreamID,
 		ActionRevisionID:     rev.ID,
 		ActionContentHash:    rev.ContentHash,
@@ -216,7 +214,6 @@ func (r *InputRepository) LoadActionRevisionInput(ctx context.Context, userID st
 
 	return &quality.QualityActionInput{
 		UserID:               rev.UserID,
-		CharacterID:          rev.CharacterID,
 		ProcessingTaskID:     rev.ProcessingTaskID,
 		ProcessingActionID:   rev.ProcessingActionID,
 		ActionKey:            rev.ActionKey,

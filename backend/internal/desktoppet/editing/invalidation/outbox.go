@@ -3,7 +3,6 @@ package invalidation
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/google/uuid"
 	"time"
 
@@ -62,7 +61,7 @@ func (o *LogEventOutbox) publish(eventType string, event baseline.ActionRevision
 		log.Logger.Errorf("序列化事件失败: eventType=%s err=%v", eventType, err)
 		return err
 	}
-	aggregateID := fmt.Sprintf("%s:%s", event.CharacterID, event.ActionKey)
+	aggregateID := event.ActionKey
 	log.Logger.Infof("action_revision_event: type=%s aggregateId=%s revisionId=%s bindingRevision=%d payload=%s",
 		eventType, aggregateID, event.ActionRevisionID, event.BindingRevision, string(payload))
 

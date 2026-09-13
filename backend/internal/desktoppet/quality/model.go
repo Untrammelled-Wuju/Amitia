@@ -218,7 +218,6 @@ type ActionQualityResult struct {
 type QualityEvaluation struct {
 	ID                     string                    `json:"id"`
 	UserID                 string                    `json:"userId"`
-	CharacterID            string                    `json:"characterId"`
 	ProcessingTaskID       string                    `json:"processingTaskId"`
 	ProcessingActionID     string                    `json:"processingActionId"`
 	ActionRevisionID       string                    `json:"actionRevisionId"`
@@ -534,7 +533,6 @@ type EvaluateRequest struct {
 
 type CreateEvaluationRequest struct {
 	UserID               string `json:"userId"`
-	CharacterID          string `json:"characterId"`
 	ProcessingTaskID     string `json:"processingTaskId"`
 	ProcessingActionID   string `json:"processingActionId"`
 	ActionRevisionID     string `json:"actionRevisionId"`
@@ -620,7 +618,6 @@ type CommitEvaluationResult struct {
 
 type EvaluateTaskGateRequest struct {
 	UserID                string
-	CharacterID           string
 	ProcessingTaskID      string
 	ActiveRevisionSetHash string
 	RequiredActionKeys    []string
@@ -647,7 +644,6 @@ type QualityOutboxEvent struct {
 	EventType        string `json:"eventType"`
 	ExecutionID      string `json:"executionId"`
 	UserID           string `json:"userId"`
-	CharacterID      string `json:"characterId"`
 	ProcessingTaskID string `json:"processingTaskId"`
 	ActionKey        string `json:"actionKey"`
 	ActionRevisionID string `json:"actionRevisionId"`

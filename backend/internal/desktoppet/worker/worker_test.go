@@ -118,7 +118,6 @@ func newQueuedTask(db *gorm.DB, taskID, modelKey string, outputW, outputH int) *
 	now := time.Now().Format("2006-01-02 15:04:05")
 	task := &desktoppet.GenerationTask{
 		ID:            taskID,
-		CharacterID:   "char-w",
 		ModelConfigID: 1,
 		Name:          "worker-task",
 		Status:        "queued",
@@ -137,7 +136,6 @@ func insertTask(t *testing.T, db *gorm.DB, taskID string, modelConfigID int, sou
 	now := time.Now().Format("2006-01-02 15:04:05")
 	task := &desktoppet.GenerationTask{
 		ID:              taskID,
-		CharacterID:     "char-w",
 		ModelConfigID:   modelConfigID,
 		Name:            "task-" + taskID,
 		SourceImagePath: sourceRel,

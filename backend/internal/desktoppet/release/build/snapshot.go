@@ -37,7 +37,6 @@ type CreateSnapshotRequest struct {
 	UserID           string
 	PetID            string
 	ProcessingTaskID string
-	CharacterID      string
 	DefaultAction    string
 	IncludedActions  []string
 }
@@ -115,7 +114,6 @@ func (sc *SnapshotCreator) Create(ctx context.Context, req *CreateSnapshotReques
 		ID:                     uuid.NewString(),
 		UserID:                 req.UserID,
 		PetID:                  identity.ID,
-		CharacterID:            taskInfo.CharacterID,
 		ProcessingTaskID:       req.ProcessingTaskID,
 		ActiveRevisionSetHash:  activeRevisionSetHash,
 		QualityGateID:          gateResult.GateID,
@@ -152,25 +150,18 @@ func (sc *SnapshotCreator) resolveAndValidateIdentity(req *CreateSnapshotRequest
 		return identity, nil
 	}
 
-	identity, err := sc.repo.GetPetIdentityByCharacter(req.UserID, taskInfo.CharacterID)
-	if err == nil {
-		return identity, nil
-	}
-
 	now := formatTimestamp(time.Now())
 	name := taskInfo.PackageName
 	if name == "" {
-		name = taskInfo.CharacterID
+		name = "桌宠"
 	}
-	identity = &release.PetIdentityData{
-		ID:                uuid.NewString(),
-		OwnerUserID:       req.UserID,
-		SourceCharacterID: taskInfo.CharacterID,
-		Name:              name,
-		Slug:              makeSlug(name),
-		BindingPolicy:     "character_locked",
-		CreatedAt:         now,
-		UpdatedAt:         now,
+	identity := &release.PetIdentityData{
+		ID:          uuid.NewString(),
+		OwnerUserID: req.UserID,
+		Name:        name,
+		Slug:        makeSlug(name),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	if err := sc.repo.CreatePetIdentity(identity); err != nil {
 		return nil, NewBuildError("PET_IDENTITY_CREATE_FAILED", "创建桌宠身份失败", err)
@@ -182,14 +173,8 @@ func (sc *SnapshotCreator) validateOwnership(req *CreateSnapshotRequest, taskInf
 	if identity.OwnerUserID != req.UserID {
 		return NewBuildError(ErrCodeReleaseOwnershipDenied, "桌宠身份不属于当前用户", nil)
 	}
-	if req.CharacterID != "" && identity.SourceCharacterID != req.CharacterID {
-		return NewBuildError(ErrCodeReleaseSourceMismatch, "角色 ID 不匹配", nil)
-	}
 	if taskInfo.UserID != "" && taskInfo.UserID != req.UserID {
 		return NewBuildError(ErrCodeReleaseOwnershipDenied, "处理任务不属于当前用户", nil)
-	}
-	if taskInfo.CharacterID != "" && identity.SourceCharacterID != taskInfo.CharacterID {
-		return NewBuildError(ErrCodeReleaseSourceMismatch, "处理任务角色与桌宠角色不匹配", nil)
 	}
 	return nil
 }

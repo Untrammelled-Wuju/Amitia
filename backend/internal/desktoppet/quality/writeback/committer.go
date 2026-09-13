@@ -218,7 +218,6 @@ func (c *Committer) CommitEvaluation(ctx context.Context, req quality.CommitEval
 			EventType:        quality.OutboxEventEvaluationCompleted,
 			ExecutionID:      req.ExecutionID,
 			UserID:           ev.UserID,
-			CharacterID:      ev.CharacterID,
 			ProcessingTaskID: ev.ProcessingTaskID,
 			ActionKey:        ev.ActionKey,
 			ActionRevisionID: ev.ActionRevisionID,

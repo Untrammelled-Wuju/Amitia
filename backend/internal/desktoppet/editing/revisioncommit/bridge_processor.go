@@ -32,7 +32,6 @@ type ProcessingRevisionReader interface {
 
 type InboxEntryPayload struct {
 	UserID               string `json:"userId"`
-	CharacterID          string `json:"characterId"`
 	ProcessingTaskID     string `json:"processingTaskId"`
 	ProcessingActionID   string `json:"processingActionId"`
 	ProcessingAttemptID  string `json:"processingAttemptId"`
@@ -224,16 +223,11 @@ func (p *BridgeProcessor) buildInboxPayload(_ context.Context, evt processingeve
 	if userID == "" {
 		userID = task.UserID
 	}
-	characterID := evt.CharacterID
-	if characterID == "" {
-		characterID = task.CharacterID
-	}
-	if userID == "" || characterID == "" {
-		return InboxEntryPayload{}, fmt.Errorf("processing task identity incomplete: userId=%q characterId=%q", userID, characterID)
+	if userID == "" {
+		return InboxEntryPayload{}, fmt.Errorf("processing task identity incomplete: userId=%q", userID)
 	}
 	return InboxEntryPayload{
 		UserID:               userID,
-		CharacterID:          characterID,
 		ProcessingTaskID:     evt.ProcessingTaskID,
 		ProcessingActionID:   evt.ProcessingActionID,
 		ProcessingAttemptID:  evt.ProcessingAttemptID,
@@ -333,7 +327,6 @@ func (p *BridgeProcessor) processPayload(ctx context.Context, entry *editing.Act
 			Status:               baseline.BridgeStatusReceived,
 			EventID:              entry.EventID,
 			UserID:               payload.UserID,
-			CharacterID:          payload.CharacterID,
 			ActionKey:            payload.ActionKey,
 			CreatedAt:            now,
 			UpdatedAt:            now,
@@ -347,7 +340,6 @@ func (p *BridgeProcessor) processPayload(ctx context.Context, entry *editing.Act
 
 	commitReq := baseline.CommitterRequest{
 		UserID:               payload.UserID,
-		CharacterID:          payload.CharacterID,
 		ProcessingTaskID:     payload.ProcessingTaskID,
 		ProcessingActionID:   payload.ProcessingActionID,
 		ProcessingAttemptID:  payload.ProcessingAttemptID,

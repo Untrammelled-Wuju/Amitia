@@ -484,18 +484,9 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 		return fmt.Errorf("generate action preview failed: %w", err)
 	}
 
-	characterID := task.CharacterID
-	if characterID == "" {
-		characterID = sourceVal.Task.CharacterID
-	}
-	if characterID == "" {
-		return fmt.Errorf("processing task %s character id is empty", task.ID)
-	}
-
 	commitReq := &commit.CommitRequest{
 		Ctx:                        ctx,
 		UserID:                     sourceVal.Task.UserID,
-		CharacterID:                characterID,
 		ProcessingTaskID:           task.ID,
 		ProcessingActionID:         action.ID,
 		ProcessingAttemptID:        attempt.ID,

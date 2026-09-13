@@ -29,7 +29,7 @@ func NewFrameAssetMapper(db *gorm.DB) *FrameAssetMapper {
 
 func (m *FrameAssetMapper) MapArtifactsToAssets(
 	tx *gorm.DB,
-	userID, characterID string,
+	userID string,
 	processingRevisionID string,
 	revisionRoot string,
 	artifacts []processing.ProcessingArtifactRecord,
@@ -74,7 +74,6 @@ func (m *FrameAssetMapper) MapArtifactsToAssets(
 		asset := &editing.FrameAsset{
 			ID:                         fmt.Sprintf("fa-%s", art.ID),
 			UserID:                     userID,
-			CharacterID:                characterID,
 			ContentHash:                art.ContentHash,
 			StoragePath:                fullPath,
 			StorageKey:                 fullPath,

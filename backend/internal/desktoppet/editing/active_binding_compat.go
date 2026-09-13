@@ -19,7 +19,6 @@ type resolvedActiveRevisionBinding struct {
 	RevisionID      string
 	BindingRevision int64
 	UserID          string
-	CharacterID     string
 	ActionStreamID  string
 	Canonical       bool
 }
@@ -34,7 +33,6 @@ func resolveActiveRevisionBinding(repo Repository, processingTaskID, actionKey s
 			RevisionID:      canonical.ActiveActionRevisionID,
 			BindingRevision: canonical.BindingRevision,
 			UserID:          canonical.UserID,
-			CharacterID:     canonical.CharacterID,
 			ActionStreamID:  canonical.ActionStreamID,
 			Canonical:       true,
 		}, nil
@@ -59,7 +57,6 @@ func resolveActiveRevisionBinding(repo Repository, processingTaskID, actionKey s
 		RevisionID:      revisionID,
 		BindingRevision: revision,
 		UserID:          legacy.UserID,
-		CharacterID:     legacy.CharacterID,
 		Canonical:       false,
 	}, nil
 }
@@ -100,7 +97,6 @@ func bindActiveRevision(repo Repository, processingTaskID, actionKey, revisionID
 				CreatedAt:              now,
 				UpdatedAt:              now,
 				UserID:                 rev.UserID,
-				CharacterID:            rev.CharacterID,
 				ActiveActionRevisionID: revisionID,
 				BindingRevision:        1,
 				BoundReason:            reason,
@@ -145,11 +141,7 @@ func bindActiveRevision(repo Repository, processingTaskID, actionKey, revisionID
 	if userID == "" {
 		userID = stream.UserID
 	}
-	characterID := rev.CharacterID
-	if characterID == "" {
-		characterID = stream.CharacterID
-	}
-	if userID == "" || characterID == "" {
+	if userID == "" {
 		return "", 0, fmt.Errorf("canonical revision missing ownership identity: %s", revisionID)
 	}
 
@@ -167,7 +159,6 @@ func bindActiveRevision(repo Repository, processingTaskID, actionKey, revisionID
 				ID:                     "ab-" + uuid.NewString(),
 				ActionStreamID:         rev.ActionStreamID,
 				UserID:                 userID,
-				CharacterID:            characterID,
 				ActionKey:              actionKey,
 				ActiveActionRevisionID: revisionID,
 				BindingRevision:        1,
@@ -242,7 +233,6 @@ func bindActiveRevision(repo Repository, processingTaskID, actionKey, revisionID
 		legacy.Reason = reason
 		legacy.UpdatedAt = now
 		legacy.UserID = userID
-		legacy.CharacterID = characterID
 		legacy.ActiveActionRevisionID = revisionID
 		legacy.BindingRevision = newBindingRevision
 		legacy.BoundReason = reason
@@ -267,7 +257,6 @@ func bindActiveRevision(repo Repository, processingTaskID, actionKey, revisionID
 			"previousRevisionId": previousRevisionID,
 			"actionKey":          actionKey,
 			"userId":             userID,
-			"characterId":        characterID,
 			"occurredAt":         now,
 		})
 		if marshalErr != nil {

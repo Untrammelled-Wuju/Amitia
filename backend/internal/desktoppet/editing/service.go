@@ -1169,7 +1169,6 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 		return nil, ErrPermissionDenied
 	}
 
-	characterID := baseRev.CharacterID
 	actionStreamID := baseRev.ActionStreamID
 	if actionStreamID != "" {
 		stream, err := s.repo.GetActionStreamByID(actionStreamID)
@@ -1179,9 +1178,6 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 		if stream == nil || (stream.UserID != "" && stream.UserID != userID) {
 			return nil, ErrPermissionDenied
 		}
-		if characterID == "" {
-			characterID = stream.CharacterID
-		}
 	}
 
 	now := nowUTC()
@@ -1190,7 +1186,6 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 	session := &EditSession{
 		ID:                    sessionID,
 		UserID:                userID,
-		CharacterID:           characterID,
 		ActionStreamID:        actionStreamID,
 		ProcessingTaskID:      processingTaskID,
 		ActionKey:             actionKey,
@@ -1708,7 +1703,6 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 	newRev := &ActionRevision{
 		ID:                         revID,
 		UserID:                     session.UserID,
-		CharacterID:                session.CharacterID,
 		ProcessingTaskID:           session.ProcessingTaskID,
 		ProcessingActionID:         baseRev.ProcessingActionID,
 		GenerationTaskID:           baseRev.GenerationTaskID,
@@ -2013,7 +2007,6 @@ func (s *service) CreateRegenerationJob(ctx context.Context, sessionID, userID s
 		ID:                   jobID,
 		SessionID:            sessionID,
 		UserID:               session.UserID,
-		CharacterID:          session.CharacterID,
 		ActionStreamID:       session.ActionStreamID,
 		DraftSnapshotID:      draftSnapshot.ID,
 		DraftSnapshotHash:    draftSnapshot.SnapshotHash,
@@ -2246,7 +2239,6 @@ func (s *service) UploadCandidate(ctx context.Context, sessionID, userID string,
 		ID:                  candidateID,
 		SessionID:           sessionID,
 		UserID:              session.UserID,
-		CharacterID:         session.CharacterID,
 		ActionStreamID:      session.ActionStreamID,
 		CandidateVersion:    snapshot.SessionVersion,
 		DraftSnapshotID:     snapshot.ID,
@@ -2422,7 +2414,6 @@ func (s *service) ListActionStreams(ctx context.Context, userID string) ([]Actio
 		summary := ActionStreamSummary{
 			ID:                   stream.ID,
 			UserID:               stream.UserID,
-			CharacterID:          stream.CharacterID,
 			ActionKey:            stream.ActionKey,
 			RootProcessingTaskID: stream.RootProcessingTaskID,
 			StreamKey:            stream.StreamKey,

@@ -39,7 +39,6 @@ func (a *V1RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 	payload := runtimev1.PlayActionPayload{
 		RuntimeID:        cmd.RuntimeID,
 		ActionKey:        cmd.ActionKey,
-		CharacterID:      cmd.CharacterID,
 		PetInstanceID:    cmd.PetInstanceID,
 		InstallationID:   cmd.InstallationID,
 		PlaybackMode:     "once",

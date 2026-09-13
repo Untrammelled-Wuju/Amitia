@@ -18,7 +18,6 @@ type RuntimeDomainEvent struct {
 	DeviceID       string
 	InstallationID string
 	UserID         string
-	CharacterID    string
 	Sequence       int64
 	Timestamp      time.Time
 	Payload        json.RawMessage

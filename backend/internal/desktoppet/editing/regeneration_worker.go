@@ -429,7 +429,6 @@ func (w *RegenerationWorker) processSingleFrameJob(ctx context.Context, job *Reg
 		SessionID:           job.SessionID,
 		JobID:               job.ID,
 		UserID:              job.UserID,
-		CharacterID:         job.CharacterID,
 		ActionStreamID:      job.ActionStreamID,
 		CandidateVersion:    snapshot.SessionVersion,
 		DraftSnapshotID:     snapshot.ID,
@@ -560,7 +559,6 @@ func (w *RegenerationWorker) processFullActionJob(ctx context.Context, job *Rege
 	candidateRev := &ActionRevision{
 		ID:                         candidateRevID,
 		UserID:                     job.UserID,
-		CharacterID:                job.CharacterID,
 		ProcessingTaskID:           job.ProcessingTaskID,
 		ProcessingActionID:         baseRev.ProcessingActionID,
 		GenerationTaskID:           baseRev.GenerationTaskID,
@@ -750,7 +748,6 @@ func (w *RegenerationWorker) ensureFullActionCandidate(ctx context.Context, job 
 			SessionID:           job.SessionID,
 			JobID:               job.ID,
 			UserID:              job.UserID,
-			CharacterID:         job.CharacterID,
 			ActionStreamID:      job.ActionStreamID,
 			CandidateVersion:    snapshot.SessionVersion,
 			DraftSnapshotID:     snapshot.ID,

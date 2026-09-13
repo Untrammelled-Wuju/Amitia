@@ -96,7 +96,6 @@ func (s *service) CreateFromProcessingRevision(ctx context.Context, req CreateBa
 	rev := &editing.ActionRevision{
 		ID:                         revisionID,
 		UserID:                     req.UserID,
-		CharacterID:                req.CharacterID,
 		ProcessingTaskID:           req.ProcessingTaskID,
 		ProcessingActionID:         req.ProcessingActionID,
 		ActionKey:                  req.ActionKey,

@@ -154,7 +154,7 @@ func expectedActionKeysByCategory(t *testing.T, db *gorm.DB, catKey string) []st
 func createValidTask(t *testing.T, svc Service, name string, actions []string) *TaskSummaryResponse {
 	t.Helper()
 	fh := makeFileHeader(t, makePNG(t), "ref.png")
-	summary, err := svc.CreateTask(context.Background(), "test-user", "char_test", 1, name, "", "", 512, 512, actions, fh)
+	summary, err := svc.CreateTask(context.Background(), "test-user", 1, name, "", "", 512, 512, actions, fh)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -251,9 +251,6 @@ func TestCreateTask_Valid(t *testing.T) {
 	if summary.SelectedActionCount != 2 {
 		t.Fatalf("selectedActionCount = %d, want 2", summary.SelectedActionCount)
 	}
-	if summary.CharacterID != "char_test" {
-		t.Fatalf("characterID = %s, want char_test", summary.CharacterID)
-	}
 	if summary.ModelConfigID != 1 {
 		t.Fatalf("modelConfigID = %d, want 1", summary.ModelConfigID)
 	}
@@ -293,13 +290,13 @@ func TestCreateTask_Valid(t *testing.T) {
 func TestCreateTask_NoAction(t *testing.T) {
 	svc, db, _ := setupTestService(t)
 
-	_, err := svc.CreateTask(context.Background(), "u", "char_test", 1, "t", "", "", 512, 512, nil, nil)
+	_, err := svc.CreateTask(context.Background(), "u", 1, "t", "", "", 512, 512, nil, nil)
 	assertBusinessError(t, err, ErrCodeActionSelectionRequired)
 	if count := countTasks(t, db); count != 0 {
 		t.Fatalf("expected 0 tasks, got %d", count)
 	}
 
-	_, err = svc.CreateTask(context.Background(), "u", "char_test", 1, "t", "", "", 512, 512, []string{}, nil)
+	_, err = svc.CreateTask(context.Background(), "u", 1, "t", "", "", 512, 512, []string{}, nil)
 	assertBusinessError(t, err, ErrCodeActionSelectionRequired)
 	if count := countTasks(t, db); count != 0 {
 		t.Fatalf("expected 0 tasks, got %d", count)
@@ -309,7 +306,7 @@ func TestCreateTask_NoAction(t *testing.T) {
 func TestCreateTask_NoDefaultIdle(t *testing.T) {
 	svc, db, _ := setupTestService(t)
 
-	_, err := svc.CreateTask(context.Background(), "u", "char_test", 1, "t", "", "", 512, 512, []string{"walk_left", "walk_right"}, nil)
+	_, err := svc.CreateTask(context.Background(), "u", 1, "t", "", "", 512, 512, []string{"walk_left", "walk_right"}, nil)
 	assertBusinessError(t, err, ErrCodeDefaultIdleActionRequired)
 	if count := countTasks(t, db); count != 0 {
 		t.Fatalf("expected 0 tasks, got %d", count)
@@ -319,7 +316,7 @@ func TestCreateTask_NoDefaultIdle(t *testing.T) {
 func TestCreateTask_InvalidAction(t *testing.T) {
 	svc, db, _ := setupTestService(t)
 
-	_, err := svc.CreateTask(context.Background(), "u", "char_test", 1, "t", "", "", 512, 512, []string{"nonexistent"}, nil)
+	_, err := svc.CreateTask(context.Background(), "u", 1, "t", "", "", 512, 512, []string{"nonexistent"}, nil)
 	assertBusinessError(t, err, ErrCodeActionNotFound)
 	if count := countTasks(t, db); count != 0 {
 		t.Fatalf("expected 0 tasks, got %d", count)
@@ -333,7 +330,7 @@ func TestCreateTask_DisabledAction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := svc.CreateTask(context.Background(), "u", "char_test", 1, "t", "", "", 512, 512, []string{"idle_normal"}, nil)
+	_, err := svc.CreateTask(context.Background(), "u", 1, "t", "", "", 512, 512, []string{"idle_normal"}, nil)
 	assertBusinessError(t, err, ErrCodeActionNotFound)
 	if count := countTasks(t, db); count != 0 {
 		t.Fatalf("expected 0 tasks, got %d", count)
@@ -343,7 +340,7 @@ func TestCreateTask_DisabledAction(t *testing.T) {
 func TestCreateTask_ModelNotFound(t *testing.T) {
 	svc, db, _ := setupTestService(t)
 
-	_, err := svc.CreateTask(context.Background(), "u", "char_test", 999, "t", "", "", 512, 512, []string{"idle_normal"}, nil)
+	_, err := svc.CreateTask(context.Background(), "u", 999, "t", "", "", 512, 512, []string{"idle_normal"}, nil)
 	assertBusinessError(t, err, ErrCodeImageModelNotFound)
 	if count := countTasks(t, db); count != 0 {
 		t.Fatalf("expected 0 tasks, got %d", count)
@@ -357,7 +354,7 @@ func TestCreateTask_ModelDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := svc.CreateTask(context.Background(), "u", "char_test", 1, "t", "", "", 512, 512, []string{"idle_normal"}, nil)
+	_, err := svc.CreateTask(context.Background(), "u", 1, "t", "", "", 512, 512, []string{"idle_normal"}, nil)
 	assertBusinessError(t, err, ErrCodeImageModelDisabled)
 	if count := countTasks(t, db); count != 0 {
 		t.Fatalf("expected 0 tasks, got %d", count)
@@ -368,7 +365,7 @@ func TestCreateTask_InvalidImage(t *testing.T) {
 	svc, db, _ := setupTestService(t)
 
 	fh := makeFileHeader(t, []byte("not an image"), "ref.png")
-	_, err := svc.CreateTask(context.Background(), "u", "char_test", 1, "t", "", "", 512, 512, []string{"idle_normal"}, fh)
+	_, err := svc.CreateTask(context.Background(), "u", 1, "t", "", "", 512, 512, []string{"idle_normal"}, fh)
 	assertBusinessError(t, err, ErrCodeReferenceImageInvalid)
 	if count := countTasks(t, db); count != 0 {
 		t.Fatalf("expected 0 tasks, got %d", count)
@@ -382,7 +379,7 @@ func TestCreateTask_ImageTooLarge(t *testing.T) {
 		Filename: "big.png",
 		Size:     11 * 1024 * 1024,
 	}
-	_, err := svc.CreateTask(context.Background(), "u", "char_test", 1, "t", "", "", 512, 512, []string{"idle_normal"}, fh)
+	_, err := svc.CreateTask(context.Background(), "u", 1, "t", "", "", 512, 512, []string{"idle_normal"}, fh)
 	assertBusinessError(t, err, ErrCodeReferenceImageTooLarge)
 	if count := countTasks(t, db); count != 0 {
 		t.Fatalf("expected 0 tasks, got %d", count)
@@ -399,7 +396,7 @@ func TestCreateTask_FileFailureCompensation(t *testing.T) {
 	config.AppCfg.Storage.DataDir = blocker
 
 	fh := makeFileHeader(t, makePNG(t), "ref.png")
-	_, err := svc.CreateTask(context.Background(), "u", "char_test", 1, "t", "", "", 512, 512, []string{"idle_normal"}, fh)
+	_, err := svc.CreateTask(context.Background(), "u", 1, "t", "", "", 512, 512, []string{"idle_normal"}, fh)
 	if err == nil {
 		t.Fatal("expected error when data dir is not a directory")
 	}
@@ -452,9 +449,6 @@ func TestGetTask(t *testing.T) {
 	if detail.ReferenceImageUrl == "" {
 		t.Fatal("referenceImageUrl should not be empty")
 	}
-	if detail.CharacterName != "测试角色" {
-		t.Fatalf("characterName = %s, want 测试角色", detail.CharacterName)
-	}
 	if detail.ModelName != "测试模型" {
 		t.Fatalf("modelName = %s, want 测试模型", detail.ModelName)
 	}
@@ -467,33 +461,30 @@ func TestListTasks(t *testing.T) {
 	svc, db, _ := setupTestService(t)
 
 	tasks := []GenerationTask{
-		{ID: "t1", CharacterID: "char_test", ModelConfigID: 1, Name: "t1", Status: "pending", CurrentStage: "queued", CreatedAt: "2026-07-24 10:00:00", UpdatedAt: "2026-07-24 10:00:00"},
-		{ID: "t2", CharacterID: "char_test", ModelConfigID: 1, Name: "t2", Status: "completed", CurrentStage: "completed", CreatedAt: "2026-07-24 11:00:00", UpdatedAt: "2026-07-24 11:00:00"},
-		{ID: "t3", CharacterID: "char_test", ModelConfigID: 1, Name: "t3", Status: "pending", CurrentStage: "queued", CreatedAt: "2026-07-24 12:00:00", UpdatedAt: "2026-07-24 12:00:00"},
-		{ID: "t4", CharacterID: "char_other", ModelConfigID: 1, Name: "t4", Status: "pending", CurrentStage: "queued", CreatedAt: "2026-07-24 13:00:00", UpdatedAt: "2026-07-24 13:00:00"},
+		{ID: "t1", ModelConfigID: 1, Name: "t1", Status: "pending", CurrentStage: "queued", CreatedAt: "2026-07-24 10:00:00", UpdatedAt: "2026-07-24 10:00:00"},
+		{ID: "t2", ModelConfigID: 1, Name: "t2", Status: "completed", CurrentStage: "completed", CreatedAt: "2026-07-24 11:00:00", UpdatedAt: "2026-07-24 11:00:00"},
+		{ID: "t3", ModelConfigID: 1, Name: "t3", Status: "pending", CurrentStage: "queued", CreatedAt: "2026-07-24 12:00:00", UpdatedAt: "2026-07-24 12:00:00"},
+		{ID: "t4", ModelConfigID: 1, Name: "t4", Status: "pending", CurrentStage: "queued", CreatedAt: "2026-07-24 13:00:00", UpdatedAt: "2026-07-24 13:00:00"},
 	}
 	if err := db.Create(&tasks).Error; err != nil {
 		t.Fatal(err)
 	}
 
-	resp, err := svc.ListTasks("", "char_test", "", 1, 10)
+	resp, err := svc.ListTasks("", "", 1, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Total != 3 {
-		t.Fatalf("total = %d, want 3", resp.Total)
+	if resp.Total != 4 {
+		t.Fatalf("total = %d, want 4", resp.Total)
 	}
-	if len(resp.Items) != 3 {
-		t.Fatalf("items = %d, want 3", len(resp.Items))
+	if len(resp.Items) != 4 {
+		t.Fatalf("items = %d, want 4", len(resp.Items))
 	}
-	if resp.Items[0].ID != "t3" || resp.Items[1].ID != "t2" || resp.Items[2].ID != "t1" {
-		t.Fatalf("order = %s %s %s, want t3 t2 t1 (created_at desc)", resp.Items[0].ID, resp.Items[1].ID, resp.Items[2].ID)
-	}
-	if resp.Items[0].CharacterName != "测试角色" {
-		t.Fatalf("characterName = %s, want 测试角色", resp.Items[0].CharacterName)
+	if resp.Items[0].ID != "t4" || resp.Items[1].ID != "t3" || resp.Items[2].ID != "t2" || resp.Items[3].ID != "t1" {
+		t.Fatalf("order = %s %s %s %s, want t4 t3 t2 t1 (created_at desc)", resp.Items[0].ID, resp.Items[1].ID, resp.Items[2].ID, resp.Items[3].ID)
 	}
 
-	respPending, err := svc.ListTasks("", "char_test", "pending", 1, 10)
+	respPending, err := svc.ListTasks("", "pending", 1, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -509,37 +500,26 @@ func TestListTasks(t *testing.T) {
 		}
 	}
 
-	respOther, err := svc.ListTasks("", "char_other", "", 1, 10)
+	page1, err := svc.ListTasks("", "", 1, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if respOther.Total != 1 || len(respOther.Items) != 1 || respOther.Items[0].ID != "t4" {
-		t.Fatalf("char_other filter failed: total=%d items=%v", respOther.Total, respOther.Items)
+	if page1.Total != 4 || len(page1.Items) != 2 {
+		t.Fatalf("page1 total=%d items=%d, want 4/2", page1.Total, len(page1.Items))
 	}
-	if respOther.Items[0].CharacterName != "" {
-		t.Fatalf("char_other characterName = %s, want empty", respOther.Items[0].CharacterName)
+	if page1.Items[0].ID != "t4" || page1.Items[1].ID != "t3" {
+		t.Fatalf("page1 order = %s %s, want t4 t3", page1.Items[0].ID, page1.Items[1].ID)
 	}
 
-	page1, err := svc.ListTasks("", "char_test", "", 1, 2)
+	page2, err := svc.ListTasks("", "", 2, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page1.Total != 3 || len(page1.Items) != 2 {
-		t.Fatalf("page1 total=%d items=%d, want 3/2", page1.Total, len(page1.Items))
+	if page2.Total != 4 || len(page2.Items) != 2 {
+		t.Fatalf("page2 total=%d items=%d, want 4/2", page2.Total, len(page2.Items))
 	}
-	if page1.Items[0].ID != "t3" || page1.Items[1].ID != "t2" {
-		t.Fatalf("page1 order = %s %s, want t3 t2", page1.Items[0].ID, page1.Items[1].ID)
-	}
-
-	page2, err := svc.ListTasks("", "char_test", "", 2, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if page2.Total != 3 || len(page2.Items) != 1 {
-		t.Fatalf("page2 total=%d items=%d, want 3/1", page2.Total, len(page2.Items))
-	}
-	if page2.Items[0].ID != "t1" {
-		t.Fatalf("page2 item = %s, want t1", page2.Items[0].ID)
+	if page2.Items[0].ID != "t2" || page2.Items[1].ID != "t1" {
+		t.Fatalf("page2 order = %s %s, want t2 t1", page2.Items[0].ID, page2.Items[1].ID)
 	}
 }
 
@@ -603,9 +583,6 @@ func TestRefreshRecovery(t *testing.T) {
 	}
 	if !keys["idle_normal"] || !keys["walk_left"] {
 		t.Fatalf("actions keys = %v, want idle_normal+walk_left", keys)
-	}
-	if detail.CharacterName != "测试角色" {
-		t.Fatalf("characterName = %s, want 测试角色", detail.CharacterName)
 	}
 	if detail.ModelName != "测试模型" {
 		t.Fatalf("modelName = %s, want 测试模型", detail.ModelName)

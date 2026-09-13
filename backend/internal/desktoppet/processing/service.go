@@ -234,7 +234,6 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 		ID:                         taskID,
 		GenerationTaskID:           req.GenerationTaskID,
 		UserID:                     req.UserID,
-		CharacterID:                validation.Task.CharacterID,
 		ProcessingVersion:          processingVersion,
 		Status:                     "pending",
 		CurrentStage:               "created",
@@ -670,7 +669,6 @@ func (s *service) preparePackageBuildRequest(req *CreatePackageRequest) (*Packag
 	buildReq := &PackageBuildRequest{
 		ProcessingTaskID:  req.ProcessingTaskID,
 		UserID:            req.UserID,
-		CharacterID:       genTask.CharacterID,
 		GenerationTaskID:  task.GenerationTaskID,
 		PackageName:       genTask.Name,
 		DefaultAction:     defaultAction,
