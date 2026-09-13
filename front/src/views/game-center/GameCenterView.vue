@@ -36,7 +36,7 @@
           游戏扩展已安装。由插件检测并连接其支持的游戏，GameHost 只承载插件 Runtime 与通信通道。
         </p>
         <p v-else>
-          添加一个 `.gamex` 或 `.amitiax` 游戏扩展。安装完成后，Amitia 会自动把它归入游戏模式。
+          添加一个 `.gamex` 游戏扩展。安装完成后，Amitia 会自动把它归入游戏模式。
         </p>
 
         <div class="current-game-stats">
@@ -233,7 +233,7 @@
           <span>不会再要求填写后端宿主机文件路径</span>
         </template>
         <el-button :loading="previewLoading" @click="choosePackage">{{ installFile ? "重新选择" : "选择文件" }}</el-button>
-        <input ref="packageInput" class="sr-only" type="file" accept=".gamex,.amitiax" @change="onPackageFile" />
+        <input ref="packageInput" class="sr-only" type="file" accept=".gamex" @change="onPackageFile" />
       </div>
 
       <el-progress
@@ -573,9 +573,7 @@ const installAcknowledged = ref(false);
 const previewIsGame = computed(() => {
   const preview = installPreview.value;
   if (!preview) return false;
-  return preview.managementTarget === "game_center"
-    || preview.contributionKinds?.includes("gamex") === true
-    || preview.contributionKinds?.includes("game_plugin") === true;
+  return preview.managementTarget === "game_center" || preview.contributionKinds?.includes("gamex") === true;
 });
 
 const needsInstallAcknowledgement = computed(() => {
@@ -875,8 +873,8 @@ async function onPackageDrop(event: DragEvent) {
 }
 
 async function setPackageFile(file: File) {
-  if (!/\.(gamex|amitiax)$/i.test(file.name)) {
-    ElMessage.warning("请选择 .gamex 或 .amitiax 游戏扩展包");
+  if (!/\.gamex$/i.test(file.name)) {
+    ElMessage.warning("请选择 .gamex 游戏扩展包");
     return;
   }
   installFile.value = file;
@@ -905,7 +903,6 @@ async function buildPackagePreview() {
     if (
       preview.managementTarget !== "game_center"
       && !preview.contributionKinds?.includes("gamex")
-      && !preview.contributionKinds?.includes("game_plugin")
     ) {
       ElMessage.error("该扩展包不是游戏扩展，已阻止从游戏模式安装");
       return;
