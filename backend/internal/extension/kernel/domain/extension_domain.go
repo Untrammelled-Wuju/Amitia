@@ -18,10 +18,12 @@ func DefaultExtensionDomain() ExtensionDomain {
 }
 
 func IsValidExtensionDomain(domain ExtensionDomain) bool {
-	switch NormalizeExtensionDomain(domain) {
+	switch domain {
 	case ExtensionDomainGeneral, ExtensionDomainGame, ExtensionDomainDesktopPet,
 		ExtensionDomainMemory, ExtensionDomainProfile, ExtensionDomainEpisodic,
 		ExtensionDomainWorldbook, ExtensionDomainCompanion:
+		return true
+	case "game", "desktop_pet":
 		return true
 	default:
 		return false

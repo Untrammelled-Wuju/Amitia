@@ -165,7 +165,14 @@ func (m *managedPluginHost) Invoke(ctx context.Context, request runtime_supervis
 
 	var outputBytes []byte
 	if output != nil {
-		outputBytes = []byte(fmt.Sprintf("%v", output))
+		outputBytes, err = json.Marshal(output)
+		if err != nil {
+			return runtime_supervisor.InvocationResult{
+				InvocationID: request.InvocationID,
+				Status:       "failed",
+				Error:        fmt.Errorf("javascript_main: encode invocation output: %w", err),
+			}
+		}
 	}
 
 	return runtime_supervisor.InvocationResult{

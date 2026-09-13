@@ -11,7 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	kernel "github.com/u-ai/backend/internal/extension/kernel"
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
@@ -43,33 +43,51 @@ type PluginToolResult struct {
 }
 
 type KernelPluginToolExecutor struct {
-	Facade *kernel.ToolFacade
+	Container *kernel.Container
 }
 
 func (e KernelPluginToolExecutor) ExecuteTool(ctx context.Context, toolID string, input json.RawMessage, scope PluginExecutionScope, externalCallID string, idempotencyKey string) (PluginToolResult, bool) {
-	if e.Facade == nil {
+	if e.Container == nil || e.Container.ToolRegistry == nil || e.Container.RuntimeSupervisor == nil {
 		return PluginToolResult{Status: "failed", ErrorCode: "KERNEL_UNAVAILABLE", ErrorText: "extension kernel unavailable"}, false
 	}
-	result, ok := e.Facade.ExecuteTool(ctx, kernelCapabilityID(toolID), input, kernel.LegacyScope{
-		UserID:         scope.UserID,
-		CharacterID:    scope.CharacterID,
-		ConversationID: scope.ConversationID,
-		Channel:        scope.Channel,
-		SessionID:      scope.SessionID,
-		TraceID:        scope.TraceID,
-		RequestID:      scope.RequestID,
-		ToolCallID:     scope.ToolCallID,
-	}, externalCallID, idempotencyKey)
-	out := PluginToolResult{
-		Status:      result.Status,
-		Output:      result.Output,
-		VisibleText: result.VisibleText,
+	definition, ok := e.Container.ToolRegistry.Get(ctx, strings.TrimSpace(toolID))
+	if !ok {
+		return PluginToolResult{Status: "failed", ErrorCode: "TOOL_NOT_FOUND", ErrorText: toolID}, false
 	}
+	if definition.Runtime.RuntimeType == "" || definition.Runtime.HandlerName == "" {
+		return PluginToolResult{Status: "failed", ErrorCode: "RUNTIME_BINDING_INVALID", ErrorText: toolID}, false
+	}
+	definitionID := runtime_supervisor.BuildRuntimeDefinitionID(string(definition.ExtensionID), string(definition.ModuleID), string(definition.Runtime.RuntimeType))
+	snapshot := e.Container.RuntimeSupervisor.Snapshot(ctx, definitionID)
+	instanceID := ""
+	for _, instance := range snapshot.Instances {
+		if instance.Actual == runtime_supervisor.ActualReady {
+			instanceID = instance.InstanceID
+			break
+		}
+	}
+	if instanceID == "" {
+		return PluginToolResult{Status: "failed", ErrorCode: "RUNTIME_NOT_READY", ErrorText: toolID}, false
+	}
+	invocationID := strings.TrimSpace(externalCallID)
+	if invocationID == "" {
+		invocationID = strings.TrimSpace(scope.ToolCallID)
+	}
+	if invocationID == "" {
+		invocationID = strings.TrimSpace(scope.RequestID)
+	}
+	result := e.Container.RuntimeSupervisor.Invoke(ctx, runtime_supervisor.InvocationRequest{
+		InstanceID:   instanceID,
+		TraceID:      scope.TraceID,
+		InvocationID: invocationID,
+		Operation:    definition.Runtime.HandlerName,
+		Input:        input,
+		Generation:   snapshot.Generation,
+	})
 	if result.Error != nil {
-		out.ErrorCode = result.Error.Code
-		out.ErrorText = result.Error.Message
+		return PluginToolResult{Status: "failed", ErrorCode: "RUNTIME_INVOKE_FAILED", ErrorText: result.Error.Error()}, true
 	}
-	return out, ok
+	return PluginToolResult{Status: result.Status, Output: json.RawMessage(result.Output), VisibleText: string(result.Output)}, true
 }
 
 type PluginHandler struct {
@@ -200,8 +218,8 @@ func (h *PluginHandler) command(c *gin.Context, action string, payload map[strin
 		if message == "" {
 			message = result.VisibleText
 		}
-		if message == "" {
-			message = "主动消息插件执行失败"
+		if message == "" || message == ProactiveCommandToolID {
+			message = fmt.Sprintf("主动消息插件执行失败: status=%s code=%s", result.Status, result.ErrorCode)
 		}
 		util.ErrorResponse(c, 500, message, nil)
 		return
@@ -304,8 +322,4 @@ func clonePayload(payload map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
-}
-
-func kernelCapabilityID(value string) capability.CapabilityID {
-	return capability.CapabilityID(strings.TrimSpace(value))
 }

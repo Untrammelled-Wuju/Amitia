@@ -502,7 +502,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			apiGroup,
 			ctx,
 			services.Companion,
-			proactive.KernelPluginToolExecutor{Facade: agentToolFacade},
+			proactive.KernelPluginToolExecutor{Container: services.KernelContainer},
 		)
 		proactive.RegisterRemindersRouter(apiGroup, proHandler)
 		episodic.RegisterEpisodicRouter(apiGroup, services.Episodic)
