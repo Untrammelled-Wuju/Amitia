@@ -18,21 +18,11 @@ func TestBaseline_Cutover_NoDirectSkillRuntimeInProduction(t *testing.T) {
 	}
 }
 
-func TestBaseline_Cutover_ProductionSkipsPluginManagerStart(t *testing.T) {
-	src := readServicesSource(t)
-	if !strings.Contains(src, "SkipPluginManagerStart: true") {
-		t.Fatalf("services.go must create the legacy runtime with SkipPluginManagerStart: true; Phase 9 forbids starting the old PluginManager in production")
-	}
-}
-
 func TestBaseline_Cutover_LegacyCallCounterHasAllMetrics(t *testing.T) {
 	src := readLegacyCallCounterSource(t)
 	requiredMetrics := []string{
-		"legacy_plugin_start",
-		"legacy_plugin_dispatch",
 		"legacy_tool_execute",
 		"legacy_package_install",
-		"legacy_skill_execute",
 		"legacy_mcp_tool_register",
 		"legacy_schedule_tick",
 	}
@@ -43,20 +33,13 @@ func TestBaseline_Cutover_LegacyCallCounterHasAllMetrics(t *testing.T) {
 		}
 	}
 	if len(missing) > 0 {
-		t.Fatalf("LegacyCallCounter must track all 7 legacy metrics required by Phase 9 section 13.5; missing=%v", missing)
+		t.Fatalf("LegacyCallCounter must track all required legacy metrics; missing=%v", missing)
 	}
 	if !strings.Contains(src, "func (c *LegacyCallCounter) Total()") {
 		t.Fatalf("LegacyCallCounter must expose Total() for aggregate legacy call verification")
 	}
 	if !strings.Contains(src, "func (c *LegacyCallCounter) Snapshot()") {
 		t.Fatalf("LegacyCallCounter must expose Snapshot() for dev console and readiness reporting")
-	}
-}
-
-func TestBaseline_Cutover_PluginStartCounterWired(t *testing.T) {
-	src := readLegacyRuntimeSource(t)
-	if !strings.Contains(src, "GlobalLegacyCallCounter().IncPluginStart()") {
-		t.Fatalf("runtime.go must call GlobalLegacyCallCounter().IncPluginStart() before pluginManager.Start; Phase 9 requires legacy_plugin_start monitoring")
 	}
 }
 

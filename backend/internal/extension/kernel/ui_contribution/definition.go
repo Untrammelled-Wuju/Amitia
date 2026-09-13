@@ -8,6 +8,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 )
 
 var ErrActionApprovalRequired = errors.New("ui action approval required")
@@ -476,6 +477,9 @@ func ValidateAgainstSlot(def *UIContributionDefinition, slot *UISlotContract) er
 				break
 			}
 		}
+		if !sandboxAllowed && def.Sandbox.Type == SandboxHostNative && IsAllowedHostRuntime(def.ExtensionID, def.Entry.RuntimeID) {
+			sandboxAllowed = true
+		}
 		if !sandboxAllowed {
 			return fmt.Errorf("%w: %s not in slot %s", ErrSandboxNotAllowedBySlot, def.Sandbox.Type, slot.SlotID)
 		}
@@ -742,4 +746,8 @@ func allowedSandboxesForKind(kind UIContributionKind) []UISandboxType {
 	default:
 		return []UISandboxType{kind.DefaultSandbox()}
 	}
+}
+
+func IsAllowedHostRuntime(extensionID ExtensionID, runtimeID string) bool {
+	return runtimegate.HostRuntimeAllowed(string(extensionID), runtimeID)
 }

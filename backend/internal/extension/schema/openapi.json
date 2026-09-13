@@ -315,160 +315,6 @@
         ],
         "type": "object"
       },
-      "PermissionGrant": {
-        "properties": {
-          "capability": {
-            "type": "string"
-          },
-          "decision": {
-            "enum": [
-              "deny",
-              "allow_once",
-              "allow_session",
-              "allow_character",
-              "allow_always"
-            ]
-          },
-          "expiresAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "scopeId": {
-            "type": "string"
-          },
-          "scopeType": {
-            "enum": [
-              "global",
-              "character",
-              "conversation",
-              "channel",
-              "session"
-            ]
-          }
-        },
-        "required": [
-          "capability",
-          "decision",
-          "scopeType",
-          "scopeId"
-        ],
-        "type": "object"
-      },
-      "PluginManifest": {
-        "properties": {
-          "$schema": {
-            "const": "https://schemas.amitia.dev/extensions/v1/manifest.schema.json"
-          },
-          "apiVersion": {
-            "const": "extensions.amitia.dev/v1alpha1"
-          },
-          "capabilities": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "compatibility": {
-            "type": "object"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "entry": {
-            "type": "object"
-          },
-          "execution": {
-            "type": "object"
-          },
-          "hooks": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "kind": {
-            "const": "Plugin"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "registeredSkills": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "state": {
-            "type": "object"
-          },
-          "subscriptions": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "$schema",
-          "apiVersion",
-          "kind",
-          "metadata",
-          "compatibility",
-          "entry",
-          "capabilities",
-          "hooks",
-          "subscriptions",
-          "registeredSkills",
-          "execution",
-          "state",
-          "enabled"
-        ],
-        "type": "object"
-      },
-      "PluginView": {
-        "properties": {
-          "compatible": {
-            "type": "boolean"
-          },
-          "currentCircuits": {
-            "type": "integer"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "health": {
-            "type": "string"
-          },
-          "lifecycle": {
-            "enum": [
-              "registered",
-              "loaded",
-              "enabled",
-              "disabled",
-              "error",
-              "circuit_open",
-              "unloading",
-              "unloaded"
-            ]
-          },
-          "manifest": {
-            "$ref": "#/components/schemas/PluginManifest"
-          },
-          "source": {
-            "const": "builtin"
-          }
-        },
-        "required": [
-          "manifest",
-          "source",
-          "lifecycle",
-          "health",
-          "compatible",
-          "enabled",
-          "currentCircuits"
-        ],
-        "type": "object"
-      },
       "Problem": {
         "properties": {
           "code": {
@@ -502,321 +348,6 @@
           "instance",
           "code",
           "traceId"
-        ],
-        "type": "object"
-      },
-      "SurfaceActionRequest": {
-        "properties": {
-          "channel": {
-            "type": "string"
-          },
-          "characterId": {
-            "type": "string"
-          },
-          "conversationId": {
-            "type": "string"
-          },
-          "input": {},
-          "sessionId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "characterId",
-          "input"
-        ],
-        "type": "object"
-      },
-      "WorkshopGenerateRequest": {
-        "properties": {
-          "draft": {
-            "type": "object"
-          },
-          "requirement": {
-            "maxLength": 20000,
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "WorkshopPermissionConfirmation": {
-        "properties": {
-          "capabilities": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "uniqueItems": true
-          },
-          "confirmedHighRisk": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "uniqueItems": true
-          },
-          "production": {
-            "type": "boolean"
-          },
-          "workflowChecksum": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "workflowChecksum",
-          "capabilities",
-          "confirmedHighRisk",
-          "production"
-        ],
-        "type": "object"
-      },
-      "WorkshopPlan": {
-        "properties": {
-          "assumptions": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "capabilities": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "configs": {
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "dependencies": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "goal": {
-            "type": "string"
-          },
-          "inputs": {
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "missingDetails": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "outputs": {
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "risks": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "sideEffects": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "steps": {
-            "items": {
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "purpose": {
-                  "type": "string"
-                },
-                "type": {
-                  "enum": [
-                    "http",
-                    "condition",
-                    "transform",
-                    "template",
-                    "call_skill",
-                    "schedule",
-                    "notification",
-                    "memory_candidate",
-                    "context_contribution"
-                  ]
-                }
-              },
-              "required": [
-                "id",
-                "type",
-                "purpose"
-              ],
-              "type": "object"
-            },
-            "minItems": 1,
-            "type": "array"
-          }
-        },
-        "required": [
-          "goal",
-          "inputs",
-          "outputs",
-          "configs",
-          "steps",
-          "dependencies",
-          "capabilities",
-          "sideEffects",
-          "risks",
-          "missingDetails",
-          "assumptions"
-        ],
-        "type": "object"
-      },
-      "WorkshopRevision": {
-        "properties": {
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "draft": {
-            "type": "object"
-          },
-          "id": {
-            "type": "string"
-          },
-          "modelName": {
-            "type": "string"
-          },
-          "modelProvider": {
-            "type": "string"
-          },
-          "normalizedDraft": {
-            "type": "object"
-          },
-          "plan": {
-            "$ref": "#/components/schemas/WorkshopPlan"
-          },
-          "revision": {
-            "type": "integer"
-          },
-          "sessionId": {
-            "type": "string"
-          },
-          "validation": {
-            "type": "object"
-          },
-          "workflowChecksum": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "sessionId",
-          "revision",
-          "plan",
-          "draft",
-          "normalizedDraft",
-          "workflowChecksum",
-          "createdAt"
-        ],
-        "type": "object"
-      },
-      "WorkshopSession": {
-        "properties": {
-          "characterId": {
-            "type": "string"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "currentRevision": {
-            "type": "integer"
-          },
-          "id": {
-            "type": "string"
-          },
-          "installedSkillId": {
-            "type": "string"
-          },
-          "installedVersion": {
-            "type": "string"
-          },
-          "requirement": {
-            "type": "string"
-          },
-          "status": {
-            "enum": [
-              "draft",
-              "generating",
-              "generated",
-              "validating",
-              "validation_failed",
-              "validated",
-              "awaiting_permission_confirmation",
-              "testing",
-              "test_failed",
-              "test_passed",
-              "installing",
-              "installed",
-              "enabled",
-              "disabled",
-              "archived",
-              "error"
-            ]
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "userId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "userId",
-          "status",
-          "requirement",
-          "currentRevision",
-          "createdAt",
-          "updatedAt"
-        ],
-        "type": "object"
-      },
-      "WorkshopTestRequest": {
-        "properties": {
-          "controlledLiveConfirmed": {
-            "type": "boolean"
-          },
-          "mode": {
-            "enum": [
-              "dry_run",
-              "mocked",
-              "controlled_live"
-            ]
-          },
-          "testCaseIds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "testCases": {
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "mode"
         ],
         "type": "object"
       }
@@ -2790,11 +2321,25 @@
             "multipart/form-data": {
               "schema": {
                 "properties": {
-                  "file": {"format": "binary", "type": "string"},
-                  "scopeId": {"type": "string"},
-                  "scopeType": {"enum": ["global", "character"], "type": "string"}
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  },
+                  "scopeId": {
+                    "type": "string"
+                  },
+                  "scopeType": {
+                    "enum": [
+                      "global",
+                      "character"
+                    ],
+                    "type": "string"
+                  }
                 },
-                "required": ["file", "scopeType"],
+                "required": [
+                  "file",
+                  "scopeType"
+                ],
                 "type": "object"
               }
             }
@@ -2802,79 +2347,206 @@
           "required": true
         },
         "responses": {
-          "201": {"description": "Artifact stored and preview session created"},
-          "422": {"description": "Package rejected by the verification pipeline"}
+          "201": {
+            "description": "Artifact stored and preview session created"
+          },
+          "422": {
+            "description": "Package rejected by the verification pipeline"
+          }
         },
         "summary": "Upload an immutable package artifact and create its preview"
       }
     },
     "/extensions/packages/previews/{sessionId}/confirm": {
       "post": {
-        "parameters": [{"in": "path", "name": "sessionId", "required": true, "schema": {"type": "string"}}],
-        "requestBody": {"content": {"application/json": {"schema": {"type": "object"}}}, "required": true},
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
-          "200": {"description": "Bound, expiring confirmation token"},
-          "422": {"description": "Preview or confirmations rejected"}
+          "200": {
+            "description": "Bound, expiring confirmation token"
+          },
+          "422": {
+            "description": "Preview or confirmations rejected"
+          }
         },
         "summary": "Confirm a package preview"
       }
     },
     "/extensions/packages/previews": {
       "post": {
-        "responses": {"201": {"description": "Artifact stored and preview session created"}},
+        "responses": {
+          "201": {
+            "description": "Artifact stored and preview session created"
+          }
+        },
         "summary": "Create a package preview from an uploaded artifact"
       }
     },
     "/extensions/packages/import/sessions/{sessionId}": {
       "get": {
-        "parameters": [{"in": "path", "name": "sessionId", "required": true, "schema": {"type": "string"}}],
-        "responses": {"200": {"description": "Package preview session"}},
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Package preview session"
+          }
+        },
         "summary": "Get a package preview session"
       },
       "delete": {
-        "parameters": [{"in": "path", "name": "sessionId", "required": true, "schema": {"type": "string"}}],
-        "responses": {"200": {"description": "Package preview session cancelled"}},
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Package preview session cancelled"
+          }
+        },
         "summary": "Cancel a package preview session"
       }
     },
     "/extension-package-operations/{operationId}": {
       "get": {
-        "parameters": [{"in": "path", "name": "operationId", "required": true, "schema": {"type": "string"}}],
-        "responses": {"200": {"description": "Package operation"}},
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Package operation"
+          }
+        },
         "summary": "Get a package operation compatibility view"
       }
     },
     "/extension-package-operations/{operationId}/final-gate": {
       "get": {
-        "parameters": [{"in": "path", "name": "operationId", "required": true, "schema": {"type": "string"}}],
-        "responses": {"200": {"description": "Final gate verification result"}, "404": {"description": "Operation not found"}},
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Final gate verification result"
+          },
+          "404": {
+            "description": "Operation not found"
+          }
+        },
         "summary": "Verify the final gate for a package operation (compatibility view)"
       }
     },
     "/extensions/packages/operations/install": {
       "post": {
-        "requestBody": {"content": {"application/json": {"schema": {"type": "object"}}}, "required": true},
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
-          "202": {"description": "Install operation completed and journaled"},
-          "422": {"description": "Confirmation, policy, artifact, or trust validation failed"}
+          "202": {
+            "description": "Install operation completed and journaled"
+          },
+          "422": {
+            "description": "Confirmation, policy, artifact, or trust validation failed"
+          }
         },
         "summary": "Execute a confirmed package install operation"
       }
     },
     "/extensions/packages/operations/update": {
       "post": {
-        "requestBody": {"content": {"application/json": {"schema": {"type": "object"}}}, "required": true},
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
-          "202": {"description": "Update operation completed and journaled"},
-          "422": {"description": "Confirmation, policy, artifact, dependency, or update validation failed"}
+          "202": {
+            "description": "Update operation completed and journaled"
+          },
+          "422": {
+            "description": "Confirmation, policy, artifact, dependency, or update validation failed"
+          }
         },
         "summary": "Execute a confirmed package update operation"
       }
     },
     "/extensions/packages/operations/{operationId}": {
       "get": {
-        "parameters": [{"in": "path", "name": "operationId", "required": true, "schema": {"type": "string"}}],
-        "responses": {"200": {"description": "Authoritative operation journal"}, "404": {"description": "Operation not found"}},
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operationId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative operation journal"
+          },
+          "404": {
+            "description": "Operation not found"
+          }
+        },
         "summary": "Get a package operation"
       }
     },
@@ -3000,721 +2672,6 @@
         "summary": "Get extension package service status"
       }
     },
-    "/extensions/plugins": {
-      "get": {
-        "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "minimum": 1,
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "schema": {
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin page"
-          }
-        },
-        "summary": "List registered plugins"
-      }
-    },
-    "/extensions/plugins/{id}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin details"
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Not found"
-          }
-        },
-        "summary": "Get plugin details"
-      }
-    },
-    "/extensions/plugins/{id}/circuit/reset": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Reset"
-          }
-        },
-        "summary": "Reset all plugin hook circuits"
-      }
-    },
-    "/extensions/plugins/{id}/config": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Redacted config"
-          }
-        },
-        "summary": "Get redacted plugin config"
-      },
-      "put": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Updated"
-          },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Invalid config"
-          }
-        },
-        "summary": "Validate, encrypt and update plugin config"
-      }
-    },
-    "/extensions/plugins/{id}/config/reset": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Reset"
-          }
-        },
-        "summary": "Reset plugin config"
-      }
-    },
-    "/extensions/plugins/{id}/disable": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Disabled"
-          }
-        },
-        "summary": "Disable plugin and its registered skills"
-      }
-    },
-    "/extensions/plugins/{id}/enable": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Enabled"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Incompatible or lifecycle failure"
-          }
-        },
-        "summary": "Enable plugin and its registered skills"
-      }
-    },
-    "/extensions/plugins/{id}/events": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "schema": {
-              "enum": [
-                "pending",
-                "failed",
-                "completed",
-                "dead_letter"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "schema": {
-              "maximum": 100,
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Event delivery page"
-          }
-        },
-        "summary": "List role-isolated plugin event deliveries"
-      }
-    },
-    "/extensions/plugins/{id}/events/dead-letter": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Dead-letter page"
-          }
-        },
-        "summary": "List plugin dead letters"
-      }
-    },
-    "/extensions/plugins/{id}/events/{eventId}/retry": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "eventId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Queued"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Character scope mismatch"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Not retryable"
-          }
-        },
-        "summary": "Retry owned dead-letter event"
-      }
-    },
-    "/extensions/plugins/{id}/health": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin health"
-          }
-        },
-        "summary": "Get plugin lifecycle and per-hook circuit state"
-      }
-    },
-    "/extensions/plugins/{id}/permissions": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Permission grants"
-          }
-        },
-        "summary": "Get role-isolated plugin capability grants"
-      },
-      "put": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "characterId": {
-                    "type": "string"
-                  },
-                  "grants": {
-                    "items": {
-                      "$ref": "#/components/schemas/PermissionGrant"
-                    },
-                    "type": "array"
-                  }
-                },
-                "required": [
-                  "grants"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Updated"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Denied"
-          }
-        },
-        "summary": "Replace plugin capability grants"
-      }
-    },
-    "/extensions/plugins/{id}/reload": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Reloaded"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Reload failed"
-          }
-        },
-        "summary": "Reload plugin with rollback on failure"
-      }
-    },
-    "/extensions/plugins/{id}/schedules": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Schedules"
-          }
-        },
-        "summary": "List role-isolated plugin schedules"
-      }
-    },
-    "/extensions/plugins/{id}/schedules/{scheduleId}/pause": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "scheduleId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paused"
-          }
-        },
-        "summary": "Pause owned plugin schedule"
-      }
-    },
-    "/extensions/plugins/{id}/schedules/{scheduleId}/resume": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "scheduleId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Resumed"
-          }
-        },
-        "summary": "Resume owned plugin schedule"
-      }
-    },
-    "/extensions/plugins/{id}/state": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Plugin states"
-          }
-        },
-        "summary": "List role-isolated encrypted plugin state"
-      }
-    },
-    "/extensions/plugins/{id}/surface": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Surface document"
-          }
-        },
-        "summary": "Get validated declarative Schema Surface"
-      }
-    },
-    "/extensions/plugins/{id}/surface/actions/{actionId}": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "actionId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SurfaceActionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Skill result"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Action not declared or denied"
-          }
-        },
-        "summary": "Execute a declared surface action through Skill Runtime"
-      }
-    },
     "/extensions/recovery/execute": {
       "post": {
         "description": "Execute recovery action",
@@ -3832,125 +2789,6 @@
         "tags": [
           "Rollbacks"
         ]
-      }
-    },
-    "/extensions/runs": {
-      "get": {
-        "parameters": [
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "skillId",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "trigger",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "channel",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "from",
-            "schema": {
-              "format": "date-time",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "to",
-            "schema": {
-              "format": "date-time",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "minimum": 1,
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "schema": {
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Run page"
-          }
-        },
-        "summary": "List skill runs"
-      }
-    },
-    "/extensions/runs/{runId}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "runId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Run details"
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Not found"
-          }
-        },
-        "summary": "Get skill run"
       }
     },
     "/extensions/schedules": {
@@ -4466,444 +3304,6 @@
         "summary": "Revoke local signer trust"
       }
     },
-    "/extensions/skills": {
-      "get": {
-        "parameters": [
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "enabled",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "trigger",
-            "schema": {
-              "enum": [
-                "llm",
-                "manual",
-                "schedule",
-                "system_event"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "source",
-            "schema": {
-              "enum": [
-                "builtin",
-                "legacy_tool",
-                "workflow",
-                "instructions"
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Skill list"
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          }
-        },
-        "summary": "List skills"
-      }
-    },
-    "/extensions/skills/{id}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Skill details"
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Not found"
-          }
-        },
-        "summary": "Get skill details"
-      }
-    },
-    "/extensions/skills/{id}/config": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Config"
-          }
-        },
-        "summary": "Get character-scoped skill config"
-      },
-      "put": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Updated"
-          },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Invalid config"
-          }
-        },
-        "summary": "Update character-scoped skill config"
-      }
-    },
-    "/extensions/skills/{id}/config/reset": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Reset"
-          }
-        },
-        "summary": "Reset character-scoped skill config"
-      }
-    },
-    "/extensions/skills/{id}/disable": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Disabled"
-          }
-        },
-        "summary": "Disable skill for a character"
-      }
-    },
-    "/extensions/skills/{id}/enable": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Enabled"
-          }
-        },
-        "summary": "Enable skill for a character"
-      }
-    },
-    "/extensions/skills/{id}/execute": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExecuteRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Skill result"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Permission denied"
-          }
-        },
-        "summary": "Manually execute skill"
-      }
-    },
-    "/extensions/skills/{id}/permissions": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "characterId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Permission grants"
-          }
-        },
-        "summary": "Get character-scoped skill permissions"
-      },
-      "put": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "channel": {
-                    "type": "string"
-                  },
-                  "characterId": {
-                    "type": "string"
-                  },
-                  "conversationId": {
-                    "type": "string"
-                  },
-                  "grants": {
-                    "items": {
-                      "$ref": "#/components/schemas/PermissionGrant"
-                    },
-                    "type": "array"
-                  },
-                  "sessionId": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "grants",
-                  "characterId"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Updated"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Denied"
-          }
-        },
-        "summary": "Replace character-scoped skill permissions"
-      }
-    },
-    "/extensions/skills/{id}/versions/{version}/rollback": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "version",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Rollback result"
-          }
-        },
-        "summary": "Atomically rollback a workflow Skill version"
-      }
-    },
-    "/extensions/skills/{id}/workshop/fork": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Forked workshop session"
-          },
-          "409": {
-            "description": "Only workflow Skills can be forked"
-          }
-        },
-        "summary": "Create a new workshop revision session from an installed workflow Skill"
-      }
-    },
     "/extensions/task-definitions": {
       "get": {
         "description": "List task definitions",
@@ -5138,534 +3538,6 @@
         ]
       }
     },
-    "/extensions/workshop/instructions/generate": {
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "requirement": {
-                    "maxLength": 20000,
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "requirement"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Validated Agent Skill import preview"
-          },
-          "400": {
-            "description": "Invalid, unsafe, or executable model output"
-          }
-        },
-        "summary": "Generate and server-validate a no-code Agent Skill instruction preview"
-      }
-    },
-    "/extensions/workshop/metrics": {
-      "get": {
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "counters": {
-                      "additionalProperties": {
-                        "minimum": 0,
-                        "type": "integer"
-                      },
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "counters"
-                  ],
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Required workshop counters"
-          }
-        },
-        "summary": "Get workshop runtime counters"
-      }
-    },
-    "/extensions/workshop/sessions": {
-      "get": {
-        "parameters": [
-          {
-            "in": "query",
-            "name": "characterId",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "schema": {
-              "minimum": 1,
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "schema": {
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Workshop session page"
-          }
-        },
-        "summary": "List owned workshop sessions"
-      },
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "characterId": {
-                    "type": "string"
-                  },
-                  "requirement": {
-                    "maxLength": 20000,
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "requirement"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkshopSession"
-                }
-              }
-            },
-            "description": "Created"
-          }
-        },
-        "summary": "Create workshop session"
-      }
-    },
-    "/extensions/workshop/sessions/{id}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Session detail"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Forbidden"
-          }
-        },
-        "summary": "Get owned workshop session"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/archive": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Archived"
-          }
-        },
-        "summary": "Archive workshop session"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/artifact": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Artifact metadata and redacted declarative files"
-          },
-          "404": {
-            "description": "Artifact not found"
-          }
-        },
-        "summary": "Get installed workshop artifact"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/export": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/zip": {
-                "schema": {
-                  "format": "binary",
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Artifact ZIP"
-          }
-        },
-        "summary": "Export deterministic workflow artifact ZIP"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/generate": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkshopGenerateRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkshopRevision"
-                }
-              }
-            },
-            "description": "Generated revision"
-          },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Invalid model output"
-          }
-        },
-        "summary": "Plan requirements and generate or save a structured draft revision"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/revisions": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Revision list"
-          }
-        },
-        "summary": "List immutable revisions"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/revisions/{revision}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "revision",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkshopRevision"
-                }
-              }
-            },
-            "description": "Revision"
-          }
-        },
-        "summary": "Get immutable revision"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/revisions/{revision}/install": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "revision",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Installed disabled Skill"
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Revision or version conflict"
-          }
-        },
-        "summary": "Atomically install validated and tested workflow Skill"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/revisions/{revision}/permissions/confirm": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "revision",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkshopPermissionConfirmation"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "Confirmed"
-          }
-        },
-        "summary": "Confirm revision-bound capabilities"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/revisions/{revision}/test": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "revision",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkshopTestRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Structured test report"
-          }
-        },
-        "summary": "Run declarative workflow sandbox test"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/revisions/{revision}/validate": {
-      "post": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "revision",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Validation result"
-          }
-        },
-        "summary": "Compile and statically validate revision"
-      }
-    },
-    "/extensions/workshop/sessions/{id}/tests": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Test reports"
-          }
-        },
-        "summary": "List revision-bound test reports"
-      }
-    },
-    "/extensions/workshop/tests/{testRunId}": {
-      "get": {
-        "parameters": [
-          {
-            "in": "path",
-            "name": "testRunId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Test report"
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Forbidden"
-          }
-        },
-        "summary": "Get owned redacted test report"
-      }
-    },
     "/extensions/{id}": {
       "delete": {
         "responses": {
@@ -5750,13 +3622,21 @@
         "summary": "Preview uninstall cleanup, retained audit data and dependency blockers"
       },
       "post": {
-        "responses": {"200": {"description": "Uninstall preview"}},
+        "responses": {
+          "200": {
+            "description": "Uninstall preview"
+          }
+        },
         "summary": "Create an uninstall preview"
       }
     },
     "/extensions/{id}/uninstall": {
       "post": {
-        "responses": {"200": {"description": "Uninstall operation"}},
+        "responses": {
+          "200": {
+            "description": "Uninstall operation"
+          }
+        },
         "summary": "Uninstall an extension package"
       }
     },
@@ -5994,23 +3874,59 @@
     "/extensions/{id}/versions/{version}/rollback/preview": {
       "get": {
         "parameters": [
-          {"in": "path", "name": "id", "required": true, "schema": {"type": "string"}},
-          {"in": "path", "name": "version", "required": true, "schema": {"type": "string"}}
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "Rollback preview with affected resources"},
-          "404": {"description": "Extension or version not found"}
+          "200": {
+            "description": "Rollback preview with affected resources"
+          },
+          "404": {
+            "description": "Extension or version not found"
+          }
         },
         "summary": "Preview a version rollback without executing it"
       },
       "post": {
         "parameters": [
-          {"in": "path", "name": "id", "required": true, "schema": {"type": "string"}},
-          {"in": "path", "name": "version", "required": true, "schema": {"type": "string"}}
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": {"description": "Rollback preview with affected resources"},
-          "404": {"description": "Extension or version not found"}
+          "200": {
+            "description": "Rollback preview with affected resources"
+          },
+          "404": {
+            "description": "Extension or version not found"
+          }
         },
         "summary": "Preview a version rollback without executing it"
       }

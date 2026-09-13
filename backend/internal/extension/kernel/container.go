@@ -52,6 +52,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/gamehost"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/runtimeprofile"
@@ -317,6 +318,7 @@ func (c *Container) Recover(ctx context.Context) error {
 		if inst.InstallationState != domain.InstallationStateInstalled {
 			continue
 		}
+		runtimegate.Set(string(inst.ExtensionID), inst.EnablementState == domain.EnablementEnabled || inst.EnablementState == domain.EnablementRequiresRecovery)
 		contribs, err := c.ContributionRepository.ListContributions(ctx, inst.ExtensionID)
 		if err != nil {
 			recoverErrs = append(recoverErrs, fmt.Errorf("kernel: list contributions for %s: %w", inst.ExtensionID, err))

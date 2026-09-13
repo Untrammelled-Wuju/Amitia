@@ -18,7 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/trust"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -151,7 +151,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 		preview.SignatureStatus = "legacy_signature"
 		preview.SignerKeyID = pkg.Signatures.KeyID
 		preview.TrustDecision = "rejected"
-		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_signature_required", Message: "Manifest v2 signature is required"})
+		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: "package_signature_required", Message: "Manifest v1 signature is required"})
 	} else {
 		if packageDevelopmentModeEnabled() || r.packageUnsignedDevAllowed(request, preview.ExtensionID) {
 			preview.DevOnly = true
@@ -248,7 +248,7 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	return preview, nil
 }
 
-func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifest manifest_v2.Manifest, preview *InstallPreview) {
+func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifest manifest_v1.Manifest, preview *InstallPreview) {
 	if preview == nil || !packageManifestHasMigrations(manifest) {
 		return
 	}
@@ -285,7 +285,7 @@ func (r *Runtime) evaluatePackageMigrationPreflight(ctx context.Context, manifes
 	}
 }
 
-func packageManifestHasMigrations(manifest manifest_v2.Manifest) bool {
+func packageManifestHasMigrations(manifest manifest_v1.Manifest) bool {
 	if len(manifest.Extension.Metadata) == 0 {
 		return false
 	}
@@ -363,7 +363,7 @@ func (r *Runtime) evaluatePackageCompatibilityAndDependenciesWithHostValidator(c
 			preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewPartialUnsupported, Code: "unsupported_module", Message: mod.ID})
 		}
 	}
-	deps := append([]manifest_v2.Dependency(nil), pkg.Manifest.Dependencies...)
+	deps := append([]manifest_v1.Dependency(nil), pkg.Manifest.Dependencies...)
 	for _, mod := range pkg.Manifest.Modules {
 		deps = append(deps, mod.Dependencies...)
 		for _, contribution := range mod.Contributions {

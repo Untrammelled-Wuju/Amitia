@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -114,23 +115,54 @@ func (api *KernelAPI) listExtensions(c *gin.Context) {
 		return
 	}
 	type extensionItem struct {
+		Name           string    `json:"name"`
 		ExtensionID    string    `json:"extensionId"`
 		Version        string    `json:"version"`
 		InstallationID string    `json:"installationId"`
 		State          string    `json:"state"`
 		Enablement     string    `json:"enablement"`
+		SystemManaged  bool      `json:"systemManaged"`
 		InstalledAt    time.Time `json:"installedAt"`
 		UpdatedAt      time.Time `json:"updatedAt"`
 		Generation     int64     `json:"generation"`
 	}
+	defsByExt := map[domain.ExtensionID][]domain.ExtensionDefinition{}
+	if defs, err := container.DefinitionRepository.ListExtensions(ctx); err == nil {
+		for _, def := range defs {
+			defsByExt[def.ID] = append(defsByExt[def.ID], def)
+		}
+	}
+	resolveName := func(inst domain.ExtensionInstallation) string {
+		defs := defsByExt[inst.ExtensionID]
+		fallback := ""
+		for _, def := range defs {
+			if fallback == "" {
+				fallback = def.Name.Default
+			}
+			if def.Version == inst.InstalledVersion {
+				return def.Name.Default
+			}
+		}
+		return fallback
+	}
+	resolveSystemManaged := func(inst domain.ExtensionInstallation) bool {
+		for _, def := range defsByExt[inst.ExtensionID] {
+			if value, ok := def.Metadata["system.managed"].(bool); ok && value {
+				return true
+			}
+		}
+		return strings.HasPrefix(string(inst.ExtensionID), "com.amitia.builtin.")
+	}
 	items := make([]extensionItem, 0, len(insts))
 	for _, inst := range insts {
 		items = append(items, extensionItem{
+			Name:           resolveName(inst),
 			ExtensionID:    string(inst.ExtensionID),
 			Version:        inst.InstalledVersion.String(),
 			InstallationID: inst.InstallationID,
-			State:          string(inst.InstallationState),
+			State:          installationStateForView(inst),
 			Enablement:     string(inst.EnablementState),
+			SystemManaged:  resolveSystemManaged(inst),
 			InstalledAt:    inst.InstalledAt,
 			UpdatedAt:      inst.UpdatedAt,
 			Generation:     inst.Generation,
@@ -160,6 +192,10 @@ func (api *KernelAPI) getExtension(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "extension not found"})
 		return
+	}
+	name := ""
+	if def, err := container.DefinitionRepository.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion); err == nil {
+		name = def.Name.Default
 	}
 
 	modules, _ := container.ModuleRepository.ListModules(ctx, domain.ExtensionID(extID))
@@ -213,17 +249,45 @@ func (api *KernelAPI) getExtension(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"name":           name,
 		"extensionId":    string(inst.ExtensionID),
 		"version":        inst.InstalledVersion.String(),
 		"installationId": inst.InstallationID,
-		"state":          string(inst.InstallationState),
+		"state":          installationStateForView(inst),
 		"enablement":     string(inst.EnablementState),
+		"systemManaged":  isSystemManagedExtension(ctx, container, string(inst.ExtensionID)),
 		"installedAt":    inst.InstalledAt,
 		"updatedAt":      inst.UpdatedAt,
 		"generation":     inst.Generation,
 		"modules":        moduleList,
 		"contributions":  contribList,
 	})
+}
+
+func installationStateForView(inst domain.ExtensionInstallation) string {
+	if inst.InstallationState == "" {
+		return string(domain.InstallationStateInstalled)
+	}
+	return string(inst.InstallationState)
+}
+
+func isSystemManagedExtension(ctx context.Context, container *kernelruntime.Container, extensionID string) bool {
+	if strings.HasPrefix(extensionID, "com.amitia.builtin.") {
+		return true
+	}
+	if container == nil || container.DefinitionRepository == nil || container.InstallationRepository == nil {
+		return false
+	}
+	inst, err := container.InstallationRepository.GetInstallation(ctx, domain.ExtensionID(extensionID))
+	if err != nil {
+		return false
+	}
+	def, err := container.DefinitionRepository.GetExtension(ctx, domain.ExtensionID(extensionID), inst.InstalledVersion)
+	if err != nil {
+		return false
+	}
+	value, _ := def.Metadata["system.managed"].(bool)
+	return value
 }
 
 func (api *KernelAPI) previewInstall(c *gin.Context) {
@@ -313,6 +377,10 @@ func (api *KernelAPI) previewUninstall(c *gin.Context) {
 		scopeType = "global"
 	}
 	ctx := c.Request.Context()
+	if isSystemManagedExtension(ctx, api.runtime.Kernel.Container(), req.ExtensionID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "系统插件不可卸载", "code": "SYSTEM_EXTENSION_UNINSTALL_FORBIDDEN"})
+		return
+	}
 	kr := api.runtime.Kernel
 	preview, err := kr.PreviewPackageUninstall(ctx, req.ExtensionID, kernelAPIUser(c), scopeType, req.ScopeID)
 	if err != nil {
@@ -350,6 +418,10 @@ func (api *KernelAPI) confirmUninstall(c *gin.Context) {
 		scopeType = "global"
 	}
 	ctx := c.Request.Context()
+	if isSystemManagedExtension(ctx, api.runtime.Kernel.Container(), req.ExtensionID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "系统插件不可卸载", "code": "SYSTEM_EXTENSION_UNINSTALL_FORBIDDEN"})
+		return
+	}
 	kr := api.runtime.Kernel
 	result, err := kr.ConfirmPackageUninstall(ctx, kernelruntime.ConfirmPackageUninstallRequest{
 		ExtensionID:   req.ExtensionID,
@@ -379,6 +451,10 @@ func (api *KernelAPI) uninstall(c *gin.Context) {
 	scopeType := req.ScopeType
 	if scopeType == "" {
 		scopeType = "global"
+	}
+	if isSystemManagedExtension(c.Request.Context(), api.runtime.Kernel.Container(), req.ExtensionID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "系统插件不可卸载", "code": "SYSTEM_EXTENSION_UNINSTALL_FORBIDDEN"})
+		return
 	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	if idempotencyKey == "" {

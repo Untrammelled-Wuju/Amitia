@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -54,7 +55,7 @@ func TestAgentSkillParserValidation(t *testing.T) {
 }
 
 func TestAgentSkillDirectoryLimitsAndUnsafeSVG(t *testing.T) {
-	service := NewAgentSkillService(nil, nil, nil)
+	service := NewAgentSkillService(nil, nil)
 	service.limits.MaxFiles = 1
 	_, err := service.PreviewDirectory(context.Background(), "user-1", "code-review", map[string][]byte{"SKILL.md": []byte("x"), "guide.md": []byte("x")})
 	assertExtensionErrorCode(t, err, ErrAgentSkillArchiveLimit)
@@ -155,24 +156,16 @@ func TestAgentSkillZIPSecurity(t *testing.T) {
 	assertExtensionErrorCode(t, err, ErrAgentSkillInvalidArchive)
 }
 
-func TestInstructionsRegistryAndExecutorContract(t *testing.T) {
-	validator, err := NewSchemaValidator()
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry := NewRegistry("1.0.0", validator, nil)
+func TestAgentSkillManifestIsNotModelExecutable(t *testing.T) {
 	definition := AgentSkillDefinition{ExtensionID: "local.agentskill.scope.code-review", Name: "code-review", Description: "Review code. Use when requested.", ArtifactID: "artifact", ContentHash: strings.Repeat("a", 64), CompatibilityStatus: AgentSkillCompatible}
 	skill := buildAgentSkillManifest(definition, "0.0.0+aaaaaaaaaaaa")
-	if err := registry.Register(context.Background(), skill, nil); err != nil {
+	var manifest Manifest
+	if err := json.Unmarshal(skill.Raw, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	available, err := registry.Available(context.Background(), ExecutionScope{Trigger: TriggerLLM})
-	if err != nil || len(available) != 0 {
-		t.Fatalf("instructions exposed as model tool: %v %v", available, err)
+	if manifest.Entry.Kind != "instructions" || manifest.Kind != "Skill" {
+		t.Fatalf("unexpected Agent Skill manifest: %+v", manifest)
 	}
-	executor := NewExecutor(registry, validator, nil, nil)
-	_, err = executor.Execute(context.Background(), ExecuteSkillRequest{SkillID: skill.ID, Scope: ExecutionScope{Trigger: TriggerManual}})
-	assertExtensionErrorCode(t, err, ErrSkillNotExecutable)
 }
 
 func TestAgentSkillInstallActivateResourceAndRestore(t *testing.T) {
@@ -180,8 +173,7 @@ func TestAgentSkillInstallActivateResourceAndRestore(t *testing.T) {
 	ctx := context.Background()
 	validator, _ := NewSchemaValidator()
 	repository := NewRepository(db)
-	registry := NewRegistry("1.0.0", validator, repository)
-	service := NewAgentSkillService(repository, registry, validator)
+	service := NewAgentSkillService(repository, validator)
 	raw := agentSkillTestZIP(t, map[string][]byte{"code-review/SKILL.md": []byte("---\nname: code-review\ndescription: Review code. Use when users request an audit.\n---\n\nRead references/checklist.md and report findings."), "code-review/references/checklist.md": []byte("Check correctness and security.")}, nil)
 	preview, err := service.PreviewZIP(ctx, "user-1", raw)
 	if err != nil {
@@ -263,13 +255,12 @@ func TestAgentSkillInstallActivateResourceAndRestore(t *testing.T) {
 	service.EndRound(scope)
 	_, err = service.ReadResource(ctx, ReadAgentSkillResourceRequest{Scope: scope, NameOrID: "code-review", Path: "references/checklist.md"})
 	assertExtensionErrorCode(t, err, ErrAgentSkillResourceDenied)
-	restoredRegistry := NewRegistry("1.0.0", validator, repository)
-	restored := NewAgentSkillService(repository, restoredRegistry, validator)
+	restored := NewAgentSkillService(repository, validator)
 	if err := restored.Restore(ctx); err != nil {
 		t.Fatal(err)
 	}
-	item, err := restoredRegistry.Get(ctx, installed.ExtensionID)
-	if err != nil || !item.Definition.Enabled {
+	item, _, err := restored.Get(ctx, ExecutionScope{UserID: "user-1", CharacterID: "char-1"}, installed.ExtensionID)
+	if err != nil || !item.Enabled {
 		t.Fatalf("restore failed: %+v %v", item, err)
 	}
 }
@@ -281,7 +272,7 @@ func agentSkillTestDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	runner := migration.Runner{DB: db, SkipBackup: true}
-	if err := runner.Apply([]migration.Migration{migration.ExtensionsMigration(), migration.PluginRuntimeMigration(), migration.ExtensionWorkshopMigration(), migration.ExtensionAgentSkillsMigration(), migration.ExtensionAgentSkillTraceMigration()}); err != nil {
+	if err := runner.Apply([]migration.Migration{migration.ExtensionsMigration(), migration.PluginRuntimeMigration(), migration.ExtensionScopeBindingsMigration(), migration.ExtensionWorkshopMigration(), migration.ExtensionAgentSkillsMigration(), migration.ExtensionAgentSkillTraceMigration()}); err != nil {
 		t.Fatal(err)
 	}
 	return db

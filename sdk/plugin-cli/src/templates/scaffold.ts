@@ -4,7 +4,7 @@ export function scaffoldManifest(input: TemplateScaffoldInput, kind: TemplateKin
   const module = moduleForTemplate(kind);
   const permissions = permissionsForTemplate(kind);
   const manifest = {
-    manifestVersion: 2,
+    manifestVersion: 1,
     extension: {
       id: input.extensionId,
       name: { default: input.displayName },

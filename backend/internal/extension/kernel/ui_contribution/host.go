@@ -266,12 +266,38 @@ func (h *UIHost) ListBySlot(slotID string) []*UIContributionDefinition {
 	return out
 }
 
+func (h *UIHost) ListActiveBySlot(slotID string) []*UIContributionDefinition {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]*UIContributionDefinition, 0)
+	for id, def := range h.contributions {
+		instance, ok := h.instances[id]
+		if ok && instance.Snapshot().State.IsActive() && def.Slot.SlotID == slotID {
+			out = append(out, def)
+		}
+	}
+	return out
+}
+
 func (h *UIHost) ListAll() []*UIContributionDefinition {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	out := make([]*UIContributionDefinition, 0, len(h.contributions))
 	for _, def := range h.contributions {
 		out = append(out, def)
+	}
+	return out
+}
+
+func (h *UIHost) ListActiveAll() []*UIContributionDefinition {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]*UIContributionDefinition, 0, len(h.contributions))
+	for id, def := range h.contributions {
+		instance, ok := h.instances[id]
+		if ok && instance.Snapshot().State.IsActive() {
+			out = append(out, def)
+		}
 	}
 	return out
 }

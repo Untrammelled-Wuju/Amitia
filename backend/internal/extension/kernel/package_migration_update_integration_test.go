@@ -13,7 +13,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 )
 
@@ -51,11 +51,11 @@ func packageMigrationSQLStagingDir(t *testing.T, extensionID string, definitions
 	return dir
 }
 
-func packageMigrationManifest(extensionID, version string, definitions []migration.MigrationDefinition) manifest_v2.Manifest {
-	return manifest_v2.Manifest{Extension: manifest_v2.ExtensionMeta{ID: extensionID, Version: version, Metadata: map[string]any{"migrations": map[string]any{"definitions": definitions}}}}
+func packageMigrationManifest(extensionID, version string, definitions []migration.MigrationDefinition) manifest_v1.Manifest {
+	return manifest_v1.Manifest{Extension: manifest_v1.ExtensionMeta{ID: extensionID, Version: version, Metadata: map[string]any{"migrations": map[string]any{"definitions": definitions}}}}
 }
 
-func packageMigrationPackage(manifest manifest_v2.Manifest, definitions []migration.MigrationDefinition) *amitiax.Package {
+func packageMigrationPackage(manifest manifest_v1.Manifest, definitions []migration.MigrationDefinition) *amitiax.Package {
 	files := make([]amitiax.FileEntry, 0, len(definitions))
 	for _, definition := range definitions {
 		files = append(files, amitiax.FileEntry{Path: definition.Entry, Size: 10, Hash: "entry-" + definition.MigrationID})

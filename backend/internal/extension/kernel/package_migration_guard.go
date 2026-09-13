@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 )
 
@@ -17,7 +17,7 @@ func NewPackageMigrationGuard(repo *migration.MigrationRepository) *PackageMigra
 	return &PackageMigrationGuard{core: migration.NewReversibleMigrationCore(repo)}
 }
 
-func (g *PackageMigrationGuard) PreflightManifest(ctx context.Context, manifest manifest_v2.Manifest, fromVersion string) (*migration.ReversiblePreflight, error) {
+func (g *PackageMigrationGuard) PreflightManifest(ctx context.Context, manifest manifest_v1.Manifest, fromVersion string) (*migration.ReversiblePreflight, error) {
 	if g == nil || g.core == nil {
 		return nil, fmt.Errorf("migration: package guard unavailable")
 	}
@@ -47,7 +47,7 @@ func (g *PackageMigrationGuard) CompensateReverse(ctx context.Context, request m
 	return g.core.CompensateReverse(ctx, request, handler)
 }
 
-func manifestMigrationDefinitions(manifest manifest_v2.Manifest) ([]migration.MigrationDefinition, error) {
+func manifestMigrationDefinitions(manifest manifest_v1.Manifest) ([]migration.MigrationDefinition, error) {
 	if len(manifest.Extension.Metadata) == 0 {
 		return nil, fmt.Errorf("migration: manifest migrations missing")
 	}

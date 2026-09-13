@@ -397,15 +397,15 @@ func TestRetiredRoutesRespondWithGoneWithoutSideEffects(t *testing.T) {
 	}
 }
 
-func TestSkillRoutesRemainActive(t *testing.T) {
+func TestLegacySkillRoutesAreRemoved(t *testing.T) {
 	engine := buildProductionExtensionRouter(t)
 
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/extensions/skills", nil)
 	engine.ServeHTTP(recorder, req)
 
-	if recorder.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 for /extensions/skills (auth required), got %d. body: %s", recorder.Code, recorder.Body.String())
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for removed /extensions/skills route, got %d. body: %s", recorder.Code, recorder.Body.String())
 	}
 }
 

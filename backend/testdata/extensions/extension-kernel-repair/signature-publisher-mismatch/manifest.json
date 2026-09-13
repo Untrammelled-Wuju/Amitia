@@ -1,5 +1,5 @@
 {
-	"manifestVersion": 2,
+	"manifestVersion": 1,
 	"extension": {
 		"id": "com.amitia.mismatch/signature-publisher-mismatch",
 		"name": {"default": "Signature Publisher Mismatch"},

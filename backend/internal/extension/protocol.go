@@ -1,24 +1,12 @@
 package extension
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	coreexec "github.com/u-ai/backend/internal/execution"
-	"strings"
-	"time"
-)
-
-type SkillSource string
-
-const (
-	SkillSourceBuiltin      SkillSource = "builtin"
-	SkillSourceLegacy       SkillSource = "legacy_tool"
-	SkillSourceWorkflow     SkillSource = "workflow"
-	SkillSourceInstructions SkillSource = "instructions"
-	SkillSourceMCP          SkillSource = "mcp"
 )
 
 type SkillTrigger string
@@ -30,36 +18,11 @@ const (
 	TriggerSystemEvent SkillTrigger = "system_event"
 )
 
-type RunStatus string
-
-const (
-	RunPending            RunStatus = "pending"
-	RunRunning            RunStatus = "running"
-	RunSucceeded          RunStatus = "succeeded"
-	RunFailed             RunStatus = "failed"
-	RunCancelled          RunStatus = "cancelled"
-	RunTimedOut           RunStatus = "timed_out"
-	RunPartiallySucceeded RunStatus = "partially_succeeded"
-)
-
-type PermissionDecision string
-
-const (
-	DecisionDeny           PermissionDecision = "deny"
-	DecisionAllowOnce      PermissionDecision = "allow_once"
-	DecisionAllowSession   PermissionDecision = "allow_session"
-	DecisionAllowCharacter PermissionDecision = "allow_character"
-	DecisionAllowAlways    PermissionDecision = "allow_always"
-)
-
 type ScopeType string
 
 const (
-	ScopeGlobal       ScopeType = "global"
-	ScopeCharacter    ScopeType = "character"
-	ScopeConversation ScopeType = "conversation"
-	ScopeChannel      ScopeType = "channel"
-	ScopeSession      ScopeType = "session"
+	ScopeGlobal    ScopeType = "global"
+	ScopeCharacter ScopeType = "character"
 )
 
 const (
@@ -127,37 +90,6 @@ type ManifestExecution struct {
 	Idempotent     bool  `json:"idempotent"`
 }
 
-type SkillDefinition struct {
-	ID                  string          `json:"id"`
-	ModelName           string          `json:"modelName"`
-	Name                string          `json:"name"`
-	Description         string          `json:"description"`
-	Version             string          `json:"version"`
-	Source              SkillSource     `json:"source"`
-	Entry               SkillEntry      `json:"entry"`
-	InputSchema         json.RawMessage `json:"inputSchema"`
-	OutputSchema        json.RawMessage `json:"outputSchema"`
-	ConfigSchema        json.RawMessage `json:"configSchema,omitempty"`
-	DefaultConfig       json.RawMessage `json:"defaultConfig,omitempty"`
-	Capabilities        []string        `json:"capabilities"`
-	Dependencies        []string        `json:"dependencies,omitempty"`
-	Triggers            []SkillTrigger  `json:"triggers"`
-	Timeout             time.Duration   `json:"-"`
-	TimeoutMS           int64           `json:"timeoutMs"`
-	HasSideEffects      bool            `json:"hasSideEffects"`
-	Retryable           bool            `json:"retryable"`
-	Idempotent          bool            `json:"idempotent"`
-	Enabled             bool            `json:"enabled"`
-	EffectiveScopeType  ScopeType       `json:"effectiveScopeType,omitempty"`
-	EffectiveScopeID    string          `json:"effectiveScopeId,omitempty"`
-	Compatible          bool            `json:"compatible"`
-	CompatibilityReason string          `json:"compatibilityReason,omitempty"`
-	Author              string          `json:"author,omitempty"`
-	License             string          `json:"license,omitempty"`
-	Manifest            json.RawMessage `json:"manifest"`
-	Internal            bool            `json:"internal,omitempty"`
-}
-
 type ExecutionScope struct {
 	UserID           string                     `json:"userId"`
 	CharacterID      string                     `json:"characterId"`
@@ -179,12 +111,6 @@ type ExecutionScope struct {
 type PermissionScope struct {
 	Type ScopeType `json:"type"`
 	ID   string    `json:"id"`
-}
-
-type ExtensionIdentity struct {
-	ExtensionID string `json:"extensionId"`
-	SkillID     string `json:"skillId"`
-	Version     string `json:"version"`
 }
 
 type SideEffectRecord struct {
@@ -222,140 +148,14 @@ func NewExtensionError(code, message, detail string, retryable bool, cause error
 	return &ExtensionError{Code: code, Message: message, Detail: detail, Retryable: retryable, Cause: cause}
 }
 
-type SkillResult struct {
-	RunID       string             `json:"runId"`
-	Status      RunStatus          `json:"status"`
-	Output      json.RawMessage    `json:"output,omitempty"`
-	SideEffects []SideEffectRecord `json:"sideEffects,omitempty"`
-	Error       *ExtensionError    `json:"error,omitempty"`
-	Duration    time.Duration      `json:"-"`
-	DurationMS  int64              `json:"durationMs"`
-	VisibleText string             `json:"visibleText,omitempty"`
-	ForceVoice  bool               `json:"forceVoice,omitempty"`
-}
-
-type ExecuteSkillRequest struct {
-	SkillID        string          `json:"skillId"`
-	Input          json.RawMessage `json:"input"`
-	Config         json.RawMessage `json:"config,omitempty"`
-	Scope          ExecutionScope  `json:"scope"`
-	IdempotencyKey string          `json:"idempotencyKey,omitempty"`
-}
-
-type SkillHandler func(context.Context, ExecuteSkillRequest) (SkillResult, error)
-
-type RegisteredSkill struct {
-	Definition SkillDefinition
-	Handler    SkillHandler
-}
-
-type SkillFilter struct {
-	Enabled         *bool
-	Trigger         SkillTrigger
-	Source          SkillSource
-	IncludeInternal bool
-}
-
-type RunFilter struct {
-	SkillID     string
-	Status      RunStatus
-	CharacterID string
-	Channel     string
-	Trigger     SkillTrigger
-	From        string
-	To          string
-	Page        int
-	PageSize    int
-}
-
-type PermissionGrantInput struct {
-	Capability string             `json:"capability"`
-	Decision   PermissionDecision `json:"decision"`
-	ScopeType  ScopeType          `json:"scopeType"`
-	ScopeID    string             `json:"scopeId"`
-	ExpiresAt  string             `json:"expiresAt,omitempty"`
-}
-
-type PermissionGrantView struct {
-	ID          string             `json:"id"`
-	Capability  string             `json:"capability"`
-	Risk        string             `json:"risk"`
-	Description string             `json:"description"`
-	Decision    PermissionDecision `json:"decision"`
-	ScopeType   ScopeType          `json:"scopeType"`
-	ScopeID     string             `json:"scopeId"`
-	ExpiresAt   string             `json:"expiresAt,omitempty"`
-	ConsumedAt  string             `json:"consumedAt,omitempty"`
-}
-
-type RunView struct {
-	RunID            string             `json:"runId"`
-	ExtensionID      string             `json:"extensionId"`
-	ExtensionVersion string             `json:"extensionVersion"`
-	SkillID          string             `json:"skillId"`
-	UserID           string             `json:"userId"`
-	CharacterID      string             `json:"characterId"`
-	ConversationID   string             `json:"conversationId"`
-	Channel          string             `json:"channel"`
-	Trigger          SkillTrigger       `json:"trigger"`
-	Status           RunStatus          `json:"status"`
-	InputSummary     string             `json:"inputSummary"`
-	OutputSummary    string             `json:"outputSummary"`
-	SideEffects      []SideEffectRecord `json:"sideEffects,omitempty"`
-	IdempotencyKey   string             `json:"idempotencyKey,omitempty"`
-	StartedAt        string             `json:"startedAt"`
-	FinishedAt       string             `json:"finishedAt,omitempty"`
-	DurationMS       int64              `json:"durationMs"`
-	ErrorCode        string             `json:"errorCode,omitempty"`
-	ErrorDetail      string             `json:"errorDetail,omitempty"`
-	TraceID          string             `json:"traceId"`
-}
-
-type RunPage struct {
-	Items    []RunView `json:"items"`
-	Total    int64     `json:"total"`
-	Page     int       `json:"page"`
-	PageSize int       `json:"pageSize"`
-}
-
-type SkillView struct {
-	SkillDefinition
-	LatestRun *RunView `json:"latestRun,omitempty"`
-}
-
-type SkillDetailView struct {
-	SkillView
-	Permissions []PermissionGrantView  `json:"permissions"`
-	Config      json.RawMessage        `json:"config"`
-	RecentRuns  []RunView              `json:"recentRuns"`
-	Versions    []ExtensionVersionView `json:"versions"`
-}
-
-type ExtensionVersionView struct {
-	Version   string          `json:"version"`
-	Checksum  string          `json:"checksum"`
-	Manifest  json.RawMessage `json:"manifest"`
-	CreatedAt time.Time       `json:"createdAt"`
-}
-
 type ProblemDetail struct {
-	Type     string       `json:"type"`
-	Title    string       `json:"title"`
-	Status   int          `json:"status"`
-	Detail   string       `json:"detail"`
-	Instance string       `json:"instance"`
-	Code     string       `json:"code"`
-	TraceID  string       `json:"traceId"`
-	Result   *SkillResult `json:"result,omitempty"`
-}
-
-func hasTrigger(triggers []SkillTrigger, trigger SkillTrigger) bool {
-	for _, item := range triggers {
-		if item == trigger {
-			return true
-		}
-	}
-	return false
+	Type     string `json:"type"`
+	Title    string `json:"title"`
+	Status   int    `json:"status"`
+	Detail   string `json:"detail"`
+	Instance string `json:"instance"`
+	Code     string `json:"code"`
+	TraceID  string `json:"traceId"`
 }
 
 func normalizeJSON(input json.RawMessage) json.RawMessage {
@@ -363,100 +163,6 @@ func normalizeJSON(input json.RawMessage) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	return input
-}
-
-func compactSensitiveJSON(input json.RawMessage) string {
-	if len(input) == 0 {
-		return "{}"
-	}
-	var value interface{}
-	if json.Unmarshal(input, &value) != nil {
-		return "[invalid json]"
-	}
-	redactValue(value)
-	out, _ := json.Marshal(value)
-	if len(out) > 2048 {
-		out = out[:2048]
-	}
-	return string(out)
-}
-
-func redactValue(value interface{}) {
-	switch typed := value.(type) {
-	case map[string]interface{}:
-		for key, item := range typed {
-			if isSensitiveKey(key) {
-				typed[key] = "[REDACTED]"
-				continue
-			}
-			redactValue(item)
-		}
-	case []interface{}:
-		for _, item := range typed {
-			redactValue(item)
-		}
-	}
-}
-
-func isSensitiveKey(key string) bool {
-	lower := strings.ToLower(key)
-	return strings.Contains(lower, "secret") || strings.Contains(lower, "token") || strings.Contains(lower, "apikey") || strings.Contains(lower, "api_key") || strings.Contains(lower, "authorization") || strings.Contains(lower, "password") || strings.Contains(lower, "credential")
-}
-
-func hasPlaintextSecret(value interface{}) bool {
-	switch typed := value.(type) {
-	case map[string]interface{}:
-		for key, item := range typed {
-			if isSensitiveKey(key) {
-				if text, ok := item.(string); !ok || (strings.TrimSpace(text) != "" && text != "[REDACTED]") {
-					return true
-				}
-			}
-			if hasPlaintextSecret(item) {
-				return true
-			}
-		}
-	case []interface{}:
-		for _, item := range typed {
-			if hasPlaintextSecret(item) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func redactJSON(input json.RawMessage) json.RawMessage {
-	var value interface{}
-	if json.Unmarshal(input, &value) != nil {
-		return json.RawMessage(`{}`)
-	}
-	redactValue(value)
-	output, err := json.Marshal(value)
-	if err != nil {
-		return json.RawMessage(`{}`)
-	}
-	return output
-}
-
-func restoreRedactedValue(stored interface{}, incoming interface{}) interface{} {
-	storedMap, storedOK := stored.(map[string]interface{})
-	incomingMap, incomingOK := incoming.(map[string]interface{})
-	if !storedOK || !incomingOK {
-		return incoming
-	}
-	for key, value := range incomingMap {
-		if value == "[REDACTED]" {
-			if existing, ok := storedMap[key]; ok {
-				incomingMap[key] = existing
-			}
-			continue
-		}
-		if existing, ok := storedMap[key]; ok {
-			incomingMap[key] = restoreRedactedValue(existing, value)
-		}
-	}
-	return incomingMap
 }
 
 func asExtensionError(err error) *ExtensionError {

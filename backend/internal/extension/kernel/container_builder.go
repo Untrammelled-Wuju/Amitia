@@ -1410,6 +1410,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		scopes := []scope.ScopeRef{
 			scope.NewExtensionScope(extensionID),
 			scope.NewModuleScope(extensionID, moduleID),
+			scope.NewInvocationScope(invocationID),
 			scope.NewSessionScope(invocationID),
 		}
 		if characterID != "" {
@@ -1638,6 +1639,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			scopes := []scope.ScopeRef{
 				scope.NewExtensionScope(extensionID),
 				scope.NewModuleScope(extensionID, moduleID),
+				scope.NewInvocationScope(invocationID),
 				scope.NewSessionScope(invocationID),
 			}
 			if characterID != "" {
@@ -1798,6 +1800,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	typedInstaller.SetContainer(container)
+	if err := activateBuiltinUIContributions(ctx, typedInstaller, instRepo, contribRepo); err != nil {
+		return nil, err
+	}
 
 	candidateNS := NewCandidateNamespace()
 	typedInstaller.SetCandidateNamespace(candidateNS)
@@ -1880,6 +1885,40 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	return container, nil
+}
+
+func activateBuiltinUIContributions(
+	ctx context.Context,
+	installer *TypedContributionInstaller,
+	instRepo domain.InstallationRepository,
+	contribRepo sqlite.ContributionRepository,
+) error {
+	if installer == nil || instRepo == nil || contribRepo == nil {
+		return nil
+	}
+	installations, err := instRepo.ListInstallations(ctx)
+	if err != nil {
+		return fmt.Errorf("kernel: list builtin installations: %w", err)
+	}
+	for _, inst := range installations {
+		if !strings.HasPrefix(string(inst.ExtensionID), builtin.PrefixBuiltin) || inst.EnablementState != domain.EnablementEnabled {
+			continue
+		}
+		contributions, err := contribRepo.ListContributions(ctx, inst.ExtensionID)
+		if err != nil {
+			return fmt.Errorf("kernel: list builtin contributions %s: %w", inst.ExtensionID, err)
+		}
+		for _, contrib := range contributions {
+			switch contrib.Kind {
+			case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat,
+				domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
+				if err := installer.activateUI(ctx, contrib, inst.Generation); err != nil {
+					return fmt.Errorf("kernel: activate builtin ui contribution %s: %w", contrib.ID, err)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 type gameHostDefinitionReconcile struct {

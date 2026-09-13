@@ -655,7 +655,7 @@ func TestMigrationMappingsCoverage(t *testing.T) {
 	}
 
 	expectedTables := []string{
-		"plugin_runs", "mcp_operations", "workflow_runs",
+		"mcp_operations", "workflow_runs",
 		"extension_runs", "package_operations", "agent_skill_activations",
 	}
 
@@ -935,7 +935,6 @@ func TestExecutionHookCircuitEvents(t *testing.T) {
 func TestOperationTypeConstants(t *testing.T) {
 	types := []OperationType{
 		OpToolExecute, OpWorkflowExecute, OpWorkflowSchedule,
-		OpPluginHook, OpPluginEvent, OpPluginSchedule,
 		OpMCPConnect, OpMCPDisconnect, OpMCPDiscover, OpMCPToolExecute,
 		OpExtensionInstall, OpExtensionEnable, OpExtensionDisable,
 		OpExtensionUpdate, OpExtensionRollback, OpExtensionUninstall, OpExtensionRestore,

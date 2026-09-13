@@ -808,7 +808,7 @@ func scanWorkflowDefinition(row scannerInterface) (*workflow.WorkflowDefinition,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("workflow definition not found")
+			return nil, fmt.Errorf("workflow definition not found: %w", sql.ErrNoRows)
 		}
 		return nil, fmt.Errorf("scan workflow definition: %w", err)
 	}

@@ -86,7 +86,7 @@ func TestExtensionDefinitionDefaultDomainGeneral(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Test"},
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/test", Type: ModuleTypeBuiltin}},
 	}
@@ -103,7 +103,7 @@ func TestExtensionDefinitionValidGameDomain(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/game-test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Game Test"},
 		Domain:          ExtensionDomainGame,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/game-test", Type: ModuleTypeBuiltin}},
@@ -121,7 +121,7 @@ func TestExtensionDefinitionValidDesktopPetDomain(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/pet-test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Pet Test"},
 		Domain:          ExtensionDomainDesktopPet,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/pet-test", Type: ModuleTypeBuiltin}},
@@ -139,7 +139,7 @@ func TestExtensionDefinitionInvalidDomain(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/invalid",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Invalid"},
 		Domain:          "minecraft",
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/invalid", Type: ModuleTypeBuiltin}},
@@ -154,7 +154,7 @@ func TestExtensionDefinitionPreservesGameDomainOnCopy(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/game-test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Game"},
 		Domain:          ExtensionDomainGame,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/game-test", Type: ModuleTypeBuiltin}},
@@ -173,7 +173,7 @@ func TestExtensionDefinitionPreservesDesktopPetDomainOnCopy(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/pet-test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Pet"},
 		Domain:          ExtensionDomainDesktopPet,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/pet-test", Type: ModuleTypeBuiltin}},
@@ -192,7 +192,7 @@ func TestExtensionDomainJSONSerialization(t *testing.T) {
 	def := ExtensionDefinition{
 		ID:              "com.example/test",
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Name:            LocalizedText{Default: "Test"},
 		Domain:          ExtensionDomainGame,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: "com.example/test", Type: ModuleTypeBuiltin}},
@@ -211,7 +211,7 @@ func TestExtensionDomainJSONDeserialization(t *testing.T) {
 		"id": "com.example/test",
 		"name": {"default": "Test"},
 		"version": {"major": 1, "minor": 0, "patch": 0},
-		"manifestVersion": 2,
+		"manifestVersion": 1,
 		"domain": "desktop_pet",
 		"modules": [{"id": "main", "type": "builtin"}]
 	}`)

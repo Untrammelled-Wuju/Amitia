@@ -8,11 +8,8 @@ import (
 )
 
 type LegacyCallCounter struct {
-	pluginStart                        atomic.Int64
-	pluginDispatch                     atomic.Int64
 	toolExecute                        atomic.Int64
 	packageInstall                     atomic.Int64
-	skillExecute                       atomic.Int64
 	mcpToolRegister                    atomic.Int64
 	scheduleTick                       atomic.Int64
 	toolExecuteCalls                   atomic.Int64
@@ -69,16 +66,6 @@ func (c *LegacyCallCounter) storeGet(metricName string) int64 {
 	return c.store.Get(context.Background(), metricName)
 }
 
-func (c *LegacyCallCounter) IncPluginStart() {
-	c.pluginStart.Add(1)
-	c.syncToStore("legacy_plugin_start")
-}
-
-func (c *LegacyCallCounter) IncPluginDispatch() {
-	c.pluginDispatch.Add(1)
-	c.syncToStore("legacy_plugin_dispatch")
-}
-
 func (c *LegacyCallCounter) IncToolExecute() {
 	c.toolExecute.Add(1)
 	c.syncToStore("legacy_tool_execute")
@@ -87,11 +74,6 @@ func (c *LegacyCallCounter) IncToolExecute() {
 func (c *LegacyCallCounter) IncPackageInstall() {
 	c.packageInstall.Add(1)
 	c.syncToStore("legacy_package_install")
-}
-
-func (c *LegacyCallCounter) IncSkillExecute() {
-	c.skillExecute.Add(1)
-	c.syncToStore("legacy_skill_execute")
 }
 
 func (c *LegacyCallCounter) IncMCPToolRegister() {
@@ -289,16 +271,13 @@ func (c *LegacyCallCounter) LegacyFallbackTotal() int64 {
 func (c *LegacyCallCounter) Total() int64 {
 	if c.store != nil {
 		total := int64(0)
-		for _, name := range []string{"legacy_plugin_start", "legacy_plugin_dispatch", "legacy_tool_execute", "legacy_package_install", "legacy_skill_execute", "legacy_mcp_tool_register", "legacy_schedule_tick", "legacy_tool_execute_calls", "legacy_model_tools_calls", "legacy_prompt_hook_calls", "legacy_mcp_execute_calls", "duplicate_mcp_tool_registrations", "legacy_package_write_calls", "duplicate_contribution_registrations", "orphan_runtime_instances", "orphan_ui_sessions", "failed_cleanup_resources"} {
+		for _, name := range []string{"legacy_tool_execute", "legacy_package_install", "legacy_mcp_tool_register", "legacy_schedule_tick", "legacy_tool_execute_calls", "legacy_model_tools_calls", "legacy_prompt_hook_calls", "legacy_mcp_execute_calls", "duplicate_mcp_tool_registrations", "legacy_package_write_calls", "duplicate_contribution_registrations", "orphan_runtime_instances", "orphan_ui_sessions", "failed_cleanup_resources"} {
 			total += c.storeGet(name)
 		}
 		return total
 	}
-	return c.pluginStart.Load() +
-		c.pluginDispatch.Load() +
-		c.toolExecute.Load() +
+	return c.toolExecute.Load() +
 		c.packageInstall.Load() +
-		c.skillExecute.Load() +
 		c.mcpToolRegister.Load() +
 		c.scheduleTick.Load() +
 		c.toolExecuteCalls.Load() +
@@ -332,11 +311,8 @@ func (c *LegacyCallCounter) Snapshot() map[string]int64 {
 		return c.store.Snapshot(context.Background())
 	}
 	return map[string]int64{
-		"legacy_plugin_start":                  c.pluginStart.Load(),
-		"legacy_plugin_dispatch":               c.pluginDispatch.Load(),
 		"legacy_tool_execute":                  c.toolExecute.Load(),
 		"legacy_package_install":               c.packageInstall.Load(),
-		"legacy_skill_execute":                 c.skillExecute.Load(),
 		"legacy_mcp_tool_register":             c.mcpToolRegister.Load(),
 		"legacy_schedule_tick":                 c.scheduleTick.Load(),
 		"legacy_tool_execute_calls":            c.toolExecuteCalls.Load(),

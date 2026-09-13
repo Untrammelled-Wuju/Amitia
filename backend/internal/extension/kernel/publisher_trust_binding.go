@@ -5,7 +5,7 @@ import "github.com/u-ai/backend/internal/extension/kernel/domain"
 // bindAuthoritativePublisherTrust applies a trust decision produced by the
 // package verification/trust pipeline to the persisted extension definition
 // and every UI provider contribution derived from it. Manifest-authored trust
-// values are deliberately ignored by manifest_v2.ToExtensionDefinition.
+// values are deliberately ignored by manifest_v1.ToExtensionDefinition.
 func bindAuthoritativePublisherTrust(def *domain.ExtensionDefinition, trustLevel string) {
 	if def == nil {
 		return

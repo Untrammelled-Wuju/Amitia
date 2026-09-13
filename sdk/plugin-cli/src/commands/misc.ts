@@ -9,7 +9,7 @@ import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildPackage, inspectPackage, readZip, createZip } from "../archive.js";
 import type { ArchiveEntry } from "../archive.js";
-import type { AmitiaxManifestV2 } from "../manifest.js";
+import type { AmitiaxManifestV1 } from "../manifest.js";
 
 export const testCommand: CliCommand = {
   name: "test",
@@ -263,7 +263,7 @@ export const publishCheckCommand: CliCommand = {
 
 export const migrateCommand: CliCommand = {
   name: "migrate",
-  description: "Assist in migrating legacy extension projects to v2",
+  description: "Assist in migrating legacy extension projects to v1",
   usage: "amitia-ext migrate [options]",
   options: [
     { name: "--source", shortName: "-s", description: "Legacy source directory", takesValue: true },
@@ -304,7 +304,7 @@ export const sdkCommand: CliCommand = {
       message: "sdk info",
       data: {
         sdkVersion: "1.0.0",
-        supportedManifestVersion: 2,
+        supportedManifestVersion: 1,
         supportedHostApiRange: ">=1.0.0 <2.0.0",
         supportedRuntimeRpcRange: ">=1.0.0 <2.0.0",
         minAmitiaVersion: "0.1.0",

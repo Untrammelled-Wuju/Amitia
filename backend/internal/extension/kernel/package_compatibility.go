@@ -10,7 +10,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	gamehostnetworkpolicy "github.com/u-ai/backend/internal/gamehost/networkpolicy"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
@@ -75,7 +75,7 @@ func packageVersionAtMost(actual, maximum string) bool {
 	return actualErr == nil && maximumErr == nil && actualVersion.Compare(maximumVersion) <= 0
 }
 
-func appendPackageHostCompatibilityIssues(manifest manifest_v2.Manifest, preview *InstallPreview) {
+func appendPackageHostCompatibilityIssues(manifest manifest_v1.Manifest, preview *InstallPreview) {
 	if preview == nil {
 		return
 	}
@@ -107,11 +107,11 @@ func appendPackageHostCompatibilityIssues(manifest manifest_v2.Manifest, preview
 	}
 }
 
-func packageModuleSupported(mod manifest_v2.ModuleMeta, platform, hostVersion string) bool {
-	if !manifest_v2.IsSupportedModuleType(mod.Type) {
+func packageModuleSupported(mod manifest_v1.ModuleMeta, platform, hostVersion string) bool {
+	if !manifest_v1.IsSupportedModuleType(mod.Type) {
 		return false
 	}
-	if mod.Runtime != nil && strings.TrimSpace(mod.Runtime.Type) != "" && !manifest_v2.IsSupportedRuntimeType(mod.Runtime.Type) {
+	if mod.Runtime != nil && strings.TrimSpace(mod.Runtime.Type) != "" && !manifest_v1.IsSupportedRuntimeType(mod.Runtime.Type) {
 		return false
 	}
 	if mod.Compatibility == nil {
@@ -138,11 +138,11 @@ func packageGamePluginNetworkPolicy(spec *gameprotocol.PluginNetworkPolicy, requ
 	}
 }
 
-func appendGamePluginNetworkCompatibilityIssues(manifest manifest_v2.Manifest, preview *InstallPreview) {
+func appendGamePluginNetworkCompatibilityIssues(manifest manifest_v1.Manifest, preview *InstallPreview) {
 	appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest, preview, trusted_service.ValidateNetworkSandboxPrerequisites)
 }
 
-func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manifest_v2.Manifest, preview *InstallPreview, validateHost func(trusted_service.ServiceNetworkPolicy) error) {
+func appendGamePluginNetworkCompatibilityIssuesWithHostValidator(manifest manifest_v1.Manifest, preview *InstallPreview, validateHost func(trusted_service.ServiceNetworkPolicy) error) {
 	if preview == nil {
 		return
 	}

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 )
 
 func runValidate(args []string, output *Output) int {
@@ -42,7 +42,7 @@ func runValidate(args []string, output *Output) int {
 }
 
 func validateManifest(path string, output *Output, useSchema bool) int {
-	m, report := manifest_v2.ValidateFile(path)
+	m, report := manifest_v1.ValidateFile(path)
 
 	result := Result{
 		OK:      true,
@@ -131,6 +131,6 @@ func validatePackage(path string, output *Output) int {
 	return ExitFailure
 }
 
-func isContentTreeHashMissing(e manifest_v2.ValidationError) bool {
+func isContentTreeHashMissing(e manifest_v1.ValidationError) bool {
 	return e.Code == "missing" && strings.Contains(e.Path, "contentTreeHash")
 }

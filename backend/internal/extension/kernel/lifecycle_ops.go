@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -17,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 )
 
 type moduleEnablementSnapshot struct {
@@ -59,6 +61,11 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	if err != nil {
 		return fmt.Errorf("kernel: get installation: %w", err)
 	}
+	if inst.Metadata == nil {
+		inst.Metadata = map[string]any{}
+	}
+	inst.Metadata["user.enabled"] = true
+	inst.Metadata["user.disabled"] = false
 	prevInst := inst
 	prevExtEnablement := enablement.EnablementDisabled
 	prevExtDesired := enablement.DesiredRuntimeStopped
@@ -321,7 +328,7 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 				}
 				tx.uiRegistered = true
 			}
-			if uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage {
+			if strings.TrimSpace(uiDef.Entry.RuntimeID) == "" && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage) {
 				entryKind := extension_page_host.PageKindWeb
 				if uiDef.Kind == ui_contribution.UIContributionSchemaPage {
 					entryKind = extension_page_host.PageKindSchema
@@ -381,6 +388,7 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_generation_changed", extensionID, map[string]interface{}{"generation": candidateGeneration})
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", extensionID, nil)
 	}
+	runtimegate.Set(extensionID, true)
 
 	return nil
 }
@@ -655,6 +663,11 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	if err != nil {
 		return fmt.Errorf("kernel: get installation: %w", err)
 	}
+	if inst.Metadata == nil {
+		inst.Metadata = map[string]any{}
+	}
+	inst.Metadata["user.enabled"] = false
+	inst.Metadata["user.disabled"] = true
 
 	modules, err := r.container.ModuleRepository.ListModules(ctx, extID)
 	if err != nil {
@@ -768,6 +781,7 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_generation_changed", extensionID, map[string]interface{}{"generation": newGeneration})
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", extensionID, nil)
 	}
+	runtimegate.Set(extensionID, false)
 
 	return nil
 }
@@ -971,6 +985,7 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_uninstalled", extensionID, nil)
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", extensionID, nil)
 	}
+	runtimegate.Set(extensionID, false)
 
 	return nil
 }

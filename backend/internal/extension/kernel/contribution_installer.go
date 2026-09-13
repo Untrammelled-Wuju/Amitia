@@ -27,6 +27,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
@@ -868,8 +869,19 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 	}
 	uiDef.Integrity.Generation = generation
 
-	hasPage := uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage
-	hasSchema := uiDef.Entry.SchemaPath != "" || uiDef.Sandbox.Type == ui_contribution.SandboxSchemaRenderer
+	hostRuntimeID := strings.TrimSpace(uiDef.Entry.RuntimeID)
+	hostRuntime := hostRuntimeID != ""
+	if hostRuntime {
+		if uiDef.Sandbox.Type != ui_contribution.SandboxHostNative {
+			return installOp{}, fmt.Errorf("host runtime ui contribution %s requires host_native sandbox", uiDef.ContributionID)
+		}
+		if !runtimegate.HostRuntimeAllowed(string(uiDef.ExtensionID), hostRuntimeID) {
+			return installOp{}, fmt.Errorf("host runtime %s is not allowed for extension %s", hostRuntimeID, uiDef.ExtensionID)
+		}
+	}
+
+	hasPage := !hostRuntime && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage)
+	hasSchema := !hostRuntime && (uiDef.Entry.SchemaPath != "" || uiDef.Sandbox.Type == ui_contribution.SandboxSchemaRenderer)
 	if hasSchema && uiDef.Entry.SchemaPath == "" {
 		return installOp{}, fmt.Errorf("schema ui contribution %s requires entry.schema_path", uiDef.ContributionID)
 	}
@@ -1985,7 +1997,7 @@ func (i *TypedContributionInstaller) recoverInMemoryRegistrations(ctx context.Co
 		}
 		for _, uiDef := range uiDefs {
 			_ = i.container.UIHost.RegisterContribution(uiDef)
-			if i.container.PageHost != nil && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage) {
+			if i.container.PageHost != nil && strings.TrimSpace(uiDef.Entry.RuntimeID) == "" && (uiDef.Kind == ui_contribution.UIContributionWebPage || uiDef.Kind == ui_contribution.UIContributionSchemaPage) {
 				entryKind := extension_page_host.PageKindWeb
 				if uiDef.Kind == ui_contribution.UIContributionSchemaPage {
 					entryKind = extension_page_host.PageKindSchema

@@ -127,7 +127,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	extRuntime, err := extension.NewRuntimeWithOptions(rootCtx, db, config.AppCfg.App.Version, extension.RuntimeOptions{SkipPluginManagerStart: true})
+	extRuntime, err := extension.NewRuntime(rootCtx, db, config.AppCfg.App.Version)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "extension runtime init failed: %v\n", err)
 		os.Exit(1)

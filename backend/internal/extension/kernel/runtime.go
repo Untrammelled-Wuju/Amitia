@@ -18,7 +18,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 )
 
 type InstalledExtension struct {
@@ -289,7 +289,7 @@ func (r *Runtime) Recover() error {
 		if readErr != nil {
 			continue
 		}
-		manifest, report, parseErr := manifest_v2.ParseValidated(data)
+		manifest, report, parseErr := manifest_v1.ParseValidated(data)
 		if parseErr != nil {
 			continue
 		}
@@ -383,7 +383,7 @@ func (r *Runtime) Update(ctx context.Context, archivePath string) (InstalledExte
 	return item, nil
 }
 
-func installedFromManifest(manifest manifest_v2.Manifest, path string, installedAt time.Time) InstalledExtension {
+func installedFromManifest(manifest manifest_v1.Manifest, path string, installedAt time.Time) InstalledExtension {
 	return InstalledExtension{ID: manifest.Extension.ID, Name: manifest.Extension.Name.Default, Version: manifest.Extension.Version, Publisher: manifest.Publisher.ID, Path: path, ModuleCount: len(manifest.Modules), InstalledAt: installedAt.UTC()}
 }
 

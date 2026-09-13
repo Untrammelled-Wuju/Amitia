@@ -460,7 +460,6 @@ func DefaultPreCheckItems() []PreCheckItem {
 		{Name: "old.write_frozen", Passed: false},
 		{Name: "old.scheduler_stopped", Passed: false},
 		{Name: "old.mcp_reconnect_stopped", Passed: false},
-		{Name: "old.plugin_init_stopped", Passed: false},
 		{Name: "old.tool_handler_stopped", Passed: false},
 		{Name: "new.registry_rebuildable", Passed: false},
 		{Name: "rollback.snapshot_complete", Passed: false},

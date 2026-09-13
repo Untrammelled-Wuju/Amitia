@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -93,7 +95,13 @@ type agentSkillActivationRecord struct {
 
 func (agentSkillActivationRecord) TableName() string { return "extension_agent_skill_activations" }
 
-func (r *Repository) InstallAgentSkill(ctx context.Context, definition AgentSkillDefinition, report AgentSkillCompatibilityReport, manifest SkillDefinition, files map[string][]byte) error {
+type agentSkillManifest struct {
+	Version string
+	Raw     json.RawMessage
+	Enabled bool
+}
+
+func (r *Repository) InstallAgentSkill(ctx context.Context, definition AgentSkillDefinition, report AgentSkillCompatibilityReport, manifest agentSkillManifest, files map[string][]byte) error {
 	archive, err := encodeAgentSkillArtifact(files)
 	if err != nil {
 		return err
@@ -119,11 +127,50 @@ func (r *Repository) InstallAgentSkill(ctx context.Context, definition AgentSkil
 		if count > 0 {
 			return NewExtensionError(ErrAgentSkillNameConflict, "Agent Skill name already exists in this scope", definition.Name, false, nil)
 		}
-		artifact := map[string]interface{}{"id": uuid.NewString(), "artifact_id": definition.ArtifactID, "extension_id": definition.ExtensionID, "extension_version": manifest.Version, "source": string(definition.Source), "session_id": "", "revision": 0, "manifest_json": string(manifest.Manifest), "workflow_json": "{}", "schemas_json": "{}", "compiled_workflow_json": "{}", "tests_json": "[]", "readme_text": "", "checksum": definition.ContentHash, "size_bytes": len(archive), "created_at": now, "archived_at": "", "artifact_kind": "agent-skill", "content_blob": archive, "resource_index_json": string(resources)}
+		artifact := map[string]interface{}{"id": uuid.NewString(), "artifact_id": definition.ArtifactID, "extension_id": definition.ExtensionID, "extension_version": manifest.Version, "source": string(definition.Source), "session_id": "", "revision": 0, "manifest_json": string(manifest.Raw), "workflow_json": "{}", "schemas_json": "{}", "compiled_workflow_json": "{}", "tests_json": "[]", "readme_text": "", "checksum": definition.ContentHash, "size_bytes": len(archive), "created_at": now, "archived_at": "", "artifact_kind": "agent-skill", "content_blob": archive, "resource_index_json": string(resources)}
 		if err := tx.Table("extension_artifacts").Create(artifact).Error; err != nil {
 			return err
 		}
 		return tx.Create(&record).Error
+	})
+}
+
+func (r *Repository) UpsertAgentSkillExtension(ctx context.Context, definition AgentSkillDefinition, manifest agentSkillManifest) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	normalized := string(manifest.Raw)
+	var value interface{}
+	if json.Unmarshal(manifest.Raw, &value) == nil {
+		if raw, err := json.Marshal(value); err == nil {
+			normalized = string(raw)
+		}
+	}
+	record := extensionRecord{
+		ID: uuid.NewString(), ExtensionID: definition.ExtensionID, Kind: "AgentSkill", Name: definition.Name,
+		CurrentVersion: manifest.Version, Source: string(definition.Source), Enabled: boolNumber(definition.Enabled),
+		ManifestJSON: string(manifest.Raw), NormalizedManifestJSON: normalized, CreatedAt: now, UpdatedAt: now,
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing extensionRecord
+		err := tx.Where("extension_id = ?", definition.ExtensionID).First(&existing).Error
+		if err == nil {
+			record.ID = existing.ID
+			record.CreatedAt = existing.CreatedAt
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "extension_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"kind", "name", "current_version", "source", "enabled", "manifest_json", "normalized_manifest_json", "updated_at"}),
+		}).Create(&record).Error; err != nil {
+			return err
+		}
+		binding := scopeBindingRecord{ID: uuid.NewString(), ExtensionID: definition.ExtensionID, ScopeType: string(ScopeGlobal), ScopeID: "", Enabled: boolNumber(definition.Enabled), CreatedAt: now, UpdatedAt: now}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&binding).Error; err != nil {
+			return err
+		}
+		hash := sha256.Sum256(manifest.Raw)
+		version := extensionVersionRecord{ID: uuid.NewString(), ExtensionID: definition.ExtensionID, Version: manifest.Version, ManifestJSON: string(manifest.Raw), Checksum: hex.EncodeToString(hash[:]), CreatedAt: now}
+		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&version).Error
 	})
 }
 

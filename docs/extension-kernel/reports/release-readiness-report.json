@@ -13,7 +13,7 @@
       "required": true,
       "evidence": [
         "GlobalLegacyCallCounter 实例化成功",
-        "初始 Total()=0,跟踪指标数量=20",
+        "初始 Total()=0,跟踪指标数量=18",
         "旧系统调用计数器就绪 (冻结审计完成)"
       ],
       "startedAt": "2026-08-18T00:48:00.6425666Z",
@@ -23,7 +23,7 @@
       "itemId": "stage1.base_extraction",
       "stage": "freeze_audit",
       "title": "基础设施抽取",
-      "description": "第13-20步：包安全、MCP、Skill、Workflow、PluginRuntime、Lifecycle、Enabled、只读迁移",
+      "description": "第13-20步：包安全、MCP、Skill、Workflow、Lifecycle、Enabled、只读迁移",
       "status": "passed",
       "required": true,
       "evidence": [
@@ -31,8 +31,7 @@
         "tool_migration.Registry 实例化成功",
         "skill_migration.Registry 实例化成功",
         "mcp_migration.Registry 实例化并验证注册/查询成功",
-        "workflow_migration.Registry 实例化成功",
-        "plugin_migration.Registry 实例化成功"
+        "workflow_migration.Registry 实例化成功"
       ],
       "startedAt": "2026-08-18T00:48:00.6425666Z",
       "completedAt": "2026-08-18T00:48:00.6425666Z"
@@ -57,8 +56,8 @@
     {
       "itemId": "stage3.amitiax_manifest",
       "stage": "amitiax_runtime",
-      "title": "AmitiaxManifestV2",
-      "description": "第29-34步：Manifest v2、多模块包、解析器、安装事务、签名、更新回滚",
+      "title": "AmitiaxManifestV1",
+      "description": "第29-34步：Manifest v1、多模块包、解析器、安装事务、签名、更新回滚",
       "status": "passed",
       "required": true,
       "evidence": [
@@ -137,22 +136,6 @@
       "completedAt": "2026-08-18T00:48:01.8611503Z"
     },
     {
-      "itemId": "stage5.plugins_legacy",
-      "stage": "migration",
-      "title": "Plugins 与旧 Amitiax 迁移",
-      "description": "第53-55步：官方 Plugins、旧 Amitiax、数据迁移",
-      "status": "passed",
-      "required": true,
-      "evidence": [
-        "plugin_migration.Registry 注册并查询成功",
-        "amitiax_migration.Registry 实例化成功",
-        "data_migration.Registry 实例化成功",
-        "Plugins 与旧 Amitiax 迁移基础设施就绪"
-      ],
-      "startedAt": "2026-08-18T00:48:01.8611503Z",
-      "completedAt": "2026-08-18T00:48:01.8611503Z"
-    },
-    {
       "itemId": "stage6.sdk_cli",
       "stage": "dev_ecosystem",
       "title": "TypeScript SDK 与 Plugin CLI",
@@ -193,8 +176,6 @@
       "required": true,
       "evidence": [
         "ExtensionCenterView.vue 存在",
-        "PluginDetailView.vue 存在",
-        "PluginListView.vue 存在",
         "UIHost 和 PageHost 实例化成功 (扩展中心与详情页基础设施就绪)"
       ],
       "startedAt": "2026-08-18T00:48:01.8611503Z",
@@ -260,21 +241,6 @@
         "GlobalLegacyCallCounter.Total()=0 (旧系统不承担生产执行)"
       ],
       "startedAt": "2026-08-18T00:48:06.5649206Z",
-      "completedAt": "2026-08-18T00:48:07.735625Z"
-    },
-    {
-      "itemId": "stage7.legacy_plugin",
-      "stage": "legacy_removal",
-      "title": "旧 PluginRuntime 弃用",
-      "description": "第66步：旧 PluginRuntime 标记弃用",
-      "status": "passed",
-      "required": true,
-      "evidence": [
-        "plugin_migration.Registry 支持弃用标记",
-        "LegacyCallCounter.Total()=0 (旧 PluginRuntime 不承担生产执行)",
-        "旧 PluginRuntime 已通过迁移注册表弃用"
-      ],
-      "startedAt": "2026-08-18T00:48:07.735625Z",
       "completedAt": "2026-08-18T00:48:07.735625Z"
     },
     {
@@ -422,12 +388,12 @@
     }
   ],
   "summary": {
-    "total": 27,
-    "passed": 25,
+    "total": 25,
+    "passed": 23,
     "failed": 0,
     "skipped": 2,
     "blocked": 0,
-    "required": 25
+    "required": 23
   },
   "outcome": "passed",
   "releaseReady": true,

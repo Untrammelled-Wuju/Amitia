@@ -48,7 +48,7 @@ func createPackagePipelineArchiveWithMigrations(t *testing.T, version string, de
 		extension["metadata"] = map[string]any{"migrations": map[string]any{"definitions": definitions}}
 	}
 	manifest := map[string]any{
-		"manifestVersion": 2,
+		"manifestVersion": 1,
 		"extension":       extension,
 		"publisher":       map[string]any{"id": "com.example", "displayName": "Example"},
 		"compatibility":   map[string]any{},

@@ -13,7 +13,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/extension/kernel/manifest_v2"
+	"github.com/u-ai/backend/internal/extension/kernel/manifest_v1"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 )
@@ -88,8 +88,8 @@ type InstallPreview struct {
 	ExpiresAt                 time.Time                               `json:"expiresAt"`
 	SecurityPassed            bool                                    `json:"securityPassed"`
 	SecurityReport            *package_security.PackageSecurityReport `json:"securityReport,omitempty"`
-	Manifest                  manifest_v2.Manifest                    `json:"manifest"`
-	ValidationReport          manifest_v2.ValidationReport            `json:"validationReport"`
+	Manifest                  manifest_v1.Manifest                    `json:"manifest"`
+	ValidationReport          manifest_v1.ValidationReport            `json:"validationReport"`
 	Issues                    []PreviewIssue                          `json:"issues"`
 	Modules                   []PreviewModule                         `json:"modules"`
 	MissingDependencies       []PreviewDependency                     `json:"missingDependencies"`
@@ -163,7 +163,7 @@ type RollbackSnapshotRequirement struct {
 }
 
 type RollbackSnapshotRequirementInput struct {
-	Manifest               manifest_v2.Manifest
+	Manifest               manifest_v1.Manifest
 	ManifestNoDataChange   bool
 	ConfigBeforeHash       string
 	ConfigAfterHash        string

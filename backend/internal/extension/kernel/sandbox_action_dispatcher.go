@@ -45,9 +45,11 @@ func buildSandboxActionDispatcher(deps sandboxActionDispatcherDeps) *sandbox_web
 			ModuleID:             session.ModuleID,
 			Generation:           session.Generation,
 			ScopeSnapshotID:      session.ScopeSnapshotID,
-			PermissionSnapshotID: session.PermissionSnapshotID,
-			CharacterID:          session.CharacterID,
-			ConversationID:       session.ConversationID,
-		}, action, input)
+	PermissionSnapshotID: session.PermissionSnapshotID,
+	CharacterID:          session.CharacterID,
+	ConversationID:       session.ConversationID,
+	UserID:               session.UserID,
+	DeviceID:             session.DeviceID,
+	}, action, input)
 	})
 }

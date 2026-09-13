@@ -111,10 +111,10 @@ var existingComponentBindings = []ExistingComponentBinding{
 		Role:             "Runtime Provider Factory / Slot / Instance 构造与 Runtime 生命周期装配；不是 AI Capability Provider 权威。",
 	},
 	{
-		ComponentPackage: "backend/internal/desktoppet/runtime/protocol/v2",
+		ComponentPackage: "backend/internal/desktoppet/runtime/protocol/v1",
 		Disposition:      DispositionAdapter,
 		CanonicalDomain:  DomainDevice,
-		Role:             "现有桌宠 Runtime v2 中的 hello/session/heartbeat/command/ack/sequence/resume/reconcile/dedup 是后续通用 Device Runtime Protocol 的抽取来源，但桌宠协议本身不能继续作为全局 Device 权威。",
+		Role:             "现有桌宠 Runtime v1 中的 hello/session/heartbeat/command/ack/sequence/resume/reconcile/dedup 是后续通用 Device Runtime Protocol 的抽取来源，但桌宠协议本身不能继续作为全局 Device 权威。",
 	},
 	{
 		ComponentPackage: "backend/internal/system",

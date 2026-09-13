@@ -14,7 +14,6 @@ const (
 	AgentSkillSourceBundled         AgentSkillSource              = "bundled"
 	AgentSkillSourceDirectory       AgentSkillSource              = "local-directory"
 	AgentSkillSourceZIP             AgentSkillSource              = "local-zip"
-	AgentSkillSourceWorkshop        AgentSkillSource              = "workshop"
 	AgentSkillScopeGlobal           AgentSkillScope               = "global"
 	AgentSkillScopeCharacter        AgentSkillScope               = "character"
 	AgentSkillResourceSkill         AgentSkillResourceKind        = "skill"

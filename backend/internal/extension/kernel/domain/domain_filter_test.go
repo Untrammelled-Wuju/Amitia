@@ -10,7 +10,7 @@ func makeExtension(id string, domain ExtensionDomain) ExtensionDefinition {
 		ID:              ExtensionID(id),
 		Name:            LocalizedText{Default: id},
 		Version:         v,
-		ManifestVersion: 2,
+		ManifestVersion: 1,
 		Domain:          domain,
 		Modules:         []ModuleDefinition{{ID: "main", ExtensionID: ExtensionID(id), Type: ModuleTypeBuiltin}},
 	}

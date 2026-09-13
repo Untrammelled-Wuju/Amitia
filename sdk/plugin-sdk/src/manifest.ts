@@ -12,8 +12,8 @@ export type ModuleKind =
   | "ui_contribution"
   | "ui_provider";
 
-export interface AmitiaxManifestV2 {
-  manifestVersion: 2;
+export interface AmitiaxManifestV1 {
+  manifestVersion: 1;
   extension: {
     id: string;
     name: LocalizedText;
@@ -357,10 +357,10 @@ export interface JSONSchema {
   $ref?: string;
 }
 
-export function validateManifest(manifest: AmitiaxManifestV2): string[] {
+export function validateManifest(manifest: AmitiaxManifestV1): string[] {
   const errors: string[] = [];
-  if (manifest.manifestVersion !== 2) {
-    errors.push("manifestVersion must be 2");
+  if (manifest.manifestVersion !== 1) {
+    errors.push("manifestVersion must be 1");
   }
   if (!manifest.extension?.id) {
     errors.push("extension.id is required");

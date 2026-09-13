@@ -12,7 +12,7 @@ if ($Verbose) {
     $vitestArgs += "--reporter=verbose"
 }
 
-$proc = Start-Process -FilePath "npx" -ArgumentList ($vitestArgs + "src/__tests__/extensions.legacy.baseline.test.ts") -NoNewWindow -Wait -PassThru -WorkingDirectory $frontDir
+$proc = Start-Process -FilePath "npx" -ArgumentList ($vitestArgs + "src/__tests__/extensions.baseline.test.ts") -NoNewWindow -Wait -PassThru -WorkingDirectory $frontDir
 
 if ($proc.ExitCode -ne 0) {
     Write-Host "Frontend tests FAILED." -ForegroundColor Red

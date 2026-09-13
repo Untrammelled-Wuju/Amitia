@@ -1,10 +1,10 @@
-import type { AmitiaxManifestV2 } from "@amitia/plugin-sdk";
+import type { AmitiaxManifestV1 } from "@amitia/plugin-sdk";
 
-export type { AmitiaxManifestV2 };
+export type { AmitiaxManifestV1 };
 
-export function validateManifest(manifest: AmitiaxManifestV2): string[] {
+export function validateManifest(manifest: AmitiaxManifestV1): string[] {
   const errors: string[] = [];
-  if (manifest.manifestVersion !== 2) errors.push("manifestVersion must be 2");
+  if (manifest.manifestVersion !== 1) errors.push("manifestVersion must be 1");
   if (!manifest.extension?.id) errors.push("extension.id is required");
   if (!manifest.publisher?.id) errors.push("publisher.id is required");
   if (!manifest.extension?.name?.default) errors.push("extension.name.default is required");

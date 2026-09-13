@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -211,7 +212,7 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]slotSnapshotEntry, 0, len(slots))
 	for _, s := range slots {
-		contribs := h.uiHost.ListBySlot(string(s.SlotID))
+		contribs := h.uiHost.ListActiveBySlot(string(s.SlotID))
 		out = append(out, slotSnapshotEntry{
 			SlotID:            string(s.SlotID),
 			ContractVersion:   s.ContractVersion,
@@ -235,7 +236,7 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	payload := map[string]any{
 		"slots":                out,
-		"contributions":        h.uiHost.ListAll(),
+		"contributions":        h.uiHost.ListActiveAll(),
 		"pendingContributions": h.uiHost.ListPending(),
 		"timestamp":            time.Now().UTC(),
 	}
@@ -793,6 +794,11 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
+	actorUserID := ""
+	actorDeviceID := strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID"))
+	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+		actorUserID = actor.UserID.String()
+	}
 	var req struct {
 		ContributionID string                      `json:"contributionId"`
 		Surface        string                      `json:"surface"`
@@ -863,6 +869,7 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		Locale:             req.Locale,
 		BasePath:           basePath,
 		EntryPath:          def.Entry.Path,
+		EnableScripts:      def.Sandbox.EnableScripts,
 		Surface:            req.Surface,
 		SurfaceRole:        req.SurfaceRole,
 		Host:               req.Host,
@@ -874,6 +881,8 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		GrantedScopes:      auth.GrantedScopes,
 		ScopeSnapshotID:    scopeSnapshotID,
 	}
+	sreq.UserID = actorUserID
+	sreq.DeviceID = actorDeviceID
 	result, err := h.sandboxHost.CreateSession(sreq)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "webui_session_create_failed", err.Error())
@@ -1074,6 +1083,18 @@ func (h *HTTPHandler) resolveExtensionBasePath(extensionID string) string {
 		return ""
 	}
 	safeID := strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(extensionID)
+	installationsRoot := filepath.Join(h.extRoot, "installations", safeID)
+	if currentData, err := os.ReadFile(filepath.Join(installationsRoot, "current.json")); err == nil {
+		var current struct {
+			GenerationID string `json:"generationID"`
+		}
+		if json.Unmarshal(currentData, &current) == nil && current.GenerationID != "" {
+			candidate := filepath.Join(installationsRoot, "generations", current.GenerationID)
+			if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
+				return candidate
+			}
+		}
+	}
 	installedRoot := filepath.Join(h.extRoot, "installed", safeID)
 	entries, err := os.ReadDir(installedRoot)
 	if err != nil {
@@ -1133,6 +1154,22 @@ func (h *HTTPHandler) handleWebUIBridge(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		writeError(w, http.StatusNotFound, "webui_session_not_found", err.Error())
 		return
+	}
+	if sess.UserID == "" || sess.DeviceID == "" {
+		bindUserID := ""
+		bindDeviceID := ""
+		if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+			bindUserID = actor.UserID.String()
+			bindDeviceID = actor.DeviceID.String()
+		}
+		if bindDeviceID == "" {
+			bindDeviceID = strings.TrimSpace(r.Header.Get("X-Amitia-Device-ID"))
+		}
+		if bindUserID != "" || bindDeviceID != "" {
+			if sess.BindIdentityIfNeeded(bindUserID, bindDeviceID) {
+				log.Printf("[ui-action] bridge identity backfill: session=%s user=%q device=%q", sessionID, sess.UserID, sess.DeviceID)
+			}
+		}
 	}
 	var msg sandbox_webui.BridgeMessage
 	if err := decodeJSON(r, &msg); err != nil {

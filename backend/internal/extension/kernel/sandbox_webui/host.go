@@ -142,6 +142,8 @@ type WebSession struct {
 	GrantedScopes        []string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
+	UserID               string
+	DeviceID             string
 	mu                   sync.Mutex
 	subscriptions        map[string]*DataSubscription
 	resourceHandles      map[string]*ResourceHandle
@@ -153,6 +155,21 @@ type ThemeSnapshot struct {
 	Mode    string            `json:"mode"`
 	Density string            `json:"density"`
 	Tokens  map[string]string `json:"tokens"`
+}
+
+func (s *WebSession) BindIdentityIfNeeded(userID, deviceID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	bound := false
+	if s.UserID == "" && userID != "" {
+		s.UserID = userID
+		bound = true
+	}
+	if s.DeviceID == "" && deviceID != "" {
+		s.DeviceID = deviceID
+		bound = true
+	}
+	return bound
 }
 
 type DataSubscription struct {
@@ -331,6 +348,7 @@ type CreateSessionRequest struct {
 	BasePath             string
 	EntryPath            string
 	ExpectedHash         string
+	EnableScripts        bool
 	Surface              string
 	SurfaceRole          string
 	Host                 string
@@ -342,6 +360,8 @@ type CreateSessionRequest struct {
 	GrantedScopes        []string
 	ScopeSnapshotID      string
 	PermissionSnapshotID string
+	UserID               string
+	DeviceID             string
 }
 
 type CreateSessionResult struct {
@@ -373,7 +393,7 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 	if err != nil {
 		return nil, err
 	}
-	if err := h.verifier.Verify(req.BasePath, cleanPath); err != nil {
+	if err := h.verifier.VerifyWithPolicy(req.BasePath, cleanPath, req.EnableScripts); err != nil {
 		return nil, err
 	}
 	if req.ExpectedHash != "" {
@@ -457,6 +477,8 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 		ConversationID:       req.ConversationID,
 		GrantedPerms:         req.GrantedPerms,
 		GrantedScopes:        req.GrantedScopes,
+		UserID:               req.UserID,
+		DeviceID:             req.DeviceID,
 		ScopeSnapshotID:      scopeSnapshotID,
 		PermissionSnapshotID: permissionSnapshotID,
 		subscriptions:        make(map[string]*DataSubscription),
@@ -822,6 +844,10 @@ func NewBundleVerifier() *BundleVerifier {
 }
 
 func (v *BundleVerifier) Verify(basePath, entryPath string) error {
+	return v.VerifyWithPolicy(basePath, entryPath, false)
+}
+
+func (v *BundleVerifier) VerifyWithPolicy(basePath, entryPath string, enableScripts bool) error {
 	if entryPath == "" {
 		return ErrEntryMissing
 	}
@@ -841,7 +867,7 @@ func (v *BundleVerifier) Verify(basePath, entryPath string) error {
 		return ErrBundleNotFound
 	}
 	lower := strings.ToLower(string(content))
-	if strings.Contains(lower, "<script") {
+	if !enableScripts && strings.Contains(lower, "<script") {
 		return ErrBundleScriptForbidden
 	}
 	if strings.Contains(lower, "javascript:") {

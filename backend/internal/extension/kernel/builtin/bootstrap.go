@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 )
 
 type EnableExtensionFunc func(ctx context.Context, extensionID domain.ExtensionID) error
@@ -95,8 +96,11 @@ func (b *Bootstrapper) reconcileDefinition(ctx context.Context, def Definition) 
 		}
 	}
 
-	for _, contrib := range extDef.AllContributions() {
-		if b.contributions != nil {
+	if b.contributions != nil {
+		if err := b.contributions.DeleteContributions(ctx, extID); err != nil {
+			return fmt.Errorf("clear obsolete contributions: %w", err)
+		}
+		for _, contrib := range extDef.AllContributions() {
 			if err := b.contributions.PutContribution(ctx, contrib); err != nil {
 				return fmt.Errorf("persist contribution %s: %w", contrib.ID, err)
 			}
@@ -108,27 +112,50 @@ func (b *Bootstrapper) reconcileDefinition(ctx context.Context, def Definition) 
 
 	if instErr != nil {
 		inst = domain.ExtensionInstallation{
-			InstallationID:   string(extID),
-			ExtensionID:      extID,
-			InstalledVersion: extDef.Version,
-			EnablementState:  domain.EnablementDisabled,
-			InstalledAt:      time.Now().UTC(),
-			UpdatedAt:        time.Now().UTC(),
-			Metadata:         map[string]any{"source": "builtin", "immutablePackage": true},
+			InstallationID:    string(extID),
+			ExtensionID:       extID,
+			InstalledVersion:  extDef.Version,
+			InstallationState: domain.InstallationStateInstalled,
+			EnablementState:   domain.EnablementDisabled,
+			InstalledAt:       time.Now().UTC(),
+			UpdatedAt:         time.Now().UTC(),
+			Metadata:          map[string]any{"source": "builtin", "immutablePackage": true},
 		}
 		if err := b.installations.PutInstallation(ctx, inst); err != nil {
 			return fmt.Errorf("persist installation: %w", err)
 		}
-	} else if inst.InstalledVersion.String() != extDef.Version.String() {
-		inst.InstalledVersion = extDef.Version
-		inst.UpdatedAt = time.Now().UTC()
-		if err := b.installations.PutInstallation(ctx, inst); err != nil {
-			return fmt.Errorf("update installation version: %w", err)
+	} else {
+		changed := false
+		if inst.InstallationState == "" {
+			inst.InstallationState = domain.InstallationStateInstalled
+			changed = true
+		}
+		if inst.InstalledVersion.String() != extDef.Version.String() {
+			inst.InstalledVersion = extDef.Version
+			changed = true
+		}
+		if changed {
+			inst.UpdatedAt = time.Now().UTC()
+			if err := b.installations.PutInstallation(ctx, inst); err != nil {
+				return fmt.Errorf("update installation metadata: %w", err)
+			}
 		}
 	}
 
+	userEnabled := installationUserEnabled(inst)
+	if userEnabled {
+		desiredEnabled = true
+	}
 	if inst.IsUserDisabled() {
 		desiredEnabled = false
+	}
+	runtimegate.Set(string(extID), desiredEnabled && inst.AllowsEnable())
+	if !desiredEnabled && inst.EnablementState != domain.EnablementDisabled {
+		inst.EnablementState = domain.EnablementDisabled
+		inst.UpdatedAt = time.Now().UTC()
+		if err := b.installations.PutInstallation(ctx, inst); err != nil {
+			return fmt.Errorf("persist default disabled installation: %w", err)
+		}
 	}
 
 	if b.providerReconciler != nil {
@@ -146,4 +173,12 @@ func (b *Bootstrapper) reconcileDefinition(ctx context.Context, def Definition) 
 	}
 
 	return nil
+}
+
+func installationUserEnabled(inst domain.ExtensionInstallation) bool {
+	if inst.Metadata == nil {
+		return false
+	}
+	value, ok := inst.Metadata["user.enabled"].(bool)
+	return ok && value
 }

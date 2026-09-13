@@ -215,15 +215,13 @@ type PackageDryRunReport struct {
 }
 
 type PackageDryRunCaseReport struct {
-	ID         string               `json:"id"`
-	Name       string               `json:"name"`
-	Mode       string               `json:"mode"`
-	Status     string               `json:"status"`
-	DurationMS int64                `json:"durationMs"`
-	Steps      []WorkflowStepResult `json:"steps"`
-	Assertions []AssertionResult    `json:"assertions"`
-	Output     json.RawMessage      `json:"output,omitempty"`
-	Error      *ExtensionError      `json:"error,omitempty"`
+	ID         string          `json:"id"`
+	Name       string          `json:"name"`
+	Mode       string          `json:"mode"`
+	Status     string          `json:"status"`
+	DurationMS int64           `json:"durationMs"`
+	Output     json.RawMessage `json:"output,omitempty"`
+	Error      *ExtensionError `json:"error,omitempty"`
 }
 
 type PreviewPackageImportRequest struct {

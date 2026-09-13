@@ -229,63 +229,6 @@ func (r *DeprecationRegistry) ApplyDeprecatedHeader(filePath, reason, replacemen
 
 func DefaultRegistry() *DeprecationRegistry {
 	r := NewDeprecationRegistry()
-	step66Files := []LegacyFile{
-		{
-			FilePath:         "backend/internal/extension/plugin_manager.go",
-			Package:          "extension",
-			Step:             66,
-			Reason:           "旧 PluginManager，由 extension/kernel/runtime_supervisor 替代",
-			Replacement:      "extension/kernel/runtime_supervisor",
-			Status:           StatusMarked,
-			BlockingDeletion: true,
-			ProductionRefs:   []string{"runtime.go", "service.go", "plugin_service.go", "plugin_host.go"},
-			TestRefs:         []string{"plugin_baseline_test.go", "plugin_runtime_test.go"},
-			Remediation:      "改造 runtime.go 移除 AttachPluginManager，将 plugin_host.go 替换为 runtime_supervisor，删除 plugin_service.go",
-		},
-		{
-			FilePath:         "backend/internal/migration/plugin_runtime.go",
-			Package:          "migration",
-			Step:             66,
-			Reason:           "旧 PluginRuntime 迁移建表，由 extension/kernel/data_migration 替代",
-			Replacement:      "extension/kernel/data_migration",
-			Status:           StatusMarked,
-			BlockingDeletion: true,
-			ProductionRefs:   []string{"migration/migrations.go:60"},
-			TestRefs: []string{
-				"cmd/server/services_test.go",
-				"internal/extension/workshop_integration_test.go",
-				"internal/extension/workshop_baseline_test.go",
-				"internal/extension/plugin_runtime_test.go",
-				"internal/extension/plugin_baseline_test.go",
-				"internal/extension/package_manager_test.go",
-				"internal/migration/extension_packages_test.go",
-				"internal/migration/extensions_test.go",
-			},
-			Remediation: "保留迁移文件以保证历史 schema，但停止向旧表写入，新写入走 extension/kernel 数据模型",
-		},
-	}
-	for _, f := range step66Files {
-		_ = r.Mark(f)
-	}
-
-	step67Files := []LegacyFile{
-		{
-			FilePath:         "backend/internal/extension/agent_skill_handler.go",
-			Package:          "extension",
-			Step:             67,
-			Reason:           "旧 Skill Handler，由 extension/kernel/skill_migration 和 extension/kernel/agent_skill 替代",
-			Replacement:      "extension/kernel/agent_skill",
-			Status:           StatusMarked,
-			BlockingDeletion: true,
-			ProductionRefs:   []string{"router.go (14 routes)"},
-			TestRefs:         []string{},
-			Remediation:      "router.go 改为注册 /api/extensions/* 路由，旧 /api/agent-skills/* 路由由 cutover manager 重定向到新入口",
-		},
-	}
-	for _, f := range step67Files {
-		_ = r.Mark(f)
-	}
-
 	step68Files := []LegacyFile{
 		{
 			FilePath:         "backend/internal/extension/package_installer.go",
@@ -304,48 +247,6 @@ func DefaultRegistry() *DeprecationRegistry {
 		},
 	}
 	for _, f := range step68Files {
-		_ = r.Mark(f)
-	}
-
-	step69Files := []LegacyFile{
-		{
-			FilePath:         "backend/internal/extension/plugin_runtime_test.go",
-			Package:          "extension",
-			Step:             69,
-			Reason:           "旧 PluginRuntime 测试，新模型由 extension/kernel 测试覆盖",
-			Replacement:      "extension/kernel/runtime_supervisor/registry_test.go 等",
-			Status:           StatusMarked,
-			BlockingDeletion: false,
-			ProductionRefs:   []string{},
-			TestRefs:         []string{},
-			Remediation:      "在新模型测试覆盖率达标后删除",
-		},
-		{
-			FilePath:         "backend/internal/extension_states (旧表)",
-			Package:          "schema",
-			Step:             69,
-			Reason:           "重复生命周期状态表，由 extension_installations / extension_contributions 替代",
-			Replacement:      "extension/kernel/lifecycle_manager 表",
-			Status:           StatusMarked,
-			BlockingDeletion: true,
-			ProductionRefs:   []string{"旧 PluginManager 读写"},
-			TestRefs:         []string{},
-			Remediation:      "保留表但停止新写，迁移历史数据后 DROP",
-		},
-		{
-			FilePath:         "backend/internal/plugin_runs (旧表)",
-			Package:          "schema",
-			Step:             69,
-			Reason:           "旧 plugin_runs 表，由 extension/kernel/observability 替代",
-			Replacement:      "extension/kernel/observability 表",
-			Status:           StatusMarked,
-			BlockingDeletion: true,
-			ProductionRefs:   []string{"旧 PluginManager 写入"},
-			TestRefs:         []string{},
-			Remediation:      "保留表但停止新写，迁移历史数据后 DROP",
-		},
-	}
-	for _, f := range step69Files {
 		_ = r.Mark(f)
 	}
 
@@ -373,18 +274,6 @@ func DefaultRegistry() *DeprecationRegistry {
 			ProductionRefs:   []string{},
 			TestRefs:         []string{},
 			Remediation:      "零调用，可直接删除",
-		},
-		{
-			FilePath:         "backend/internal/extension/plugin_handler.go",
-			Package:          "extension",
-			Step:             70,
-			Reason:           "旧 Plugin Event API（GetPluginEvents/GetPluginDeadLetters/RetryPluginEvent），由 extension/kernel/event API 替代",
-			Replacement:      "extension/event_api.go EventAPI",
-			Status:           StatusMarked,
-			BlockingDeletion: true,
-			ProductionRefs:   []string{"router.go:101-103"},
-			TestRefs:         []string{},
-			Remediation:      "router.go 保留旧路由至前端迁移完成，新代码禁止扩展旧 API",
 		},
 	}
 	for _, f := range step70Files {

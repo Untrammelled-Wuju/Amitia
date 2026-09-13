@@ -42,20 +42,6 @@ type MigrationMapping struct {
 func DefaultMigrationMappings() []MigrationMapping {
 	return []MigrationMapping{
 		{
-			OldTable:      "plugin_runs",
-			OperationType: OpPluginHook,
-			SubjectType:   SubjectTool,
-			StatusMap: map[string]ExecutionStatus{
-				"pending":   StatusQueued,
-				"running":   StatusRunning,
-				"success":   StatusSucceeded,
-				"failed":    StatusFailed,
-				"cancelled": StatusCancelled,
-				"timeout":   StatusTimedOut,
-				"denied":    StatusDenied,
-			},
-		},
-		{
 			OldTable:      "mcp_operations",
 			OperationType: OpMCPToolExecute,
 			SubjectType:   SubjectMCPServer,

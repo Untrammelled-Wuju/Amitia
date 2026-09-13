@@ -25,7 +25,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/jsonrpc"
 	"github.com/u-ai/backend/internal/extension/kernel/mcp_migration"
-	"github.com/u-ai/backend/internal/extension/kernel/plugin_migration"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
@@ -284,14 +283,13 @@ func DefaultSuite() *Suite {
 	s := NewSuite()
 	items := []AcceptanceItem{
 		{ItemID: "stage1.freeze_audit", Stage: StageFreezeAudit, Title: "旧系统冻结与审计", Required: true, Description: "第1-12步：冻结旧系统，建立调用链地图、数据清单"},
-		{ItemID: "stage1.base_extraction", Stage: StageFreezeAudit, Title: "基础设施抽取", Required: true, Description: "第13-20步：包安全、MCP、Skill、Workflow、PluginRuntime、Lifecycle、Enabled、只读迁移"},
+		{ItemID: "stage1.base_extraction", Stage: StageFreezeAudit, Title: "基础设施抽取", Required: true, Description: "第13-20步：包安全、MCP、Skill、Workflow、Lifecycle、Enabled、只读迁移"},
 		{ItemID: "stage2.kernel_core", Stage: StageKernelCore, Title: "ExtensionKernel 领域模型", Required: true, Description: "第21-28步：ExtensionKernel、Lifecycle、Contribution、Dependency、Runtime、HostAPI、Storage、Secret、Event、Hook"},
-		{ItemID: "stage3.amitiax_manifest", Stage: StageAmitiaxRuntime, Title: "AmitiaxManifestV2", Required: true, Description: "第29-34步：Manifest v2、多模块包、解析器、安装事务、签名、更新回滚"},
+		{ItemID: "stage3.amitiax_manifest", Stage: StageAmitiaxRuntime, Title: "AmitiaxManifestV1", Required: true, Description: "第29-34步：Manifest v1、多模块包、解析器、安装事务、签名、更新回滚"},
 		{ItemID: "stage3.runtimes", Stage: StageAmitiaxRuntime, Title: "多 Runtime 实现", Required: true, Description: "第35-40步：JSMain、Task、JSONRPC、TrustedService、WASM"},
 		{ItemID: "stage4.ui_contribution", Stage: StageUIContribution, Title: "UI Contribution 协议", Required: true, Description: "第41-48步：UIContribution、SchemaUI、SandboxWebUI、Slots、PageHost、ChatUI、Desktop、UIOrdering"},
 		{ItemID: "stage5.builtin_tools", Stage: StageMigration, Title: "内置 Tools 迁移", Required: true, Description: "第49步：内置 Tool 迁移到 system/amitia-core"},
 		{ItemID: "stage5.skills_mcp_workflow", Stage: StageMigration, Title: "Skill/MCP/Workflow 迁移", Required: true, Description: "第50-52步：AgentSkills、MCP、Workflows 迁移"},
-		{ItemID: "stage5.plugins_legacy", Stage: StageMigration, Title: "Plugins 与旧 Amitiax 迁移", Required: true, Description: "第53-55步：官方 Plugins、旧 Amitiax、数据迁移"},
 		{ItemID: "stage6.sdk_cli", Stage: StageDevEcosystem, Title: "TypeScript SDK 与 Plugin CLI", Required: true, Description: "第56-57步：Plugin SDK、Plugin CLI"},
 		{ItemID: "stage6.dev_mode_console", Stage: StageDevEcosystem, Title: "开发模式与 Developer Console", Required: true, Description: "第58-59步：DevMode、热重载、Developer Console"},
 		{ItemID: "stage6.center_detail", Stage: StageDevEcosystem, Title: "扩展中心与详情页", Required: true, Description: "第60-61步：ExtensionCenter、ExtensionDetailPage"},
@@ -299,8 +297,7 @@ func DefaultSuite() *Suite {
 		{ItemID: "stage7.stability", Stage: StageValidation, Title: "桌面端稳定性", Required: true, Description: "第63步：稳定性验收"},
 		{ItemID: "stage7.security", Stage: StageValidation, Title: "安全权限隔离", Required: true, Description: "第64步：安全验收"},
 		{ItemID: "stage7.cutover", Stage: StageCutover, Title: "ExtensionKernel 唯一入口", Required: true, Description: "第65步：切换为唯一入口"},
-		{ItemID: "stage7.legacy_plugin", Stage: StageLegacyRemoval, Title: "旧 PluginRuntime 弃用", Required: true, Description: "第66步：旧 PluginRuntime 标记弃用"},
-		{ItemID: "stage7.legacy_skill", Stage: StageLegacyRemoval, Title: "旧 Skill 兼容层弃用", Required: true, Description: "第67步：旧 Skill Handler 标记弃用"},
+		{ItemID: "stage7.legacy_skill", Stage: StageLegacyRemoval, Title: "旧 Skill 兼容层删除", Required: true, Description: "第67步：旧 Skill Registry、Executor、Handler 与 Workshop 物理删除"},
 		{ItemID: "stage7.legacy_amitiax", Stage: StageLegacyRemoval, Title: "旧 Amitiax 安装器弃用", Required: true, Description: "第68步：旧安装器标记弃用"},
 		{ItemID: "stage7.legacy_data", Stage: StageLegacyRemoval, Title: "旧数据模型弃用", Required: true, Description: "第69步：旧表标记弃用"},
 		{ItemID: "arch.single_chain", Stage: StageKernelCore, Title: "单一主链", Required: true, Description: "确认无第二条生产主链"},
@@ -339,16 +336,12 @@ func DefaultSuite() *Suite {
 			s.Register(it, verifyBuiltinToolsMigration)
 		case "stage5.skills_mcp_workflow":
 			s.Register(it, verifySkillsMCPWorkflowMigration)
-		case "stage5.plugins_legacy":
-			s.Register(it, verifyPluginsLegacyMigration)
 		case "stage6.dev_mode_console":
 			s.Register(it, verifyDevModeConsole)
 		case "stage7.equivalence":
 			s.Register(it, verifyEquivalence)
 		case "stage7.stability":
 			s.Register(it, verifyStability)
-		case "stage7.legacy_plugin":
-			s.Register(it, verifyLegacyPluginDeprecated)
 		case "stage7.legacy_skill":
 			s.Register(it, verifyLegacySkillDeprecated)
 		case "stage7.legacy_amitiax":
@@ -792,11 +785,8 @@ func verifyFreezeAudit(ctx context.Context) ([]string, error) {
 
 	snap := counter.Snapshot()
 	requiredMetrics := []string{
-		"legacy_plugin_start",
-		"legacy_plugin_dispatch",
 		"legacy_tool_execute",
 		"legacy_package_install",
-		"legacy_skill_execute",
 		"legacy_mcp_tool_register",
 		"legacy_schedule_tick",
 		"legacy_total",
@@ -840,11 +830,6 @@ func verifyBaseExtraction(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("workflow_migration.Registry must not be nil")
 	}
 
-	pluginReg := plugin_migration.NewPluginMigrationRegistry()
-	if pluginReg == nil {
-		return nil, fmt.Errorf("plugin_migration.Registry must not be nil")
-	}
-
 	spec := &mcp_migration.MCPContributionSpec{
 		ServerID:    "verify-base",
 		DisplayName: "Verify Base",
@@ -867,7 +852,6 @@ func verifyBaseExtraction(ctx context.Context) ([]string, error) {
 		"skill_migration.Registry 实例化成功",
 		"mcp_migration.Registry 实例化并验证注册/查询成功",
 		"workflow_migration.Registry 实例化成功",
-		"plugin_migration.Registry 实例化成功",
 	}, nil
 }
 
@@ -983,44 +967,6 @@ func verifySkillsMCPWorkflowMigration(ctx context.Context) ([]string, error) {
 		"mcp_migration.Registry 注册并列表成功",
 		"workflow_migration.Registry 注册成功",
 		"Skill/MCP/Workflow 迁移注册表均可写入和读取",
-	}, nil
-}
-
-func verifyPluginsLegacyMigration(ctx context.Context) ([]string, error) {
-	pluginReg := plugin_migration.NewPluginMigrationRegistry()
-	pluginSpec := &plugin_migration.PluginContributionSpec{
-		PluginID:       "system/amitia-core/verify-plugin",
-		LegacyPluginID: "verify-plugin",
-		ExtensionID:    "system/amitia-core",
-		DisplayName:    "Verify Plugin",
-	}
-	if err := pluginReg.Register(pluginSpec); err != nil {
-		return nil, fmt.Errorf("plugin_migration.Register failed: %w", err)
-	}
-
-	amitiaxReg := amitiax_migration.NewAmitiaxMigrationRegistry()
-	if amitiaxReg == nil {
-		return nil, fmt.Errorf("amitiax_migration.Registry must not be nil")
-	}
-
-	dataReg := data_migration.NewDataMigrationRegistry()
-	if dataReg == nil {
-		return nil, fmt.Errorf("data_migration.Registry must not be nil")
-	}
-
-	retrieved, err := pluginReg.Get("system/amitia-core/verify-plugin")
-	if err != nil {
-		return nil, fmt.Errorf("plugin_migration.Get failed: %w", err)
-	}
-	if retrieved.LegacyPluginID != "verify-plugin" {
-		return nil, fmt.Errorf("retrieved plugin legacy ID mismatch")
-	}
-
-	return []string{
-		"plugin_migration.Registry 注册并查询成功",
-		"amitiax_migration.Registry 实例化成功",
-		"data_migration.Registry 实例化成功",
-		"Plugins 与旧 Amitiax 迁移基础设施就绪",
 	}, nil
 }
 
@@ -1163,36 +1109,6 @@ func verifyStability(ctx context.Context) ([]string, error) {
 	}, nil
 }
 
-func verifyLegacyPluginDeprecated(ctx context.Context) ([]string, error) {
-	reg := plugin_migration.NewPluginMigrationRegistry()
-	if reg == nil {
-		return nil, fmt.Errorf("plugin_migration.Registry must not be nil")
-	}
-
-	spec := &plugin_migration.PluginContributionSpec{
-		PluginID:        "system/amitia-core/deprecated-plugin",
-		LegacyPluginID:  "deprecated-plugin",
-		ExtensionID:     "system/amitia-core",
-		DisplayName:     "Deprecated Plugin",
-		Deprecated:      true,
-		DeprecationNote: "migrated to kernel",
-	}
-	if err := reg.Register(spec); err != nil {
-		return nil, fmt.Errorf("plugin_migration.Register failed: %w", err)
-	}
-
-	counter := kernel.GlobalLegacyCallCounter()
-	if counter.Total() != 0 {
-		return nil, fmt.Errorf("LegacyCallCounter must be 0 (legacy plugins not active), got %d", counter.Total())
-	}
-
-	return []string{
-		"plugin_migration.Registry 支持弃用标记",
-		"LegacyCallCounter.Total()=0 (旧 PluginRuntime 不承担生产执行)",
-		"旧 PluginRuntime 已通过迁移注册表弃用",
-	}, nil
-}
-
 func verifyLegacySkillDeprecated(ctx context.Context) ([]string, error) {
 	reg := skill_migration.NewSkillMigrationRegistry()
 	if reg == nil {
@@ -1218,7 +1134,7 @@ func verifyLegacySkillDeprecated(ctx context.Context) ([]string, error) {
 	return []string{
 		"skill_migration.Registry 注册成功",
 		"LegacyCallCounter.Total()=0 (旧 Skill Handler 不承担生产执行)",
-		"旧 Skill 兼容层已通过迁移注册表弃用",
+		"旧 Skill 兼容层已物理删除，Agent Skill 与 Workflow 使用 Kernel 主链",
 	}, nil
 }
 
@@ -1305,14 +1221,6 @@ func verifyCenterDetail(ctx context.Context) ([]string, error) {
 	if _, err := os.Stat(centerView); err != nil {
 		return nil, fmt.Errorf("ExtensionCenterView.vue must exist: %w", err)
 	}
-	detailView := filepath.Join(frontSrc, "PluginDetailView.vue")
-	if _, err := os.Stat(detailView); err != nil {
-		return nil, fmt.Errorf("PluginDetailView.vue must exist: %w", err)
-	}
-	listView := filepath.Join(frontSrc, "PluginListView.vue")
-	if _, err := os.Stat(listView); err != nil {
-		return nil, fmt.Errorf("PluginListView.vue must exist: %w", err)
-	}
 
 	uiHost := ui_contribution.NewUIHost()
 	if uiHost == nil {
@@ -1325,8 +1233,6 @@ func verifyCenterDetail(ctx context.Context) ([]string, error) {
 
 	return []string{
 		"ExtensionCenterView.vue 存在",
-		"PluginDetailView.vue 存在",
-		"PluginListView.vue 存在",
 		"UIHost 和 PageHost 实例化成功 (扩展中心与详情页基础设施就绪)",
 	}, nil
 }

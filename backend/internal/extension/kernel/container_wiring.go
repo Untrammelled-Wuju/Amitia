@@ -19,6 +19,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 )
 
 type containerCandidateProvider struct {
@@ -228,6 +229,11 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 	case lifecycle_manager.CmdEnable:
 		if plan.CurrentState.Installation != nil {
 			inst := *plan.CurrentState.Installation
+			if inst.Metadata == nil {
+				inst.Metadata = map[string]any{}
+			}
+			inst.Metadata["user.enabled"] = true
+			inst.Metadata["user.disabled"] = false
 			inst.EnablementState = domain.EnablementEnabled
 			inst.UpdatedAt = time.Now().UTC()
 			if err := e.instRepo.PutInstallation(ctx, inst); err != nil {
@@ -253,6 +259,7 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			}
 			result.Applied = append(result.Applied, "activate_contributions")
 		}
+		runtimegate.Set(string(extID), true)
 		if e.uiHostNotifier != nil {
 			e.uiHostNotifier.BroadcastExtensionChange("extension_enabled", string(extID), nil)
 			e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
@@ -261,6 +268,11 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 	case lifecycle_manager.CmdDisable:
 		if plan.CurrentState.Installation != nil {
 			inst := *plan.CurrentState.Installation
+			if inst.Metadata == nil {
+				inst.Metadata = map[string]any{}
+			}
+			inst.Metadata["user.enabled"] = false
+			inst.Metadata["user.disabled"] = true
 			inst.EnablementState = domain.EnablementDisabled
 			inst.UpdatedAt = time.Now().UTC()
 			if err := e.instRepo.PutInstallation(ctx, inst); err != nil {
@@ -286,6 +298,7 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			}
 			result.Applied = append(result.Applied, "deactivate_contributions")
 		}
+		runtimegate.Set(string(extID), false)
 		if e.uiHostNotifier != nil {
 			e.uiHostNotifier.BroadcastExtensionChange("extension_disabled", string(extID), nil)
 			e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
@@ -327,6 +340,7 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			_ = e.defRepo.DeleteExtension(ctx, extID, plan.CurrentState.Definition.Version)
 		}
 		result.Applied = append(result.Applied, "uninstall")
+		runtimegate.Set(string(extID), false)
 		if e.uiHostNotifier != nil {
 			e.uiHostNotifier.BroadcastExtensionChange("extension_uninstalled", string(extID), nil)
 			e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
