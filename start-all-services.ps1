@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backendDir = Join-Path $root "backend"
-$frontDir = Join-Path $root "front"
+$desktopDir = Join-Path $root "desktop"
 $nodeExe = Join-Path $root "desktop\resources\core\node\node.exe"
 $surrealExe = Join-Path $backendDir "surrealdb\surreal.exe"
 $qdrantExe = Join-Path $backendDir "qdrant\qdrant.exe"
@@ -35,7 +35,7 @@ Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
-foreach ($port in @(18899, 18000, 19178, 5178)) {
+foreach ($port in @(18899, 18000, 19178, 15178)) {
     Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue |
         ForEach-Object { Stop-ProjectProcess -ProcessId $_.OwningProcess }
 }
@@ -61,10 +61,10 @@ Start-Process -FilePath $serverExe -WorkingDirectory $backendDir -WindowStyle Hi
 Start-Sleep -Seconds 20
 
 Write-Host "`n[5/5] 启动前端..." -ForegroundColor Yellow
-$viteEntry = Join-Path $frontDir "node_modules\vite\bin\vite.js"
+$viteEntry = Join-Path $desktopDir "node_modules\vite\bin\vite.js"
 Start-Process -FilePath $nodeExe `
-    -ArgumentList $viteEntry, "--host", "127.0.0.1", "--port", "5178" `
-    -WorkingDirectory $frontDir `
+    -ArgumentList $viteEntry, "--host", "127.0.0.1", "--port", "15178" `
+    -WorkingDirectory $desktopDir `
     -WindowStyle Hidden
 Start-Sleep -Seconds 10
 
@@ -78,7 +78,7 @@ Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
     Format-Table -AutoSize
 
 Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-    Where-Object { $_.LocalPort -in 18899, 18000, 19178, 5178 } |
+    Where-Object { $_.LocalPort -in 18899, 18000, 19178, 15178 } |
     Format-Table LocalPort, OwningProcess -AutoSize
 
 try {
