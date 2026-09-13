@@ -55,7 +55,7 @@ func (d *FileTypeDetector) Detect(raw []byte, declaredExtension string) FileType
 
 	if archiveMagic := findMagicPrefix(raw, archiveMagicNumbers); archiveMagic != "" {
 		result.IsArchive = true
-		if result.Extension != ".zip" && result.Extension != ".amitiax" {
+		if result.Extension != ".zip" && result.Extension != ".amitiax" && result.Extension != ".gamex" && result.Extension != ".petx" {
 			result.Warnings = append(result.Warnings, "archive magic without expected extension")
 		}
 	}
@@ -69,8 +69,8 @@ func (d *FileTypeDetector) Detect(raw []byte, declaredExtension string) FileType
 		result.IsText = true
 	}
 
-	if result.Extension == ".amitiax" && !result.IsArchive {
-		result.Warnings = append(result.Warnings, ".amitiax extension without valid archive magic")
+	if (result.Extension == ".amitiax" || result.Extension == ".gamex" || result.Extension == ".petx") && !result.IsArchive {
+		result.Warnings = append(result.Warnings, result.Extension+" extension without valid archive magic")
 	}
 
 	return result

@@ -53,6 +53,14 @@ func TestFileTypeDetector(t *testing.T) {
 	if !result.IsArchive {
 		t.Error("expected archive detection for ZIP magic")
 	}
+	result = d.Detect([]byte("PK\u0003\u0004\u0000\u0000\u0000\u0000"), ".gamex")
+	if !result.IsArchive {
+		t.Error("expected archive detection for .gamex ZIP magic")
+	}
+	result = d.Detect([]byte("PK\u0003\u0004\u0000\u0000\u0000\u0000"), ".petx")
+	if !result.IsArchive {
+		t.Error("expected archive detection for .petx ZIP magic")
+	}
 
 	result = d.Detect([]byte("MZ\u0090\u0000"), ".exe")
 	if !result.IsExecutable {
