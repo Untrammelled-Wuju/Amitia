@@ -856,9 +856,6 @@ func (b *UIBridge) handleActionInvoke(ctx context.Context, sess *BridgeSession, 
 	}
 	result, err := handler(ctx, sess, action, p.Input)
 	if err != nil {
-		if errors.Is(err, ErrActionApprovalRequired) {
-			return BridgeResponse{OK: false, Error: NewUIError(UIErrPermissionDenied, err.Error(), nil)}
-		}
 		return BridgeResponse{OK: false, Error: NewUIError(UIErrRuntimeUnavailable, err.Error(), nil)}
 	}
 	return BridgeResponse{OK: true, Result: result}

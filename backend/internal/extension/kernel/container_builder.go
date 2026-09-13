@@ -1476,7 +1476,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := SetupDefaultHostCommands(hostCmdRegistry, hostAPIGateway); err != nil {
 		return nil, fmt.Errorf("kernel: setup host commands: %w", err)
 	}
-	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo, permBroker, toolRegistry, scopeManager)
+	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo, toolRegistry, scopeManager)
 	sandboxDispatcher := buildSandboxActionDispatcher(sandboxActionDispatcherDeps{
 		getSession: sandboxHost.GetSession,
 		getContribution: func(contributionID string) (*ui_contribution.UIContributionDefinition, error) {

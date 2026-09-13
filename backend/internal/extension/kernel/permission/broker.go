@@ -217,18 +217,6 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 			continue
 		}
 
-		if remoteDecision == DecisionRequireApproval {
-			if !b.validateApprovalRecord(req.PermissionID, request) {
-				result.Missing = append(result.Missing, req)
-				result.Reasons = append(result.Reasons, PermissionReason{
-					Code:       "remote_approval_required",
-					Permission: req.PermissionID,
-				})
-				hasForcedApprovalMissing = true
-				continue
-			}
-		}
-
 		if b.InstallationPolicy != nil {
 			if decision, handled := b.InstallationPolicy(ctx, request.Subject, req, def); handled {
 				if decision == DecisionDeny {
@@ -245,6 +233,18 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 						Permission: req.PermissionID,
 					})
 				}
+				continue
+			}
+		}
+
+		if remoteDecision == DecisionRequireApproval {
+			if !b.validateApprovalRecord(req.PermissionID, request) {
+				result.Missing = append(result.Missing, req)
+				result.Reasons = append(result.Reasons, PermissionReason{
+					Code:       "remote_approval_required",
+					Permission: req.PermissionID,
+				})
+				hasForcedApprovalMissing = true
 				continue
 			}
 		}

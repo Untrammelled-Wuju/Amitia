@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,19 +42,17 @@ type UIActionExecutor struct {
 	runStore            workflow.RunStore
 	hostCommandRegistry *HostCommandRegistry
 	operationRepo       sqlite.OperationRepository
-	permissionBroker    permission.PermissionBroker
 	toolRegistry        *capability.ToolRegistry
 	scopeManager        scope.ScopeManager
 }
 
-func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository, permissionBroker permission.PermissionBroker, toolRegistry *capability.ToolRegistry, scopeManager scope.ScopeManager) *UIActionExecutor {
+func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository, toolRegistry *capability.ToolRegistry, scopeManager scope.ScopeManager) *UIActionExecutor {
 	return &UIActionExecutor{
 		hostAPIGateway:      gateway,
 		workflowExecutor:    wfExecutor,
 		runStore:            runStore,
 		hostCommandRegistry: hostCmdRegistry,
 		operationRepo:       opRepo,
-		permissionBroker:    permissionBroker,
 		toolRegistry:        toolRegistry,
 		scopeManager:        scopeManager,
 	}
@@ -98,33 +95,12 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 	if err := e.ensureToolScope(ctx, execCtx.ExtensionID, toolID); err != nil {
 		return nil, err
 	}
-	toolInputPayload, approvalConfirmed, err := splitUIActionInput(input)
+	toolInputPayload, err := splitUIActionInput(input)
 	if err != nil {
 		return nil, err
 	}
 	callID := fmt.Sprintf("ui-action-tool-%s-%s", execCtx.SessionID, uuid.NewString())
 	executionContext := uiActionExecutionContext(ctx, execCtx)
-	approvalRecordID := ""
-	if approvalConfirmed {
-		log.Printf("[ui-action] approval confirm: action=%s call=%s ctxEmpty=%v deviceExec=%v bindingKey=%q scopeSnapshot=%q", action.ActionID, callID, executionContext.IsEmpty(), executionContext.IsDeviceExecution(), executionContext.BindingKey(), execCtx.ScopeSnapshotID)
-		if e.permissionBroker == nil || executionContext.IsEmpty() || !executionContext.IsDeviceExecution() {
-			return nil, fmt.Errorf("%w: unable to bind the approval to the active desktop session", ui_contribution.ErrActionApprovalRequired)
-		}
-		record, recordErr := e.permissionBroker.RecordApproval(ctx, permission.PermissionApprovalRecordRequest{
-			InvocationID:        callID,
-			PermissionIDs:       []string{"tool.invoke"},
-			ScopeSnapshotID:     execCtx.ScopeSnapshotID,
-			Decision:            permission.ApprovalDecisionApproved,
-			ApprovedBy:          executionContext.UserID.String(),
-			ExecutionContext:    executionContext,
-			ExecutionBindingKey: executionContext.BindingKey(),
-			RiskLevel:           "high",
-		})
-		if recordErr != nil {
-			return nil, fmt.Errorf("%w: %v", ui_contribution.ErrActionApprovalRequired, recordErr)
-		}
-		approvalRecordID = record.RecordID
-	}
 	toolInput, _ := json.Marshal(map[string]any{
 		"toolId": toolID,
 		"input":  toolInputPayload,
@@ -138,15 +114,11 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 		ScopeSnapshotID:      execCtx.ScopeSnapshotID,
 		PermissionSnapshotID: execCtx.PermissionSnapshotID,
 		InvocationID:         callID,
-		ApprovalRecordID:     approvalRecordID,
 		ExecutionContext:     executionContext,
 	}
 	result := e.hostAPIGateway.Call(ctx, callReq)
 	if result.Error != nil {
 		log.Printf("[ui-action] gateway call failed: action=%s call=%s code=%s msg=%s", action.ActionID, callID, result.Error.Code, result.Error.Message)
-		if result.Error.Code == host_api.ErrorCodePermissionDenied && strings.Contains(result.Error.Message, "decision=require_approval") {
-			return nil, fmt.Errorf("%w: this operation needs confirmation", ui_contribution.ErrActionApprovalRequired)
-		}
 		return nil, fmt.Errorf("action %s failed: %s", action.ActionID, result.Error.Message)
 	}
 	return result.Output, nil
@@ -181,26 +153,17 @@ func (e *UIActionExecutor) ensureToolScope(ctx context.Context, extensionID, too
 	return nil
 }
 
-func splitUIActionInput(input json.RawMessage) (json.RawMessage, bool, error) {
+func splitUIActionInput(input json.RawMessage) (json.RawMessage, error) {
 	if len(input) == 0 {
-		return json.RawMessage(`{}`), false, nil
+		return json.RawMessage(`{}`), nil
 	}
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(input, &payload); err != nil {
-		return nil, false, fmt.Errorf("tool action input invalid: %w", err)
+		return nil, fmt.Errorf("tool action input invalid: %w", err)
 	}
-	approvedRaw, approved := payload["__amitiaApprovalConfirmed"]
 	delete(payload, "__amitiaApprovalConfirmed")
-	if !approved {
-		output, _ := json.Marshal(payload)
-		return output, false, nil
-	}
-	var confirmed bool
-	if err := json.Unmarshal(approvedRaw, &confirmed); err != nil || !confirmed {
-		return nil, false, fmt.Errorf("tool action approval marker invalid")
-	}
 	output, _ := json.Marshal(payload)
-	return output, true, nil
+	return output, nil
 }
 
 func uiActionExecutionContext(ctx context.Context, execCtx UIActionExecContext) permission.PermissionExecutionContext {

@@ -11,8 +11,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/runtimegate"
 )
 
-var ErrActionApprovalRequired = errors.New("ui action approval required")
-
 type UIContributionKind string
 
 const (
