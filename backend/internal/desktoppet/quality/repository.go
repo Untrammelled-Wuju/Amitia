@@ -627,6 +627,12 @@ func (r *GormRepository) GetReviewDecision(ctx context.Context, evaluationID str
 	return &decision, nil
 }
 
+func (r *GormRepository) DeleteMeasurementCache(ctx context.Context, frameArtifactID, contentHash string) error {
+	return r.db.WithContext(ctx).
+		Where("frame_artifact_id = ? AND content_hash = ?", frameArtifactID, contentHash).
+		Delete(&QualityMeasurementCacheRecord{}).Error
+}
+
 func (r *GormRepository) GetMeasurementCache(ctx context.Context, frameArtifactID, contentHash string) (*QualityMeasurementCacheRecord, error) {
 	var cache QualityMeasurementCacheRecord
 	err := r.db.WithContext(ctx).

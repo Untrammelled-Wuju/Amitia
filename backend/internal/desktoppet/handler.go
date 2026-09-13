@@ -36,7 +36,6 @@ func (h *Handler) GetActionDefinitions(c *gin.Context) {
 }
 
 func (h *Handler) CreateTask(c *gin.Context) {
-	characterID := c.PostForm("characterId")
 	modelConfigID, err := strconv.Atoi(c.PostForm("modelConfigId"))
 	if err != nil || modelConfigID <= 0 {
 		util.ErrorResponse(c, response.InvalidParams, "modelConfigId 无效", gin.H{"errorCode": "INVALID_MODEL_CONFIG"})
@@ -78,7 +77,7 @@ func (h *Handler) CreateTask(c *gin.Context) {
 	}
 	userID := string(actor.UserID)
 
-	taskSummary, err := h.service.CreateTask(c.Request.Context(), userID, characterID, modelConfigID, name, prompt, negativePrompt, outputWidth, outputHeight, selectedActionKeys, fileHeader)
+	taskSummary, err := h.service.CreateTask(c.Request.Context(), userID, modelConfigID, name, prompt, negativePrompt, outputWidth, outputHeight, selectedActionKeys, fileHeader)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -112,7 +111,6 @@ func (h *Handler) ListTasks(c *gin.Context) {
 		return
 	}
 	userID := string(actor.UserID)
-	characterID := c.Query("characterId")
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
@@ -125,7 +123,7 @@ func (h *Handler) ListTasks(c *gin.Context) {
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	data, err := h.service.ListTasks(userID, characterID, status, page, pageSize)
+	data, err := h.service.ListTasks(userID, status, page, pageSize)
 	if err != nil {
 		writeServiceError(c, err)
 		return

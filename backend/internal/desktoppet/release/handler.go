@@ -24,7 +24,6 @@ func NewHandler(svc ReleaseService, guard security.OwnershipGuard) *Handler {
 type buildReleasePayload struct {
 	ProcessingTaskID string   `json:"processingTaskId"`
 	PetID            string   `json:"petId"`
-	CharacterID      string   `json:"characterId"`
 	DefaultAction    string   `json:"defaultAction"`
 	IncludedActions  []string `json:"includedActions"`
 	ProfileID        string   `json:"profileId"`
@@ -52,7 +51,6 @@ func (h *Handler) BuildRelease(c *gin.Context) {
 		UserID:             userID,
 		ProcessingTaskID:   payload.ProcessingTaskID,
 		PetID:              payload.PetID,
-		CharacterID:        payload.CharacterID,
 		DefaultAction:      payload.DefaultAction,
 		IncludedActionKeys: payload.IncludedActions,
 		BuildProfileID:     payload.ProfileID,

@@ -9,7 +9,6 @@ import (
 
 type CreateReferenceAssetRequest struct {
 	UserID                  string
-	CharacterID             string
 	TaskID                  string
 	UploadPath              string
 	UploadName              string
@@ -24,7 +23,7 @@ type CreateReferenceAssetRequest struct {
 
 type ReferenceAssetService interface {
 	CreateForGenerationTask(ctx context.Context, tx *gorm.DB, req CreateReferenceAssetRequest) (*ReferenceAsset, error)
-	ValidateForTask(ctx context.Context, taskID, userID, characterID string) (*ReferenceAsset, error)
+	ValidateForTask(ctx context.Context, taskID, userID string) (*ReferenceAsset, error)
 }
 
 type referenceAssetService struct {
@@ -66,7 +65,6 @@ func (s *referenceAssetService) CreateForGenerationTask(ctx context.Context, tx 
 		Tx:                      tx,
 		DataDir:                 s.dataDir,
 		UserID:                  req.UserID,
-		CharacterID:             req.CharacterID,
 		TaskID:                  req.TaskID,
 		UploadPath:              req.UploadPath,
 		UploadName:              req.UploadName,
@@ -86,7 +84,7 @@ func (s *referenceAssetService) CreateForGenerationTask(ctx context.Context, tx 
 	return result.ReferenceAsset, nil
 }
 
-func (s *referenceAssetService) ValidateForTask(ctx context.Context, taskID, userID, characterID string) (*ReferenceAsset, error) {
+func (s *referenceAssetService) ValidateForTask(ctx context.Context, taskID, userID string) (*ReferenceAsset, error) {
 	asset, err := s.repo.GetReferenceAssetByTaskID(taskID)
 	if err != nil {
 		return nil, fmt.Errorf("reference asset not found for task %s: %w", taskID, err)
@@ -99,9 +97,6 @@ func (s *referenceAssetService) ValidateForTask(ctx context.Context, taskID, use
 	}
 	if userID != "" && asset.UserID != userID {
 		return nil, fmt.Errorf("reference asset ownership mismatch: expected user %s, got %s", userID, asset.UserID)
-	}
-	if characterID != "" && asset.CharacterID != characterID {
-		return nil, fmt.Errorf("reference asset character mismatch: expected %s, got %s", characterID, asset.CharacterID)
 	}
 	return asset, nil
 }

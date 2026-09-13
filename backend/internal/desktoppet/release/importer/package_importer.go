@@ -195,16 +195,9 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 		return nil, release.NewReleaseError("STAGING_SOURCE_CHANGED", "暂存包在验证后发生变化", nil)
 	}
 
-	characterID := manifest.Binding.SourceCharacterID
-
 	petID := "pet_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 
 	var identity *release.PetIdentityData
-	existingByIdentity, err := pi.repo.GetPetIdentityByCharacter(req.UserID, characterID)
-	if err == nil && existingByIdentity != nil {
-		identity = existingByIdentity
-		petID = identity.ID
-	}
 
 	now := formatImportTimestamp(time.Now())
 	operationID := uuid.NewString()
@@ -215,17 +208,11 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 		if name == "" {
 			name = petID
 		}
-		bindingPolicy := strings.TrimSpace(manifest.Binding.Policy)
-		if bindingPolicy == "" {
-			bindingPolicy = "character_locked"
-		}
 		identity = &release.PetIdentityData{
 			ID:                  petID,
 			OwnerUserID:         req.UserID,
-			SourceCharacterID:   characterID,
 			Name:                name,
 			Slug:                makeIdentitySlug(name),
-			BindingPolicy:       bindingPolicy,
 			UpstreamPetID:       strings.TrimSpace(manifest.PetID),
 			DefaultActionKey:    manifest.DefaultAction,
 			NextReleaseSequence: 1,
@@ -799,7 +786,7 @@ func (pi *PackageImporter) hashWorkspaceFiles(workspaceDir, releaseID string, ma
 		}
 		clean, pathErr := packageformat.NormalizePackagePath(filepath.ToSlash(relPath))
 		if pathErr != nil {
-			return fmt.Errorf("workspace path is not Package V2 canonical: %s: %w", relPath, pathErr)
+			return fmt.Errorf("workspace path is not Package V1 canonical: %s: %w", relPath, pathErr)
 		}
 		verifiedPath, resolveErr := packageformat.SecureResolveExistingUnderRoot(workspaceDir, clean)
 		if resolveErr != nil {

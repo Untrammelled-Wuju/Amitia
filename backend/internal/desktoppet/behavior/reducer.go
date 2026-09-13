@@ -436,7 +436,7 @@ func behaviorSourceSequenceKey(event BehaviorEventEnvelope) string {
 		return ""
 	}
 
-	// Runtime V2 sequence numbers belong to a runtime session. Prefer the
+	// Runtime V1 sequence numbers belong to a runtime session. Prefer the
 	// session identity so a reconnect that legitimately restarts a sequence
 	// cannot be rejected by a cursor persisted for the previous session.
 	if event.SessionID != "" {
@@ -444,7 +444,7 @@ func behaviorSourceSequenceKey(event BehaviorEventEnvelope) string {
 	}
 
 	// Adapter-originated playback feedback may use a per-command sequence
-	// instead of Runtime V2's session-global sequence. Scope that cursor to the
+	// instead of Runtime V1's session-global sequence. Scope that cursor to the
 	// command/decision so the next playback is allowed to restart at sequence 1.
 	if event.Origin == OriginPlayback {
 		payload := parsePayload(event.Payload)

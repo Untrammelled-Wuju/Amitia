@@ -59,6 +59,7 @@ type Worker struct {
 	sem               chan struct{}
 	stateEngine       *taskstate.Engine
 	onActionProcessed func(taskID, actionID, actionKey string)
+	onTaskFinalized   func(taskID string)
 }
 
 func NewWorker(db *gorm.DB, repo processing.Repository, dataDir string, pipeline *application.Pipeline, sourceResolver *application.RepoSourceResolver, committer *commit.ProcessingCommitter) *Worker {
@@ -82,6 +83,10 @@ func NewWorker(db *gorm.DB, repo processing.Repository, dataDir string, pipeline
 
 func (w *Worker) SetOnActionProcessed(fn func(taskID, actionID, actionKey string)) {
 	w.onActionProcessed = fn
+}
+
+func (w *Worker) SetOnTaskFinalized(fn func(taskID string)) {
+	w.onTaskFinalized = fn
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -290,10 +295,91 @@ func (w *Worker) runProcessingStages(ctx context.Context, task *processing.Proce
 		return err
 	}
 
+	finalActions, err := w.repo.ListProcessingActionsOrdered(task.ID)
+	if err != nil {
+		return fmt.Errorf("list processing actions for packaging failed: %w", err)
+	}
+	succeededCount := 0
+	for i := range finalActions {
+		if finalActions[i].Status == "succeeded" {
+			succeededCount++
+		}
+	}
+	if succeededCount > 0 {
+		if err := w.ensurePackagePreviewForTask(task, finalActions); err != nil {
+			log.Logger.Warnf("processing task %s package preview generation failed: %v", task.ID, err)
+		}
+	}
+
 	if err := w.updateProgress(task.ID, executionID, ProgressPackage); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (w *Worker) ensurePackagePreviewForTask(task *processing.ProcessingTask, actions []processing.ProcessingAction) error {
+	succeededActions, err := w.repo.ListSucceededActions(task.GenerationTaskID)
+	if err != nil {
+		return fmt.Errorf("list succeeded actions for package preview failed: %w", err)
+	}
+	excludedKeys := make(map[string]bool)
+	for _, a := range actions {
+		if a.Excluded == 1 {
+			excludedKeys[a.ActionKey] = true
+		}
+	}
+	availableActions := make([]desktoppet.GenerationTaskAction, 0, len(succeededActions))
+	for _, a := range succeededActions {
+		if !excludedKeys[a.ActionKey] {
+			availableActions = append(availableActions, a)
+		}
+	}
+	if len(availableActions) == 0 {
+		return fmt.Errorf("no successful actions for package preview")
+	}
+	defaultAction, err := processing.NewDefaultActionSelector("").SelectDefaultAction(availableActions)
+	if err != nil {
+		return fmt.Errorf("select default action for package preview failed: %w", err)
+	}
+	return w.ensurePackagePreview(task, defaultAction)
+}
+
+func (w *Worker) ensurePackagePreview(task *processing.ProcessingTask, defaultActionKey string) error {
+	versionDir := filepath.Join(w.dataDir, "desktop-pets", "generation-tasks", task.GenerationTaskID,
+		"processed", fmt.Sprintf("version-%d", task.ProcessingVersion))
+	dst := filepath.Join(versionDir, "package-preview.png")
+	if _, err := os.Stat(dst); err == nil {
+		return nil
+	}
+	action, err := w.repo.GetProcessingActionByActionKey(task.ID, defaultActionKey)
+	if err != nil {
+		return fmt.Errorf("get default action for package preview failed: %w", err)
+	}
+	frames, err := w.repo.ListProcessedFramesByAction(action.ID)
+	if err != nil {
+		return fmt.Errorf("list frames for package preview failed: %w", err)
+	}
+	imgs := make([]image.Image, 0, len(frames))
+	for _, frame := range frames {
+		if frame.ProcessedPath == "" {
+			continue
+		}
+		f, err := os.Open(filepath.Join(w.dataDir, filepath.FromSlash(frame.ProcessedPath)))
+		if err != nil {
+			continue
+		}
+		img, _, decodeErr := image.Decode(f)
+		f.Close()
+		if decodeErr != nil {
+			continue
+		}
+		imgs = append(imgs, img)
+	}
+	if len(imgs) == 0 {
+		return fmt.Errorf("no decodable frames for package preview")
+	}
+	_, err = w.previewGenerator.GeneratePackagePreview(task.GenerationTaskID, task.ProcessingVersion, imgs)
+	return err
 }
 
 func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingTask, action *processing.ProcessingAction, sourceVal *processing.SourceValidationResult, executionID string) (retErr error) {
@@ -725,6 +811,10 @@ func (w *Worker) finalizeTask(taskID string, processErr error, executionID strin
 	}
 
 	w.publishCompleted(taskID, string(decision.Status), succeeded, failed, total)
+
+	if w.onTaskFinalized != nil {
+		w.onTaskFinalized(taskID)
+	}
 }
 
 func (w *Worker) buildProcessingSnapshot(task *processing.ProcessingTask, actions []processing.ProcessingAction, succeeded int, hasActiveChildren bool) taskstate.ProcessingSnapshot {
@@ -746,6 +836,12 @@ func (w *Worker) buildProcessingSnapshot(task *processing.ProcessingTask, action
 		manifestValid = pkg.ManifestPath != "" && fileExists(filepath.Join(w.dataDir, pkg.ManifestPath))
 		hashValid = pkg.PackageHash != ""
 		includedActionsMatch = checkIncludedActionsMatch(pkg.IncludedActions, actions)
+	} else {
+		packageReady = true
+		packagePathValid = true
+		manifestValid = true
+		hashValid = true
+		includedActionsMatch = true
 	}
 
 	cancelRequested := task.CancelRequestedAt != ""

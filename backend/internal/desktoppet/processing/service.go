@@ -27,6 +27,7 @@ const (
 	ErrCodeProcessingActionNotFound     = "PROCESSING_ACTION_NOT_FOUND"
 	ErrCodeProcessingActionNotRetryable = "PROCESSING_ACTION_NOT_RETRYABLE"
 	ErrCodeProcessingInvalidAttempt     = "PROCESSING_INVALID_ATTEMPT"
+	ErrCodeProcessingPreviewNotReady    = "PROCESSING_PREVIEW_NOT_READY"
 	ErrCodeProcessingExcludedDefault    = "PROCESSING_EXCLUDED_DEFAULT_IDLE"
 	ErrCodeProcessingPackageFailed      = "PROCESSING_PACKAGE_FAILED"
 	ErrCodeProcessingTaskNotOwned       = "PROCESSING_TASK_NOT_OWNED"
@@ -121,14 +122,16 @@ type GetProcessingTaskResponse struct {
 }
 
 type ActionStatusInfo struct {
-	ActionKey     string   `json:"actionKey"`
-	ActionName    string   `json:"actionName"`
-	Status        string   `json:"status"`
-	Progress      int      `json:"progress"`
-	QualityLevel  string   `json:"qualityLevel"`
-	QualityFlags  []string `json:"qualityFlags"`
-	SourceAttempt int      `json:"sourceAttempt"`
-	Excluded      bool     `json:"excluded"`
+	ActionKey          string   `json:"actionKey"`
+	ActionName         string   `json:"actionName"`
+	Status             string   `json:"status"`
+	Progress           int      `json:"progress"`
+	QualityLevel       string   `json:"qualityLevel"`
+	QualityFlags       []string `json:"qualityFlags"`
+	SourceAttempt      int      `json:"sourceAttempt"`
+	SourceFrameCount   int      `json:"sourceFrameCount"`
+	ProcessedFrameCount int     `json:"processedFrameCount"`
+	Excluded           bool     `json:"excluded"`
 }
 
 type QualitySummary struct {
@@ -363,13 +366,15 @@ func (s *service) GetProcessingTask(id string) (*GetProcessingTaskResponse, erro
 
 	for _, action := range actions {
 		info := ActionStatusInfo{
-			ActionKey:     action.ActionKey,
-			ActionName:    action.ActionNameSnapshot,
-			Status:        action.Status,
-			Progress:      action.Progress,
-			SourceAttempt: action.SourceAttemptNumber,
-			Excluded:      action.Excluded == 1,
-			QualityFlags:  []string{},
+			ActionKey:           action.ActionKey,
+			ActionName:          action.ActionNameSnapshot,
+			Status:              action.Status,
+			Progress:            action.Progress,
+			SourceAttempt:       action.SourceAttemptNumber,
+			SourceFrameCount:    action.SourceFrameCount,
+			ProcessedFrameCount: action.ProcessedFrameCount,
+			Excluded:            action.Excluded == 1,
+			QualityFlags:        []string{},
 		}
 
 		frames, ferr := s.repo.ListProcessedFramesByAction(action.ID)
@@ -518,29 +523,29 @@ func (s *service) RetryProcessingAction(processingTaskID, actionKey string) erro
 		}
 	}()
 
-	_, err = s.repo.BeginProcessingActionAttempt(tx, action.ID, action.RowVersion, "", action.SourceAttemptNumber)
-	if err != nil {
-		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "创建处理尝试失败", err)
-	}
+txStateStore := desktoppet.NewStateStore(s.db).WithTx(tx)
+txEngine := taskstate.NewEngine(txStateStore)
 
-	txStateStore := desktoppet.NewStateStore(s.db).WithTx(tx)
-	txEngine := taskstate.NewEngine(txStateStore)
+actionFrom := contracts.LifecycleStatus(action.Status)
+actionTransition, err := txEngine.Transition(context.Background(), taskstate.TransitionRequest{
+	EntityType: contracts.EntityProcessingAction,
+	EntityID:   action.ID,
+	From:       []contracts.LifecycleStatus{actionFrom},
+	To:         contracts.StatusQueued,
+	Stage:      contracts.StageQueued,
+	Reason:     contracts.ReasonProcessingActionRetry,
+	ActorType:  contracts.ActorRetryService,
+})
+if err != nil {
+	return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "重试动作状态转换失败", err)
+}
 
-	actionFrom := contracts.LifecycleStatus(action.Status)
-	_, err = txEngine.Transition(context.Background(), taskstate.TransitionRequest{
-		EntityType: contracts.EntityProcessingAction,
-		EntityID:   action.ID,
-		From:       []contracts.LifecycleStatus{actionFrom},
-		To:         contracts.StatusQueued,
-		Stage:      contracts.StageQueued,
-		Reason:     contracts.ReasonProcessingActionRetry,
-		ActorType:  contracts.ActorRetryService,
-	})
-	if err != nil {
-		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "重试动作状态转换失败", err)
-	}
+_, err = s.repo.CreateQueuedProcessingActionAttempt(tx, action.ID, actionTransition.CurrentVersion, action.SourceAttemptNumber)
+if err != nil {
+	return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "创建处理尝试失败", err)
+}
 
-	taskFrom := contracts.LifecycleStatus(task.Status)
+taskFrom := contracts.LifecycleStatus(task.Status)
 	_, err = txEngine.Transition(context.Background(), taskstate.TransitionRequest{
 		EntityType: contracts.EntityProcessingTask,
 		EntityID:   processingTaskID,
@@ -1071,6 +1076,9 @@ func (s *service) GetActionPreview(processingTaskID, actionKey string) (fullPath
 	fullPath = filepath.Join(s.dataDir, "desktop-pets", "generation-tasks", task.GenerationTaskID,
 		"processed", fmt.Sprintf("version-%d", task.ProcessingVersion),
 		"actions", actionKey, "preview.png")
+	if _, statErr := os.Stat(fullPath); statErr != nil {
+		return "", "", NewProcessingError(ErrCodeProcessingPreviewNotReady, "动作预览尚未生成")
+	}
 	return fullPath, "image/png", nil
 }
 

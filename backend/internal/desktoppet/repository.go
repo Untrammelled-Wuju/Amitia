@@ -3,10 +3,8 @@
 package desktoppet
 
 import (
-	"errors"
 	"time"
 
-	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -22,11 +20,10 @@ type Repository interface {
 	CreateTaskActions(tx *gorm.DB, actions []GenerationTaskAction) error
 	GetTaskByID(id string) (*GenerationTask, error)
 	ListActionsByTaskID(taskID string) ([]GenerationTaskAction, error)
-	ListTasks(userID, characterID, status string, page, pageSize int) ([]GenerationTask, int64, error)
+	ListTasks(userID, status string, page, pageSize int) ([]GenerationTask, int64, error)
 	DeleteTask(tx *gorm.DB, id string) error
 	DeleteActionsByTaskID(tx *gorm.DB, taskID string) error
 	GetImageGenConfigByID(id int) (*imageGenConfigView, error)
-	FindCharacterByID(id string) (*character.Character, error)
 	CreateFrames(tx *gorm.DB, frames []GenerationFrame) error
 	ListFramesByAction(taskActionID string) ([]GenerationFrame, error)
 	ListFramesByTask(taskID string) ([]GenerationFrame, error)
@@ -139,15 +136,12 @@ func (r *repository) ListActionsByTaskID(taskID string) ([]GenerationTaskAction,
 	return actions, err
 }
 
-func (r *repository) ListTasks(userID, characterID, status string, page, pageSize int) ([]GenerationTask, int64, error) {
+func (r *repository) ListTasks(userID, status string, page, pageSize int) ([]GenerationTask, int64, error) {
 	var tasks []GenerationTask
 	var total int64
 	q := r.db.Model(&GenerationTask{})
 	if userID != "" {
 		q = q.Where("user_id = ?", userID)
-	}
-	if characterID != "" {
-		q = q.Where("character_id = ?", characterID)
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -187,18 +181,6 @@ func (r *repository) GetImageGenConfigByID(id int) (*imageGenConfigView, error) 
 		return nil, err
 	}
 	return &cfg, nil
-}
-
-func (r *repository) FindCharacterByID(id string) (*character.Character, error) {
-	charRepo := character.NewRepository(r.ctx)
-	c, err := charRepo.FindByID(id)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
-		return nil, err
-	}
-	return c, nil
 }
 
 func (r *repository) CreateFrames(tx *gorm.DB, frames []GenerationFrame) error {

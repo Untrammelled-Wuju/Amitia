@@ -91,7 +91,7 @@ func createValidTestPackage(t *testing.T) (string, *Manifest) {
 	frameHash := sha256Hex(frameData)
 
 	cfg := testActionConfig{
-		SchemaVersion:          2,
+		SchemaVersion:          1,
 		ActionKey:              "idle",
 		DisplayName:            "Idle",
 		Version:                1,
@@ -310,7 +310,7 @@ func TestValidateDirectory_InvalidPlaybackMode(t *testing.T) {
 	frameData := pngFrameData()
 	frameHash := sha256Hex(frameData)
 	cfg := &testActionConfig{
-		SchemaVersion:          2,
+		SchemaVersion:          1,
 		ActionKey:              "idle",
 		DisplayName:            "Idle",
 		Version:                1,
@@ -345,7 +345,7 @@ func TestValidateDirectory_InvalidPlaybackMode(t *testing.T) {
 
 func TestValidateDirectory_EmptyFrames(t *testing.T) {
 	cfg := &testActionConfig{
-		SchemaVersion:          2,
+		SchemaVersion:          1,
 		ActionKey:              "idle",
 		DisplayName:            "Idle",
 		Version:                1,
@@ -379,7 +379,7 @@ func TestValidateDirectory_ReturnToActionInvalid(t *testing.T) {
 	frameData := pngFrameData()
 	frameHash := sha256Hex(frameData)
 	cfg := &testActionConfig{
-		SchemaVersion:          2,
+		SchemaVersion:          1,
 		ActionKey:              "idle",
 		DisplayName:            "Idle",
 		Version:                1,
@@ -466,9 +466,11 @@ func TestDirectoryPackageFS_PathTraversal(t *testing.T) {
 
 	fs := NewDirectoryPackageFS(dir)
 
-	_, err := fs.Open("safe.txt")
+	rc, err := fs.Open("safe.txt")
 	if err != nil {
 		t.Errorf("Open safe.txt failed: %v", err)
+	} else if closeErr := rc.Close(); closeErr != nil {
+		t.Errorf("Close safe.txt failed: %v", closeErr)
 	}
 
 	_, err = fs.Open("../escape.txt")
@@ -518,7 +520,7 @@ func TestIsForbiddenExecutable(t *testing.T) {
 	}
 }
 
-func TestV2ReaderRejectsMissingNestedRequiredField(t *testing.T) {
+func TestCanonicalReaderRejectsMissingNestedRequiredField(t *testing.T) {
 	_, manifest := createValidTestPackage(t)
 	data, err := json.Marshal(manifest)
 	if err != nil {
@@ -535,8 +537,8 @@ func TestV2ReaderRejectsMissingNestedRequiredField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal mutated manifest: %v", err)
 	}
-	if _, err := (&V2Reader{}).ReadManifest(data); err == nil {
-		t.Fatal("expected V2Reader to reject an action missing supportsDefaultIdle")
+	if _, err := (&CanonicalReader{}).ReadManifest(data); err == nil {
+		t.Fatal("expected CanonicalReader to reject an action missing supportsDefaultIdle")
 	}
 }
 
@@ -600,88 +602,7 @@ func TestValidateDirectoryRejectsFrameHashNotMatchingIntegrity(t *testing.T) {
 	}
 }
 
-func TestValidateDirectoryLegacyV1Compatibility(t *testing.T) {
-	dir := t.TempDir()
-	legacyManifest := map[string]any{
-		"schemaVersion":     1,
-		"packageId":         "legacy-release-001",
-		"name":              "Legacy Pet",
-		"characterId":       "legacy-pet-001",
-		"generationTaskId":  "legacy-task-001",
-		"processingVersion": 1,
-		"createdAt":         "2026-08-29T00:00:00Z",
-		"canvas":            map[string]any{"width": 512, "height": 512},
-		"defaultAction":     "idle",
-		"preview":           "",
-		"actions":           []map[string]any{{"key": "idle", "name": "Idle", "config": "actions/idle/action.json", "loopType": "loop"}},
-		"capabilities":      map[string]any{"hasTransparentBackground": true, "supportsFrameSequence": true},
-	}
-	manifestData, err := json.MarshalIndent(legacyManifest, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal legacy manifest: %v", err)
-	}
-	writeTestFile(t, dir, "manifest.json", manifestData)
-	frameData := pngFrameData()
-	writeTestFile(t, dir, "actions/idle/frames/0.png", frameData)
-	legacyAction := map[string]any{
-		"key":           "idle",
-		"name":          "Idle",
-		"loopType":      "loop",
-		"fps":           10,
-		"frames":        []map[string]any{{"index": 0, "file": "frames/0.png", "durationMs": 100}},
-		"anchor":        map[string]any{"type": "feet_center", "x": 0.5, "y": 0.92},
-		"interruptible": true,
-	}
-	actionData, err := json.MarshalIndent(legacyAction, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal legacy action: %v", err)
-	}
-	writeTestFile(t, dir, "actions/idle/action.json", actionData)
-
-	manifest, err := NewSchemaRegistry().ReadManifest(manifestData)
-	if err != nil {
-		t.Fatalf("read legacy manifest: %v", err)
-	}
-	report := NewValidator().ValidateDirectory(dir, manifest)
-	if report.Verdict != "valid" && report.Verdict != "valid_with_warnings" {
-		t.Fatalf("legacy V1 package should remain importable, verdict=%s findings=%+v", report.Verdict, report.Findings)
-	}
-}
-
-func TestValidateDirectoryLegacyV1MissingFrameRejected(t *testing.T) {
-	dir := t.TempDir()
-	legacyManifest := map[string]any{
-		"schemaVersion":     1,
-		"packageId":         "legacy-release-002",
-		"name":              "Legacy Pet",
-		"characterId":       "legacy-pet-002",
-		"processingVersion": 1,
-		"canvas":            map[string]any{"width": 512, "height": 512},
-		"defaultAction":     "idle",
-		"actions":           []map[string]any{{"key": "idle", "name": "Idle", "config": "actions/idle/action.json", "loopType": "loop"}},
-		"capabilities":      map[string]any{},
-	}
-	manifestData, _ := json.Marshal(legacyManifest)
-	writeTestFile(t, dir, "manifest.json", manifestData)
-	legacyAction := map[string]any{
-		"key":      "idle",
-		"fps":      10,
-		"loopType": "loop",
-		"frames":   []string{"frames/missing.png"},
-	}
-	actionData, _ := json.Marshal(legacyAction)
-	writeTestFile(t, dir, "actions/idle/action.json", actionData)
-	manifest, err := NewSchemaRegistry().ReadManifest(manifestData)
-	if err != nil {
-		t.Fatalf("read legacy manifest: %v", err)
-	}
-	report := NewValidator().ValidateDirectory(dir, manifest)
-	if !hasFinding(report, ErrCodeFrameMissing) {
-		t.Fatalf("expected missing legacy frame to be rejected, findings=%+v", report.Findings)
-	}
-}
-
-func TestV2ReaderRejectsNullForNonNullableNestedField(t *testing.T) {
+func TestCanonicalReaderRejectsNullForNonNullableNestedField(t *testing.T) {
 	_, manifest := createValidTestPackage(t)
 	data, err := json.Marshal(manifest)
 	if err != nil {
@@ -697,8 +618,8 @@ func TestV2ReaderRejectsNullForNonNullableNestedField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal mutated manifest: %v", err)
 	}
-	if _, err := (&V2Reader{}).ReadManifest(data); err == nil {
-		t.Fatal("expected V2Reader to reject supportsDefaultIdle:null")
+	if _, err := (&CanonicalReader{}).ReadManifest(data); err == nil {
+		t.Fatal("expected CanonicalReader to reject supportsDefaultIdle:null")
 	}
 }
 
@@ -729,6 +650,6 @@ func TestValidateDirectoryRejectsNullForNonNullableActionField(t *testing.T) {
 	}
 	report := NewValidator().ValidateDirectory(dir, manifest)
 	if !hasFinding(report, ErrCodeActionConfigInvalid) {
-		t.Fatalf("expected null non-nullable V2 fields to be rejected, findings=%+v", report.Findings)
+		t.Fatalf("expected null non-nullable V1 fields to be rejected, findings=%+v", report.Findings)
 	}
 }

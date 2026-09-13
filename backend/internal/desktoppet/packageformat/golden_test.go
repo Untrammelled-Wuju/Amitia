@@ -12,7 +12,7 @@ func buildGoldenPackage(t *testing.T) (string, *Manifest) {
 	frameHash := sha256Hex(frameData)
 
 	idleCfg := testActionConfig{
-		SchemaVersion:          2,
+		SchemaVersion:          1,
 		ActionKey:              "idle",
 		DisplayName:            "Idle",
 		Version:                1,
@@ -37,7 +37,7 @@ func buildGoldenPackage(t *testing.T) (string, *Manifest) {
 	}
 
 	waveCfg := testActionConfig{
-		SchemaVersion:          2,
+		SchemaVersion:          1,
 		ActionKey:              "wave",
 		DisplayName:            "Wave",
 		Version:                1,
@@ -235,7 +235,7 @@ func TestGoldenPackage_ReturnToActionInvalid(t *testing.T) {
 	frameHash := sha256Hex(frameData)
 
 	idleCfg := testActionConfig{
-		SchemaVersion:          2,
+		SchemaVersion:          1,
 		ActionKey:              "idle",
 		DisplayName:            "Idle",
 		Version:                1,
@@ -259,7 +259,7 @@ func TestGoldenPackage_ReturnToActionInvalid(t *testing.T) {
 	}
 
 	waveCfg := testActionConfig{
-		SchemaVersion:          2,
+		SchemaVersion:          1,
 		ActionKey:              "wave",
 		DisplayName:            "Wave",
 		Version:                1,
@@ -425,8 +425,8 @@ func TestGoldenPackage_AllFieldsValidated(t *testing.T) {
 		t.Error("Integrity.ContentRootHash is empty")
 	}
 
-	if manifest.Integrity.Algorithm != IntegrityAlgorithmV2 {
-		t.Errorf("Integrity.Algorithm = %q, want %q", manifest.Integrity.Algorithm, IntegrityAlgorithmV2)
+	if manifest.Integrity.Algorithm != IntegrityAlgorithmV1 {
+		t.Errorf("Integrity.Algorithm = %q, want %q", manifest.Integrity.Algorithm, IntegrityAlgorithmV1)
 	}
 
 	fs := NewDirectoryPackageFS(dir)

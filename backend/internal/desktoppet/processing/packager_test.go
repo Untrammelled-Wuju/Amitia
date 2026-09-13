@@ -471,7 +471,7 @@ func TestPackager_CopyActionFiles(t *testing.T) {
 	repo := newRepoFromDB(t, db)
 	p := NewPackager(repo, dataDir)
 
-	err := p.copyActionFiles(taskID, packageID, []string{actionKey}, processingVersion)
+	err := p.copyActionFiles(taskID, taskID, packageID, []string{actionKey}, processingVersion)
 	if err != nil {
 		t.Fatalf("copyActionFiles 失败: %v", err)
 	}
@@ -510,7 +510,7 @@ func TestPackager_CopyActionFiles_SourceMissing(t *testing.T) {
 	repo := newRepoFromDB(t, db)
 	p := NewPackager(repo, dataDir)
 
-	err := p.copyActionFiles(taskID, packageID, []string{"idle_normal"}, processingVersion)
+	err := p.copyActionFiles(taskID, taskID, packageID, []string{"idle_normal"}, processingVersion)
 	if err == nil {
 		t.Fatal("期望错误但得到 nil")
 	}

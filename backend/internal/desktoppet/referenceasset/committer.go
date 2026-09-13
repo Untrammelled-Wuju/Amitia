@@ -97,7 +97,6 @@ type CommitInput struct {
 	Tx                      *gorm.DB
 	DataDir                 string
 	UserID                  string
-	CharacterID             string
 	TaskID                  string
 	UploadPath              string
 	UploadName              string
@@ -162,7 +161,6 @@ func (c *Committer) Commit(input CommitInput) (*CommitResult, error) {
 		OutputPath:               normalizedAbsPath,
 		Config:                   input.NormalizeConfig,
 		UserID:                   input.UserID,
-		CharacterID:              input.CharacterID,
 		TaskID:                   input.TaskID,
 		NormalizerProfileID:      input.NormalizeProfileID,
 		NormalizerProfileVersion: input.NormalizeProfileVersion,

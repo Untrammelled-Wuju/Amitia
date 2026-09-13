@@ -146,7 +146,7 @@ func (p *Packager) buildPackage(req *PackageBuildRequest, persistLegacyRecord bo
 		}()
 	}
 
-	if err := p.copyActionFiles(req.GenerationTaskID, packageID, req.IncludedActions, req.ProcessingVersion); err != nil {
+	if err := p.copyActionFiles(req.GenerationTaskID, req.ProcessingTaskID, packageID, req.IncludedActions, req.ProcessingVersion); err != nil {
 		return nil, err
 	}
 
@@ -277,10 +277,10 @@ func (p *Packager) validateIncludedActions(req *PackageBuildRequest) error {
 	return nil
 }
 
-func (p *Packager) copyActionFiles(taskID, packageID string, actionKeys []string, processingVersion int) error {
+func (p *Packager) copyActionFiles(generationTaskID, processingTaskID, packageID string, actionKeys []string, processingVersion int) error {
 	for _, actionKey := range actionKeys {
-		srcDir := p.processedActionDir(taskID, processingVersion, actionKey)
-		dstDir := p.packageActionDir(taskID, packageID, actionKey)
+		srcDir := p.processedActionDir(generationTaskID, processingVersion, actionKey)
+		dstDir := p.packageActionDir(generationTaskID, packageID, actionKey)
 
 		if err := os.MkdirAll(dstDir, 0755); err != nil {
 			return &PackageError{Code: ErrCodePackageBuildFailed, Message: fmt.Sprintf("创建动作目录失败: %s", actionKey), Err: err}
@@ -298,10 +298,82 @@ func (p *Packager) copyActionFiles(taskID, packageID string, actionKeys []string
 			return &PackageError{Code: ErrCodePackageFileMissing, Message: fmt.Sprintf("复制 preview.png 失败: %s", actionKey), Err: err}
 		}
 
-		srcFrames := filepath.Join(srcDir, packageFramesDir)
-		dstFrames := filepath.Join(dstDir, packageFramesDir)
-		if err := copyDir(srcFrames, dstFrames); err != nil {
-			return &PackageError{Code: ErrCodePackageFileMissing, Message: fmt.Sprintf("复制 frames 目录失败: %s", actionKey), Err: err}
+srcFrames := filepath.Join(srcDir, packageFramesDir)
+if _, err := os.Stat(srcFrames); err != nil {
+	if alt, ok := p.revisionFramesDir(processingTaskID, actionKey); ok {
+		srcFrames = alt
+	}
+}
+dstFrames := filepath.Join(dstDir, packageFramesDir)
+if err := copyFramesForAction(srcFrames, dstFrames, dstActionJSON); err != nil {
+return &PackageError{Code: ErrCodePackageFileMissing, Message: fmt.Sprintf("复制 frames 目录失败: %s", actionKey), Err: err}
+}
+	}
+	return nil
+}
+
+func (p *Packager) revisionFramesDir(processingTaskID, actionKey string) (string, bool) {
+	action, err := p.repo.GetProcessingActionByActionKey(processingTaskID, actionKey)
+	if err != nil {
+		return "", false
+	}
+	frames, err := p.repo.ListProcessedFramesByAction(action.ID)
+	if err != nil || len(frames) == 0 || frames[0].ProcessedPath == "" {
+		return "", false
+	}
+	first := filepath.Join(p.dataDir, filepath.FromSlash(frames[0].ProcessedPath))
+	dir := filepath.Dir(first)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return "", false
+	}
+	return dir, true
+}
+
+func copyFramesForAction(srcFramesDir, dstFramesDir, actionJSONPath string) error {
+	if err := os.MkdirAll(dstFramesDir, 0o755); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(srcFramesDir)
+	if err != nil {
+		return err
+	}
+	sources := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		sources = append(sources, filepath.Join(srcFramesDir, e.Name()))
+	}
+	sort.Strings(sources)
+
+	targets := make([]string, 0, len(sources))
+	data, err := os.ReadFile(actionJSONPath)
+	if err == nil {
+		var cfg struct {
+			Frames []struct {
+				File string `json:"file"`
+			} `json:"frames"`
+		}
+		if json.Unmarshal(data, &cfg) == nil {
+			for _, f := range cfg.Frames {
+				if f.File != "" {
+					targets = append(targets, filepath.Base(filepath.FromSlash(f.File)))
+				}
+			}
+		}
+	}
+
+	if len(targets) != len(sources) {
+		targets = nil
+		for _, s := range sources {
+			targets = append(targets, filepath.Base(s))
+		}
+	}
+
+	for i, src := range sources {
+		dst := filepath.Join(dstFramesDir, targets[i])
+		if err := copyFile(src, dst); err != nil {
+			return err
 		}
 	}
 	return nil

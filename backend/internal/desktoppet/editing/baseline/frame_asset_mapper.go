@@ -2,8 +2,10 @@ package baseline
 
 import (
 	"fmt"
-	"github.com/google/uuid"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
@@ -29,6 +31,7 @@ func (m *FrameAssetMapper) MapArtifactsToAssets(
 	tx *gorm.DB,
 	userID, characterID string,
 	processingRevisionID string,
+	revisionRoot string,
 	artifacts []processing.ProcessingArtifactRecord,
 ) ([]FrameAssetMapping, error) {
 	mappings := make([]FrameAssetMapping, 0, len(artifacts))
@@ -44,7 +47,17 @@ func (m *FrameAssetMapper) MapArtifactsToAssets(
 			return nil, fmt.Errorf("查找已有FrameAsset失败(artifact=%s): %w", art.ID, err)
 		}
 
+		if existing == nil {
+			existing, err = m.findByContentHash(tx, art.ContentHash, art.MimeType)
+			if err != nil {
+				return nil, fmt.Errorf("按内容哈希查找FrameAsset失败(artifact=%s): %w", art.ID, err)
+			}
+		}
+
 		if existing != nil {
+			if repairErr := m.repairStoragePath(tx, existing, revisionRoot); repairErr != nil {
+				return nil, fmt.Errorf("修复FrameAsset存储路径失败(asset=%s): %w", existing.ID, repairErr)
+			}
 			mappings = append(mappings, FrameAssetMapping{
 				Artifact: art,
 				Asset:    existing,
@@ -53,13 +66,18 @@ func (m *FrameAssetMapper) MapArtifactsToAssets(
 			continue
 		}
 
+		fullPath := art.RelativePath
+		if revisionRoot != "" {
+			fullPath = revisionRoot + "/" + art.RelativePath
+		}
+
 		asset := &editing.FrameAsset{
 			ID:                         fmt.Sprintf("fa-%s", art.ID),
 			UserID:                     userID,
 			CharacterID:                characterID,
 			ContentHash:                art.ContentHash,
-			StoragePath:                art.RelativePath,
-			StorageKey:                 art.RelativePath,
+			StoragePath:                fullPath,
+			StorageKey:                 fullPath,
 			MimeType:                   art.MimeType,
 			Width:                      art.Width,
 			Height:                     art.Height,
@@ -99,6 +117,35 @@ func (m *FrameAssetMapper) findExistingAsset(tx *gorm.DB, artifactID string) (*e
 		return nil, err
 	}
 	return &asset, nil
+}
+
+func (m *FrameAssetMapper) findByContentHash(tx *gorm.DB, contentHash, mimeType string) (*editing.FrameAsset, error) {
+	if contentHash == "" {
+		return nil, nil
+	}
+	var asset editing.FrameAsset
+	err := tx.Where("content_hash = ? AND mime_type = ?", contentHash, mimeType).First(&asset).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &asset, nil
+}
+
+func (m *FrameAssetMapper) repairStoragePath(tx *gorm.DB, asset *editing.FrameAsset, revisionRoot string) error {
+	if asset.StoragePath == "" || strings.HasPrefix(asset.StoragePath, "desktop-pets/") || revisionRoot == "" {
+		return nil
+	}
+	fullPath := revisionRoot + "/" + asset.StoragePath
+	if err := tx.Model(&editing.FrameAsset{}).Where("id = ?", asset.ID).
+		Updates(map[string]any{"storage_path": fullPath, "storage_key": fullPath}).Error; err != nil {
+		return err
+	}
+	asset.StoragePath = fullPath
+	asset.StorageKey = fullPath
+	return nil
 }
 
 func (m *FrameAssetMapper) BuildFrameHashInfos(mappings []FrameAssetMapping, frameDurationMS int) []FrameHashInfo {

@@ -141,7 +141,7 @@ func NewDefaultConfigSnapshot(outputWidth, outputHeight int, targetHeightRatio f
 	if anchorMode == "" {
 		anchorMode = "feet_center"
 	}
-	if backgroundMode == "" {
+	if backgroundMode == "" || backgroundMode == "transparent" {
 		backgroundMode = "remove_background"
 	}
 	if backgroundProvider == "" {

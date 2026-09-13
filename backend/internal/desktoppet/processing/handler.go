@@ -4,6 +4,8 @@ package processing
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -418,14 +420,16 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, frameIndex)
-	if err != nil {
-		writeProcessingError(c, err)
-		return
-	}
-	ref.StorageKey = resolveStorageKey(fullPath)
-	ref.MIME = mimeType
-	h.safeResponder.ServeArtifact(c, actor, *ref)
+ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, frameIndex)
+if err != nil {
+	writeProcessingError(c, err)
+	return
+}
+if err := finalizeArtifactReference(ref, fullPath, mimeType); err != nil {
+	writeProcessingError(c, err)
+	return
+}
+h.safeResponder.ServeArtifact(c, actor, *ref)
 }
 
 func (h *Handler) ActionPreview(c *gin.Context) {
@@ -447,14 +451,16 @@ func (h *Handler) ActionPreview(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-	ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, 0)
-	if err != nil {
-		writeProcessingError(c, err)
-		return
-	}
-	ref.StorageKey = resolveStorageKey(fullPath)
-	ref.MIME = mimeType
-	h.safeResponder.ServeArtifact(c, actor, *ref)
+ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, 0)
+if err != nil {
+	writeProcessingError(c, err)
+	return
+}
+if err := finalizeArtifactReference(ref, fullPath, mimeType); err != nil {
+	writeProcessingError(c, err)
+	return
+}
+h.safeResponder.ServeArtifact(c, actor, *ref)
 }
 
 func writeProcessingError(c *gin.Context, err error) {
@@ -497,7 +503,8 @@ func mapProcessingErrorCode(code string) int {
 		ErrCodeActionFrameCountInvalid:
 		return response.InvalidParams
 	case ErrCodeProcessingTaskNotFound,
-		ErrCodeProcessingActionNotFound:
+		ErrCodeProcessingActionNotFound,
+		ErrCodeProcessingPreviewNotReady:
 		return response.NotFound
 	case ErrCodeProcessingTaskNotOwned,
 		ErrCodePackageNotOwned:
@@ -618,9 +625,32 @@ func (h *Handler) DownloadPackage(c *gin.Context) {
 	}
 }
 
-func resolveStorageKey(fullPath string) string {
-	if idx := strings.Index(fullPath, "desktop-pets/"); idx != -1 {
-		return fullPath[idx+len("desktop-pets/"):]
+func finalizeArtifactReference(ref *security.ArtifactReference, fullPath, mimeType string) error {
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return err
 	}
-	return fullPath
+	f, err := os.Open(fullPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, f); err != nil {
+		return err
+	}
+	ref.RootKind = security.RootDesktopPets
+	ref.StorageKey = resolveStorageKey(fullPath)
+	ref.ContentHash = hex.EncodeToString(hasher.Sum(nil))
+	ref.ByteSize = info.Size()
+	ref.MIME = mimeType
+	return nil
+}
+
+func resolveStorageKey(fullPath string) string {
+	normalized := filepath.ToSlash(fullPath)
+	if idx := strings.Index(normalized, "desktop-pets/"); idx != -1 {
+		return normalized[idx+len("desktop-pets/"):]
+	}
+	return normalized
 }

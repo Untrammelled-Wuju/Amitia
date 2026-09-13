@@ -1,15 +1,14 @@
 package packageformat
 
-const ManifestSchemaVersion = 2
+const ManifestSchemaVersion = 1
 
-const ActionConfigSchemaVersion = 2
+const ActionConfigSchemaVersion = 1
 
 const ManifestFormatCanonical = "amitia-desktop-pet"
 
 const (
-	BindingPolicyBound    = "bound"
-	BindingPolicyUnbound  = "unbound"
-	BindingPolicyInferred = "legacy_inferred"
+	BindingPolicyBound   = "bound"
+	BindingPolicyUnbound = "unbound"
 )
 
 const (
@@ -47,8 +46,7 @@ const (
 )
 
 const (
-	IntegrityAlgorithmV2       = "amitia-package-sha256-v2"
-	IntegrityAlgorithmV1Legacy = "amitia-tree-sha256-v1"
+	IntegrityAlgorithmV1 = "amitia-package-sha256-v1"
 )
 
 const (
@@ -111,21 +109,6 @@ const (
 	QualityVerdictSkipped = "skipped"
 )
 
-func MapLegacyQualityVerdict(verdict string) string {
-	switch verdict {
-	case QualityVerdictPass:
-		return QualityVerdictAccepted
-	case QualityVerdictWarn:
-		return QualityVerdictAcceptedWithWarning
-	case QualityVerdictFail:
-		return QualityVerdictRejected
-	case QualityVerdictSkipped:
-		return QualityVerdictNeedsReview
-	default:
-		return verdict
-	}
-}
-
 type ManifestAuthor struct {
 	Name string `json:"name"`
 	ID   string `json:"id"`
@@ -143,8 +126,7 @@ type ManifestCompatibility struct {
 }
 
 type ManifestBinding struct {
-	Policy            string `json:"policy"`
-	SourceCharacterID string `json:"sourceCharacterId"`
+	Policy string `json:"policy"`
 }
 
 type ManifestCanvas struct {
@@ -231,7 +213,7 @@ func NewManifest() *Manifest {
 			Policy: BindingPolicyUnbound,
 		},
 		Compatibility: ManifestCompatibility{
-			// 0.0.0 is the canonical "no minimum runtime" floor for package-v2.
+			// 0.0.0 is the canonical "no minimum runtime" floor for package-v1.
 			// Release builders overwrite this with the concrete runtime contract.
 			MinRuntimeVersion: "0.0.0",
 			RenderMode:        RenderModeSprite,
@@ -240,7 +222,7 @@ func NewManifest() *Manifest {
 			CoordinateSystem: CoordinateSystemTopLeft,
 		},
 		Integrity: ManifestIntegrity{
-			Algorithm: IntegrityAlgorithmV2,
+			Algorithm: IntegrityAlgorithmV1,
 		},
 		Capabilities: ManifestCapabilities{
 			TransparentBackground: true,
@@ -248,7 +230,7 @@ func NewManifest() *Manifest {
 		},
 		Provenance: ManifestProvenance{
 			SourceType: "generated",
-			Builder:    "amitia-packageformat-v2",
+			Builder:    "amitia-packageformat-v1",
 		},
 	}
 }

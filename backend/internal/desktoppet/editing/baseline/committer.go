@@ -93,7 +93,7 @@ func (c *BaselineActionRevisionCommitter) Commit(req CommitterRequest, procRev *
 		}
 		result.RevisionNumber = revisionNumber
 
-		mappings, err := c.mapper.MapArtifactsToAssets(tx, req.UserID, req.CharacterID, req.ProcessingRevisionID, artifacts)
+		mappings, err := c.mapper.MapArtifactsToAssets(tx, req.UserID, req.CharacterID, req.ProcessingRevisionID, procRev.RootRelativePath, artifacts)
 		if err != nil {
 			return fmt.Errorf("映射FrameAssets失败: %w", err)
 		}

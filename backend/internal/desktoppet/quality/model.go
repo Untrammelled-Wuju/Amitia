@@ -351,7 +351,7 @@ type QualityGateResultRecord struct {
 	SnapshotHash          string `json:"snapshotHash"`
 	ActiveRevisionSetHash string `json:"activeRevisionSetHash"`
 	EvaluationSetHash     string `json:"evaluationSetHash"`
-	RuleSetVersion        string `json:"ruleSetVersion"`
+	RuleSetVersion        string `json:"ruleSetVersion" gorm:"column:ruleset_version"`
 	ProfileID             string `json:"profileId"`
 	InvalidatedAt         string `json:"invalidatedAt"`
 	CreatedAt             string `json:"createdAt"`
@@ -413,6 +413,10 @@ type QualityMeasurementCacheRecord struct {
 	FullyTransparentRatio float64 `json:"fullyTransparentRatio"`
 	SemiTransparentRatio  float64 `json:"semiTransparentRatio"`
 	OpaqueRatio           float64 `json:"opaqueRatio"`
+	SubjectBoxX           float64 `json:"subjectBoxX"`
+	SubjectBoxY           float64 `json:"subjectBoxY"`
+	SubjectBoxWidth       float64 `json:"subjectBoxWidth"`
+	SubjectBoxHeight      float64 `json:"subjectBoxHeight"`
 	Decodable             bool    `json:"decodable"`
 	MimeType              string  `json:"mimeType"`
 	PixelHash             string  `json:"pixelHash"`
@@ -520,6 +524,7 @@ type EvaluateRequest struct {
 	ProcessingTaskID     string                 `json:"processingTaskId"`
 	ProcessingActionID   string                 `json:"processingActionId"`
 	ActionKey            string                 `json:"actionKey"`
+	UserID               string                 `json:"userId"`
 	Profile              QualityProfileSnapshot `json:"profile"`
 	ExpectedRevisionHash string                 `json:"expectedRevisionHash"`
 	ExecutionID          string                 `json:"executionId"`

@@ -54,7 +54,6 @@ type BuildReleaseRequest struct {
 	UserID             string
 	ProcessingTaskID   string
 	PetID              string
-	CharacterID        string
 	IncludedActionKeys []string
 	DefaultAction      string
 	BuildProfileID     string
@@ -105,33 +104,23 @@ type PetIdentityResolver struct {
 
 func (r *PetIdentityResolver) ResolveOrCreate(
 	ctx context.Context,
-	userID, characterID, preferredName string,
+	userID, preferredName string,
 ) (*PetIdentityData, error) {
 	if userID == "" {
 		return nil, NewReleaseError("INVALID_USER", "用户 ID 不能为空", nil)
-	}
-	if characterID == "" {
-		return nil, NewReleaseError("INVALID_CHARACTER", "角色 ID 不能为空", nil)
-	}
-
-	existing, err := r.repo.GetPetIdentityByCharacter(userID, characterID)
-	if err == nil {
-		return existing, nil
 	}
 
 	currentTime := formatReleaseTimestamp(time.Now())
 	name := preferredName
 	if name == "" {
-		name = characterID
+		name = "桌宠"
 	}
 
 	identity := &PetIdentityData{
 		ID:                  uuid.NewString(),
 		OwnerUserID:         userID,
-		SourceCharacterID:   characterID,
 		Name:                name,
 		Slug:                makeIdentitySlug(name),
-		BindingPolicy:       "character_locked",
 		NextReleaseSequence: 1,
 		CreatedAt:           currentTime,
 		UpdatedAt:           currentTime,
@@ -260,26 +249,11 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 		defer os.RemoveAll(generated.PackageDir) // audit:ok: Ephemeral PackageDir is created and owned by the internal processing packager
 	}
 
-	legacyManifest, err := (&packageformat.V1Reader{}).ReadManifest(generated.ManifestData)
+	generatedManifest, err := (&packageformat.CanonicalReader{}).ReadManifest(generated.ManifestData)
 	if err != nil {
 		err = s.failOperation(op, "SOURCE_MANIFEST_INVALID", err)
-		return nil, NewReleaseError("SOURCE_MANIFEST_INVALID", "源包 manifest 无法转换为 V2", err)
+		return nil, NewReleaseError("SOURCE_MANIFEST_INVALID", "源包 manifest 无法读取", err)
 	}
-	characterID := strings.TrimSpace(legacyManifest.Binding.SourceCharacterID)
-	if characterID == "" {
-		characterID = strings.TrimSpace(req.CharacterID)
-	}
-	if characterID == "" {
-		err := errors.New("source character id is empty")
-		err = s.failOperation(op, "CHARACTER_ID_MISSING", err)
-		return nil, NewReleaseError("CHARACTER_ID_MISSING", "无法确定桌宠绑定角色", err)
-	}
-	if req.CharacterID != "" && req.CharacterID != characterID {
-		err := fmt.Errorf("request character %s does not match source character %s", req.CharacterID, characterID)
-		err = s.failOperation(op, "CHARACTER_ID_MISMATCH", err)
-		return nil, NewReleaseError("CHARACTER_ID_MISMATCH", "桌宠角色绑定与处理任务不一致", err)
-	}
-
 	var identity *PetIdentityData
 	if req.PetID != "" {
 		identity, err = s.repo.GetPetIdentity(req.PetID)
@@ -287,20 +261,20 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 			err = s.failOperation(op, "PET_IDENTITY_NOT_FOUND", err)
 			return nil, NewReleaseError("PET_IDENTITY_NOT_FOUND", "指定桌宠身份不存在", err)
 		}
-		if identity.OwnerUserID != req.UserID || (identity.SourceCharacterID != "" && identity.SourceCharacterID != characterID) {
-			err := errors.New("pet identity ownership or binding mismatch")
+		if identity.OwnerUserID != req.UserID {
+			err := errors.New("pet identity ownership mismatch")
 			err = s.failOperation(op, "OWNERSHIP_DENIED", err)
-			return nil, NewReleaseError("OWNERSHIP_DENIED", "桌宠身份与当前用户或角色不匹配", err)
+			return nil, NewReleaseError("OWNERSHIP_DENIED", "桌宠身份与当前用户不匹配", err)
 		}
 	} else {
-		identity, err = s.identitySvc.ResolveOrCreate(ctx, req.UserID, characterID, legacyManifest.Name)
+		identity, err = s.identitySvc.ResolveOrCreate(ctx, req.UserID, generatedManifest.Name)
 		if err != nil {
 			err = s.failOperation(op, "IDENTITY_CREATE_FAILED", err)
 			return nil, err
 		}
 	}
 
-	snapshot, err := s.createSnapshot(ctx, req, op, identity, legacyManifest, gate)
+	snapshot, err := s.createSnapshot(ctx, req, op, identity, generatedManifest, gate)
 	if err != nil {
 		err = s.failOperation(op, "SNAPSHOT_FAILED", err)
 		return nil, err
@@ -330,12 +304,12 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 		Lifecycle:             string(ReleaseLifecycleBuilding),
 		SourceType:            "generated",
 		SourceProcessingTask:  req.ProcessingTaskID,
-		SourceGenerationTask:  legacyManifest.Provenance.GenerationTaskID,
+		SourceGenerationTask:  generatedManifest.Provenance.GenerationTaskID,
 		ActiveRevisionSetHash: gate.ActiveRevisionSetHash,
 		QualityGateID:         gate.GateID,
 		QualityGateHash:       gate.GateHash,
 		EvaluationSetHash:     gate.EvaluationSetHash,
-		DefaultActionKey:      legacyManifest.DefaultAction,
+		DefaultActionKey:      generatedManifest.DefaultAction,
 		BuildSnapshotID:       snapshot.ID,
 		IntegrityStatus:       string(ReleaseIntegrityUnknown),
 		CompatibilityStatus:   string(ReleaseCompatUnknown),
@@ -352,7 +326,7 @@ func (s *service) createNewBuild(ctx context.Context, req *BuildReleaseRequest, 
 		return nil, NewReleaseError("OPERATION_UPDATE_FAILED", "更新操作状态失败", err)
 	}
 
-	finalRelease, err := s.finalizeRelease(ctx, op, snapshot, record, version, identity, legacyManifest, generated)
+	finalRelease, err := s.finalizeRelease(ctx, op, snapshot, record, version, identity, generatedManifest, generated)
 	if err != nil {
 		record.Lifecycle = string(ReleaseLifecycleFailed)
 		record.UpdatedAt = formatReleaseTimestamp(time.Now())
@@ -468,7 +442,6 @@ func (s *service) createSnapshot(ctx context.Context, req *BuildReleaseRequest, 
 		ID:                     uuid.NewString(),
 		UserID:                 req.UserID,
 		PetID:                  identity.ID,
-		CharacterID:            identity.SourceCharacterID,
 		ProcessingTaskID:       req.ProcessingTaskID,
 		ActiveRevisionSetHash:  gate.ActiveRevisionSetHash,
 		QualityGateID:          gate.GateID,
@@ -505,8 +478,18 @@ func (s *service) allocateSequence(ctx context.Context, petID string) (int, erro
 		if sequence < 1 {
 			sequence = 1
 		}
+		var maxUsed int
+		maxRow := tx.WithContext(ctx).Table("desktop_pet_package_releases").
+			Where("pet_id = ?", petID).
+			Select("COALESCE(MAX(release_sequence), 0)").Row()
+		if err := maxRow.Scan(&maxUsed); err != nil {
+			return err
+		}
+		if maxUsed >= sequence {
+			sequence = maxUsed + 1
+		}
 		result := tx.WithContext(ctx).Table("desktop_pet_identities").
-			Where("id = ? AND next_release_sequence = ?", petID, current).
+			Where("id = ? AND next_release_sequence <= ?", petID, sequence).
 			Update("next_release_sequence", sequence+1)
 		if result.Error != nil {
 			return result.Error
@@ -551,13 +534,13 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 	manifest.Author = packageformat.ManifestAuthor{Name: "Amitia User", ID: record.OwnerUserID}
 	manifest.License = packageformat.ManifestLicense{SPDX: "AGPL-3.0-only"}
 	manifest.Compatibility = packageformat.ManifestCompatibility{MinRuntimeVersion: contracts.RuntimeVersion, RenderMode: packageformat.RenderModeSprite}
-	manifest.Binding = packageformat.ManifestBinding{Policy: packageformat.BindingPolicyBound, SourceCharacterID: identity.SourceCharacterID}
+	manifest.Binding = packageformat.ManifestBinding{Policy: packageformat.BindingPolicyUnbound}
 	manifest.Canvas.CoordinateSystem = packageformat.CoordinateSystemTopLeft
 	manifest.Capabilities = packageformat.ManifestCapabilities{TransparentBackground: true, FrameSequence: true, PerFrameDuration: true, Audio: false}
 	manifest.Provenance.SourceType = "generated"
 	manifest.Provenance.ProcessingTaskID = snapshot.ProcessingTaskID
 	manifest.Provenance.BuiltAt = time.Now().UTC().Format(time.RFC3339)
-	manifest.Provenance.Builder = "amitia-release-v2"
+	manifest.Provenance.Builder = "amitia-release-v1"
 
 	for i := range manifest.Actions {
 		a := &manifest.Actions[i]
@@ -587,17 +570,17 @@ func (s *service) finalizeRelease(ctx context.Context, op *ReleaseBuildOperation
 	if err != nil {
 		return nil, NewReleaseError("FILE_MANIFEST_FAILED", "计算 Release 文件清单失败", s.cleanupStagingFailure(record.ID, err))
 	}
-	manifest.Integrity = packageformat.ManifestIntegrity{Algorithm: packageformat.IntegrityAlgorithmV2, Files: fileManifest.Entries}
+	manifest.Integrity = packageformat.ManifestIntegrity{Algorithm: packageformat.IntegrityAlgorithmV1, Files: fileManifest.Entries}
 	for _, f := range fileManifest.Entries {
 		manifest.Integrity.TotalBytes += f.Bytes
 	}
 	manifest.Integrity.FileCount = len(fileManifest.Entries)
-	finalManifest, manifestData, err := (&packageformat.V2Writer{}).FinalizeManifest(&manifest)
+	finalManifest, manifestData, err := (&packageformat.CanonicalWriter{}).FinalizeManifest(&manifest)
 	if err != nil {
-		return nil, NewReleaseError("MANIFEST_FINALIZE_FAILED", "生成 V2 manifest 失败", s.cleanupStagingFailure(record.ID, err))
+		return nil, NewReleaseError("MANIFEST_FINALIZE_FAILED", "生成 V1 manifest 失败", s.cleanupStagingFailure(record.ID, err))
 	}
 	if err := os.WriteFile(filepath.Join(stagingDir, "manifest.json"), manifestData, 0o644); err != nil {
-		return nil, NewReleaseError("MANIFEST_WRITE_FAILED", "写入 V2 manifest 失败", s.cleanupStagingFailure(record.ID, err))
+		return nil, NewReleaseError("MANIFEST_WRITE_FAILED", "写入 V1 manifest 失败", s.cleanupStagingFailure(record.ID, err))
 	}
 	validation := packageformat.NewValidator().ValidateDirectory(stagingDir, finalManifest)
 	if validation.Verdict != "valid" || validation.ErrorCount > 0 {
@@ -1117,7 +1100,6 @@ func (s *ReleaseBuildSnapshot) computeSnapshotHash() string {
 	type hashSource struct {
 		UserID                string `json:"userId"`
 		PetID                 string `json:"petId"`
-		CharacterID           string `json:"characterId"`
 		ProcessingTaskID      string `json:"processingTaskId"`
 		ActiveRevisionSetHash string `json:"activeRevisionSetHash"`
 		QualityGateID         string `json:"qualityGateId"`
@@ -1135,7 +1117,6 @@ func (s *ReleaseBuildSnapshot) computeSnapshotHash() string {
 	src := hashSource{
 		UserID:                s.UserID,
 		PetID:                 s.PetID,
-		CharacterID:           s.CharacterID,
 		ProcessingTaskID:      s.ProcessingTaskID,
 		ActiveRevisionSetHash: s.ActiveRevisionSetHash,
 		QualityGateID:         s.QualityGateID,

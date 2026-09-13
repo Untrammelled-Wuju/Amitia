@@ -67,7 +67,8 @@ func (a *ProcessingMeasurementAdapter) resolvePath(p string) string {
 	return filepath.Join(a.dataDir, p)
 }
 
-func (a *ProcessingMeasurementAdapter) LoadActionMeasurements(ctx context.Context, processingActionID string) (*ActionMeasurementSet, error) {
+func (a *ProcessingMeasurementAdapter) LoadActionMeasurements(ctx context.Context, userID, processingActionID string) (*ActionMeasurementSet, error) {
+	_ = userID
 	actionRevisionID, err := a.provider.GetActiveActionRevisionID(ctx, processingActionID)
 	if err != nil {
 		return nil, NewQualityError(ErrCodeRevisionNotFound, "failed to resolve action revision id", err)
@@ -252,7 +253,7 @@ func computeMaskArea(alphaCoverage float64, canvasW, canvasH int) float64 {
 	if canvasW <= 0 || canvasH <= 0 {
 		return alphaCoverage
 	}
-	return alphaCoverage * float64(canvasW*canvasH)
+	return alphaCoverage
 }
 
 func computeRevisionHash(measurements []FrameMeasurement) string {

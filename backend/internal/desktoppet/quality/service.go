@@ -234,7 +234,7 @@ func (s *qualityService) GetTaskGate(ctx context.Context, processingTaskID strin
 }
 
 func (s *qualityService) EvaluateTaskGate(ctx context.Context, processingTaskID string, actionVerdicts []ActionVerdictSummary, profile QualityProfileSnapshot) (*QualityGateResult, error) {
-	return s.gateEvaluator.EvaluateTaskGate(ctx, processingTaskID, actionVerdicts, profile)
+	return s.gateEvaluator.EvaluateTaskGate(ctx, processingTaskID, actionVerdicts, profile, GateMeta{})
 }
 
 func (s *qualityService) ListProblemFrames(ctx context.Context, evaluationID string, page, pageSize int) ([]ProblemFrameSummary, int64, error) {

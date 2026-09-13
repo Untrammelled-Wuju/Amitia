@@ -248,7 +248,7 @@ func (p *BridgeProcessor) buildInboxPayload(_ context.Context, evt processingeve
 		FrameDurationMS:      actionJSON.FrameDurationMs,
 		LoopType:             actionJSON.LoopType,
 		AnchorJSON:           string(anchorBytes),
-		PromotionPolicy:      baseline.PromotionPolicyFirstRevisionOnly,
+		PromotionPolicy:      baseline.PromotionPolicyReplaceSystemBaselineIfUnchanged,
 		CreatedBy:            "system:processing-bridge",
 	}, nil
 }

@@ -41,10 +41,10 @@ func computeSHA256HexLocal(data string) string {
 
 type Service interface {
 	GetActionDefinitions() (*ActionDefinitionsResponse, error)
-	CreateTask(ctx context.Context, userID string, characterID string, modelConfigID int, name string, prompt string, negativePrompt string, outputWidth int, outputHeight int, selectedActionKeys []string, fileHeader *multipart.FileHeader) (*TaskSummaryResponse, error)
+	CreateTask(ctx context.Context, userID string, modelConfigID int, name string, prompt string, negativePrompt string, outputWidth int, outputHeight int, selectedActionKeys []string, fileHeader *multipart.FileHeader) (*TaskSummaryResponse, error)
 	CheckTaskOwnership(taskID, userID string) error
 	GetTask(taskID string) (*TaskDetailResponse, error)
-	ListTasks(userID, characterID, status string, page, pageSize int) (*TaskListResponse, error)
+	ListTasks(userID, status string, page, pageSize int) (*TaskListResponse, error)
 	DeleteTask(taskID string) error
 	GetTaskSourceImage(taskID string) (fullPath string, mimeType string, err error)
 	GetTaskSourceImageRef(taskID string, userID string) (security.ArtifactReference, error)
@@ -154,17 +154,8 @@ func (s *service) GetActionDefinitions() (*ActionDefinitionsResponse, error) {
 	}, nil
 }
 
-func (s *service) CreateTask(ctx context.Context, userID string, characterID string, modelConfigID int, name string, prompt string, negativePrompt string, outputWidth int, outputHeight int, selectedActionKeys []string, fileHeader *multipart.FileHeader) (*TaskSummaryResponse, error) {
-	if characterID == "" {
-		return nil, NewBusinessError(response.NotFound, ErrCodeCharacterNotFound, "角色不存在")
-	}
+func (s *service) CreateTask(ctx context.Context, userID string, modelConfigID int, name string, prompt string, negativePrompt string, outputWidth int, outputHeight int, selectedActionKeys []string, fileHeader *multipart.FileHeader) (*TaskSummaryResponse, error) {
 	deviceAgent := runtimeprofile.CurrentProcessProfile().IsDeviceAgent()
-	if !deviceAgent {
-		character, err := s.repo.FindCharacterByID(characterID)
-		if err != nil || character == nil {
-			return nil, NewBusinessError(response.NotFound, ErrCodeCharacterNotFound, "角色不存在")
-		}
-	}
 
 	if name == "" {
 		return nil, NewBusinessError(response.BusinessError, ErrCodeDesktopPetNameRequired, "桌宠名称不能为空")
@@ -340,7 +331,6 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 	task := &GenerationTask{
 		ID:                       taskID,
 		UserID:                   userID,
-		CharacterID:              characterID,
 		ModelConfigID:            modelConfigID,
 		Name:                     name,
 		SourceImagePath:          imageInfo.Path,
@@ -383,7 +373,6 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 	uploadAbsPath := filepath.Join(config.AppCfg.Storage.DataDir, imageInfo.Path)
 	refAsset, err := s.refAssetService.CreateForGenerationTask(ctx, tx, referenceasset.CreateReferenceAssetRequest{
 		UserID:       userID,
-		CharacterID:  characterID,
 		TaskID:       taskID,
 		UploadPath:   uploadAbsPath,
 		UploadName:   imageInfo.OriginalName,
@@ -419,7 +408,6 @@ func (s *service) CreateTask(ctx context.Context, userID string, characterID str
 	return &TaskSummaryResponse{
 		ID:                       task.ID,
 		Name:                     task.Name,
-		CharacterID:              task.CharacterID,
 		ModelConfigID:            task.ModelConfigID,
 		Status:                   task.Status,
 		CurrentStage:             task.CurrentStage,
@@ -453,11 +441,6 @@ func (s *service) GetTask(taskID string) (*TaskDetailResponse, error) {
 			return nil, NewBusinessError(response.NotFound, ErrCodeGenerationTaskNotFound, "任务不存在")
 		}
 		return nil, err
-	}
-
-	characterName := ""
-	if ch, err := s.repo.FindCharacterByID(task.CharacterID); err == nil && ch != nil {
-		characterName = ch.Name
 	}
 
 	modelName := task.ModelNameSnapshot
@@ -510,8 +493,6 @@ func (s *service) GetTask(taskID string) (*TaskDetailResponse, error) {
 	return &TaskDetailResponse{
 		ID:                          task.ID,
 		Name:                        task.Name,
-		CharacterID:                 task.CharacterID,
-		CharacterName:               characterName,
 		ModelConfigID:               task.ModelConfigID,
 		ModelName:                   modelName,
 		Status:                      task.Status,
@@ -573,24 +554,20 @@ func computeTaskDurationSeconds(startedAt, completedAt string) int64 {
 	return int64(end.Sub(start).Seconds())
 }
 
-func (s *service) ListTasks(userID, characterID, status string, page, pageSize int) (*TaskListResponse, error) {
+func (s *service) ListTasks(userID, status string, page, pageSize int) (*TaskListResponse, error) {
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 {
 		pageSize = 20
 	}
-	tasks, total, err := s.repo.ListTasks(userID, characterID, status, page, pageSize)
+	tasks, total, err := s.repo.ListTasks(userID, status, page, pageSize)
 	if err != nil {
 		return nil, err
 	}
 
 	items := make([]TaskListItemResponse, 0, len(tasks))
 	for _, t := range tasks {
-		characterName := ""
-		if ch, err := s.repo.FindCharacterByID(t.CharacterID); err == nil && ch != nil {
-			characterName = ch.Name
-		}
 		modelName := t.ModelNameSnapshot
 		if cfg, err := s.repo.GetImageGenConfigByID(t.ModelConfigID); err == nil && cfg != nil && strings.TrimSpace(cfg.Name) != "" {
 			modelName = cfg.Name
@@ -598,8 +575,6 @@ func (s *service) ListTasks(userID, characterID, status string, page, pageSize i
 		items = append(items, TaskListItemResponse{
 			ID:                       t.ID,
 			Name:                     t.Name,
-			CharacterID:              t.CharacterID,
-			CharacterName:            characterName,
 			ModelConfigID:            t.ModelConfigID,
 			ModelName:                modelName,
 			Status:                   t.Status,
@@ -865,7 +840,7 @@ func (s *service) StartTask(taskID string) (*TaskSummaryResponse, error) {
 	}
 
 	if task.ReferenceAssetID != "" {
-		_, err := s.refAssetService.ValidateForTask(context.Background(), taskID, task.UserID, task.CharacterID)
+		_, err := s.refAssetService.ValidateForTask(context.Background(), taskID, task.UserID)
 		if err != nil {
 			return nil, NewBusinessError(response.BusinessError, ErrCodeReferenceImageInvalid, "参考资源验证失败")
 		}
@@ -1203,7 +1178,6 @@ func (s *service) buildTaskSummary(task *GenerationTask) *TaskSummaryResponse {
 	return &TaskSummaryResponse{
 		ID:                       task.ID,
 		Name:                     task.Name,
-		CharacterID:              task.CharacterID,
 		ModelConfigID:            task.ModelConfigID,
 		Status:                   task.Status,
 		CurrentStage:             task.CurrentStage,

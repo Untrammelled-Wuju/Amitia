@@ -13,20 +13,20 @@ type SchemaReader interface {
 }
 
 type SchemaRegistry struct {
-	readers map[int]SchemaReader
+	readers map[int][]SchemaReader
 }
 
 func NewSchemaRegistry() *SchemaRegistry {
 	registry := &SchemaRegistry{
-		readers: make(map[int]SchemaReader),
+		readers: make(map[int][]SchemaReader),
 	}
-	registry.Register(&V1Reader{})
-	registry.Register(&V2Reader{})
+	registry.Register(&CanonicalReader{})
 	return registry
 }
 
 func (r *SchemaRegistry) Register(reader SchemaReader) {
-	r.readers[reader.SchemaVersion()] = reader
+	version := reader.SchemaVersion()
+	r.readers[version] = append(r.readers[version], reader)
 }
 
 func (r *SchemaRegistry) ReadManifest(data []byte) (*Manifest, error) {
@@ -49,7 +49,7 @@ func (r *SchemaRegistry) ReadManifest(data []byte) (*Manifest, error) {
 		)
 	}
 
-	reader, ok := r.readers[probe.SchemaVersion]
+	readers, ok := r.readers[probe.SchemaVersion]
 	if !ok {
 		return nil, NewPackageError(
 			ErrCodePackageSchemaUnsupported,
@@ -58,7 +58,15 @@ func (r *SchemaRegistry) ReadManifest(data []byte) (*Manifest, error) {
 		)
 	}
 
-	return reader.ReadManifest(data)
+	var lastErr error
+	for _, reader := range readers {
+		manifest, err := reader.ReadManifest(data)
+		if err == nil {
+			return manifest, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }
 
 func (r *SchemaRegistry) SupportedVersions() []int {
@@ -70,43 +78,43 @@ func (r *SchemaRegistry) SupportedVersions() []int {
 	return versions
 }
 
-type V2Reader struct{}
+type CanonicalReader struct{}
 
-var v2ManifestAllowedFields = []string{
+var canonicalManifestAllowedFields = []string{
 	"schemaVersion", "manifestFormat", "petId", "releaseId", "version", "name",
 	"description", "author", "license", "compatibility", "binding", "canvas",
 	"defaultAction", "preview", "actions", "capabilities", "integrity", "provenance",
 }
 
-var v2ManifestRequiredFields = []string{
+var canonicalManifestRequiredFields = []string{
 	"schemaVersion", "manifestFormat", "petId", "releaseId", "version", "name",
 	"compatibility", "binding", "canvas", "defaultAction", "actions", "capabilities",
 	"integrity", "provenance",
 }
 
-func (r *V2Reader) SchemaVersion() int { return 2 }
+func (r *CanonicalReader) SchemaVersion() int { return 1 }
 
-func (r *V2Reader) ReadManifest(data []byte) (*Manifest, error) {
+func (r *CanonicalReader) ReadManifest(data []byte) (*Manifest, error) {
 	var manifest Manifest
-	if err := DecodeStrictTopLevelJSON(data, &manifest, v2ManifestAllowedFields); err != nil {
-		return nil, NewPackageError(ErrCodePackageManifestInvalid, "failed strict v2 manifest validation", err)
+	if err := DecodeStrictTopLevelJSON(data, &manifest, canonicalManifestAllowedFields); err != nil {
+		return nil, NewPackageError(ErrCodePackageManifestInvalid, "failed strict v1 manifest validation", err)
 	}
 
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, NewPackageError(ErrCodePackageManifestInvalid, "failed to inspect v2 manifest fields", err)
+		return nil, NewPackageError(ErrCodePackageManifestInvalid, "failed to inspect v1 manifest fields", err)
 	}
-	for _, field := range v2ManifestRequiredFields {
+	for _, field := range canonicalManifestRequiredFields {
 		value, ok := raw[field]
 		if !ok {
-			return nil, NewPackageError(ErrCodePackageManifestInvalid, fmt.Sprintf("required v2 manifest field is missing: %s", field), nil)
+			return nil, NewPackageError(ErrCodePackageManifestInvalid, fmt.Sprintf("required v1 manifest field is missing: %s", field), nil)
 		}
 		if isJSONNull(value) {
-			return nil, NewPackageError(ErrCodePackageManifestInvalid, fmt.Sprintf("required v2 manifest field must not be null: %s", field), nil)
+			return nil, NewPackageError(ErrCodePackageManifestInvalid, fmt.Sprintf("required v1 manifest field must not be null: %s", field), nil)
 		}
 	}
-	if err := validateV2ManifestRequiredNestedFields(raw); err != nil {
-		return nil, NewPackageError(ErrCodePackageManifestInvalid, "v2 manifest is missing required nested fields", err)
+	if err := validateCanonicalManifestRequiredNestedFields(raw); err != nil {
+		return nil, NewPackageError(ErrCodePackageManifestInvalid, "v1 manifest is missing required nested fields", err)
 	}
 	if manifest.SchemaVersion != ManifestSchemaVersion {
 		return nil, NewPackageError(
@@ -118,7 +126,7 @@ func (r *V2Reader) ReadManifest(data []byte) (*Manifest, error) {
 	return &manifest, nil
 }
 
-func validateV2ManifestRequiredNestedFields(raw map[string]json.RawMessage) error {
+func validateCanonicalManifestRequiredNestedFields(raw map[string]json.RawMessage) error {
 	if authorRaw, ok := raw["author"]; ok {
 		if err := requireJSONObjectFields(authorRaw, "author", "name"); err != nil {
 			return err
@@ -165,9 +173,6 @@ func validateV2ManifestRequiredNestedFields(raw map[string]json.RawMessage) erro
 			"revisionId", "qualityEvaluationId", "qualityVerdict"); err != nil {
 			return err
 		}
-	}
-	if err := requireOptionalNonNullJSONObjectFields(raw["binding"], "binding", "sourceCharacterId"); err != nil {
-		return err
 	}
 	if err := requireOptionalNonNullJSONObjectFields(raw["capabilities"], "capabilities",
 		"transparentBackground", "frameSequence", "perFrameDuration", "audio"); err != nil {

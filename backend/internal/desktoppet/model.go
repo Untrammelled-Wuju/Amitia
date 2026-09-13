@@ -46,7 +46,6 @@ func (ActionDefinition) TableName() string { return "desktop_pet_action_definiti
 type GenerationTask struct {
 	ID                          string `gorm:"column:id;primaryKey" json:"id"`
 	UserID                      string `gorm:"column:user_id" json:"userId"`
-	CharacterID                 string `gorm:"column:character_id" json:"characterId"`
 	ModelConfigID               int    `gorm:"column:model_config_id" json:"modelConfigId"`
 	Name                        string `gorm:"column:name" json:"name"`
 	SourceImagePath             string `gorm:"column:source_image_path" json:"sourceImagePath"`
@@ -278,7 +277,6 @@ type ActionDefinitionsResponse struct {
 type TaskSummaryResponse struct {
 	ID                       string `json:"id"`
 	Name                     string `json:"name"`
-	CharacterID              string `json:"characterId"`
 	ModelConfigID            int    `json:"modelConfigId"`
 	Status                   string `json:"status"`
 	CurrentStage             string `json:"currentStage"`
@@ -343,8 +341,6 @@ type TaskActionResponse struct {
 type TaskDetailResponse struct {
 	ID                          string               `json:"id"`
 	Name                        string               `json:"name"`
-	CharacterID                 string               `json:"characterId"`
-	CharacterName               string               `json:"characterName"`
 	ModelConfigID               int                  `json:"modelConfigId"`
 	ModelName                   string               `json:"modelName"`
 	Status                      string               `json:"status"`
@@ -382,8 +378,6 @@ type TaskDetailResponse struct {
 type TaskListItemResponse struct {
 	ID                       string `json:"id"`
 	Name                     string `json:"name"`
-	CharacterID              string `json:"characterId"`
-	CharacterName            string `json:"characterName"`
 	ModelConfigID            int    `json:"modelConfigId"`
 	ModelName                string `json:"modelName"`
 	Status                   string `json:"status"`

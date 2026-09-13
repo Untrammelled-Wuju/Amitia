@@ -160,15 +160,10 @@ func (a *CoordinatorRepoAdapter) CreateInstallationAndDesiredState(ctx context.C
 		if presentation.Manifest.Preview != "" {
 			previewPath = filepath.ToSlash(filepath.Join(installPath, filepath.FromSlash(presentation.Manifest.Preview)))
 		}
-		characterID := install.CharacterID
-		if characterID == "" {
-			characterID = presentation.Manifest.Binding.SourceCharacterID
-		}
 		model := &Installation{
 			ID:                     install.ID,
 			UserID:                 install.UserID,
 			DeviceID:               install.DeviceID,
-			CharacterID:            characterID,
 			PackageID:              install.ReleaseID,
 			PackageVersion:         presentation.Version,
 			Name:                   presentation.Manifest.Name,
@@ -767,7 +762,6 @@ func installationRecord(inst *Installation) *coordinator.InstallationRecord {
 		ID:                inst.ID,
 		UserID:            inst.UserID,
 		DeviceID:          inst.DeviceID,
-		CharacterID:       inst.CharacterID,
 		PetID:             inst.PetID,
 		ReleaseID:         inst.CurrentReleaseID,
 		Status:            inst.Status,

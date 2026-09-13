@@ -21,7 +21,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	"github.com/u-ai/backend/internal/desktoppet/packageformat"
-	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
+	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 	security "github.com/u-ai/backend/internal/desktoppet/security"
 	"gorm.io/gorm"
 )
@@ -160,14 +160,12 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		characterID := presentation.Manifest.Binding.SourceCharacterID
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			inst = installation.Installation{
 				ID:                     installationID,
 				UserID:                 op.UserID,
 				DeviceID:               op.DeviceID,
 				PetID:                  petID,
-				CharacterID:            characterID,
 				PackageID:              targetReleaseID,
 				PackageVersion:         presentation.Version,
 				Name:                   presentation.Manifest.Name,
@@ -198,7 +196,6 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 			}
 		} else {
 			inst.PetID = petID
-			inst.CharacterID = firstNonEmpty(inst.CharacterID, characterID)
 			inst.PackageID = targetReleaseID
 			inst.PackageVersion = presentation.Version
 			inst.Name = presentation.Manifest.Name
@@ -340,10 +337,10 @@ func (p *ProductionDBRepo) GetInstallation(installationID string) (interface{}, 
 
 type ProductionRuntimeRepo struct {
 	db     *gorm.DB
-	facade *runtimev2.RuntimeFacade
+	facade *runtimev1.RuntimeFacade
 }
 
-func NewProductionRuntimeRepo(db *gorm.DB, facade *runtimev2.RuntimeFacade) *ProductionRuntimeRepo {
+func NewProductionRuntimeRepo(db *gorm.DB, facade *runtimev1.RuntimeFacade) *ProductionRuntimeRepo {
 	return &ProductionRuntimeRepo{db: db, facade: facade}
 }
 
@@ -356,11 +353,11 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 		return err
 	}
 	if op.OperationType == operation.TypeRecenter {
-		var targetConn *runtimev2.Connection
+		var targetConn *runtimev1.Connection
 		targetSessionID := ""
 		targetGeneration := int64(0)
 		for _, conn := range p.facade.ListConnections(userID) {
-			if conn == nil || conn.GetState() != runtimev2.ConnStateConnected || string(conn.DeviceID) != deviceID {
+			if conn == nil || conn.GetState() != runtimev1.ConnStateConnected || string(conn.DeviceID) != deviceID {
 				continue
 			}
 			if runtimeID != "" && string(conn.RuntimeID) != runtimeID {
@@ -380,16 +377,16 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 		key := fmt.Sprintf("recenter:%s:%s", opID, targetSessionID)
 		cmd, err := p.facade.Commands().CreateEphemeralCommandForSession(
 			userID, deviceID, string(targetConn.RuntimeID), targetSessionID, firstNonEmpty(installationID, op.InstallationID),
-			string(runtimev2.CommandTypeRecenterOnce), key, payload,
+			string(runtimev1.CommandTypeRecenterOnce), key, payload,
 		)
-		if err != nil && !errors.Is(err, runtimev2.ErrCommandDuplication) {
+		if err != nil && !errors.Is(err, runtimev1.ErrCommandDuplication) {
 			return err
 		}
 		if cmd == nil {
 			return errors.New("production runtime recovery: recenter command creation returned nil")
 		}
 		currentSessionID, currentGeneration := targetConn.SessionSnapshot()
-		if targetConn.GetState() != runtimev2.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
+		if targetConn.GetState() != runtimev1.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
 			if markErr := p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed during recenter creation", time.Now().UTC()); markErr != nil {
 				return fmt.Errorf("production runtime recovery: recenter session changed and stale command fencing failed: %w", markErr)
 			}
@@ -399,7 +396,7 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 			return errors.New("production runtime recovery: duplicate recenter belongs to stale runtime session")
 		}
 		currentSessionID, currentGeneration = targetConn.SessionSnapshot()
-		if targetConn.GetState() != runtimev2.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
+		if targetConn.GetState() != runtimev1.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
 			if markErr := p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed after recenter route bind", time.Now().UTC()); markErr != nil {
 				return fmt.Errorf("production runtime recovery: recenter route-bind session changed and stale command fencing failed: %w", markErr)
 			}
@@ -420,23 +417,23 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 		return err
 	}
 	ensureAbsent := op.OperationType == operation.TypeUninstall || (!state.DesiredEnabled && !state.DesiredVisible && op.OperationType == operation.TypeUninstall)
-	payload := runtimev2.SyncDesiredStatePayload{
+	payload := runtimev1.SyncDesiredStatePayload{
 		DesiredRevision:        desiredRevision,
 		DesiredHash:            state.DesiredHash,
 		EnsureAbsent:           ensureAbsent,
 		InstallationID:         firstNonEmpty(installationID, state.InstallationID),
 		PetID:                  state.PetID,
 		ReleaseID:              state.ReleaseID,
-		RuntimeContractVersion: runtimev2.CurrentSchemaVersion,
+		RuntimeContractVersion: runtimev1.CurrentSchemaVersion,
 		DefaultActionKey:       state.DesiredActionKey,
 		SettingsRevision:       state.SettingsRevision,
 	}
-	commandType := runtimev2.CommandTypeSyncDesiredState
+	commandType := runtimev1.CommandTypeSyncDesiredState
 	if ensureAbsent {
-		commandType = runtimev2.CommandTypeEnsureAbsent
+		commandType = runtimev1.CommandTypeEnsureAbsent
 	}
 	_, err = p.facade.Commands().CreateDurableCommand(userID, deviceID, string(commandType), fmt.Sprintf("desired:%s:%d", deviceID, desiredRevision), fmt.Sprintf("desired:%s", deviceID), seq, payload)
-	if errors.Is(err, runtimev2.ErrCommandDuplication) {
+	if errors.Is(err, runtimev1.ErrCommandDuplication) {
 		return nil
 	}
 	return err
@@ -482,11 +479,11 @@ func (p *ProductionRuntimeRepo) CancelDesiredCommand(ctx context.Context, opID, 
 		return err
 	}
 	idempotencyKey := fmt.Sprintf("desired:%s:%d", deviceID, op.DesiredRevision)
-	var command *runtimev2.RuntimeCommand
+	var command *runtimev1.RuntimeCommand
 	var err error
 	if op.OperationType == operation.TypeRecenter {
 		prefix := fmt.Sprintf("recenter:%s", op.ID)
-		var latest runtimev2.RuntimeCommand
+		var latest runtimev1.RuntimeCommand
 		err = p.db.WithContext(ctx).Where(
 			"idempotency_key = ? OR idempotency_key LIKE ?", prefix, prefix+":%",
 		).Order("created_at DESC").First(&latest).Error
@@ -544,7 +541,7 @@ func (p *ProductionRuntimeRepo) QueryCommandTerminalStatusByIdempotencyKey(ctx c
 	if p == nil || p.db == nil {
 		return "", false, errors.New("production runtime recovery: runtime v2 unavailable")
 	}
-	var cmd runtimev2.RuntimeCommand
+	var cmd runtimev1.RuntimeCommand
 	query := p.db.WithContext(ctx)
 	if strings.HasPrefix(idempotencyKey, "recenter:") {
 		query = query.Where("idempotency_key = ? OR idempotency_key LIKE ?", idempotencyKey, idempotencyKey+":%")

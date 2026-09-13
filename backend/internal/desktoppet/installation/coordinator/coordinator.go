@@ -47,7 +47,6 @@ type InstallationRecord struct {
 	ID                string
 	UserID            string
 	DeviceID          string
-	CharacterID       string
 	PetID             string
 	ReleaseID         string
 	Status            string
@@ -178,7 +177,7 @@ func (c *Coordinator) Install(ctx context.Context, req InstallRequest) (*Install
 	}
 	idempotencyKey := req.IdempotencyKey
 	if idempotencyKey == "" {
-		idempotencyKey = c.buildIdempotencyKey(operation.TypeInstall, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.TargetReleaseID, req.PetID, req.CharacterID)
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeInstall, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.TargetReleaseID, req.PetID)
 	}
 	return c.executeInstall(ctx, req, idempotencyKey)
 }
@@ -466,7 +465,7 @@ func (c *Coordinator) executeInstall(ctx context.Context, req InstallRequest, id
 		CreatedAt:       time.Now().Format(operationTimeFormat),
 		UpdatedAt:       time.Now().Format(operationTimeFormat),
 	}
-	op.RequestHash = operationRequestHash(op, map[string]string{"characterID": req.CharacterID})
+	op.RequestHash = operationRequestHash(op, nil)
 	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
 		return &InstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict, ErrorMessage: err.Error()}, err
 	} else if existing != nil {
@@ -506,7 +505,6 @@ func (c *Coordinator) executeInstall(ctx context.Context, req InstallRequest, id
 		ID:                op.InstallationID,
 		UserID:            req.DeviceCtx.UserID,
 		DeviceID:          req.DeviceCtx.DeviceID,
-		CharacterID:       req.CharacterID,
 		PetID:             op.PetID,
 		ReleaseID:         req.TargetReleaseID,
 		Status:            "installed",

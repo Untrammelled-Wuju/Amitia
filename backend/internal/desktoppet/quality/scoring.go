@@ -117,6 +117,7 @@ func (s *DefaultScorer) scoreDimension(dimension string, findings []QualityFindi
 	hasError := false
 	totalPenalty := 0.0
 	maxConfidence := 0.0
+	rulePenalty := map[string]float64{}
 
 	for _, f := range findings {
 		if f.HardGate {
@@ -137,7 +138,12 @@ func (s *DefaultScorer) scoreDimension(dimension string, findings []QualityFindi
 		if penalty <= 0 {
 			penalty = 20
 		}
-		totalPenalty += penalty
+		if cur, ok := rulePenalty[f.RuleCode]; !ok || penalty > cur {
+			rulePenalty[f.RuleCode] = penalty
+		}
+	}
+	for _, p := range rulePenalty {
+		totalPenalty += p
 	}
 
 	if len(observations) == 0 && len(findings) == 0 {

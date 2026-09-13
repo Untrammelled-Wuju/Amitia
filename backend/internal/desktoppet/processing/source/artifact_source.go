@@ -91,7 +91,7 @@ func (a *SpriteSheetSourceAdapter) Resolve(ctx context.Context, req ResolveReque
 		return nil, fmt.Errorf("%w: artifactID=%s status=%s", ErrSourceArtifactNotReady, artifact.ArtifactID, artifact.Status)
 	}
 
-	layout, err := parseSpriteSheetLayout(artifact.LayoutJSON)
+	layout, err := parseSpriteSheetLayout(artifact.LayoutJSON, artifact.Width, artifact.Height)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrSourceLayoutInvalid, err)
 	}
@@ -236,7 +236,7 @@ func (a *KeyframeSourceAdapter) Resolve(ctx context.Context, req ResolveRequest)
 		return nil, fmt.Errorf("%w: artifactID=%s status=%s", ErrSourceArtifactNotReady, artifact.ArtifactID, artifact.Status)
 	}
 
-	layout, _ := parseSpriteSheetLayout(artifact.LayoutJSON)
+	layout, _ := parseSpriteSheetLayout(artifact.LayoutJSON, artifact.Width, artifact.Height)
 	frames := buildKeyframeFrames(layout, artifact)
 
 	descriptor := &ProcessingSourceDescriptor{
@@ -292,18 +292,122 @@ func validateOwnership(repo ArtifactSourceRepo, req ResolveRequest) error {
 	return nil
 }
 
-func parseSpriteSheetLayout(layoutJSON string) (*SpriteSheetLayoutSnapshot, error) {
+type SegmentedLayoutPayload struct {
+	Segments []SegmentedSheetSegment `json:"segments"`
+}
+
+type SegmentedSheetSegment struct {
+	SegmentIndex    int                     `json:"segmentIndex"`
+	SheetLayout     SegmentedSheetLayout    `json:"sheetLayout"`
+	FrameStartIndex int                     `json:"frameStartIndex"`
+	FrameEndIndex   int                     `json:"frameEndIndex"`
+	FrameCount      int                     `json:"frameCount"`
+}
+
+type SegmentedSheetLayout struct {
+	Rows         int              `json:"rows"`
+	Columns      int              `json:"columns"`
+	CellWidth    int              `json:"cellWidth"`
+	CellHeight   int              `json:"cellHeight"`
+	MarginX      int              `json:"marginX"`
+	MarginY      int              `json:"marginY"`
+	GapX         int              `json:"gapX"`
+	GapY         int              `json:"gapY"`
+	SheetWidth   int              `json:"sheetWidth"`
+	SheetHeight  int              `json:"sheetHeight"`
+	ReadingOrder string           `json:"readingOrder"`
+	Cells        []SegmentedCell  `json:"cells"`
+	EmptyCells   []int            `json:"emptyCells"`
+	TotalCells   int              `json:"totalCells"`
+	UsedCells    int              `json:"usedCells"`
+	FrameCount   int              `json:"frameCount"`
+}
+
+type SegmentedCell struct {
+	Row        int  `json:"row"`
+	Column     int  `json:"column"`
+	FrameIndex int  `json:"frameIndex"`
+	IsEmpty    bool `json:"isEmpty"`
+}
+
+func parseSpriteSheetLayout(layoutJSON string, artifactWidth, artifactHeight int) (*SpriteSheetLayoutSnapshot, error) {
 	if layoutJSON == "" || layoutJSON == "null" {
 		return nil, nil
 	}
-	var layout SpriteSheetLayoutSnapshot
-	if err := json.Unmarshal([]byte(layoutJSON), &layout); err != nil {
+	var flat SpriteSheetLayoutSnapshot
+	if err := json.Unmarshal([]byte(layoutJSON), &flat); err == nil && flat.Rows > 0 && flat.Columns > 0 {
+		return &flat, nil
+	}
+	var segmented SegmentedLayoutPayload
+	if err := json.Unmarshal([]byte(layoutJSON), &segmented); err != nil {
 		return nil, err
 	}
-	if layout.Rows <= 0 || layout.Columns <= 0 {
-		return nil, fmt.Errorf("invalid layout dimensions: rows=%d cols=%d", layout.Rows, layout.Columns)
+	if len(segmented.Segments) == 0 {
+		return nil, fmt.Errorf("layout payload has no segments")
 	}
-	return &layout, nil
+	segment := &segmented.Segments[0]
+	if artifactWidth > 0 && artifactHeight > 0 {
+		for i := range segmented.Segments {
+			if segmented.Segments[i].SheetLayout.SheetWidth == artifactWidth && segmented.Segments[i].SheetLayout.SheetHeight == artifactHeight {
+				segment = &segmented.Segments[i]
+				break
+			}
+		}
+	}
+	snapshot := convertSegmentedLayout(&segment.SheetLayout)
+	if snapshot == nil || snapshot.Rows <= 0 || snapshot.Columns <= 0 {
+		rows, cols := 0, 0
+		if snapshot != nil {
+			rows, cols = snapshot.Rows, snapshot.Columns
+		}
+		return nil, fmt.Errorf("invalid layout dimensions: rows=%d cols=%d", rows, cols)
+	}
+	return snapshot, nil
+}
+
+func convertSegmentedLayout(sheet *SegmentedSheetLayout) *SpriteSheetLayoutSnapshot {
+	if sheet == nil {
+		return nil
+	}
+	snapshot := &SpriteSheetLayoutSnapshot{
+		Rows:           sheet.Rows,
+		Columns:        sheet.Columns,
+		CellWidth:      sheet.CellWidth,
+		CellHeight:     sheet.CellHeight,
+		MarginTop:      sheet.MarginY,
+		MarginRight:    sheet.MarginX,
+		MarginBottom:   sheet.MarginY,
+		MarginLeft:     sheet.MarginX,
+		GapX:           sheet.GapX,
+		GapY:           sheet.GapY,
+		ReadingOrder:   sheet.ReadingOrder,
+		ExpectedWidth:  sheet.SheetWidth,
+		ExpectedHeight: sheet.SheetHeight,
+	}
+	emptySet := make(map[int]bool)
+	for _, idx := range sheet.EmptyCells {
+		emptySet[idx] = true
+	}
+	for _, cell := range sheet.Cells {
+		cellIndex := cell.Row*sheet.Columns + cell.Column
+		empty := cell.IsEmpty || emptySet[cellIndex]
+		converted := SpriteSheetCell{
+			CellIndex: cellIndex,
+			Row:       cell.Row,
+			Column:    cell.Column,
+			X:         sheet.MarginX + cell.Column*(sheet.CellWidth+sheet.GapX),
+			Y:         sheet.MarginY + cell.Row*(sheet.CellHeight+sheet.GapY),
+			Width:     sheet.CellWidth,
+			Height:    sheet.CellHeight,
+			Empty:     empty,
+		}
+		if !empty {
+			fi := cell.FrameIndex
+			converted.FrameIndex = &fi
+		}
+		snapshot.Cells = append(snapshot.Cells, converted)
+	}
+	return snapshot
 }
 
 func layoutSafe(l *SpriteSheetLayoutSnapshot) *SpriteSheetLayoutSnapshot {

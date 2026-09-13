@@ -201,7 +201,6 @@ func (v *Validator) validateCore(report *ValidationReport, fs PackageFileSystem,
 }
 
 func (v *Validator) validateSchemaLayer(report *ValidationReport, m *Manifest) {
-	isLegacyV1 := m.Provenance.SourceType == "legacy_v1"
 	if m.SchemaVersion == 0 {
 		report.addFinding(Finding{
 			Code:     ErrCodePackageSchemaMissing,
@@ -244,7 +243,7 @@ func (v *Validator) validateSchemaLayer(report *ValidationReport, m *Manifest) {
 		})
 	}
 
-	if !isLegacyV1 && !isValidRuntimeVersion(m.Version) {
+	if !isValidRuntimeVersion(m.Version) {
 		report.addFinding(Finding{
 			Code:     ErrCodePackageRuntimeVersionInvalid,
 			Severity: SeverityError,
@@ -283,17 +282,14 @@ func (v *Validator) validateSchemaLayer(report *ValidationReport, m *Manifest) {
 	if m.Compatibility.RenderMode != RenderModeSprite {
 		report.addFinding(Finding{Code: ErrCodePackageManifestInvalid, Severity: SeverityError, Expected: RenderModeSprite, Actual: m.Compatibility.RenderMode, Message: "compatibility.renderMode must be sprite"})
 	}
-	if m.Binding.Policy != BindingPolicyBound && m.Binding.Policy != BindingPolicyUnbound && m.Binding.Policy != BindingPolicyInferred {
-		report.addFinding(Finding{Code: ErrCodePackageManifestInvalid, Severity: SeverityError, Expected: "bound/unbound/legacy_inferred", Actual: m.Binding.Policy, Message: "invalid binding.policy"})
+	if m.Binding.Policy != BindingPolicyBound && m.Binding.Policy != BindingPolicyUnbound {
+		report.addFinding(Finding{Code: ErrCodePackageManifestInvalid, Severity: SeverityError, Expected: "bound/unbound", Actual: m.Binding.Policy, Message: "invalid binding.policy"})
 	}
 	if strings.TrimSpace(m.Provenance.Builder) == "" {
 		report.addFinding(Finding{Code: ErrCodePackageManifestInvalid, Severity: SeverityError, Message: "provenance.builder is required"})
 	}
 
-	expectedIntegrityAlgorithm := IntegrityAlgorithmV2
-	if isLegacyV1 {
-		expectedIntegrityAlgorithm = IntegrityAlgorithmV1Legacy
-	}
+	expectedIntegrityAlgorithm := IntegrityAlgorithmV1
 	if m.Integrity.Algorithm != expectedIntegrityAlgorithm {
 		report.addFinding(Finding{
 			Code:     ErrCodePackageIntegrityAlgorithmUnsupported,
@@ -356,11 +352,6 @@ func (v *Validator) validatePathLayer(report *ValidationReport, m *Manifest) {
 }
 
 func (v *Validator) validateFileLayerFS(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
-	if m.Provenance.SourceType == "legacy_v1" {
-		v.validateLegacyFileLayerFS(report, fs, m)
-		return
-	}
-
 	declared := make(map[string]*FileManifestEntry, len(m.Integrity.Files))
 	for i := range m.Integrity.Files {
 		e := &m.Integrity.Files[i]
@@ -516,7 +507,7 @@ func (v *Validator) validateFileLayerFS(report *ValidationReport, fs PackageFile
 		}
 	}
 
-	if m.Provenance.SourceType != "legacy_v1" && m.Integrity.FileCount < 1 {
+	if m.Integrity.FileCount < 1 {
 		report.addFinding(Finding{Code: ErrCodePackageManifestInvalid, Severity: SeverityError, Expected: "fileCount >= 1", Actual: fmt.Sprintf("fileCount=%d", m.Integrity.FileCount), Message: "invalid integrity.fileCount"})
 	}
 	if m.Integrity.TotalBytes < 0 {
@@ -557,60 +548,7 @@ func (v *Validator) validateFileLayerFS(report *ValidationReport, fs PackageFile
 	}
 }
 
-func (v *Validator) validateLegacyFileLayerFS(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
-	actualPaths, err := fs.List()
-	if err != nil {
-		report.addFinding(Finding{
-			Code:     ErrCodePackagePathInvalid,
-			Severity: SeverityError,
-			Message:  fmt.Sprintf("failed to list legacy package files: %v", err),
-		})
-		return
-	}
-
-	actualSet := make(map[string]bool, len(actualPaths))
-	for _, p := range actualPaths {
-		actualSet[p] = true
-	}
-
-	required := make([]struct {
-		path      string
-		actionKey string
-	}, 0, len(m.Actions)+1)
-	if m.Preview != "" {
-		required = append(required, struct {
-			path      string
-			actionKey string
-		}{path: m.Preview})
-	}
-	for _, action := range m.Actions {
-		if action.Config != "" {
-			required = append(required, struct {
-				path      string
-				actionKey string
-			}{path: action.Config, actionKey: action.Key})
-		}
-	}
-
-	for _, ref := range required {
-		normalized, pathErr := NormalizePackagePath(ref.path)
-		if pathErr != nil {
-			continue // validatePathLayer already reports the precise path failure.
-		}
-		if !actualSet[normalized] {
-			report.addFinding(Finding{
-				Code:      ErrCodePackageFileMissing,
-				Severity:  SeverityError,
-				Path:      normalized,
-				ActionKey: ref.actionKey,
-				Message:   fmt.Sprintf("legacy package referenced file is missing: %s", normalized),
-			})
-		}
-	}
-}
-
 func (v *Validator) validateActionLayer(report *ValidationReport, m *Manifest) {
-	isLegacyV1 := m.Provenance.SourceType == "legacy_v1"
 	if len(m.Actions) == 0 {
 		report.addFinding(Finding{
 			Code:     ErrCodePackageManifestInvalid,
@@ -652,21 +590,20 @@ func (v *Validator) validateActionLayer(report *ValidationReport, m *Manifest) {
 				Message:   "action config path is empty",
 			})
 		}
-		if !isLegacyV1 && action.FrameCount < 1 {
+		if action.FrameCount < 1 {
 			report.addFinding(Finding{Code: ErrCodePackageManifestInvalid, Severity: SeverityError, ActionKey: action.Key, Expected: "frameCount >= 1", Actual: fmt.Sprintf("frameCount=%d", action.FrameCount), Message: "invalid frame count"})
 		}
-		if !isLegacyV1 && (action.FPS < 1 || action.FPS > 120) {
+		if action.FPS < 1 || action.FPS > 120 {
 			report.addFinding(Finding{Code: ErrCodePackageManifestInvalid, Severity: SeverityError, ActionKey: action.Key, Expected: "1 <= fps <= 120", Actual: fmt.Sprintf("fps=%d", action.FPS), Message: "invalid FPS"})
 		}
-		if !isLegacyV1 && !IsValidPlaybackMode(action.PlaybackMode) {
+		if !IsValidPlaybackMode(action.PlaybackMode) {
 			report.addFinding(Finding{Code: ErrCodePackageManifestInvalid, Severity: SeverityError, ActionKey: action.Key, Expected: "loop/once/hold/ping_pong", Actual: action.PlaybackMode, Message: "invalid action playbackMode"})
 		}
 		if action.QualityVerdict != "" {
 			validQualityVerdict := action.QualityVerdict == QualityVerdictAccepted ||
 				action.QualityVerdict == QualityVerdictAcceptedWithWarning ||
 				action.QualityVerdict == QualityVerdictNeedsReview ||
-				action.QualityVerdict == QualityVerdictRejected ||
-				(isLegacyV1 && action.QualityVerdict == QualityVerdictSkipped)
+				action.QualityVerdict == QualityVerdictRejected
 			if !validQualityVerdict {
 				report.addFinding(Finding{Code: ErrCodePackageManifestInvalid, Severity: SeverityError, ActionKey: action.Key, Actual: action.QualityVerdict, Message: "invalid action qualityVerdict"})
 			}
@@ -748,11 +685,6 @@ type validatedAnchor struct {
 }
 
 func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
-	if m.Provenance.SourceType == "legacy_v1" {
-		v.validateLegacyActionConfigLayer(report, fs, m)
-		return
-	}
-
 	actionKeys := make(map[string]bool, len(m.Actions))
 	for _, a := range m.Actions {
 		actionKeys[a.Key] = true
@@ -853,7 +785,7 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 		if missingRequired {
 			continue
 		}
-		if !v.validateV2ActionNestedRequiredFields(report, action, rawFields) {
+		if !v.validateCanonicalActionNestedRequiredFields(report, action, rawFields) {
 			continue
 		}
 
@@ -1194,7 +1126,7 @@ func (v *Validator) validateActionConfigLayer(report *ValidationReport, fs Packa
 	}
 }
 
-func (v *Validator) validateV2ActionNestedRequiredFields(report *ValidationReport, action ManifestActionEntry, rawFields map[string]json.RawMessage) bool {
+func (v *Validator) validateCanonicalActionNestedRequiredFields(report *ValidationReport, action ManifestActionEntry, rawFields map[string]json.RawMessage) bool {
 	valid := true
 	require := func(raw json.RawMessage, label string, fields ...string) map[string]json.RawMessage {
 		var object map[string]json.RawMessage
@@ -1242,123 +1174,6 @@ func (v *Validator) validateV2ActionNestedRequiredFields(report *ValidationRepor
 		require(frameRaw, fmt.Sprintf("frames[%d]", i), "frameId", "index", "file", "durationMs", "assetId", "contentHash")
 	}
 	return valid
-}
-
-type legacyValidatedActionConfig struct {
-	ActionKey       string            `json:"actionKey"`
-	Key             string            `json:"key"`
-	DisplayName     string            `json:"displayName"`
-	ActionName      string            `json:"actionName"`
-	Name            string            `json:"name"`
-	Fps             int               `json:"fps"`
-	DefaultFps      int               `json:"defaultFps"`
-	PlaybackMode    string            `json:"playbackMode"`
-	LoopType        string            `json:"loopType"`
-	FrameDurationMs int               `json:"frameDurationMs"`
-	Frames          []json.RawMessage `json:"frames"`
-	ReturnAction    string            `json:"returnAction"`
-}
-
-type legacyValidatedFrame struct {
-	Index      *int   `json:"index"`
-	File       string `json:"file"`
-	DurationMs *int   `json:"durationMs"`
-}
-
-func (v *Validator) validateLegacyActionConfigLayer(report *ValidationReport, fs PackageFileSystem, m *Manifest) {
-	actionKeys := make(map[string]bool, len(m.Actions))
-	for _, action := range m.Actions {
-		actionKeys[action.Key] = true
-	}
-
-	for _, action := range m.Actions {
-		if action.Config == "" {
-			report.addFinding(Finding{Code: ErrCodeActionConfigMissing, Severity: SeverityError, ActionKey: action.Key, Message: "legacy action config path is empty"})
-			continue
-		}
-		rc, err := fs.Open(action.Config)
-		if err != nil {
-			report.addFinding(Finding{Code: ErrCodeActionConfigMissing, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Message: fmt.Sprintf("failed to open legacy action config: %v", err)})
-			continue
-		}
-		data, readErr := io.ReadAll(rc)
-		rc.Close()
-		if readErr != nil {
-			report.addFinding(Finding{Code: ErrCodeActionConfigInvalid, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Message: fmt.Sprintf("failed to read legacy action config: %v", readErr)})
-			continue
-		}
-
-		var cfg legacyValidatedActionConfig
-		if err := json.Unmarshal(data, &cfg); err != nil {
-			report.addFinding(Finding{Code: ErrCodeActionConfigInvalid, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Message: fmt.Sprintf("failed to parse legacy action config: %v", err)})
-			continue
-		}
-		configKey := strings.TrimSpace(cfg.ActionKey)
-		if configKey == "" {
-			configKey = strings.TrimSpace(cfg.Key)
-		}
-		if configKey != "" && configKey != action.Key {
-			report.addFinding(Finding{Code: ErrCodePackageActionKeyMismatch, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Expected: action.Key, Actual: configKey, Message: "legacy action key does not match manifest"})
-		}
-
-		fps := cfg.Fps
-		if fps == 0 {
-			fps = cfg.DefaultFps
-		}
-		if fps < 0 || fps > 120 {
-			report.addFinding(Finding{Code: ErrCodeActionConfigInvalid, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Expected: "0 <= fps <= 120 for legacy packages", Actual: fmt.Sprintf("fps=%d", fps), Message: "invalid legacy fps"})
-		}
-		mode := NormalizePlaybackMode(cfg.PlaybackMode)
-		if mode == "" {
-			mode = NormalizePlaybackMode(cfg.LoopType)
-		}
-		if mode != "" && !IsValidPlaybackMode(mode) {
-			report.addFinding(Finding{Code: ErrCodeActionConfigInvalid, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Expected: "loop/once/hold/ping_pong or legacy alias", Actual: cfg.PlaybackMode, Message: "invalid legacy playback mode"})
-		}
-
-		if len(cfg.Frames) == 0 {
-			report.addFinding(Finding{Code: ErrCodeFrameMissing, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Message: "legacy action config has no frames"})
-			continue
-		}
-		seenFramePaths := make(map[string]bool, len(cfg.Frames))
-		for i, rawFrame := range cfg.Frames {
-			frameFile := ""
-			if err := json.Unmarshal(rawFrame, &frameFile); err != nil || frameFile == "" {
-				var frame legacyValidatedFrame
-				if objErr := json.Unmarshal(rawFrame, &frame); objErr != nil {
-					report.addFinding(Finding{Code: ErrCodeActionConfigInvalid, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Message: fmt.Sprintf("invalid legacy frame at index %d: %v", i, objErr)})
-					continue
-				}
-				frameFile = frame.File
-				if frame.Index != nil && *frame.Index != i {
-					report.addFinding(Finding{Code: ErrCodePackageFrameIndexInvalid, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Expected: fmt.Sprintf("index=%d", i), Actual: fmt.Sprintf("index=%d", *frame.Index), Message: "legacy frame index is not contiguous"})
-				}
-				if frame.DurationMs != nil && (*frame.DurationMs <= 0 || *frame.DurationMs > 60000) {
-					report.addFinding(Finding{Code: ErrCodeActionConfigInvalid, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Expected: "0 < durationMs <= 60000", Actual: fmt.Sprintf("durationMs=%d", *frame.DurationMs), Message: "invalid legacy frame duration"})
-				}
-			}
-			if strings.TrimSpace(frameFile) == "" {
-				report.addFinding(Finding{Code: ErrCodeFrameMissing, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Message: fmt.Sprintf("legacy frame %d has empty file", i)})
-				continue
-			}
-			framePath, pathErr := resolveActionResourcePath(action.Config, frameFile)
-			if pathErr != nil {
-				report.addFinding(Finding{Code: ErrCodePackagePathInvalid, Severity: SeverityError, Path: frameFile, ActionKey: action.Key, Message: fmt.Sprintf("invalid legacy frame path: %v", pathErr)})
-				continue
-			}
-			if seenFramePaths[framePath] {
-				report.addFinding(Finding{Code: ErrCodePackageDuplicateEntry, Severity: SeverityError, Path: framePath, ActionKey: action.Key, Message: "duplicate legacy frame file"})
-			}
-			seenFramePaths[framePath] = true
-			if _, statErr := fs.Stat(framePath); statErr != nil {
-				report.addFinding(Finding{Code: ErrCodeFrameMissing, Severity: SeverityError, Path: framePath, ActionKey: action.Key, Message: fmt.Sprintf("legacy frame resource is missing: %s", framePath)})
-			}
-		}
-
-		if cfg.ReturnAction != "" && !actionKeys[cfg.ReturnAction] {
-			report.addFinding(Finding{Code: ErrCodeActionReferenceInvalid, Severity: SeverityError, Path: action.Config, ActionKey: action.Key, Actual: cfg.ReturnAction, Message: fmt.Sprintf("legacy returnAction target not found: %s", cfg.ReturnAction)})
-		}
-	}
 }
 
 func resolveActionResourcePath(configPath, resourcePath string) (string, error) {

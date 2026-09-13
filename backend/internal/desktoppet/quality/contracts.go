@@ -9,8 +9,8 @@ import (
 )
 
 type MeasurementSource interface {
-	LoadActionMeasurements(ctx context.Context, actionRevisionID string) (*ActionMeasurementSet, error)
-	OpenFrame(ctx context.Context, actionRevisionID string, frameIndex int) (image.Image, error)
+	LoadActionMeasurements(ctx context.Context, userID, actionRevisionID string) (*ActionMeasurementSet, error)
+	OpenFrame(ctx context.Context, userID, actionRevisionID string, frameIndex int) (image.Image, error)
 }
 
 type Detector interface {
@@ -87,6 +87,7 @@ type QualityRepository interface {
 
 	GetMeasurementCache(ctx context.Context, frameArtifactID, contentHash string) (*QualityMeasurementCacheRecord, error)
 	CreateMeasurementCache(ctx context.Context, cache *QualityMeasurementCacheRecord) error
+	DeleteMeasurementCache(ctx context.Context, frameArtifactID, contentHash string) error
 
 	CreateOutboxEvent(ctx context.Context, event *QualityOutboxEventRecord) error
 	ListPendingOutboxEvents(ctx context.Context, limit int) ([]QualityOutboxEventRecord, error)
@@ -169,6 +170,10 @@ type FrameMeasurementResult struct {
 	FullyTransparentRatio float64
 	SemiTransparentRatio  float64
 	OpaqueRatio           float64
+	SubjectBoxX           float64
+	SubjectBoxY           float64
+	SubjectBoxWidth       float64
+	SubjectBoxHeight      float64
 	Decodable             bool
 	MimeType              string
 	PixelHash             string

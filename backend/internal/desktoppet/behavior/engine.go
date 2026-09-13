@@ -773,7 +773,7 @@ func (e *BehaviorEngine) submitRuntimeCommand(ctx context.Context, decision *Beh
 			"decisionId": decision.DecisionID,
 		})
 		// Keep the committed decision in selected state. The inbox retry will
-		// resume this exact decision, and Runtime V2 idempotency prevents a
+		// resume this exact decision, and Runtime V1 idempotency prevents a
 		// duplicate command if transport acceptance happened before the error.
 		return runtimeErr
 	}
@@ -922,7 +922,7 @@ func (e *BehaviorEngine) processInboxBatch(ctx context.Context) {
 		}
 		if err := e.repo.MarkInboxStatus(ctx, record.EventID, leaseToken, status, "", ""); err != nil {
 			// A lost lease means another worker is authoritative. Any duplicated
-			// Runtime V2 submission is fenced by the decision idempotency key.
+			// Runtime V1 submission is fenced by the decision idempotency key.
 			log.Warn("behavior engine: failed to acknowledge inbox event", map[string]interface{}{"eventId": record.EventID, "status": status, "error": err.Error()})
 		}
 	}

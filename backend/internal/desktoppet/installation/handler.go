@@ -38,16 +38,7 @@ func requireDeviceID(c *gin.Context) (string, bool) {
 }
 
 type installPackagePayload struct {
-	CharacterID       string `json:"characterId"`
-	LegacyCharacterID string `json:"character_id"`
-	IdempotencyKey    string `json:"idempotencyKey"`
-}
-
-func (p installPackagePayload) resolvedCharacterID() string {
-	if strings.TrimSpace(p.CharacterID) != "" {
-		return strings.TrimSpace(p.CharacterID)
-	}
-	return strings.TrimSpace(p.LegacyCharacterID)
+	IdempotencyKey string `json:"idempotencyKey"`
 }
 
 type updateDefaultActionPayload struct {
@@ -89,18 +80,13 @@ func (h *Handler) InstallPackage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	characterID := payload.resolvedCharacterID()
-	if characterID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "角色 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
-		return
-	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
 	userID := actorID
-	inst, err := h.service.InstallPackage(packageID, userID, characterID)
+	inst, err := h.service.InstallPackage(packageID, userID)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -437,11 +423,6 @@ func (h *CoordinatorHandler) InstallPackage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	characterID := payload.resolvedCharacterID()
-	if characterID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "角色 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
-		return
-	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
@@ -455,7 +436,6 @@ func (h *CoordinatorHandler) InstallPackage(c *gin.Context) {
 	result, err := h.coordinator.Install(c.Request.Context(), coordinator.InstallRequest{
 		DeviceCtx:       deviceCtx,
 		TargetReleaseID: packageID,
-		CharacterID:     characterID,
 		IdempotencyKey:  firstNonEmpty(strings.TrimSpace(c.GetHeader("Idempotency-Key")), strings.TrimSpace(payload.IdempotencyKey)),
 	})
 	if err != nil {
@@ -477,11 +457,6 @@ func (h *CoordinatorHandler) InstallRelease(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数格式错误", gin.H{"errorCode": ErrCodeInstallationFailed})
 		return
 	}
-	characterID := payload.resolvedCharacterID()
-	if characterID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "角色 ID 为空", gin.H{"errorCode": ErrCodeInstallationFailed})
-		return
-	}
 	actorID, err := middleware.ResolveActorID(c)
 	if err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
@@ -493,7 +468,7 @@ func (h *CoordinatorHandler) InstallRelease(c *gin.Context) {
 		return
 	}
 	result, err := h.coordinator.Install(c.Request.Context(), coordinator.InstallRequest{
-		DeviceCtx: deviceCtx, PetID: petID, TargetReleaseID: releaseID, CharacterID: characterID,
+		DeviceCtx: deviceCtx, PetID: petID, TargetReleaseID: releaseID,
 		IdempotencyKey: firstNonEmpty(strings.TrimSpace(c.GetHeader("Idempotency-Key")), strings.TrimSpace(payload.IdempotencyKey)),
 	})
 	if err != nil {

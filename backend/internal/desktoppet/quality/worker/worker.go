@@ -44,6 +44,8 @@ type Worker struct {
 
 	recoveryWorker  quality.QualityRecoveryWorker
 	outboxPublisher quality.QualityOutboxPublisher
+
+	onEvaluationCommitted func(taskID, actionKey string)
 }
 
 func NewWorker(db *gorm.DB, svc quality.QualityService, dataDir string) *Worker {
@@ -59,6 +61,10 @@ func NewWorker(db *gorm.DB, svc quality.QualityService, dataDir string) *Worker 
 		w.outboxPublisher = provider.OutboxPublisher()
 	}
 	return w
+}
+
+func (w *Worker) SetOnEvaluationCommitted(fn func(taskID, actionKey string)) {
+	w.onEvaluationCommitted = fn
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -215,6 +221,7 @@ func (w *Worker) processEvaluation(ctx context.Context, eval *quality.QualityEva
 		ProcessingTaskID:   eval.ProcessingTaskID,
 		ProcessingActionID: eval.ProcessingActionID,
 		ActionKey:          eval.ActionKey,
+		UserID:             eval.UserID,
 		Profile:            profile,
 		ExecutionID:        executionID,
 		WorkerID:           qualityWorkerID,
@@ -249,6 +256,10 @@ func (w *Worker) processEvaluation(ctx context.Context, eval *quality.QualityEva
 	// event source. Flush after each evaluation for low-latency delivery; the
 	// periodic flush remains the retry path for transient publisher failures.
 	w.flushOutbox(cleanupCtx)
+
+	if w.onEvaluationCommitted != nil && eval.ProcessingTaskID != "" {
+		w.onEvaluationCommitted(eval.ProcessingTaskID, eval.ActionKey)
+	}
 }
 
 func (w *Worker) recoverStuckEvaluations(ctx context.Context) {

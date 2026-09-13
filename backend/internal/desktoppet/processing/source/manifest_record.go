@@ -184,7 +184,7 @@ func (b *ManifestBuilder) Build(req BuildManifestRequest) (*ProcessingSourceMani
 
 	record := &ProcessingSourceManifestRecord{
 		ID:                            req.ID,
-		SchemaVersion:                 2,
+		SchemaVersion:                 1,
 		UserID:                        req.UserID,
 		CharacterID:                   req.CharacterID,
 		ProcessingTaskID:              req.ProcessingTaskID,

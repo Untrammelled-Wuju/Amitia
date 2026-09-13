@@ -3,7 +3,7 @@
 package migration
 
 // DesktopPetRuntimeBehaviorFinalizationMigration closes the remaining
-// production schema gaps for Runtime V2 physical-state reporting and the
+// production schema gaps for Runtime V1 physical-state reporting and the
 // CloudCore -> DeviceAgent desktop-pet behavior delivery path. It is forward
 // only and safe for databases that already have some of these objects because
 // Step helpers and IF NOT EXISTS statements are idempotent.

@@ -55,7 +55,7 @@ func (e *Engine) ProfileRegistry() *ProfileRegistry {
 func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateResult, error) {
 	startTime := time.Now()
 
-	measurements, err := e.measurementSource.LoadActionMeasurements(ctx, req.ActionRevisionID)
+	measurements, err := e.measurementSource.LoadActionMeasurements(ctx, req.UserID, req.ActionRevisionID)
 	if err != nil {
 		return nil, NewQualityError(ErrCodeRevisionNotFound, "failed to load measurements", err)
 	}

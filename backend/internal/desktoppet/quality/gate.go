@@ -18,7 +18,14 @@ func NewGateEvaluator(repo QualityRepository) *GateEvaluator {
 	return &GateEvaluator{repo: repo}
 }
 
-func (g *GateEvaluator) EvaluateTaskGate(ctx context.Context, processingTaskID string, actionVerdicts []ActionVerdictSummary, profile QualityProfileSnapshot) (*QualityGateResult, error) {
+type GateMeta struct {
+	ActiveRevisionSetHash string
+	EvaluationSetHash     string
+	ProfileID             string
+	RuleSetVersion        string
+}
+
+func (g *GateEvaluator) EvaluateTaskGate(ctx context.Context, processingTaskID string, actionVerdicts []ActionVerdictSummary, profile QualityProfileSnapshot, meta GateMeta) (*QualityGateResult, error) {
 	required := 0
 	accepted := 0
 	warning := 0
@@ -80,6 +87,10 @@ func (g *GateEvaluator) EvaluateTaskGate(ctx context.Context, processingTaskID s
 		FailedEvaluationCount: failed,
 		SnapshotJSON:          string(snapshotJSON),
 		SnapshotHash:          snapshotHash,
+		ActiveRevisionSetHash: meta.ActiveRevisionSetHash,
+		EvaluationSetHash:     meta.EvaluationSetHash,
+		ProfileID:             meta.ProfileID,
+		RuleSetVersion:        meta.RuleSetVersion,
 	}
 
 	if err := g.repo.UpsertGateResult(ctx, record); err != nil {

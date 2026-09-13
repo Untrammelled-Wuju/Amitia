@@ -11,13 +11,15 @@ type GateStatus string
 
 const (
 	GateStatusPassed         GateStatus = "passed"
-	GateStatusPassedWithWarn GateStatus = "passed_with_warning"
+	GateStatusPassedWithWarn GateStatus = "passed_with_warnings"
 	GateStatusMissing        GateStatus = "missing"
 	GateStatusPending        GateStatus = "pending"
 	GateStatusReviewRequired GateStatus = "review_required"
 	GateStatusFailed         GateStatus = "failed"
 	GateStatusError          GateStatus = "error"
 	GateStatusStale          GateStatus = "stale"
+	GateStatusBlocked        GateStatus = "blocked"
+	GateStatusPartialCand    GateStatus = "partial_candidate"
 )
 
 type QualityGateResult struct {
@@ -66,6 +68,10 @@ func (g GateStatus) ErrorCode() string {
 		return "quality_gate_error"
 	case GateStatusStale:
 		return "quality_gate_stale"
+	case GateStatusBlocked:
+		return "quality_gate_failed"
+	case GateStatusPartialCand:
+		return "quality_gate_partial_candidate"
 	default:
 		return "quality_gate_unknown"
 	}
@@ -197,7 +203,6 @@ type ReleaseRepository interface {
 	UpdateLegacyMigrationOperation(op *LegacyPackageMigrationOperation) error
 
 	GetPetIdentity(petID string) (*PetIdentityData, error)
-	GetPetIdentityByCharacter(userID, characterID string) (*PetIdentityData, error)
 	CreatePetIdentity(identity *PetIdentityData) error
 	CreatePetIdentityTx(tx *gorm.DB, identity *PetIdentityData) error
 	UpdatePetIdentity(identity *PetIdentityData) error
@@ -248,10 +253,8 @@ type ReleaseRepository interface {
 type PetIdentityData struct {
 	ID                  string `json:"id"`
 	OwnerUserID         string `json:"ownerUserId"`
-	SourceCharacterID   string `json:"sourceCharacterId"`
 	Name                string `json:"name"`
 	Slug                string `json:"slug"`
-	BindingPolicy       string `json:"bindingPolicy"`
 	UpstreamPetID       string `json:"upstreamPetId,omitempty"`
 	DefaultActionKey    string `json:"defaultActionKey,omitempty"`
 	NextReleaseSequence int    `json:"nextReleaseSequence"`

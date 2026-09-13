@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
@@ -40,7 +39,7 @@ type RuntimeNotifier interface {
 }
 
 type Service interface {
-	InstallPackage(packageId, userId, characterId string) (*Installation, error)
+	InstallPackage(packageId, userId string) (*Installation, error)
 	Uninstall(userId, installationId string) error
 	EnableInstallation(userId, installationId string) error
 	DisableInstallation(userId, installationId string) error
@@ -72,7 +71,6 @@ type service struct {
 	installer     Installer
 	uninstaller   Uninstaller
 	packageRepo   processing.Repository
-	charRepo      character.Repository
 	dataDir       string
 	notifier      RuntimeNotifier
 	v2Coordinator V2Coordinator
@@ -92,13 +90,12 @@ func WithV2Coordinator(coordinator V2Coordinator) ServiceOption {
 	}
 }
 
-func NewService(repo Repository, installer Installer, uninstaller Uninstaller, packageRepo processing.Repository, charRepo character.Repository, dataDir string, opts ...ServiceOption) Service {
+func NewService(repo Repository, installer Installer, uninstaller Uninstaller, packageRepo processing.Repository, dataDir string, opts ...ServiceOption) Service {
 	s := &service{
 		repo:        repo,
 		installer:   installer,
 		uninstaller: uninstaller,
 		packageRepo: packageRepo,
-		charRepo:    charRepo,
 		dataDir:     dataDir,
 	}
 	for _, opt := range opts {
@@ -121,8 +118,8 @@ func SetRuntimeNotifier(svc Service, notifier RuntimeNotifier) bool {
 	return true
 }
 
-func (s *service) InstallPackage(packageId, userId, characterId string) (*Installation, error) {
-	return s.installer.InstallPackage(packageId, userId, characterId)
+func (s *service) InstallPackage(packageId, userId string) (*Installation, error) {
+	return s.installer.InstallPackage(packageId, userId)
 }
 
 func (s *service) Uninstall(userId, installationId string) error {
@@ -242,12 +239,6 @@ func (s *service) validateEnablePrerequisites(inst *Installation) error {
 		return NewInstallationError(ErrCodePackageHashMismatch,
 			fmt.Sprintf("包哈希不匹配: 期望 %s, 实际 %s", inst.PackageHash, actualHash),
 			ErrPackageHashMismatch)
-	}
-	if _, err := s.charRepo.FindByID(inst.CharacterID); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return NewInstallationError(ErrCodeCharacterNotFound, "角色不存在", ErrCharacterNotFound)
-		}
-		return NewInstallationError(ErrCodeCharacterNotFound, "校验角色失败", err)
 	}
 	return nil
 }

@@ -25,7 +25,7 @@ var windowsReservedNames = map[string]bool{
 }
 
 // NormalizePackagePath validates a package-relative path against the frozen
-// Package V2 portability contract. Paths use '/' on every host, must already
+// Package V1 portability contract. Paths use '/' on every host, must already
 // be NFC and canonical, and must be materializable on Windows/macOS/Linux.
 func NormalizePackagePath(raw string) (string, error) {
 	if raw == "" {
