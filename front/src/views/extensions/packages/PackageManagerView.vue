@@ -145,6 +145,7 @@
                 <el-button size="small" :icon="MoreFilled" aria-label="更多操作" />
                 <template #dropdown>
                   <el-dropdown-menu>
+                    <el-dropdown-item command="permissions">权限管理</el-dropdown-item>
                     <el-dropdown-item
                       command="pause"
                       :disabled="row.enablement !== 'enabled'"
@@ -364,6 +365,48 @@
       </div>
     </el-dialog>
 
+    <el-dialog v-model="permissionDialogVisible" title="权限管理" width="760px">
+      <div v-if="permissionTarget" class="permission-manager">
+        <div class="permission-manager-head">
+          <div>
+            <strong>{{ permissionTarget.name || permissionTarget.extensionId }}</strong>
+            <span>{{ permissionTarget.extensionId }}</span>
+          </div>
+          <el-tag type="info" size="small">{{ permissionRows.length }} 项</el-tag>
+        </div>
+        <el-table
+          v-loading="permissionLoading"
+          :data="permissionRows"
+          size="small"
+          border
+          empty-text="该插件没有声明权限"
+        >
+          <el-table-column prop="name" label="权限" min-width="210" show-overflow-tooltip />
+          <el-table-column prop="scope" label="Scope" width="100" />
+          <el-table-column prop="reason" label="用途" show-overflow-tooltip />
+          <el-table-column label="必需" width="70">
+            <template #default="{ row }">
+              <el-tag :type="row.required ? 'warning' : 'info'" size="small">
+                {{ row.required ? "是" : "否" }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="授权" width="104" align="center">
+            <template #default="{ row }">
+              <el-switch
+                class="permission-pill-switch"
+                :model-value="row.granted"
+                :loading="permissionUpdating[row.name]"
+                :disabled="permissionLoading"
+                :aria-label="`${row.granted ? '关闭' : '开启'}权限 ${row.name}`"
+                @change="(value: string | number | boolean) => togglePermission(row, Boolean(value))"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-dialog>
+
     <el-dialog v-model="updateDialogVisible" title="扩展更新" width="680px">
       <div v-if="updateTarget">
         <el-descriptions :column="2" border size="small">
@@ -424,9 +467,11 @@ import {
   uninstallExtension,
   pauseExtension,
   rollbackExtension,
+  setExtensionPermission,
   type KernelStatus,
   type KernelExtension,
   type KernelExtensionDetail,
+  type KernelPermission,
   type InstallPreview,
 } from "@/views/kernel/api";
 import {
@@ -462,6 +507,11 @@ const installLoading = ref(false);
 
 const detailVisible = ref(false);
 const detail = ref<KernelExtensionDetail | null>(null);
+const permissionDialogVisible = ref(false);
+const permissionTarget = ref<KernelExtension | null>(null);
+const permissionRows = ref<KernelPermission[]>([]);
+const permissionLoading = ref(false);
+const permissionUpdating = ref<Record<string, boolean>>({});
 const toggleUpdating = ref<Record<string, boolean>>({});
 
 const packageInput = ref<HTMLInputElement>();
@@ -683,6 +733,9 @@ async function handleRowCommand(row: KernelExtension, command: string) {
     case "update":
       await checkRowUpdate(row);
       break;
+    case "permissions":
+      await openPermissionManager(row);
+      break;
     case "rollback":
       await doRollback(row);
       break;
@@ -721,6 +774,39 @@ async function openDetail(row: KernelExtension) {
     detailVisible.value = true;
   } catch (e: any) {
     ElMessage.error("加载详情失败: " + (e?.message || e));
+  }
+}
+
+async function openPermissionManager(row: KernelExtension) {
+  permissionTarget.value = row;
+  permissionRows.value = [];
+  permissionDialogVisible.value = true;
+  permissionLoading.value = true;
+  try {
+    const data = await getExtension(row.extensionId);
+    permissionRows.value = data.permissions ?? [];
+  } catch (e: any) {
+    ElMessage.error("加载权限失败: " + (e?.message || e));
+  } finally {
+    permissionLoading.value = false;
+  }
+}
+
+async function togglePermission(row: KernelPermission, granted: boolean) {
+  if (!permissionTarget.value || permissionUpdating.value[row.name]) return;
+  permissionUpdating.value[row.name] = true;
+  try {
+    const updated = await setExtensionPermission(
+      permissionTarget.value.extensionId,
+      row.name,
+      granted,
+    );
+    row.granted = updated.granted;
+    ElMessage.success(granted ? "权限已开启" : "权限已关闭");
+  } catch (e: any) {
+    ElMessage.error("权限更新失败: " + (e?.message || e));
+  } finally {
+    permissionUpdating.value[row.name] = false;
   }
 }
 
@@ -1018,6 +1104,45 @@ p {
   align-items: center;
   gap: 8px;
   white-space: nowrap;
+}
+.permission-manager {
+  display: grid;
+  gap: 14px;
+}
+.permission-manager-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  background: var(--el-fill-color-lighter);
+}
+.permission-manager-head > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.permission-manager-head strong {
+  overflow: hidden;
+  color: var(--console-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.permission-manager-head span {
+  overflow: hidden;
+  color: var(--console-text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.permission-pill-switch {
+  --el-switch-on-color: var(--el-color-success);
+}
+.permission-pill-switch :deep(.el-switch__core) {
+  min-width: 46px;
+  border-radius: 999px;
 }
 .sr-only {
   position: absolute;

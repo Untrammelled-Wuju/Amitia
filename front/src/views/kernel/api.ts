@@ -146,6 +146,19 @@ export async function getExtension(id: string): Promise<KernelExtensionDetail> {
   return res.data;
 }
 
+export async function setExtensionPermission(
+  extensionId: string,
+  permission: string,
+  granted: boolean,
+): Promise<KernelPermission> {
+  const res = await apiClient.post(`${BASE}/extensions/permissions`, {
+    extensionId,
+    permission,
+    granted,
+  });
+  return res.data;
+}
+
 export async function previewInstall(file: File): Promise<InstallPreview> {
   const formData = new FormData();
   formData.append("package", file);
