@@ -149,7 +149,7 @@ func TestSubmitProactiveMessageUsesTemporalSnapshotContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := svc.submitProactiveMessage(context.Background(), "char-1", "conv-temporal", "wechat", "prompt", "request-1")
+	result, err := svc.submitProactiveMessage(context.Background(), "default", "char-1", "conv-temporal", "wechat", "prompt", "request-1")
 	if err != nil || result == nil {
 		t.Fatalf("expected proactive dispatch, result=%#v err=%v", result, err)
 	}
@@ -173,7 +173,7 @@ func TestSubmitProactiveMessageFallsBackWhenTemporalUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := svc.submitProactiveMessage(context.Background(), "char-1", "conv-fallback", "web", "prompt", "request-2")
+	result, err := svc.submitProactiveMessage(context.Background(), "default", "char-1", "conv-fallback", "web", "prompt", "request-2")
 	if err != nil || result == nil {
 		t.Fatalf("expected fallback dispatch, result=%#v err=%v", result, err)
 	}
@@ -194,7 +194,7 @@ func TestSubmitProactiveMessageStopsAtTemporalPolicyGate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := svc.submitProactiveMessage(context.Background(), "char-1", "conv-quiet", "web", "prompt", "request-3")
+	result, err := svc.submitProactiveMessage(context.Background(), "default", "char-1", "conv-quiet", "web", "prompt", "request-3")
 	if err != nil || result != nil {
 		t.Fatalf("expected policy suppression without error, result=%#v err=%v", result, err)
 	}

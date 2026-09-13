@@ -210,6 +210,22 @@ func DefaultMigrations() []Migration {
 		TtsClonedVoicesMigration(),
 		DesktopPetCatalogRepairMigration(),
 		DesktopPetGenerationModeSnapshotRepairMigration(),
+		DesktopPetQualityMeasurementSubjectBoxMigration(),
+		EmotionStateMigration(),
+	}
+}
+
+func DesktopPetQualityMeasurementSubjectBoxMigration() Migration {
+	return Migration{
+		Version: "20260912001",
+		Name:    "add_quality_measurement_subject_box_columns",
+		Up: func(s *Step) error {
+			s.AddColumn("desktop_pet_quality_measurement_cache", "subject_box_x", "REAL NOT NULL DEFAULT 0")
+			s.AddColumn("desktop_pet_quality_measurement_cache", "subject_box_y", "REAL NOT NULL DEFAULT 0")
+			s.AddColumn("desktop_pet_quality_measurement_cache", "subject_box_width", "REAL NOT NULL DEFAULT 0")
+			s.AddColumn("desktop_pet_quality_measurement_cache", "subject_box_height", "REAL NOT NULL DEFAULT 0")
+			return nil
+		},
 	}
 }
 

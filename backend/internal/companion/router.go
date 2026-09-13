@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/requestidentity"
 )
 
@@ -53,12 +54,12 @@ func RegisterCompanionRouter(r *gin.RouterGroup, svc Service) {
 		comp.GET("/work-profile", handler.GetWorkProfile)
 		comp.PUT("/work-profile", handler.UpdateWorkProfile)
 
-		comp.GET("/active-message/setting", handler.GetActiveMessageSetting)
-		comp.PUT("/active-message/setting", handler.UpdateActiveMessageSetting)
-		comp.GET("/active-message/tasks/today", handler.GetActiveMessageTasksToday)
-		comp.POST("/active-message/tasks/regenerate", handler.RegenerateActiveMessageTasks)
-		comp.POST("/active-message/tasks/:id/run", handler.RunActiveMessageTask)
-		comp.POST("/active-message/tasks/:id/cancel", handler.CancelActiveMessageTask)
+		comp.GET("/active-message/setting", activeMessagePluginGuard(), handler.GetActiveMessageSetting)
+		comp.PUT("/active-message/setting", activeMessagePluginGuard(), handler.UpdateActiveMessageSetting)
+		comp.GET("/active-message/tasks/today", activeMessagePluginGuard(), handler.GetActiveMessageTasksToday)
+		comp.POST("/active-message/tasks/regenerate", activeMessagePluginGuard(), handler.RegenerateActiveMessageTasks)
+		comp.POST("/active-message/tasks/:id/run", activeMessagePluginGuard(), handler.RunActiveMessageTask)
+		comp.POST("/active-message/tasks/:id/cancel", activeMessagePluginGuard(), handler.CancelActiveMessageTask)
 
 		comp.GET("/delayed-replies", handler.ListDelayedReplies)
 		comp.POST("/delayed-replies/:id/cancel", handler.CancelDelayedReply)
@@ -66,11 +67,21 @@ func RegisterCompanionRouter(r *gin.RouterGroup, svc Service) {
 
 		comp.GET("/debug/overview", handler.GetDebugOverview)
 		comp.POST("/debug/regenerate-all", handler.RegenerateAllDebug)
-		comp.POST("/debug/process-active-messages", handler.ProcessActiveMessagesDebug)
+		comp.POST("/debug/process-active-messages", activeMessagePluginGuard(), handler.ProcessActiveMessagesDebug)
 		comp.POST("/debug/process-delayed-replies", handler.ProcessDelayedRepliesDebug)
 		comp.POST("/debug/trigger-daily-regeneration", handler.TriggerDailyRegeneration)
 
 		comp.GET("/rule-logs", handler.GetRuleLogs)
+	}
+}
+
+func activeMessagePluginGuard() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"code": 404, "msg": "主动消息插件未启用"})
+			return
+		}
+		c.Next()
 	}
 }
 

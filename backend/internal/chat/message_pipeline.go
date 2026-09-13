@@ -175,11 +175,10 @@ func (s *service) dispatchPluginAfterReply(req *ProcessMessageRequest, result *C
 		messageID = messageIDs[len(messageIDs)-1]
 	}
 	scope := extension.ExecutionScope{UserID: req.UserID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, SessionID: req.SessionID, TraceID: result.RequestID, RequestID: result.RequestID, CorrelationID: result.Trace.CorrelationID, CausationID: result.Trace.CausationID}
-	replyView := extension.ReplyView{MessageID: messageID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, Content: result.Reply, CreatedAt: time.Now().UTC()}
+	replyView := ReplyView{MessageID: messageID, CharacterID: result.CharacterID, ConversationID: result.ConversationID, Channel: result.Channel, Content: result.Reply, CreatedAt: time.Now().UTC()}
 	if s.toolRuntime != nil {
 		toolScope := toolScopeFromExtension(scope)
-		toolReply := ReplyView{MessageID: replyView.MessageID, CharacterID: replyView.CharacterID, ConversationID: replyView.ConversationID, Channel: replyView.Channel, Content: replyView.Content, CreatedAt: replyView.CreatedAt}
-		s.toolRuntime.AfterReply(toolScope, toolReply)
+		s.toolRuntime.AfterReply(toolScope, replyView)
 		return
 	}
 }

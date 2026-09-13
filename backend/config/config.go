@@ -81,9 +81,8 @@ type GraphStoreProviderConfig struct {
 }
 
 type ComponentsConfig struct {
-	PluginHost ProcessComponentConfig `mapstructure:"pluginHost"`
-	TaskHost   ProcessComponentConfig `mapstructure:"taskHost"`
-	Sidecars   SidecarsConfig         `mapstructure:"sidecars"`
+	TaskHost ProcessComponentConfig `mapstructure:"taskHost"`
+	Sidecars SidecarsConfig         `mapstructure:"sidecars"`
 }
 
 type ProcessComponentConfig struct {
@@ -191,7 +190,6 @@ type PromptFeatureFlags struct {
 type RuntimeConfig struct {
 	Mode       string                   `mapstructure:"mode"`
 	Node       NodeRuntimeConfig        `mapstructure:"node"`
-	PluginHost ProcessHostRuntimeConfig `mapstructure:"pluginHost"`
 	TaskHost   ProcessHostRuntimeConfig `mapstructure:"taskHost"`
 	IOSSandbox IOSSandboxRuntimeConfig  `mapstructure:"iosSandbox"`
 	Sidecars   SidecarRuntimeConfig     `mapstructure:"sidecars"`
@@ -404,9 +402,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.node.npmPath", "")
 	v.SetDefault("runtime.node.npxPath", "")
 	v.SetDefault("runtime.node.workDir", "")
-	v.SetDefault("runtime.pluginHost.enabled", true)
-	v.SetDefault("runtime.pluginHost.entryPath", "")
-	v.SetDefault("runtime.pluginHost.workDir", "")
 	v.SetDefault("runtime.taskHost.enabled", true)
 	v.SetDefault("runtime.taskHost.entryPath", "")
 	v.SetDefault("runtime.taskHost.workDir", "")
@@ -474,9 +469,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.browser.maxTabsTotal", 32)
 	v.SetDefault("providers.browser.navigationTimeoutSec", 30)
 	v.SetDefault("providers.browser.maxNavigationTimeoutSec", 120)
-	v.SetDefault("components.pluginHost.enabled", true)
-	v.SetDefault("components.pluginHost.entryUri", "")
-	v.SetDefault("components.pluginHost.workUri", "")
 	v.SetDefault("components.taskHost.enabled", true)
 	v.SetDefault("components.taskHost.entryUri", "")
 	v.SetDefault("components.taskHost.workUri", "")
@@ -536,9 +528,6 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "runtime.node.npmPath", environments: []string{"AMITIA_NPM_BIN"}},
 	{key: "runtime.node.npxPath", environments: []string{"AMITIA_NPX_BIN"}},
 	{key: "runtime.node.workDir", environments: []string{"AMITIA_NODE_WORK_DIR"}},
-	{key: "runtime.pluginHost.enabled", environments: []string{"AMITIA_PLUGIN_HOST_ENABLED"}},
-	{key: "runtime.pluginHost.entryPath", environments: []string{"AMITIA_PLUGIN_HOST_PATH"}},
-	{key: "runtime.pluginHost.workDir", environments: []string{"AMITIA_PLUGIN_HOST_WORK_DIR"}},
 	{key: "runtime.taskHost.enabled", environments: []string{"AMITIA_TASK_HOST_ENABLED"}},
 	{key: "runtime.taskHost.entryPath", environments: []string{"AMITIA_TASK_HOST_PATH"}},
 	{key: "runtime.taskHost.workDir", environments: []string{"AMITIA_TASK_HOST_WORK_DIR"}},
@@ -584,9 +573,6 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "providers.graphStore.surrealdb.password", environments: []string{"AMITIA_SURREAL_PASSWORD"}},
 	{key: "providers.graphStore.surrealdb.dataPath", environments: []string{"AMITIA_SURREAL_DATA_PATH"}},
 	{key: "providers.graphStore.surrealdb.enabled", environments: []string{"AMITIA_SURREAL_ENABLED"}},
-	{key: "components.pluginHost.enabled", environments: []string{"AMITIA_PLUGIN_HOST_ENABLED"}},
-	{key: "components.pluginHost.entryUri", environments: []string{"AMITIA_PLUGIN_HOST_URI"}},
-	{key: "components.pluginHost.workUri", environments: []string{"AMITIA_PLUGIN_HOST_WORK_URI"}},
 	{key: "components.taskHost.enabled", environments: []string{"AMITIA_TASK_HOST_ENABLED"}},
 	{key: "components.taskHost.entryUri", environments: []string{"AMITIA_TASK_HOST_URI"}},
 	{key: "components.taskHost.workUri", environments: []string{"AMITIA_TASK_HOST_WORK_URI"}},
@@ -699,9 +685,6 @@ func validateConfig(cfg *Config) error {
 		}
 	}
 
-	if err := validateComponentURI(cfg.Components.PluginHost.EntryURI); err != nil {
-		return fmt.Errorf("pluginHost.entryUri: %w", err)
-	}
 	if err := validateComponentURI(cfg.Components.TaskHost.EntryURI); err != nil {
 		return fmt.Errorf("taskHost.entryUri: %w", err)
 	}

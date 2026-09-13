@@ -2,6 +2,7 @@ package chat
 
 import (
 	"github.com/u-ai/backend/internal/decision"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/interaction"
 	promptir "github.com/u-ai/backend/internal/prompt"
 )
@@ -127,6 +128,9 @@ func buildEmotionFusionInput(runtime *interaction.RuntimeAssembly) *promptir.Emo
 }
 
 func buildEmotionFusionRaw(runtime *interaction.RuntimeAssembly, name string) string {
+	if !runtimegate.IsEnabled(runtimegate.EmotionExtensionID) {
+		return ""
+	}
 	if runtime == nil {
 		return ""
 	}

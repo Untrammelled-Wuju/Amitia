@@ -241,6 +241,12 @@ func (h *VoiceHandler) GetStatus(c *gin.Context) {
 		return
 	}
 	status := h.service.Status()
+	if err := CascadeVoiceReadiness(); err != nil {
+		status.CascadeReady = false
+		status.CascadeError = err.Error()
+	} else {
+		status.CascadeReady = true
+	}
 	status.ActiveSessions = 0
 	status.WakeArmedSessions = 0
 	for _, sess := range h.service.ListActiveSessions() {

@@ -583,13 +583,13 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 		}
 		c.state.behaviorOk = true
 	}
-	if svc.DesktopPetRuntimeV2 != nil {
-		if err := svc.DesktopPetRuntimeV2.Start(ctx); err != nil {
+	if svc.DesktopPetRuntimeV1 != nil {
+		if err := svc.DesktopPetRuntimeV1.Start(ctx); err != nil {
 			c.stopAllLocked(ctx, svc)
 			if svc.SafeMode != nil {
-				svc.SafeMode.Enter("pet runtime v2 start failed")
+				svc.SafeMode.Enter("pet runtime v1 start failed")
 			}
-			return fmt.Errorf("runtime v2 start: %w", err)
+			return fmt.Errorf("runtime v1 start: %w", err)
 		}
 	}
 	if svc.RuntimeDomainEventConsumer != nil {
@@ -632,7 +632,7 @@ func (c *desktopPetComponent) Ready(ctx context.Context) error {
 }
 
 func (c *desktopPetComponent) readyLocked(svc *AppServices) error {
-	if svc == nil || svc.DesktopPetRuntimeV2 == nil || svc.Readiness == nil {
+	if svc == nil || svc.DesktopPetRuntimeV1 == nil || svc.Readiness == nil {
 		return fmt.Errorf("desktop pet not ready")
 	}
 	snapshot := svc.Readiness.Snapshot()
@@ -676,8 +676,8 @@ func (c *desktopPetComponent) readyLocked(svc *AppServices) error {
 	if svc.BehaviorService == nil || !svc.BehaviorService.IsRunning() {
 		return fmt.Errorf("desktop pet behavior service not running")
 	}
-	if !svc.DesktopPetRuntimeV2.IsStarted() {
-		return fmt.Errorf("desktop pet runtime v2 not running")
+	if !svc.DesktopPetRuntimeV1.IsStarted() {
+		return fmt.Errorf("desktop pet runtime v1 not running")
 	}
 	if svc.RuntimeDomainEventConsumer == nil || !svc.RuntimeDomainEventConsumer.IsRunning() {
 		return fmt.Errorf("desktop pet runtime domain event consumer not running")
@@ -700,13 +700,13 @@ func (c *desktopPetComponent) Stop(ctx context.Context) error {
 
 func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppServices) {
 	// Stop event ingress before the behavior engine so no new domain event can
-	// race into a service that is already draining. Runtime v2 is closed next,
+	// race into a service that is already draining. Runtime v1 is closed next,
 	// followed by behavior and the background workers in reverse dependency order.
 	if svc.RuntimeDomainEventConsumer != nil {
 		svc.RuntimeDomainEventConsumer.Stop()
 	}
-	if svc.DesktopPetRuntimeV2 != nil {
-		_ = svc.DesktopPetRuntimeV2.Close(ctx)
+	if svc.DesktopPetRuntimeV1 != nil {
+		_ = svc.DesktopPetRuntimeV1.Close(ctx)
 	}
 	if c.state.behaviorOk && svc.BehaviorService != nil {
 		_ = svc.BehaviorService.Stop()

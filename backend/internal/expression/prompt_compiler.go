@@ -64,6 +64,7 @@ func compileWithPolicy(policy ChannelPolicy) CompiledPrompt {
 		styleParts = append(styleParts,
 			"用口语化方式回复，自然流畅像真人说话。",
 			"使用简短的句子，符合语音对话的习惯。",
+			voiceReactionRules,
 		)
 	default:
 		instructionParts = append(instructionParts,

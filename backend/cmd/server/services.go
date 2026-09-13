@@ -65,7 +65,7 @@ import (
 	releasestorage "github.com/u-ai/backend/internal/desktoppet/release/storage"
 	releaseworker "github.com/u-ai/backend/internal/desktoppet/release/worker"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
-	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
+	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/devicemesh"
@@ -76,7 +76,6 @@ import (
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	"github.com/u-ai/backend/internal/extension/kernel/event"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
@@ -157,7 +156,7 @@ type AppServices struct {
 	ReleaseRecoveryWorker        *release.ReleaseRecoveryWorker
 	ReleaseEventPublisher        *release.ReleaseEventPublisher
 	ReleaseEventOutboxDispatcher *releaseworker.EventOutboxDispatcher
-	DesktopPetRuntimeV2          *runtimev2.RuntimeFacade
+	DesktopPetRuntimeV1          *runtimev1.RuntimeFacade
 	EditingService               editing.Service
 	RegenerationWorker           *editing.RegenerationWorker
 	BridgeRecoveryWorker         *revisioncommit.RecoveryWorker
@@ -187,7 +186,7 @@ type AppServices struct {
 	DesktopInstanceStore         *security.DesktopInstanceStore
 	DeviceRepository             *device.Repository
 	RuntimeOrchestrator          RuntimeOrchestrator
-	RuntimeDomainEventConsumer   *runtimev2.OutboxConsumer
+	RuntimeDomainEventConsumer   *runtimev1.OutboxConsumer
 	DesktopPetMigrationRunner    *migration.Runner
 	DesktopPetMaintenanceHandler *maintenance.Handler
 	MigrationLock                *migrationcore.PersistentLock
@@ -288,7 +287,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
 	syncService := syncpkg.NewService(ctx.DB, syncApplier)
 	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore, syncService.ChangeLog)
-	extensionRuntime, err := extension.NewRuntimeWithOptions(context.Background(), ctx.DB, "1.0.0", extension.RuntimeOptions{SkipPluginManagerStart: true})
+	extensionRuntime, err := extension.NewRuntime(context.Background(), ctx.DB, "1.0.0")
 	if err != nil {
 		log.Error("failed to initialize skill runtime:", err)
 		panic("failed to initialize skill runtime")
@@ -449,6 +448,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err := kernelContainer.Recover(context.Background()); err != nil {
 		log.Warn("kernel recovery warning: ", err)
 	}
+	if report, err := extension.MigrateLegacyWorkflowSkills(context.Background(), ctx.DB, kernelContainer); err != nil {
+		log.Warn("legacy workflow skill migration warning: ", err)
+	} else if report.Migrated > 0 || report.Failed > 0 {
+		log.Info(fmt.Sprintf("legacy workflow skill migration: migrated=%d skipped=%d failed=%d", report.Migrated, report.Skipped, report.Failed))
+	}
 	if kernelContainer.WorkflowExecutor != nil {
 		if _, err := kernelContainer.WorkflowExecutor.ReapStuck(context.Background(), 90*time.Second, 24*time.Hour, 100); err != nil {
 			log.Warn("workflow stuck-run reaper warning: ", err)
@@ -573,7 +577,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		toolFacade.SetHookService(kernelContainer.HookService)
 		chatSvc.SetHookInvoker(chat.NewHookAdapter(kernelContainer.HookService))
 	}
-	extensionRuntime.Workshop.SetModelGenerator(chatSvc)
 	orchCfg := interaction.DefaultOrchestratorConfig()
 	tracker := interaction.NewSQLiteInteractionTracker(ctx.DB)
 	if err := tracker.InitSchema(); err != nil {
@@ -728,7 +731,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to init delivery store schema:", err)
 		panic("failed to init delivery store schema")
 	}
-	configureWorkflowHost(extensionRuntime, chatSvc, memSvc, deliveryStore, kernelContainer.HostEventEmitter)
 	mcpDuplicateStore := mcp.NewDuplicateStore(ctx.DB)
 	kernelContainer.MCPDuplicateProvider = &mcpDuplicateMetricAdapter{store: mcpDuplicateStore}
 	canonicalMCPCaller := NewCanonicalMCPCaller(canonicalStdioRegistry, canonicalRemoteRegistry)
@@ -780,6 +782,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	qualitySvc, err := quality.NewQualityService(quality.ServiceConfig{
 		DB:                ctx.DB,
 		DataDir:           processingDataDir,
+		MeasurementSrc:    qualitymeasurement.NewActionRevisionMeasurementSource(qualityInputRepo, qualityMeasurementEngine),
 		Detectors:         detectors.NewDefaultDetectors(),
 		EventPublisher:    quality.NewLogEventPublisher(),
 		Repo:              qualityRepo,
@@ -799,6 +802,38 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		return nil, errors.New("quality service is nil")
 	}
 	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
+
+	evaluateTaskGateFor := func(taskID string) {
+		evalActions, err := processingRepo.ListProcessingActions(taskID)
+		if err != nil {
+			log.Error("list processing actions for task gate failed: ", err)
+			return
+		}
+		requiredKeys := make([]string, 0, len(evalActions))
+		optionalKeys := make([]string, 0, len(evalActions))
+		for _, a := range evalActions {
+			if a.Excluded == 1 {
+				continue
+			}
+			if a.Status == "succeeded" {
+				requiredKeys = append(requiredKeys, a.ActionKey)
+			} else {
+				optionalKeys = append(optionalKeys, a.ActionKey)
+			}
+		}
+		if _, err := qualityTaskGateSvc.Evaluate(context.Background(), quality.EvaluateTaskGateRequest{
+			ProcessingTaskID:   taskID,
+			RequiredActionKeys: requiredKeys,
+			OptionalActionKeys: optionalKeys,
+		}); err != nil {
+			log.Error("evaluate task quality gate failed: ", err)
+		}
+	}
+
+	processingWorker.SetOnTaskFinalized(evaluateTaskGateFor)
+	qualityWorker.SetOnEvaluationCommitted(func(taskID, actionKey string) {
+		evaluateTaskGateFor(taskID)
+	})
 
 	installationRepo := installation.NewRepository(ctx.DB, ctx)
 	installationRepoV2, ok := installationRepo.(installation.RepositoryV2)
@@ -824,7 +859,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if policy.DesktopPet && kernelContainer.DeviceRuntimeSessions == nil {
 		return nil, errors.New("desktop pet runtime requires kernel DeviceRuntimeSessions authority")
 	}
-	runtimeV2Facade := runtimev2.NewRuntimeFacadeWithDeviceRuntime(ctx.DB, &runtimev2.FacadeConfig{
+	runtimeV1Facade := runtimev1.NewRuntimeFacadeWithDeviceRuntime(ctx.DB, &runtimev1.FacadeConfig{
 		Enabled:            runtimeConfig.Enabled,
 		Path:               runtimeConfig.Path,
 		LoopbackOnly:       runtimeConfig.LoopbackOnly,
@@ -839,12 +874,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	runtimeSinkHolder := &runtimeEventSinkHolder{}
 	runtimeOutboxSink := runtime.NewOutboxRuntimeEventSink(
-		runtime.NewV2ActualStateEventOutbox(runtimeV2Facade.StateService().AppendDomainEvent),
+		runtime.NewActualStateEventOutbox(runtimeV1Facade.StateService().AppendDomainEvent),
 	)
 	runtimeSinkHolder.Set(runtimeOutboxSink)
 
-	v2Notifier := runtimev2.NewV2RuntimeNotifier(runtimeV2Facade.StateService(), runtimeV2Facade.Events())
-	_ = v2Notifier
+	runtimeNotifier := runtimev1.NewRuntimeNotifier(runtimeV1Facade.StateService(), runtimeV1Facade.Events())
+	_ = runtimeNotifier
 
 	editingRepo := editing.NewRepository(ctx.DB)
 	editingAssetStore := editing.NewAssetStore(processingDataDir, editingRepo)
@@ -901,7 +936,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	coordRepo := installation.NewCoordinatorRepoAdapter(installationRepoV2)
 	coordValidator := &coordinatorReleaseValidator{releases: releaseRepo}
 	coordStager := installation.NewReleaseStager(ctx.DB, pathRegistry)
-	coordPublisher := &coordinatorRuntimePublisher{facade: runtimeV2Facade, installations: coordRepo}
+	coordPublisher := &coordinatorRuntimePublisher{facade: runtimeV1Facade, installations: coordRepo}
 	desiredOutboxWorker := installation.NewDesiredStateOutboxWorker(installationRepoV2, coordPublisher)
 	projectionService := installationprojection.NewService(ctx.DB)
 	coordProjection := installationprojection.NewCoordinatorAdapter(projectionService)
@@ -915,7 +950,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	installationRecoveryWorker := installationrecovery.NewRecoveryWorker(recoveryRepo)
 	stagingRecoveryPort := installationrecovery.NewProductionStagingRepo(ctx.DB, coordStager, pathRegistry)
 	dbRecoveryPort := installationrecovery.NewProductionDBRepo(ctx.DB, installationRepoV2)
-	runtimeRecoveryPort := installationrecovery.NewProductionRuntimeRepo(ctx.DB, runtimeV2Facade)
+	runtimeRecoveryPort := installationrecovery.NewProductionRuntimeRepo(ctx.DB, runtimeV1Facade)
 	runtimeFinalizer := installationrecovery.NewProductionRuntimeFinalizer(ctx.DB, installationRepoV2, pathRegistry)
 	stagingRecovery := installationrecovery.NewStagingRecovery(installationRecoveryWorker, recoveryRepo, stagingRecoveryPort)
 	dbRecovery := installationrecovery.NewDBRecovery(installationRecoveryWorker, recoveryRepo, dbRecoveryPort)
@@ -937,13 +972,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	bootstrapTicketRepo := runtime.NewBootstrapTicketRepository(ctx.DB)
 
-	v2BehaviorRuntimePort := wiring.NewV2RuntimeActionAdapter(runtimeV2Facade)
-	v2ActivePetPort := wiring.NewV2ActivePetAdapter(installationRepo, runtimeV2Facade, processingDataDir)
+	v1BehaviorRuntimePort := wiring.NewV1RuntimeActionAdapter(runtimeV1Facade)
+	v1ActivePetPort := wiring.NewV1ActivePetAdapter(installationRepo, runtimeV1Facade, processingDataDir)
 
 	behaviorAssembled, assembleErr := wiring.AssembleBehavior(wiring.AssemblyDeps{
 		DB:                ctx.DB,
-		ActivePetPort:     v2ActivePetPort,
-		RuntimeActionPort: v2BehaviorRuntimePort,
+		ActivePetPort:     v1ActivePetPort,
+		RuntimeActionPort: v1BehaviorRuntimePort,
 		InstallRepo:       installationRepo,
 		PsycheStore:       psycheStore,
 		DataDir:           processingDataDir,
@@ -958,11 +993,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 
 	var behaviorRuntimeSink *BehaviorRuntimeEventSink
-	var runtimeDomainEventConsumer *runtimev2.OutboxConsumer
+	var runtimeDomainEventConsumer *runtimev1.OutboxConsumer
 	if behaviorAssembled != nil && behaviorAssembled.Engine != nil {
 		behaviorRuntimeSink = NewBehaviorRuntimeEventSink(installationRepo, behaviorAssembled.Engine)
-		runtimeDomainEventConsumer = runtimev2.NewOutboxConsumer(ctx.DB, func(eventCtx context.Context, event runtimev2.DomainEventOutbox) error {
-			domainEvent, err := runtime.DecodeV2OutboxEvent(event)
+		runtimeDomainEventConsumer = runtimev1.NewOutboxConsumer(ctx.DB, func(eventCtx context.Context, event runtimev1.DomainEventOutbox) error {
+			domainEvent, err := runtime.DecodeV1OutboxEvent(event)
 			if err != nil {
 				return err
 			}
@@ -1034,7 +1069,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			}
 			canaryCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
-			if _, err := executeDesktopPetWriteCanary(canaryCtx, installationCoordinator, installationRepoV2, runtimeV2Facade); err != nil {
+			if _, err := executeDesktopPetWriteCanary(canaryCtx, installationCoordinator, installationRepoV2, runtimeV1Facade); err != nil {
 				return err
 			}
 			return executeDesktopPetEditingWriteCanary(canaryCtx, editingSvc, ctx.DB)
@@ -1073,7 +1108,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		canonicalStdioRegistry,
 		canonicalRemoteRegistry,
 		commandResolver,
-		extensionRuntime,
 		kernelContainer.ToolFacade,
 		chatSvc,
 		mcpDataDirectory(ctx),
@@ -1123,7 +1157,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		ReleaseRecoveryWorker:        releaseRecoveryWorker,
 		ReleaseEventPublisher:        releaseEventPublisher,
 		ReleaseEventOutboxDispatcher: releaseEventOutboxDispatcher,
-		DesktopPetRuntimeV2:          runtimeV2Facade,
+		DesktopPetRuntimeV1:          runtimeV1Facade,
 		EditingService:               editingSvc,
 		RegenerationWorker:           regenerationWorker,
 		BridgeRecoveryWorker:         bridgeRecoveryWorker,
@@ -1264,7 +1298,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 
-	if runtimeV2Facade != nil {
+	if runtimeV1Facade != nil {
 		readinessSvc, err = readiness.NewFullStartupReadinessService(readiness.StartupReadinessDeps{
 			DB:        ctx.DB,
 			Extension: extensionRuntime,
@@ -1285,8 +1319,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 				return bootstrapTicketRepo.ReadinessCheck(context.Background())
 			},
 			RuntimeGatewayReady: func() error {
-				if services.DesktopPetRuntimeV2 == nil {
-					return fmt.Errorf("runtime v2 facade is nil")
+				if services.DesktopPetRuntimeV1 == nil {
+					return fmt.Errorf("runtime v1 facade is nil")
 				}
 				return nil
 			},
@@ -1336,8 +1370,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 				return nil
 			},
 			CanonicalCutoverReady: func() error {
-				if services.DesktopPetRuntimeV2 == nil || services.InstallationRepo == nil || services.InstallationCoordinator == nil {
-					return fmt.Errorf("desktop pet canonical v2 wiring is incomplete")
+				if services.DesktopPetRuntimeV1 == nil || services.InstallationRepo == nil || services.InstallationCoordinator == nil {
+					return fmt.Errorf("desktop pet canonical v1 wiring is incomplete")
 				}
 				if !desktoppet.LegacyPackageWritesDisabled {
 					return fmt.Errorf("legacy desktop pet package writes are still enabled")
@@ -1477,126 +1511,6 @@ func (p *petInfoPort) ResolvePetInfo(ctx context.Context, petInstanceID string) 
 		return inst.UserID, inst.CharacterID
 	}
 	return "", ""
-}
-
-func configureWorkflowHost(runtime *extension.Runtime, chatSvc chat.Service, memSvc memory.Service, deliveryStore *delivery.SQLiteDeliveryStore, hostEmitter event.HostEventEmitter) {
-	runtime.WorkflowHost.Schedule = wrapWithWorkflowEvent(hostEmitter, "schedule", func(ctx context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
-		var payload map[string]interface{}
-		if err := json.Unmarshal(input, &payload); err != nil {
-			return nil, nil, fmt.Errorf("日程参数无效: %w", err)
-		}
-		if payload["due_time"] == nil && payload["dueAt"] != nil {
-			payload["due_time"] = payload["dueAt"]
-		}
-		idempotencyKey, _ := payload["idempotencyKey"].(string)
-		normalized, _ := json.Marshal(payload)
-		registered, err := runtime.Registry.Get(ctx, "dev.amitia.skill.create-schedule")
-		if err != nil {
-			return nil, nil, err
-		}
-		result, err := registered.Handler(ctx, extension.ExecuteSkillRequest{SkillID: registered.Definition.ID, Input: normalized, Scope: scope, IdempotencyKey: idempotencyKey})
-		return result.Output, result.SideEffects, err
-	})
-	runtime.WorkflowHost.Notification = wrapWithWorkflowEvent(hostEmitter, "notification", func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
-		var payload struct {
-			Content string `json:"content"`
-		}
-		if err := json.Unmarshal(input, &payload); err != nil {
-			return nil, nil, fmt.Errorf("通知参数无效: %w", err)
-		}
-		payload.Content = strings.TrimSpace(payload.Content)
-		if payload.Content == "" || len([]rune(payload.Content)) > 4000 {
-			return nil, nil, fmt.Errorf("通知内容长度必须为 1 到 4000 个字符")
-		}
-		scopedChat, ok := chatSvc.(interface {
-			GetConversationForUser(id, userID string) (*chat.Conversation, error)
-		})
-		if !ok {
-			return nil, nil, fmt.Errorf("chat service does not provide user-scoped operations")
-		}
-		conversation, err := scopedChat.GetConversationForUser(scope.ConversationID, scope.UserID)
-		if err != nil {
-			return nil, nil, err
-		}
-		if conversation.CharacterID != scope.CharacterID || conversation.Channel != scope.Channel || conversation.PeerID == "" {
-			return nil, nil, fmt.Errorf("通知只能发送到当前角色和会话绑定的渠道")
-		}
-		body, _ := json.Marshal(map[string]string{"content": payload.Content})
-		interactionID := scope.RequestID
-		if interactionID == "" {
-			interactionID = uuid.New().String()
-		}
-		intent := delivery.NewDeliveryIntent(interactionID, conversation.Channel, conversation.PeerID, "text", body)
-		if err := deliveryStore.CreateIntent(intent); err != nil {
-			return nil, nil, err
-		}
-		output, _ := json.Marshal(map[string]string{"intentId": intent.ID, "status": string(intent.Status)})
-		return output, []extension.SideEffectRecord{{Type: "notification_send", TargetID: intent.ID, Confirmed: true}}, nil
-	})
-	runtime.WorkflowHost.MemoryCandidate = wrapWithWorkflowEvent(hostEmitter, "memory_candidate", func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
-		var payload struct {
-			Key        string `json:"key"`
-			Value      string `json:"value"`
-			MemoryType string `json:"memoryType"`
-			Importance int    `json:"importance"`
-			Source     string `json:"source"`
-		}
-		if err := json.Unmarshal(input, &payload); err != nil {
-			return nil, nil, fmt.Errorf("候选记忆参数无效: %w", err)
-		}
-		scopedMemory, ok := memSvc.(interface {
-			SubmitCandidateForUser(req *memory.SubmitCandidateRequest, userID string) (*memory.MemoryCandidate, error)
-		})
-		if !ok {
-			return nil, nil, fmt.Errorf("memory service does not provide user-scoped operations")
-		}
-		candidate, err := scopedMemory.SubmitCandidateForUser(&memory.SubmitCandidateRequest{Key: payload.Key, Value: payload.Value, MemoryType: payload.MemoryType, Importance: payload.Importance, SourceText: payload.Source, ConversationID: scope.ConversationID, CharacterID: scope.CharacterID}, scope.UserID)
-		if err != nil {
-			return nil, nil, err
-		}
-		output, _ := json.Marshal(map[string]interface{}{"candidateId": candidate.ID, "status": "pending_review"})
-		return output, []extension.SideEffectRecord{{Type: "memory_candidate_write", TargetID: candidate.ID, Confirmed: true}}, nil
-	})
-	runtime.WorkflowHost.ContextContribution = wrapWithWorkflowEvent(hostEmitter, "context_contribution", func(_ context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
-		var payload struct {
-			Content    string `json:"content"`
-			TokenLimit int    `json:"tokenLimit"`
-		}
-		if err := json.Unmarshal(input, &payload); err != nil {
-			return nil, nil, fmt.Errorf("上下文贡献参数无效: %w", err)
-		}
-		payload.Content = strings.TrimSpace(payload.Content)
-		if payload.Content == "" || payload.TokenLimit < 1 || payload.TokenLimit > 1024 || len([]rune(payload.Content)) > payload.TokenLimit*8 {
-			return nil, nil, fmt.Errorf("上下文贡献超出 1024 token 宿主限制")
-		}
-		output, _ := json.Marshal(map[string]interface{}{"content": payload.Content, "tokenLimit": payload.TokenLimit, "conversationId": scope.ConversationID})
-		return output, []extension.SideEffectRecord{{Type: "context_injection", TargetID: scope.ConversationID, Confirmed: true}}, nil
-	})
-}
-
-func wrapWithWorkflowEvent(hostEmitter event.HostEventEmitter, action string, handler func(context.Context, json.RawMessage, extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error)) func(context.Context, json.RawMessage, extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
-	return func(ctx context.Context, input json.RawMessage, scope extension.ExecutionScope) (json.RawMessage, []extension.SideEffectRecord, error) {
-		output, effects, err := handler(ctx, input, scope)
-		if err == nil && hostEmitter != nil {
-			payload, _ := json.Marshal(map[string]interface{}{
-				"action":         action,
-				"characterId":    scope.CharacterID,
-				"conversationId": scope.ConversationID,
-				"channel":        scope.Channel,
-				"requestId":      scope.RequestID,
-			})
-			opts := event.PublishOptions{
-				TraceID:       scope.TraceID,
-				OperationID:   scope.RequestID,
-				AggregateType: "conversation",
-				AggregateID:   scope.ConversationID,
-				PartitionKey:  scope.ConversationID,
-				OrderingKey:   scope.ConversationID,
-			}
-			_, _ = hostEmitter.EmitWorkflowCompleted(ctx, payload, opts)
-		}
-		return output, effects, err
-	}
 }
 
 func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Repository, temporalServices ...*temporal.Service) *interaction.ContextLoaderRegistry {

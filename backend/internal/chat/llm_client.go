@@ -687,11 +687,12 @@ type noopEventSink struct{}
 
 func (noopEventSink) Emit(ctx context.Context, event ModelEvent) error { return nil }
 
-func (s *service) callLLMStreamAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, sink ModelEventSink) (*ModelResult, error) {
+func (s *service) callLLMStreamAdapter(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool, jsonOnly bool, disableThinking bool, sink ModelEventSink) (*ModelResult, error) {
 	protocol := resolveProtocol(cfg)
 	adapter := modelprotocol.AdapterForProtocol(protocol)
-	req := messagesToModelRequest(cfg, messages, tools, false)
+	req := messagesToModelRequest(cfg, messages, tools, jsonOnly)
 	req.Stream = true
+	req.DisableThinking = disableThinking
 	pcfg := cfgToProviderConfig(cfg)
 	if sink == nil {
 		sink = noopEventSink{}

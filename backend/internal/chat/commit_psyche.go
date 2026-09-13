@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/psyche"
 	"gorm.io/gorm"
 )
@@ -15,9 +16,14 @@ type AppraisalResultBridge struct {
 	PsycheDelta       float64
 	RelationshipDelta float64
 	Severity          float64
+	EnergyDelta       float64
+	StressDelta       float64
 }
 
 func (s *service) updatePsycheStateTx(tx *gorm.DB, plan messageCommitPlan) error {
+	if !runtimegate.IsEnabled(runtimegate.EmotionExtensionID) {
+		return nil
+	}
 	charID := plan.Character
 	if s.psycheStore == nil || charID == "" {
 		return nil
@@ -26,7 +32,7 @@ func (s *service) updatePsycheStateTx(tx *gorm.DB, plan messageCommitPlan) error
 	if sqliteStore, ok := s.psycheStore.(*psyche.SQLitePsycheStore); ok {
 		store = sqliteStore.WithDB(tx)
 	}
-	var appraisal *AppraisalResultBridge
+	appraisal := &AppraisalResultBridge{}
 	if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
 		appraisal = &AppraisalResultBridge{
 			EventType:         plan.Runtime.Appraisal.EventType,
@@ -34,6 +40,10 @@ func (s *service) updatePsycheStateTx(tx *gorm.DB, plan messageCommitPlan) error
 			RelationshipDelta: plan.Runtime.Appraisal.RelationshipDelta,
 			Severity:          plan.Runtime.Appraisal.Severity,
 		}
+	}
+	if _, scheduleDelta := s.realtimeScheduleContext(tx.Statement.Context, charID, time.Now()); scheduleDelta.Energy != 0 || scheduleDelta.Stress != 0 {
+		appraisal.EnergyDelta += scheduleDelta.Energy
+		appraisal.StressDelta += scheduleDelta.Stress
 	}
 	return s.updatePsycheStateWithStore(store, charID, appraisal)
 }
@@ -156,6 +166,8 @@ func buildPsycheEvent(charID string, state psyche.PsycheState, appraisal *Apprai
 		event.StressDelta += (appraisal.Severity - 0.6) * 0.1
 		event.EnergyDelta += -(appraisal.Severity - 0.6) * 0.06
 	}
+	event.EnergyDelta += appraisal.EnergyDelta
+	event.StressDelta += appraisal.StressDelta
 
 	return event
 }

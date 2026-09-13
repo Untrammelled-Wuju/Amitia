@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/proactive"
@@ -316,14 +317,14 @@ func main() {
 		} else {
 			log.Info("消息计数已修复，影响", count, "条对话")
 		}
-		if services.DB != nil && services.Companion != nil {
+		if services.DB != nil && services.Companion != nil && runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
 			var charIDs []string
 			services.DB.Table("characters").Pluck("id", &charIDs)
 			for _, cid := range charIDs {
 				services.Companion.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), cid)
 			}
+			log.Info("今日主动消息任务已生成")
 		}
-		log.Info("今日主动消息任务已生成")
 	}
 
 	killExistingServer(serverAddr)

@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/expression"
 	"github.com/u-ai/backend/internal/extension"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/personality"
 	promptir "github.com/u-ai/backend/internal/prompt"
@@ -183,13 +184,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	history := s.loadHistoryExcluding(convID, userMsgID)
 	sys2Result := s.sys2Builder(convID, charID, requestID, req.Channel, req.Message)
 
-	kind := expression.ChannelWeb
-	switch req.Channel {
-	case "wechat":
-		kind = expression.ChannelWechat
-	case "qq":
-		kind = expression.ChannelQQ
-	}
+	kind := resolveExpressionChannel(req.Channel, req.VoiceMessage)
 	channelPrompt := expression.CompileChannelPrompt(kind)
 
 	userContent := req.Message
@@ -274,10 +269,10 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	} else {
 		applog.TraceError(trace.WithStage("tool_runtime_unavailable"), nil, fmt.Errorf("tool runtime is not configured"), "agent skill prompt preparation skipped")
 	}
-	pluginContributions := []extension.ContextContribution{}
+	pluginContributions := []ContextContribution{}
 	if s.toolRuntime != nil {
 		toolScope := toolScopeFromExtension(skillScope)
-		pluginContributions = contextContributionsToExtension(s.toolRuntime.BeforePrompt(ctx, toolScope))
+		pluginContributions = s.toolRuntime.BeforePrompt(ctx, toolScope)
 	} else {
 		applog.TraceError(trace.WithStage("tool_runtime_unavailable"), nil, fmt.Errorf("tool runtime is not configured"), "plugin context contributions skipped")
 	}
@@ -293,13 +288,23 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		req.Runtime.Context.Temporal.Value.RelationshipTime.Policy = &policy
 		relationshipTimeContext = temporal.RenderRelationshipTime(*req.Runtime.Context.Temporal.Value.RelationshipTime, policy)
 	}
+	emotionFusionRaw := buildEmotionFusionRaw(req.Runtime, charName)
+	if emotionContext, emotionErr := s.LoadRealtimeEmotionContext(ctx, req.UserID, charID); emotionErr == nil && emotionContext != nil {
+		if prompt := strings.TrimSpace(emotionContext.Prompt); prompt != "" {
+			if strings.TrimSpace(emotionFusionRaw) == "" {
+				emotionFusionRaw = prompt
+			} else {
+				emotionFusionRaw = strings.TrimSpace(emotionFusionRaw) + "\n\n" + prompt
+			}
+		}
+	}
 	messages, promptTrace := buildProcessPromptMessages(processPromptInput{
 		BaseIdentity:              promptir.BaseIdentitySection(),
 		CharacterBase:             runtimeProfile.CharacterBase,
 		CharacterConfig:           sys1Result.CharacterConfig,
 		PersonalityConfig:         sys2Result.SystemInstruction,
 		PersonalityRaw:            personalityRaw,
-		EmotionFusionRaw:          buildEmotionFusionRaw(req.Runtime, charName),
+		EmotionFusionRaw:          emotionFusionRaw,
 		AdultIntimacyRaw:          adultIntimacyRaw,
 		MemoryInjectRaw:           sys2Result.MemoryInjectRaw,
 		AntiRepeatRaw:             antiRepeatRaw,
@@ -419,13 +424,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		reply = "操作已完成"
 	}
 
-	kind = expression.ChannelWeb
-	switch channel {
-	case "wechat":
-		kind = expression.ChannelWechat
-	case "qq":
-		kind = expression.ChannelQQ
-	}
+	kind = resolveExpressionChannel(channel, req.VoiceMessage)
 
 	priorAssistant := extractAssistantReplies(history)
 	var qualityFlags promptir.QualityFlags
@@ -492,6 +491,20 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}, nil
 }
 
+func resolveExpressionChannel(channel string, voiceMessage bool) expression.ChannelKind {
+	if voiceMessage {
+		return expression.ChannelVoice
+	}
+	switch strings.ToLower(strings.TrimSpace(channel)) {
+	case "wechat":
+		return expression.ChannelWechat
+	case "qq":
+		return expression.ChannelQQ
+	default:
+		return expression.ChannelWeb
+	}
+}
+
 func (s *service) PostCommitActions(ctx context.Context, result *ComputeResult) {
 	if result.HasExistingUser {
 		return
@@ -537,7 +550,7 @@ func mergeContext(a, b string) string {
 	return a + "\n\n" + b
 }
 
-func renderPluginContributions(contributions []extension.ContextContribution) (string, []string) {
+func renderPluginContributions(contributions []ContextContribution) (string, []string) {
 	parts := make([]string, 0, len(contributions))
 	sources := make([]string, 0, len(contributions))
 	for _, contribution := range contributions {
@@ -599,6 +612,9 @@ func extractAssistantReplies(history []map[string]string) []string {
 }
 
 func buildProactiveEmotionFromPsyche(runtime *interaction.RuntimeAssembly) string {
+	if !runtimegate.IsEnabled(runtimegate.EmotionExtensionID) {
+		return ""
+	}
 	if runtime == nil || runtime.Context.Psyche.Status != interaction.LoadStatusReady {
 		return ""
 	}

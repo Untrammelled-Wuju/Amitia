@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -129,7 +130,7 @@ func (h *Handler) Status(c *gin.Context) {
 			}
 		}
 	}
-	util.SuccessResponse(c, gin.H{"schedulerRunning": SchedulerRunning, "enabledRuleCount": enabled, "totalRuleCount": total})
+	util.SuccessResponse(c, gin.H{"schedulerRunning": SchedulerRunning && runtimegate.IsEnabled(runtimegate.ProactiveExtensionID), "enabledRuleCount": enabled, "totalRuleCount": total})
 }
 
 func (h *Handler) TestRule(c *gin.Context) {

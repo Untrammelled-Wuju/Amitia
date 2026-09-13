@@ -57,10 +57,12 @@ type Service interface {
 }
 
 type ServiceStatus struct {
-	ActiveSessions    int   `json:"activeSessions"`
-	WakeArmedSessions int   `json:"wakeArmedSessions"`
-	Healthy           bool  `json:"healthy"`
-	UptimeSeconds     int64 `json:"uptimeSeconds"`
+	ActiveSessions    int    `json:"activeSessions"`
+	WakeArmedSessions int    `json:"wakeArmedSessions"`
+	Healthy           bool   `json:"healthy"`
+	UptimeSeconds     int64  `json:"uptimeSeconds"`
+	CascadeReady      bool   `json:"cascadeReady"`
+	CascadeError      string `json:"cascadeError,omitempty"`
 }
 
 type service struct {

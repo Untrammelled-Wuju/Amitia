@@ -3,7 +3,10 @@
 package proactive
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/pkg/app"
 )
@@ -16,50 +19,64 @@ func RegisterProactiveRouterWithCompanion(r *gin.RouterGroup, ctx *app.AppContex
 	repo := NewRepository(ctx)
 	svc := NewService(repo, ctx)
 	handler := NewHandler(svc, ctx.DB, compSvc)
+	proactiveGroup := r.Group("/proactive")
+	proactiveGroup.Use(proactivePluginGuard())
 
-	r.GET("/proactive/rules", handler.ListRules)
-	r.POST("/proactive/rules", handler.CreateRule)
-	r.PUT("/proactive/rules/:id", handler.UpdateRule)
-	r.DELETE("/proactive/rules/:id", handler.DeleteRule)
-	r.POST("/proactive/rules/:id/toggle", handler.ToggleRule)
-	r.GET("/proactive/status", handler.Status)
-	r.GET("/proactive/reminders", handler.ListReminders)
-	r.POST("/proactive/reminders", handler.CreateReminder)
-	r.PUT("/proactive/reminders/:id", handler.UpdateReminder)
-	r.DELETE("/proactive/reminders/:id", handler.DeleteReminder)
-	r.POST("/proactive/reminders/:id/toggle", handler.ToggleReminder)
-	r.POST("/proactive/reminders/test/:id", handler.TestReminder)
-	r.POST("/proactive/reminders/:id/trigger", handler.TriggerReminder)
-	r.POST("/proactive/reminders/cancel-latest", handler.CancelLatestReminder)
-	r.GET("/proactive/reminders/status", handler.ReminderStatus)
-	r.GET("/proactive/reminders/pending", handler.PendingReminders)
-	r.DELETE("/proactive/reminders", handler.CancelRemindersByQuery)
-	r.GET("/proactive/history", handler.ListTriggerHistory)
-	r.GET("/proactive/queue-summary", handler.QueueSummary)
-	r.GET("/proactive/prospective", handler.Prospective)
-	r.POST("/proactive/rules/test/:id", handler.TestRule)
-	r.POST("/proactive/rules/:id/trigger", handler.TriggerRule)
-	r.POST("/proactive/presets/reset", handler.ResetPresets)
-	r.GET("/proactive/rules/:id/messages", handler.RuleMessages)
-	r.GET("/proactive/settings/cleanup", security.SharedCoreAdminOnly(), handler.GetCleanupConfig)
-	r.POST("/proactive/settings/cleanup", security.SharedCoreAdminOnly(), handler.SetCleanupConfig)
+	proactiveGroup.GET("/rules", handler.ListRules)
+	proactiveGroup.POST("/rules", handler.CreateRule)
+	proactiveGroup.PUT("/rules/:id", handler.UpdateRule)
+	proactiveGroup.DELETE("/rules/:id", handler.DeleteRule)
+	proactiveGroup.POST("/rules/:id/toggle", handler.ToggleRule)
+	proactiveGroup.GET("/status", handler.Status)
+	proactiveGroup.GET("/reminders", handler.ListReminders)
+	proactiveGroup.POST("/reminders", handler.CreateReminder)
+	proactiveGroup.PUT("/reminders/:id", handler.UpdateReminder)
+	proactiveGroup.DELETE("/reminders/:id", handler.DeleteReminder)
+	proactiveGroup.POST("/reminders/:id/toggle", handler.ToggleReminder)
+	proactiveGroup.POST("/reminders/test/:id", handler.TestReminder)
+	proactiveGroup.POST("/reminders/:id/trigger", handler.TriggerReminder)
+	proactiveGroup.POST("/reminders/cancel-latest", handler.CancelLatestReminder)
+	proactiveGroup.GET("/reminders/status", handler.ReminderStatus)
+	proactiveGroup.GET("/reminders/pending", handler.PendingReminders)
+	proactiveGroup.DELETE("/reminders", handler.CancelRemindersByQuery)
+	proactiveGroup.GET("/history", handler.ListTriggerHistory)
+	proactiveGroup.GET("/queue-summary", handler.QueueSummary)
+	proactiveGroup.GET("/prospective", handler.Prospective)
+	proactiveGroup.POST("/rules/test/:id", handler.TestRule)
+	proactiveGroup.POST("/rules/:id/trigger", handler.TriggerRule)
+	proactiveGroup.POST("/presets/reset", handler.ResetPresets)
+	proactiveGroup.GET("/rules/:id/messages", handler.RuleMessages)
+	proactiveGroup.GET("/settings/cleanup", security.SharedCoreAdminOnly(), handler.GetCleanupConfig)
+	proactiveGroup.POST("/settings/cleanup", security.SharedCoreAdminOnly(), handler.SetCleanupConfig)
 	return handler
 }
 
 func RegisterRemindersRouter(r *gin.RouterGroup, h *Handler) {
-	r.GET("/reminders", h.ListReminders)
-	r.POST("/reminders", h.CreateReminder)
-	r.PUT("/reminders/:id", h.UpdateReminder)
-	r.DELETE("/reminders/:id", h.DeleteReminder)
-	r.POST("/reminders/:id/toggle", h.ToggleReminder)
-	r.POST("/reminders/:id/test", h.TestReminder)
-	r.POST("/reminders/:id/trigger", h.TriggerReminder)
-	r.GET("/reminders/status", h.ReminderStatus)
-	r.GET("/reminders/cleanup-config", security.SharedCoreAdminOnly(), h.GetCleanupConfig)
-	r.PUT("/reminders/cleanup-config", security.SharedCoreAdminOnly(), h.SetCleanupConfig)
-	r.POST("/reminders/clear-backpressure", security.SharedCoreAdminOnly(), h.ClearBackpressure)
-	r.GET("/reminders/stream", h.RemindersStream)
-	r.GET("/reminders/prospective", h.Prospective)
-	r.GET("/reminders/queue-summary", h.QueueSummary)
-	r.GET("/reminders/trigger-history", h.ListTriggerHistory)
+	reminders := r.Group("/reminders")
+	reminders.Use(proactivePluginGuard())
+	reminders.GET("", h.ListReminders)
+	reminders.POST("", h.CreateReminder)
+	reminders.PUT("/:id", h.UpdateReminder)
+	reminders.DELETE("/:id", h.DeleteReminder)
+	reminders.POST("/:id/toggle", h.ToggleReminder)
+	reminders.POST("/:id/test", h.TestReminder)
+	reminders.POST("/:id/trigger", h.TriggerReminder)
+	reminders.GET("/status", h.ReminderStatus)
+	reminders.GET("/cleanup-config", security.SharedCoreAdminOnly(), h.GetCleanupConfig)
+	reminders.PUT("/cleanup-config", security.SharedCoreAdminOnly(), h.SetCleanupConfig)
+	reminders.POST("/clear-backpressure", security.SharedCoreAdminOnly(), h.ClearBackpressure)
+	reminders.GET("/stream", h.RemindersStream)
+	reminders.GET("/prospective", h.Prospective)
+	reminders.GET("/queue-summary", h.QueueSummary)
+	reminders.GET("/trigger-history", h.ListTriggerHistory)
+}
+
+func proactivePluginGuard() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"code": 404, "msg": "主动消息插件未启用"})
+			return
+		}
+		c.Next()
+	}
 }

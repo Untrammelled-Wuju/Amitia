@@ -99,21 +99,6 @@ func toolScopeFromExtension(es extension.ExecutionScope) SkillScope {
 	}
 }
 
-func contextContributionsToExtension(ccs []ContextContribution) []extension.ContextContribution {
-	result := make([]extension.ContextContribution, 0, len(ccs))
-	for _, c := range ccs {
-		result = append(result, extension.ContextContribution{
-			Source:     c.Source,
-			Priority:   c.Priority,
-			Content:    c.Content,
-			TokenLimit: c.TokenLimit,
-			ExpiresAt:  c.ExpiresAt,
-			Metadata:   c.Metadata,
-		})
-	}
-	return result
-}
-
 type toolExecOutcome struct {
 	VisibleText string
 	Status      string

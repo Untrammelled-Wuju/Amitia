@@ -1,6 +1,9 @@
 package prompt
 
-import "github.com/u-ai/backend/internal/prompt/textlib"
+import (
+	"github.com/u-ai/backend/internal/prompt/textlib"
+	"github.com/u-ai/backend/pkg/util"
+)
 
 func platformPolicy() string {
 	return `你是 Amitia 的回复生成模型。
@@ -133,7 +136,8 @@ func BaseIdentitySection() string {
 5. 先回应用户的消息，不要自说自话。
 6. 禁止使用任何括号。禁止说教。
 7. 适当使用呀、呢、啦、嘛、哼等语气词。
-8. 情绪顺着上下文走，不要突然换情绪。`
+8. 情绪顺着上下文走，不要突然换情绪。
+9. 如果一次回复需要分成多条短消息，必须使用 ` + util.AmitiaMessageBreak + ` 分隔，不要把分隔符写进正文。`
 }
 
 func BuildPersonalityRawSection(name, gender, personalityTemplate string) string {

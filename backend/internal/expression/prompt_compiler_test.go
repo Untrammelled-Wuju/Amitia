@@ -49,6 +49,11 @@ func TestCompileChannelPrompt_VoiceSingleUtterance(t *testing.T) {
 	if !strings.Contains(cp.SystemInstruction, "120字") {
 		t.Fatal("voice prompt should mention 120 char limit")
 	}
+	for _, want := range []string{"语音即时反应", "恍然大悟", "哦～", "被逗笑", "哈哈", "哦。"} {
+		if !strings.Contains(cp.StyleInstruction, want) {
+			t.Fatalf("voice prompt should include reaction rule %q", want)
+		}
+	}
 }
 
 func TestCompileChannelPrompt_UnknownFallback(t *testing.T) {

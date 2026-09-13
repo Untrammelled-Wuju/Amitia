@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"gorm.io/gorm"
 )
 
@@ -79,6 +80,9 @@ func (s *SafeScheduler) loop() {
 }
 
 func (s *SafeScheduler) calcNextFire() time.Time {
+	if !runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
+		return time.Time{}
+	}
 	var earliest time.Time
 
 	now := time.Now()
@@ -162,6 +166,9 @@ func (s *SafeScheduler) calcNextFire() time.Time {
 }
 
 func (s *SafeScheduler) fireRules() {
+	if !runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
+		return
+	}
 	now := time.Now()
 	todayStr := now.Format("2006-01-02")
 	timeStr := now.Format("15:04")

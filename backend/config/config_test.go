@@ -52,9 +52,6 @@ func TestProviderConfigDefaults(t *testing.T) {
 		t.Error("Node binaryPath should be empty by default")
 	}
 
-	if !cfg.Components.PluginHost.Enabled {
-		t.Error("PluginHost should be enabled by default")
-	}
 	if !cfg.Components.TaskHost.Enabled {
 		t.Error("TaskHost should be enabled by default")
 	}
@@ -282,14 +279,12 @@ func TestProviderEnvironmentOverrides(t *testing.T) {
 	t.Setenv("AMITIA_QDRANT_PORT", "5555")
 	t.Setenv("AMITIA_SURREAL_HOST", "10.0.0.6")
 	t.Setenv("AMITIA_SURREAL_PORT", "6666")
-	t.Setenv("AMITIA_PLUGIN_HOST_ENABLED", "false")
 	t.Setenv("AMITIA_NODE_BIN", "/env/path/node")
 	defer func() {
 		os.Unsetenv("AMITIA_QDRANT_HOST")
 		os.Unsetenv("AMITIA_QDRANT_PORT")
 		os.Unsetenv("AMITIA_SURREAL_HOST")
 		os.Unsetenv("AMITIA_SURREAL_PORT")
-		os.Unsetenv("AMITIA_PLUGIN_HOST_ENABLED")
 		os.Unsetenv("AMITIA_NODE_BIN")
 	}()
 
@@ -310,9 +305,6 @@ func TestProviderEnvironmentOverrides(t *testing.T) {
 	if cfg.Providers.GraphStore.SurrealDB.Port != 6666 {
 		t.Errorf("SurrealDB port via env = %d", cfg.Providers.GraphStore.SurrealDB.Port)
 	}
-	if cfg.Components.PluginHost.Enabled {
-		t.Error("PluginHost should be disabled via env")
-	}
 	if cfg.Providers.ScriptRuntime.Node.BinaryPath != "/env/path/node" {
 		t.Errorf("Node binary via env = %q", cfg.Providers.ScriptRuntime.Node.BinaryPath)
 	}
@@ -328,14 +320,12 @@ func TestProviderEnvironmentFalseOverridesDefaults(t *testing.T) {
 
 	t.Setenv("AMITIA_QDRANT_ENABLED", "false")
 	t.Setenv("AMITIA_SURREAL_ENABLED", "false")
-	t.Setenv("AMITIA_PLUGIN_HOST_ENABLED", "false")
 	t.Setenv("AMITIA_TASK_HOST_ENABLED", "false")
 	t.Setenv("AMITIA_WECHAT_SIDECAR_ENABLED", "false")
 	t.Setenv("AMITIA_QQ_SIDECAR_ENABLED", "false")
 	defer func() {
 		os.Unsetenv("AMITIA_QDRANT_ENABLED")
 		os.Unsetenv("AMITIA_SURREAL_ENABLED")
-		os.Unsetenv("AMITIA_PLUGIN_HOST_ENABLED")
 		os.Unsetenv("AMITIA_TASK_HOST_ENABLED")
 		os.Unsetenv("AMITIA_WECHAT_SIDECAR_ENABLED")
 		os.Unsetenv("AMITIA_QQ_SIDECAR_ENABLED")
@@ -351,9 +341,6 @@ func TestProviderEnvironmentFalseOverridesDefaults(t *testing.T) {
 	}
 	if cfg.Providers.GraphStore.SurrealDB.Enabled {
 		t.Error("SurrealDB should be disabled via env false")
-	}
-	if cfg.Components.PluginHost.Enabled {
-		t.Error("PluginHost should be disabled via env false")
 	}
 	if cfg.Components.TaskHost.Enabled {
 		t.Error("TaskHost should be disabled via env false")
@@ -436,7 +423,7 @@ func TestLegacyBinaryEnvironmentFallback(t *testing.T) {
 
 func TestComponentEntryPathValidation(t *testing.T) {
 	dir := t.TempDir()
-	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  pluginHost:\n    enabled: true\n    entryUri: \"amitia://runtime/polyglot/launcher.mjs\"\n    workUri: \"amitia://runtime/polyglot\"\n"
+	yaml := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  taskHost:\n    enabled: true\n    entryUri: \"amitia://runtime/polyglot/launcher.mjs\"\n    workUri: \"amitia://runtime/polyglot\"\n"
 	configFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(configFile, []byte(yaml), 0644); err != nil {
 		t.Fatal(err)
@@ -446,12 +433,12 @@ func TestComponentEntryPathValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfig should accept valid URI: %v", err)
 	}
-	if cfg.Components.PluginHost.EntryURI != "amitia://runtime/polyglot/launcher.mjs" {
-		t.Errorf("PluginHost entryUri = %q", cfg.Components.PluginHost.EntryURI)
+	if cfg.Components.TaskHost.EntryURI != "amitia://runtime/polyglot/launcher.mjs" {
+		t.Errorf("TaskHost entryUri = %q", cfg.Components.TaskHost.EntryURI)
 	}
 
 	dir2 := t.TempDir()
-	yaml2 := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  pluginHost:\n    entryUri: \"file:///etc/passwd\"\n"
+	yaml2 := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  taskHost:\n    entryUri: \"file:///etc/passwd\"\n"
 	configFile2 := filepath.Join(dir2, "config.yml")
 	if err := os.WriteFile(configFile2, []byte(yaml2), 0644); err != nil {
 		t.Fatal(err)
@@ -463,7 +450,7 @@ func TestComponentEntryPathValidation(t *testing.T) {
 	}
 
 	dir3 := t.TempDir()
-	yaml3 := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  pluginHost:\n    entryUri: \"\"\n"
+	yaml3 := "jwt:\n  secret: \"" + testJWTSecret + "\"\ncomponents:\n  taskHost:\n    entryUri: \"\"\n"
 	configFile3 := filepath.Join(dir3, "config.yml")
 	if err := os.WriteFile(configFile3, []byte(yaml3), 0644); err != nil {
 		t.Fatal(err)

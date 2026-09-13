@@ -311,6 +311,9 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 			hook(event)
 		}
 	}
+	if !plan.Request.IsInternal && plan.Source != "proactive" {
+		s.trackUserAffectFromMessage(plan.Request.UserID, plan.Character, plan.Request.Message)
+	}
 	return result, nil
 }
 

@@ -58,6 +58,10 @@ func IssueRealtimeAccessTicket(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "conversation not found"})
 		return
 	}
+	if err := CascadeVoiceReadiness(); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": http.StatusServiceUnavailable, "message": err.Error()})
+		return
+	}
 
 	token, err := newSecureRealtimeToken(32)
 	if err != nil {

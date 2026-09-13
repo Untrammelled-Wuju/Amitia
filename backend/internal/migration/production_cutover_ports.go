@@ -297,7 +297,6 @@ func (p *cutoverSmokePort) RunSmokeChecks(ctx context.Context) error {
 
 type LegacyVerifierDependencies struct {
 	CheckMCPManager      func() bool
-	CheckPluginWorkers   func() bool
 	CheckMemoryRawWriter func() bool
 	CountRuntimeActive   func() int
 	CountWriteEnabled    func() int
@@ -314,13 +313,6 @@ func NewCutoverLegacyVerifier(deps LegacyVerifierDependencies) CutoverLegacyVeri
 func (v *cutoverLegacyVerifier) LegacyMCPManagerPresent() bool {
 	if v.deps.CheckMCPManager != nil {
 		return v.deps.CheckMCPManager()
-	}
-	return false
-}
-
-func (v *cutoverLegacyVerifier) LegacyPluginWorkersPresent() bool {
-	if v.deps.CheckPluginWorkers != nil {
-		return v.deps.CheckPluginWorkers()
 	}
 	return false
 }

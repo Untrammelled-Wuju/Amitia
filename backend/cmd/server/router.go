@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/agent"
@@ -34,7 +35,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
-	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
+	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -525,6 +526,30 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				OwnerUserID: userID, OccurredAt: time.Now().UTC(), Payload: event.Payload,
 			}, workflowkernel.ExecutionContext{UserID: userID})
 		})
+		realtime.SetCascadeVoiceProvider(func(callCtx context.Context, req realtime.CascadeVoiceGenerationRequest, onDelta func(string) error) error {
+			history := make([]chat.VoiceStreamTurn, 0, len(req.History))
+			for _, turn := range req.History {
+				history = append(history, chat.VoiceStreamTurn{UserText: turn.UserText, SpeechText: turn.SpeechText})
+			}
+			userID, userErr := uuid.Parse(req.UserID)
+			if userErr != nil {
+				return userErr
+			}
+			characterID, characterErr := uuid.Parse(req.CharacterID)
+			if characterErr != nil {
+				return characterErr
+			}
+			return services.Chat.GenerateVoiceStream(callCtx, userID, characterID, req.SystemPrompt, history, req.RollingSummary, req.UserText, onDelta)
+		}, services.Chat.RealtimeVoiceReady)
+		realtime.SetCascadeRollingSummarizer(func(callCtx context.Context, existingSummary, rawTurns string) (string, error) {
+			return services.Chat.SummarizeRealtimeVoiceRollingContext(callCtx, existingSummary, rawTurns)
+		})
+		realtime.SetCascadeEmotionProvider(cascadeEmotionAdapter{chat: services.Chat})
+		if err := realtime.CascadeVoiceReadiness(); err != nil {
+			log.Warn("realtime voice not ready:", err.Error())
+		} else {
+			log.Info("realtime voice ready")
+		}
 		realtime.RegisterRealtimeRouter(apiGroup, ctx, services.Vision)
 		r.GET("/api/realtime/v2/ws/session", realtime.HandleTicketedSession)
 		r.GET("/api/realtime/v2/ws/visual", realtime.HandleTicketedVisualSession)
@@ -874,7 +899,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		}
 	}
 
-	// Desktop-pet entity mutations and Runtime v2 are device-local authority.
+	// Desktop-pet entity mutations and Runtime v1 are device-local authority.
 	// CloudCore exposes catalog/control-plane reads and mesh gateways only; the
 	// desktop routes these writes to the loopback Device Agent.
 	if services.RuntimePolicy.DesktopPet {
@@ -901,9 +926,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		registerImportStagingRoutes(desktopPetWriteGroup, services.PathRegistry, services.ImportStagingRepo, services.OwnershipGuard, services.PackageImporter)
 		behavior.RegisterRoutes(desktopPetWriteGroup, services.BehaviorService)
 
-		runtimev2.RegisterInternalRoutes(
+		runtimev1.RegisterInternalRoutes(
 			r,
-			services.DesktopPetRuntimeV2,
+			services.DesktopPetRuntimeV1,
 			services.SafeMode,
 			func(ctx context.Context, rawTicket string, runtimeID runtimeidentity.RuntimeID, deviceID runtimeidentity.DeviceID) (runtimeidentity.UserID, error) {
 				ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, string(runtimeID), string(deviceID))
@@ -913,7 +938,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				return runtimeidentity.UserID(ticket.UserID), nil
 			},
 		)
-		runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
+		runtimev1.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV1)
 	}
 
 	maintenanceAuthGroup := r.Group("/api")

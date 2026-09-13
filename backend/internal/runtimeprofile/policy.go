@@ -105,7 +105,7 @@ func PolicyFor(profile Profile) Policy {
 
 			// The pet body is a device capability. In cloud deployments the
 			// Business Core remains remote, while package installation, renderer
-			// state and Runtime v2 are hosted by this device-agent.
+			// state and Runtime v1 are hosted by this device-agent.
 			DesktopPet: true,
 
 			DeviceExecutionPlane: true,

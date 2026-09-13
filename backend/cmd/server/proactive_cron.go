@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/companion"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/queue"
 	"gorm.io/gorm"
@@ -92,6 +93,9 @@ func (c *ProactiveCron) runReminderScanner() {
 	for {
 		select {
 		case <-ticker.C:
+			if !runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
+				continue
+			}
 			c.cleanupOldReminders()
 		case <-c.stopCh:
 			return
@@ -111,6 +115,9 @@ func (c *ProactiveCron) runActiveTaskScanner() {
 	for {
 		select {
 		case <-ticker.C:
+			if !runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
+				continue
+			}
 			var charIDs []string
 			c.db.Table("characters").Pluck("id", &charIDs)
 			for _, cid := range charIDs {
@@ -139,6 +146,9 @@ func (c *ProactiveCron) runDailyRegenerator() {
 	for {
 		select {
 		case <-ticker.C:
+			if !runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
+				continue
+			}
 			c.dailyRegenerate()
 		case <-c.stopCh:
 			return
@@ -178,6 +188,9 @@ func (c *ProactiveCron) runRandomBurstTrigger() {
 	for {
 		select {
 		case <-ticker.C:
+			if !runtimegate.IsEnabled(runtimegate.ProactiveExtensionID) {
+				continue
+			}
 			c.triggerRandomBurst(ctx)
 		case <-c.stopCh:
 			return

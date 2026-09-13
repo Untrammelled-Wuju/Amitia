@@ -215,6 +215,7 @@ func (h *Handler) WebChatDeleteConvMessages(c *gin.Context) {
 	}
 	err := scoped.DeleteMessagesForUser(id, webChatUserID(c))
 	if err != nil {
+		applog.Error(fmt.Sprintf("[WebChatDeleteConvMessages] clear messages failed: conversation=%s err=%v", id, err))
 		util.ErrorResponse(c, response.OperationFailed, "清空失败", nil)
 		return
 	}

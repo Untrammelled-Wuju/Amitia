@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -58,6 +59,14 @@ func (s *captureProfileService) UpsertFromTool(userID, category, attrName, attrV
 
 func (s *captureProfileService) SyncGraphProfile(id string) bool {
 	return false
+}
+
+func (s *captureProfileService) Name() string {
+	return "capture"
+}
+
+func (s *captureProfileService) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
+	return nil
 }
 
 func setupMemoryIntegrationService(t *testing.T, profSvc profile.Service) *service {

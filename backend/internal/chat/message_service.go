@@ -97,7 +97,7 @@ func (s *service) DeleteMessagesForUser(convID string, userID string) error {
 				return err
 			}
 		}
-		if err := tx.Where("conversation_id = ?", convID).Delete(&MessageAttachment{}).Error; err != nil {
+		if err := tx.Where("message_id IN (SELECT id FROM messages WHERE conversation_id = ?)", convID).Delete(&MessageAttachment{}).Error; err != nil {
 			return err
 		}
 		return nil

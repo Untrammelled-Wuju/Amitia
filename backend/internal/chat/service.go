@@ -12,9 +12,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/decision"
+	"github.com/u-ai/backend/internal/emotionstate"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
@@ -65,6 +67,11 @@ type Service interface {
 	ReplayPostProcess(eventType string, payload []byte) error
 	TestChat(ctx context.Context, characterID string, userMessage string) (string, error)
 	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
+	GenerateVoiceStream(ctx context.Context, userID, characterID uuid.UUID, systemPrompt string, history []VoiceStreamTurn, rollingSummary string, userText string, onDelta func(string) error) error
+	SummarizeRealtimeVoiceRollingContext(ctx context.Context, existingSummary, rawTurns string) (string, error)
+	RealtimeVoiceReady() error
+	LoadRealtimeEmotionContext(ctx context.Context, userID, characterID string) (*RealtimeEmotionContext, error)
+	CommitRealtimeEmotion(ctx context.Context, commit RealtimeEmotionCommit) error
 	GenerateMCPSampling(ctx context.Context, request json.RawMessage) (any, error)
 	ExportConversation(convID string, format string) (string, error)
 	SetToolRuntime(ModelToolRuntime)
@@ -138,6 +145,7 @@ type service struct {
 	db                  *gorm.DB
 	changeRecorder      syncapi.ChangeRecorder
 	psycheStore         psyche.PsycheStore
+	emotion             *emotionstate.Service
 	memoryPort          MemoryPort
 	profilePort         ProfilePort
 	episodicPort        EpisodicPort
@@ -428,5 +436,5 @@ func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPo
 	if len(recorder) > 0 {
 		r = recorder[0]
 	}
-	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
+	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, emotion: emotionstate.NewService(ctx.DB), memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
 }

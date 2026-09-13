@@ -341,6 +341,20 @@ CREATE TABLE IF NOT EXISTS asr_configs (
     updated_at TEXT DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS emotion_states (
+    user_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
+    user_affect_json TEXT NOT NULL DEFAULT '{}',
+    relationship_emotion_json TEXT NOT NULL DEFAULT '{}',
+    signals_json TEXT NOT NULL DEFAULT '{}',
+    baseline_json TEXT NOT NULL DEFAULT '{}',
+    version INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (user_id, character_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_emotion_states_character ON emotion_states(character_id);
+
 CREATE TABLE IF NOT EXISTS vision_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -4544,11 +4558,15 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_measurement_cache (
   fully_transparent_ratio REAL NOT NULL DEFAULT 0,
   semi_transparent_ratio REAL NOT NULL DEFAULT 0,
   opaque_ratio REAL NOT NULL DEFAULT 0,
+  subject_box_x REAL NOT NULL DEFAULT 0,
+  subject_box_y REAL NOT NULL DEFAULT 0,
+  subject_box_width REAL NOT NULL DEFAULT 0,
+  subject_box_height REAL NOT NULL DEFAULT 0,
   decodable INTEGER NOT NULL DEFAULT 0,
   mime_type TEXT NOT NULL DEFAULT '',
   pixel_hash TEXT NOT NULL DEFAULT '',
   measurements_json TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT DEFAULT ''
+  created_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqmc_artifact_hash_ver ON desktop_pet_quality_measurement_cache(frame_artifact_id, content_hash, measurement_version);
 
@@ -5797,7 +5815,8 @@ CREATE TABLE IF NOT EXISTS workspace_mounts (
     read_only INTEGER NOT NULL DEFAULT 0,
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL
+    updated_at DATETIME NOT NULL,
+    last_used_at DATETIME
 );
 
 --- 来源: model_config_protocol.go ---

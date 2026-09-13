@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/extension/runtimegate"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/sse"
@@ -306,7 +307,7 @@ func (h *Handler) ReminderStatus(c *gin.Context) {
 			dueNow++
 		}
 	}
-	util.SuccessResponse(c, gin.H{"schedulerRunning": SchedulerRunning, "total": total, "enabled": enabled, "dueNow": dueNow})
+	util.SuccessResponse(c, gin.H{"schedulerRunning": SchedulerRunning && runtimegate.IsEnabled(runtimegate.ProactiveExtensionID), "total": total, "enabled": enabled, "dueNow": dueNow})
 }
 
 func (h *Handler) PendingReminders(c *gin.Context) {

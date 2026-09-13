@@ -12,7 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/device"
 	"github.com/u-ai/backend/internal/desktoppet/packageformat"
 	"github.com/u-ai/backend/internal/desktoppet/release"
-	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
+	runtimev1 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v1"
 )
 
 type coordinatorReleaseValidator struct {
@@ -66,13 +66,13 @@ type coordinatorInstallationLookup interface {
 }
 
 type coordinatorRuntimePublisher struct {
-	facade        *runtimev2.RuntimeFacade
+	facade        *runtimev1.RuntimeFacade
 	installations coordinatorInstallationLookup
 }
 
 func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, deviceCtx device.DeviceContext, snapshot *coordinator.DesiredStateSnapshot) error {
 	if p.facade == nil {
-		return fmt.Errorf("runtime v2 unavailable")
+		return fmt.Errorf("runtime v1 unavailable")
 	}
 	if !deviceCtx.IsValid() {
 		return fmt.Errorf("invalid device context")
@@ -88,22 +88,21 @@ func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, d
 		}
 		settingsSnapshot = json.RawMessage(snapshot.SettingsSnapshotJSON)
 	}
-	payload := runtimev2.SyncDesiredStatePayload{
+	payload := runtimev1.SyncDesiredStatePayload{
 		DesiredRevision:        snapshot.DesiredRevision,
 		DesiredHash:            snapshot.DesiredHash,
 		EnsureAbsent:           snapshot.EnsureAbsent,
 		InstallationID:         snapshot.InstallationID,
 		PetID:                  snapshot.PetID,
-		CharacterID:            "",
 		ReleaseID:              snapshot.ReleaseID,
-		RuntimeContractVersion: runtimev2.CurrentSchemaVersion,
+		RuntimeContractVersion: runtimev1.CurrentSchemaVersion,
 		DefaultActionKey:       snapshot.DefaultActionKey,
 		SettingsRevision:       snapshot.SettingsRevision,
 		SettingsSnapshot:       settingsSnapshot,
 	}
-	commandType := runtimev2.CommandTypeSyncDesiredState
+	commandType := runtimev1.CommandTypeSyncDesiredState
 	if snapshot.EnsureAbsent {
-		commandType = runtimev2.CommandTypeEnsureAbsent
+		commandType = runtimev1.CommandTypeEnsureAbsent
 	}
 	_, err = p.facade.Commands().CreateDurableCommand(
 		deviceCtx.UserID,
@@ -115,7 +114,7 @@ func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, d
 		payload,
 	)
 	if err != nil {
-		if err == runtimev2.ErrCommandDuplication {
+		if err == runtimev1.ErrCommandDuplication {
 			return nil
 		}
 		return fmt.Errorf("create durable command: %w", err)
@@ -123,13 +122,13 @@ func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, d
 	return nil
 }
 
-func (p *coordinatorRuntimePublisher) activeRuntimeConnection(deviceCtx device.DeviceContext) (*runtimev2.Connection, string, int64, error) {
+func (p *coordinatorRuntimePublisher) activeRuntimeConnection(deviceCtx device.DeviceContext) (*runtimev1.Connection, string, int64, error) {
 	if p.facade == nil {
-		return nil, "", 0, fmt.Errorf("runtime v2 unavailable")
+		return nil, "", 0, fmt.Errorf("runtime v1 unavailable")
 	}
 	targetRuntimeID := strings.TrimSpace(deviceCtx.RuntimeID)
 	for _, conn := range p.facade.ListConnections(deviceCtx.UserID) {
-		if conn == nil || conn.GetState() != runtimev2.ConnStateConnected {
+		if conn == nil || conn.GetState() != runtimev1.ConnStateConnected {
 			continue
 		}
 		if string(conn.DeviceID) != deviceCtx.DeviceID {
@@ -149,7 +148,7 @@ func (p *coordinatorRuntimePublisher) activeRuntimeConnection(deviceCtx device.D
 
 func (p *coordinatorRuntimePublisher) PublishRecenter(ctx context.Context, deviceCtx device.DeviceContext, installationID, operationID string) (string, error) {
 	if p.facade == nil {
-		return "", fmt.Errorf("runtime v2 unavailable")
+		return "", fmt.Errorf("runtime v1 unavailable")
 	}
 	if !deviceCtx.IsValid() {
 		return "", fmt.Errorf("invalid device context")
@@ -174,12 +173,12 @@ func (p *coordinatorRuntimePublisher) PublishRecenter(ctx context.Context, devic
 		string(targetConn.RuntimeID),
 		targetSessionID,
 		installationID,
-		string(runtimev2.CommandTypeRecenterOnce),
+		string(runtimev1.CommandTypeRecenterOnce),
 		fmt.Sprintf("recenter:%s:%s", operationID, targetSessionID),
 		payloadBytes,
 	)
 	if err != nil {
-		if err == runtimev2.ErrCommandDuplication && cmd != nil {
+		if err == runtimev1.ErrCommandDuplication && cmd != nil {
 			return cmd.ID, nil
 		}
 		return "", fmt.Errorf("create recenter command: %w", err)
@@ -188,7 +187,7 @@ func (p *coordinatorRuntimePublisher) PublishRecenter(ctx context.Context, devic
 		return "", fmt.Errorf("create recenter command: empty command id")
 	}
 	currentSessionID, currentGeneration := targetConn.SessionSnapshot()
-	if targetConn.GetState() != runtimev2.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
+	if targetConn.GetState() != runtimev1.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
 		_ = p.facade.Commands().MarkSuperseded(cmd.ID, "runtime session changed during recenter creation", time.Now().UTC())
 		return "", fmt.Errorf("%w: runtime session changed while scheduling recenter", coordinator.ErrRuntimeUnavailable)
 	}
@@ -200,7 +199,7 @@ func (p *coordinatorRuntimePublisher) PublishRecenter(ctx context.Context, devic
 
 func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, deviceCtx device.DeviceContext, installationID, actionKey string) error {
 	if p.facade == nil {
-		return fmt.Errorf("%w: runtime v2 facade unavailable", coordinator.ErrRuntimeUnavailable)
+		return fmt.Errorf("%w: runtime v1 facade unavailable", coordinator.ErrRuntimeUnavailable)
 	}
 	if !deviceCtx.IsValid() || installationID == "" || actionKey == "" {
 		return fmt.Errorf("invalid play action request")
@@ -217,22 +216,18 @@ func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, dev
 	if err != nil {
 		return fmt.Errorf("resolve play action installation: %w", err)
 	}
-	if inst == nil || strings.TrimSpace(inst.CharacterID) == "" {
-		return fmt.Errorf("play action installation has no character identity")
-	}
-	payload := runtimev2.PlayActionPayload{
+	payload := runtimev1.PlayActionPayload{
 		RuntimeID:        targetRuntimeID,
 		ActionKey:        actionKey,
-		CharacterID:      strings.TrimSpace(inst.CharacterID),
 		PetInstanceID:    targetRuntimeID,
 		InstallationID:   installationID,
 		PlaybackMode:     "once",
 		Priority:         0,
-		QueuePolicy:      runtimev2.PlayActionQueueReplaceCurrent,
+		QueuePolicy:      runtimev1.PlayActionQueueReplaceCurrent,
 		Interruptible:    true,
 		ReturnTo:         "default",
 		PlaybackRate:     1.0,
-		CompletionPolicy: runtimev2.PlayActionCompletionOnStarted,
+		CompletionPolicy: runtimev1.PlayActionCompletionOnStarted,
 		Semantic:         "manual",
 		ReasonCode:       "manual_play_request",
 		ExpiresAt:        time.Now().UTC().Add(30 * time.Second).Format(time.RFC3339Nano),
@@ -247,12 +242,12 @@ func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, dev
 		targetRuntimeID,
 		targetSessionID,
 		installationID,
-		string(runtimev2.CommandTypePlayAction),
+		string(runtimev1.CommandTypePlayAction),
 		fmt.Sprintf("play:%s:%s:%s:%s", deviceCtx.DeviceID, installationID, actionKey, uuid.NewString()),
 		payloadBytes,
 	)
 	if err != nil {
-		if err == runtimev2.ErrCommandDuplication {
+		if err == runtimev1.ErrCommandDuplication {
 			return nil
 		}
 		return fmt.Errorf("create play action command: %w", err)
@@ -261,7 +256,7 @@ func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, dev
 		return fmt.Errorf("create play action command: empty command")
 	}
 	currentSessionID, currentGeneration := targetConn.SessionSnapshot()
-	if targetConn.GetState() != runtimev2.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
+	if targetConn.GetState() != runtimev1.ConnStateConnected || currentSessionID != targetSessionID || currentGeneration != targetGeneration {
 		_ = p.facade.Commands().MarkSuperseded(created.ID, "runtime session changed during play action creation", time.Now().UTC())
 		return fmt.Errorf("%w: runtime session changed while scheduling play action", coordinator.ErrRuntimeUnavailable)
 	}

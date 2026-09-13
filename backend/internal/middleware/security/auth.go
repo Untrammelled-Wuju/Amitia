@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -292,8 +293,27 @@ func isLocalPublicPath(path string) bool {
 	return false
 }
 
+func isWebUIResourcePath(path string) bool {
+	return strings.HasPrefix(path, "/api/extension/webui/resource/")
+}
+
 func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
 	if isLocalPublicPath(c.Request.URL.Path) {
+		c.Next()
+		return
+	}
+
+	if isWebUIResourcePath(c.Request.URL.Path) {
+		if c.Request.Method != http.MethodGet {
+			util.ErrorResponse(c, response.Unauthorized, "本地令牌无效", nil)
+			c.Abort()
+			return
+		}
+		if !isLoopback(c.Request.RemoteAddr) || !isLoopback(cfg.ListenAddress) {
+			util.ErrorResponse(c, response.Unauthorized, "本地单用户模式仅允许回环访问", nil)
+			c.Abort()
+			return
+		}
 		c.Next()
 		return
 	}
