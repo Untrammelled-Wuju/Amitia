@@ -649,7 +649,6 @@ func TestCreateAndGetPackage(t *testing.T) {
 	pkg := &Package{
 		ID:               "pkg-1",
 		UserID:           "user-1",
-		CharacterID:      "char-1",
 		GenerationTaskID: "gt-1",
 		ProcessingTaskID: "pt-1",
 		Name:             "测试包",

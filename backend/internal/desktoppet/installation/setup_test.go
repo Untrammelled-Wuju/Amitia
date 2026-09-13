@@ -57,20 +57,20 @@ func newTestContext(db *gorm.DB) *app.AppContext {
 	return &app.AppContext{DB: db, Context: context.Background()}
 }
 
-func newTestService(t *testing.T, db *gorm.DB, dataDir string, pkgRepo processing.Repository, charRepo character.Repository) Service {
+func newTestService(t *testing.T, db *gorm.DB, dataDir string, pkgRepo processing.Repository, _ character.Repository) Service {
 	t.Helper()
 	ctx := newTestContext(db)
 	repo := NewRepository(db, ctx)
-	inst := NewInstaller(repo, pkgRepo, charRepo, dataDir) // audit:ok: test exercises guarded deprecated installer
+	inst := NewInstaller(repo, pkgRepo, dataDir) // audit:ok: test exercises guarded deprecated installer
 	un := NewUninstaller(repo, dataDir)
-	return NewService(repo, inst, un, pkgRepo, charRepo, dataDir)
+	return NewService(repo, inst, un, pkgRepo, dataDir)
 }
 
-func newTestInstaller(t *testing.T, db *gorm.DB, dataDir string, pkgRepo processing.Repository, charRepo character.Repository) (Installer, Repository) {
+func newTestInstaller(t *testing.T, db *gorm.DB, dataDir string, pkgRepo processing.Repository, _ character.Repository) (Installer, Repository) {
 	t.Helper()
 	ctx := newTestContext(db)
 	repo := NewRepository(db, ctx)
-	return NewInstaller(repo, pkgRepo, charRepo, dataDir), repo // audit:ok: test helper for guarded deprecated installer
+	return NewInstaller(repo, pkgRepo, dataDir), repo // audit:ok: test helper for guarded deprecated installer
 }
 
 func newTestUninstaller(t *testing.T, db *gorm.DB, dataDir string) Uninstaller {
@@ -286,7 +286,6 @@ func createPackageOnDisk(t *testing.T, dataDir, taskID, pkgID string, canvasW, c
 		SchemaVersion:     processing.ManifestSchemaVersion,
 		PackageID:         pkgID,
 		Name:              "测试包",
-		CharacterID:       testCharacterID,
 		GenerationTaskID:  taskID,
 		ProcessingVersion: 1,
 		Canvas:            processing.ManifestCanvas{Width: canvasW, Height: canvasH},
@@ -406,7 +405,6 @@ func createReadyPackage(t *testing.T, dataDir, pkgID string, actions []actionSpe
 	return &processing.Package{
 		ID:               pkgID,
 		UserID:           testUserID,
-		CharacterID:      testCharacterID,
 		GenerationTaskID: testTaskID,
 		Name:             "测试包",
 		Version:          1,
@@ -478,7 +476,6 @@ func createInstalledPackageOnDisk(t *testing.T, dataDir, installID string, actio
 		SchemaVersion:     processing.ManifestSchemaVersion,
 		PackageID:         testPackageID,
 		Name:              "测试包",
-		CharacterID:       testCharacterID,
 		GenerationTaskID:  testTaskID,
 		ProcessingVersion: 1,
 		Canvas:            processing.ManifestCanvas{Width: testCanvasWidth, Height: testCanvasHeight},
@@ -516,7 +513,6 @@ func createInstalledPackageOnDisk(t *testing.T, dataDir, installID string, actio
 	inst := &Installation{
 		ID:               installID,
 		UserID:           testUserID,
-		CharacterID:      testCharacterID,
 		PackageID:        testPackageID,
 		PackageVersion:   "1",
 		Name:             "测试包",
@@ -551,7 +547,7 @@ func setupInstalledService(t *testing.T) (Service, *gorm.DB, string, *Installati
 	notifier := &mockNotifier{}
 	SetRuntimeNotifier(svc, notifier)
 
-	inst, err := svc.InstallPackage(testPackageID, testUserID, testCharacterID)
+	inst, err := svc.InstallPackage(testPackageID, testUserID)
 	if err != nil {
 		t.Fatalf("InstallPackage: %v", err)
 	}

@@ -29,11 +29,11 @@ func setupTwoInstallations(t *testing.T) (Service, *gorm.DB, string, *Installati
 	notifier := &mockNotifier{}
 	SetRuntimeNotifier(svc, notifier)
 
-	instA, err := svc.InstallPackage("pkg_a", testUserID, testCharacterID)
+	instA, err := svc.InstallPackage("pkg_a", testUserID)
 	if err != nil {
 		t.Fatalf("InstallPackage A: %v", err)
 	}
-	instB, err := svc.InstallPackage("pkg_b", testUserID, testCharacterID)
+	instB, err := svc.InstallPackage("pkg_b", testUserID)
 	if err != nil {
 		t.Fatalf("InstallPackage B: %v", err)
 	}

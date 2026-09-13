@@ -137,7 +137,6 @@ func TestPackager_BuildPackage_Success(t *testing.T) {
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
 		UserID:            "user-1",
-		CharacterID:       "char-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包",
 		DefaultAction:     "idle_normal",
@@ -328,7 +327,7 @@ func TestPackager_VerifyPackageIntegrity_ManifestInvalid(t *testing.T) {
 func TestPackager_VerifyPackageIntegrity_ActionConfigMissing(t *testing.T) {
 	dir := t.TempDir()
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 512, 512, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 512, 512, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
@@ -357,7 +356,7 @@ func TestPackager_VerifyPackageIntegrity_FrameCountMismatch(t *testing.T) {
 	}
 	writeValidatorPNG(t, dir, "actions/idle_normal/frames/frame-0001.png", 8, 8)
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 512, 512, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 512, 512, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
@@ -414,7 +413,7 @@ func TestPackager_VerifyPackageIntegrity_ForbiddenFile(t *testing.T) {
 
 	writeFileBytes(t, dir, "secret.key", []byte("fake-key"))
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 8, 8, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 8, 8, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
@@ -441,7 +440,7 @@ func TestPackager_VerifyPackageIntegrity_Success(t *testing.T) {
 		writeValidatorPNG(t, dir, filepath.ToSlash(filepath.Join("actions", "idle_normal", "frames", frameFileName(i))), 8, 8)
 	}
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 8, 8, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 8, 8, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
@@ -566,7 +565,6 @@ func TestPackager_BuildPackage_PreviewMissing(t *testing.T) {
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
 		UserID:            "user-1",
-		CharacterID:       "char-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包",
 		DefaultAction:     "idle_normal",
@@ -601,7 +599,6 @@ func TestPackager_BuildPackage_IncludedActionNotInSucceeded(t *testing.T) {
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
 		UserID:            "user-1",
-		CharacterID:       "char-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包",
 		DefaultAction:     "idle_normal",
@@ -645,7 +642,6 @@ func TestPackager_BuildPackage_VersionIncrement(t *testing.T) {
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
 		UserID:            "user-1",
-		CharacterID:       "char-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包v2",
 		DefaultAction:     "idle_normal",
@@ -679,7 +675,7 @@ func TestVerifyActionIntegrity_ImageSize(t *testing.T) {
 
 	writeValidatorPNG(t, dir, "actions/idle_normal/frames/frame-0001.png", 256, 256)
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 512, 512, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 512, 512, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
@@ -709,7 +705,7 @@ func TestVerifyActionIntegrity_ImageUndecodable(t *testing.T) {
 
 	writeFileBytes(t, dir, "actions/idle_normal/frames/frame-0001.png", []byte("not a valid png"))
 
-	manifest := BuildManifest("pkg-test", "测试", "char-1", "task-1", 1, 512, 512, "idle_normal",
+	manifest := BuildManifest("pkg-test", "测试", "task-1", 1, 512, 512, "idle_normal",
 		[]ManifestAction{BuildManifestAction("idle_normal", "待机")})
 	manifestData, _ := json.MarshalIndent(manifest, "", "  ")
 	writeFileBytes(t, dir, "manifest.json", manifestData)
