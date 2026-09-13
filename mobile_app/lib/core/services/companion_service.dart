@@ -179,14 +179,14 @@ class CompanionService {
 
   Future<Map<String, dynamic>?> activeMessageSetting({String? characterId}) async {
     final resp = await _api.get<Map<String, dynamic>>(
-      '/api/companion/active-message/setting',
+      '/api/proactive/settings',
       queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
     );
     return resp;
   }
 
   Future<bool> updateActiveMessageSetting(Map<String, dynamic> data, {String? characterId}) async {
-    await _api.put('/api/companion/active-message/setting', queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId}, data: data);
+    await _api.put('/api/proactive/settings', queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId}, data: data);
     return true;
   }
 

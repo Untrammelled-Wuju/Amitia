@@ -104,7 +104,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
         ref.watch(kernelExtensionEnablementProvider).valueOrNull ??
         const <String, bool>{};
     final proactiveEnabled =
-        featurePluginEnablement['com.amitia.builtin.proactive'] ?? false;
+        featurePluginEnablement['com.amitia/proactive'] ?? false;
     final emotionEnabled =
         featurePluginEnablement['com.amitia.builtin.emotion'] ?? false;
     final lifestyleEnabled =

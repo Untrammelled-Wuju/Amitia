@@ -167,7 +167,6 @@ class _TrackedPlayback {
   final String playbackId;
   final String actionKey;
   final String installationId;
-  final String characterId;
   final String decisionId;
   final String completionPolicy;
   final int interruptAfterMs;
@@ -184,7 +183,6 @@ class _TrackedPlayback {
     required this.playbackId,
     required this.actionKey,
     required this.installationId,
-    required this.characterId,
     required this.decisionId,
     required this.completionPolicy,
     required this.interruptAfterMs,
@@ -1138,14 +1136,11 @@ class DesktopPetMobileRuntimeNotifier
     }
 
     requireIdentity('petId', installation['petId']?.toString() ?? '');
-    requireIdentity('characterId', installation['characterId']?.toString() ?? '');
     requireIdentity('releaseId', installation['currentReleaseId']?.toString() ?? '');
 
     final authoritativePetId = installation['petId']?.toString().trim() ?? '';
     final authoritativeReleaseId =
         installation['currentReleaseId']?.toString().trim() ?? '';
-    final authoritativeCharacterId =
-        installation['characterId']?.toString().trim() ?? '';
     final manifestPetId = manifest['petId']?.toString().trim() ?? '';
     final manifestReleaseId = manifest['releaseId']?.toString().trim() ?? '';
     if (manifest.isEmpty ||
@@ -1283,7 +1278,6 @@ class DesktopPetMobileRuntimeNotifier
     await _native('desktop.pet.renderer.unload');
     final loaded = await _native('desktop.pet.renderer.load', <String, dynamic>{
       'installationId': installationId,
-      'characterId': authoritativeCharacterId,
       'petId': authoritativePetId,
       'releaseId': authoritativeReleaseId,
       'releaseVersion': expectedReleaseVersion,
@@ -1353,7 +1347,6 @@ class DesktopPetMobileRuntimeNotifier
     final requestedInstance = inner['petInstanceId']?.toString().trim() ?? '';
     final installationId =
         (inner['installationId'] ?? outer['installationId'])?.toString().trim() ?? '';
-    final characterId = inner['characterId']?.toString().trim() ?? '';
     if (requestedRuntimeId.isEmpty || requestedRuntimeId != _runtimeId) {
       throw const _RuntimeCommandFailure(
         'RUNTIME_ID_MISMATCH',
@@ -1372,15 +1365,6 @@ class DesktopPetMobileRuntimeNotifier
         'play action must target the active installation',
       );
     }
-    final nativeStatus = await _native('desktop.pet.renderer.status');
-    final activeCharacter = nativeStatus['characterId']?.toString().trim() ?? '';
-    if (characterId.isEmpty || activeCharacter.isEmpty || characterId != activeCharacter) {
-      throw const _RuntimeCommandFailure(
-        'CHARACTER_MISMATCH',
-        'play action must target the active installation character',
-      );
-    }
-
     final queuePolicy = inner['queuePolicy']?.toString().trim() ?? 'replace_current';
     if (queuePolicy != 'replace_current' && queuePolicy != 'enqueue') {
       throw const _RuntimeCommandFailure(
@@ -1398,6 +1382,7 @@ class DesktopPetMobileRuntimeNotifier
         'Android desktop pet renderer is busy; enqueue admission is unavailable',
       );
     }
+    final nativeStatus = await _native('desktop.pet.renderer.status');
     final current = _playback;
     if (current != null) {
       final currentPlayedMs = _nonNegativeInt(nativeStatus['playedMs']);
@@ -1458,7 +1443,6 @@ class DesktopPetMobileRuntimeNotifier
       playbackId: playbackId,
       actionKey: actionKey,
       installationId: state.installationId,
-      characterId: characterId,
       decisionId: inner['decisionId']?.toString() ?? '',
       completionPolicy: inner['completionPolicy']?.toString() ?? '',
       interruptAfterMs: interruptAfterMs,
@@ -1692,7 +1676,6 @@ class DesktopPetMobileRuntimeNotifier
       'actionKey': tracked.actionKey,
       'triggerSource': 'runtime_command',
       'installationId': tracked.installationId,
-      if (tracked.characterId.isNotEmpty) 'characterId': tracked.characterId,
       'petInstanceId': _runtimeId,
       if (tracked.decisionId.isNotEmpty) 'decisionId': tracked.decisionId,
       if (name == 'runtime.playback.action_started') 'startedAt': now,

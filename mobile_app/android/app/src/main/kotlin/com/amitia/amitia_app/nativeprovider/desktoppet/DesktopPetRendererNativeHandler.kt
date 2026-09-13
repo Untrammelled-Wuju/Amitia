@@ -77,7 +77,6 @@ internal class DesktopPetRendererNativeHandler(
     private data class LoadedPet(
         val installationId: String,
         val installRoot: File,
-        val characterId: String,
         val petId: String,
         val releaseId: String,
         val releaseVersion: String,
@@ -179,7 +178,6 @@ internal class DesktopPetRendererNativeHandler(
         }
         val installationId = request.payload.string("installationId")
         val installPath = request.payload.string("installPath")
-        val authoritativeCharacterId = request.payload.string("characterId")
         if (installationId.isBlank() || installPath.isBlank()) {
             return failure(
                 request,
@@ -193,7 +191,6 @@ internal class DesktopPetRendererNativeHandler(
                 loadPackage(
                     installationId = installationId,
                     installPath = installPath,
-                    authoritativeCharacterId = authoritativeCharacterId,
                     expectedPetId = request.payload.string("petId"),
                     expectedReleaseId = request.payload.string("releaseId"),
                     expectedReleaseVersion = request.payload.string("releaseVersion"),
@@ -485,7 +482,6 @@ internal class DesktopPetRendererNativeHandler(
     private fun loadPackage(
         installationId: String,
         installPath: String,
-        authoritativeCharacterId: String,
         expectedPetId: String,
         expectedReleaseId: String,
         expectedReleaseVersion: String,
@@ -578,14 +574,6 @@ internal class DesktopPetRendererNativeHandler(
         val binding = manifest.optJSONObject("binding") ?: error("manifest binding is missing")
         val bindingPolicy = binding.optString("policy").trim()
         require(bindingPolicy in SUPPORTED_BINDING_POLICIES) { "unsupported binding policy: $bindingPolicy" }
-        val bindingCharacterId = binding.optString("sourceCharacterId").trim()
-        val characterId = authoritativeCharacterId.trim()
-        require(characterId.isNotEmpty()) { "installation character identity is missing" }
-        if (bindingPolicy == "bound") {
-            require(bindingCharacterId.isNotEmpty() && bindingCharacterId == characterId) {
-                "package binding character does not match installation authority"
-            }
-        }
 
         val canvas = manifest.optJSONObject("canvas") ?: error("manifest canvas is missing")
         require(canvas.optString("coordinateSystem").trim() == "top-left") {
@@ -624,7 +612,6 @@ internal class DesktopPetRendererNativeHandler(
         return LoadedPet(
             installationId = installationId,
             installRoot = installRoot,
-            characterId = characterId,
             petId = petId,
             releaseId = releaseId,
             releaseVersion = releaseVersion,
@@ -1299,7 +1286,6 @@ internal class DesktopPetRendererNativeHandler(
             "visible" to visible,
             "paused" to paused,
             "installationId" to (pet?.installationId ?: ""),
-            "characterId" to (pet?.characterId ?: ""),
             "petId" to (pet?.petId ?: ""),
             "releaseId" to (pet?.releaseId ?: ""),
             "releaseVersion" to (pet?.releaseVersion ?: ""),
