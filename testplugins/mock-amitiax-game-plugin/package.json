@@ -1,0 +1,33 @@
+{
+  "name": "@amitia/world-game-plugin",
+  "version": "1.0.0",
+  "description": "Amitia World Game Plugin - a formal game plugin for the Amitia platform.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js",
+    "package": "node scripts/build-package.mjs",
+    "verify-package": "node scripts/verify-package.mjs"
+  },
+  "dependencies": {
+    "@amitia/game-plugin-sdk": "file:vendor/amitia-game-plugin-sdk-0.1.0.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "game-plugin",
+    "sdk-consumer",
+    "amitia",
+    "world-game",
+    "formal-plugin"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

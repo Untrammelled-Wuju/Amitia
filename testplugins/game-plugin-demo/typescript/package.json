@@ -1,0 +1,39 @@
+{
+  "name": "@example/mock-amitiax-game-plugin-ts",
+  "version": "0.2.0",
+  "description": "Independent mock game plugin built with the formal TypeScript SDK. Demonstrates opaque RPC, notification, event, state, channel, binary and stream boundaries.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js",
+    "test": "node --test",
+    "lint": "eslint src/**/*.ts"
+  },
+  "dependencies": {
+    "@amitia/game-plugin-sdk": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "mock",
+    "game-plugin",
+    "sdk-example",
+    "typescript",
+    "amitia",
+    "g35",
+    "event",
+    "state",
+    "channel",
+    "binary",
+    "stream"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

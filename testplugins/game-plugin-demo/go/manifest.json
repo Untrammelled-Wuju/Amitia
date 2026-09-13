@@ -1,0 +1,157 @@
+{
+  "manifestVersion": 1,
+  "extension": {
+    "id": "com.example/mock-game-plugin-go",
+    "name": {
+      "default": "Mock Game Plugin (Go) - G37"
+    },
+    "description": {
+      "default": "G37 Independent Mock AmitiaX Game Plugin with full fault injection capabilities."
+    },
+    "version": "0.3.0",
+    "license": "MIT",
+    "categories": [
+      "game",
+      "example"
+    ],
+    "keywords": [
+      "mock",
+      "game-plugin",
+      "sdk-example",
+      "go",
+      "g37",
+      "fault-injection",
+      "conformance",
+      "stability-matrix"
+    ]
+  },
+  "publisher": {
+    "id": "example",
+    "displayName": "Example Developer",
+    "trustLevel": "trusted"
+  },
+  "compatibility": {
+    "minHostVersion": "0.1.0",
+    "platforms": [
+      "windows",
+      "linux",
+      "macos"
+    ]
+  },
+  "modules": [
+    {
+      "id": "mock-go-runtime",
+      "name": {
+        "default": "Mock Go Runtime"
+      },
+      "type": "service",
+      "runtime": {
+        "type": "service",
+        "entryPoint": "mock-game-plugin"
+      },
+      "contributions": [
+        {
+          "id": "mock-go-game-plugin",
+          "kind": "game_plugin",
+          "name": {
+            "default": "Mock Game Plugin Go Contribution (G37)"
+          },
+          "description": {
+            "default": "G37: Full stability fault matrix with fault injection capabilities."
+          },
+          "spec": {
+            "protocolVersion": "amitia-game-host/1",
+            "runtimeModuleId": "mock-go-runtime",
+            "hostFeatures": [
+              "realtime_control",
+              "state_streaming",
+              "event_streaming",
+              "custom_rpc",
+              "host_api",
+              "shared_control"
+            ],
+            "services": [
+              {
+                "id": "mock-go-runtime",
+                "moduleId": "mock-go-runtime",
+                "name": "Mock Go Runtime",
+                "kind": "process",
+                "required": true
+              }
+            ],
+            "channels": [
+              {
+                "id": "mock-events",
+                "kind": "event",
+                "serviceId": "mock-go-runtime"
+              },
+              {
+                "id": "mock-state",
+                "kind": "state",
+                "serviceId": "mock-go-runtime"
+              }
+            ],
+            "controlEffectSinks": [
+              {
+                "id": "mock.control.effect",
+                "serviceId": "mock-go-runtime",
+                "description": "Opaque control-effect sink declared by the plugin package."
+              }
+            ],
+            "network": {
+              "mode": "none"
+            },
+            "metadata": {
+              "fixture": "go-public-sdk"
+            }
+          },
+          "requiredPermissions": [
+            "gamehost.control",
+            "gamehost.channel.use",
+            "gamehost.host_api.invoke",
+            "service.secret.use"
+          ]
+        }
+      ],
+      "placement": "device"
+    }
+  ],
+  "dependencies": [],
+  "permissions": [
+    {
+      "name": "gamehost.control",
+      "reason": "Required to request control authority transitions and submit formal control-effect intents through the registered mock.control.effect sink.",
+      "required": false
+    },
+    {
+      "name": "gamehost.channel.use",
+      "reason": "Required to publish to generic channels (mock-events, mock-state).",
+      "required": false
+    },
+    {
+      "name": "gamehost.host_api.invoke",
+      "reason": "Required to invoke host API routes (host.runtime.health and representative routes) via G11 gateway.",
+      "required": false
+    },
+    {
+      "name": "service.secret.use",
+      "reason": "Required to acquire scoped SecretLease for mock.provider.credential via existing Secret system (G5).",
+      "required": false,
+      "scope": "extension"
+    }
+  ],
+  "secretRefs": [
+    {
+      "ref": "secret://mock.provider.credential",
+      "serviceId": "mock-go-runtime",
+      "purpose": "startup",
+      "required": false,
+      "description": "SFixture SecretRef for control-effect downstream provider. Plugin holds only the lease, never the secret value."
+    }
+  ],
+  "integrity": {
+    "algorithm": "sha256",
+    "contentTreeHash": "placeholder-hash-replace-on-build"
+  },
+  "placement": "device"
+}
