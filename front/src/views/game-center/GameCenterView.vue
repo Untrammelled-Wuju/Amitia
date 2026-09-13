@@ -170,46 +170,6 @@
     </section>
 
     <el-dialog
-      v-model="approvalDialogVisible"
-      title="等待权限确认"
-      width="min(640px, calc(100vw - 32px))"
-      :close-on-click-modal="false"
-      :close-on-press-escape="false"
-      :show-close="false"
-      class="approval-dialog"
-    >
-      <div class="approval-dialog-intro">
-        <span class="approval-dialog-count">{{ approvalPermissionCount }}</span>
-        <div>
-          <strong>游戏插件正在申请执行敏感操作</strong>
-          <p>请核对下列权限后一次性确认。一次允许仅用于当前启动；永久授权可在扩展权限管理中撤回。</p>
-        </div>
-      </div>
-      <div class="approval-list" role="list" aria-label="待确认权限请求">
-        <article v-for="approval in pendingApprovals" :key="approval.id" class="approval-card" role="listitem">
-          <div class="approval-copy">
-            <strong>本次启动申请以下权限</strong>
-            <ul class="approval-permissions">
-              <li v-for="permissionId in approvalPermissionIds(approval)" :key="permissionId">
-                {{ permissionLabel(permissionId) }}
-              </li>
-            </ul>
-            <span>插件：{{ approval.pluginId || approval.extensionId }}</span>
-            <small v-if="approval.serviceId">服务：{{ approval.serviceId }}</small>
-            <small v-if="approval.target?.path" class="approval-target" :title="approval.target.path">目标目录：{{ approval.target.path }}</small>
-            <small v-if="approval.target?.url" class="approval-target" :title="approval.target.url">目标地址：{{ approval.target.url }}</small>
-            <small>{{ approvalScopeLabel(approval) }}</small>
-          </div>
-        </article>
-      </div>
-      <template #footer>
-        <el-button :disabled="!!approvalBusy" @click="resolveAllApprovals(false)">拒绝</el-button>
-        <el-button :disabled="!!approvalBusy" @click="resolveAllApprovals(true, false)">允许一次</el-button>
-        <el-button type="primary" :loading="!!approvalBusy" @click="resolveAllApprovals(true, true)">永久授权</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog
       v-model="installDialogVisible"
       :title="installMode === 'update' ? `更新 ${updateTarget?.name || '游戏扩展'}` : '添加游戏'"
       width="680px"
@@ -441,7 +401,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -483,19 +443,6 @@ type Runtime = {
 
 type GameService = { serviceId: string; state?: string; health?: string };
 type PackageOperationView = { status?: string; errorCode?: string };
-type PendingApproval = {
-  id: string;
-  runtimeId: string;
-  pluginId: string;
-  serviceId?: string;
-  extensionId: string;
-  permissionId: string;
-  permissionIds?: string[];
-  target?: { type?: string; id?: string; path?: string; url?: string };
-  status: string;
-  requestedAt: string;
-  expiresAt: string;
-};
 
 const api = useApi();
 const router = useRouter();
@@ -506,17 +453,6 @@ const error = ref("");
 const plugins = ref<Plugin[]>([]);
 const runtimes = ref<Runtime[]>([]);
 const developerAccess = ref(false);
-const pendingApprovals = ref<PendingApproval[]>([]);
-const approvalBusy = ref("");
-const approvalDialogVisible = ref(false);
-let approvalPollTimer: number | undefined;
-
-watch(pendingApprovals, (approvals) => {
-  approvalDialogVisible.value = approvals.length > 0;
-});
-
-const approvalPermissionCount = computed(() => pendingApprovals.value
-  .reduce((count, approval) => count + approvalPermissionIds(approval).length, 0));
 const activeRuntime = computed<Runtime | null>(() =>
   runtimes.value.find((item) => item.connected && item.ready)
   || runtimes.value.find((item) => item.connected)
@@ -663,62 +599,6 @@ async function bindRuntimeAgentContext(runtimeId: string) {
     // every real tool invocation, so a transient bind failure must not make
     // Game Center itself unusable.
   }
-}
-
-async function refreshApprovals() {
-  try {
-    const result = await api.get<{ items?: PendingApproval[] }>("/api/game-center/approvals");
-    pendingApprovals.value = (result?.items ?? []).filter((item) => item?.status === "pending");
-  } catch {
-    // Approval polling must never make the whole Game Center unavailable.
-  }
-}
-
-async function resolveAllApprovals(approve: boolean, persistent = false) {
-  const approvals = pendingApprovals.value.filter((approval) => approval?.id);
-  if (approvals.length === 0 || approvalBusy.value) return;
-  approvalBusy.value = "resolving";
-  try {
-    await Promise.all(approvals.map((approval) => api.post(
-      `/api/game-center/approvals/${encodeURIComponent(approval.id)}/${approve ? "approve" : "reject"}`,
-      { reason: approve ? "approved from Game Center" : "rejected from Game Center", persistent },
-      { timeout: 10000 },
-    )));
-    ElMessage.success(approve ? (persistent ? "已永久授权本次启动所需权限" : "已允许本次启动所需权限") : "已拒绝本次启动权限");
-    await refreshApprovals();
-  } catch (err: any) {
-    ElMessage.error(err?.message || "权限确认失败");
-    await refreshApprovals();
-  } finally {
-    approvalBusy.value = "";
-  }
-}
-
-function approvalPermissionIds(approval: PendingApproval) {
-  const permissionIds = approval.permissionIds?.filter(Boolean) ?? [];
-  return permissionIds.length > 0 ? permissionIds : [approval.permissionId];
-}
-
-function approvalScopeLabel(approval: PendingApproval) {
-  return `等待确认 · ${approvalExpiryLabel(approval.expiresAt)}`;
-}
-
-function permissionLabel(permissionId: string) {
-  const labels: Record<string, string> = {
-    "gamehost.control": "允许游戏插件执行本次控制操作",
-    "gamehost.artifact.deploy": "允许游戏插件执行本次制品部署",
-    "service.runtime.execute": "运行游戏 Runtime",
-    "service.process.spawn": "允许本次插件进程操作",
-    "service.network.request": "允许插件网络访问（持久）",
-  };
-  return labels[permissionId] || `允许一次：${permissionId}`;
-}
-
-function approvalExpiryLabel(expiresAt: string) {
-  const expires = Date.parse(expiresAt);
-  if (!Number.isFinite(expires)) return "即将过期";
-  const seconds = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
-  return `${seconds} 秒后过期`;
 }
 
 function gameInitial(name: string) {
@@ -1279,17 +1159,6 @@ async function controlAction(runtimeId: string, action: string, successMessage =
 
 onMounted(() => {
   void refresh();
-  void refreshApprovals();
-  approvalPollTimer = window.setInterval(() => {
-    void refreshApprovals();
-  }, 1000);
-});
-
-onBeforeUnmount(() => {
-  if (approvalPollTimer !== undefined) {
-    window.clearInterval(approvalPollTimer);
-    approvalPollTimer = undefined;
-  }
 });
 </script>
 
@@ -1343,81 +1212,6 @@ onBeforeUnmount(() => {
 .page-head {
   gap: 20px;
   align-items: flex-start;
-}
-
-.approval-dialog-intro {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 14px;
-  border: 1px solid var(--game-border-light);
-  border-radius: 12px;
-  background: var(--game-panel-soft);
-}
-
-.approval-dialog-count {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  color: var(--game-danger);
-  background: var(--game-danger-soft);
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.approval-dialog-intro strong {
-  display: block;
-  margin-bottom: 4px;
-}
-
-.approval-dialog-intro p {
-  margin: 0;
-  color: var(--game-text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.approval-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-  max-height: 56vh;
-  overflow-y: auto;
-}
-
-.approval-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px;
-  border: 1px solid var(--game-border-light);
-  border-radius: 12px;
-  background: var(--game-panel-soft);
-}
-
-.approval-copy {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.approval-copy span,
-.approval-copy small {
-  color: var(--game-text-muted);
-}
-
-.approval-target {
-  overflow-wrap: anywhere;
-}
-
-.approval-actions {
-  display: flex;
-  flex-shrink: 0;
-  gap: 8px;
 }
 
 .page-copy {
@@ -2228,13 +2022,5 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
   }
 
-  .approval-card {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .approval-actions :deep(.el-button) {
-    flex: 1;
-  }
 }
 </style>
