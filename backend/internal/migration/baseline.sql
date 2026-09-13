@@ -2002,6 +2002,7 @@ CREATE INDEX IF NOT EXISTS idx_dpvr_operation ON desktop_pet_package_validation_
 
 CREATE TABLE IF NOT EXISTS desktop_pet_action_revisions (
   id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL DEFAULT '',
   processing_task_id TEXT NOT NULL DEFAULT '',
   processing_action_id TEXT NOT NULL DEFAULT '',
   generation_task_id TEXT NOT NULL DEFAULT '',
@@ -2037,7 +2038,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_revisions (
     updated_at TEXT NOT NULL DEFAULT '',
   ready_at TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
   source_type TEXT NOT NULL DEFAULT '',
   content_hash TEXT NOT NULL DEFAULT '',
   content_hash_version TEXT NOT NULL DEFAULT '',
@@ -2070,6 +2070,7 @@ CREATE INDEX IF NOT EXISTS idx_dpar_stream_rev ON desktop_pet_action_revisions(a
 
 CREATE TABLE IF NOT EXISTS desktop_pet_action_active_revisions (
   processing_task_id TEXT NOT NULL DEFAULT '',
+  character_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
   revision_id TEXT NOT NULL DEFAULT '',
   binding_version INTEGER NOT NULL DEFAULT 0,
@@ -2078,7 +2079,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_active_revisions (
     created_at TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
   active_action_revision_id TEXT NOT NULL DEFAULT '',
   binding_revision INTEGER NOT NULL DEFAULT 0,
   bound_reason TEXT NOT NULL DEFAULT '',
@@ -2089,6 +2089,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_active_revisions (
 
 CREATE TABLE IF NOT EXISTS desktop_pet_frame_assets (
   id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL DEFAULT '',
   content_hash TEXT NOT NULL DEFAULT '',
   storage_path TEXT NOT NULL DEFAULT '',
   mime_type TEXT NOT NULL DEFAULT '',
@@ -2104,7 +2105,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_frame_assets (
   status TEXT NOT NULL DEFAULT 'staging',
     created_at TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
   storage_key TEXT NOT NULL DEFAULT '',
   source_processing_revision_id TEXT NOT NULL DEFAULT '',
   source_processing_artifact_id TEXT NOT NULL DEFAULT ''
@@ -2209,6 +2209,7 @@ CREATE INDEX IF NOT EXISTS idx_dec_session ON desktop_pet_edit_checkpoints(sessi
 CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_jobs (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL DEFAULT '',
+  character_id TEXT NOT NULL DEFAULT '',
   processing_task_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
   target_frame_id TEXT NOT NULL DEFAULT '',
@@ -2241,7 +2242,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_jobs (
   rejected_by TEXT NOT NULL DEFAULT '',
   rejected_at TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
   draft_snapshot_id TEXT NOT NULL DEFAULT '',
   draft_snapshot_hash TEXT NOT NULL DEFAULT '',
@@ -2270,6 +2270,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_candidates (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL DEFAULT '',
   job_id TEXT NOT NULL DEFAULT '',
+  character_id TEXT NOT NULL DEFAULT '',
   target_frame_id TEXT NOT NULL DEFAULT '',
   candidate_type TEXT NOT NULL DEFAULT '',
   asset_id TEXT NOT NULL DEFAULT '',
@@ -2291,7 +2292,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_candidates (
   rejected_at TEXT NOT NULL DEFAULT '',
   reject_reason TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
   candidate_version INTEGER NOT NULL DEFAULT 0,
   draft_snapshot_id TEXT NOT NULL DEFAULT '',
@@ -2765,6 +2765,7 @@ CREATE INDEX IF NOT EXISTS idx_dprr_status ON desktop_pet_processing_retry_reque
 
 CREATE TABLE IF NOT EXISTS desktop_pet_quality_evaluations (
   id TEXT PRIMARY KEY,
+  character_id TEXT NOT NULL DEFAULT '',
   processing_task_id TEXT NOT NULL,
   processing_action_id TEXT NOT NULL,
   action_revision_id TEXT NOT NULL,
@@ -2790,7 +2791,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_evaluations (
   started_at TEXT DEFAULT '',
   completed_at TEXT DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
-  character_id TEXT NOT NULL DEFAULT '',
   action_content_hash TEXT NOT NULL DEFAULT '',
   processing_revision_id TEXT NOT NULL DEFAULT '',
   profile_id TEXT NOT NULL DEFAULT '',
@@ -2971,6 +2971,7 @@ CREATE INDEX IF NOT EXISTS idx_gen_artifacts_action_id ON desktop_pet_generation
 CREATE TABLE IF NOT EXISTS desktop_pet_reference_assets (
     id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL DEFAULT '',
+    character_id TEXT NOT NULL DEFAULT '',
     source_path TEXT NOT NULL DEFAULT '',
     source_hash TEXT NOT NULL DEFAULT '',
     source_mime TEXT NOT NULL DEFAULT '',
@@ -2987,7 +2988,6 @@ CREATE TABLE IF NOT EXISTS desktop_pet_reference_assets (
     subject_box TEXT NOT NULL DEFAULT '{}',
     anchor TEXT NOT NULL DEFAULT '{}',
     coordinate_space TEXT NOT NULL DEFAULT '',
-    character_id TEXT NOT NULL DEFAULT '',
     user_id TEXT NOT NULL DEFAULT '',
     source_artifact_id TEXT NOT NULL DEFAULT '',
     storage_path TEXT NOT NULL DEFAULT '',

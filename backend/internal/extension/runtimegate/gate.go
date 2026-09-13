@@ -5,7 +5,7 @@ import "sync"
 const (
 	EmotionExtensionID   = "com.amitia.builtin.emotion"
 	LifestyleExtensionID = "com.amitia.builtin.lifestyle"
-	ProactiveExtensionID = "com.amitia.builtin.proactive"
+	ProactiveExtensionID = "com.amitia/proactive"
 )
 
 var (

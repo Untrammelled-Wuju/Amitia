@@ -28,6 +28,7 @@ func NewContributionRepository(db *sql.DB) *SQLiteContributionRepository {
 }
 
 func (r *SQLiteContributionRepository) PutContribution(ctx context.Context, contrib domain.ContributionDefinition) error {
+	contrib.Kind = domain.NormalizeContributionKind(contrib.Kind)
 	data, err := json.Marshal(contrib)
 	if err != nil {
 		return fmt.Errorf("sqlite: marshal contribution: %w", err)
@@ -80,6 +81,7 @@ func (r *SQLiteContributionRepository) GetContribution(ctx context.Context, exte
 	if err := json.Unmarshal([]byte(data), &contrib); err != nil {
 		return domain.ContributionDefinition{}, fmt.Errorf("sqlite: unmarshal contribution: %w", err)
 	}
+	contrib.Kind = domain.NormalizeContributionKind(contrib.Kind)
 
 	return contrib, nil
 }
@@ -102,6 +104,7 @@ func (r *SQLiteContributionRepository) ListContributions(ctx context.Context, ex
 		if err := json.Unmarshal([]byte(data), &contrib); err != nil {
 			return nil, fmt.Errorf("sqlite: unmarshal contribution: %w", err)
 		}
+		contrib.Kind = domain.NormalizeContributionKind(contrib.Kind)
 		out = append(out, contrib)
 	}
 
@@ -130,6 +133,7 @@ func (r *SQLiteContributionRepository) ListContributionsByModule(ctx context.Con
 		if err := json.Unmarshal([]byte(data), &contrib); err != nil {
 			return nil, fmt.Errorf("sqlite: unmarshal contribution: %w", err)
 		}
+		contrib.Kind = domain.NormalizeContributionKind(contrib.Kind)
 		out = append(out, contrib)
 	}
 

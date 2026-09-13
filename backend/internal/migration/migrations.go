@@ -212,6 +212,7 @@ func DefaultMigrations() []Migration {
 		DesktopPetGenerationModeSnapshotRepairMigration(),
 		DesktopPetQualityMeasurementSubjectBoxMigration(),
 		EmotionStateMigration(),
+		DesktopPetCharacterUnbindMigration(),
 	}
 }
 

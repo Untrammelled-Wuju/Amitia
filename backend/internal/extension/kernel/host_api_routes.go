@@ -215,6 +215,10 @@ type RuntimeHealthReader interface {
 	SnapshotByExtension(ctx context.Context, extensionID string, moduleID string) []runtime_supervisor.RuntimeHealthSnapshot
 }
 
+type ProactiveMessageDispatcher interface {
+	DispatchProactiveMessage(ctx context.Context, userID, characterID, conversationID, channel, prompt, requestID string) (string, error)
+}
+
 type HostAPIRouteDeps struct {
 	StateStore          ExtensionStateStore
 	CharacterReader     CharacterReader
@@ -233,6 +237,7 @@ type HostAPIRouteDeps struct {
 	ScopeSnapshotStore  host_api.ScopeSnapshotStore
 	SecretStore         SecretStore
 	ProviderInvoker     ProviderInvoker
+	ProactiveDispatcher ProactiveMessageDispatcher
 }
 
 type SecretStore interface {
@@ -1633,6 +1638,57 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					Status: host_api.StatusSuccess,
 					Output: output,
 				}, nil
+			},
+		},
+		{
+			method:          host_api.MethodProactiveDispatch,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectExternal,
+			timeout:         2 * time.Minute,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var p struct {
+					UserID         string `json:"userId"`
+					CharacterID    string `json:"characterId"`
+					ConversationID string `json:"conversationId"`
+					Channel        string `json:"channel"`
+					Message        string `json:"message"`
+					RequestID      string `json:"requestId"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if deps.ProactiveDispatcher == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "proactive dispatcher not configured"},
+					}, nil
+				}
+				content, err := deps.ProactiveDispatcher.DispatchProactiveMessage(
+					ctx,
+					p.UserID,
+					p.CharacterID,
+					p.ConversationID,
+					p.Channel,
+					p.Message,
+					p.RequestID,
+				)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error: &host_api.Error{
+							Code:    host_api.ErrorCodeInternal,
+							Message: err.Error(),
+						},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{
+					"content":   content,
+					"requestId": p.RequestID,
+				})
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
 			},
 		},
 	}

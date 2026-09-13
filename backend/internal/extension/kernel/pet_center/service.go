@@ -1,4 +1,4 @@
-package desktop_pet_center
+package pet_center
 
 import (
 	"context"
@@ -12,15 +12,15 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
-const managementTarget = "desktop_pet_center"
+const managementTarget = "pet_center"
 
 var (
-	ErrKernelUnavailable        = errors.New("desktop_pet_center: extension kernel unavailable")
-	ErrExtensionNotFound        = errors.New("desktop_pet_center: extension not found")
-	ErrNotDesktopPetPlugin      = errors.New("desktop_pet_center: extension is not a desktop_pet_plugin")
-	ErrInvalidInput             = errors.New("desktop_pet_center: invalid input")
-	ErrManagementTargetMismatch = errors.New("desktop_pet_center: package management target mismatch")
-	ErrPackageIdentityMismatch  = errors.New("desktop_pet_center: package identity mismatch")
+	ErrKernelUnavailable        = errors.New("pet_center: extension kernel unavailable")
+	ErrExtensionNotFound        = errors.New("pet_center: extension not found")
+	ErrNotDesktopPetPlugin      = errors.New("pet_center: extension is not a pet_plugin")
+	ErrInvalidInput             = errors.New("pet_center: invalid input")
+	ErrManagementTargetMismatch = errors.New("pet_center: package management target mismatch")
+	ErrPackageIdentityMismatch  = errors.New("pet_center: package identity mismatch")
 )
 
 type kernelContainer interface {
@@ -87,12 +87,12 @@ func (s *DesktopPetPluginManagementService) List(ctx context.Context, page, page
 	for _, inst := range installations {
 		contribs, err := s.container.ListContributions(ctx, inst.ExtensionID)
 		if err != nil {
-			log.Printf("desktop_pet_center: list contributions for %s: %v", inst.ExtensionID, err)
+			log.Printf("pet_center: list contributions for %s: %v", inst.ExtensionID, err)
 			continue
 		}
 		hasPetPlugin := false
 		for _, c := range contribs {
-			if c.Kind == domain.ContributionKindDesktopPetPlugin {
+			if c.Kind == domain.ContributionKindPetPlugin {
 				hasPetPlugin = true
 				break
 			}
@@ -101,7 +101,7 @@ func (s *DesktopPetPluginManagementService) List(ctx context.Context, page, page
 			continue
 		}
 		for _, c := range contribs {
-			if c.Kind != domain.ContributionKindDesktopPetPlugin {
+			if c.Kind != domain.ContributionKindPetPlugin {
 				continue
 			}
 			if search != "" && !matchesPluginSearch(c, inst, search) {
@@ -146,7 +146,7 @@ func (s *DesktopPetPluginManagementService) Get(ctx context.Context, pluginID st
 		}
 		hasPetPlugin := false
 		for _, c := range contribs {
-			if c.Kind == domain.ContributionKindDesktopPetPlugin {
+			if c.Kind == domain.ContributionKindPetPlugin {
 				hasPetPlugin = true
 				break
 			}
@@ -155,7 +155,7 @@ func (s *DesktopPetPluginManagementService) Get(ctx context.Context, pluginID st
 			continue
 		}
 		for _, c := range contribs {
-			if c.Kind != domain.ContributionKindDesktopPetPlugin {
+			if c.Kind != domain.ContributionKindPetPlugin {
 				continue
 			}
 			if string(c.ID) != pluginID {
@@ -182,7 +182,7 @@ func (s *DesktopPetPluginManagementService) GetByExtensionID(ctx context.Context
 	found := false
 	var results []DesktopPetPluginDetail
 	for _, c := range contribs {
-		if c.Kind == domain.ContributionKindDesktopPetPlugin {
+		if c.Kind == domain.ContributionKindPetPlugin {
 			found = true
 			detail, err := s.buildDetail(ctx, inst, c)
 			if err != nil {
@@ -337,7 +337,7 @@ func (s *DesktopPetPluginManagementService) requireDesktopPetPlugin(ctx context.
 		return err
 	}
 	for _, c := range contribs {
-		if c.Kind == domain.ContributionKindDesktopPetPlugin {
+		if c.Kind == domain.ContributionKindPetPlugin {
 			return nil
 		}
 	}

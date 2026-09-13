@@ -102,7 +102,7 @@ func packagePreviewManagementTarget(preview kernelruntime.InstallPreview) (strin
 	seen := make(map[string]struct{})
 	for _, module := range preview.Manifest.Modules {
 		for _, contribution := range module.Contributions {
-			kind := string(contribution.Kind)
+			kind := string(domain.NormalizeContributionKind(domain.ContributionKind(contribution.Kind)))
 			if kind == "" {
 				continue
 			}

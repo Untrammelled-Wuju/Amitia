@@ -37,8 +37,9 @@ type DefaultPermissionBroker struct {
 	approvalRecords map[string]PermissionApprovalRecord
 	snapshotStore   PermissionSnapshotStore
 
-	SystemPolicy    func(ctx context.Context, subject PermissionSubject, permissionID string, scope PermissionScope) (PermissionDecision, bool)
-	ExecutionPolicy func(ctx context.Context, request PermissionEvaluationRequest, requirement PermissionRequirement, definition PermissionDefinition) (PermissionDecision, bool)
+	SystemPolicy       func(ctx context.Context, subject PermissionSubject, permissionID string, scope PermissionScope) (PermissionDecision, bool)
+	ExecutionPolicy    func(ctx context.Context, request PermissionEvaluationRequest, requirement PermissionRequirement, definition PermissionDefinition) (PermissionDecision, bool)
+	InstallationPolicy func(ctx context.Context, subject PermissionSubject, requirement PermissionRequirement, definition PermissionDefinition) (PermissionDecision, bool)
 
 	OnPermissionRevoked func(extensionID, runtimeID string)
 
@@ -132,6 +133,7 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 	hasHardDeny := false
 	hasForcedApprovalMissing := false
 	hasNormalMissing := false
+	hasInstallationDeny := false
 
 	for _, req := range request.Requirements {
 		def, ok := b.registry.Get(req.PermissionID)
@@ -227,6 +229,26 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 			}
 		}
 
+		if b.InstallationPolicy != nil {
+			if decision, handled := b.InstallationPolicy(ctx, request.Subject, req, def); handled {
+				if decision == DecisionDeny {
+					result.Missing = append(result.Missing, req)
+					result.Reasons = append(result.Reasons, PermissionReason{
+						Code:       "installation_permission_denied",
+						Permission: req.PermissionID,
+					})
+					hasHardDeny = true
+					hasInstallationDeny = true
+				} else {
+					result.Reasons = append(result.Reasons, PermissionReason{
+						Code:       "installation_permission_granted",
+						Permission: req.PermissionID,
+					})
+				}
+				continue
+			}
+		}
+
 		if def.RequiresPerUse && b.validateApprovalRecord(req.PermissionID, request) {
 			result.Reasons = append(result.Reasons, PermissionReason{
 				Code:       "per_use_approval_matched",
@@ -273,7 +295,10 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 		}
 	}
 
-	if hasHardDeny {
+	if hasInstallationDeny {
+		result.Decision = DecisionDeny
+		result.ApprovalRequest = nil
+	} else if hasHardDeny {
 		b.determineDenyOrApproval(&result, request)
 	} else if hasForcedApprovalMissing {
 		b.determineForcedApproval(&result, request)

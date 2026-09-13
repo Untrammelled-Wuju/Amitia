@@ -256,7 +256,7 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 		return i.buildUISlotOp(ctx, contrib, defData)
 	case domain.ContributionKindGamePlugin:
 		return i.buildGamePluginOp(ctx, contrib, defData, generation)
-	case domain.ContributionKindDesktopPetPlugin:
+	case domain.ContributionKindPetPlugin:
 		return i.buildDesktopPetPluginOp(ctx, contrib, defData, generation)
 	default:
 		return installOp{}, fmt.Errorf("unsupported contribution kind: %s", contrib.Kind)
@@ -584,10 +584,10 @@ func (i *TypedContributionInstaller) buildGamePluginOp(ctx context.Context, cont
 
 func (i *TypedContributionInstaller) buildDesktopPetPluginOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
 	if contrib.ID == "" {
-		return installOp{}, fmt.Errorf("desktop_pet_plugin: id required")
+		return installOp{}, fmt.Errorf("pet_plugin: id required")
 	}
 	return installOp{
-		kind: domain.ContributionKindDesktopPetPlugin,
+		kind: domain.ContributionKindPetPlugin,
 		doInstall: func(ctx context.Context) error {
 			i.logAudit(lifecycleAuditEntry{
 				ContributionID: string(contrib.ID),

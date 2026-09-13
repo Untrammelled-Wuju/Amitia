@@ -392,6 +392,9 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if err := step(7, StepCommitKernelRepositories, "completed", packageJSON(commitRepoResult), ""); err != nil {
 		return KernelInstallResult{}, err
 	}
+	if err := r.syncInstalledPackagePermissions(ctx, definition.ID, pkg.Manifest.Permissions); err != nil {
+		return fail("install.grant_permissions", err, targetPath)
+	}
 	if r.container.ExtensionProviderReconciler != nil {
 		if err := r.container.ExtensionProviderReconciler.ReconcileDefinitions(definition); err != nil {
 			return fail(StepReconcileCapabilityProviders, err, targetPath)

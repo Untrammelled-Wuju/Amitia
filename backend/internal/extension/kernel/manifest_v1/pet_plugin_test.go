@@ -78,7 +78,7 @@ func TestSchemaAcceptsDesktopPetPluginContribution(t *testing.T) {
 	}
 }
 
-func TestDesktopPetPluginRequiresID(t *testing.T) {
+func TestPetPluginRequiresID(t *testing.T) {
 	manifest := `{
 		"manifestVersion": 1,
 		"extension": {
@@ -302,8 +302,8 @@ func TestDesktopPetPluginPreservedInExtensionDefinition(t *testing.T) {
 	if len(def.Modules[0].Contributions) != 1 {
 		t.Fatalf("expected 1 contribution, got %d", len(def.Modules[0].Contributions))
 	}
-	if string(def.Modules[0].Contributions[0].Kind) != "desktop_pet_plugin" {
-		t.Errorf("expected contribution kind desktop_pet_plugin, got %s", def.Modules[0].Contributions[0].Kind)
+	if string(def.Modules[0].Contributions[0].Kind) != "pet_plugin" {
+		t.Errorf("expected contribution kind pet_plugin, got %s", def.Modules[0].Contributions[0].Kind)
 	}
 }
 

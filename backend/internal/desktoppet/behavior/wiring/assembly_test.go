@@ -312,7 +312,7 @@ func TestInferCategoryFromKey(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := inferCategoryFromKey(tt.key)
+		got := v2InferCategoryFromKey(tt.key)
 		if got != tt.want {
 			t.Errorf("inferCategoryFromKey(%s) = %s, want %s", tt.key, got, tt.want)
 		}

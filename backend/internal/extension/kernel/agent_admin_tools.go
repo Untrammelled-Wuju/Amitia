@@ -556,6 +556,9 @@ type agentAdminToolSpec struct {
 	risk                     capability.RiskLevel
 	side                     capability.SideEffectLevel
 	approval                 bool
+	internal                 bool
+	background               bool
+	permissions              []capability.PermissionRequirement
 	timeout                  time.Duration
 }
 
@@ -596,13 +599,16 @@ func registerAgentAdminTools(ctx context.Context, registry *capability.ToolRegis
 		if spec.timeout <= 0 {
 			spec.timeout = 30 * time.Second
 		}
+		exposed := !spec.internal
 		def := capability.ToolDefinition{
 			ID: "builtin.agent_admin." + spec.name, ModelName: spec.name, Source: capability.ToolSourceBuiltin,
 			Name: spec.name, Description: spec.description, InputSchema: json.RawMessage(spec.input), OutputSchema: json.RawMessage(obj),
-			RiskLevel: spec.risk, SideEffect: spec.side, HasSideEffects: spec.side != capability.SideEffectReadOnly && spec.side != capability.SideEffectNone,
+			Internal:    spec.internal,
+			Permissions: spec.permissions,
+			RiskLevel:   spec.risk, SideEffect: spec.side, HasSideEffects: spec.side != capability.SideEffectReadOnly && spec.side != capability.SideEffectNone,
 			Idempotent: spec.side == capability.SideEffectReadOnly, Retryable: spec.side == capability.SideEffectReadOnly, Enabled: true, Compatible: true, TimeoutMS: spec.timeout.Milliseconds(),
-			ToolVersion: capability.ToolVersion{SchemaVersion: 1, Revision: "agent-admin-v1"}, ModelExposure: capability.ModelExposureRule{ExposedByDefault: true, Categories: []string{"system", "management"}, Priority: 45},
-			ExecutionPolicy: capability.ToolExecutionPolicy{Timeout: spec.timeout, MaxConcurrency: 2, Idempotent: spec.side == capability.SideEffectReadOnly, ApprovalRequired: spec.approval, AllowBackground: false},
+			ToolVersion: capability.ToolVersion{SchemaVersion: 1, Revision: "agent-admin-v1"}, ModelExposure: capability.ModelExposureRule{ExposedByDefault: exposed, Categories: []string{"system", "management"}, Priority: 45},
+			ExecutionPolicy: capability.ToolExecutionPolicy{Timeout: spec.timeout, MaxConcurrency: 2, Idempotent: spec.side == capability.SideEffectReadOnly, ApprovalRequired: spec.approval, AllowBackground: spec.background},
 			ResultPolicy:    capability.ToolResultPolicy{SanitizeError: true, MaxOutputBytes: 512 * 1024}, Runtime: capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeBuiltin, RuntimeID: "agent_admin", HandlerName: spec.name},
 		}
 		if err := registry.Register(ctx, def); err != nil {

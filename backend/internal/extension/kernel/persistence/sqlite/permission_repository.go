@@ -32,6 +32,7 @@ type PermissionRepository interface {
 	PutGrant(ctx context.Context, grant PermissionGrant) error
 	GetGrant(ctx context.Context, extensionID domain.ExtensionID, permissionName string) (PermissionGrant, error)
 	ListGrants(ctx context.Context, extensionID domain.ExtensionID) ([]PermissionGrant, error)
+	IsGranted(ctx context.Context, extensionID domain.ExtensionID, permissionName string) (bool, error)
 	DeleteGrant(ctx context.Context, extensionID domain.ExtensionID, permissionName string) error
 }
 
@@ -212,6 +213,28 @@ func (r *SQLitePermissionRepository) ListGrants(ctx context.Context, extensionID
 	}
 
 	return out, nil
+}
+
+func (r *SQLitePermissionRepository) IsGranted(ctx context.Context, extensionID domain.ExtensionID, permissionName string) (bool, error) {
+	ex := getExecutor(ctx, r.db)
+	var granted int
+	err := ex.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM extension_permission_requirements req
+			JOIN extension_permission_grants grant
+				ON grant.extension_id = req.extension_id
+				AND grant.permission_name = req.permission_name
+			WHERE req.extension_id = ?
+				AND req.permission_name = ?
+				AND grant.state = 'granted'
+				AND (grant.expires_at IS NULL OR grant.expires_at > CURRENT_TIMESTAMP)
+		)
+	`, string(extensionID), permissionName).Scan(&granted)
+	if err != nil {
+		return false, fmt.Errorf("sqlite: query effective permission grant: %w", err)
+	}
+	return granted != 0, nil
 }
 
 func (r *SQLitePermissionRepository) DeleteGrant(ctx context.Context, extensionID domain.ExtensionID, permissionName string) error {

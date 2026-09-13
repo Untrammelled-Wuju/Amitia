@@ -28,7 +28,7 @@ func BuildGameHostExtension(version string) Definition {
 		Domain:          domain.ExtensionDomainGame,
 		Placement:       domain.ExtensionPlacementDevice,
 		Publisher:       domain.PublisherReference{PublisherID: "com.amitia", DisplayName: "Amitia", TrustLevel: "system"},
-		Package:         domain.PackageReference{PackageID: "builtin-game-host", ManifestVersion: 1},
+		Package:         domain.PackageReference{PackageID: "gamex", ManifestVersion: 1},
 		Modules: []domain.ModuleDefinition{{
 			ID: GameHostModuleID, ExtensionID: GameHostExtensionID,
 			Name:        domain.LocalizedText{Default: "Game Plugin Host Runtime"},
@@ -89,7 +89,7 @@ func BuildDesktopPetExtension(version string) Definition {
 			TrustLevel:  "system",
 		},
 		Package: domain.PackageReference{
-			PackageID:       "builtin-desktop-pet",
+			PackageID:       "petx",
 			ManifestVersion: 1,
 		},
 		Modules: []domain.ModuleDefinition{
@@ -123,10 +123,10 @@ func BuildDesktopPetExtension(version string) Definition {
 				},
 				Placement: domain.ModulePlacementDevice,
 				DeviceRequirements: &domain.DeviceRequirements{
-					Platforms: []string{"windows", "linux", "darwin"},
+					Platforms: []string{"windows", "linux", "darwin", "android"},
 				},
 				Compatibility: domain.ModuleCompatibility{
-					Platforms: []string{"windows", "linux", "darwin"},
+					Platforms: []string{"windows", "linux", "darwin", "android"},
 				},
 				Policies: domain.ModulePolicies{
 					NetworkAccess:    false,
@@ -135,7 +135,7 @@ func BuildDesktopPetExtension(version string) Definition {
 			},
 		},
 		Compatibility: domain.ExtensionCompatibility{
-			Platforms: []string{"windows", "linux", "darwin"},
+			Platforms: []string{"windows", "linux", "darwin", "android"},
 		},
 		Policies: domain.ExtensionPolicies{
 			NetworkAccess: false,
@@ -154,10 +154,10 @@ func BuildDesktopPetExtension(version string) Definition {
 func buildDesktopPetContributions(extID domain.ExtensionID, modID domain.ModuleID) []domain.ContributionDefinition {
 	return []domain.ContributionDefinition{
 		{
-			ID:          domain.ContributionID("desktop_pet_plugin"),
+			ID:          domain.ContributionID("pet_plugin"),
 			ModuleID:    modID,
 			ExtensionID: extID,
-			Kind:        domain.ContributionKindDesktopPetPlugin,
+			Kind:        domain.ContributionKindPetPlugin,
 			Name:        domain.LocalizedText{Default: "Desktop Pet Plugin"},
 			Description: domain.LocalizedText{
 				Default: "Desktop pet plugin contribution providing rendering, interaction, notification, and animation for desktop pets.",

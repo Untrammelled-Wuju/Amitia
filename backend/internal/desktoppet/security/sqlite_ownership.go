@@ -21,35 +21,6 @@ func NewSQLiteOwnershipGuard(db *gorm.DB) *SQLiteOwnershipGuard {
 	return &SQLiteOwnershipGuard{db: db}
 }
 
-func (g *SQLiteOwnershipGuard) RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*CharacterScope, error) {
-	if actor == nil {
-		return nil, ErrUnauthorized
-	}
-	if characterID == "" {
-		return nil, ErrNotFound
-	}
-	var result struct {
-		Owner string `gorm:"column:owner_user_id"`
-	}
-	err := g.db.WithContext(ctx).Table("desktop_pet_identities").
-		Select("owner_user_id").
-		Where("source_character_id = ?", characterID).
-		Take(&result).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	if result.Owner == "" {
-		return nil, ErrNotFound
-	}
-	if result.Owner != string(actor.UserID) && !actor.HasRole("admin") {
-		return nil, ErrForbidden
-	}
-	return &CharacterScope{UserID: result.Owner, CharacterID: characterID}, nil
-}
-
 func (g *SQLiteOwnershipGuard) RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*GenerationTaskScope, error) {
 	if actor == nil {
 		return nil, ErrUnauthorized

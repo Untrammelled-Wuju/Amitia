@@ -319,6 +319,13 @@ func (c *Container) Recover(ctx context.Context) error {
 			continue
 		}
 		runtimegate.Set(string(inst.ExtensionID), inst.EnablementState == domain.EnablementEnabled || inst.EnablementState == domain.EnablementRequiresRecovery)
+		if definition, definitionErr := c.DefinitionRepository.GetExtension(ctx, inst.ExtensionID, inst.InstalledVersion); definitionErr == nil {
+			if permissionErr := restorePackagePermissionsFromDefinition(ctx, c.PermissionRepository, inst.ExtensionID, definition); permissionErr != nil {
+				recoverErrs = append(recoverErrs, fmt.Errorf("kernel: restore package permissions for %s: %w", inst.ExtensionID, permissionErr))
+				c.markRequiresRecovery(ctx, inst)
+				continue
+			}
+		}
 		contribs, err := c.ContributionRepository.ListContributions(ctx, inst.ExtensionID)
 		if err != nil {
 			recoverErrs = append(recoverErrs, fmt.Errorf("kernel: list contributions for %s: %w", inst.ExtensionID, err))

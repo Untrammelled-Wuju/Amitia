@@ -139,6 +139,7 @@ type ContainerBuilder struct {
 
 	channelStore         capability.ChannelStore
 	agentAdminController AgentAdminToolController
+	proactiveDispatcher  ProactiveMessageDispatcher
 }
 
 type WorkshopModelGenerator interface {
@@ -319,6 +320,11 @@ func (b *ContainerBuilder) WithAgentAdminController(controller AgentAdminToolCon
 	return b
 }
 
+func (b *ContainerBuilder) WithProactiveDispatcher(dispatcher ProactiveMessageDispatcher) *ContainerBuilder {
+	b.proactiveDispatcher = dispatcher
+	return b
+}
+
 func (b *ContainerBuilder) WithMCPRepository(repo *mcp.Repository) *ContainerBuilder {
 	b.mcpRepository = repo
 	return b
@@ -383,6 +389,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	permBroker := permission.NewDefaultPermissionBroker(permDefRegistry, permStorage)
 	permBroker.SetSnapshotStore(permSnapshotStore)
 	permBroker.SetTrustLevelChecker(newRepositoryPermissionTrustChecker(instRepo, defRepo))
+	permBroker.InstallationPolicy = newInstallationPermissionPolicy(permRepo)
 	permBroker.PersistentOverride = map[string]struct{}{
 		permission.PermissionServiceRuntimeExecute: {},
 		permission.PermissionServiceNetworkRequest: {},
@@ -863,7 +870,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	stateLoader := newContainerStateLoader(instRepo, defRepo, moduleRepo, contribRepo, runtimeRepo, stateStore)
 	preflightChecker := newContainerPreflightChecker(dependencyResolver)
 	typedInstaller := NewTypedContributionInstaller(nil)
-	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, stateStore, typedInstaller, packageRepo, packageArtifactStore, packageGenerationStore, packageSec, uiHostNotifier)
+	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, permRepo, stateStore, typedInstaller, packageRepo, packageArtifactStore, packageGenerationStore, packageSec, uiHostNotifier)
 	lcAuditWriter := newContainerAuditWriter(opRepo)
 	lifecycleMgr := lifecycle_manager.NewManager(stateLoader, preflightChecker, planExecutor, lcAuditWriter)
 
@@ -1100,6 +1107,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ScopeSnapshotStore:  host_api.NewSnapshotStoreAdapter(scopeStore),
 		SecretStore:         nil,
 		ProviderInvoker:     kernelProviderInvoker,
+		ProactiveDispatcher: b.proactiveDispatcher,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
 	}
@@ -1114,6 +1122,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	jsFactory.SetHostAPI(hostAPIGateway)
 
 	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, nodeResolver, artifactResolver)
+	jsSupervisorFactory.SetExtensionRoot(b.extRoot)
 	_ = supervisor.RegisterFactory(jsSupervisorFactory)
 
 	agentAdminTools := newAgentAdminToolService(b.agentAdminController, workflowRegistry, workflowExecutor, toolRegistry)
@@ -1386,6 +1395,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	})
 	uiContribRepo := sqlite.NewSQLiteUIContributionRepository(store.DB())
 	savedContribs, _ := uiContribRepo.ListAll(ctx)
+	activeContribs := savedContribs[:0]
+	for _, def := range savedContribs {
+		if string(def.ExtensionID) == builtin.LegacyProactiveExtensionID {
+			_ = uiContribRepo.DeleteContribution(ctx, string(def.ContributionID))
+			continue
+		}
+		activeContribs = append(activeContribs, def)
+	}
+	savedContribs = activeContribs
 	slotRegistry := extension_slots.DefaultSlotRegistry()
 	pageRegistry := extension_page_host.NewPageRegistry()
 	pageSessionMgr := extension_page_host.NewSessionManager()

@@ -11,11 +11,6 @@ import (
 	"github.com/u-ai/backend/pkg/comment/response"
 )
 
-type CharacterScope struct {
-	UserID      string
-	CharacterID string
-}
-
 type GenerationTaskScope struct {
 	UserID      string
 	TaskID      string
@@ -100,7 +95,6 @@ var (
 )
 
 type OwnershipGuard interface {
-	RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*CharacterScope, error)
 	RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*GenerationTaskScope, error)
 	RequireProcessingTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*ProcessingTaskScope, error)
 	RequireActionRevision(ctx context.Context, actor *desktoppetAuth.ActorContext, revisionID string) (*ActionRevisionScope, error)

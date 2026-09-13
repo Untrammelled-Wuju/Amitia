@@ -1,4 +1,4 @@
-package desktop_pet_center
+package pet_center
 
 import (
 	"net/http"
@@ -16,7 +16,11 @@ func NewHTTPHandler(service *DesktopPetPluginManagementService) *HTTPHandler {
 }
 
 func (h *HTTPHandler) RegisterRoutes(group *gin.RouterGroup) {
-	plugins := group.Group("/desktop-pet/plugins")
+	h.registerPluginRoutes(group.Group("/pet/plugins"))
+	h.registerPluginRoutes(group.Group("/desktop-pet/plugins"))
+}
+
+func (h *HTTPHandler) registerPluginRoutes(plugins *gin.RouterGroup) {
 	plugins.GET("", h.listPlugins)
 	plugins.GET("/:pluginId", h.getPlugin)
 	plugins.POST("/install", h.install)
@@ -28,7 +32,7 @@ func (h *HTTPHandler) RegisterRoutes(group *gin.RouterGroup) {
 
 func (h *HTTPHandler) listPlugins(c *gin.Context) {
 	if h.service == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "desktop pet service unavailable", "data": nil})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
 	ctx := c.Request.Context()
@@ -45,7 +49,7 @@ func (h *HTTPHandler) listPlugins(c *gin.Context) {
 
 func (h *HTTPHandler) getPlugin(c *gin.Context) {
 	if h.service == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "desktop pet service unavailable", "data": nil})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
 	ctx := c.Request.Context()
@@ -60,7 +64,7 @@ func (h *HTTPHandler) getPlugin(c *gin.Context) {
 
 func (h *HTTPHandler) install(c *gin.Context) {
 	if h.service == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "desktop pet service unavailable", "data": nil})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
 	var req InstallRequest
@@ -78,7 +82,7 @@ func (h *HTTPHandler) install(c *gin.Context) {
 
 func (h *HTTPHandler) update(c *gin.Context) {
 	if h.service == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "desktop pet service unavailable", "data": nil})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
 	extensionID := c.Param("extensionId")
@@ -101,7 +105,7 @@ func (h *HTTPHandler) update(c *gin.Context) {
 
 func (h *HTTPHandler) enable(c *gin.Context) {
 	if h.service == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "desktop pet service unavailable", "data": nil})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
 	extensionID := c.Param("extensionId")
@@ -115,7 +119,7 @@ func (h *HTTPHandler) enable(c *gin.Context) {
 
 func (h *HTTPHandler) disable(c *gin.Context) {
 	if h.service == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "desktop pet service unavailable", "data": nil})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
 	extensionID := c.Param("extensionId")
@@ -129,7 +133,7 @@ func (h *HTTPHandler) disable(c *gin.Context) {
 
 func (h *HTTPHandler) uninstall(c *gin.Context) {
 	if h.service == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "desktop pet service unavailable", "data": nil})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "pet service unavailable", "data": nil})
 		return
 	}
 	extensionID := c.Param("extensionId")

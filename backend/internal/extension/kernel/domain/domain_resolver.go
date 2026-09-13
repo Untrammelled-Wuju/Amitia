@@ -3,12 +3,12 @@ package domain
 import "fmt"
 
 var exclusiveContributionKinds = map[ContributionKind]bool{
-	ContributionKindGamePlugin:       true,
-	ContributionKindDesktopPetPlugin: true,
+	ContributionKindGamePlugin: true,
+	ContributionKindPetPlugin:  true,
 }
 
 func IsExclusiveContributionKind(kind ContributionKind) bool {
-	return exclusiveContributionKinds[kind]
+	return exclusiveContributionKinds[NormalizeContributionKind(kind)]
 }
 
 type DomainClassification struct {
@@ -31,11 +31,11 @@ func ResolveDomainFromKinds(kinds []ContributionKind) (ExtensionDomain, error) {
 	var exclusiveFound []ContributionKind
 
 	for _, k := range kinds {
-		switch k {
+		switch NormalizeContributionKind(k) {
 		case ContributionKindGamePlugin:
 			hasGame = true
 			exclusiveFound = append(exclusiveFound, k)
-		case ContributionKindDesktopPetPlugin:
+		case ContributionKindPetPlugin:
 			hasDesktopPet = true
 			exclusiveFound = append(exclusiveFound, k)
 		}

@@ -33,6 +33,7 @@ func DefaultPermissionMapping() map[Method][]PermissionMappingEntry {
 		MethodConversationRead:        {{PermissionID: "conversation.read", Resource: "conversation"}},
 		MethodMemoryQuery:             {{PermissionID: "memory.read", Resource: "memory"}},
 		MethodProviderInvoke:          {{PermissionID: "provider.invoke", Resource: "provider"}},
+		MethodProactiveDispatch:       {{PermissionID: "proactive.dispatch", Resource: "proactive"}},
 		MethodUINotify:                {{PermissionID: "ui.notify", Resource: "ui"}},
 		MethodUIDialog:                {{PermissionID: "ui.dialog", Resource: "ui"}},
 		MethodUINavigate:              {{PermissionID: "ui.navigate", Resource: "ui"}},
@@ -91,6 +92,8 @@ func RouteScopeForMethod(method Method) ScopePolicy {
 		return ScopePolicy{Namespaced: true}
 	case MethodToolExecute:
 		return ScopePolicy{RequireRoles: []string{"invocation"}}
+	case MethodProactiveDispatch:
+		return ScopePolicy{Namespaced: true}
 	case MethodUINotify, MethodUIDialog, MethodUINavigate:
 		return ScopePolicy{RequireRoles: []string{"session"}}
 	case MethodClipboardWrite, MethodClipboardRead:
@@ -121,7 +124,7 @@ func RouteRiskForMethod(method Method) RiskLevel {
 		return RiskMedium
 	case MethodUIDialog:
 		return RiskMedium
-	case MethodToolExecute:
+	case MethodToolExecute, MethodProactiveDispatch:
 		return RiskHigh
 	case MethodNetworkRequest, MethodNetworkTCPOpen, MethodNetworkTCPRead, MethodNetworkTCPWrite, MethodNetworkTCPClose,
 		MethodNetworkUDPOpen, MethodNetworkUDPReceive, MethodNetworkUDPSend, MethodNetworkUDPClose,
@@ -143,7 +146,7 @@ func RouteSideEffectForMethod(method Method) SideEffectLevel {
 		return SideEffectWrite
 	case MethodEventEmit:
 		return SideEffectWrite
-	case MethodToolExecute, MethodNetworkRequest, MethodNetworkTCPOpen, MethodNetworkTCPRead, MethodNetworkTCPWrite, MethodNetworkTCPClose,
+	case MethodToolExecute, MethodProactiveDispatch, MethodNetworkRequest, MethodNetworkTCPOpen, MethodNetworkTCPRead, MethodNetworkTCPWrite, MethodNetworkTCPClose,
 		MethodNetworkUDPOpen, MethodNetworkUDPReceive, MethodNetworkUDPSend, MethodNetworkUDPClose,
 		MethodNetworkWebSocketOpen, MethodNetworkWebSocketReceive, MethodNetworkWebSocketSend, MethodNetworkWebSocketClose:
 		return SideEffectExternal
@@ -175,6 +178,7 @@ func RegisterPermissionDefinitions(registry *permission.PermissionDefinitionRegi
 		{ID: "conversation.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeConversation, permission.ScopeCharacter}},
 		{ID: "memory.read", AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeCharacter, permission.ScopeConversation}},
 		{ID: "provider.invoke", Name: "Invoke Provider", Description: "Invoke an AI provider through the host provider boundary", Category: permission.CategoryProvider, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalManual},
+		{ID: "proactive.dispatch", Name: "Dispatch Proactive Message", Description: "Dispatch a proactive message through the character conversation pipeline", Category: permission.CategoryExtension, RiskLevel: capability.RiskHigh, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeExtension, permission.ScopeModule}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
 		{ID: "ui.notify", Name: "Show Notification", Description: "Display a host notification in the active user session", Category: permission.CategoryDesktop, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},
 		{ID: "ui.dialog", Name: "Show Dialog", Description: "Display an interactive host dialog in the active user session", Category: permission.CategoryDesktop, RiskLevel: capability.RiskMedium, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: permission.ChildReevaluate, DefaultApproval: permission.ApprovalManual},
 		{ID: "ui.navigate", Name: "Navigate UI", Description: "Navigate the host UI in the active user session", Category: permission.CategoryDesktop, RiskLevel: capability.RiskLow, AllowedScopes: []permission.ScopeType{permission.ScopeGlobal, permission.ScopeSession}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: permission.ChildInherit, DefaultApproval: permission.ApprovalAuto},

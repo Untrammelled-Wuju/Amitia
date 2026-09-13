@@ -82,6 +82,7 @@ func (r *DefinitionRepository) GetExtension(ctx context.Context, id domain.Exten
 	if err := json.Unmarshal([]byte(data), &def); err != nil {
 		return domain.ExtensionDefinition{}, fmt.Errorf("sqlite: unmarshal definition: %w", err)
 	}
+	def.Domain = domain.NormalizeExtensionDomain(def.Domain)
 
 	return def, nil
 }
@@ -104,6 +105,7 @@ func (r *DefinitionRepository) ListExtensions(ctx context.Context) ([]domain.Ext
 		if err := json.Unmarshal([]byte(data), &def); err != nil {
 			return nil, fmt.Errorf("sqlite: unmarshal definition: %w", err)
 		}
+		def.Domain = domain.NormalizeExtensionDomain(def.Domain)
 		out = append(out, def)
 	}
 

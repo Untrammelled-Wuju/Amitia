@@ -20,21 +20,6 @@ func BuildEmotionExtension(version string) Definition {
 	)
 }
 
-func BuildProactiveExtension(version string) Definition {
-	return buildCharacterFeatureExtension(
-		runtimegate.ProactiveExtensionID,
-		version,
-		"主动消息",
-		"为角色提供主动消息规则、调度、发送和历史记录能力。",
-		"proactive-core",
-		"host.character.proactive",
-		"主动消息",
-		"proactive",
-		200,
-		[]string{"proactive.rules.read", "proactive.rules.write", "proactive.dispatch"},
-	)
-}
-
 func BuildLifestyleExtension(version string) Definition {
 	return buildCharacterFeatureExtension(
 		runtimegate.LifestyleExtensionID,

@@ -2,6 +2,9 @@ package javascript_main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -71,6 +74,17 @@ func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*Pl
 	}
 	if req.WorkingDirectory == "" {
 		return nil, errors.New("javascript_main: working directory required")
+	}
+	if req.SessionToken == "" {
+		token := make([]byte, 32)
+		if _, err := rand.Read(token); err != nil {
+			return nil, fmt.Errorf("javascript_main: generate session token: %w", err)
+		}
+		req.SessionToken = hex.EncodeToString(token)
+	}
+	if req.DefinitionHash == "" {
+		sum := sha256.Sum256([]byte(req.ExtensionID + "\x00" + req.ModuleID))
+		req.DefinitionHash = hex.EncodeToString(sum[:])
 	}
 
 	instanceID := fmt.Sprintf("inst-%s-%s-%d", req.ExtensionID, req.ModuleID, time.Now().UnixNano())

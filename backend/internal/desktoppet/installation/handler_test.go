@@ -632,9 +632,6 @@ func (s *stubRepository) GetOrCreateDeviceContext(ctx context.Context, userID st
 
 type stubInstallGuard struct{}
 
-func (s *stubInstallGuard) RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*security.CharacterScope, error) {
-	return &security.CharacterScope{UserID: string(actor.UserID)}, nil
-}
 func (s *stubInstallGuard) RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.GenerationTaskScope, error) {
 	return &security.GenerationTaskScope{UserID: string(actor.UserID)}, nil
 }

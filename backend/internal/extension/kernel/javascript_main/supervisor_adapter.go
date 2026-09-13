@@ -4,8 +4,12 @@ package javascript_main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
@@ -18,6 +22,7 @@ type SupervisorFactory struct {
 	factory                 *RuntimeFactory
 	nodeEnvironmentResolver script_host.NodeEnvironmentResolver
 	hostArtifactResolver    script_host.ArtifactResolver
+	extensionRoot           string
 }
 
 func NewSupervisorFactory(
@@ -40,6 +45,10 @@ func NewSupervisorFactory(
 
 func (f *SupervisorFactory) Type() domain.RuntimeType {
 	return domain.RuntimeTypeJavaScript
+}
+
+func (f *SupervisorFactory) SetExtensionRoot(root string) {
+	f.extensionRoot = root
 }
 
 func (f *SupervisorFactory) Validate(spec runtime_supervisor.InstanceSpec) error {
@@ -72,11 +81,12 @@ func (f *SupervisorFactory) Create(ctx context.Context, spec runtime_supervisor.
 	if err != nil {
 		return nil, fmt.Errorf("javascript_main: resolve plugin host: %w", err)
 	}
+	entryPoint := resolveExtensionEntryPoint(f.extensionRoot, string(spec.ExtensionID), string(spec.ModuleID), spec.EntryPoint)
 
 	req := CreateHostRequest{
 		ExtensionID:      string(spec.ExtensionID),
 		ModuleID:         string(spec.ModuleID),
-		Entry:            spec.EntryPoint,
+		Entry:            entryPoint,
 		DefinitionHash:   spec.DefinitionHash,
 		Generation:       int(spec.Generation),
 		NodePath:         nodeEnv.NodeBinary,
@@ -97,6 +107,26 @@ func (f *SupervisorFactory) Create(ctx context.Context, spec runtime_supervisor.
 	}
 
 	return &managedPluginHost{host: host}, nil
+}
+
+func resolveExtensionEntryPoint(extensionRoot, extensionID, moduleID, entryPoint string) string {
+	if extensionRoot == "" || extensionID == "" || moduleID == "" || entryPoint == "" || filepath.IsAbs(entryPoint) {
+		return entryPoint
+	}
+	safeID := strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(extensionID)
+	installationsRoot := filepath.Join(extensionRoot, "installations", safeID)
+	if currentData, err := os.ReadFile(filepath.Join(installationsRoot, "current.json")); err == nil {
+		var current struct {
+			GenerationID string `json:"generationID"`
+		}
+		if json.Unmarshal(currentData, &current) == nil && current.GenerationID != "" {
+			candidate := filepath.Join(installationsRoot, "generations", current.GenerationID, "modules", moduleID, entryPoint)
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				return candidate
+			}
+		}
+	}
+	return entryPoint
 }
 
 type managedPluginHost struct {

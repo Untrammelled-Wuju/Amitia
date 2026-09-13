@@ -412,7 +412,7 @@ func (m Manifest) Validate() ValidationReport {
 		"schedule": true, "background_task": true,
 		"ui_page": true, "ui_panel": true, "ui_chat": true,
 		"ui_context_action": true, "ui_desktop": true, "ui_provider": true, "ui_slot": true,
-		"game_plugin": true, "desktop_pet_plugin": true,
+		"game_plugin": true, "pet_plugin": true, "desktop_pet_plugin": true,
 	}
 	contributionIDs := make(map[string]bool)
 	for i, mod := range m.Modules {
@@ -479,9 +479,9 @@ func (m Manifest) Validate() ValidationReport {
 					report.AddError(cpath+".spec", "invalid_game_plugin", err.Error())
 				}
 			}
-			if c.Kind == "desktop_pet_plugin" {
+			if c.Kind == "pet_plugin" || c.Kind == "desktop_pet_plugin" {
 				if err := validateDesktopPetPluginContribution(c.Spec, cpath, moduleIDs); err != nil {
-					report.AddError(cpath+".spec", "invalid_desktop_pet_plugin", err.Error())
+					report.AddError(cpath+".spec", "invalid_pet_plugin", err.Error())
 				}
 			}
 			if c.Kind == "mcp_server" {
@@ -875,7 +875,7 @@ func validateDesktopPetPluginContribution(spec map[string]any, cpath string, mod
 	}
 	if runtimeModuleID, ok := spec["runtimeModuleId"].(string); ok && runtimeModuleID != "" {
 		if !moduleIDs[runtimeModuleID] {
-			return fmt.Errorf("desktop_pet_plugin references unknown module: %s", runtimeModuleID)
+			return fmt.Errorf("pet_plugin references unknown module: %s", runtimeModuleID)
 		}
 	}
 	return nil

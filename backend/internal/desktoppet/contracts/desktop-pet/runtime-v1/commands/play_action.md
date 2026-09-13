@@ -7,7 +7,6 @@ Ephemeral 命令，播放一个动作。
 ```json
 {
   "runtimeId": "desktop-runtime-1",
-  "characterId": "character-1",
   "petInstanceId": "desktop-runtime-1",
   "installationId": "installation-1",
   "actionKey": "wave",
@@ -33,10 +32,9 @@ Ephemeral 命令，播放一个动作。
 
 - `runtimeId` 必须等于命令绑定的 Runtime；
 - `petInstanceId` 必须等于当前桌宠 Runtime pet instance；
-- `installationId` 必须等于当前激活安装；
-- `characterId` 必须存在并等于该安装当前角色。
+- `installationId` 必须等于当前激活安装。
 
-任一字段缺失或不匹配均 fail-closed，禁止用“字段缺失则跳过比对”的兼容逻辑，否则角色/安装切换后的延迟命令可能命中新桌宠。
+任一字段缺失或不匹配均 fail-closed，禁止用“字段缺失则跳过比对”的兼容逻辑，否则安装切换后的延迟命令可能命中新桌宠。
 
 ## CompletionPolicy
 

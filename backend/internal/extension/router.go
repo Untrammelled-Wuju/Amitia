@@ -27,7 +27,7 @@ func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtim
 	devConsoleAPI := NewDevConsoleAPI(runtime)
 	updateAPI := NewUpdateAPI(runtime)
 	canaryAPI := NewCanaryAPI(runtime)
-	desktopPetPluginAPI := NewDesktopPetPluginAPI(runtime)
+	petPluginAPI := NewPetPluginAPI(runtime)
 	extensions := group.Group("/extensions")
 	extensions.GET("/openapi.json", handler.OpenAPI)
 
@@ -49,7 +49,7 @@ func RegisterRouter(group *gin.RouterGroup, ctx *app.AppContext, runtime *Runtim
 	devConsoleAPI.RegisterRoutes(group)
 	updateAPI.RegisterRoutes(extensions)
 	canaryAPI.RegisterRoutes(extensions)
-	desktopPetPluginAPI.RegisterRoutes(extensions)
+	petPluginAPI.RegisterRoutes(extensions)
 	extensions.POST("/agent-skills/import/preview", agentSkillHandler.Preview)
 	extensions.POST("/agent-skills/import/install", agentSkillHandler.Install)
 	extensions.GET("/agent-skills", agentSkillHandler.List)

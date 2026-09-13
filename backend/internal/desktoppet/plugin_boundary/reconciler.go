@@ -243,7 +243,7 @@ func (r *Reconciler) handleReconcileExtensionLocked(ctx context.Context, extID d
 
 	desired := make(map[string]domain.ContributionDefinition)
 	for _, c := range contribs {
-		if c.Kind != domain.ContributionKindDesktopPetPlugin {
+		if c.Kind != domain.ContributionKindPetPlugin {
 			continue
 		}
 		ref := ContributionRefFromDefinition(c)
@@ -392,7 +392,7 @@ func inferContributionKind(c domain.ContributionDefinition) ContributionKind {
 		return ParseContributionKind(v)
 	}
 	switch c.Kind {
-	case domain.ContributionKindDesktopPetPlugin:
+	case domain.ContributionKindPetPlugin:
 		return KindAction
 	default:
 		return KindUnknown

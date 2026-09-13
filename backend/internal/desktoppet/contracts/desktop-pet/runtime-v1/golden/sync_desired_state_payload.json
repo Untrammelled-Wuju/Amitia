@@ -4,7 +4,6 @@
   "ensureAbsent": false,
   "installationId": "install_01JXYZ",
   "petId": "pet_01JXYZ",
-  "characterId": "char_01JXYZ",
   "releaseId": "release_01JXYZ",
   "releaseVersion": "1.2.3",
   "contentRootHash": "sha256:content123hash",

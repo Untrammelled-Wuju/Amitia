@@ -358,11 +358,17 @@ func (r *Runtime) Install(ctx context.Context, archivePath string) (InstalledExt
 	r.installed[item.ID] = item
 	r.mu.Unlock()
 
+	if r.container != nil && r.container.PermissionRepository != nil {
+		if err := r.syncInstalledPackagePermissions(ctx, domain.ExtensionID(pkg.Manifest.Extension.ID), pkg.Manifest.Permissions); err != nil {
+			return InstalledExtension{}, err
+		}
+	}
+
 	if r.container != nil && r.container.DesktopPetPluginBoundary != nil {
 		extID := domain.ExtensionID(pkg.Manifest.Extension.ID)
 		version := pkg.Manifest.Extension.Version
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionInstalled(ctx, extID, version, ""); err != nil {
-			log.Printf("[install] desktop_pet_plugin boundary error: %v", err)
+			log.Printf("[install] pet_plugin boundary error: %v", err)
 		}
 	}
 
@@ -377,7 +383,7 @@ func (r *Runtime) Update(ctx context.Context, archivePath string) (InstalledExte
 	if r.container != nil && r.container.DesktopPetPluginBoundary != nil {
 		extID := domain.ExtensionID(item.ID)
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionUpdated(ctx, extID, "", item.Version, ""); err != nil {
-			log.Printf("[update] desktop_pet_plugin boundary error: %v", err)
+			log.Printf("[update] pet_plugin boundary error: %v", err)
 		}
 	}
 	return item, nil

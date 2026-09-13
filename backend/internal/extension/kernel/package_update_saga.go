@@ -292,7 +292,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}
 	targetRequirements := packageManifestRequirements(current.ExtensionID, confirmed.preview.Manifest.Permissions)
 	targetResources := packageManifestResources(current.ExtensionID, confirmed.preview.Manifest.Resources, targetGeneration.GenerationPath)
-	retainedGrants := retainPackagePermissionGrants(currentGrants, targetRequirements)
+	targetGrants := packageManifestGrantRecords(current.ExtensionID, targetRequirements)
 	current.InstalledVersion = targetDefinition.Version
 	current.PackageID = confirmed.artifact.ArtifactID
 	current.Generation++
@@ -353,7 +353,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 				return err
 			}
 		}
-		for _, grant := range retainedGrants {
+		for _, grant := range targetGrants {
 			if err := r.container.PermissionRepository.PutGrant(txCtx, grant); err != nil {
 				return err
 			}

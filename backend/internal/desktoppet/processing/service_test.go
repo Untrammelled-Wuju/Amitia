@@ -367,10 +367,6 @@ func TestServiceCreatePackage_Normal(t *testing.T) {
 	taskID := "gt-pkg-svc-normal"
 	action := seedFullGenerationTask(t, db, dataDir, taskID, "user-1", "idle_normal", 1)
 
-	if err := db.Model(&desktoppet.GenerationTask{}).Where("id = ?", taskID).Update("character_id", "char-svc-1").Error; err != nil {
-		t.Fatalf("update character_id: %v", err)
-	}
-
 	seedProcessingTaskRow(t, db, "pt-pkg-svc", taskID, 1, "succeeded")
 	seedProcessingActionRow(t, db, "pa-pkg-svc", "pt-pkg-svc", action.ID, "idle_normal", "succeeded", 0)
 

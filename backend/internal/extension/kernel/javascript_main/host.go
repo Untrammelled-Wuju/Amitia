@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/extension/kernel/jsonrpc"
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	secretpkg "github.com/u-ai/backend/internal/extension/kernel/secret"
@@ -473,9 +474,15 @@ func (h *PluginHost) handleRequest(req *jsonrpc.Request) {
 }
 
 type hostCallParams struct {
-	Method  string          `json:"method"`
-	Version int             `json:"version"`
-	Input   json.RawMessage `json:"input"`
+	Method               string                                `json:"method"`
+	Version              int                                   `json:"version"`
+	Input                json.RawMessage                       `json:"input"`
+	ScopeSnapshotID      string                                `json:"scopeSnapshotId"`
+	PermissionSnapshotID string                                `json:"permissionSnapshotId"`
+	InvocationID         string                                `json:"invocationId"`
+	ParentID             string                                `json:"parentId"`
+	TraceID              string                                `json:"traceId"`
+	ExecutionContext     permission.PermissionExecutionContext `json:"executionContext"`
 }
 
 func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
@@ -507,12 +514,28 @@ func (h *PluginHost) handleHostCall(req *jsonrpc.Request) {
 		ModuleID:    domain.ModuleID(h.moduleID),
 	}
 
+	executionContext := p.ExecutionContext.Normalize()
+	if executionContext.ExtensionID == "" {
+		executionContext.ExtensionID = h.extensionID
+	}
+	if executionContext.ModuleID == "" {
+		executionContext.ModuleID = h.moduleID
+	}
+	if executionContext.Source == "" {
+		executionContext.Source = "plugin"
+	}
 	callReq := host_api.CallRequest{
-		CallID:          req.ID.String(),
-		RuntimeIdentity: identity,
-		Method:          host_api.Method(p.Method),
-		Version:         p.Version,
-		Input:           p.Input,
+		CallID:               req.ID.String(),
+		RuntimeIdentity:      identity,
+		Method:               host_api.Method(p.Method),
+		Version:              p.Version,
+		Input:                p.Input,
+		ScopeSnapshotID:      p.ScopeSnapshotID,
+		PermissionSnapshotID: p.PermissionSnapshotID,
+		TraceID:              p.TraceID,
+		InvocationID:         p.InvocationID,
+		ParentID:             p.ParentID,
+		ExecutionContext:     executionContext,
 	}
 
 	result := gateway.Call(procCtx, callReq)

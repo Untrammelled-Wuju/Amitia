@@ -129,6 +129,7 @@ func AllRegisteredMethods() []string {
 		string(MethodCharacterRead), string(MethodConversationRead), string(MethodMemoryQuery),
 		// Provider / Tool / Runtime / mediated network
 		string(MethodProviderInvoke), string(MethodToolExecute), string(MethodRuntimeHealth), string(MethodNetworkRequest),
+		string(MethodProactiveDispatch),
 		string(MethodNetworkTCPOpen), string(MethodNetworkTCPRead), string(MethodNetworkTCPWrite), string(MethodNetworkTCPClose),
 		string(MethodNetworkUDPOpen), string(MethodNetworkUDPReceive), string(MethodNetworkUDPSend), string(MethodNetworkUDPClose),
 		string(MethodNetworkWebSocketOpen), string(MethodNetworkWebSocketReceive), string(MethodNetworkWebSocketSend), string(MethodNetworkWebSocketClose),

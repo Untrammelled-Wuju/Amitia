@@ -74,7 +74,7 @@ func setupTestService(t *testing.T) (Service, *gorm.DB, string) {
 	}).Error; err != nil {
 		t.Fatalf("seed character: %v", err)
 	}
-	if err := db.Exec(`INSERT INTO image_gen_configs(id,name,api_key,model_name,base_url,is_active,enabled) VALUES(1,'测试模型','key','model','url',1,1)`).Error; err != nil {
+	if err := db.Exec(`INSERT INTO image_gen_configs(id,name,api_key,model_name,base_url,is_active,enabled) VALUES(1,'测试模型','key','model','https://example.com',1,1)`).Error; err != nil {
 		t.Fatalf("seed image_gen_config: %v", err)
 	}
 

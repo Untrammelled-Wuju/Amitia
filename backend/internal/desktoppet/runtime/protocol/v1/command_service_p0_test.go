@@ -171,7 +171,7 @@ func TestAllSessionBoundEphemeralCommandsCarryAuthoritativeExpiry(t *testing.T) 
 	for i, commandType := range types {
 		payload := []byte(`{}`)
 		if commandType == CommandTypePlayAction {
-			payload = []byte(`{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"installation-1"}`)
+			payload = []byte(`{"runtimeId":"runtime-1","actionKey":"wave","petInstanceId":"runtime-1","installationId":"installation-1"}`)
 		}
 		before := time.Now().UTC()
 		cmd, err := svc.CreateEphemeralCommandForSession(
@@ -464,7 +464,7 @@ func TestHelloReconciliationRetargetsQueuedDesiredCommandToCurrentRuntime(t *tes
 func TestSessionBoundEphemeralCarriesAuthoritativeExpiry(t *testing.T) {
 	db := newCommandServiceTestDB(t)
 	svc := NewCommandService(db)
-	payload := []byte(`{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"inst-1"}`)
+	payload := []byte(`{"runtimeId":"runtime-1","actionKey":"wave","petInstanceId":"runtime-1","installationId":"inst-1"}`)
 	before := time.Now().UTC()
 	cmd, err := svc.CreateEphemeralCommandForSession("u", "d", "runtime-1", "session-1", "inst-1", string(CommandTypePlayAction), "play:expiry", payload)
 	if err != nil {
@@ -485,7 +485,7 @@ func TestSessionBoundEphemeralCarriesAuthoritativeExpiry(t *testing.T) {
 func TestSessionBoundPlayActionCannotExtendServerTTL(t *testing.T) {
 	svc := NewCommandService(newCommandServiceTestDB(t))
 	requested := time.Now().UTC().Add(6 * time.Hour)
-	payload := []byte(fmt.Sprintf(`{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"inst-1","expiresAt":%q}`, requested.Format(time.RFC3339Nano)))
+	payload := []byte(fmt.Sprintf(`{"runtimeId":"runtime-1","actionKey":"wave","petInstanceId":"runtime-1","installationId":"inst-1","expiresAt":%q}`, requested.Format(time.RFC3339Nano)))
 	before := time.Now().UTC()
 	cmd, err := svc.CreateEphemeralCommandForSession("u", "d", "runtime-1", "session-1", "inst-1", string(CommandTypePlayAction), "play:ttl-cap", payload)
 	if err != nil {
@@ -526,7 +526,7 @@ func TestExpiryReconcilerAllowsShortEventDeliveryGrace(t *testing.T) {
 
 func TestSessionBoundPlayActionRejectsInvalidAuthoritativeExpiry(t *testing.T) {
 	svc := NewCommandService(newCommandServiceTestDB(t))
-	payload := []byte(`{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"inst-1","expiresAt":"not-a-time"}`)
+	payload := []byte(`{"runtimeId":"runtime-1","actionKey":"wave","petInstanceId":"runtime-1","installationId":"inst-1","expiresAt":"not-a-time"}`)
 	if _, err := svc.CreateEphemeralCommandForSession("u", "d", "runtime-1", "session-1", "inst-1", string(CommandTypePlayAction), "play:bad-expiry", payload); err == nil {
 		t.Fatal("invalid play_action expiresAt must fail closed")
 	}
@@ -652,10 +652,9 @@ func TestSessionBoundPlayActionRejectsIncompleteTargetIdentity(t *testing.T) {
 		name    string
 		payload string
 	}{
-		{"missing runtime", `{"actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"inst-1"}`},
-		{"missing character", `{"runtimeId":"runtime-1","actionKey":"wave","petInstanceId":"runtime-1","installationId":"inst-1"}`},
-		{"missing pet instance", `{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","installationId":"inst-1"}`},
-		{"stale installation", `{"runtimeId":"runtime-1","actionKey":"wave","characterId":"char-1","petInstanceId":"runtime-1","installationId":"inst-old"}`},
+		{"missing runtime", `{"actionKey":"wave","petInstanceId":"runtime-1","installationId":"inst-1"}`},
+		{"missing pet instance", `{"runtimeId":"runtime-1","actionKey":"wave","installationId":"inst-1"}`},
+		{"stale installation", `{"runtimeId":"runtime-1","actionKey":"wave","petInstanceId":"runtime-1","installationId":"inst-old"}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

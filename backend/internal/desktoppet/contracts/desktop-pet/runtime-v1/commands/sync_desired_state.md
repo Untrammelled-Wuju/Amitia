@@ -11,7 +11,6 @@ Durable 命令，同步 Runtime 期望状态。
   "ensureAbsent": false,
   "installationId": "install_xxx",
   "petId": "pet_xxx",
-  "characterId": "char_xxx",
   "releaseId": "release_xxx",
   "releaseVersion": "1.2.3",
   "contentRootHash": "sha256...",

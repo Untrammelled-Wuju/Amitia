@@ -18,9 +18,6 @@ import (
 
 type stubOwnershipGuard struct{}
 
-func (s *stubOwnershipGuard) RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*security.CharacterScope, error) {
-	return &security.CharacterScope{UserID: string(actor.UserID), CharacterID: characterID}, nil
-}
 func (s *stubOwnershipGuard) RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.GenerationTaskScope, error) {
 	return &security.GenerationTaskScope{UserID: string(actor.UserID), TaskID: taskID}, nil
 }

@@ -40,6 +40,7 @@ const (
 	MethodConversationRead        Method = "host.conversation.read"
 	MethodMemoryQuery             Method = "host.memory.query"
 	MethodProviderInvoke          Method = "host.provider.invoke"
+	MethodProactiveDispatch       Method = "host.proactive.dispatch"
 	MethodRuntimeHealth           Method = "host.runtime.health"
 	MethodNetworkRequest          Method = "host.network.request"
 	MethodNetworkTCPOpen          Method = "host.network.tcp.open"

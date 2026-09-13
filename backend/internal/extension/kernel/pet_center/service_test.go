@@ -1,4 +1,4 @@
-package desktop_pet_center
+package pet_center
 
 import (
 	"context"
@@ -86,6 +86,22 @@ type fakeRuntime struct {
 	enableFn    func(ctx context.Context, extensionID string) error
 	disableFn   func(ctx context.Context, extensionID string) error
 	uninstallFn func(ctx context.Context, extensionID string) error
+}
+
+type fakeTargetPreflight struct {
+	extensionID string
+	err         error
+}
+
+func (f *fakeTargetPreflight) ValidateArchiveTarget(context.Context, string, domain.ManagementTarget) (*PackageTargetPreview, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &PackageTargetPreview{
+		ExtensionID:      f.extensionID,
+		ManagementTarget: domain.ManagementTargetPetCenter,
+		Installable:      true,
+	}, nil
 }
 
 func (f *fakeRuntime) Install(ctx context.Context, archivePath string) (kernelInstalledExtension, error) {
@@ -362,8 +378,8 @@ func TestGet_ReturnsPetPluginDetail(t *testing.T) {
 	if detail.Enabled {
 		t.Errorf("expected enabled=false for disabled install")
 	}
-	if detail.ManagementTarget != "desktop_pet_center" {
-		t.Errorf("expected managementTarget=desktop_pet_center, got %s", detail.ManagementTarget)
+	if detail.ManagementTarget != "pet_center" {
+		t.Errorf("expected managementTarget=pet_center, got %s", detail.ManagementTarget)
 	}
 	if detail.PermissionSummary == nil {
 		t.Fatal("expected permissionSummary to be non-nil")
@@ -393,7 +409,12 @@ func TestInstall_CallsKernel(t *testing.T) {
 			return kernelInstalledExtension{ID: "com.example/new-pet", Name: "New Pet", Version: "1.0.0"}, nil
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt, nil)
+	container := &fakeContainer{
+		contributions: []domain.ContributionDefinition{
+			makePetPluginContrib("com.example/new-pet", "new-pet-plugin"),
+		},
+	}
+	svc := NewDesktopPetPluginManagementService(container, rt, &fakeTargetPreflight{extensionID: "com.example/new-pet"})
 	result, err := svc.Install(context.Background(), "/tmp/pkg.zip")
 	if err != nil {
 		t.Fatalf("Install: %v", err)
@@ -579,8 +600,8 @@ func TestList_CrossCenterIsolation(t *testing.T) {
 		t.Errorf("expected total=1 (pet only), got %d", resp.Total)
 	}
 	for _, p := range resp.Plugins {
-		if p.ManagementTarget != "desktop_pet_center" {
-			t.Errorf("expected all plugins to have desktop_pet_center target, got %s", p.ManagementTarget)
+		if p.ManagementTarget != "pet_center" {
+			t.Errorf("expected all plugins to have pet_center target, got %s", p.ManagementTarget)
 		}
 	}
 }
@@ -627,8 +648,13 @@ func TestUpdate_CallsKernel(t *testing.T) {
 			return kernelInstalledExtension{ID: "com.example/pet-upd", Name: "Pet Updated", Version: "2.0.0"}, nil
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt, nil)
-	result, err := svc.Update(context.Background(), "/tmp/pkg-v2.zip")
+	container := &fakeContainer{
+		contributions: []domain.ContributionDefinition{
+			makePetPluginContrib("com.example/pet-upd", "pet-upd-plugin"),
+		},
+	}
+	svc := NewDesktopPetPluginManagementService(container, rt, &fakeTargetPreflight{extensionID: "com.example/pet-upd"})
+	result, err := svc.Update(context.Background(), "com.example/pet-upd", "/tmp/pkg-v2.zip")
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -648,7 +674,7 @@ func TestUpdate_CallsKernel(t *testing.T) {
 
 func TestUpdate_EmptyPathReturnsInvalidInput(t *testing.T) {
 	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, &fakeRuntime{}, nil)
-	_, err := svc.Update(context.Background(), "")
+	_, err := svc.Update(context.Background(), "com.example/pet-upd", "")
 	if err != ErrInvalidInput {
 		t.Errorf("expected ErrInvalidInput, got %v", err)
 	}
@@ -661,7 +687,7 @@ func TestUpdate_ErrorPropagation(t *testing.T) {
 		},
 	}
 	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt, nil)
-	_, err := svc.Update(context.Background(), "/tmp/bad.zip")
+	_, err := svc.Update(context.Background(), "com.example/pet-upd", "/tmp/bad.zip")
 	if err == nil {
 		t.Error("expected error from kernel Update")
 	}
@@ -669,7 +695,7 @@ func TestUpdate_ErrorPropagation(t *testing.T) {
 
 func TestUpdate_KernelUnavailable(t *testing.T) {
 	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, nil, nil)
-	_, err := svc.Update(context.Background(), "/tmp/pkg.zip")
+	_, err := svc.Update(context.Background(), "com.example/pet-upd", "/tmp/pkg.zip")
 	if err != ErrKernelUnavailable {
 		t.Errorf("expected ErrKernelUnavailable, got %v", err)
 	}

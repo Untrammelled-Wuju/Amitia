@@ -179,6 +179,7 @@ type containerPlanExecutor struct {
 	defRepo           domain.DefinitionRepository
 	moduleRepo        sqlite.ModuleRepository
 	contribRepo       sqlite.ContributionRepository
+	permRepo          sqlite.PermissionRepository
 	enablement        enablement.StateStore
 	installer         *TypedContributionInstaller
 	packageRepo       *PackageRepository
@@ -193,6 +194,7 @@ func newContainerPlanExecutor(
 	defRepo domain.DefinitionRepository,
 	moduleRepo sqlite.ModuleRepository,
 	contribRepo sqlite.ContributionRepository,
+	permRepo sqlite.PermissionRepository,
 	enablementStore enablement.StateStore,
 	installer *TypedContributionInstaller,
 	packageRepo *PackageRepository,
@@ -206,6 +208,7 @@ func newContainerPlanExecutor(
 		defRepo:           defRepo,
 		moduleRepo:        moduleRepo,
 		contribRepo:       contribRepo,
+		permRepo:          permRepo,
 		enablement:        enablementStore,
 		installer:         installer,
 		packageRepo:       packageRepo,
@@ -822,6 +825,13 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 		return 0, err
 	}
 	result.Applied = append(result.Applied, "create_installation")
+
+	if err := persistInstalledPackagePermissions(ctx, e.permRepo, definition.ID, packageManifestRequirements(definition.ID, pkg.Manifest.Permissions)); err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("grant package permissions: %v", err)
+		return 0, err
+	}
+	result.Applied = append(result.Applied, "grant_package_permissions")
 
 	artifact.InstalledPath = targetPath
 	result.Applied = append(result.Applied, "mark_installation_disabled")

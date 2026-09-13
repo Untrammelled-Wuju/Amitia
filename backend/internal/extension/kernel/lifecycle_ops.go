@@ -308,7 +308,7 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 
 	if r.container.DesktopPetPluginBoundary != nil {
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionEnabled(ctx, extID, inst.InstalledVersion.String(), operationID); err != nil {
-			log.Printf("[enable-tx] desktop_pet_plugin boundary error: %v", err)
+			log.Printf("[enable-tx] pet_plugin boundary error: %v", err)
 		}
 	}
 
@@ -741,7 +741,7 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	if r.container.DesktopPetPluginBoundary != nil {
 		disableOpID := fmt.Sprintf("disable-%s-%d", extensionID, time.Now().UnixNano())
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionDisabled(ctx, extID, inst.InstalledVersion.String(), disableOpID, ""); err != nil {
-			log.Printf("[disable-tx] desktop_pet_plugin boundary error: %v", err)
+			log.Printf("[disable-tx] pet_plugin boundary error: %v", err)
 		}
 	}
 
@@ -871,7 +871,7 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 
 	if r.container.DesktopPetPluginBoundary != nil {
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionUninstalled(ctx, extID, version, "", ""); err != nil {
-			log.Printf("[uninstall-tx] desktop_pet_plugin boundary error: %v", err)
+			log.Printf("[uninstall-tx] pet_plugin boundary error: %v", err)
 		}
 	}
 

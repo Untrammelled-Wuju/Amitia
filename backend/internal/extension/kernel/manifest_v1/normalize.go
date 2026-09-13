@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
@@ -59,12 +60,7 @@ const maxProvidedCapabilities = 256
 const maxProviderLabels = 64
 
 func normalizeContributionKind(kind string) string {
-	switch kind {
-	case "background_service":
-		return "background_task"
-	default:
-		return kind
-	}
+	return string(domain.NormalizeContributionKind(domain.ContributionKind(kind)))
 }
 
 func normalizeProviderContributions(modIdx int, mod *ModuleMeta, report *ValidationReport) bool {

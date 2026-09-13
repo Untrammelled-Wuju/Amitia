@@ -211,7 +211,7 @@
             "enum": [
               "extension_center",
               "game_center",
-              "desktop_pet_center"
+              "pet_center"
             ],
             "type": "string"
           },

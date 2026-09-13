@@ -1,4 +1,4 @@
-package desktop_pet_center
+package pet_center
 
 import (
 	"time"

@@ -10,11 +10,11 @@ func TestExtensionDomainValues(t *testing.T) {
 	if string(ExtensionDomainGeneral) != "general" {
 		t.Errorf("expected general, got %s", ExtensionDomainGeneral)
 	}
-	if string(ExtensionDomainGame) != "game" {
-		t.Errorf("expected game, got %s", ExtensionDomainGame)
+	if string(ExtensionDomainGame) != "gamex" {
+		t.Errorf("expected gamex, got %s", ExtensionDomainGame)
 	}
-	if string(ExtensionDomainDesktopPet) != "desktop_pet" {
-		t.Errorf("expected desktop_pet, got %s", ExtensionDomainDesktopPet)
+	if string(ExtensionDomainDesktopPet) != "petx" {
+		t.Errorf("expected petx, got %s", ExtensionDomainDesktopPet)
 	}
 }
 
@@ -54,6 +54,12 @@ func TestNormalizeExtensionDomain(t *testing.T) {
 	}
 	if d := NormalizeExtensionDomain("foobar"); d != "foobar" {
 		t.Errorf("expected foobar to stay foobar, got %s", d)
+	}
+	if d := NormalizeExtensionDomain("game"); d != ExtensionDomainGame {
+		t.Errorf("expected legacy game to normalize to gamex, got %s", d)
+	}
+	if d := NormalizeExtensionDomain("desktop_pet"); d != ExtensionDomainDesktopPet {
+		t.Errorf("expected legacy desktop_pet to normalize to petx, got %s", d)
 	}
 }
 
@@ -201,8 +207,8 @@ func TestExtensionDomainJSONSerialization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if !bytes.Contains(data, []byte(`"domain":"game"`)) {
-		t.Errorf("expected domain:game in JSON, got: %s", string(data))
+	if !bytes.Contains(data, []byte(`"domain":"gamex"`)) {
+		t.Errorf("expected domain:gamex in JSON, got: %s", string(data))
 	}
 }
 
@@ -219,8 +225,9 @@ func TestExtensionDomainJSONDeserialization(t *testing.T) {
 	if err := json.Unmarshal(data, &def); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
+	def.Domain = NormalizeExtensionDomain(def.Domain)
 	if def.Domain != ExtensionDomainDesktopPet {
-		t.Errorf("expected desktop_pet, got %s", def.Domain)
+		t.Errorf("expected petx, got %s", def.Domain)
 	}
 }
 
@@ -256,7 +263,10 @@ func TestDomainFromContributionKinds(t *testing.T) {
 		t.Errorf("expected desktop_pet for desktop_pet_plugin contribution, got %s", d)
 	}
 	if d := DomainFromContributionKinds([]ContributionKind{ContributionKindTool, ContributionKindDesktopPetPlugin}); d != ExtensionDomainDesktopPet {
-		t.Errorf("expected desktop_pet when desktop_pet_plugin present, got %s", d)
+		t.Errorf("expected petx when pet_plugin present, got %s", d)
+	}
+	if d := DomainFromContributionKinds([]ContributionKind{"desktop_pet_plugin"}); d != ExtensionDomainDesktopPet {
+		t.Errorf("expected petx for legacy desktop_pet_plugin, got %s", d)
 	}
 }
 

@@ -5,8 +5,11 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
 var schemaMigrations = []string{
@@ -2535,9 +2538,122 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_wf_exec_idempotency ON extension_workflow_executions(workflow_id, idempotency_key) WHERE idempotency_key <> ''`); err != nil {
 		return fmt.Errorf("sqlite: ensure workflow idempotency index: %w", err)
 	}
+	if err := normalizeLegacyExtensionIdentities(ctx, tx); err != nil {
+		return fmt.Errorf("sqlite: normalize legacy extension identities: %w", err)
+	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("sqlite: commit migration transaction: %w", err)
+	}
+	return nil
+}
+
+func normalizeLegacyExtensionIdentities(ctx context.Context, tx *sql.Tx) error {
+	definitionRows, err := tx.QueryContext(ctx, `SELECT id, definition_json FROM extension_definitions`)
+	if err != nil {
+		return err
+	}
+	type definitionRow struct {
+		id   string
+		data string
+	}
+	var definitions []definitionRow
+	for definitionRows.Next() {
+		var row definitionRow
+		if err := definitionRows.Scan(&row.id, &row.data); err != nil {
+			definitionRows.Close()
+			return err
+		}
+		definitions = append(definitions, row)
+	}
+	if err := definitionRows.Close(); err != nil {
+		return err
+	}
+	if err := definitionRows.Err(); err != nil {
+		return err
+	}
+	for _, row := range definitions {
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(row.data), &raw); err != nil {
+			return err
+		}
+		changed := false
+		if value, ok := raw["domain"].(string); ok {
+			normalized := string(domain.NormalizeExtensionDomain(domain.ExtensionDomain(value)))
+			if normalized != value {
+				raw["domain"] = normalized
+				changed = true
+			}
+		}
+		if pkg, ok := raw["package"].(map[string]any); ok {
+			if value, ok := pkg["packageId"].(string); ok {
+				switch value {
+				case "builtin-game-host":
+					pkg["packageId"] = "gamex"
+					changed = true
+				case "builtin-desktop-pet":
+					pkg["packageId"] = "petx"
+					changed = true
+				}
+			}
+		}
+		if !changed {
+			continue
+		}
+		data, err := json.Marshal(raw)
+		if err != nil {
+			return err
+		}
+		hash := sha256.Sum256(data)
+		if _, err := tx.ExecContext(ctx, `UPDATE extension_definitions SET definition_json = ?, definition_hash = ? WHERE id = ?`, string(data), hex.EncodeToString(hash[:]), row.id); err != nil {
+			return err
+		}
+	}
+
+	contributionRows, err := tx.QueryContext(ctx, `SELECT id, definition_json FROM extension_contributions`)
+	if err != nil {
+		return err
+	}
+	type contributionRow struct {
+		id   string
+		data string
+	}
+	var contributions []contributionRow
+	for contributionRows.Next() {
+		var row contributionRow
+		if err := contributionRows.Scan(&row.id, &row.data); err != nil {
+			contributionRows.Close()
+			return err
+		}
+		contributions = append(contributions, row)
+	}
+	if err := contributionRows.Close(); err != nil {
+		return err
+	}
+	if err := contributionRows.Err(); err != nil {
+		return err
+	}
+	for _, row := range contributions {
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(row.data), &raw); err != nil {
+			return err
+		}
+		value, ok := raw["kind"].(string)
+		if !ok {
+			continue
+		}
+		normalized := string(domain.NormalizeContributionKind(domain.ContributionKind(value)))
+		if normalized == value {
+			continue
+		}
+		raw["kind"] = normalized
+		data, err := json.Marshal(raw)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE extension_contributions SET contribution_type = ?, definition_json = ? WHERE id = ?`, normalized, string(data), row.id); err != nil {
+			return err
+		}
 	}
 	return nil
 }
