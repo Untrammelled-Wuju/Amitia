@@ -365,7 +365,6 @@ export function makeLoadedInstallation(
       packageId: "test-install",
       schemaVersion: 1,
       name: "Test",
-      characterId: "char-1",
       canvas: { width: 256, height: 256 },
       defaultAction: "idle",
       actions: [

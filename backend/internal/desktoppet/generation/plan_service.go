@@ -18,7 +18,6 @@ type PlanFreezeInput struct {
 	Tx                     *gorm.DB
 	TaskID                 string
 	UserID                 string
-	CharacterID            string
 	Provider               string
 	Model                  string
 	ConfigID               int

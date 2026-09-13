@@ -32,7 +32,6 @@ interface ManifestConfig {
   packageId?: string;
   schemaVersion?: number;
   name?: string;
-  characterId?: string;
   canvas?: { width: number; height: number };
   defaultAction?: string;
   preview?: string;
@@ -128,7 +127,6 @@ describe("ResourceLoader", () => {
         packageId: "pet-1",
         schemaVersion: 1,
         name: "Pet",
-        characterId: "char-1",
         canvas: { width: 256, height: 256 },
         defaultAction: "idle",
         actions: [{ key: "idle", loopType: "loop" }, { key: "wave", loopType: "once" }],

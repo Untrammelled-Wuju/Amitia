@@ -32,7 +32,6 @@ function makeLoaded(actions: RuntimeAction[], defaultKey: string): LoadedInstall
       packageId: "package-test",
       schemaVersion: 1,
       name: "Test Pet",
-      characterId: "character-test",
       canvas: { width: 64, height: 64 },
       defaultAction: defaultKey,
       actions: [],

@@ -33,7 +33,6 @@ type Repository interface {
 	GetInstallation(id string) (*Installation, error)
 	GetInstallationByPackageVersion(packageID, packageVersion string) (*Installation, error)
 	ListInstallationsByUser(userID string) ([]*Installation, error)
-	ListInstallationsByCharacter(characterID string) ([]*Installation, error)
 	ListInstallations(userID string) ([]*Installation, error)
 	UpdateInstallationStatus(id, status string) error
 	SetActiveInstallation(userID, installationID string) error
@@ -333,17 +332,6 @@ func (r *repository) GetInstallationByPackageVersion(packageID, packageVersion s
 func (r *repository) ListInstallationsByUser(userID string) ([]*Installation, error) {
 	var installations []*Installation
 	err := r.db.Where("user_id = ?", userID).
-		Order("created_at DESC").
-		Find(&installations).Error
-	if installations == nil {
-		installations = []*Installation{}
-	}
-	return installations, err
-}
-
-func (r *repository) ListInstallationsByCharacter(characterID string) ([]*Installation, error) {
-	var installations []*Installation
-	err := r.db.Where("character_id = ?", characterID).
 		Order("created_at DESC").
 		Find(&installations).Error
 	if installations == nil {
