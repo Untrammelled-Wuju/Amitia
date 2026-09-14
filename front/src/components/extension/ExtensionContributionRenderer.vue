@@ -10,6 +10,9 @@ const isHostRuntime = computed(() => props.contribution.runtimeId?.trim().starts
 
 const renderer = computed(() => {
   if (isHostRuntime.value) return defineAsyncComponent(() => import("./HostRuntimeContribution.vue"));
+  if (props.contribution.kind === "composer_action" && ["web_restricted", "web_isolated"].includes(props.contribution.sandbox ?? "")) {
+    return defineAsyncComponent(() => import("./WebComposerActionProxy.vue"));
+  }
   if (props.contribution.sandbox === "schema_renderer") return defineAsyncComponent(() => import("./SchemaUIRenderer.vue"));
   if (["web_restricted", "web_isolated"].includes(props.contribution.sandbox ?? "")) return defineAsyncComponent(() => import("./SandboxWebUIFrame.vue"));
   if (props.contribution.sandbox === "host_native") return defineAsyncComponent(() => import("./HostNativeAction.vue"));

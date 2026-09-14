@@ -126,6 +126,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 
           <div class="input-row">
           <div class="input-left-actions">
+            <ComposerActionExtensionHost
+              v-if="characterId"
+              :character-id="characterId"
+              :conversation-id="conversationId"
+              :channel="channel"
+              :platform="env.platform"
+              :host="env.host"
+              :os="env.os"
+              :conversation-state="generating ? 'generating' : 'idle'"
+              :capabilities="hostCapabilities"
+              :draft="text"
+            />
             <el-popover
               v-model:visible="addMenuOpen"
               placement="top-start"
@@ -520,6 +532,7 @@ import { fetchAgentSkills, resolveCharacterId } from "../views/extensions/api";
 import type { AgentSkillDefinition } from "../views/extensions/types";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import ComposerExtensionHost from "./extension/chat/ComposerExtensionHost.vue";
+import ComposerActionExtensionHost from "./extension/chat/ComposerActionExtensionHost.vue";
 import {
   useConversationWorkspace,
   type WorkspaceMountSummary,

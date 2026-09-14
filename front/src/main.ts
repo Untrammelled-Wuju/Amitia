@@ -58,6 +58,10 @@ async function bootstrap() {
 
   await router.isReady();
   app.mount("#app");
+  if (isAuthenticated) {
+    void import("./components/extension/WebComposerActionProxy.vue");
+    void import("./components/extension/SandboxWebUIFrame.vue");
+  }
 }
 
 void bootstrap();
