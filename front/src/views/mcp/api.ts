@@ -97,15 +97,11 @@ export async function listMCPResources(id: string) {
     await apiClient.get(`/api/mcp/servers/${encodeURIComponent(id)}/resources`),
   );
 }
-export async function readMCPResource(
-  id: string,
-  uri: string,
-  characterId = "",
-) {
+export async function readMCPResource(id: string, uri: string) {
   return data<any>(
     await apiClient.post(
       `/api/mcp/servers/${encodeURIComponent(id)}/resources/read`,
-      { uri, characterId },
+      { uri },
     ),
   );
 }
@@ -113,11 +109,10 @@ export async function subscribeMCPResource(
   id: string,
   uri: string,
   subscribed: boolean,
-  characterId = "",
 ) {
   await apiClient.post(
     `/api/mcp/servers/${encodeURIComponent(id)}/resources/${subscribed ? "subscribe" : "unsubscribe"}`,
-    { uri, characterId },
+    { uri },
   );
 }
 export async function listMCPPrompts(id: string) {
@@ -129,12 +124,11 @@ export async function getMCPPrompt(
   id: string,
   name: string,
   argumentsValue: Record<string, string>,
-  characterId = "",
 ) {
   return data<any>(
     await apiClient.post(
       `/api/mcp/servers/${encodeURIComponent(id)}/prompts/get`,
-      { name, arguments: argumentsValue, characterId },
+      { name, arguments: argumentsValue },
     ),
   );
 }
@@ -144,13 +138,11 @@ export async function completeMCPArgument(
   argumentName: string,
   value: string,
   contextArguments: Record<string, string>,
-  characterId = "",
 ) {
   return data<{ values: string[]; total?: number; hasMore?: boolean }>(
     await apiClient.post(
       `/api/mcp/servers/${encodeURIComponent(id)}/completion`,
       {
-        characterId,
         ref: { type: "ref/prompt", name: promptName },
         argument: { name: argumentName, value },
         contextArguments,
@@ -180,7 +172,7 @@ export async function setMCPToolEnabled(
 ) {
   await apiClient.put(
     `/api/mcp/servers/${encodeURIComponent(serverId)}/tools/${encodeURIComponent(toolId)}/scope`,
-    { characterId: "", enabled },
+    { enabled },
   );
 }
 export async function listMCPCapabilities(id: string) {
