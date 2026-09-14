@@ -33,7 +33,7 @@
           插件 Runtime 已连接{{ activeRuntime.ready ? "并完成准备" : "，正在准备中" }}。插件向 Agent 注册的能力可在对话中使用；GameHost 不解释这些能力的游戏语义。
         </p>
         <p v-else-if="activePlugin">
-          游戏扩展已安装。由插件检测并连接其支持的游戏，GameHost 只承载插件 Runtime 与通信通道。
+          游戏扩展已安装，由插件检测并连接其支持的游戏。
         </p>
         <p v-else>
           添加一个 `.gamex` 游戏扩展。安装完成后，Amitia 会自动把它归入游戏模式。
