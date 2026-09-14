@@ -43,6 +43,7 @@ const iframeLoaded = ref(false);
 const ready = ref(false);
 const preferredHeight = ref<number | null>(null);
 const preferredWidth = ref<number | null>(null);
+const dismissCounter = ref(0);
 let bridgePort: MessagePort | null = null;
 let composerResizeObserver: ResizeObserver | null = null;
 
@@ -55,6 +56,21 @@ const uiContext = computed<Record<string, unknown>>(() => ({
 }));
 const surfaceRole = computed(() => String((uiContext.value.surface as Record<string, unknown> | undefined)?.role ?? "main"));
 const overlayMode = computed(() => surfaceRole.value === "composer" || surfaceRole.value === "overlay");
+const composerExpanded = computed(() => overlayMode.value && ((preferredWidth.value ?? 32) > 32 || (preferredHeight.value ?? 32) > 32));
+const surfaceStateWithDismiss = computed<Record<string, unknown>>(() => ({
+  ...(props.surfaceState ?? {}),
+  dismissToken: dismissCounter.value,
+}));
+
+function onDocumentPointerDown(event: PointerEvent) {
+  if (!composerExpanded.value) return;
+  const iframe = iframeRef.value;
+  if (!iframe) return;
+  const target = event.target as Node | null;
+  if (!target) return;
+  if (target === iframe || iframe.contains(target)) return;
+  dismissCounter.value += 1;
+}
 const iframeStyle = computed(() => {
   if (overlayMode.value) {
     return {
@@ -237,7 +253,7 @@ function onMessage(event: MessageEvent) {
         os: env.os,
         surface: (uiContext.value.surface as Record<string, unknown> | undefined)?.role ?? "main",
         slotId: props.slotId,
-        surfaceState: props.surfaceState ?? {},
+        surfaceState: surfaceStateWithDismiss.value,
         surfaceMetrics: buildSurfaceMetrics(),
       },
       capabilities: serverCapabilities,
@@ -272,7 +288,7 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
       const data = res.data as Record<string, unknown>;
       const output = data.output;
       if (output && typeof output === "object") {
-        (output as Record<string, unknown>).surfaceState = props.surfaceState ?? {};
+        (output as Record<string, unknown>).surfaceState = surfaceStateWithDismiss.value;
         (output as Record<string, unknown>).surfaceMetrics = buildSurfaceMetrics();
       }
       sendBridgeResponse(msg, data);
@@ -392,7 +408,7 @@ function postUIContext() {
       moduleId: props.contribution.moduleId,
     },
     generation: props.contribution.generation,
-    surfaceState: props.surfaceState ?? {},
+    surfaceState: surfaceStateWithDismiss.value,
     surfaceMetrics: buildSurfaceMetrics(),
   };
   bridgePort.postMessage({ type: "host.event", method: "ui.host.context", payload: contextPayload });
@@ -410,11 +426,13 @@ function buildThemeTokens() {
 
 onMounted(async () => {
   window.addEventListener("message", onMessage);
+  document.addEventListener("pointerdown", onDocumentPointerDown, true);
   await restartSession();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("message", onMessage);
+  document.removeEventListener("pointerdown", onDocumentPointerDown, true);
   composerResizeObserver?.disconnect();
   composerResizeObserver = null;
   ++restartToken;
@@ -455,6 +473,11 @@ watch(() => props.surfaceState, () => {
   if (!bridgePort || !ready.value) return;
   postUIContext();
 }, { deep: true });
+
+watch(dismissCounter, () => {
+  if (!bridgePort || !ready.value) return;
+  postUIContext();
+});
 </script>
 
 <template>

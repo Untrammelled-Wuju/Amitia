@@ -53,7 +53,7 @@ describe("表情包前端", () => {
     expect(managerScriptSource).toContain("item.assetUrl");
     expect(managerScriptSource).toContain("item.thumbnailUrl");
     expect(managerScriptSource).toContain("saveDetail");
-    expect(managerScriptSource).toContain("roleScope");
+    expect(managerScriptSource).toContain("emotes.batch_update");
   });
 
   it("表情包入口归属角色与记忆且不再出现在设置页签", () => {

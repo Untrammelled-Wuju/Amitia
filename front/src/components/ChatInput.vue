@@ -528,7 +528,7 @@ import {
 import { useTextInput } from "../composables/useTextInput";
 import { useMediaUpload } from "../composables/useMediaUpload";
 import { useVoiceInput } from "../composables/useVoiceInput";
-import { fetchAgentSkills, resolveCharacterId } from "../views/extensions/api";
+import { fetchAgentSkills } from "../views/extensions/api";
 import type { AgentSkillDefinition } from "../views/extensions/types";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import ComposerExtensionHost from "./extension/chat/ComposerExtensionHost.vue";
@@ -711,9 +711,7 @@ const filteredSlashSkills = computed(() => {
 async function loadAgentSkills() {
   skillsLoading.value = true;
   try {
-    const targetCharacterId = props.characterId || await resolveCharacterId();
-    if (!targetCharacterId) return;
-    const page = await fetchAgentSkills(targetCharacterId, { pageSize: 100 });
+    const page = await fetchAgentSkills({ pageSize: 100 });
     agentSkills.value = (page.items || []).filter(
       (skill) => skill.enabled && skill.compatibilityStatus !== "blocked",
     );

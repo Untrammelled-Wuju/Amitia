@@ -1,11 +1,9 @@
 import { apiClient } from "@/composables/useApi";
-import type { Character } from "@/types";
 import type {
   AgentSkillDetail,
   AgentSkillDefinition,
   AgentSkillPage,
   AgentSkillPreview,
-  AgentSkillScope,
   LocalExtensionPackage,
   PackageImportPreview,
   PackageOperation,
@@ -22,32 +20,6 @@ import type {
 } from "./types";
 
 export type { PackageImportPreview, PackageOperationResult } from "./types";
-
-export async function fetchCharacterOptions() {
-  const response = await apiClient.get("/api/characters");
-  const characters = response.data?.data || response.data;
-  return Array.isArray(characters) ? (characters as Character[]) : [];
-}
-
-export async function resolveCharacterId(availableCharacters?: Character[]) {
-  const characters = availableCharacters || (await fetchCharacterOptions());
-  const cached = localStorage.getItem("uai-default-char");
-  if (cached) {
-    try {
-      const parsed = JSON.parse(cached);
-      if (
-        parsed?.id &&
-        characters.some((item) => String(item.id) === String(parsed.id))
-      )
-        return String(parsed.id);
-    } catch {}
-  }
-  const selected =
-    characters.find((item) => item.isDefault) ||
-    characters.find((item) => item.isActive) ||
-    characters.find((item) => item.status !== "disabled");
-  return selected?.id ? String(selected.id) : "";
-}
 
 const agentSkillPath = (id = "") =>
   `/api/extensions/agent-skills${id ? `/${encodeURIComponent(id)}` : ""}`;
@@ -77,55 +49,37 @@ export async function previewAgentSkillDirectory(
   return response.data as AgentSkillPreview;
 }
 export async function fetchAgentSkills(
-  characterId: string,
   params: Record<string, unknown> = {},
 ) {
-  const response = await apiClient.get(agentSkillPath(), {
-    params: { characterId, ...params },
-  });
+  const response = await apiClient.get(agentSkillPath(), { params });
   return response.data as AgentSkillPage;
 }
-export async function fetchAgentSkill(id: string, characterId: string) {
-  const response = await apiClient.get(agentSkillPath(id), {
-    params: { characterId },
-  });
+export async function fetchAgentSkill(id: string) {
+  const response = await apiClient.get(agentSkillPath(id));
   return response.data as AgentSkillDetail;
 }
-export async function installAgentSkill(
-  previewId: string,
-  scope: AgentSkillScope,
-  characterId: string,
-) {
+export async function installAgentSkill(previewId: string) {
   const response = await apiClient.post(`${agentSkillPath()}/import/install`, {
     previewId,
-    scope,
-    characterId,
     enable: false,
   });
   return response.data as AgentSkillDefinition;
 }
-export async function setAgentSkillEnabled(
-  id: string,
-  enabled: boolean,
-  characterId: string,
-) {
+export async function setAgentSkillEnabled(id: string, enabled: boolean) {
   await apiClient.post(
     `${agentSkillPath(id)}/${enabled ? "enable" : "disable"}`,
-    null,
-    { params: { characterId } },
   );
 }
-export async function removeAgentSkill(id: string, characterId: string) {
-  await apiClient.delete(agentSkillPath(id), { params: { characterId } });
+export async function removeAgentSkill(id: string) {
+  await apiClient.delete(agentSkillPath(id));
 }
 export async function previewAgentSkillMCPDependencies(
   agentSkillExtensionId: string,
-  characterId: string,
   dependencies: unknown[],
 ) {
   const response = await apiClient.post(
     "/api/mcp/agent-skills/dependencies/preview",
-    { agentSkillExtensionId, characterId, dependencies },
+    { agentSkillExtensionId, dependencies },
   );
   return response.data?.data ?? response.data;
 }
