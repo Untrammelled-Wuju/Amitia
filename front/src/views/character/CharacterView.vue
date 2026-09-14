@@ -508,9 +508,7 @@ const activeTab = computed(() => {
   if (p.endsWith("/voice")) return "voice";
   if (p.endsWith("/memory")) return "memory";
   if (p.endsWith("/timeline")) return "timeline";
-  if (p.endsWith("/proactive")) return "proactive";
-  if (p.endsWith("/life-system")) return "life-system";
-  if (p.endsWith("/debug")) return "life-system";
+  if (p.endsWith("/lifestyle")) return "lifestyle";
   if (p.endsWith("/psyche")) return "psyche";
   return "life-rules";
 });

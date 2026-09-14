@@ -145,7 +145,7 @@
                 <el-button size="small" :icon="MoreFilled" aria-label="更多操作" />
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="permissions">权限管理</el-dropdown-item>
+                    <el-dropdown-item command="permissions" :disabled="row.systemManaged">权限管理</el-dropdown-item>
                     <el-dropdown-item
                       command="pause"
                       :disabled="row.enablement !== 'enabled'"

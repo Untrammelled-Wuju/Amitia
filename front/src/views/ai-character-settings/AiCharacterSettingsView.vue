@@ -66,31 +66,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         v-model:activeCollapse="activeCollapse"
       />
 
-      <EmoteSettingsSection :character-id="charId" />
-
-      <LifestyleTendencySection :characterId="charId" />
-
       <RelationshipTimeSection :character-id="charId" />
 
-      <SleepSettingSection v-model:sleepForm="sleepForm" />
-
-      <LifeScenarioSection
-        v-model:lifeIdentity="lifeIdentity"
-        v-model:lifeIdentityCustom="lifeIdentityCustom"
-        @change="onLifeIdentityChange"
-      />
-
       <TemporalAwarenessSection :character-id="charId" />
-
-      <FixedEventsSection v-if="showCourseSection" :characterId="charId" />
-
-      <SpecialEventsSection :characterId="charId" />
-
-      <WorkProfileSection
-        v-if="showWorkSection"
-        v-model:workForm="workForm"
-        :characterId="charId"
-      />
     </div>
 
     <PromptEditorDialog
@@ -103,26 +81,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, inject, type Ref } from "vue";
+import { ref, reactive, onMounted, inject, type Ref } from "vue";
 import { ElMessage } from "element-plus";
 import { View } from "@element-plus/icons-vue";
 import { useApi } from "../../composables/useApi";
 import { useCachedApi } from "../../composables/useCachedApi";
 import { useRoleProfile } from "../../composables/useRoleProfile";
-import { useSleepSetting } from "../../composables/useSleepSetting";
-import { useWorkProfile } from "../../composables/useWorkProfile";
 import PersonalitySlidersSection from "./components/PersonalitySlidersSection.vue";
 import RoleGenderSection from "./components/RoleGenderSection.vue";
-import LifestyleTendencySection from "./components/LifestyleTendencySection.vue";
 import RelationshipTimeSection from "./components/RelationshipTimeSection.vue";
-import SleepSettingSection from "./components/SleepSettingSection.vue";
-import LifeScenarioSection from "./components/LifeScenarioSection.vue";
 import TemporalAwarenessSection from "./components/TemporalAwarenessSection.vue";
-import FixedEventsSection from "./components/FixedEventsSection.vue";
-import SpecialEventsSection from "./components/SpecialEventsSection.vue";
-import WorkProfileSection from "./components/WorkProfileSection.vue";
 import PromptEditorDialog from "./components/PromptEditorDialog.vue";
-import EmoteSettingsSection from "./components/EmoteSettingsSection.vue";
 
 const { get, post, put } = useApi();
 const { invalidateCache } = useCachedApi();
@@ -134,9 +103,6 @@ const injectedCharacterId = inject<Ref<string | null>>(
 const refreshHealth = inject<() => void>("refreshHealth", () => {});
 
 const { updateRoleProfile } = useRoleProfile();
-const { updateSleepSetting } = useSleepSetting();
-const { getSleepSetting } = useSleepSetting();
-const { getWorkProfile, updateWorkProfile } = useWorkProfile();
 const { getRoleProfile } = useRoleProfile();
 
 const charId = ref("");
@@ -146,34 +112,6 @@ const promptLoading = ref(false);
 const showPromptEditor = ref(false);
 const activeCollapse = ref<string[]>([]);
 const editingPrompt = ref("");
-
-const PRESET_IDENTITIES = ["SCHOOL", "WORK", "UNEMPLOYED", "HOME"];
-const lifeIdentity = ref("CUSTOM");
-const lifeIdentityCustom = ref("");
-const isCustomLifeIdentity = computed(
-  () => !PRESET_IDENTITIES.includes(lifeIdentity.value),
-);
-const showCourseSection = computed(
-  () => lifeIdentity.value === "SCHOOL" || isCustomLifeIdentity.value,
-);
-const showWorkSection = computed(
-  () => lifeIdentity.value === "WORK" || isCustomLifeIdentity.value,
-);
-
-async function onLifeIdentityChange(val: string) {
-  lifeIdentity.value = val;
-  if (PRESET_IDENTITIES.includes(val)) {
-    lifeIdentityCustom.value = "";
-  }
-  if (!charId.value) return;
-  try {
-    await put<any>(`/api/characters/${charId.value}`, {
-      lifeIdentity: isCustomLifeIdentity.value
-        ? lifeIdentityCustom.value || lifeIdentity.value
-        : lifeIdentity.value,
-    });
-  } catch {}
-}
 
 const DEFAULT_CONFIG = {
   familiarity: 78,
@@ -234,15 +172,6 @@ function applyCharacter(data: any) {
   form.description = data.description || form.description;
   form.isDefault = !!data.isDefault;
   form.personalityConfig = normalizePersonalityConfig(data.personalityConfig);
-  if (data.lifeIdentity) {
-    if (PRESET_IDENTITIES.includes(data.lifeIdentity)) {
-      lifeIdentity.value = data.lifeIdentity;
-      lifeIdentityCustom.value = "";
-    } else {
-      lifeIdentity.value = "CUSTOM";
-      lifeIdentityCustom.value = data.lifeIdentity;
-    }
-  }
 }
 
 const genderForm = reactive({
@@ -253,33 +182,6 @@ const genderForm = reactive({
   selfReference: "我",
   userAddressingStyle: "自然称呼" as string | null,
   genderExpression: 30,
-});
-
-const sleepForm = reactive({
-  sleepReplyEnabled: false,
-  sleepReplyMode: "NO_REPLY",
-});
-
-const workForm = reactive({
-  enabled: false,
-  workDaysArr: ["MON", "TUE", "WED", "THU", "FRI"] as string[],
-  workStartTime: "09:00",
-  workEndTime: "18:00",
-  lunchBreakStartTime: "12:00",
-  lunchBreakEndTime: "13:30",
-  commuteMinMinutes: 15,
-  commuteMaxMinutes: 45,
-  prepareMinMinutes: 20,
-  prepareMaxMinutes: 60,
-  replyMode: "SHORT_REPLY",
-  allowOvertime: false,
-  overtimeProbability: 10,
-  overtimeMinMinutes: 30,
-  overtimeMaxMinutes: 180,
-  overtimeReplyMode: "SHORT_REPLY",
-  delayedReplyEnabled: false,
-  commuteHomeShareEnabled: true,
-  commuteHomeShareProbability: 60,
 });
 
 onMounted(async () => {
@@ -316,40 +218,6 @@ onMounted(async () => {
     }
   } catch {}
 
-  try {
-    const ss = await getSleepSetting(charId.value || undefined);
-    if (ss) {
-      sleepForm.sleepReplyEnabled = ss.sleepReplyEnabled;
-      sleepForm.sleepReplyMode = ss.sleepReplyMode;
-    }
-  } catch {}
-
-  try {
-    const wp = await getWorkProfile(charId.value || undefined);
-    if (wp) {
-      workForm.enabled = wp.enabled;
-      workForm.workDaysArr = wp.workDays
-        ? wp.workDays.split(",")
-        : ["MON", "TUE", "WED", "THU", "FRI"];
-      workForm.workStartTime = wp.workStartTime;
-      workForm.workEndTime = wp.workEndTime;
-      workForm.lunchBreakStartTime = wp.lunchBreakStartTime;
-      workForm.lunchBreakEndTime = wp.lunchBreakEndTime;
-      workForm.commuteMinMinutes = wp.commuteMinMinutes;
-      workForm.commuteMaxMinutes = wp.commuteMaxMinutes;
-      workForm.prepareMinMinutes = wp.prepareMinMinutes;
-      workForm.prepareMaxMinutes = wp.prepareMaxMinutes;
-      workForm.replyMode = wp.replyMode;
-      workForm.allowOvertime = wp.allowOvertime;
-      workForm.overtimeProbability = wp.overtimeProbability;
-      workForm.overtimeMinMinutes = wp.overtimeMinMinutes;
-      workForm.overtimeMaxMinutes = wp.overtimeMaxMinutes;
-      workForm.overtimeReplyMode = wp.overtimeReplyMode;
-      workForm.delayedReplyEnabled = wp.delayedReplyEnabled;
-      workForm.commuteHomeShareEnabled = wp.commuteHomeShareEnabled;
-      workForm.commuteHomeShareProbability = wp.commuteHomeShareProbability;
-    }
-  } catch {}
 });
 
 async function saveConfig() {
@@ -360,9 +228,6 @@ async function saveConfig() {
       description: form.description.trim(),
       personalityConfig: form.personalityConfig,
       isDefault: form.isDefault,
-      lifeIdentity: isCustomLifeIdentity.value
-        ? lifeIdentityCustom.value || lifeIdentity.value
-        : lifeIdentity.value,
     };
     const result = charId.value
       ? await put<any>(`/api/characters/${charId.value}`, payload)
@@ -385,47 +250,6 @@ async function saveConfig() {
       );
     } catch (e: any) {
       console.warn("Role profile save failed:", e);
-    }
-
-    try {
-      await updateSleepSetting(
-        {
-          sleepReplyEnabled: sleepForm.sleepReplyEnabled,
-          sleepReplyMode: sleepForm.sleepReplyMode,
-        },
-        charId.value || undefined,
-      );
-    } catch (e: any) {
-      console.warn("Sleep setting save failed:", e);
-    }
-
-    try {
-      await updateWorkProfile(
-        {
-          enabled: workForm.enabled,
-          workDays: workForm.workDaysArr.join(","),
-          workStartTime: workForm.workStartTime,
-          workEndTime: workForm.workEndTime,
-          lunchBreakStartTime: workForm.lunchBreakStartTime,
-          lunchBreakEndTime: workForm.lunchBreakEndTime,
-          commuteMinMinutes: workForm.commuteMinMinutes,
-          commuteMaxMinutes: workForm.commuteMaxMinutes,
-          prepareMinMinutes: workForm.prepareMinMinutes,
-          prepareMaxMinutes: workForm.prepareMaxMinutes,
-          replyMode: workForm.replyMode,
-          allowOvertime: workForm.allowOvertime,
-          overtimeProbability: workForm.overtimeProbability,
-          overtimeMinMinutes: workForm.overtimeMinMinutes,
-          overtimeMaxMinutes: workForm.overtimeMaxMinutes,
-          overtimeReplyMode: workForm.overtimeReplyMode,
-          delayedReplyEnabled: workForm.delayedReplyEnabled,
-          commuteHomeShareEnabled: workForm.commuteHomeShareEnabled,
-          commuteHomeShareProbability: workForm.commuteHomeShareProbability,
-        } as any,
-        charId.value || undefined,
-      );
-    } catch (e: any) {
-      console.warn("Work profile save failed:", e);
     }
 
     ElMessage.success("保存成功");

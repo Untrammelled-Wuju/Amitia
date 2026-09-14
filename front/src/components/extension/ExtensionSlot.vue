@@ -31,6 +31,7 @@ const props = withDefaults(
     /** Exact parent contribution that authorized rendering this child slot. */
     authorizedBy?: string;
     bare?: boolean;
+    renderContributions?: boolean;
   }>(),
   {
     fallback: undefined,
@@ -46,6 +47,7 @@ const props = withDefaults(
     hookContext: undefined,
     authorizedBy: undefined,
     bare: false,
+    renderContributions: true,
   }
 );
 
@@ -105,6 +107,7 @@ onBeforeUnmount(() => {
 });
 
 const visibleContributions = computed<UIContributionSummary[]>(() => {
+  if (!props.renderContributions) return [];
   let items = contributions.value;
   if (props.extensionId) {
     items = items.filter((c) => c.extensionId === props.extensionId);
@@ -116,6 +119,7 @@ const visibleContributions = computed<UIContributionSummary[]>(() => {
 });
 
 const dispatchedClientContributions = computed(() => {
+  if (!props.renderContributions) return [];
   browserClientPluginRuntime.slots.revision.value;
   if (props.authorizedBy) {
     browserClientPluginRuntime.slots.assertRenderAuthority(props.authorizedBy, props.slotId);

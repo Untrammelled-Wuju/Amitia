@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { flushPromises, mount } from "@vue/test-utils";
-import EmoteMessage from "../components/chat-bubble/EmoteMessage.vue";
-import { resetRuntimeConnectionCache } from "../runtime/runtime-adapter";
-import routerSource from "../router/index.ts?raw";
-import managerSource from "../views/emotes/EmoteManagerView.vue?raw";
-import pickerSource from "../components/EmotePicker.vue?raw";
+import routerSource from "../router/builtinRoutes.ts?raw";
+import managerSource from "../../../plugins/emote/ui/index.html?raw";
+import managerScriptSource from "../../../plugins/emote/ui/index.js?raw";
+import composerSource from "../../../plugins/emote/ui/composer.html?raw";
+import composerScriptSource from "../../../plugins/emote/ui/composer.js?raw";
+import messageSource from "../../../plugins/emote/ui/message.html?raw";
+import messageScriptSource from "../../../plugins/emote/ui/message.js?raw";
+import manifestSource from "../../../plugins/emote/amitia-extension.json?raw";
 import inputSource from "../components/ChatInput.vue?raw";
 import bubbleSource from "../components/ChatBubble.vue?raw";
-import webChatSource from "../views/web-chat/WebChatView.vue?raw";
-import sideNavSource from "../components/SideNav.vue?raw";
+import navigationSource from "../ui-runtime/navigationRegistry.ts?raw";
+import webChatSource from "../views/web-chat/BuiltinWebChatView.vue?raw";
 import settingsSource from "../views/settings/SettingsView.vue?raw";
 import {
   compareChatMessages,
@@ -18,118 +20,66 @@ import {
 
 describe("表情包前端", () => {
   it("管理页面可进入且包含导入、分组、未分组、多选和批量设置", async () => {
-    expect(routerSource).toContain('path: "/emotes"');
+    expect(routerSource).not.toContain('path: "/emotes"');
     expect(managerSource).not.toContain("<h1>表情包管理</h1>");
     expect(managerSource).toContain('class="toolbar"');
     expect(managerSource).toContain("导入文件夹");
     expect(managerSource).toContain("导入表情");
-    expect(managerSource).toContain('key: "unassigned"');
-    expect(managerSource).toContain("selectedIds");
-    expect(managerSource).toContain("batch-update");
-    expect(managerSource).toContain("createGroup");
-    expect(managerSource).toContain("deleteGroup");
-    const module = await import("../views/emotes/EmoteManagerView.vue");
-    expect(module.default).toBeDefined();
+    expect(managerSource).toContain('<script src="./index.js" defer></script>');
+    expect(managerSource).not.toContain("<style");
+    expect(managerSource).toContain('data-view="unassigned"');
+    expect(managerScriptSource).toContain("selectView");
+    expect(managerScriptSource).toContain("state.selected");
+    expect(managerScriptSource).toContain("emotes.batch_update");
+    expect(managerScriptSource).toContain("createGroup");
+    expect(managerScriptSource).toContain("groupMenu");
+    expect(manifestSource).toContain('"route": "/emotes"');
+    expect(manifestSource).toContain('"id": "emote-page"');
   }, 15000);
 
   it("导入预览、逐项结果、动图预览和详情编辑可用", () => {
     expect(managerSource).toContain("导入预览");
-    expect(managerSource).toContain('class="defaults-row"');
-    expect(managerSource).toContain("settings-row");
-    expect(managerSource).toContain("中文或英文逗号分隔");
-    expect(managerSource).toContain("createObjectURL");
-    expect(managerSource).toContain("batch-upload");
-    expect(managerSource).toContain("item.status");
-    expect(managerSource).toContain(
-      "assetUrl(hoveredId === item.id ? item.filePath : item.thumbnailPath)",
-    );
-    expect(managerSource).toContain("saveDetail");
-    expect(managerSource).toContain("roleScope");
+    expect(managerSource).toContain('class="defaults"');
+    expect(managerScriptSource).toContain("中文或英文逗号分隔");
+    expect(managerScriptSource).toContain("createObjectURL");
+    expect(managerScriptSource).toContain("upload.complete");
+    expect(managerScriptSource).toContain("item.status");
+    expect(managerScriptSource).toContain("item.assetUrl");
+    expect(managerScriptSource).toContain("item.thumbnailUrl");
+    expect(managerScriptSource).toContain("saveDetail");
+    expect(managerScriptSource).toContain("roleScope");
   });
 
   it("表情包入口归属角色与记忆且不再出现在设置页签", () => {
-    expect(sideNavSource).toContain('<el-sub-menu index="char-memory">');
-    expect(sideNavSource).toContain(
-      '<el-menu-item index="/emotes">表情包管理</el-menu-item>',
-    );
+    expect(navigationSource).not.toContain('id: "character.emotes"');
     expect(settingsSource).not.toContain("/settings/emotes");
-    expect(routerSource).toContain(
-      '{ path: "/settings/emotes", redirect: "/emotes" }',
-    );
+    expect(manifestSource).toContain('"group": "character"');
+    expect(manifestSource).toContain('"groupLabel": "角色"');
   });
 
   it("聊天输入区提供最近、分组和搜索表情面板", () => {
-    expect(inputSource).toContain("EmotePicker");
-    expect(pickerSource).toContain("最近使用");
-    expect(pickerSource).toContain("/api/emote-groups");
-    expect(pickerSource).toContain("/api/emotes");
-    expect(pickerSource).toContain("assetUrl(item.thumbnailPath)");
-    expect(pickerSource).toContain('emit("select", item)');
+    expect(inputSource).not.toContain("EmotePicker");
+    expect(inputSource).toContain("ComposerExtensionHost");
+    expect(composerSource).toContain("最近使用");
+    expect(composerSource).toContain('<script src="./composer.js" defer></script>');
+    expect(composerSource).not.toContain("<style");
+    expect(composerScriptSource).toContain('call("groups.list")');
+    expect(composerScriptSource).toContain('call("emotes.list"');
+    expect(composerScriptSource).toContain("item.thumbnailUrl || item.assetUrl");
+    expect(composerScriptSource).toContain('call("emotes.send"');
+    expect(manifestSource).toContain('"kind": "composer_action"');
+    expect(manifestSource).toContain('"path": "modules/emote-ui/ui/composer.html"');
   });
 
   it("实时和历史表情消息使用同一专用渲染组件", () => {
-    expect(bubbleSource).toContain("EmoteMessage");
-    expect(bubbleSource).toContain('msgType === "emote"');
-    expect(webChatSource).toContain("send-emote");
-    expect(webChatSource).toContain("emoteId");
-  });
-
-  it("表情消息渲染原图、状态和降级文本", async () => {
-    (window as any).amitiaDesktop = {
-      getDeploymentConfig: async () => ({ mode: "local" }),
-    };
-    resetRuntimeConnectionCache();
-    const wrapper = mount(EmoteMessage, {
-      props: {
-        message: {
-          msgType: "emote",
-          content: "[表情：开心]",
-          altText: "开心",
-          originalAssetReference: "/original.gif",
-          fallbackAssetReference: "/fallback.png",
-          status: "sending",
-          width: 120,
-          height: 80,
-        },
-      },
-    });
-    await flushPromises();
-    expect(wrapper.get("img").attributes("src")).toBe(
-      "http://127.0.0.1:18899/original.gif",
-    );
-    expect(wrapper.text()).toContain("发送中");
-    await wrapper.get("img").trigger("error");
-    expect(wrapper.get("img").attributes("src")).toBe(
-      "http://127.0.0.1:18899/fallback.png",
-    );
-    await wrapper.get("img").trigger("error");
-    expect(wrapper.text()).toContain("开心");
-    delete (window as any).amitiaDesktop;
-    resetRuntimeConnectionCache();
-  });
-
-  it("表情缺少原图时直接使用降级图且兼容下划线字段", async () => {
-    (window as any).amitiaDesktop = {
-      getDeploymentConfig: async () => ({ mode: "local" }),
-    };
-    resetRuntimeConnectionCache();
-    const wrapper = mount(EmoteMessage, {
-      props: {
-        message: {
-          msg_type: "emote",
-          alt_text: "晚安",
-          fallback_asset_reference: "/fallback.png",
-        },
-      },
-    });
-    await flushPromises();
-    expect(wrapper.get("img").attributes("src")).toBe(
-      "http://127.0.0.1:18899/fallback.png",
-    );
-    await wrapper.get("img").trigger("error");
-    expect(wrapper.text()).toContain("晚安");
-    delete (window as any).amitiaDesktop;
-    resetRuntimeConnectionCache();
+    expect(bubbleSource).not.toContain("EmoteMessage");
+    expect(webChatSource).not.toContain("send-emote");
+    expect(messageSource).toContain('<script src="./message.js" defer></script>');
+    expect(messageSource).not.toContain("<style");
+    expect(messageScriptSource).toContain("requestResize");
+    expect(messageScriptSource).toContain("originalAssetReference");
+    expect(manifestSource).toContain('"kind": "message_renderer"');
+    expect(manifestSource).toContain('"path": "modules/emote-ui/ui/message.html"');
   });
 
   it("同一回复组严格按消息计划顺序显示", () => {
@@ -164,37 +114,37 @@ describe("表情包前端", () => {
     ]);
   });
 
-  it("主动消息保留表情字段并能被完整消息补全", () => {
+  it("外部实时图片消息保留通用媒体字段并能被完整消息补全", () => {
     const proactive = normalizeRealtimeMessage({
-      messageId: "emote-1",
+      messageId: "image-1",
       conversationId: "conv-1",
-      msg_type: "emote",
-      emote_id: "asset-1",
-      original_asset_reference: "/emote-assets/original.gif",
+      msg_type: "image",
+      extension_type: "emote",
+      original_asset_reference: "/extension-assets/original.gif",
       response_group_id: "response-1",
       delivery_sequence: 2,
     });
     expect(proactive).toMatchObject({
-      id: "emote-1",
-      msgType: "emote",
-      emoteId: "asset-1",
-      originalAssetReference: "/emote-assets/original.gif",
+      id: "image-1",
+      msgType: "image",
+      extensionType: "emote",
+      originalAssetReference: "/extension-assets/original.gif",
       responseGroupId: "response-1",
       deliverySequence: 2,
     });
 
     const messages = [
       {
-        id: "emote-1",
+        id: "image-1",
         role: "assistant",
-        content: "[表情]",
+        content: "[图片]",
         source: "proactive",
       },
     ];
     expect(mergeChatMessage(messages, proactive)).toBe(true);
     expect(messages[0]).toMatchObject({
-      msgType: "emote",
-      emoteId: "asset-1",
+      msgType: "image",
+      extensionType: "emote",
       source: "proactive",
     });
   });
@@ -202,10 +152,10 @@ describe("表情包前端", () => {
   it("外部实时事件的内容类型和媒体尺寸会统一为前端字段", () => {
     expect(
       normalizeRealtimeMessage({
-        content_type: "emote",
+        content_type: "image",
         media_width: 240,
         media_height: 160,
       }),
-    ).toMatchObject({ contentType: "emote", width: 240, height: 160 });
+    ).toMatchObject({ contentType: "image", width: 240, height: 160 });
   });
 });

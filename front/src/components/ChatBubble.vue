@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <div class="chat-bubble" :class="[message.role, { 'is-emote': isEmote }]">
+  <div class="chat-bubble" :class="message.role">
     <div class="bubble-avatar">
       <el-avatar
         :size="32"
@@ -33,9 +33,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         >
         <slot name="badges" :message="message" />
       </div>
-      <EmoteMessage v-if="isEmote" :message="message" />
       <MediaAttachmentPreview
-        v-else
         :image-url="(message as any).imageUrl"
         :video-url="(message as any).videoUrl"
       />
@@ -85,7 +83,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div
         class="bubble-status"
         v-if="
-          !isEmote &&
           (message.status === 'failed' || message.status === 'interrupted')
         "
       >
@@ -118,7 +115,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         class="bubble-actions"
         v-if="typingDone"
       >
-        <el-button v-if="message.role === 'assistant' && !isEmote" text size="small" @click="copyContent">
+        <el-button v-if="message.role === 'assistant'" text size="small" @click="copyContent">
           <el-icon><DocumentCopy /></el-icon>
         </el-button>
         <el-button
@@ -147,7 +144,6 @@ import {
 import { ElMessage } from "element-plus";
 import VoicePlayBar from "./chat-bubble/VoicePlayBar.vue";
 import MediaAttachmentPreview from "./chat-bubble/MediaAttachmentPreview.vue";
-import EmoteMessage from "./chat-bubble/EmoteMessage.vue";
 import { fmtTime } from "./chat-bubble/utils";
 import { useAppStore } from "@/stores/app";
 
@@ -184,17 +180,6 @@ const emit = defineEmits<{
 const appStore = useAppStore();
 
 const hasAudio = computed(() => !!(props.message as any).audioUrl);
-const isEmote = computed(() => {
-  const message = props.message as any;
-  return (
-    message.msgType === "emote" ||
-    message.msg_type === "emote" ||
-    message.contentType === "emote" ||
-    message.content_type === "emote" ||
-    !!message.emoteId ||
-    !!message.emote_id
-  );
-});
 const textExpanded = ref(!(props.message as any).audioUrl);
 
 const hasReplyTo = computed(() => !!(props.message as any).replyToMessageId);
@@ -218,7 +203,6 @@ const typingDone = computed(() => {
 });
 
 const renderedContent = computed(() => {
-  if (isEmote.value) return "";
   const raw = (props.message as any).content;
   const text = typeof raw === "string" ? raw : "";
   const msg = props.message as any;
@@ -299,10 +283,6 @@ async function copyContent() {
   max-width: min(80%, 760px);
   min-width: 60px;
 }
-.chat-bubble.is-emote .bubble-body {
-  min-width: 0;
-}
-
 .bubble-meta {
   display: flex;
   align-items: center;

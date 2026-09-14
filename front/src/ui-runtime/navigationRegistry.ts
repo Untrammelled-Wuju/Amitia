@@ -86,7 +86,6 @@ const builtinItems: UINavigationItem[] = [
   { id: "character.world-book", route: "/world-book", label: "世界书", icon: Collection, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 35 },
   { id: "character.wechat", route: "/wechat", label: "微信连接", icon: Connection, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 40 },
   { id: "character.qq", route: "/qq", label: "QQ 连接", icon: ChatDotSquare, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 45 },
-  { id: "character.emotes", route: "/emotes", label: "表情包管理", icon: StarFilled, group: "character", groupLabel: "角色", groupIcon: UserFilled, order: 50 },
   { id: "memory.manager", route: "/memory-manager", label: "记忆总览", icon: List, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 55, mobile: true, match: ["/memory", "/memory-manager"] },
   { id: "memory.episodic", route: "/episodic", label: "情景记忆", icon: Film, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 60 },
   { id: "memory.graph", route: "/graph", label: "记忆图谱", icon: Share, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 65 },

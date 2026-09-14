@@ -126,10 +126,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 
           <div class="input-row">
           <div class="input-left-actions">
-            <EmotePicker
-              :disabled="!!disabled"
-              @select="$emit('emote', $event)"
-            />
             <el-popover
               v-model:visible="addMenuOpen"
               placement="top-start"
@@ -523,7 +519,6 @@ import { useVoiceInput } from "../composables/useVoiceInput";
 import { fetchAgentSkills, resolveCharacterId } from "../views/extensions/api";
 import type { AgentSkillDefinition } from "../views/extensions/types";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
-import EmotePicker from "./EmotePicker.vue";
 import ComposerExtensionHost from "./extension/chat/ComposerExtensionHost.vue";
 import {
   useConversationWorkspace,
@@ -560,7 +555,6 @@ const emit = defineEmits<{
   video: [file: File, videoUrl: string];
   removeVideo: [];
   cancelReply: [];
-  emote: [emote: any];
   file: [file: File];
 }>();
 

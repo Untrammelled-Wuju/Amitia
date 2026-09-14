@@ -163,7 +163,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       @removeVideo="onVideoRemoved"
       @file="handleFileSend"
       @cancel-reply="replyTarget = null"
-      @emote="handleEmoteSend"
     /></div>
 
     <ConversationDrawer
@@ -440,29 +439,6 @@ async function deleteConversationMessage(messageId: string) {
   if (index >= 0) messages.value.splice(index, 1);
 }
 
-async function handleEmoteSend(emote: any) {
-  if (!convId.value || !characterId.value) {
-    ElMessage.warning("请先选择角色和会话");
-    return;
-  }
-  try {
-    const message = normalizeRealtimeMessage(
-      await post<any>("/api/chat/send-emote", {
-        conversationId: convId.value,
-        characterId: characterId.value,
-        emoteId: emote.id,
-        replyToMessageId: replyTarget.value?.id || undefined,
-      }),
-    );
-    if (!messages.value.some((item) => item.id === message.id))
-      messages.value.push(message);
-    replyTarget.value = null;
-    nextTick(() => scrollToBottom());
-  } catch (error: any) {
-    ElMessage.error(error?.response?.data?.msg || "表情发送失败");
-  }
-}
-
 function toggleProfiles() {
   showProfiles.value = !showProfiles.value;
   if (showProfiles.value) {
@@ -629,10 +605,6 @@ const conversationHostActions: Record<string, (input?: any) => unknown | Promise
   "conversation.sendVoice": async (input) => {
     if (input?.blob instanceof Blob) return handleVoiceAudio(input.blob, input?.transcript, input?.duration);
     if (input?.text) return handleVoiceText(String(input.text));
-  },
-  "conversation.sendEmote": async (input) => {
-    const emoteId = String(input?.emoteId ?? input?.id ?? "").trim();
-    if (emoteId) return handleEmoteSend({ ...input, id: emoteId });
   },
   "conversation.workspace.choose": async () => chooseWorkspaceDirectory(),
   "conversation.workspace.select": async (input) => {

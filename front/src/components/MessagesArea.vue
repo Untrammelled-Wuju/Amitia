@@ -24,7 +24,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div class="empty-icon"><el-icon :size="48"><ChatDotRound /></el-icon></div>
       <p class="empty-text">你好，我是 {{ charName || "AI 陪伴角色" }}</p>
       <p class="empty-hint">随时可以和我聊聊天，我在这里陪你。</p>
-      <ChatEmptyStateExtensionHost :context="extensionContext" />
+      <ChatEmptyStateExtensionHost :context="extensionContext || {}" />
     </div>
 
     <template v-for="item in flowItems" :key="item.key">
@@ -349,22 +349,35 @@ watch(conversationId, (id) => {
 }, { immediate: true });
 
 function messageContext(msg: any) {
+  const messageType = msg.msgType || msg.msg_type || msg.type || "text";
   return {
     messageId: msg.id,
-    type: msg.type || "text",
+    type: messageType,
+    messageType,
+    extensionType: msg.extensionType || msg.extension_type || "",
     role: msg.role,
     status: msg.status,
     content: msg.content || msg.text || "",
+    altText: msg.altText || msg.alt_text || "",
+    imageUrl: msg.imageUrl || msg.image_url || "",
+    videoUrl: msg.videoUrl || msg.video_url || "",
+    audioUrl: msg.audioUrl || msg.audio_url || "",
+    originalAssetReference: msg.originalAssetReference || msg.original_asset_reference || "",
+    fallbackAssetReference: msg.fallbackAssetReference || msg.fallback_asset_reference || "",
+    isAnimated: !!(msg.isAnimated || msg.is_animated),
+    width: msg.width || msg.media_width || 0,
+    height: msg.height || msg.media_height || 0,
     attachments: msg.attachments || [],
     metadata: msg.metadata || {},
   };
 }
 
 function messageSlotContext(msg: any) {
+  const messageType = msg.msgType || msg.msg_type || msg.type || "text";
   return {
     ...(props.extensionContext ?? {}),
     messageId: msg.id,
-    messageType: msg.type || "text",
+    messageType,
     direction: msg.role === "user" ? "outgoing" : msg.role === "assistant" ? "incoming" : "system",
     senderType: msg.role === "user" ? "user" : msg.role === "assistant" ? "character" : "system",
     characterId: props.characterId,
@@ -403,9 +416,11 @@ function messageActions(msg: any) {
 }
 
 function messageExtensionSummary(msg: any) {
+  const messageType = msg.msgType || msg.msg_type || msg.type || "text";
   return {
     messageId: msg.id,
-    type: msg.type || "text",
+    type: messageType,
+    messageType,
     direction: msg.role === "user" ? "outgoing" : msg.role === "assistant" ? "incoming" : "system",
     senderType: msg.role === "user" ? "user" : msg.role === "assistant" ? "character" : "system",
     createdAt: msg.createdAt || "",

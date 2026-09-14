@@ -40,8 +40,8 @@ function providerMatchesRoute(provider: UIProviderDefinition, path: string): boo
     .map((item) => String(item ?? "").trim())
     .filter(Boolean);
   const aliases = uiRouteAliases(path);
-  if (routeSelectors.some((pattern) => aliases.some((candidate) => matchesPattern(candidate, pattern)))) {
-    return true;
+  if (routeSelectors.length > 0) {
+    return routeSelectors.some((pattern) => aliases.some((candidate) => matchesPattern(candidate, pattern)));
   }
 
   const surfaces = Array.isArray(metadata.surfaces) ? metadata.surfaces : [];

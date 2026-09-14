@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from "vue";
+import { computed } from "vue";
 import type { UIContributionSummary } from "@/stores/extensionUI";
+import { resolveHostRuntimeComponent } from "./hostRuntimeRegistry";
 
 const props = defineProps<{
   contribution: UIContributionSummary;
@@ -8,15 +9,8 @@ const props = defineProps<{
   slotId: string;
 }>();
 
-const runtimeComponents: Record<string, ReturnType<typeof defineAsyncComponent>> = {
-  "host.character.proactive": defineAsyncComponent(() => import("@/views/proactive-rules/ProactiveRules.vue")),
-  "host.character.psyche": defineAsyncComponent(() => import("@/views/character/CharacterPsycheView.vue")),
-  "host.character.lifestyle": defineAsyncComponent(() => import("@/views/companion-debug/CompanionDebugView.vue")),
-};
-
 const runtimeComponent = computed(() => {
-  const runtimeId = props.contribution.runtimeId?.trim() ?? "";
-  return runtimeId ? runtimeComponents[runtimeId] ?? null : null;
+  return resolveHostRuntimeComponent(props.contribution.runtimeId ?? "");
 });
 </script>
 

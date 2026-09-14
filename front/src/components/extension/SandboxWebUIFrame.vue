@@ -43,7 +43,7 @@ const iframeStyle = computed(() => {
 });
 
 const sessionScopeKey = computed(() =>
-  `${props.contribution.contributionId}:${props.contribution.generation}:${uiContext.value.characterId || ""}:${uiContext.value.conversationId || ""}`
+  `${props.contribution.contributionId}:${props.contribution.generation}:${uiContext.value.characterId || ""}:${uiContext.value.conversationId || ""}:${uiContext.value.messageId || ""}`
 );
 
 let serverCapabilities: string[] = [];
@@ -236,7 +236,7 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
     const input = msg.input as Record<string, unknown> | undefined;
     const requested = Number(input?.preferredHeight ?? input?.height);
     if (Number.isFinite(requested) && requested > 0) {
-      const maximum = surfaceRole.value === "composer" ? 160 : surfaceRole.value === "message" ? 480 : 720;
+      const maximum = surfaceRole.value === "composer" ? 480 : surfaceRole.value === "message" ? 480 : 720;
       preferredHeight.value = Math.max(44, Math.min(Math.round(requested), maximum));
     }
     sendBridgeResponse(msg, { ok: true });
@@ -300,6 +300,7 @@ function postUIContext() {
     os: env.os,
     surface: surfaceRole,
     slotId: props.slotId,
+    messageId: (uiContext.value.messageId as string) || "",
     characterId: (uiContext.value.characterId as string) || "",
     conversationId: (uiContext.value.conversationId as string) || "",
     capabilities: serverCapabilities,
@@ -450,7 +451,7 @@ watch(() => uiContext.value.locale, () => {
   border-radius: 6px;
   background: transparent;
 }
-.sandbox-webui-frame__iframe--composer { min-height: 44px; max-height: 160px; }
+.sandbox-webui-frame__iframe--composer { min-height: 44px; max-height: 480px; }
 .sandbox-webui-frame__iframe--message { min-height: 44px; max-height: 480px; }
 .sandbox-webui-frame__iframe--sidebar, .sandbox-webui-frame__iframe--main { display: block; min-height: 0; }
 .sandbox-webui-frame__loading {

@@ -49,8 +49,15 @@ function refreshStatus() {
 
 async function loadTimingOverview() {
   try {
-    const { data } = await apiClient.get("/api/proactive/status");
-    if (data) timingOverview.value = data;
+    const { data } = await apiClient.post(
+      "/api/extension/action/proactive-character-tab/command",
+      {
+        context: {},
+        input: { action: "status", payload: {} },
+      },
+    );
+    const value = data?.result ?? data?.data?.result ?? data;
+    if (value) timingOverview.value = value;
   } catch {}
 }
 

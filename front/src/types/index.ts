@@ -83,7 +83,7 @@ export interface Message {
   videoUrl?: string;
   audioUrl?: string;
   msgType?: string;
-  emoteId?: string;
+  extensionType?: string;
   altText?: string;
   isAnimated?: boolean | number;
   width?: number;
@@ -93,7 +93,6 @@ export interface Message {
   responseGroupId?: string;
   deliverySequence?: number;
   sequence?: number;
-  emoteDecisionStatus?: string;
   tokens?: number;
   source: string;
   importedItemId?: string | null;
