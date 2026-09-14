@@ -53,3 +53,5 @@ backend/node/node.exe
 runtime/out/dependencies/surrealdb/2.3.8/linux-arm64/surreal
 mobile_app/android/app/src/main/assets/runtime-package/amitia-runtime-1.0.0.zip
 runtime/out/runtime-package/android-arm64/amitia-runtime-current-android-arm64.zip
+
+Plugin/Emote/keys/
