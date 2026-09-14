@@ -55,11 +55,11 @@ func New(repository *mcp.Repository, caller Caller) *Service {
 	return &Service{repository: repository, caller: caller}
 }
 
-func (s *Service) ReadResource(ctx context.Context, serverID, characterID, uri string) (ResourceReadResult, error) {
+func (s *Service) ReadResource(ctx context.Context, serverID, uri string) (ResourceReadResult, error) {
 	if strings.TrimSpace(uri) == "" {
 		return ResourceReadResult{}, fmt.Errorf("MCP_RESOURCE_NOT_FOUND")
 	}
-	if err := s.authorize(ctx, serverID, characterID); err != nil {
+	if err := s.authorize(ctx, serverID); err != nil {
 		return ResourceReadResult{}, err
 	}
 	raw, err := s.caller.Call(ctx, serverID, "resources/read", map[string]any{"uri": uri}, client.CallOptions{})
@@ -83,11 +83,11 @@ func (s *Service) ReadResource(ctx context.Context, serverID, characterID, uri s
 	return result, nil
 }
 
-func (s *Service) GetPrompt(ctx context.Context, serverID, characterID, name string, arguments map[string]string) (PromptResult, error) {
+func (s *Service) GetPrompt(ctx context.Context, serverID, name string, arguments map[string]string) (PromptResult, error) {
 	if strings.TrimSpace(name) == "" {
 		return PromptResult{}, fmt.Errorf("MCP_PROMPT_NOT_FOUND")
 	}
-	if err := s.authorize(ctx, serverID, characterID); err != nil {
+	if err := s.authorize(ctx, serverID); err != nil {
 		return PromptResult{}, err
 	}
 	definition, err := s.repository.GetPromptByName(ctx, serverID, name)
@@ -137,8 +137,8 @@ func (s *Service) GetPrompt(ctx context.Context, serverID, characterID, name str
 	return result, nil
 }
 
-func (s *Service) Complete(ctx context.Context, serverID, characterID string, reference map[string]any, argument map[string]string, contextArguments map[string]string) (CompletionResult, error) {
-	if err := s.authorize(ctx, serverID, characterID); err != nil {
+func (s *Service) Complete(ctx context.Context, serverID string, reference map[string]any, argument map[string]string, contextArguments map[string]string) (CompletionResult, error) {
+	if err := s.authorize(ctx, serverID); err != nil {
 		return CompletionResult{}, err
 	}
 	if len(argument["name"]) > 200 || len(argument["value"]) > 2000 || sensitiveCompletion(argument["value"]) {
@@ -174,15 +174,15 @@ func sensitiveCompletion(value string) bool {
 	return strings.Contains(lower, "bearer ") || strings.Contains(lower, "api_key") || strings.Contains(lower, "apikey") || strings.Contains(lower, "access_token") || strings.Contains(lower, "refresh_token") || strings.Contains(lower, "private_key") || strings.Contains(lower, "password=")
 }
 
-func (s *Service) Subscribe(ctx context.Context, serverID, characterID, uri string) error {
-	if err := s.authorize(ctx, serverID, characterID); err != nil {
+func (s *Service) Subscribe(ctx context.Context, serverID, uri string) error {
+	if err := s.authorize(ctx, serverID); err != nil {
 		return err
 	}
 	_, err := s.caller.Call(ctx, serverID, "resources/subscribe", map[string]any{"uri": uri}, client.CallOptions{})
 	return err
 }
-func (s *Service) Unsubscribe(ctx context.Context, serverID, characterID, uri string) error {
-	if err := s.authorize(ctx, serverID, characterID); err != nil {
+func (s *Service) Unsubscribe(ctx context.Context, serverID, uri string) error {
+	if err := s.authorize(ctx, serverID); err != nil {
 		return err
 	}
 	_, err := s.caller.Call(ctx, serverID, "resources/unsubscribe", map[string]any{"uri": uri}, client.CallOptions{})
@@ -193,8 +193,8 @@ func (s *Service) Ping(ctx context.Context, serverID string) error {
 	return err
 }
 
-func (s *Service) authorize(ctx context.Context, serverID, characterID string) error {
-	enabled, _, err := s.repository.ResolveScopeEnabled(ctx, serverID, characterID)
+func (s *Service) authorize(ctx context.Context, serverID string) error {
+	enabled, err := s.repository.ResolveScopeEnabled(ctx, serverID)
 	if err != nil {
 		return err
 	}
