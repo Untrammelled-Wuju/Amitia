@@ -53,7 +53,4 @@ func TestNewAppServicesBuildsCoreServicesOnce(t *testing.T) {
 	if services.WorldBook == nil {
 		t.Fatal("missing worldbook service")
 	}
-	if services.Companion == nil {
-		t.Fatal("missing companion service")
-	}
 }

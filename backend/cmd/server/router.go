@@ -20,7 +20,6 @@ import (
 	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
@@ -40,7 +39,6 @@ import (
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/embedding_config"
-	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	extensionkernel "github.com/u-ai/backend/internal/extension/kernel"
@@ -61,7 +59,6 @@ import (
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mood"
 	"github.com/u-ai/backend/internal/nativebridge"
-	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/realtime"
@@ -498,20 +495,12 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		if services.KernelContainer != nil {
 			agentToolFacade = services.KernelContainer.ToolFacade
 		}
-		proHandler := proactive.RegisterProactiveRouterWithPlugin(
-			apiGroup,
-			ctx,
-			services.Companion,
-			proactive.KernelPluginToolExecutor{Container: services.KernelContainer},
-		)
-		proactive.RegisterRemindersRouter(apiGroup, proHandler)
 		episodic.RegisterEpisodicRouter(apiGroup, services.Episodic)
 		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)
 		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service)
-		companion.RegisterCompanionRouter(apiGroup, services.Companion)
 		qq.RegisterQQRouter(apiGroup, ctx)
 		tts.RegisterTtsRouter(apiGroup, ctx)
 		asr.RegisterAsrRouter(apiGroup, ctx)
@@ -705,7 +694,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				}
 			}
 		}
-		emote.RegisterRouter(apiGroup, services.Emote)
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
 		mood.RegisterMoodRouter(apiGroup, ctx)
 		if services.Sync != nil {

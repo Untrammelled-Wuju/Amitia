@@ -21,7 +21,6 @@ import (
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
-	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
@@ -71,7 +70,6 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh"
 	devicemeshagent "github.com/u-ai/backend/internal/devicemesh/agent"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
-	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
@@ -80,6 +78,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
+	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
@@ -136,7 +135,6 @@ type AppServices struct {
 	Episodic                     episodic.Service
 	WorldBook                    worldbook.Service
 	Vision                       vision.Service
-	Companion                    companion.Service
 	Chat                         chat.Service
 	UnifiedEntry                 *interaction.UnifiedEntry
 	DataLifecycle                *mindruntime.DataLifecycleCoordinator
@@ -169,7 +167,6 @@ type AppServices struct {
 	VoiceEntry                   *interaction.VoiceEntry
 	Extension                    *extension.Runtime
 	KernelContainer              *kernel.Container
-	Emote                        *emote.Service
 	Temporal                     *temporal.Service
 	RelTimeCoordinator           *temporal.RelationshipTimeCoordinator
 	OwnershipGuard               desktoppetsecurity.OwnershipGuard
@@ -269,11 +266,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	wbSvc := worldbook.NewService(wbRepo, ctx, graphSvc)
 	visionRepo := vision.NewRepository(ctx.DB)
 	visionSvc := vision.NewService(visionRepo)
-	compSvc := companion.NewService(ctx)
-	compSvc.AttachTemporalResolver(temporalSvc)
-	if temporalSvc.FeatureFlags().RelationshipTimeEnabled {
-		compSvc.AttachAssistantContactRecorder(relTimeCoordinator)
-	}
 	compressor := chat.NewCompressor(ctx.DB)
 	psycheStore := psyche.NewSQLitePsycheStore(ctx.DB)
 	if err := psycheStore.InitSchema(); err != nil {
@@ -403,7 +395,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithConversationReader(kernelConvReader).
 		WithMemoryQueryService(kernelMemQuerySvc).
 		WithAgentAdminController(agentAdminController).
-		WithProactiveDispatcher(compSvc).
+		WithConversationMessageSender(newConversationMessageSenderAdapter(newConversationMessageAppenderAdapter(chatSvc))).
+		WithConversationMessageAppender(newConversationMessageAppenderAdapter(chatSvc)).
+		WithVectorStore(newKernelVectorStoreAdapter(ctx.DB)).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
 		WithSearchConfig(search.DefaultConfig()).
@@ -559,6 +553,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		toolFacade.SetSkillResourceHandler(extension.NewSkillResourceAdapter(extensionRuntime.AgentSkills, baseURL))
 	}
 	chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))
+	extensionContextProvider := newKernelExtensionContextProvider(toolFacade)
+	if setter, ok := interface{}(chatSvc).(interface {
+		SetExtensionContextProvider(extensioncontext.Provider)
+	}); ok {
+		setter.SetExtensionContextProvider(extensionContextProvider)
+	}
 	actionMaterializer := interaction.NewActionMaterializer(toolFacade)
 	actionDispatcher := interaction.NewActionDispatcher(toolFacade)
 	observationBuilder := interaction.NewObservationBuilder()
@@ -598,10 +598,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	deliveryWorker := delivery.NewWorker(deliveryStore, kernelContainer.ChannelResolver, delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
-	emoteSvc := emote.NewService(ctx.DB, deliveryStore)
-	emoteDecision := emote.NewDecisionService(emoteSvc)
-	chat.RegisterMessagePlanningHook(emoteDecision.Plan)
-
 	outboxAdapter := &chatOutboxAdapter{store: newOutboxStore}
 	chatSvc.SetOutboxStore(outboxAdapter)
 	if err := runtimeQueue.InitSchema(); err != nil {
@@ -632,7 +628,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		orch.SetRelationshipTimeCoordinator(relTimeCoordinator)
 		chatSvc.SetRelationshipTimeCoordinator(relTimeCoordinator)
 	}
-	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, temporalSvc)
+	runtimeRegistry := newRuntimeContextLoaderRegistry(ctx, charRepo, extensionContextProvider, temporalSvc)
 	runtimePipeline := interaction.NewRuntimePipeline(runtimeRegistry, interaction.NewPathClassifier(), interaction.NewTokenBudgetManager(2400))
 	runtimePipeline.SetPersonalityCompiler(personality.NewCompiler(personality.DefaultCompilerConfig()))
 	runtimePipeline.SetSafetyGovernor(safety.NewGovernor(safety.DefaultGovernorConfig()))
@@ -693,13 +689,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	if kernelContainer != nil && kernelContainer.ExecutionService != nil {
 		entry.SetExecutionService(kernelContainer.ExecutionService)
-	}
-	compSvc.AttachUnifiedEntry(entry)
-	compSvc.AttachDeliveryStore(deliveryStore)
-	if coordinatorSetter, ok := interface{}(compSvc).(interface {
-		SetDataLifecycleCoordinator(*mindruntime.DataLifecycleCoordinator)
-	}); ok {
-		coordinatorSetter.SetDataLifecycleCoordinator(dataLifecycle)
 	}
 	reconciliationEngine := mindruntime.NewReconciliationEngine(mindruntime.DefaultReconciliationConfig())
 	graphReconAdapter := &graphReconciliationAdapter{graphSvc: graphSvc}
@@ -1136,7 +1125,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Episodic:                     epiSvc,
 		WorldBook:                    wbSvc,
 		Vision:                       visionSvc,
-		Companion:                    compSvc,
 		Chat:                         chatSvc,
 		UnifiedEntry:                 entry,
 		DataLifecycle:                dataLifecycle,
@@ -1172,7 +1160,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		VoiceEntry:                   voiceEntry,
 		Extension:                    extensionRuntime,
 		KernelContainer:              kernelContainer,
-		Emote:                        emoteSvc,
 		Temporal:                     temporalSvc,
 		RelTimeCoordinator:           relTimeCoordinator,
 		OwnershipGuard:               ownershipGuard,
@@ -1507,7 +1494,7 @@ func (p *petInfoPort) ResolvePetInfo(ctx context.Context, petInstanceID string) 
 	return "", ""
 }
 
-func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Repository, temporalServices ...*temporal.Service) *interaction.ContextLoaderRegistry {
+func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Repository, extensionContext extensioncontext.Provider, temporalServices ...*temporal.Service) *interaction.ContextLoaderRegistry {
 	runtimeRegistry := interaction.NewContextLoaderRegistry()
 	runtimeRegistry.Register(interaction.NewRoleRuntimeProfileContextLoader(charRepo))
 	runtimeRegistry.Register(interaction.NewChannelContextLoader())
@@ -1515,7 +1502,7 @@ func newRuntimeContextLoaderRegistry(ctx *app.AppContext, charRepo character.Rep
 	runtimeRegistry.Register(interaction.NewPsycheContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewRelationshipContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewBeliefContextLoader(ctx.DB))
-	runtimeRegistry.Register(interaction.NewLifeContextLoader(ctx.DB))
+	runtimeRegistry.Register(interaction.NewLifeContextLoader(extensionContext))
 	runtimeRegistry.Register(interaction.NewNeedContextLoader(ctx.DB))
 	runtimeRegistry.Register(interaction.NewUnresolvedThreadContextLoader(ctx.DB))
 	if len(temporalServices) > 0 && temporalServices[0] != nil {
@@ -1563,6 +1550,14 @@ type chatDeliveryAdapter struct {
 
 func (a *chatDeliveryAdapter) CreateDeliveryIntent(interactionID, channel, peerID, contentType string, payload []byte) error {
 	intent := delivery.NewDeliveryIntent(interactionID, channel, peerID, contentType, payload)
+	var metadata struct {
+		ResponseGroupID  string `json:"responseGroupId"`
+		DeliverySequence int    `json:"deliverySequence"`
+	}
+	if err := json.Unmarshal(payload, &metadata); err == nil {
+		intent.ResponseGroupID = metadata.ResponseGroupID
+		intent.DeliverySequence = metadata.DeliverySequence
+	}
 	return a.store.CreateIntent(intent)
 }
 

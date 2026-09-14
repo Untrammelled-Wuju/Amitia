@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/chat"
@@ -27,6 +28,9 @@ func (a *chatToolRuntimeAdapter) toLegacyScope(scope chat.SkillScope) kernel.Leg
 		ConversationID: scope.ConversationID,
 		Channel:        scope.Channel,
 		SessionID:      scope.SessionID,
+		Message:        scope.Message,
+		Source:         scope.Source,
+		IsInternal:     scope.IsInternal,
 		Trigger:        scope.Trigger,
 		TraceID:        scope.TraceID,
 		RequestID:      scope.RequestID,
@@ -122,6 +126,55 @@ func (a *chatToolRuntimeAdapter) AfterReply(scope chat.SkillScope, reply chat.Re
 		Content:        reply.Content,
 		CreatedAt:      reply.CreatedAt,
 	})
+}
+
+func (a *chatToolRuntimeAdapter) PlanMessageOutputs(ctx context.Context, scope chat.SkillScope, event *chat.MessageOutputPlanningEvent) ([]chat.MessageOutput, error) {
+	if a == nil || a.facade == nil || event == nil {
+		return nil, nil
+	}
+	input, err := json.Marshal(map[string]any{
+		"conversationId": event.ConversationID,
+		"characterId":    event.CharacterID,
+		"channel":        event.Channel,
+		"source":         event.Source,
+		"userMessage":    event.UserMessage,
+		"reply":          event.Reply,
+		"lines":          event.Lines,
+		"userId":         event.UserID,
+		"peerId":         event.PeerID,
+		"requestId":      event.RequestID,
+		"forceVoice":     event.ForceVoice,
+	})
+	if err != nil {
+		return nil, err
+	}
+	results := a.facade.ExecuteMessageOutputProviders(ctx, a.toLegacyScope(scope), input)
+	outputs := make([]chat.MessageOutput, 0)
+	for _, providerResult := range results {
+		if providerResult.Result.Error != nil || !strings.EqualFold(providerResult.Result.Status, "SUCCESS") || len(providerResult.Result.Output) == 0 {
+			continue
+		}
+		var envelope struct {
+			Outputs []chat.MessageOutput `json:"outputs"`
+		}
+		if err := json.Unmarshal(providerResult.Result.Output, &envelope); err != nil {
+			var direct []chat.MessageOutput
+			if directErr := json.Unmarshal(providerResult.Result.Output, &direct); directErr != nil {
+				continue
+			}
+			envelope.Outputs = direct
+		}
+		for _, output := range envelope.Outputs {
+			if output.ExtensionID == "" {
+				output.ExtensionID = providerResult.Provider.ExtensionID
+			}
+			if output.OutputID == "" {
+				output.OutputID = providerResult.Provider.ID
+			}
+			outputs = append(outputs, output)
+		}
+	}
+	return outputs, nil
 }
 
 type mcpDuplicateMetricAdapter struct {

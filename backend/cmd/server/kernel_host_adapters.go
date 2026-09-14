@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/memory"
+	"github.com/u-ai/backend/internal/system"
 )
 
 const (
@@ -59,6 +61,29 @@ func (r *kernelCharacterReader) ReadCharacter(ctx context.Context, characterID s
 		"summary":     summary,
 	})
 	return data, true, nil
+}
+
+func (r *kernelCharacterReader) ListCharacters(_ context.Context, userID string, includeDisabled bool) ([]json.RawMessage, error) {
+	characters, err := r.repo.List(includeDisabled)
+	if err != nil {
+		return nil, err
+	}
+	userID = strings.TrimSpace(userID)
+	items := make([]json.RawMessage, 0, len(characters))
+	for _, character := range characters {
+		owner := strings.TrimSpace(character.UserID)
+		if userID != "" && owner != "" && owner != userID && owner != "default" {
+			continue
+		}
+		data, _ := json.Marshal(map[string]any{
+			"id":          character.ID,
+			"displayName": character.Name,
+			"avatarRef":   character.Avatar,
+			"enabled":     character.Status == "enabled",
+		})
+		items = append(items, data)
+	}
+	return items, nil
 }
 
 type kernelConversationReader struct {
@@ -121,6 +146,125 @@ func (r *kernelConversationReader) ReadConversation(ctx context.Context, convers
 
 type kernelMemoryQueryService struct {
 	memSvc memory.Service
+}
+
+type conversationMessageSenderAdapter struct {
+	appender kernel.ConversationMessageAppender
+}
+
+func newConversationMessageSenderAdapter(appender kernel.ConversationMessageAppender) *conversationMessageSenderAdapter {
+	return &conversationMessageSenderAdapter{appender: appender}
+}
+
+func (a *conversationMessageSenderAdapter) SendConversationMessage(ctx context.Context, request kernel.ConversationMessageRequest) (kernel.ConversationMessageResult, error) {
+	if a == nil || a.appender == nil {
+		return kernel.ConversationMessageResult{}, fmt.Errorf("conversation message appender is not configured")
+	}
+	_, err := a.appender.AppendConversationMessages(ctx, kernel.ConversationMessageAppendRequest{
+		UserID:         request.UserID,
+		CharacterID:    request.CharacterID,
+		ConversationID: request.ConversationID,
+		Channel:        request.Channel,
+		Role:           "assistant",
+		Source:         "extension",
+		RequestID:      request.RequestID,
+		Parts: []kernel.ConversationMessagePart{
+			{Type: "text", Content: request.Content},
+		},
+	})
+	if err != nil {
+		return kernel.ConversationMessageResult{}, err
+	}
+	return kernel.ConversationMessageResult{
+		Content:   request.Content,
+		RequestID: request.RequestID,
+	}, nil
+}
+
+type conversationMessageAppenderAdapter struct {
+	service chat.Service
+}
+
+func newConversationMessageAppenderAdapter(service chat.Service) *conversationMessageAppenderAdapter {
+	return &conversationMessageAppenderAdapter{service: service}
+}
+
+func (a *conversationMessageAppenderAdapter) AppendConversationMessages(ctx context.Context, request kernel.ConversationMessageAppendRequest) (kernel.ConversationMessageAppendResult, error) {
+	if a == nil || a.service == nil {
+		return kernel.ConversationMessageAppendResult{}, fmt.Errorf("chat service is not configured")
+	}
+	parts := make([]chat.MessagePart, len(request.Parts))
+	for index, part := range request.Parts {
+		parts[index] = chat.MessagePart{
+			Type:          part.Type,
+			Content:       part.Content,
+			ExtensionType: part.ExtensionType,
+			MIMEType:      part.MIMEType,
+			URL:           part.URL,
+			FallbackURL:   part.FallbackURL,
+			AltText:       part.AltText,
+			Width:         part.Width,
+			Height:        part.Height,
+			IsAnimated:    part.IsAnimated,
+			Metadata:      part.Metadata,
+		}
+	}
+	result, err := a.service.AppendConversationMessages(ctx, &chat.AppendConversationMessagesRequest{
+		UserID:           request.UserID,
+		CharacterID:      request.CharacterID,
+		ConversationID:   request.ConversationID,
+		Channel:          request.Channel,
+		Role:             request.Role,
+		Source:           request.Source,
+		ReplyToMessageID: request.ReplyToMessageID,
+		RequestID:        request.RequestID,
+		Parts:            parts,
+	})
+	if err != nil {
+		return kernel.ConversationMessageAppendResult{}, err
+	}
+	bus := system.GetMessageEventBus()
+	direction := "outbound"
+	if strings.EqualFold(request.Role, "user") {
+		direction = "inbound"
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	for index, messageID := range result.MessageIDs {
+		if index >= len(parts) {
+			break
+		}
+		part := parts[index]
+		sequence := result.LastSequence
+		if index < len(result.Sequences) {
+			sequence = result.Sequences[index]
+		}
+		bus.PublishMessageCreated(
+			request.ConversationID,
+			messageID,
+			request.Channel,
+			direction,
+			request.Role,
+			part.Content,
+			now,
+			sequence,
+			map[string]any{
+				"type":          part.Type,
+				"extensionType": part.ExtensionType,
+				"url":           part.URL,
+				"fallbackUrl":   part.FallbackURL,
+				"altText":       part.AltText,
+				"width":         part.Width,
+				"height":        part.Height,
+				"isAnimated":    part.IsAnimated,
+			},
+		)
+	}
+	return kernel.ConversationMessageAppendResult{
+		MessageIDs:      result.MessageIDs,
+		Sequences:       result.Sequences,
+		ResponseGroupID: result.ResponseGroupID,
+		LastSequence:    result.LastSequence,
+	}, nil
 }
 
 func newKernelMemoryQueryService(memSvc memory.Service) *kernelMemoryQueryService {
