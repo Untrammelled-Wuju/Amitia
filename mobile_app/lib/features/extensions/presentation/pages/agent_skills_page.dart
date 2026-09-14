@@ -27,7 +27,6 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
   List<Map<String, dynamic>> _skills = [];
   bool _loading = true;
   String? _error;
-  String _characterId = '';
 
   @override
   void initState() {
@@ -35,23 +34,12 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     _loadSkills();
   }
 
-  Future<String> _resolveCharacterId() async {
-    final selected = ref.read(currentCharacterIdProvider);
-    final characters = await ref.read(characterServiceProvider).list();
-    if (characters.isEmpty) return '';
-    final match = characters.where((item) => item.id == selected).firstOrNull;
-    final resolved = match?.id ?? characters.where((item) => item.isActive == 1).firstOrNull?.id ?? characters.first.id;
-    ref.read(currentCharacterIdProvider.notifier).state = resolved;
-    return resolved;
-  }
-
   Future<void> _loadSkills() async {
     setState(() { _loading = true; _error = null; });
     try {
       final svc = ref.read(extensionServiceProvider);
-      final characterId = await _resolveCharacterId();
-      final data = await svc.agentSkills(characterId: characterId);
-      if (mounted) setState(() { _characterId = characterId; _skills = data; _loading = false; });
+      final data = await svc.agentSkills();
+      if (mounted) setState(() { _skills = data; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = safeErrorMessage(e); _loading = false; });
     }
@@ -343,7 +331,6 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
       final definition = previewMap['definition'] is Map ? Map<String, dynamic>.from(previewMap['definition'] as Map) : <String, dynamic>{};
       final report = previewMap['compatibilityReport'] is Map ? Map<String, dynamic>.from(previewMap['compatibilityReport'] as Map) : <String, dynamic>{};
       if (!mounted) return;
-      String scope = 'global';
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => StatefulBuilder(
@@ -363,16 +350,6 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                   const SizedBox(height: 10),
                   Text('兼容性：${report['status'] ?? definition['compatibilityStatus'] ?? 'unknown'}', style: AppTypography.label(dialogContext)),
                   Text('文件数：${(previewMap['files'] as List?)?.length ?? 0}', style: AppTypography.label(dialogContext)),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: scope,
-                    decoration: const InputDecoration(labelText: '安装范围'),
-                    items: [
-                      const DropdownMenuItem(value: 'global', child: Text('全局')),
-                      if (_characterId.isNotEmpty) const DropdownMenuItem(value: 'character', child: Text('当前角色')),
-                    ],
-                    onChanged: (value) => setDialogState(() => scope = value ?? 'global'),
-                  ),
                   if (((report['errors'] as List?) ?? const []).isNotEmpty) ...[
                     const SizedBox(height: 10),
                     Text('存在兼容性错误，后端可能拒绝安装。', style: AppTypography.label(dialogContext).copyWith(color: dialogContext.error)),
@@ -394,7 +371,6 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
       if (dependencies.isNotEmpty) {
         dependencyPlan = await ref.read(mcpServiceProvider).previewAgentSkillDependencies(
               agentSkillExtensionId: (definition['extensionId'] ?? definition['id'] ?? '').toString(),
-              characterId: scope == 'character' ? _characterId : '',
               dependencies: dependencies,
             );
         if (dependencyPlan == null) throw StateError('MCP 依赖计划生成失败');
@@ -409,8 +385,6 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
           '/api/extensions/agent-skills/import/install',
           data: {
             'previewId': previewId,
-            'scope': scope,
-            'characterId': scope == 'character' ? _characterId : '',
             'enable': true,
           },
         );

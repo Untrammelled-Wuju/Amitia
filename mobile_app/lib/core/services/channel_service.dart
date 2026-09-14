@@ -205,7 +205,6 @@ class MCPService {
 
   Future<Map<String, dynamic>?> previewAgentSkillDependencies({
     required String agentSkillExtensionId,
-    required String characterId,
     required List<dynamic> dependencies,
   }) async {
     return _asMap(
@@ -213,7 +212,6 @@ class MCPService {
         '/api/mcp/agent-skills/dependencies/preview',
         data: {
           'agentSkillExtensionId': agentSkillExtensionId,
-          'characterId': characterId,
           'dependencies': dependencies,
         },
       ),

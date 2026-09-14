@@ -356,14 +356,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(child: Text(name, style: AppTypography.cardTitle(context))),
-                    SizedBox(width: AppSpacing.sm),
-                    if (characterIds.isNotEmpty)
-                      AmitiaStatusBadge(label: '专属', type: BadgeType.accent),
-                  ],
-                ),
+                Expanded(child: Text(name, style: AppTypography.cardTitle(context))),
                 const SizedBox(height: 2),
                 Text('含义：$meaning', style: AppTypography.caption(context)),
                 const SizedBox(height: 2),
@@ -413,10 +406,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
     final keywordsController = TextEditingController(text: _stringList(emote['keywords']).join(', '));
     var enabled = _asBool(emote['isEnabled'] ?? emote['enabled'], fallback: true);
     var aiEnabled = _asBool(emote['aiEnabled']);
-    var roleScope = (emote['roleScope'] ?? 'all_characters').toString();
-    final selectedCharacters = _stringList(emote['characterIds']).toSet();
     final selectedGroups = _stringList(emote['groupIds']).toSet();
-    final characters = ref.read(characterListProvider).valueOrNull ?? const [];
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -453,32 +443,6 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
                   value: aiEnabled,
                   onChanged: (value) => setSheetState(() => aiEnabled = value),
                 ),
-                DropdownButtonFormField<String>(
-                  value: roleScope == 'selected_characters' ? 'selected_characters' : 'all_characters',
-                  decoration: const InputDecoration(labelText: '角色作用域'),
-                  items: const [
-                    DropdownMenuItem(value: 'all_characters', child: Text('全部角色')),
-                    DropdownMenuItem(value: 'selected_characters', child: Text('指定角色')),
-                  ],
-                  onChanged: (value) => setSheetState(() => roleScope = value ?? 'all_characters'),
-                ),
-                if (roleScope == 'selected_characters') ...[
-                  SizedBox(height: AppSpacing.md),
-                  Text('可使用角色', style: AppTypography.label(context)),
-                  ...characters.map((character) => CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        title: Text(character.name),
-                        value: selectedCharacters.contains(character.id),
-                        onChanged: (checked) => setSheetState(() {
-                          if (checked == true) {
-                            selectedCharacters.add(character.id);
-                          } else {
-                            selectedCharacters.remove(character.id);
-                          }
-                        }),
-                      )),
-                ],
                 SizedBox(height: AppSpacing.md),
                 Text('所属分组', style: AppTypography.label(context)),
                 ..._groups.map((group) {
@@ -514,8 +478,6 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
                         'keywords': keywords,
                         'enabled': enabled,
                         'aiEnabled': aiEnabled,
-                        'roleScope': roleScope,
-                        'characterIds': roleScope == 'selected_characters' ? selectedCharacters.toList(growable: false) : <String>[],
                         'groupIds': selectedGroups.toList(growable: false),
                       });
                       if (sheetContext.mounted) Navigator.pop(sheetContext, true);
@@ -747,7 +709,6 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
                 'sourceName': file.name,
                 'name': file.name.replaceFirst(RegExp(r'\.[^.]+$'), ''),
                 'aiEnabled': false,
-                'roleScope': 'all_characters',
               })
           .toList(growable: false);
       final response = await svc.batchUploadEmotes(

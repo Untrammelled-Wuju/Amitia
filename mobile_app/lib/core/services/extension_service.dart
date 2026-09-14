@@ -681,13 +681,12 @@ class ExtensionService {
     return result;
   }
 
-  Future<List<Map<String, dynamic>>> agentSkills({int page = 1, int pageSize = 100, String characterId = ''}) async {
+  Future<List<Map<String, dynamic>>> agentSkills({int page = 1, int pageSize = 100}) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/extensions/agent-skills',
       queryParameters: {
         'page': page,
         'pageSize': pageSize,
-        if (characterId.isNotEmpty) 'characterId': characterId,
       },
     );
     final items = resp?['items'];

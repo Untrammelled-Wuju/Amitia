@@ -555,8 +555,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     setState(() => _replyTarget = message);
   }
 
-  Future<List<Map<String, dynamic>>> _loadAgentSkills(String characterId) {
-    return ref.read(extensionServiceProvider).agentSkills(characterId: characterId);
+  Future<List<Map<String, dynamic>>> _loadAgentSkills() {
+    return ref.read(extensionServiceProvider).agentSkills();
   }
 
   Future<void> _pickAndSendFile() async {
@@ -1751,7 +1751,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           onSendCode: _onSendCode,
                           onLoadEmotes: () => ref.read(emoteServiceProvider).listEmotes(),
                           onSendEmote: _onSendEmote,
-                          onLoadAgentSkills: () => _loadAgentSkills(characterId),
+                          onLoadAgentSkills: () => _loadAgentSkills(),
                           replyPreview: _replyTarget == null ? null : _replyExcerpt(_replyTarget!),
                           onCancelReply: () => _setReplyTarget(null),
                         ),
