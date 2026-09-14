@@ -52,7 +52,7 @@ func TestRestrictedBridgeScriptUsesTransferredPort(t *testing.T) {
 }
 
 func TestRestrictedCSPMatchesContract(t *testing.T) {
-	expected := "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
+	expected := "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'"
 	if RestrictedCSP != expected {
 		t.Fatalf("unexpected restricted CSP: %s", RestrictedCSP)
 	}
