@@ -16,6 +16,8 @@ const state = {
   groupsLoading: true,
   groupMenuId: "",
   imports: [],
+  cacheKey: "",
+  cacheRestoredAt: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -59,6 +61,40 @@ function coverUrl(group) {
   return (state.emotes.find((item) => item.id === group.coverEmoteId) || {}).thumbnailUrl || "";
 }
 
+function resolveCacheKey() {
+  const characterId = state.context.characterId || "default";
+  const conversationId = state.context.conversationId || "default";
+  return `amitia.emote.cache.v1:${characterId}:${conversationId}`;
+}
+
+function restoreCache() {
+  state.cacheKey = resolveCacheKey();
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(state.cacheKey) || "null");
+    if (!cached || Date.now() - Number(cached.savedAt || 0) > 10 * 60 * 1000) return false;
+    state.groups = Array.isArray(cached.groups) ? cached.groups : [];
+    state.emotes = Array.isArray(cached.emotes) ? cached.emotes : [];
+    state.total = Number(cached.total || state.emotes.length);
+    state.groupsLoading = false;
+    state.cacheRestoredAt = Date.now();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function persistCache() {
+  if (!state.cacheKey) state.cacheKey = resolveCacheKey();
+  try {
+    sessionStorage.setItem(state.cacheKey, JSON.stringify({
+      savedAt: Date.now(),
+      groups: state.groups,
+      emotes: state.emotes,
+      total: state.total,
+    }));
+  } catch {}
+}
+
 async function loadGroups() {
   try {
     state.groups = await call("groups.list");
@@ -69,6 +105,7 @@ async function loadGroups() {
     state.groupsLoading = false;
     renderGroups();
     renderGroupOptions();
+    persistCache();
   }
 }
 
@@ -111,6 +148,7 @@ async function loadEmotes() {
     renderGroups();
     renderGrid();
     renderDetail();
+    persistCache();
   }
 }
 
@@ -679,5 +717,12 @@ renderGrid();
 renderDetail();
 renderGroupOptions();
 window.amitiaUI.ready().then(async () => {
+  state.context = await window.amitiaUI.getContext();
+  if (restoreCache()) {
+    state.groupsLoading = false;
+    renderGroups();
+    renderGrid();
+    renderGroupOptions();
+  }
   void loadAll();
 }).catch((error) => toast(error.message || String(error)));

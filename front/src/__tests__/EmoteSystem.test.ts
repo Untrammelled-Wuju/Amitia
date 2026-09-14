@@ -8,8 +8,14 @@ import messageSource from "../../../plugins/emote/ui/message.html?raw";
 import messageScriptSource from "../../../plugins/emote/ui/message.js?raw";
 import manifestSource from "../../../plugins/emote/amitia-extension.json?raw";
 import inputSource from "../components/ChatInput.vue?raw";
+import composerActionHostSource from "../components/extension/chat/ComposerActionExtensionHost.vue?raw";
+import composerExtensionHostSource from "../components/extension/chat/ComposerExtensionHost.vue?raw";
+import composerActionProxySource from "../components/extension/WebComposerActionProxy.vue?raw";
+import sandboxFrameSource from "../components/extension/SandboxWebUIFrame.vue?raw";
 import bubbleSource from "../components/ChatBubble.vue?raw";
+import sideNavSource from "../components/SideNav.vue?raw";
 import navigationSource from "../ui-runtime/navigationRegistry.ts?raw";
+import navigationPrewarmSource from "../ui-runtime/navigationPrewarm.ts?raw";
 import webChatSource from "../views/web-chat/BuiltinWebChatView.vue?raw";
 import settingsSource from "../views/settings/SettingsView.vue?raw";
 import {
@@ -67,8 +73,37 @@ describe("表情包前端", () => {
     expect(composerScriptSource).toContain('call("emotes.list"');
     expect(composerScriptSource).toContain("item.thumbnailUrl || item.assetUrl");
     expect(composerScriptSource).toContain('call("emotes.send"');
+    expect(composerScriptSource).toContain("let loadPromise = null");
+    expect(composerScriptSource).toContain("void load().catch");
+    expect(composerScriptSource).toContain("applyHostSurfaceState");
+    expect(composerScriptSource).toContain("surfaceMetrics");
+    expect(composerScriptSource).toContain("requestResize(32, 32)");
+    expect(composerScriptSource).toContain("requestResize(360, 480)");
     expect(manifestSource).toContain('"kind": "composer_action"');
     expect(manifestSource).toContain('"path": "modules/emote-ui/ui/composer.html"');
+  });
+
+  it("扩展导航悬停时预热通用沙箱会话", () => {
+    expect(sideNavSource).toContain('@mouseenter="prewarmItem(item)"');
+    expect(navigationPrewarmSource).toContain("collectEffectiveProviderRoutes");
+    expect(navigationPrewarmSource).toContain("prewarmSandboxSession");
+    expect(sandboxFrameSource).toContain("getOrCreateSandboxSession");
+    expect(sandboxFrameSource).toContain("putCachedSandboxSession");
+  });
+
+  it("表情按钮位于加号左侧且使用不撑开输入栏的覆盖层", () => {
+    const actionHostIndex = inputSource.indexOf("<ComposerActionExtensionHost");
+    const addButtonIndex = inputSource.indexOf("<el-popover");
+    expect(actionHostIndex).toBeGreaterThan(-1);
+    expect(addButtonIndex).toBeGreaterThan(actionHostIndex);
+    expect(composerActionHostSource).toContain('slot-id="chat.composer.action"');
+    expect(composerExtensionHostSource).not.toContain('slot-id="chat.composer.action"');
+    expect(sandboxFrameSource).toContain("sandbox-webui-frame--overlay");
+    expect(sandboxFrameSource).toContain("position: absolute");
+    expect(composerActionProxySource).not.toContain("web-composer-action-proxy__button");
+    expect(composerActionProxySource).not.toContain("warmed");
+    expect(composerActionProxySource).toContain("<SandboxWebUIFrame");
+    expect(sandboxFrameSource).toContain("sandboxSessionCache");
   });
 
   it("实时和历史表情消息使用同一专用渲染组件", () => {
