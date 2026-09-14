@@ -6,9 +6,9 @@
       "default": "表情包"
     },
     "description": {
-      "default": "提供表情包管理、角色设置、AI 表情选择、聊天发送和消息渲染。"
+      "default": "提供表情包管理、AI 表情选择、聊天发送和消息渲染。"
     },
-    "version": "1.0.19",
+    "version": "1.0.20",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -42,7 +42,7 @@
         "default": "表情包运行时"
       },
       "description": {
-        "default": "管理插件自有表情数据、资源、向量、角色设置和自动发送决策。"
+        "default": "管理插件自有表情数据、资源、向量和发送决策。"
       },
       "type": "javascript",
       "placement": "device",
@@ -445,13 +445,13 @@
   "permissions": [
     {
       "name": "storage.state.read",
-      "reason": "读取插件自有表情、分组、角色设置和历史。",
+      "reason": "读取插件自有表情、分组、设置和历史。",
       "required": true,
       "scope": "extension"
     },
     {
       "name": "storage.state.write",
-      "reason": "保存插件自有表情、分组、角色设置和历史。",
+      "reason": "保存插件自有表情、分组、设置和历史。",
       "required": true,
       "scope": "extension"
     },
@@ -474,6 +474,12 @@
       "scope": "conversation"
     },
     {
+      "name": "character.read",
+      "reason": "读取当前角色信息以匹配角色专属表情。",
+      "required": true,
+      "scope": "global"
+    },
+    {
       "name": "vector.read",
       "reason": "在插件自有向量集合中搜索合适的表情。",
       "required": true,
@@ -484,12 +490,6 @@
       "reason": "维护插件自有表情向量。",
       "required": true,
       "scope": "extension"
-    },
-    {
-      "name": "character.read",
-      "reason": "读取当前角色用于角色级设置。",
-      "required": true,
-      "scope": "character"
     },
     {
       "name": "tool.invoke",

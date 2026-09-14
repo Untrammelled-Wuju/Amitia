@@ -2,6 +2,7 @@ const state = { groups: [], emotes: [], groupId: "", query: "", open: false, con
 const $ = (id) => document.getElementById(id);
 let loadPromise = null;
 let hostOpen = false;
+let lastDismissToken = 0;
 
 async function call(action, payload = {}) {
   const result = await window.amitiaUI.invokeAction("command", { action, payload });
@@ -103,10 +104,23 @@ function applyHostSurfaceState(context) {
   if (Number.isFinite(panelBottom) && panelBottom > 0) {
     $("panel").style.bottom = `${Math.round(panelBottom)}px`;
   }
+  const dismissToken = Number(context?.surfaceState?.dismissToken ?? context?.uiContext?.surfaceState?.dismissToken ?? 0);
+  if (Number.isFinite(dismissToken) && dismissToken > lastDismissToken) {
+    lastDismissToken = dismissToken;
+    if (state.open) close();
+  }
   const next = Boolean(context?.surfaceState?.open ?? context?.uiContext?.surfaceState?.open);
   if (next && !hostOpen) open();
   hostOpen = next;
 }
+
+document.addEventListener("click", (event) => {
+  if (!state.open) return;
+  const target = event.target instanceof Node ? event.target : null;
+  if (target && $("panel").contains(target)) return;
+  if (target && target === $("toggle")) return;
+  close();
+});
 
 $("toggle").onclick = () => state.open ? close() : open();
 $("group").onchange = () => { state.groupId = $("group").value; loadEmotes(); };

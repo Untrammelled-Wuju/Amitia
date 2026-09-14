@@ -47,9 +47,8 @@ function normalizeKeywords(values) {
   return result;
 }
 
-function defaultSettings(characterId) {
+function defaultSettings() {
   return {
-    characterId,
     enabled: true,
     baseProbability: 0.1,
     maxProbability: 0.3,
@@ -65,7 +64,7 @@ function defaultState() {
     version: 1,
     emotes: [],
     groups: [],
-    settings: {},
+    settings: defaultSettings(),
     sendRecords: [],
     updatedAt: nowISO(),
   };
@@ -95,8 +94,6 @@ function normalizeEmote(value) {
     fileHash: text(value && value.fileHash),
     enabled: value && value.enabled === false ? false : true,
     aiEnabled: Boolean(value && value.aiEnabled),
-    roleScope: text(value && value.roleScope) || "all_characters",
-    characterIds: Array.isArray(value && value.characterIds) ? value.characterIds.map(text).filter(Boolean) : [],
     groupIds: Array.isArray(value && value.groupIds) ? value.groupIds.map(text).filter(Boolean) : [],
     vectorStatus: text(value && value.vectorStatus) || "disabled",
     vectorError: text(value && value.vectorError),
@@ -119,15 +116,14 @@ function normalizeGroup(value) {
 function normalizeState(value) {
   const base = defaultState();
   if (!value || typeof value !== "object") return base;
-  const settings = {};
-  for (const [key, setting] of Object.entries(value.settings || {})) {
-    settings[key] = { ...defaultSettings(key), ...(setting || {}), characterId: key };
-  }
+  const rawSettings = value.settings && typeof value.settings === "object" && !Array.isArray(value.settings)
+    ? value.settings
+    : {};
   return {
     version: 1,
     emotes: Array.isArray(value.emotes) ? value.emotes.map(normalizeEmote) : [],
     groups: Array.isArray(value.groups) ? value.groups.map(normalizeGroup).sort((a, b) => a.sortOrder - b.sortOrder) : [],
-    settings,
+    settings: { ...base.settings, ...rawSettings },
     sendRecords: Array.isArray(value.sendRecords) ? value.sendRecords.slice(0, MAX_SEND_RECORDS) : [],
     updatedAt: text(value && value.updatedAt) || nowISO(),
   };
@@ -237,10 +233,8 @@ function findEmote(state, id) {
   return state.emotes.find((item) => item.id === id) || null;
 }
 
-function emoteAvailableForCharacter(item, characterId) {
-  if (!item || !item.enabled || !item.aiEnabled || !item.meaning) return false;
-  if (item.roleScope === "all_characters") return true;
-  return item.roleScope === "selected_characters" && item.characterIds.includes(characterId);
+function emoteAvailable(item) {
+  return Boolean(item && item.enabled && item.aiEnabled && item.meaning);
 }
 
 function inCooldown(state, item, characterId, minutes) {
@@ -329,7 +323,6 @@ async function syncVector(host, item) {
         payload: {
           enabled: "true",
           ai_enabled: "true",
-          role_scope: item.roleScope,
         },
       }],
     });
@@ -386,24 +379,15 @@ async function command(host, input) {
       const snapshot = await readState(host);
       return snapshot.state.groups;
     }
-    case "characters.list": {
-      return host.call("host.character.list", {
-        includeDisabled: Boolean(payload.includeDisabled),
-      });
-    }
     case "settings.get": {
-      const characterId = text(payload.characterId);
-      if (!characterId) throw new Error("缺少角色");
       const snapshot = await readState(host);
-      return snapshot.state.settings[characterId] || defaultSettings(characterId);
+      return snapshot.state.settings;
     }
     case "settings.save": {
-      const characterId = text(payload.characterId);
-      if (!characterId) throw new Error("缺少角色");
       let settings = null;
       await mutateState(host, (state) => {
-        settings = { ...defaultSettings(characterId), ...payload, characterId };
-        state.settings[characterId] = settings;
+        settings = { ...state.settings, ...payload };
+        state.settings = settings;
         return state;
       });
       return settings;
@@ -552,8 +536,6 @@ async function command(host, input) {
           fileHash,
           enabled: true,
           aiEnabled: Boolean(payload.aiEnabled && text(payload.meaning)),
-          roleScope: text(payload.roleScope) || "all_characters",
-          characterIds: Array.isArray(payload.characterIds) ? payload.characterIds.map(text) : [],
           groupIds: Array.isArray(payload.groupIds) ? payload.groupIds.map(text) : [],
           vectorStatus: "disabled",
           createdAt: now,
@@ -586,14 +568,13 @@ async function command(host, input) {
       await mutateState(host, (state) => {
         item = findEmote(state, id);
         if (!item) throw new Error("表情不存在");
-        for (const key of ["name", "meaning", "roleScope"]) {
+        for (const key of ["name", "meaning"]) {
           if (payload[key] !== undefined) item[key] = text(payload[key]);
         }
         if (payload.keywords !== undefined) item.keywords = normalizeKeywords(payload.keywords);
         if (payload.enabled !== undefined) item.enabled = Boolean(payload.enabled);
         if (payload.aiEnabled !== undefined) item.aiEnabled = Boolean(payload.aiEnabled);
         if (!item.meaning) item.aiEnabled = false;
-        if (payload.characterIds !== undefined) item.characterIds = payload.characterIds.map(text);
         if (payload.groupIds !== undefined) item.groupIds = payload.groupIds.map(text);
         item.updatedAt = nowISO();
         return state;
@@ -696,14 +677,14 @@ async function output(host, input) {
   if (!characterId || !conversationId) return { outputs: [] };
   const snapshot = await readState(host);
   const state = snapshot.state;
-  const settings = state.settings[characterId] || defaultSettings(characterId);
+  const settings = state.settings;
   const lines = Array.isArray(event.lines) ? event.lines : [];
   const reply = text(event.reply);
   const emoteOnly = lines.length === 0 && !reply && settings.allowEmoteOnly;
   if (!settings.enabled || (!reply && !emoteOnly) || event.forceVoice || suppressedContext(event.source, reply)) {
     return { outputs: [] };
   }
-  if (!state.emotes.some((item) => emoteAvailableForCharacter(item, characterId))) {
+  if (!state.emotes.some((item) => emoteAvailable(item))) {
     return { outputs: [] };
   }
   if (hourlyLimitReached(state, characterId, settings.maxPerHour)) return { outputs: [] };
@@ -730,7 +711,7 @@ async function output(host, input) {
   const candidates = [];
   for (const result of results) {
     const item = findEmote(state, text(result.id));
-    if (!emoteAvailableForCharacter(item, characterId)) continue;
+    if (!emoteAvailable(item)) continue;
     if (inCooldown(state, item, characterId, settings.sameEmoteCooldownMinutes)) continue;
     candidates.push({ item, score: number(result.score) });
   }

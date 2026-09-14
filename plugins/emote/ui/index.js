@@ -1,7 +1,6 @@
 const state = {
   groups: [],
   emotes: [],
-  characters: [],
   total: 0,
   loading: false,
   saving: false,
@@ -107,24 +106,6 @@ async function loadGroups() {
     renderGroupOptions();
     persistCache();
   }
-}
-
-let charactersPromise = null;
-function loadCharacters() {
-  if (state.characters.length) return Promise.resolve(state.characters);
-  if (charactersPromise) return charactersPromise;
-  charactersPromise = call("characters.list", { includeDisabled: true })
-    .then((result) => {
-      state.characters = (result.items || []).map((item) => item.data || item);
-      renderDetail();
-      renderImports();
-      return state.characters;
-    })
-    .catch(() => [])
-    .finally(() => {
-      charactersPromise = null;
-    });
-  return charactersPromise;
 }
 
 async function loadEmotes() {
@@ -242,24 +223,12 @@ function renderDetail() {
     $("detail").innerHTML = `<div class="empty-detail">选择一个表情查看详情</div>`;
     return;
   }
-  if (!state.characters.length) void loadCharacters();
-  const characterOptions = state.characters.length
-    ? state.characters.map((character) => `<option value="${escapeHTML(character.id)}" ${(item.characterIds || []).includes(character.id) ? "selected" : ""}>${escapeHTML(character.displayName || character.name || character.id)}</option>`).join("")
-    : `<option disabled>正在加载角色...</option>`;
   $("detail").innerHTML = `
     <img class="preview" src="${escapeHTML(item.assetUrl || item.thumbnailUrl || "")}" alt="${escapeHTML(item.meaning || item.name)}">
     <div class="form-item"><label>名称</label><input class="el-input-native" id="detail-name" value="${escapeHTML(item.name)}"></div>
     <div class="form-item"><label>含义</label><textarea class="el-input-native" id="detail-meaning" rows="3">${escapeHTML(item.meaning || "")}</textarea><small>AI 可用时含义不能为空。</small></div>
     <div class="form-item"><label>关键词</label><input class="el-input-native" id="detail-keywords" value="${escapeHTML((item.keywords || []).join("，"))}" placeholder="用逗号分隔"></div>
     <div class="form-item"><label class="el-switch"><input type="checkbox" id="detail-ai" ${item.aiEnabled ? "checked" : ""}><span class="switch-track"></span><span>允许 AI 使用</span></label></div>
-    <fieldset>
-      <legend>适用角色</legend>
-      <div class="radio-group">
-        <label class="radio-label"><input type="radio" name="role-scope" value="all_characters" ${item.roleScope === "all_characters" ? "checked" : ""}>全部角色</label>
-        <label class="radio-label"><input type="radio" name="role-scope" value="selected_characters" ${item.roleScope === "selected_characters" ? "checked" : ""}>指定角色</label>
-      </div>
-      <select class="el-select" id="detail-characters" multiple ${item.roleScope === "selected_characters" ? "" : "hidden"}>${characterOptions}</select>
-    </fieldset>
     <fieldset>
       <legend>所在分组</legend>
       <select class="el-select" id="detail-groups" multiple>
@@ -273,12 +242,6 @@ function renderDetail() {
     </div>
     <div class="detail-actions"><button type="button" class="el-button primary" id="save-detail" ${state.saving ? "disabled" : ""}>保存</button><button type="button" class="el-button danger plain" id="delete-detail">删除</button></div>
   `;
-  document.querySelectorAll("input[name='role-scope']").forEach((radio) => {
-    radio.onchange = () => {
-      const selected = document.querySelector("input[name='role-scope']:checked");
-      $("detail-characters").hidden = selected?.value !== "selected_characters";
-    };
-  });
   $("save-detail").onclick = saveDetail;
   $("delete-detail").onclick = deleteFocused;
 }
@@ -352,7 +315,7 @@ async function groupAction(action, id) {
     return;
   }
   if (action === "delete") {
-    if (!confirm(`删除分组“${group.name}”？表情会保留。`)) return;
+    if (!confirm(`删除分组"${group.name}"？表情会保留。`)) return;
     await call("groups.delete", { id });
     if (state.activeGroup === id) state.activeGroup = "";
     await loadGroups();
@@ -363,15 +326,12 @@ async function groupAction(action, id) {
 async function saveDetail() {
   const item = focusedEmote();
   if (!item || state.saving) return;
-  const roleScope = document.querySelector("input[name='role-scope']:checked")?.value || "all_characters";
   const payload = {
     id: item.id,
     name: $("detail-name").value,
     meaning: $("detail-meaning").value,
     keywords: parseKeywords($("detail-keywords").value),
     aiEnabled: $("detail-ai").checked,
-    roleScope,
-    characterIds: roleScope === "selected_characters" ? [...$("detail-characters").selectedOptions].map((option) => option.value) : [],
     groupIds: [...$("detail-groups").selectedOptions].map((option) => option.value),
   };
   state.saving = true;
@@ -392,7 +352,7 @@ async function saveDetail() {
 
 async function deleteFocused() {
   const item = focusedEmote();
-  if (!item || !confirm(`删除后“${item.name}”将停止 AI 使用并清理文件。\n\n确认删除？`)) return;
+  if (!item || !confirm(`删除后"${item.name}"将停止 AI 使用并清理文件。\n\n确认删除？`)) return;
   await call("emotes.delete", { ids: [item.id] });
   state.focusedId = "";
   await loadEmotes();
@@ -426,7 +386,6 @@ async function deleteSelected() {
 }
 
 function openFiles(files) {
-  void loadCharacters();
   const allowed = /\.(png|jpe?g|gif|webp)$/i;
   state.imports = files.filter((file) => allowed.test(file.name)).map((file) => {
     const relative = file.webkitRelativePath || file.name;
@@ -440,8 +399,6 @@ function openFiles(files) {
       keywords: "",
       groupIds: [],
       aiEnabled: false,
-      roleScope: "all_characters",
-      characterIds: [],
       folderGroup: parts.length > 1 ? parts[0] : "",
       relativePath: relative,
       status: "待导入",
@@ -453,11 +410,6 @@ function openFiles(files) {
   }
   renderImports();
   $("import-dialog").showModal();
-}
-
-function characterOptions(selectedIds = []) {
-  if (!state.characters.length) return `<option disabled>正在加载角色...</option>`;
-  return state.characters.map((character) => `<option value="${escapeHTML(character.id)}" ${selectedIds.includes(character.id) ? "selected" : ""}>${escapeHTML(character.displayName || character.name || character.id)}</option>`).join("");
 }
 
 function groupOptions(selectedIds = []) {
@@ -478,11 +430,6 @@ function renderImports() {
         <div class="import-row settings-row">
           <input class="el-input-native" data-import-field="keywords" value="${escapeHTML(item.keywords)}" aria-label="关键词" placeholder="关键词（中文或英文逗号分隔）">
           <select class="el-select" data-import-field="groupIds" multiple>${groupOptions(item.groupIds)}</select>
-          <select class="el-select" data-import-field="roleScope">
-            <option value="all_characters" ${item.roleScope === "all_characters" ? "selected" : ""}>全部角色</option>
-            <option value="selected_characters" ${item.roleScope === "selected_characters" ? "selected" : ""}>指定角色</option>
-          </select>
-          <select class="el-select" data-import-field="characterIds" multiple ${item.roleScope === "selected_characters" ? "" : "disabled"}>${characterOptions(item.characterIds)}</select>
           <label class="el-switch"><input type="checkbox" data-import-field="aiEnabled" ${item.aiEnabled ? "checked" : ""}><span class="switch-track"></span><span>AI</span></label>
         </div>
       </div>
@@ -501,13 +448,8 @@ function renderImports() {
         item[key] = control.type === "checkbox" ? control.checked : control.value;
       });
       control.addEventListener("change", () => {
-        if (key === "groupIds" || key === "characterIds") item[key] = [...control.selectedOptions].map((option) => option.value);
-        else if (key === "roleScope") {
-          item.roleScope = control.value;
-          const characterSelect = row.querySelector("[data-import-field='characterIds']");
-          characterSelect.disabled = item.roleScope !== "selected_characters";
-          characterSelect.placeholder = item.roleScope === "selected_characters" ? "选择角色" : "全部角色";
-        } else if (control.type === "checkbox") item.aiEnabled = control.checked;
+        if (key === "groupIds") item[key] = [...control.selectedOptions].map((option) => option.value);
+        else if (control.type === "checkbox") item.aiEnabled = control.checked;
         else item[key] = control.value;
       });
     });
@@ -606,8 +548,6 @@ async function submitImport() {
         isAnimated: extension === "gif",
         frameCount: 1,
         aiEnabled: item.aiEnabled,
-        roleScope: item.roleScope,
-        characterIds: item.characterIds,
         groupIds: item.groupIds,
       });
       item.status = result.status === "duplicate" ? "重复" : "成功";
@@ -683,7 +623,6 @@ $("select-all").onchange = (event) => {
   if (event.target.checked) state.emotes.forEach((item) => state.selectedIds.add(item.id));
   else state.emotes.forEach((item) => state.selectedIds.delete(item.id));
   renderGrid();
-  renderGroups();
 };
 $("apply-defaults").onclick = applyDefaults;
 $("confirm-import").onclick = submitImport;
