@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -276,8 +277,7 @@ func (s *SQLiteDeliveryStore) MarkSent(id, leaseToken string) error {
 	if res.RowsAffected == 0 {
 		return gorm.ErrRecordNotFound
 	}
-	_ = s.db.Table("emote_send_records").Where("delivery_key = ?", id).Updates(map[string]interface{}{"status": "sent", "sent_at": now, "failure_reason": ""}).Error
-	_ = s.db.Table("messages").Where("id = (SELECT message_id FROM emote_send_records WHERE delivery_key = ?)", id).Updates(map[string]interface{}{"status": "sent", "emote_decision_status": "sent", "updated_at": now}).Error
+	s.updateMessageStatusForIntent(s.db, id, "sent", "")
 	return nil
 }
 
@@ -329,12 +329,29 @@ func (s *SQLiteDeliveryStore) MarkFailed(id, leaseToken, errMsg string) error {
 		if newStatus == DeliveryStatusFailed {
 			recordStatus = "failed"
 		}
-		_ = tx.Table("emote_send_records").Where("delivery_key = ?", id).Updates(map[string]interface{}{"status": recordStatus, "failure_reason": errMsg}).Error
-		if newStatus == DeliveryStatusFailed {
-			_ = tx.Table("messages").Where("id = (SELECT message_id FROM emote_send_records WHERE delivery_key = ?)", id).Updates(map[string]interface{}{"status": "failed", "emote_decision_status": "failed", "updated_at": nowStr}).Error
-		}
+		s.updateMessageStatusForIntent(tx, id, recordStatus, errMsg)
 		return nil
 	})
+}
+
+func (s *SQLiteDeliveryStore) updateMessageStatusForIntent(tx *gorm.DB, id, status, _ string) {
+	if tx == nil || strings.TrimSpace(id) == "" {
+		return
+	}
+	var intent DeliveryIntentModel
+	if err := tx.Select("response_group_id", "delivery_sequence").Where("id = ?", id).Take(&intent).Error; err != nil {
+		return
+	}
+	if strings.TrimSpace(intent.ResponseGroupID) == "" || intent.DeliverySequence <= 0 {
+		return
+	}
+	updates := map[string]interface{}{
+		"status":     status,
+		"updated_at": time.Now().UTC().Format("2006-01-02 15:04:05"),
+	}
+	_ = tx.Table("messages").
+		Where("response_group_id = ? AND delivery_sequence = ?", intent.ResponseGroupID, intent.DeliverySequence).
+		Updates(updates).Error
 }
 
 func (s *SQLiteDeliveryStore) ReleaseExpiredClaims() (int64, error) {

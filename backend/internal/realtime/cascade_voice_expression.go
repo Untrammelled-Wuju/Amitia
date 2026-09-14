@@ -211,6 +211,15 @@ func cascadeMapTTSInstruction(configured string, plan cascadeVoiceExpressionPlan
 	return strings.Join(parts, "，")
 }
 
+func cascadeBaseTTSInstruction(configured, emotion string) string {
+	plan := cascadeVoiceExpressionPlanFromInstruction("自然电话语气，语速自然，句尾放松")
+	instruction := cascadeMapTTSInstruction(configured, plan)
+	if value := strings.TrimSpace(emotion); value != "" {
+		instruction = value + "；" + instruction
+	}
+	return instruction
+}
+
 func cascadeVoiceExpressionTail(plan cascadeVoiceExpressionPlan, existing string) string {
 	items := make([]string, 0, 8)
 	has := func(values ...string) bool {

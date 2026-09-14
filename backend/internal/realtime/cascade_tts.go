@@ -10,23 +10,32 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
-type cascadeTTSSession struct {
+type cascadeTTSConnection struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	conn      *websocket.Conn
-	sessionID string
 	writeMu   sync.Mutex
-	done      chan error
+	consumed  atomic.Bool
 	closeOnce sync.Once
 }
 
-func newCascadeTTSSession(ctx context.Context, cfg cascadeSpeechConfig, voiceID, language, instruction, sectionID string, onAudio func([]byte)) (*cascadeTTSSession, error) {
+type cascadeTTSSession struct {
+	ctx        context.Context
+	cancel     context.CancelFunc
+	connection *cascadeTTSConnection
+	sessionID  string
+	done       chan error
+	closeOnce  sync.Once
+}
+
+func newCascadeTTSConnection(ctx context.Context, cfg cascadeSpeechConfig, voiceID string) (*cascadeTTSConnection, error) {
 	endpoint := strings.TrimSpace(cfg.Endpoint)
 	if !strings.HasPrefix(endpoint, "wss://") && !strings.HasPrefix(endpoint, "ws://") {
 		endpoint = defaultCascadeTTSEndpoint
@@ -50,33 +59,45 @@ func newCascadeTTSSession(ctx context.Context, cfg cascadeSpeechConfig, voiceID,
 		}
 		return nil, fmt.Errorf("streaming tts connect failed: %w", err)
 	}
-	sessionCtx, cancel := context.WithCancel(ctx)
-	session := &cascadeTTSSession{
-		ctx:       sessionCtx,
-		cancel:    cancel,
-		conn:      conn,
-		sessionID: uuid.NewString(),
-		done:      make(chan error, 1),
+	connectionCtx, cancel := context.WithCancel(ctx)
+	connection := &cascadeTTSConnection{
+		ctx:    connectionCtx,
+		cancel: cancel,
+		conn:   conn,
 	}
 	handshakeDone := make(chan struct{})
 	go func() {
 		select {
-		case <-sessionCtx.Done():
+		case <-connectionCtx.Done():
 			_ = conn.Close()
 		case <-handshakeDone:
 		}
 	}()
 	defer close(handshakeDone)
-	if err := session.sendJSON(scEventStartConnection, "", map[string]any{"namespace": "BidirectionalTTS"}); err != nil {
-		session.Cancel()
+	if err := connection.sendJSON(scEventStartConnection, "", map[string]any{"namespace": "BidirectionalTTS"}); err != nil {
+		connection.Close()
 		return nil, err
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	if _, err := scReadExpectedProviderEvent(conn, scEventConnectionStarted, "tts connection handshake"); err != nil {
-		session.Cancel()
+		connection.Close()
 		return nil, err
 	}
+	_ = conn.SetReadDeadline(time.Time{})
+	return connection, nil
+}
 
+func (c *cascadeTTSConnection) Start(ctx context.Context, cfg cascadeSpeechConfig, voiceID, language, instruction, sectionID string, onAudio func([]byte)) (*cascadeTTSSession, error) {
+	if !c.consumed.CompareAndSwap(false, true) {
+		return nil, fmt.Errorf("streaming tts connection is already in use")
+	}
+	select {
+	case <-c.ctx.Done():
+		return nil, c.ctx.Err()
+	default:
+	}
+	voiceID = cascadeTTSVoiceID(voiceID)
+	cfg.ResourceID = cascadeTTSResourceID(cfg.ResourceID, voiceID)
 	model := strings.TrimSpace(cfg.Model)
 	if !strings.HasPrefix(model, "seed-tts-2.0-") {
 		model = defaultCascadeTTSModel
@@ -90,8 +111,16 @@ func newCascadeTTSSession(ctx context.Context, cfg cascadeSpeechConfig, voiceID,
 	}
 	additionsJSON, err := json.Marshal(additions)
 	if err != nil {
-		session.Cancel()
+		c.Close()
 		return nil, err
+	}
+	sessionCtx, cancel := context.WithCancel(ctx)
+	session := &cascadeTTSSession{
+		ctx:        sessionCtx,
+		cancel:     cancel,
+		connection: c,
+		sessionID:  uuid.NewString(),
+		done:       make(chan error, 1),
 	}
 	payload := map[string]any{
 		"namespace": "BidirectionalTTS",
@@ -106,16 +135,29 @@ func newCascadeTTSSession(ctx context.Context, cfg cascadeSpeechConfig, voiceID,
 		},
 	}
 	if err := session.sendJSON(scEventStartSession, session.sessionID, payload); err != nil {
-		session.Cancel()
+		c.Close()
 		return nil, err
 	}
-	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	if _, err := scReadExpectedProviderEvent(conn, scEventSessionStarted, "tts start session"); err != nil {
-		session.Cancel()
+	_ = c.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	if _, err := scReadExpectedProviderEvent(c.conn, scEventSessionStarted, "tts start session"); err != nil {
+		c.Close()
 		return nil, err
 	}
-	_ = conn.SetReadDeadline(time.Time{})
+	_ = c.conn.SetReadDeadline(time.Time{})
 	go session.readLoop(onAudio)
+	return session, nil
+}
+
+func newCascadeTTSSession(ctx context.Context, cfg cascadeSpeechConfig, voiceID, language, instruction, sectionID string, onAudio func([]byte)) (*cascadeTTSSession, error) {
+	connection, err := newCascadeTTSConnection(ctx, cfg, voiceID)
+	if err != nil {
+		return nil, err
+	}
+	session, err := connection.Start(ctx, cfg, voiceID, language, instruction, sectionID, onAudio)
+	if err != nil {
+		connection.Close()
+		return nil, err
+	}
 	return session, nil
 }
 
@@ -163,16 +205,16 @@ func (s *cascadeTTSSession) sendJSON(event int32, sessionID string, payload any)
 	if err != nil {
 		return err
 	}
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
+	s.connection.writeMu.Lock()
+	defer s.connection.writeMu.Unlock()
 	select {
 	case <-s.ctx.Done():
 		return s.ctx.Err()
 	default:
 	}
-	_ = s.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	err = s.conn.WriteMessage(websocket.BinaryMessage, frame)
-	_ = s.conn.SetWriteDeadline(time.Time{})
+	_ = s.connection.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	err = s.connection.conn.WriteMessage(websocket.BinaryMessage, frame)
+	_ = s.connection.conn.SetWriteDeadline(time.Time{})
 	return err
 }
 
@@ -183,7 +225,7 @@ func (s *cascadeTTSSession) readLoop(onAudio func([]byte)) {
 		close(s.done)
 	}()
 	for {
-		messageType, data, err := s.conn.ReadMessage()
+		messageType, data, err := s.connection.conn.ReadMessage()
 		if err != nil {
 			if s.ctx.Err() == nil {
 				result = fmt.Errorf("streaming tts read failed: %w", err)
@@ -246,16 +288,40 @@ func (s *cascadeTTSSession) Wait(ctx context.Context) error {
 func (s *cascadeTTSSession) Cancel() {
 	s.closeOnce.Do(func() {
 		_ = s.sendJSON(scEventCancelSession, s.sessionID, map[string]any{})
-		_ = s.sendJSON(scEventFinishConnection, "", map[string]any{"namespace": "BidirectionalTTS"})
 		s.cancel()
-		_ = s.conn.Close()
+		s.connection.Close()
 	})
 }
 
 func (s *cascadeTTSSession) Close() {
 	s.closeOnce.Do(func() {
-		_ = s.sendJSON(scEventFinishConnection, "", map[string]any{"namespace": "BidirectionalTTS"})
 		s.cancel()
-		_ = s.conn.Close()
+		s.connection.Close()
+	})
+}
+
+func (c *cascadeTTSConnection) sendJSON(event int32, sessionID string, payload any) error {
+	frame, err := scEncodeJSONEvent(event, sessionID, payload)
+	if err != nil {
+		return err
+	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	select {
+	case <-c.ctx.Done():
+		return c.ctx.Err()
+	default:
+	}
+	_ = c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	err = c.conn.WriteMessage(websocket.BinaryMessage, frame)
+	_ = c.conn.SetWriteDeadline(time.Time{})
+	return err
+}
+
+func (c *cascadeTTSConnection) Close() {
+	c.closeOnce.Do(func() {
+		_ = c.sendJSON(scEventFinishConnection, "", map[string]any{"namespace": "BidirectionalTTS"})
+		c.cancel()
+		_ = c.conn.Close()
 	})
 }

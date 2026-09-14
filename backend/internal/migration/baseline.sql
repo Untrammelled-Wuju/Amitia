@@ -203,7 +203,6 @@ CREATE TABLE IF NOT EXISTS messages (
     tool_call_id TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
-    emote_id TEXT NOT NULL DEFAULT '',
     alt_text TEXT NOT NULL DEFAULT '',
     is_animated INTEGER NOT NULL DEFAULT 0,
     media_width INTEGER NOT NULL DEFAULT 0,
@@ -212,7 +211,7 @@ CREATE TABLE IF NOT EXISTS messages (
     fallback_asset_reference TEXT NOT NULL DEFAULT '',
     response_group_id TEXT NOT NULL DEFAULT '',
     delivery_sequence INTEGER NOT NULL DEFAULT 0,
-    emote_decision_status TEXT NOT NULL DEFAULT 'none',
+    extension_type TEXT NOT NULL DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 1,
     deleted_at DATETIME
 );
@@ -367,115 +366,6 @@ CREATE TABLE IF NOT EXISTS vision_configs (
     updated_at TEXT DEFAULT ''
 );
 
-CREATE TABLE IF NOT EXISTS sleep_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    character_id TEXT DEFAULT '',
-    bed_time TEXT DEFAULT '23:00',
-    wake_time TEXT DEFAULT '07:00',
-    enabled INTEGER DEFAULT 1,
-    sleep_reply_enabled INTEGER DEFAULT 0,
-    sleep_reply_mode TEXT DEFAULT 'NO_REPLY',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS fixed_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    character_id TEXT DEFAULT '',
-    title TEXT NOT NULL,
-    description TEXT DEFAULT '',
-    week_day INTEGER DEFAULT -1,
-    start_time TEXT DEFAULT '',
-    end_time TEXT DEFAULT '',
-    event_type TEXT DEFAULT 'CUSTOM_BUSY',
-    repeat_type TEXT DEFAULT 'weekly',
-    repeat_days TEXT DEFAULT '',
-    prepare_min_minutes INTEGER DEFAULT 10,
-    prepare_max_minutes INTEGER DEFAULT 40,
-    reply_mode TEXT DEFAULT 'SHORT_REPLY',
-    enabled INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS special_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    character_id TEXT DEFAULT '',
-    title TEXT NOT NULL,
-    description TEXT DEFAULT '',
-    start_date TEXT DEFAULT '',
-    end_date TEXT DEFAULT '',
-    start_time TEXT DEFAULT '',
-    end_time TEXT DEFAULT '',
-    event_type TEXT DEFAULT 'CUSTOM',
-    repeat_type TEXT DEFAULT 'none',
-    repeat_days TEXT DEFAULT '',
-    enabled INTEGER DEFAULT 1,
-    priority INTEGER DEFAULT 0,
-    active_message_allowed INTEGER DEFAULT 1,
-    reply_mode TEXT DEFAULT 'SHORT_REPLY',
-    affect_schedule INTEGER DEFAULT 0,
-    affect_sleep INTEGER DEFAULT 0,
-    affect_meal INTEGER DEFAULT 0,
-    affect_energy INTEGER DEFAULT 0,
-    payload TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS class_adjustments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    character_id TEXT DEFAULT '',
-    date TEXT DEFAULT '',
-    slot_index INTEGER DEFAULT 0,
-    class_name TEXT DEFAULT '',
-    adjust_type TEXT DEFAULT 'swap',
-    description TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS lifestyle_tendencies (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    character_id TEXT DEFAULT '',
-    punctuality_tendency INTEGER DEFAULT 50,
-    early_prepare_tendency INTEGER DEFAULT 50,
-    self_discipline_tendency INTEGER DEFAULT 50,
-    sleepiness_tendency INTEGER DEFAULT 50,
-    randomness_tendency INTEGER DEFAULT 50,
-    activity_energy INTEGER DEFAULT 50,
-    social_energy INTEGER DEFAULT 50,
-    care_tendency INTEGER DEFAULT 50,
-    daily_share_tendency INTEGER DEFAULT 50,
-    manually_configured INTEGER DEFAULT 0,
-    updated_at TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS work_profiles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    character_id TEXT DEFAULT '',
-    enabled INTEGER DEFAULT 0,
-    work_days TEXT DEFAULT 'MON,TUE,WED,THU,FRI',
-    work_start_time TEXT DEFAULT '09:00',
-    work_end_time TEXT DEFAULT '18:00',
-    lunch_break_start_time TEXT DEFAULT '12:00',
-    lunch_break_end_time TEXT DEFAULT '13:30',
-    commute_min_minutes INTEGER DEFAULT 15,
-    commute_max_minutes INTEGER DEFAULT 45,
-    prepare_min_minutes INTEGER DEFAULT 20,
-    prepare_max_minutes INTEGER DEFAULT 60,
-    reply_mode TEXT DEFAULT 'SHORT_REPLY',
-    allow_overtime INTEGER DEFAULT 0,
-    overtime_probability INTEGER DEFAULT 10,
-    overtime_min_minutes INTEGER DEFAULT 30,
-    overtime_max_minutes INTEGER DEFAULT 180,
-    overtime_reply_mode TEXT DEFAULT 'SHORT_REPLY',
-    delayed_reply_enabled INTEGER DEFAULT 0,
-    commute_home_share_enabled INTEGER DEFAULT 1,
-    commute_home_share_probability INTEGER DEFAULT 60,
-    updated_at TEXT DEFAULT ''
-);
-
 CREATE TABLE IF NOT EXISTS role_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     character_id TEXT DEFAULT '',
@@ -488,97 +378,6 @@ CREATE TABLE IF NOT EXISTS role_profiles (
     gender_expression INTEGER DEFAULT 30,
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS active_message_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    character_id TEXT DEFAULT '',
-    enabled INTEGER DEFAULT 1,
-    active_level INTEGER DEFAULT 50,
-    min_interval INTEGER DEFAULT 60,
-    quiet_start TEXT DEFAULT '23:00',
-    quiet_end TEXT DEFAULT '07:00',
-    quiet_minutes TEXT DEFAULT '',
-    max_per_day INTEGER DEFAULT 6,
-    max_daily_calls INTEGER DEFAULT 10,
-    channel TEXT DEFAULT 'all',
-    unreplied_slowdown_enabled INTEGER DEFAULT 1,
-    unreplied_slowdown_after INTEGER DEFAULT 2,
-    unreplied_cooldown_multiplier REAL DEFAULT 2.0,
-    unreplied_recovery_on_reply INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS active_message_task (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    character_id TEXT DEFAULT '',
-    task_type TEXT DEFAULT '',
-    due_time TEXT,
-    prompt TEXT DEFAULT '',
-    status TEXT DEFAULT 'PENDING',
-    reason TEXT DEFAULT '',
-    retry_count INTEGER DEFAULT 0,
-    max_retry INTEGER DEFAULT 3,
-    last_error TEXT DEFAULT '',
-    sent_at TEXT,
-    interaction_id TEXT DEFAULT '',
-    delivery_intent_id TEXT DEFAULT '',
-    delivery_id TEXT DEFAULT '',
-    request_id TEXT DEFAULT '',
-    delivery_status TEXT DEFAULT 'PENDING',
-    delivered_at TEXT DEFAULT '',
-    error_message TEXT DEFAULT '',
-    canceled_at TEXT,
-    cancel_reason TEXT DEFAULT '',
-    source TEXT DEFAULT 'schedule_based',
-    lock_until TEXT,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS proactive_rules (
-     id INTEGER PRIMARY KEY AUTOINCREMENT,
-     user_id TEXT NOT NULL DEFAULT 'default',
-     name TEXT DEFAULT '',
-     enabled INTEGER DEFAULT 1,
-     channel TEXT DEFAULT 'web',
-     conversation_id TEXT DEFAULT '',
-     character_id TEXT DEFAULT '',
-     rule_type TEXT DEFAULT 'cron',
-     schedule_cron TEXT DEFAULT '',
-     quiet_start TEXT DEFAULT '',
-     quiet_end TEXT DEFAULT '',
-     max_per_day INTEGER DEFAULT 10,
-     sent_count_today INTEGER DEFAULT 0,
-     prompt_template TEXT DEFAULT '',
-     random_minutes INTEGER DEFAULT 0,
-     last_sent_at TEXT,
-     created_at TEXT DEFAULT '',
-     updated_at TEXT DEFAULT ''
- );
-
-CREATE TABLE IF NOT EXISTS proactive_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT NOT NULL DEFAULT 'default',
-    rule_id INTEGER,
-    conversation_id TEXT DEFAULT '',
-    message_content TEXT DEFAULT '',
-    channel TEXT DEFAULT '',
-    status TEXT DEFAULT '',
-    task_type TEXT DEFAULT '',
-    prompt TEXT DEFAULT '',
-    error TEXT DEFAULT '',
-    sent_at TEXT,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
-    interaction_id TEXT DEFAULT '',
-    delivery_intent_id TEXT DEFAULT '',
-    delivery_id TEXT DEFAULT '',
-    request_id TEXT DEFAULT '',
-    delivery_status TEXT DEFAULT 'PENDING',
-    delivered_at TEXT DEFAULT '',
-    error_message TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS reminders (
@@ -828,6 +627,8 @@ CREATE INDEX IF NOT EXISTS idx_conv_summaries_parent ON conversation_summaries(p
 CREATE TABLE IF NOT EXISTS message_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_id TEXT DEFAULT '',
+    feedback_type TEXT NOT NULL DEFAULT '',
+    reason TEXT DEFAULT '',
     rating INTEGER DEFAULT 0,
     comment TEXT DEFAULT '',
     created_at TEXT DEFAULT ''
@@ -874,9 +675,6 @@ CREATE TABLE IF NOT EXISTS app_settings (
 CREATE INDEX IF NOT EXISTS idx_app_settings_key ON app_settings(key);
 CREATE INDEX IF NOT EXISTS idx_app_settings_deleted_at ON app_settings(deleted_at);
 
-CREATE INDEX IF NOT EXISTS idx_active_task_due ON active_message_task(due_time);
-CREATE INDEX IF NOT EXISTS idx_active_task_status_due ON active_message_task(status, due_time);
-CREATE INDEX IF NOT EXISTS idx_active_task_char ON active_message_task(character_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_sequence ON messages(conversation_id, sequence);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_conv_sequence_unique ON messages(conversation_id, sequence);
@@ -3212,105 +3010,6 @@ CREATE TABLE IF NOT EXISTS output_leases (
 				preempted_by TEXT DEFAULT ''
 			);
 
--- 来源: emotes.go
-CREATE TABLE IF NOT EXISTS emotes (
-id TEXT PRIMARY KEY,
-name TEXT NOT NULL DEFAULT '',
-meaning TEXT NOT NULL DEFAULT '',
-keywords TEXT NOT NULL DEFAULT '[]',
-original_filename TEXT NOT NULL DEFAULT '',
-file_path TEXT NOT NULL DEFAULT '',
-thumbnail_path TEXT NOT NULL DEFAULT '',
-fallback_path TEXT NOT NULL DEFAULT '',
-mime_type TEXT NOT NULL DEFAULT '',
-file_extension TEXT NOT NULL DEFAULT '',
-file_size INTEGER NOT NULL DEFAULT 0,
-width INTEGER NOT NULL DEFAULT 0,
-height INTEGER NOT NULL DEFAULT 0,
-is_animated INTEGER NOT NULL DEFAULT 0,
-duration_ms INTEGER NOT NULL DEFAULT 0,
-frame_count INTEGER NOT NULL DEFAULT 1,
-file_hash TEXT NOT NULL,
-enabled INTEGER NOT NULL DEFAULT 1,
-ai_enabled INTEGER NOT NULL DEFAULT 0,
-role_scope TEXT NOT NULL DEFAULT 'all_characters',
-vector_status TEXT NOT NULL DEFAULT 'disabled',
-vector_error TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT '',
-deleted_at TEXT
-);
-
--- 来源: emotes.go
-CREATE TABLE IF NOT EXISTS emote_groups (
-id TEXT PRIMARY KEY,
-name TEXT NOT NULL,
-cover_emote_id TEXT,
-sort_order INTEGER NOT NULL DEFAULT 0,
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT '',
-FOREIGN KEY (cover_emote_id) REFERENCES emotes(id) ON DELETE SET NULL
-);
-
--- 来源: emotes.go
-CREATE TABLE IF NOT EXISTS emote_group_items (
-group_id TEXT NOT NULL,
-emote_id TEXT NOT NULL,
-sort_order INTEGER NOT NULL DEFAULT 0,
-PRIMARY KEY (group_id, emote_id),
-FOREIGN KEY (group_id) REFERENCES emote_groups(id) ON DELETE CASCADE,
-FOREIGN KEY (emote_id) REFERENCES emotes(id) ON DELETE CASCADE
-);
-
--- 来源: emotes.go
-CREATE TABLE IF NOT EXISTS emote_character_bindings (
-emote_id TEXT NOT NULL,
-character_id TEXT NOT NULL,
-PRIMARY KEY (emote_id, character_id),
-FOREIGN KEY (emote_id) REFERENCES emotes(id) ON DELETE CASCADE,
-FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
-);
-
--- 来源: emotes.go
-CREATE TABLE IF NOT EXISTS character_emote_settings (
-character_id TEXT PRIMARY KEY,
-enabled INTEGER NOT NULL DEFAULT 1,
-base_probability REAL NOT NULL DEFAULT 0.10,
-max_probability REAL NOT NULL DEFAULT 0.30,
-max_per_hour INTEGER NOT NULL DEFAULT 5,
-min_reply_gap INTEGER NOT NULL DEFAULT 3,
-same_emote_cooldown_minutes INTEGER NOT NULL DEFAULT 30,
-allow_emote_only INTEGER NOT NULL DEFAULT 0,
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT '',
-FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
-);
-
--- 来源: emotes.go
-CREATE TABLE IF NOT EXISTS emote_send_records (
-id TEXT PRIMARY KEY,
-emote_id TEXT,
-character_id TEXT NOT NULL DEFAULT '',
-conversation_id TEXT NOT NULL DEFAULT '',
-message_id TEXT NOT NULL DEFAULT '',
-response_id TEXT NOT NULL DEFAULT '',
-platform TEXT NOT NULL DEFAULT '',
-trigger_type TEXT NOT NULL DEFAULT '',
-trigger_probability REAL NOT NULL DEFAULT 0,
-random_sample REAL NOT NULL DEFAULT 0,
-trigger_hit INTEGER NOT NULL DEFAULT 0,
-decision_reason TEXT NOT NULL DEFAULT '',
-send_mode TEXT NOT NULL DEFAULT '',
-delivery_key TEXT NOT NULL DEFAULT '',
-status TEXT NOT NULL DEFAULT '',
-failure_reason TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT '',
-sent_at TEXT,
-FOREIGN KEY (emote_id) REFERENCES emotes(id) ON DELETE SET NULL,
-FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
-FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-);
-
 -- 来源: extensions.go
 CREATE TABLE IF NOT EXISTS extensions (
 id TEXT PRIMARY KEY,
@@ -4149,23 +3848,6 @@ allow_proactive_reference INTEGER NOT NULL DEFAULT 1,
 max_mention_sentences INTEGER NOT NULL DEFAULT 1,
 updated_at_utc TEXT NOT NULL DEFAULT ''
 );
-
--- 来源: trigger_history.go
-CREATE TABLE IF NOT EXISTS trigger_histories (
-				id TEXT PRIMARY KEY,
-				user_id TEXT NOT NULL DEFAULT 'default',
-				trigger_id TEXT NOT NULL DEFAULT '',
-				trigger_type TEXT NOT NULL DEFAULT '',
-				title TEXT NOT NULL DEFAULT '',
-				channel TEXT NOT NULL DEFAULT 'web',
-				state TEXT NOT NULL DEFAULT 'pending',
-				priority TEXT NOT NULL DEFAULT 'normal',
-				reason TEXT NOT NULL DEFAULT '',
-				attempt_count INTEGER DEFAULT 0,
-				last_error TEXT DEFAULT '',
-				created_at TEXT DEFAULT '',
-				updated_at TEXT DEFAULT ''
-			);
 
 --- 来源: backup.go + backup_tables_upgrade.go
 CREATE TABLE IF NOT EXISTS backup_records (
@@ -6089,7 +5771,4 @@ CREATE INDEX IF NOT EXISTS idx_dpbmo_device ON desktop_pet_behavior_mesh_outbox(
 -- Tenant ownership indexes kept in the baseline so fresh installs and upgraded databases converge.
 CREATE INDEX IF NOT EXISTS idx_characters_user_updated ON characters(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_characters_user_active ON characters(user_id, is_active, is_default);
-CREATE INDEX IF NOT EXISTS idx_proactive_rules_user ON proactive_rules(user_id, character_id, enabled);
 CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, enabled, remind_at);
-CREATE INDEX IF NOT EXISTS idx_proactive_messages_user ON proactive_messages(user_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_trigger_histories_user ON trigger_histories(user_id, created_at);

@@ -39,44 +39,28 @@ func (p *cascadeVoiceJSONParser) Feed(delta string) (string, bool, error) {
 		return "", p.instructionReady, fmt.Errorf("voice reply JSON exceeds size limit")
 	}
 	p.raw += delta
-	if p.textDone {
-		return "", p.instructionReady, nil
-	}
 	instructionBecameReady := false
 	if !p.instructionReady {
-		instructionKey := strings.Index(p.raw, strconv.Quote("speech_instruction"))
-		textKey := strings.Index(p.raw, strconv.Quote("speech_text"))
-		if textKey >= 0 && instructionKey >= 0 && textKey < instructionKey {
-			return "", false, fmt.Errorf("speech_instruction must appear before speech_text")
-		}
-		value, end, ok, err := extractCascadeJSONStringField(p.raw, "speech_instruction", 0)
+		value, _, ok, err := extractCascadeJSONStringField(p.raw, "speech_instruction", 0)
 		if err != nil {
 			return "", false, err
 		}
-		if !ok {
-			return "", false, nil
-		}
-		p.instruction = strings.TrimSpace(value)
-		if p.instruction == "" {
-			return "", false, fmt.Errorf("speech_instruction is empty")
-		}
-		p.instructionReady = true
-		instructionBecameReady = true
-		if start, found := findCascadeJSONStringValueStart(p.raw, "speech_text", end); found {
-			p.textStart = start
-			p.textScan = start
+		if ok {
+			p.instruction = strings.TrimSpace(value)
+			if p.instruction == "" {
+				return "", false, fmt.Errorf("speech_instruction is empty")
+			}
+			p.instructionReady = true
+			instructionBecameReady = true
 		}
 	}
-	if p.instructionReady && p.textStart == 0 {
-		_, end, ok, err := extractCascadeJSONStringField(p.raw, "speech_instruction", 0)
-		if err != nil {
-			return "", instructionBecameReady, err
-		}
-		if ok {
-			if start, found := findCascadeJSONStringValueStart(p.raw, "speech_text", end); found {
-				p.textStart = start
-				p.textScan = start
-			}
+	if p.textDone {
+		return "", instructionBecameReady, nil
+	}
+	if p.textStart == 0 {
+		if start, found := findCascadeJSONStringValueStart(p.raw, "speech_text", 0); found {
+			p.textStart = start
+			p.textScan = start
 		}
 	}
 	if p.textStart == 0 || p.textScan >= len(p.raw) {
@@ -115,9 +99,6 @@ func (p *cascadeVoiceJSONParser) Finalize() (*cascadeVoiceReply, error) {
 	textKey := strings.Index(normalized, strconv.Quote("speech_text"))
 	if modeKey < 0 || instructionKey < 0 || textKey < 0 {
 		return nil, fmt.Errorf("voice reply JSON is missing required fields")
-	}
-	if instructionKey < modeKey || textKey < instructionKey {
-		return nil, fmt.Errorf("voice reply JSON field order is invalid")
 	}
 	var reply cascadeVoiceReply
 	if err := json.Unmarshal([]byte(normalized), &reply); err != nil {

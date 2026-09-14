@@ -81,9 +81,10 @@ type MessagePlanItem struct {
 	MessageID              string `json:"messageId"`
 	Sequence               int    `json:"sequence"`
 	Type                   string `json:"type"`
+	ExtensionType          string `json:"extensionType,omitempty"`
 	Content                string `json:"content,omitempty"`
-	EmoteID                string `json:"emoteId,omitempty"`
 	AltText                string `json:"altText,omitempty"`
+	MIMEType               string `json:"mimeType,omitempty"`
 	IsAnimated             bool   `json:"isAnimated,omitempty"`
 	Width                  int    `json:"width,omitempty"`
 	Height                 int    `json:"height,omitempty"`

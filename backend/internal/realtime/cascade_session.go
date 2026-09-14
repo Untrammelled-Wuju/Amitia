@@ -130,6 +130,16 @@ type cascadeCallParams struct {
 	Call            *RealtimeCallSession
 }
 
+type cascadeTTSPrewarmResult struct {
+	connection *cascadeTTSConnection
+	err        error
+}
+
+type cascadeTTSPrewarmAttempt struct {
+	cancel context.CancelFunc
+	result chan cascadeTTSPrewarmResult
+}
+
 type cascadeCall struct {
 	params cascadeCallParams
 
@@ -163,17 +173,24 @@ type cascadeCall struct {
 	summaryMu     sync.Mutex
 	summaryActive bool
 
-	interruptCount       atomic.Int64
-	startedAt            time.Time
-	userSpeaking         atomic.Bool
-	bargeInFrames        int
-	signalMu             sync.Mutex
-	speechStartedAt      time.Time
-	utteranceDuration    time.Duration
-	energySum            float64
-	energySamples        int
-	lastAssistantEndedAt time.Time
-	lastUtteranceChars   int
+	interruptCount         atomic.Int64
+	startedAt              time.Time
+	userSpeaking           atomic.Bool
+	bargeInFrames          int
+	signalMu               sync.Mutex
+	speechStartedAt        time.Time
+	utteranceDuration      time.Duration
+	energySum              float64
+	energySamples          int
+	lastAssistantEndedAt   time.Time
+	lastUtteranceChars     int
+	lastSpeechEndedAtNanos atomic.Int64
+	lastASRFinalAtNanos    atomic.Int64
+	lastCommittedAtNanos   atomic.Int64
+	lastCommitPartial      atomic.Bool
+
+	ttsPrewarmMu      sync.Mutex
+	ttsPrewarmAttempt *cascadeTTSPrewarmAttempt
 
 	asrTurnSequence atomic.Uint64
 
@@ -244,6 +261,81 @@ func (s *cascadeCall) commitDelivered(tracker *cascadePlaybackTracker, interrupt
 	s.compiler.SetAssistantAt(tracker.TurnIndex(), text)
 }
 
+func (s *cascadeCall) closeTTSPrewarmResult(attempt *cascadeTTSPrewarmAttempt) {
+	go func() {
+		result := <-attempt.result
+		if result.connection != nil {
+			result.connection.Close()
+		}
+	}()
+}
+
+func (s *cascadeCall) cancelTTSPrewarm() {
+	s.ttsPrewarmMu.Lock()
+	attempt := s.ttsPrewarmAttempt
+	s.ttsPrewarmAttempt = nil
+	s.ttsPrewarmMu.Unlock()
+	if attempt == nil {
+		return
+	}
+	attempt.cancel()
+	s.closeTTSPrewarmResult(attempt)
+}
+
+func (s *cascadeCall) startTTSPrewarm() {
+	if s.callCtx == nil || s.callCtx.Err() != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(s.callCtx)
+	attempt := &cascadeTTSPrewarmAttempt{cancel: cancel, result: make(chan cascadeTTSPrewarmResult, 1)}
+	s.ttsPrewarmMu.Lock()
+	previous := s.ttsPrewarmAttempt
+	s.ttsPrewarmAttempt = attempt
+	s.ttsPrewarmMu.Unlock()
+	if previous != nil {
+		previous.cancel()
+		s.closeTTSPrewarmResult(previous)
+	}
+	go func() {
+		connection, err := newCascadeTTSConnection(ctx, s.ttsCfg, s.voiceID)
+		select {
+		case attempt.result <- cascadeTTSPrewarmResult{connection: connection, err: err}:
+		case <-ctx.Done():
+			if connection != nil {
+				connection.Close()
+			}
+			attempt.result <- cascadeTTSPrewarmResult{err: ctx.Err()}
+		}
+	}()
+}
+
+func (s *cascadeCall) takeTTSPrewarm(ctx context.Context) *cascadeTTSConnection {
+	s.ttsPrewarmMu.Lock()
+	attempt := s.ttsPrewarmAttempt
+	s.ttsPrewarmAttempt = nil
+	s.ttsPrewarmMu.Unlock()
+	if attempt == nil {
+		return nil
+	}
+	timer := time.NewTimer(80 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case result := <-attempt.result:
+		if result.err != nil {
+			return nil
+		}
+		return result.connection
+	case <-timer.C:
+		attempt.cancel()
+		s.closeTTSPrewarmResult(attempt)
+		return nil
+	case <-ctx.Done():
+		attempt.cancel()
+		s.closeTTSPrewarmResult(attempt)
+		return nil
+	}
+}
+
 func (s *cascadeCall) schedulePlaybackCommitFallback(gen uint64) {
 	tracker := s.getTracker(gen)
 	if tracker == nil {
@@ -293,6 +385,7 @@ func (s *cascadeCall) interruptActive(reason string) {
 
 func (s *cascadeCall) handleSpeechStart() {
 	now := time.Now()
+	s.cancelTTSPrewarm()
 	s.userSpeaking.Store(true)
 	s.bargeInFrames = 0
 	s.beginUserSignal(now)
@@ -304,10 +397,12 @@ func (s *cascadeCall) handleSpeechStart() {
 
 func (s *cascadeCall) handleSpeechEnd() {
 	now := time.Now()
+	s.lastSpeechEndedAtNanos.Store(now.UnixNano())
 	s.userSpeaking.Store(false)
 	s.bargeInFrames = 0
 	s.endUserSignal(now)
 	s.turn.OnSpeechEnd(now)
+	s.startTTSPrewarm()
 }
 
 func (s *cascadeCall) handleAudioChunk(pcm []byte) {
@@ -341,17 +436,20 @@ func (s *cascadeCall) handleAudioChunk(pcm []byte) {
 func (s *cascadeCall) handleASREvent(event cascadeASREvent) {
 	now := time.Now()
 	if event.Final {
+		s.lastASRFinalAtNanos.Store(now.UnixNano())
 		s.turn.OnFinal(event.Text, now)
 		return
 	}
 	s.turn.OnPartial(event.Text, now)
 }
 
-func (s *cascadeCall) commitUserTurn(text string) {
+func (s *cascadeCall) commitUserTurn(text string, partial bool) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return
 	}
+	s.lastCommittedAtNanos.Store(time.Now().UnixNano())
+	s.lastCommitPartial.Store(partial)
 	s.interruptActive("new_user_turn")
 	for _, stale := range s.takeAllTrackers() {
 		s.commitDelivered(stale, false)
@@ -488,22 +586,16 @@ func (s *cascadeCall) startAssistantTurn(userText string, turnIndex int) {
 		var ttsSessionAt atomic.Int64
 		var firstAudioAt atomic.Int64
 
-		startTTS := func() error {
+		startTTSWithInstruction := func(instruction string) error {
 			ttsMu.Lock()
 			defer ttsMu.Unlock()
 			if tts != nil {
 				return nil
 			}
-			instruction := parser.Instruction()
 			if strings.TrimSpace(instruction) == "" {
-				return fmt.Errorf("speech_instruction is not ready")
+				return fmt.Errorf("tts instruction is empty")
 			}
-			plan := cascadeVoiceExpressionPlanFromInstruction(instruction)
-			ttsInstruction := cascadeMapTTSInstruction(s.params.Instruction, plan)
-			if voiceInstruction := s.emotionVoiceInstruction(); voiceInstruction != "" {
-				ttsInstruction = voiceInstruction + "；" + ttsInstruction
-			}
-			session, err := newCascadeTTSSession(turnCtx, s.ttsCfg, s.voiceID, s.language, ttsInstruction, s.params.CallID, func(pcm []byte) {
+			onAudio := func(pcm []byte) {
 				if len(pcm) == 0 {
 					return
 				}
@@ -517,18 +609,30 @@ func (s *cascadeCall) startAssistantTurn(userText string, turnIndex int) {
 					s.writeEvent(map[string]any{"event": "speaking", "generationId": strconv.FormatUint(gen, 10)})
 					if firstAudioAt.CompareAndSwap(0, time.Now().UnixNano()) {
 						appLog.Infof(
-							"cascade latency call=%s turn=%d first_delta_ms=%d instruction_ms=%d tts_session_ms=%d first_audio_ms=%d",
+							"cascade latency call=%s turn=%d partial_commit=%v first_delta_ms=%d instruction_ms=%d tts_session_ms=%d first_audio_ms=%d end_to_asr_final_ms=%d end_to_commit_ms=%d commit_to_first_audio_ms=%d end_to_first_audio_ms=%d",
 							s.params.CallID,
 							turnIndex,
+							s.lastCommitPartial.Load(),
 							cascadeElapsedMillis(startedThinkingAt, firstDeltaAt.Load()),
 							cascadeElapsedMillis(startedThinkingAt, instructionReadyAt.Load()),
 							cascadeElapsedMillis(startedThinkingAt, ttsSessionAt.Load()),
 							cascadeElapsedMillis(startedThinkingAt, firstAudioAt.Load()),
+							cascadeElapsedNanosMillis(s.lastSpeechEndedAtNanos.Load(), s.lastASRFinalAtNanos.Load()),
+							cascadeElapsedNanosMillis(s.lastSpeechEndedAtNanos.Load(), s.lastCommittedAtNanos.Load()),
+							cascadeElapsedNanosMillis(s.lastCommittedAtNanos.Load(), firstAudioAt.Load()),
+							cascadeElapsedNanosMillis(s.lastSpeechEndedAtNanos.Load(), firstAudioAt.Load()),
 						)
 					}
 				}
 				s.writeEvent(map[string]any{"event": "audio", "generationId": strconv.FormatUint(gen, 10), "data": base64.StdEncoding.EncodeToString(pcm)})
-			})
+			}
+			var session *cascadeTTSSession
+			var err error
+			if connection := s.takeTTSPrewarm(turnCtx); connection != nil {
+				session, err = connection.Start(turnCtx, s.ttsCfg, s.voiceID, s.language, instruction, s.params.CallID, onAudio)
+			} else {
+				session, err = newCascadeTTSSession(turnCtx, s.ttsCfg, s.voiceID, s.language, instruction, s.params.CallID, onAudio)
+			}
 			if err != nil {
 				return err
 			}
@@ -536,10 +640,32 @@ func (s *cascadeCall) startAssistantTurn(userText string, turnIndex int) {
 			tts = session
 			return nil
 		}
+		var ttsInitOnce sync.Once
+		ttsInitDone := make(chan struct{})
+		var ttsInitErr error
+		initializeTTS := func(instruction string) {
+			ttsInitOnce.Do(func() {
+				go func() {
+					ttsInitErr = startTTSWithInstruction(instruction)
+					close(ttsInitDone)
+				}()
+			})
+		}
+		waitTTS := func() error {
+			select {
+			case <-ttsInitDone:
+				return ttsInitErr
+			case <-turnCtx.Done():
+				return turnCtx.Err()
+			}
+		}
 		sendChunks := func(chunks []string) error {
 			for _, chunk := range chunks {
 				if strings.TrimSpace(chunk) == "" {
 					continue
+				}
+				if err := waitTTS(); err != nil {
+					return err
 				}
 				ttsMu.Lock()
 				session := tts
@@ -571,6 +697,7 @@ func (s *cascadeCall) startAssistantTurn(userText string, turnIndex int) {
 			UserText:       userText,
 		}
 
+		initializeTTS(cascadeBaseTTSInstruction(s.params.Instruction, s.emotionVoiceInstruction()))
 		err := s.generator(turnCtx, req, func(delta string) error {
 			if turnCtx.Err() != nil || s.generation.Load() != gen {
 				return context.Canceled
@@ -580,18 +707,13 @@ func (s *cascadeCall) startAssistantTurn(userText string, turnIndex int) {
 				return feedErr
 			}
 			firstDeltaAt.CompareAndSwap(0, time.Now().UnixNano())
-			if instructionReady && instructionReadyAt.CompareAndSwap(0, time.Now().UnixNano()) {
-				if startErr := startTTS(); startErr != nil {
-					return startErr
-				}
+			if instructionReady {
+				instructionReadyAt.CompareAndSwap(0, time.Now().UnixNano())
 			}
 			if fragment == "" {
 				return nil
 			}
 			s.writeEvent(map[string]any{"event": "assistant_text", "generationId": strconv.FormatUint(gen, 10), "data": map[string]any{"text": fragment, "delta": true}})
-			if startErr := startTTS(); startErr != nil {
-				return startErr
-			}
 			return sendChunks(buffer.Push(fragment))
 		})
 
@@ -609,7 +731,7 @@ func (s *cascadeCall) startAssistantTurn(userText string, turnIndex int) {
 					}
 				} else {
 					if tts == nil {
-						err = startTTS()
+						err = waitTTS()
 					}
 					if err == nil {
 						err = sendChunks(buffer.Flush())
@@ -784,6 +906,7 @@ func serveCascadeCall(c *gin.Context, params cascadeCallParams) {
 	if strings.TrimSpace(session.language) == "" {
 		session.language = "zh-CN"
 	}
+	defer session.cancelTTSPrewarm()
 	session.loadEmotionContext(callCtx)
 
 	if params.Call != nil && realtimeVisualAnalyzer != nil {
@@ -869,7 +992,7 @@ func serveCascadeCall(c *gin.Context, params cascadeCallParams) {
 				decision := session.turn.Decide(now)
 				switch decision.Type {
 				case cascadeTurnCommit:
-					session.commitUserTurn(decision.Text)
+					session.commitUserTurn(decision.Text, decision.Partial)
 				case cascadeTurnBackchannel, cascadeTurnCompletionCheck:
 					session.speakBackchannel(decision.Text)
 				}
@@ -982,4 +1105,11 @@ func cascadeElapsedMillis(start time.Time, endNanos int64) int64 {
 		return -1
 	}
 	return time.Unix(0, endNanos).Sub(start).Milliseconds()
+}
+
+func cascadeElapsedNanosMillis(start, end int64) int64 {
+	if start == 0 || end == 0 {
+		return -1
+	}
+	return time.Duration(end - start).Milliseconds()
 }

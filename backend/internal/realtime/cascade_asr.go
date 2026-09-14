@@ -17,7 +17,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const cascadeASRChunkBytes = 6400
+const cascadeASRChunkBytes = 1600
 
 type cascadeASREvent struct {
 	Text         string
@@ -125,7 +125,7 @@ func (s *cascadeASRSession) sendConfig() error {
 			"enable_ddc":           false,
 			"show_utterances":      true,
 			"result_type":          "full",
-			"end_window_size":      800,
+			"end_window_size":      400,
 			"force_to_speech_time": 1000,
 		},
 	}

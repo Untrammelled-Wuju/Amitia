@@ -112,11 +112,26 @@ func TestCascadeVoiceJSONParserStreamsInstructionThenText(t *testing.T) {
 	}
 }
 
-func TestCascadeVoiceJSONParserRejectsWrongFieldOrder(t *testing.T) {
+func TestCascadeVoiceJSONParserStreamsTextBeforeInstruction(t *testing.T) {
 	parser := &cascadeVoiceJSONParser{}
-	_, _, err := parser.Feed(`{"speech_text":"你好","speech_instruction":"温柔"}`)
-	if err == nil {
-		t.Fatal("expected error when speech_text precedes speech_instruction")
+	var text string
+	for _, chunk := range []string{
+		`{"interaction_mode":"NORMAL","speech_text":"你`,
+		`好","speech_instruction":"温柔","user_affect":{`,
+		`"primary_emotion":"neutral","secondary_emotion":"none","intensity":0,"stress":0,"need":"none","advice_wanted":false,"openness":0.5,"severity":0,"possible_concealment":false,"confidence":0.5,"evidence":["none"]}}`,
+	} {
+		fragment, _, err := parser.Feed(chunk)
+		if err != nil {
+			t.Fatalf("feed parser: %v", err)
+		}
+		text += fragment
+	}
+	reply, err := parser.Finalize()
+	if err != nil {
+		t.Fatalf("finalize parser: %v", err)
+	}
+	if text != "你好" || reply.SpeechInstruction != "温柔" {
+		t.Fatalf("unexpected text-first result: text=%q reply=%+v", text, reply)
 	}
 }
 
@@ -140,6 +155,22 @@ func TestCascadeTurnControllerCommitsAfterSilence(t *testing.T) {
 	}
 	if controller.HasPending() {
 		t.Fatal("pending text must be cleared after commit")
+	}
+}
+
+func TestCascadeTurnControllerCommitsStablePartialBeforeFinal(t *testing.T) {
+	controller := newCascadeTurnController(defaultCascadeTurnThresholds())
+	start := time.Now()
+	controller.OnSpeechStart()
+	controller.OnPartial("今天天气不错。", start.Add(100*time.Millisecond))
+	controller.OnSpeechEnd(start.Add(300 * time.Millisecond))
+	decision := controller.Decide(start.Add(800 * time.Millisecond))
+	if decision.Type != cascadeTurnCommit || decision.Text != "今天天气不错。" || !decision.Partial {
+		t.Fatalf("expected stable partial commit, got %+v", decision)
+	}
+	controller.OnFinal("今天天气不错。", start.Add(1000*time.Millisecond))
+	if duplicate := controller.Decide(start.Add(1500 * time.Millisecond)); duplicate.Type == cascadeTurnCommit {
+		t.Fatalf("late final triggered duplicate commit: %+v", duplicate)
 	}
 }
 
@@ -371,6 +402,13 @@ func TestCascadeMapTTSInstructionKeepsSourceAndTail(t *testing.T) {
 	}
 	if !containsSubstring(instruction, "角色固定风格") || !containsSubstring(instruction, "语速稍慢，开心一点") {
 		t.Fatalf("instruction lost configured or source directive: %q", instruction)
+	}
+}
+
+func TestCascadeBaseTTSInstructionUsesPreloadedEmotion(t *testing.T) {
+	instruction := cascadeBaseTTSInstruction("角色固定风格", "声音放轻，语速稍慢")
+	if !containsSubstring(instruction, "角色固定风格") || !containsSubstring(instruction, "声音放轻") {
+		t.Fatalf("unexpected base tts instruction: %q", instruction)
 	}
 }
 

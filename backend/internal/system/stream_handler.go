@@ -99,7 +99,7 @@ func (h *Handler) MessagesStream(c *gin.Context) {
 				m["videoUrl"] = v
 				delete(m, "video_url")
 			}
-			for snake, camel := range map[string]string{"msg_type": "msgType", "emote_id": "emoteId", "alt_text": "altText", "is_animated": "isAnimated", "media_width": "width", "media_height": "height", "original_asset_reference": "originalAssetReference", "fallback_asset_reference": "fallbackAssetReference", "response_group_id": "responseGroupId", "delivery_sequence": "deliverySequence", "emote_decision_status": "emoteDecisionStatus"} {
+			for snake, camel := range map[string]string{"msg_type": "msgType", "extension_type": "extensionType", "alt_text": "altText", "is_animated": "isAnimated", "media_width": "width", "media_height": "height", "original_asset_reference": "originalAssetReference", "fallback_asset_reference": "fallbackAssetReference", "response_group_id": "responseGroupId", "delivery_sequence": "deliverySequence"} {
 				if v, ok := m[snake]; ok {
 					m[camel] = v
 					delete(m, snake)

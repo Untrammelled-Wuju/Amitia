@@ -21,24 +21,27 @@ const (
 )
 
 type cascadeTurnDecision struct {
-	Type cascadeTurnDecisionType
-	Text string
+	Type    cascadeTurnDecisionType
+	Text    string
+	Partial bool
 }
 
 type cascadeTurnThresholds struct {
-	VeryShortPauseMS   int
-	NormalTurnGapMS    int
-	HoldWindowMS       int
+	VeryShortPauseMS    int
+	PartialStableMS     int
+	NormalTurnGapMS     int
+	HoldWindowMS        int
 	BackchannelWindowMS int
-	CompletionCheckMS  int
-	LongSilenceMS      int
+	CompletionCheckMS   int
+	LongSilenceMS       int
 }
 
 func defaultCascadeTurnThresholds() cascadeTurnThresholds {
 	return cascadeTurnThresholds{
 		VeryShortPauseMS:    280,
-		NormalTurnGapMS:     520,
-		HoldWindowMS:        950,
+		PartialStableMS:     200,
+		NormalTurnGapMS:     420,
+		HoldWindowMS:        800,
 		BackchannelWindowMS: 1250,
 		CompletionCheckMS:   2200,
 		LongSilenceMS:       3200,
@@ -52,7 +55,11 @@ type cascadeTurnController struct {
 
 	pendingText         string
 	latestPartial       string
+	partialStableAt     time.Time
 	finalAt             time.Time
+	finalReceived       bool
+	awaitingFinal       bool
+	committedPartial    string
 	speechEndAt         time.Time
 	speechActive        bool
 	backchannelSent     bool
@@ -70,6 +77,11 @@ func (t *cascadeTurnController) OnSpeechStart() {
 	defer t.mu.Unlock()
 	t.speechActive = true
 	t.speechEndAt = time.Time{}
+	t.partialStableAt = time.Time{}
+	t.finalAt = time.Time{}
+	t.finalReceived = false
+	t.awaitingFinal = false
+	t.committedPartial = ""
 	t.backchannelSent = false
 	t.completionCheckSent = false
 }
@@ -88,8 +100,15 @@ func (t *cascadeTurnController) OnPartial(text string, now time.Time) {
 	if text == "" {
 		return
 	}
+	if t.awaitingFinal {
+		return
+	}
+	if text != t.latestPartial || t.partialStableAt.IsZero() {
+		t.partialStableAt = now
+	}
 	t.latestPartial = text
 	t.finalAt = time.Time{}
+	t.finalReceived = false
 	t.backchannelSent = false
 	t.completionCheckSent = false
 }
@@ -101,9 +120,15 @@ func (t *cascadeTurnController) OnFinal(text string, now time.Time) {
 	if text == "" {
 		return
 	}
+	if t.awaitingFinal {
+		t.awaitingFinal = false
+		t.committedPartial = ""
+		return
+	}
 	t.pendingText = mergeCascadeFinalText(t.pendingText, text)
 	t.latestPartial = ""
 	t.finalAt = now
+	t.finalReceived = true
 	t.backchannelSent = false
 	t.completionCheckSent = false
 }
@@ -123,7 +148,10 @@ func (t *cascadeTurnController) HasActivity() bool {
 func (t *cascadeTurnController) PendingText() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return strings.TrimSpace(t.pendingText)
+	if text := strings.TrimSpace(t.pendingText); text != "" {
+		return text
+	}
+	return strings.TrimSpace(t.latestPartial)
 }
 
 func (t *cascadeTurnController) MarkInterruptedTurn() {
@@ -138,7 +166,11 @@ func (t *cascadeTurnController) Reset() {
 	defer t.mu.Unlock()
 	t.pendingText = ""
 	t.latestPartial = ""
+	t.partialStableAt = time.Time{}
 	t.finalAt = time.Time{}
+	t.finalReceived = false
+	t.awaitingFinal = false
+	t.committedPartial = ""
 	t.speechEndAt = time.Time{}
 	t.speechActive = false
 	t.backchannelSent = false
@@ -149,13 +181,20 @@ func (t *cascadeTurnController) Decide(now time.Time) cascadeTurnDecision {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	text := strings.TrimSpace(t.pendingText)
-	if text == "" || t.speechActive || t.finalAt.IsZero() {
+	finalText := strings.TrimSpace(t.pendingText)
+	partialText := strings.TrimSpace(t.latestPartial)
+	partialOnly := false
+	text := finalText
+	if text == "" && partialText != "" && !t.partialStableAt.IsZero() {
+		text = partialText
+		partialOnly = true
+	}
+	if text == "" || t.speechActive || (!t.finalReceived && !partialOnly) {
 		return cascadeTurnDecision{Type: cascadeTurnNone}
 	}
 
 	anchor := t.finalAt
-	if t.speechEndAt.After(anchor) {
+	if !t.speechEndAt.IsZero() {
 		anchor = t.speechEndAt
 	}
 	silence := now.Sub(anchor)
@@ -170,10 +209,11 @@ func (t *cascadeTurnController) Decide(now time.Time) cascadeTurnDecision {
 		return cascadeTurnDecision{Type: cascadeTurnHold}
 	}
 
-	if !incomplete && silence >= normalGap {
+	partialStable := !partialOnly || now.Sub(t.partialStableAt) >= t.partialStableWindowLocked()
+	if !incomplete && silence >= normalGap && partialStable {
 		committed := text
-		t.resetCommittedLocked()
-		return cascadeTurnDecision{Type: cascadeTurnCommit, Text: committed}
+		t.resetCommittedLocked(committed, partialOnly)
+		return cascadeTurnDecision{Type: cascadeTurnCommit, Text: committed, Partial: partialOnly}
 	}
 
 	if incomplete {
@@ -195,13 +235,21 @@ func (t *cascadeTurnController) Decide(now time.Time) cascadeTurnDecision {
 		}
 		if silence >= longSilence {
 			committed := text
-			t.resetCommittedLocked()
-			return cascadeTurnDecision{Type: cascadeTurnCommit, Text: committed}
+			t.resetCommittedLocked(committed, partialOnly)
+			return cascadeTurnDecision{Type: cascadeTurnCommit, Text: committed, Partial: partialOnly}
 		}
 		return cascadeTurnDecision{Type: cascadeTurnHold}
 	}
 
 	return cascadeTurnDecision{Type: cascadeTurnNone}
+}
+
+func (t *cascadeTurnController) partialStableWindowLocked() time.Duration {
+	value := t.thresholds.PartialStableMS
+	if value <= 0 {
+		value = 200
+	}
+	return time.Duration(value) * time.Millisecond
 }
 
 func (t *cascadeTurnController) thresholdsLocked() (veryShortPause, normalGap, holdWindow, backchannelWindow, completionWindow, longSilence time.Duration) {
@@ -212,8 +260,8 @@ func (t *cascadeTurnController) thresholdsLocked() (veryShortPause, normalGap, h
 		return float64(value)
 	}
 	veryShort := ms(t.thresholds.VeryShortPauseMS, 280)
-	normal := ms(t.thresholds.NormalTurnGapMS, 520)
-	hold := ms(t.thresholds.HoldWindowMS, 950)
+	normal := ms(t.thresholds.NormalTurnGapMS, 420)
+	hold := ms(t.thresholds.HoldWindowMS, 800)
 	back := ms(t.thresholds.BackchannelWindowMS, 1250)
 	completion := ms(t.thresholds.CompletionCheckMS, 2200)
 	long := ms(t.thresholds.LongSilenceMS, 3200)
@@ -240,11 +288,18 @@ func (t *cascadeTurnController) thresholdsLocked() (veryShortPause, normalGap, h
 		time.Duration(long) * time.Millisecond
 }
 
-func (t *cascadeTurnController) resetCommittedLocked() {
+func (t *cascadeTurnController) resetCommittedLocked(committed string, partialOnly bool) {
 	t.pendingText = ""
 	t.latestPartial = ""
+	t.partialStableAt = time.Time{}
 	t.finalAt = time.Time{}
+	t.finalReceived = false
 	t.speechEndAt = time.Time{}
+	t.awaitingFinal = partialOnly
+	t.committedPartial = ""
+	if partialOnly {
+		t.committedPartial = committed
+	}
 	t.backchannelSent = false
 	t.completionCheckSent = false
 }

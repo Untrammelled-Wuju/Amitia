@@ -60,11 +60,11 @@ const cascadeVoiceReactionRules = `【语境化即时反应｜完整清单】
 
 const cascadeVoiceSystemContract = `【实时语音通话输出协议】
 你正在进行实时语音通话。必须且只能输出一个 JSON 对象，字段顺序固定，不得增加、删除或改名：
-{"interaction_mode":"NORMAL","speech_instruction":"...","speech_text":"...","user_affect":{"primary_emotion":"neutral","secondary_emotion":"none","intensity":0,"stress":0,"need":"none","advice_wanted":false,"openness":0.5,"severity":0,"possible_concealment":false,"confidence":0.5,"evidence":["none"]}}
+{"interaction_mode":"NORMAL","speech_text":"...","speech_instruction":"...","user_affect":{"primary_emotion":"neutral","secondary_emotion":"none","intensity":0,"stress":0,"need":"none","advice_wanted":false,"openness":0.5,"severity":0,"possible_concealment":false,"confidence":0.5,"evidence":["none"]}}
 
 规则：
 1. interaction_mode 只能是 WAIT、MICRO_REACTION、NORMAL、EMOTIONAL_CHECK、CARE、CARE_OVERRIDE、SHARED_JOY、PLAYFUL、FLIRT、CONFLICT、CONFLICT_SOFTEN、SPACE、FULL_ANSWER 之一。真正的“用户是否说完”已经由 LLM 之前的 Turn Controller 裁决；这里的 WAIT/MICRO_REACTION 只是 COMMIT 后的互动策略。
-2. speech_instruction 必须先完整生成，再开始 speech_text。它只描述本轮“怎么说”：语气、情绪表现、语速、轻重、停顿、能量、冷暖、笑意/克制等，不得重复正文，不得改变固定音色身份。
+2. speech_text 必须先于 speech_instruction 生成，第一句要说出口的内容应尽早开始。speech_instruction 随后完整生成，只描述本轮“怎么说”：语气、情绪表现、语速、轻重、停顿、能量、冷暖、笑意/克制等，不得重复正文，不得改变固定音色身份。
 3. speech_instruction 通常 20 到 80 个中文字符。
 4. speech_text 只包含真正说给用户听的话，不包含语音指令、JSON 控制说明、Markdown、括号动作描述或消息分隔符。
 5. 回复长度由当前互动决定。不要为了“完整”而把真人电话说成客服长答。

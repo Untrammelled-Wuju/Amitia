@@ -2,14 +2,25 @@ package interaction
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
+
+type fakeLifeContextProvider struct {
+	raw json.RawMessage
+	err error
+}
+
+func (p fakeLifeContextProvider) Resolve(context.Context, string, extensioncontext.Request) (json.RawMessage, error) {
+	return p.raw, p.err
+}
 
 func TestRuntimeInputLoadersLoadRoleLifeNeedAndUnresolvedThreads(t *testing.T) {
 	db := openRuntimeLoaderTestDB(t)
@@ -18,7 +29,9 @@ func TestRuntimeInputLoadersLoadRoleLifeNeedAndUnresolvedThreads(t *testing.T) {
 
 	reg := NewContextLoaderRegistry()
 	reg.Register(NewRoleRuntimeProfileContextLoader(character.NewRepository(app.NewAppContext(db, nil))))
-	reg.Register(NewLifeContextLoader(db))
+	reg.Register(NewLifeContextLoader(fakeLifeContextProvider{
+		raw: json.RawMessage(`{"slot":"chat.realtime.schedule","contributions":[{"source":"test","priority":100,"data":{"stateLife":{"mood":"calm","energy":72,"busy":false,"available":true,"currentState":"IDLE","currentActivity":"空闲时间"}}}]}`),
+	}))
 	reg.Register(NewNeedContextLoader(db))
 	reg.Register(NewUnresolvedThreadContextLoader(db))
 
@@ -39,8 +52,8 @@ func TestRuntimeInputLoadersLoadRoleLifeNeedAndUnresolvedThreads(t *testing.T) {
 	if snapshot.Life.Value.Mood != "calm" || snapshot.Life.Value.Energy != 0.72 {
 		t.Fatalf("unexpected life state: %#v", snapshot.Life.Value)
 	}
-	if len(snapshot.Life.Value.Needs) != 2 {
-		t.Fatalf("expected life needs loaded, got %#v", snapshot.Life.Value.Needs)
+	if !snapshot.Life.Value.Available || snapshot.Life.Value.CurrentState != "IDLE" {
+		t.Fatalf("expected plugin life runtime state, got %#v", snapshot.Life.Value)
 	}
 	if snapshot.Needs.Status != LoadStatusReady || snapshot.Needs.Value.Count != 2 {
 		t.Fatalf("expected two needs, got %#v", snapshot.Needs)
@@ -53,6 +66,19 @@ func TestRuntimeInputLoadersLoadRoleLifeNeedAndUnresolvedThreads(t *testing.T) {
 	}
 	if snapshot.UnresolvedThreads.Value.Threads[0].Topic != "boundary repair" {
 		t.Fatalf("unexpected unresolved thread: %#v", snapshot.UnresolvedThreads.Value.Threads)
+	}
+}
+
+func TestLifeContextLoaderUnavailableWithoutContributors(t *testing.T) {
+	loader := NewLifeContextLoader(fakeLifeContextProvider{
+		raw: json.RawMessage(`{"slot":"chat.realtime.schedule","contributions":[]}`),
+	})
+	state, err := loader.Load(context.Background(), InteractionScope{CharacterID: "char-runtime"}, "v-test")
+	if err != nil {
+		t.Fatalf("load life: %v", err)
+	}
+	if state.Status != LoadStatusUnavailable {
+		t.Fatalf("expected life unavailable without contributors, got %s", state.Status)
 	}
 }
 

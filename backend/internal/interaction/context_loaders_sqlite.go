@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/character"
+	"github.com/u-ai/backend/internal/extensioncontext"
 	"gorm.io/gorm"
 )
 
@@ -265,11 +266,11 @@ func (l *BeliefContextLoader) Load(ctx context.Context, scope InteractionScope, 
 }
 
 type LifeContextLoader struct {
-	db *gorm.DB
+	provider extensioncontext.Provider
 }
 
-func NewLifeContextLoader(db *gorm.DB) *LifeContextLoader {
-	return &LifeContextLoader{db: db}
+func NewLifeContextLoader(provider extensioncontext.Provider) *LifeContextLoader {
+	return &LifeContextLoader{provider: provider}
 }
 
 func (l *LifeContextLoader) Name() string           { return "life" }
@@ -279,50 +280,65 @@ func (l *LifeContextLoader) CacheKey(scope InteractionScope, version string) str
 	return version + ":life:" + scope.CharacterID
 }
 func (l *LifeContextLoader) Load(ctx context.Context, scope InteractionScope, version string) (SnapshotField[any], error) {
-	if l.db == nil {
-		return FieldUnavailable[any](l.Name()), errors.New("database unavailable")
+	if l.provider == nil {
+		return FieldUnavailable[any](l.Name()), nil
 	}
-	state := LifeState{
-		Mood:            "neutral",
-		Energy:          0.5,
-		Available:       true,
-		CurrentState:    "IDLE",
-		CurrentActivity: "空闲中",
-	}
-	if l.db.Migrator().HasTable("moods") {
-		var row struct {
-			Mood      string
-			MoodValue string
-		}
-		err := l.db.WithContext(ctx).Table("moods").Select("mood, mood_value").Where("character_id = ?", scope.CharacterID).Order("created_at DESC").Limit(1).Scan(&row).Error
-		if err != nil {
-			return FieldUnavailable[any](l.Name()), err
-		}
-		if row.Mood != "" {
-			state.Mood = row.Mood
-		}
-		if row.MoodValue != "" {
-			state.Mood = row.MoodValue
-		}
-	}
-	if l.db.Migrator().HasTable("psyche_states") {
-		var row struct {
-			Energy float64
-		}
-		err := l.db.WithContext(ctx).Table("psyche_states").Select("energy").Where("character_id = ?", scope.CharacterID).Order("updated_at DESC").Limit(1).Scan(&row).Error
-		if err != nil {
-			return FieldUnavailable[any](l.Name()), err
-		}
-		if row.Energy != 0 {
-			state.Energy = clamp01(row.Energy)
-		}
-	}
-	needs, err := loadNeedSummaries(ctx, l.db, scope.CharacterID)
+	raw, err := l.provider.Resolve(ctx, "chat.realtime.schedule", extensioncontext.Request{
+		UserID:         scope.UserID,
+		CharacterID:    scope.CharacterID,
+		ConversationID: scope.ConversationID,
+		At:             time.Now(),
+	})
 	if err != nil {
 		return FieldUnavailable[any](l.Name()), err
 	}
-	state.Needs = needs
-	return FieldReady[any](state, l.Name(), version), nil
+	snapshot, err := extensioncontext.Decode(raw)
+	if err != nil {
+		return FieldUnavailable[any](l.Name()), err
+	}
+	state := LifeState{}
+	found := false
+	for _, contribution := range snapshot.Contributions {
+		if contribution.Error != "" {
+			continue
+		}
+		var payload struct {
+			StateLife struct {
+				Mood            string  `json:"mood"`
+				Energy          float64 `json:"energy"`
+				Busy            bool    `json:"busy"`
+				Available       bool    `json:"available"`
+				CurrentState    string  `json:"currentState"`
+				CurrentActivity string  `json:"currentActivity"`
+				IdleDuration    float64 `json:"idleDuration"`
+			} `json:"stateLife"`
+		}
+		if err := json.Unmarshal(contribution.Data, &payload); err != nil {
+			continue
+		}
+		if payload.StateLife.CurrentState == "" && payload.StateLife.CurrentActivity == "" {
+			continue
+		}
+		energy := payload.StateLife.Energy
+		if energy > 1 {
+			energy /= 100
+		}
+		state = LifeState{
+			Mood:            payload.StateLife.Mood,
+			Energy:          clamp01(energy),
+			Busy:            payload.StateLife.Busy,
+			Available:       payload.StateLife.Available,
+			CurrentState:    payload.StateLife.CurrentState,
+			CurrentActivity: payload.StateLife.CurrentActivity,
+			IdleSeconds:     payload.StateLife.IdleDuration,
+		}
+		found = true
+		break
+	}
+	if !found {
+		return FieldUnavailable[any](l.Name()), nil
+	}
+	return FieldReady[any](state, "extension_context", version), nil
 }
 
 type NeedContextLoader struct {

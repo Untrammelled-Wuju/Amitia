@@ -33,8 +33,8 @@ func (a *QQChannelAdapter) ProviderInstanceID() string {
 }
 
 func (a *QQChannelAdapter) Deliver(intent DeliveryIntent) error {
-	if intent.ContentType == "emote" {
-		return deliverEmoteHTTP(a.sidecarURL+"/api/send-image", intent, false)
+	if intent.ContentType == "image" {
+		return deliverImageHTTP(a.sidecarURL+"/api/send-image", intent, false)
 	}
 	content := extractContentFromPayload(intent.Payload)
 	body, _ := json.Marshal(map[string]string{
@@ -74,8 +74,8 @@ func (a *WechatChannelAdapter) ProviderInstanceID() string {
 }
 
 func (a *WechatChannelAdapter) Deliver(intent DeliveryIntent) error {
-	if intent.ContentType == "emote" {
-		return deliverEmoteHTTP(a.sidecarURL+"/api/send-image", intent, true)
+	if intent.ContentType == "image" {
+		return deliverImageHTTP(a.sidecarURL+"/api/send-image", intent, true)
 	}
 	content := extractContentFromPayload(intent.Payload)
 	body, _ := json.Marshal(map[string]string{
@@ -119,17 +119,22 @@ func (a *WebChannelAdapter) Deliver(intent DeliveryIntent) error {
 	if !ok || messageID == "" {
 		return fmt.Errorf("web delivery: missing messageId")
 	}
-	if intent.ContentType == "emote" {
+	switch intent.ContentType {
+	case "text", "image":
+	default:
+		return fmt.Errorf("web delivery: unsupported content type %s", intent.ContentType)
+	}
+	if intent.ContentType == "image" {
 		if _, hasAsset := payload["originalPath"]; !hasAsset {
 			if _, hasFallback := payload["fallbackPath"]; !hasFallback {
-				return fmt.Errorf("web delivery: emote missing asset")
+				return fmt.Errorf("web delivery: image missing asset")
 			}
 		}
 	}
 	return nil
 }
 
-func deliverEmoteHTTP(url string, intent DeliveryIntent, wechat bool) error {
+func deliverImageHTTP(url string, intent DeliveryIntent, wechat bool) error {
 	var payload map[string]interface{}
 	if err := json.Unmarshal(intent.Payload, &payload); err != nil {
 		return err
@@ -141,7 +146,7 @@ func deliverEmoteHTTP(url string, intent DeliveryIntent, wechat bool) error {
 		asset = fallback
 	}
 	if asset == "" {
-		return fmt.Errorf("emote asset missing")
+		return fmt.Errorf("image asset missing")
 	}
 	bodyMap := map[string]interface{}{"toUserId": intent.PeerID, "assetUrl": asset, "fallbackUrl": fallback, "animated": payload["isAnimated"], "altText": payload["altText"]}
 	if wechat {
