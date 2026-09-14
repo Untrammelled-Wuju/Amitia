@@ -55,12 +55,26 @@ SPDX-License-Identifier: AGPL-3.0-only
             <el-icon><component :is="group.icon" /></el-icon>
             <span>{{ group.label }}</span>
           </template>
-          <el-menu-item v-for="item in group.items" :key="item.id" :index="item.route" :style="navigationItemStyle">
+          <el-menu-item
+            v-for="item in group.items"
+            :key="item.id"
+            :index="item.route"
+            :style="navigationItemStyle"
+            @mouseenter="prewarmItem(item)"
+            @focus="prewarmItem(item)"
+          >
             <el-icon><component :is="item.icon" /></el-icon>
             <span>{{ item.label }}</span>
           </el-menu-item>
         </el-sub-menu>
-        <el-menu-item v-for="item in group.label && group.items.length > 1 ? [] : group.items" :key="item.id" :index="item.route" :style="navigationItemStyle">
+        <el-menu-item
+          v-for="item in group.label && group.items.length > 1 ? [] : group.items"
+          :key="item.id"
+          :index="item.route"
+          :style="navigationItemStyle"
+          @mouseenter="prewarmItem(item)"
+          @focus="prewarmItem(item)"
+        >
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.label }}</span>
         </el-menu-item>
@@ -144,12 +158,14 @@ import {
 } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useAppStore } from "@/stores/app";
+import { useExtensionUIStore } from "@/stores/extensionUI";
 import { useBrandLogo } from "@/composables/useBrandLogo";
 import { apiClient, useApi } from "@/composables/useApi";
 import { forceCleanupSession } from "@/stores/refresh-coordinator";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import SearchModal from "./SearchModal.vue";
-import { isUINavigationItemActive, useUINavigationRegistry } from "@/ui-runtime/navigationRegistry";
+import { isUINavigationItemActive, useUINavigationRegistry, type UINavigationItem } from "@/ui-runtime/navigationRegistry";
+import { prewarmNavigationItem } from "@/ui-runtime/navigationPrewarm";
 import { useUIComponentVariant } from "@/ui-runtime/componentRegistry";
 
 const route = useRoute();
@@ -158,6 +174,7 @@ const isOnboardingPage = computed(
   () => route.path === "/onboarding" || route.path.startsWith("/onboarding/"),
 );
 const appStore = useAppStore();
+const extensionUIStore = useExtensionUIStore();
 const { groups: navigationGroups, items: navigationItems } = useUINavigationRegistry();
 const { style: navigationItemStyle } = useUIComponentVariant("navigationItem");
 const { logoUrl } = useBrandLogo();
@@ -267,6 +284,10 @@ function openSettings() {
 
 function toggleTheme() {
   emit("toggleTheme");
+}
+
+function prewarmItem(item: UINavigationItem) {
+  prewarmNavigationItem(extensionUIStore, item);
 }
 
 async function handleLogout() {

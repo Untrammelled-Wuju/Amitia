@@ -13,6 +13,8 @@ SPDX-License-Identifier: AGPL-3.0-only
       :class="{ 'tab-active': isActive(item) }"
       :aria-current="isActive(item) ? 'page' : undefined"
       :style="navigationItemStyle"
+      @mouseenter="prewarmItem(item)"
+      @pointerdown="prewarmItem(item)"
     >
       <el-icon><component :is="item.icon" /></el-icon>
       <span>{{ item.label }}</span>
@@ -24,13 +26,20 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { useRoute } from "vue-router";
 import { isUINavigationItemActive, useUINavigationRegistry, type UINavigationItem } from "@/ui-runtime/navigationRegistry";
 import { useUIComponentVariant } from "@/ui-runtime/componentRegistry";
+import { useExtensionUIStore } from "@/stores/extensionUI";
+import { prewarmNavigationItem } from "@/ui-runtime/navigationPrewarm";
 
 const route = useRoute();
+const extensionUIStore = useExtensionUIStore();
 const { mobileItems } = useUINavigationRegistry();
 const { style: navigationItemStyle } = useUIComponentVariant("navigationItem");
 
 function isActive(item: UINavigationItem) {
   return isUINavigationItemActive(route.path, item);
+}
+
+function prewarmItem(item: UINavigationItem) {
+  prewarmNavigationItem(extensionUIStore, item);
 }
 </script>
 

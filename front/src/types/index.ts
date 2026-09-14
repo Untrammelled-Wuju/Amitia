@@ -527,7 +527,6 @@ export interface TriggerQueueSummary {
   backpressure: boolean;
 }
 
-export type ReminderGroup = "overdue" | "upcoming" | "completed" | "disabled";
 
 // ============================================================
 // Extension Kernel - 新领域类型 解除Skill概念过载
@@ -739,3 +738,4 @@ export interface MCPContribution extends BaseContribution {
   serverId: string;
   descriptor?: Record<string, unknown>;
 }
+export type ReminderGroup = "overdue" | "upcoming" | "completed" | "disabled";

@@ -20,9 +20,9 @@ export { default as CharacterVoiceView } from "./views/character-voice/Character
 export { default as MemoryManagerView } from "./views/memory-manager/MemoryManagerView.vue";
 export { default as MemoryTimelineView } from "./views/memory-timeline/MemoryTimeline.vue";
 export { default as AiCharacterSettingsView } from "./views/ai-character-settings/AiCharacterSettingsView.vue";
-export { default as RemindersView } from "./views/reminders/Reminders.vue";
 export { default as ChatLogsView } from "./views/chat-logs/ChatLogsView.vue";
 export { default as ChatImportView } from "./views/chat-import/ChatImportView.vue";
+export { default as RemindersView } from "./views/reminders/Reminders.vue";
 export { default as SafetySettingsView } from "./views/safety-settings/SafetySettingsView.vue";
 export { default as SettingsView } from "./views/settings/SettingsView.vue";
 export { default as ChatCleanupView } from "./views/chat-cleanup/ChatCleanupView.vue";
