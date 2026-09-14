@@ -190,7 +190,6 @@ type Task struct {
 	ID            string `gorm:"column:id;primaryKey" json:"id"`
 	ServerID      string `gorm:"column:server_id;not null;index;uniqueIndex:idx_mcp_task_remote" json:"serverId"`
 	RemoteTaskID  string `gorm:"column:remote_task_id;not null;uniqueIndex:idx_mcp_task_remote" json:"remoteTaskId"`
-	CharacterID   string `gorm:"column:character_id;not null" json:"characterId"`
 	RunID         string `gorm:"column:run_id;not null" json:"runId"`
 	Status        string `gorm:"column:status;not null" json:"status"`
 	StatusMessage string `gorm:"column:status_message;not null" json:"statusMessage"`
@@ -208,7 +207,6 @@ type AuditLog struct {
 	ServerID       string `gorm:"column:server_id;not null;index" json:"serverId"`
 	Operation      string `gorm:"column:operation;not null" json:"operation"`
 	ToolName       string `gorm:"column:tool_name;not null" json:"toolName"`
-	CharacterID    string `gorm:"column:character_id;not null" json:"characterId"`
 	ConversationID string `gorm:"column:conversation_id;not null" json:"conversationId"`
 	Channel        string `gorm:"column:channel;not null" json:"channel"`
 	TraceID        string `gorm:"column:trace_id;not null" json:"traceId"`

@@ -585,7 +585,7 @@ func (r *Repository) UpsertTask(ctx context.Context, task Task) error {
 	if task.LastUpdatedAt == "" {
 		task.LastUpdatedAt = now
 	}
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "server_id"}, {Name: "remote_task_id"}}, DoUpdates: clause.AssignmentColumns([]string{"character_id", "run_id", "status", "status_message", "result_json", "expires_at", "last_updated_at", "updated_at"})}).Create(&task).Error
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "server_id"}, {Name: "remote_task_id"}}, DoUpdates: clause.AssignmentColumns([]string{"run_id", "status", "status_message", "result_json", "expires_at", "last_updated_at", "updated_at"})}).Create(&task).Error
 }
 
 func (r *Repository) GetTask(ctx context.Context, serverID, remoteTaskID string) (Task, error) {

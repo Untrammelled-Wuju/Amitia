@@ -130,6 +130,7 @@ func (h *Handler) createServer(c *gin.Context) {
 	}
 	if err == nil {
 		err = h.services.Repository.SetScopeEnabled(c, record.ID, request.Enabled)
+	}
 	if err == nil {
 		_, err = h.services.Repository.SetServerCapability(c, record.ID, "private_network", request.PrivateNetworkConfirmed, json.RawMessage(`{}`))
 	}
@@ -159,6 +160,7 @@ func (h *Handler) updateServer(c *gin.Context) {
 	}
 	if err == nil {
 		err = h.services.Repository.SetScopeEnabled(c, record.ID, request.Enabled)
+	}
 	if err == nil {
 		_, err = h.services.Repository.SetServerCapability(c, record.ID, "private_network", request.PrivateNetworkConfirmed, json.RawMessage(`{}`))
 	}
