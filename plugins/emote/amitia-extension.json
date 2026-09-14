@@ -8,7 +8,7 @@
     "description": {
       "default": "提供表情包管理、AI 表情选择、聊天发送和消息渲染。"
     },
-    "version": "1.0.20",
+    "version": "1.0.21",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
