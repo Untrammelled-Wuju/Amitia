@@ -8,7 +8,7 @@
     "description": {
       "default": "为角色提供主动消息规则、调度、发送、历史记录和独立启停能力。"
     },
-    "version": "1.0.0",
+    "version": "1.0.1",
     "license": "AGPL-3.0-only",
     "homepage": "https://amitia.untrammelled.top",
     "categories": [
@@ -50,7 +50,7 @@
       "runtime": {
         "type": "javascript",
         "entryPoint": "dist/index.js",
-        "timeout": "30s",
+        "timeout": "120s",
         "memory": 134217728,
         "maxSubprocesses": 0,
         "capabilities": {
@@ -103,55 +103,6 @@
               "handlerName": "command"
             }
           }
-        },
-        {
-          "id": "proactive-character-tab",
-          "kind": "ui_page",
-          "name": {
-            "default": "主动消息"
-          },
-          "description": {
-            "default": "管理主动消息规则、运行状态和触发记录。"
-          },
-          "spec": {
-            "contribution_id": "proactive-character-tab",
-            "extension_id": "com.amitia/proactive",
-            "module_id": "proactive-runtime",
-            "kind": "schema_page",
-            "slot": {
-              "slot_id": "character.detail.tab",
-              "contract_version": 1
-            },
-            "contract_version": 1,
-            "display": {
-              "title": {
-                "default": "主动消息"
-              },
-              "description": {
-                "default": "管理主动消息规则、运行状态和触发记录。"
-              },
-              "icon": "proactive"
-            },
-            "entry": {
-              "type": "host_native",
-              "path": "builtin://com.amitia/proactive",
-              "runtime_id": "host.character.proactive",
-              "content_hash": "com.amitia/proactive"
-            },
-            "sandbox": {
-              "type": "host_native"
-            },
-            "ordering": {
-              "priority": 200
-            },
-            "dispatch": {
-              "entry_key": "proactive",
-              "cell_id": "proactive"
-            },
-            "integrity": {
-              "definition_hash": "proactive-character-tab-v1"
-            }
-          }
         }
       ]
     }
@@ -170,8 +121,8 @@
       "scope": "extension"
     },
     {
-      "name": "proactive.dispatch",
-      "reason": "通过宿主统一对话管线发送主动消息。",
+      "name": "message.send",
+      "reason": "通过宿主统一会话管线发送角色消息。",
       "required": true,
       "scope": "extension"
     }

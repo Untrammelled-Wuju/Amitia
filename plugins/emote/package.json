@@ -1,0 +1,10 @@
+{
+  "name": "@amitia/emote-extension",
+  "version": "1.0.13",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-package.mjs",
+    "verify": "node scripts/verify-package.mjs"
+  }
+}

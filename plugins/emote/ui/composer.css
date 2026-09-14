@@ -1,0 +1,127 @@
+:root {
+  color-scheme: light dark;
+  --surface: var(--amitia-bg-surface, #fff);
+  --text: var(--amitia-text-primary, #20242a);
+  --muted: var(--amitia-text-secondary, #7b828c);
+  --border: var(--amitia-border, rgba(127, 127, 127, .24));
+  --hover: var(--amitia-control-hover, rgba(127, 127, 127, .08));
+  --accent: var(--amitia-color-accent, #c99557);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-width: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--amitia-font-ui, system-ui, sans-serif);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.wrap {
+  position: relative;
+  min-height: 44px;
+}
+
+.emote-button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.emote-button:hover {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--text);
+}
+
+.panel {
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .14);
+}
+
+.head {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+}
+
+input,
+select {
+  min-width: 0;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 7px;
+  max-height: 250px;
+  overflow: auto;
+  margin-top: 9px;
+}
+
+.item {
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.item:hover {
+  border-color: var(--accent);
+}
+
+.item img {
+  display: block;
+  width: 100%;
+  height: 52px;
+  object-fit: contain;
+}
+
+.item span {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  grid-column: 1 / -1;
+  padding: 34px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.hidden {
+  display: none;
+}

@@ -9,7 +9,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { deflateRawSync } from "node:zlib";
-import { basename, join, relative } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 function readOption(name) {
   const index = process.argv.indexOf(name);
@@ -17,15 +18,15 @@ function readOption(name) {
   return process.argv[index + 1] || "";
 }
 
-const packageRoot = readOption("--source") || process.env.AMITIA_PROACTIVE_SOURCE || ".";
+const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const packageRoot = readOption("--source") || process.env.AMITIA_LIFESTYLE_SOURCE || scriptRoot;
 const stagingRoot = join(packageRoot, ".package-staging");
 const outputDir =
   readOption("--output") ||
   process.env.AMITIA_PLUGIN_OUTPUT_DIR ||
-  join("..", "..", "Plugin", "Character");
-const outputFile = join(outputDir, "amitia-\u4e3b\u52a8\u6d88\u606f-1.0.1.amitiax");
-const moduleID = "proactive-runtime";
-const moduleRoot = join(stagingRoot, "modules", moduleID);
+  resolve(packageRoot, "..", "..", "Plugin", "Character");
+const manifestInfo = JSON.parse(readFileSync(join(packageRoot, "amitia-extension.json"), "utf8"));
+const outputFile = join(outputDir, `amitia-lifestyle-${manifestInfo.extension.version}.amitiax`);
 const generatedAt = "2026-01-01T00:00:00Z";
 
 function collectFiles(root) {
@@ -33,11 +34,8 @@ function collectFiles(root) {
   const walk = (current) => {
     for (const entry of readdirSync(current).sort()) {
       const fullPath = join(current, entry);
-      if (statSync(fullPath).isDirectory()) {
-        walk(fullPath);
-      } else {
-        files.push(fullPath);
-      }
+      if (statSync(fullPath).isDirectory()) walk(fullPath);
+      else files.push(fullPath);
     }
   };
   walk(root);
@@ -46,6 +44,10 @@ function collectFiles(root) {
 
 function sha256(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
+}
+
+function browserHash(buffer) {
+  return `sha256-${createHash("sha256").update(buffer).digest("base64")}`;
 }
 
 function packagePath(file) {
@@ -73,16 +75,12 @@ function buildIntegrity() {
       };
     })
     .sort((left, right) => left.path.localeCompare(right.path));
-
   const files = {};
-  for (const entry of entries) {
-    files[entry.path] = entry;
-  }
+  for (const entry of entries) files[entry.path] = entry;
   writeFileSync(
     join(integrityRoot, "files.json"),
     `${JSON.stringify({ algorithm: "sha256", files, generatedAt }, null, 2)}\n`,
   );
-
   const tree = createHash("sha256");
   for (const entry of entries) {
     tree.update(entry.path);
@@ -113,14 +111,12 @@ function createZip() {
   const localParts = [];
   const centralParts = [];
   let offset = 0;
-
   for (const file of collectFiles(stagingRoot)) {
     const archivePath = packagePath(file);
     const name = Buffer.from(archivePath, "utf8");
     const content = readFileSync(file);
     const compressed = deflateRawSync(content, { level: 9 });
     const crc = crc32(content);
-
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
@@ -131,7 +127,6 @@ function createZip() {
     local.writeUInt16LE(name.length, 26);
     const localEntry = Buffer.concat([local, name, compressed]);
     localParts.push(localEntry);
-
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x02014b50, 0);
     central.writeUInt16LE(20, 4);
@@ -145,7 +140,6 @@ function createZip() {
     centralParts.push(Buffer.concat([central, name]));
     offset += localEntry.length;
   }
-
   const centralDirectory = Buffer.concat(centralParts);
   const end = Buffer.alloc(22);
   end.writeUInt32LE(0x06054b50, 0);
@@ -158,22 +152,34 @@ function createZip() {
 
 function main() {
   rmSync(stagingRoot, { recursive: true, force: true });
-  mkdirSync(moduleRoot, { recursive: true });
+  mkdirSync(join(stagingRoot, "modules", "lifestyle-runtime", "dist"), { recursive: true });
+  mkdirSync(join(stagingRoot, "modules", "lifestyle-ui"), { recursive: true });
   mkdirSync(outputDir, { recursive: true });
   rmSync(outputFile, { force: true });
 
-  mkdirSync(join(moduleRoot, "dist"), { recursive: true });
   copyFileSync(
-    join(packageRoot, "src", "index.mjs"),
-    join(moduleRoot, "dist", "index.js"),
+    join(packageRoot, "src", "runtime", "index.mjs"),
+    join(stagingRoot, "modules", "lifestyle-runtime", "dist", "index.js"),
   );
   writeFileSync(
-    join(moduleRoot, "package.json"),
+    join(stagingRoot, "modules", "lifestyle-runtime", "package.json"),
     `${JSON.stringify({ type: "module" }, null, 2)}\n`,
   );
+  for (const file of ["index.html", "app.js", "styles.css"]) {
+    copyFileSync(
+      join(packageRoot, "src", "ui", file),
+      join(stagingRoot, "modules", "lifestyle-ui", file),
+    );
+  }
 
-  const manifest = JSON.parse(
-    readFileSync(join(packageRoot, "amitia-extension.json"), "utf8"),
+  const manifest = JSON.parse(readFileSync(join(packageRoot, "amitia-extension.json"), "utf8"));
+  const uiContribution = manifest.modules
+    .flatMap((module) => module.contributions || [])
+    .find((item) => item.kind === "ui_page");
+  if (!uiContribution) throw new Error("ui_page contribution missing");
+  const uiEntry = uiContribution.spec.entry;
+  uiEntry.content_hash = browserHash(
+    readFileSync(join(stagingRoot, "modules", "lifestyle-ui", "index.html")),
   );
   manifest.integrity.algorithm = "sha256";
   manifest.integrity.contentTreeHash = "";
@@ -181,7 +187,6 @@ function main() {
     join(stagingRoot, "manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
-
   const treeHash = buildIntegrity();
   createZip();
   rmSync(stagingRoot, { recursive: true, force: true });

@@ -191,19 +191,21 @@ async function dispatchMessage(host, settings, rule, now) {
   const userId = String(rule.userId || "").trim();
   const conversationId = String(rule.conversationId || "").trim();
   const channel = String(rule.channel || settings.channel || "all");
-  const message = String(rule.promptTemplate || "发一条自然、简短的主动消息。").trim();
+  const content = String(rule.promptTemplate || "发一条自然、简短的主动消息。").trim();
   const requestId = `proactive:${rule.id}:${now.getTime()}`;
-  const response = await host.call("host.proactive.dispatch", {
+  const response = await host.call("host.conversation.message.send", {
     userId,
     characterId,
     conversationId,
     channel,
-    message,
+    content,
     requestId,
   });
+  const responseContent = String(response && response.content || "").trim();
+  if (!responseContent) throw new Error("主动消息被宿主抑制或未生成内容");
   return {
     requestId: String(response && response.requestId || requestId),
-    content: String(response && response.content || ""),
+    content: responseContent,
   };
 }
 

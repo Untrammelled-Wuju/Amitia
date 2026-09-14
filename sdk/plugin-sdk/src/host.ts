@@ -64,6 +64,8 @@ export interface HostClient {
   readonly network: HostNetworkClient;
   readonly messages: HostMessageClient;
   readonly desktop: HostDesktopClient;
+  readonly resources?: HostResourceClient;
+  readonly vectors?: HostVectorClient;
 }
 
 export interface HostToolClient {
@@ -93,6 +95,45 @@ export interface HostMessageSendOptions {
   readonly idempotencyKey?: string;
   readonly forceVoice?: boolean;
   readonly metadata?: Record<string, unknown>;
+  readonly parts?: HostMessagePart[];
+}
+
+export interface HostMessagePart {
+  readonly type: "text" | "image" | "audio" | "video" | "file";
+  readonly content?: string;
+  readonly extensionType?: string;
+  readonly mimeType?: string;
+  readonly url?: string;
+  readonly fallbackUrl?: string;
+  readonly altText?: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly isAnimated?: boolean;
+  readonly metadata?: Record<string, unknown>;
+}
+
+export interface HostResourceClient {
+  link(request: { scope?: "package" | "data"; path: string }): Promise<{ url: string }>;
+  delete(request: { scope?: "package" | "data"; path: string }): Promise<{ deleted: boolean }>;
+}
+
+export interface HostVectorPoint {
+  readonly id: string;
+  readonly vector?: number[];
+  readonly text?: string;
+  readonly payload?: Record<string, unknown>;
+}
+
+export interface HostVectorSearchResult {
+  readonly id: string;
+  readonly score: number;
+  readonly payload?: Record<string, unknown>;
+}
+
+export interface HostVectorClient {
+  upsert(collection: string, points: HostVectorPoint[]): Promise<{ upserted: number }>;
+  search(collection: string, request: { query?: string; vector?: number[]; limit?: number; filter?: Record<string, string> }): Promise<{ items: HostVectorSearchResult[] }>;
+  delete(collection: string, ids: string[]): Promise<{ deleted: number }>;
 }
 
 export interface HostDesktopClient {
@@ -118,14 +159,16 @@ export interface HostBridgeLike {
   showNotification(payload: HostDesktopNotification): Promise<void>;
   clipboardWrite(request: HostDesktopClipboardRequest): Promise<void>;
   clipboardRead(): Promise<HostDesktopClipboardRequest>;
+  resourceLink?(request: { scope?: "package" | "data"; path: string }): Promise<{ url: string }>;
+  resourceDelete?(request: { scope?: "package" | "data"; path: string }): Promise<{ deleted: boolean }>;
+  vectorUpsert?(collection: string, points: HostVectorPoint[]): Promise<{ upserted: number }>;
+  vectorSearch?(collection: string, request: { query?: string; vector?: number[]; limit?: number; filter?: Record<string, string> }): Promise<{ items: HostVectorSearchResult[] }>;
+  vectorDelete?(collection: string, ids: string[]): Promise<{ deleted: number }>;
 }
 
 export class DefaultHostClient implements HostClient {
-  constructor(
-    private readonly bridge: HostBridgeLike,
-    _scope: RuntimeScope,
-    _traceId: string,
-  ) {}
+  readonly resources?: HostResourceClient;
+  readonly vectors?: HostVectorClient;
 
   readonly tools: HostToolClient = {
     execute: async <T = unknown>(request: HostToolCallRequest): Promise<HostToolCallResponse<T>> => {
@@ -167,6 +210,29 @@ export class DefaultHostClient implements HostClient {
       },
     },
   };
+
+  constructor(
+    private readonly bridge: HostBridgeLike,
+    _scope: RuntimeScope,
+    _traceId: string,
+  ) {
+    if (this.bridge.resourceLink) {
+      this.resources = {
+        link: async (request) => this.bridge.resourceLink!(request),
+        delete: async (request) => {
+          if (!this.bridge.resourceDelete) throw new Error("host resource delete is unavailable");
+          return this.bridge.resourceDelete(request);
+        },
+      };
+    }
+    if (this.bridge.vectorUpsert && this.bridge.vectorSearch && this.bridge.vectorDelete) {
+      this.vectors = {
+        upsert: async (collection, points) => this.bridge.vectorUpsert!(collection, points),
+        search: async (collection, request) => this.bridge.vectorSearch!(collection, request),
+        delete: async (collection, ids) => this.bridge.vectorDelete!(collection, ids),
+      };
+    }
+  }
 }
 
 export function mapHostError(cause: unknown, defaultCode = "host_call_failed"): AmitiaError {

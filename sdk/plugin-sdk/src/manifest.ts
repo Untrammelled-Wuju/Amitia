@@ -117,6 +117,7 @@ export interface ToolContributionDefinition {
   runtimeBinding: string;
   idempotent?: boolean;
   deprecated?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SkillContributionDefinition {

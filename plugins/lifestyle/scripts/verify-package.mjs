@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { inflateRawSync } from "node:zlib";
 
+const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const manifestInfo = JSON.parse(readFileSync(join(scriptRoot, "amitia-extension.json"), "utf8"));
 const packageFile =
   process.argv[2] ||
-  process.env.AMITIA_PROACTIVE_PACKAGE ||
-  join("..", "..", "Plugin", "Character", "amitia-\u4e3b\u52a8\u6d88\u606f-1.0.1.amitiax");
+  process.env.AMITIA_LIFESTYLE_PACKAGE ||
+  resolve(scriptRoot, "..", "..", "Plugin", "Character", `amitia-lifestyle-${manifestInfo.extension.version}.amitiax`);
 
 function readEntries(buffer) {
   const entries = new Map();
@@ -18,33 +21,23 @@ function readEntries(buffer) {
     }
   }
   if (endOffset < 0) throw new Error("ZIP end record not found");
-
   const count = buffer.readUInt16LE(endOffset + 10);
   let cursor = buffer.readUInt32LE(endOffset + 16);
   for (let index = 0; index < count; index += 1) {
-    if (buffer.readUInt32LE(cursor) !== 0x02014b50) {
-      throw new Error("invalid ZIP central directory");
-    }
+    if (buffer.readUInt32LE(cursor) !== 0x02014b50) throw new Error("invalid ZIP central directory");
     const method = buffer.readUInt16LE(cursor + 10);
     const compressedSize = buffer.readUInt32LE(cursor + 20);
     const nameLength = buffer.readUInt16LE(cursor + 28);
     const extraLength = buffer.readUInt16LE(cursor + 30);
     const commentLength = buffer.readUInt16LE(cursor + 32);
     const localOffset = buffer.readUInt32LE(cursor + 42);
-    const name = buffer
-      .subarray(cursor + 46, cursor + 46 + nameLength)
-      .toString("utf8");
+    const name = buffer.subarray(cursor + 46, cursor + 46 + nameLength).toString("utf8");
     const localNameLength = buffer.readUInt16LE(localOffset + 26);
     const localExtraLength = buffer.readUInt16LE(localOffset + 28);
     const start = localOffset + 30 + localNameLength + localExtraLength;
     const compressed = buffer.subarray(start, start + compressedSize);
-    const data = method === 8
-      ? inflateRawSync(compressed)
-      : method === 0
-        ? compressed
-        : (() => {
-            throw new Error(`unsupported ZIP method ${method}`);
-          })();
+    const data = method === 8 ? inflateRawSync(compressed) : method === 0 ? compressed : null;
+    if (!data) throw new Error(`unsupported ZIP method ${method}`);
     entries.set(name, data);
     cursor += 46 + nameLength + extraLength + commentLength;
   }
@@ -55,49 +48,39 @@ function sha256(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
 }
 
+function browserHash(buffer) {
+  return `sha256-${createHash("sha256").update(buffer).digest("base64")}`;
+}
+
 function main() {
-  if (!existsSync(packageFile)) {
-    throw new Error("package not found");
-  }
+  if (!existsSync(packageFile)) throw new Error("package not found");
   const entries = readEntries(readFileSync(packageFile));
   const manifest = JSON.parse(entries.get("manifest.json").toString("utf8"));
   const files = JSON.parse(entries.get("integrity/files.json").toString("utf8"));
   const tree = JSON.parse(entries.get("integrity/content-tree.json").toString("utf8"));
-
   const required = [
     "manifest.json",
     "integrity/files.json",
     "integrity/content-tree.json",
-    "modules/proactive-runtime/package.json",
-    "modules/proactive-runtime/dist/index.js",
+    "modules/lifestyle-runtime/package.json",
+    "modules/lifestyle-runtime/dist/index.js",
+    "modules/lifestyle-ui/index.html",
+    "modules/lifestyle-ui/app.js",
+    "modules/lifestyle-ui/styles.css",
   ];
   for (const path of required) {
     if (!entries.has(path)) throw new Error(`missing package path: ${path}`);
   }
-  if (manifest.manifestVersion !== 1) {
-    throw new Error("manifestVersion must be 1");
+  if (manifest.extension?.id !== "com.amitia/lifestyle") throw new Error("unexpected extension id");
+  const uiContribution = manifest.modules
+    ?.flatMap((module) => module.contributions || [])
+    .find((item) => item.kind === "ui_page");
+  if (uiContribution?.spec?.slot?.slot_id !== "character.detail.tab") {
+    throw new Error("character detail ui contribution missing");
   }
-  if (manifest.extension?.id !== "com.amitia/proactive") {
-    throw new Error("unexpected extension id");
+  if (uiContribution?.spec?.entry?.content_hash !== browserHash(entries.get("modules/lifestyle-ui/index.html"))) {
+    throw new Error("ui entry hash mismatch");
   }
-  const permissions = Array.isArray(manifest.permissions) ? manifest.permissions : [];
-  if (!permissions.some((permission) => permission.name === "message.send")) {
-    throw new Error("message.send permission missing");
-  }
-  if (permissions.some((permission) => permission.name === "proactive.dispatch")) {
-    throw new Error("legacy proactive.dispatch permission must not be present");
-  }
-  const runtimeSource = entries.get("modules/proactive-runtime/dist/index.js").toString("utf8");
-  if (!runtimeSource.includes("host.conversation.message.send")) {
-    throw new Error("conversation message host call missing");
-  }
-  if (runtimeSource.includes("host.proactive.dispatch")) {
-    throw new Error("legacy proactive host call must not be present");
-  }
-  if (files.algorithm !== "sha256" || tree.algorithm !== "sha256") {
-    throw new Error("invalid integrity algorithm");
-  }
-
   const payload = [...entries.entries()].filter(([name]) =>
     name !== "integrity/files.json" &&
     name !== "integrity/content-tree.json" &&
@@ -106,12 +89,10 @@ function main() {
   );
   for (const [name, data] of payload) {
     const declared = files.files[name];
-    if (!declared) throw new Error(`integrity entry missing: ${name}`);
-    if (declared.hash !== sha256(data) || declared.size !== data.length) {
+    if (!declared || declared.hash !== sha256(data) || declared.size !== data.length) {
       throw new Error(`integrity mismatch: ${name}`);
     }
   }
-
   const canonical = payload
     .map(([path, data]) => ({ path, hash: sha256(data) }))
     .sort((left, right) => left.path.localeCompare(right.path));
@@ -122,9 +103,7 @@ function main() {
     digest.update(entry.hash);
     digest.update(Buffer.from([0]));
   }
-  if (digest.digest("hex") !== tree.treeHash) {
-    throw new Error("content tree hash mismatch");
-  }
+  if (digest.digest("hex") !== tree.treeHash) throw new Error("content tree hash mismatch");
   console.log(`verified=${basename(packageFile)}`);
 }
 
