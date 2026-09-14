@@ -179,6 +179,7 @@ func DefaultMigrations() []Migration {
 		SessionTimestampCompatibilityMigration(),
 		DesktopPetActionRevisionSourceIndexFixMigration(),
 		MessageFeedbackColumnsMigration(),
+		ReminderCoreMigration(),
 		DesktopPetQualityInboxFinalizationMigration(),
 		DesktopPetEditingCanonicalFinalizationMigration(),
 		DesktopPetSchemaFinalizationMigration(),

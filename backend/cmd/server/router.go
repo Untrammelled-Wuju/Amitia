@@ -62,6 +62,7 @@ import (
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/realtime"
+	"github.com/u-ai/backend/internal/reminder"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
@@ -498,6 +499,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		episodic.RegisterEpisodicRouter(apiGroup, services.Episodic)
 		worldbook.RegisterWorldBookRouter(apiGroup, services.WorldBook)
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
+		reminder.RegisterRouter(apiGroup, ctx.DB, services.Chat)
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry, agentToolFacade)
 		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service)

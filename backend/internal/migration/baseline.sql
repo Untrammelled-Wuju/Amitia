@@ -154,6 +154,42 @@ CREATE TABLE IF NOT EXISTS characters (
     deleted_at DATETIME
 );
 
+CREATE TABLE IF NOT EXISTS reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL DEFAULT 'default',
+    title TEXT DEFAULT '',
+    content TEXT DEFAULT '',
+    channel TEXT DEFAULT 'web',
+    character_id TEXT DEFAULT '',
+    conversation_id TEXT DEFAULT '',
+    remind_at TEXT DEFAULT '',
+    repeat_rule TEXT DEFAULT 'none',
+    enabled INTEGER DEFAULT 1,
+    last_triggered_at TEXT DEFAULT '',
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, enabled, remind_at);
+
+CREATE TABLE IF NOT EXISTS trigger_histories (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL DEFAULT 'default',
+    trigger_id TEXT DEFAULT '',
+    trigger_type TEXT DEFAULT 'reminder',
+    title TEXT DEFAULT '',
+    channel TEXT DEFAULT 'web',
+    state TEXT DEFAULT 'pending',
+    priority TEXT DEFAULT 'normal',
+    reason TEXT DEFAULT '',
+    attempt_count INTEGER DEFAULT 0,
+    last_error TEXT DEFAULT '',
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_trigger_histories_user ON trigger_histories(user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS character_templates (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -376,22 +412,6 @@ CREATE TABLE IF NOT EXISTS role_profiles (
     self_reference TEXT DEFAULT '我',
     user_addressing_style TEXT DEFAULT '',
     gender_expression INTEGER DEFAULT 30,
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS reminders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT NOT NULL DEFAULT 'default',
-    title TEXT DEFAULT '',
-    content TEXT DEFAULT '',
-    channel TEXT DEFAULT 'web',
-    character_id TEXT DEFAULT '',
-    conversation_id TEXT DEFAULT '',
-    remind_at TEXT DEFAULT '',
-    repeat_rule TEXT DEFAULT '',
-    enabled INTEGER DEFAULT 1,
-    last_triggered_at TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
@@ -5771,4 +5791,3 @@ CREATE INDEX IF NOT EXISTS idx_dpbmo_device ON desktop_pet_behavior_mesh_outbox(
 -- Tenant ownership indexes kept in the baseline so fresh installs and upgraded databases converge.
 CREATE INDEX IF NOT EXISTS idx_characters_user_updated ON characters(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_characters_user_active ON characters(user_id, is_active, is_default);
-CREATE INDEX IF NOT EXISTS idx_reminders_user ON reminders(user_id, enabled, remind_at);

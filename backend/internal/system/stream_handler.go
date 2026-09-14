@@ -167,41 +167,6 @@ func messageSequence(value interface{}) (int64, bool) {
 	}
 }
 
-func (h *Handler) RemindersStream(c *gin.Context) {
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no")
-
-	var lastCount int64
-	var lastUpdated string
-	h.db.Table("reminders").Count(&lastCount)
-	h.db.Table("reminders").Select("MAX(updated_at)").Row().Scan(&lastUpdated)
-
-	c.SSEvent("status", map[string]interface{}{"count": lastCount})
-	c.Writer.Flush()
-
-	for {
-		select {
-		case <-c.Done():
-			return
-		case <-time.After(5 * time.Second):
-		}
-
-		var curCount int64
-		var curUpdated string
-		h.db.Table("reminders").Count(&curCount)
-		h.db.Table("reminders").Select("MAX(updated_at)").Row().Scan(&curUpdated)
-
-		if curCount != lastCount || curUpdated != lastUpdated {
-			lastCount = curCount
-			lastUpdated = curUpdated
-			c.SSEvent("changed", map[string]interface{}{"count": curCount, "updatedAt": curUpdated})
-			c.Writer.Flush()
-		}
-	}
-}
-
 func (h *Handler) WebChatSendStream(c *gin.Context) {
 	var body webChatSendRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
