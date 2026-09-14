@@ -317,7 +317,7 @@ func (s *Signer) Sign(payload SignaturePayload) (SignatureDocument, error) {
 		KeyID:       s.keyID,
 		PayloadHash: payload.PayloadHash(),
 		Signature:   "base64:" + base64Encode(sig),
-		CreatedAt:   time.Now().UTC(),
+		CreatedAt:   payload.CreatedAt.UTC(),
 		Channel:     payload.Channel,
 	}
 	return doc, nil

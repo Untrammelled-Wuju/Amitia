@@ -161,6 +161,7 @@ type Container struct {
 	OrderingEngine      *ui_ordering.OrderingEngine
 	UIProviderRegistry  *ui_provider.Registry
 	ExtRoot             string
+	ResourceLinks       *ResourceLinkManager
 
 	DesktopHost              *desktop.DesktopHost
 	UpdateManager            *desktop_update.UpdateManager

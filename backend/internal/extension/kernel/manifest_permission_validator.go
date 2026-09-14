@@ -45,23 +45,25 @@ func (v *ManifestPermissionValidator) Validate(manifest manifest_v1.Manifest) []
 	}
 
 	for _, mod := range manifest.Modules {
-		for _, permID := range mod.Runtime.Permissions {
-			if !v.registry.Known(permID) {
-				issues = append(issues, PreviewIssue{
-					Category: PreviewNotInstallable,
-					Code:     "unknown_permission",
-					Message:  "unknown permission: " + permID,
-					Path:     "modules[].runtime.permissions[]",
-				})
-				continue
-			}
-			if !declared[permID] {
-				issues = append(issues, PreviewIssue{
-					Category: PreviewNotInstallable,
-					Code:     "permission_not_declared",
-					Message:  "runtime permission " + permID + " not declared in package permissions",
-					Path:     "modules[].runtime.permissions[]",
-				})
+		if mod.Runtime != nil {
+			for _, permID := range mod.Runtime.Permissions {
+				if !v.registry.Known(permID) {
+					issues = append(issues, PreviewIssue{
+						Category: PreviewNotInstallable,
+						Code:     "unknown_permission",
+						Message:  "unknown permission: " + permID,
+						Path:     "modules[].runtime.permissions[]",
+					})
+					continue
+				}
+				if !declared[permID] {
+					issues = append(issues, PreviewIssue{
+						Category: PreviewNotInstallable,
+						Code:     "permission_not_declared",
+						Message:  "runtime permission " + permID + " not declared in package permissions",
+						Path:     "modules[].runtime.permissions[]",
+					})
+				}
 			}
 		}
 

@@ -638,7 +638,7 @@ func (h *PluginHost) waitForReady(ctx context.Context) error {
 
 func (h *PluginHost) sendRequest(ctx context.Context, method string, params interface{}) (*jsonrpc.Response, error) {
 	id := atomic.AddInt64(&h.reqCounter, 1)
-	reqID := jsonrpc.NewNumberID(id)
+	reqID := jsonrpc.NewStringID(fmt.Sprintf("host-%d", id))
 	req, err := jsonrpc.EncodeRequest(reqID, method, params)
 	if err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)

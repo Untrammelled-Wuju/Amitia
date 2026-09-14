@@ -1,11 +1,13 @@
 package runtimegate
 
-import "sync"
+import (
+	"strings"
+	"sync"
+)
 
 const (
-	EmotionExtensionID   = "com.amitia.builtin.emotion"
-	LifestyleExtensionID = "com.amitia.builtin.lifestyle"
-	ProactiveExtensionID = "com.amitia/proactive"
+	EmotionExtensionID         = "com.amitia.builtin.emotion"
+	HostRuntimeCharacterPsyche = "host.character.psyche"
 )
 
 var (
@@ -14,9 +16,11 @@ var (
 )
 
 var defaultEnabled = map[string]bool{
-	EmotionExtensionID:   false,
-	LifestyleExtensionID: false,
-	ProactiveExtensionID: false,
+	EmotionExtensionID: false,
+}
+
+var hostRuntimeAllowlist = map[string]struct{}{
+	HostRuntimeCharacterPsyche: {},
 }
 
 func Set(extensionID string, enabled bool) {
@@ -35,15 +39,7 @@ func IsEnabled(extensionID string) bool {
 	return defaultEnabled[extensionID]
 }
 
-func HostRuntimeAllowed(extensionID, runtimeID string) bool {
-	switch extensionID {
-	case EmotionExtensionID:
-		return runtimeID == "host.character.psyche"
-	case LifestyleExtensionID:
-		return runtimeID == "host.character.lifestyle"
-	case ProactiveExtensionID:
-		return runtimeID == "host.character.proactive"
-	default:
-		return false
-	}
+func HostRuntimeAllowed(runtimeID string) bool {
+	_, ok := hostRuntimeAllowlist[strings.TrimSpace(runtimeID)]
+	return ok
 }

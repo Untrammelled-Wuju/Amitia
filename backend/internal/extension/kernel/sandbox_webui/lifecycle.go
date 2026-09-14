@@ -256,6 +256,10 @@ func NewPreloadBuilder() *PreloadBuilder {
 }
 
 func (pb *PreloadBuilder) Build(session *WebSession) (string, error) {
+	initialThemeJSON, err := json.Marshal(session.Theme)
+	if err != nil {
+		return "", err
+	}
 	preload := `
 window.amitiaUI = (function() {
   const sessionId = "` + session.SessionID + `";
@@ -263,6 +267,7 @@ window.amitiaUI = (function() {
   const nonce = "` + session.Nonce + `";
   const token = "` + session.Token + `";
   const generation = ` + fmt.Sprintf("%d", session.Generation) + `;
+  const initialTheme = ` + string(initialThemeJSON) + `;
   const contributionId = "` + session.ContributionID + `";
   const protocolVersion = "` + ProtocolVersion + `";
   const characterId = "` + session.CharacterID + `";
@@ -288,6 +293,29 @@ window.amitiaUI = (function() {
       pendingMessages = [];
     }
   }
+
+  function applyThemeState(theme) {
+    if (!theme || typeof theme !== "object") return;
+    const root = document.documentElement;
+    if (!root) return;
+    const tokens = theme.tokens;
+    if (tokens && typeof tokens === "object") {
+      for (const name of Object.keys(tokens)) {
+        const value = tokens[name];
+        if (name.indexOf("--amitia-") === 0 && typeof value === "string" && value) {
+          root.style.setProperty(name, value);
+        }
+      }
+    }
+    if (typeof theme.mode === "string" && theme.mode) {
+      root.setAttribute("data-amitia-theme", theme.mode);
+    }
+    if (typeof theme.density === "string" && theme.density) {
+      root.setAttribute("data-amitia-density", theme.density);
+    }
+  }
+
+  applyThemeState(initialTheme);
 
   function postMessage(method, input, callback) {
     validateMethod(method);
@@ -355,6 +383,7 @@ if (eventType === "ui.host.context") {
     }
   }
 } else if (eventType === "ui.host.theme") {
+  applyThemeState(payload);
   for (var i = 0; i < themeChangeCallbacks.length; i++) {
     if (typeof themeChangeCallbacks[i] === "function") {
       themeChangeCallbacks[i](payload);

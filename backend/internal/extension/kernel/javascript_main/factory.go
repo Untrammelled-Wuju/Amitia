@@ -154,6 +154,27 @@ func (f *RuntimeFactory) Get(instanceID string) (*PluginHost, error) {
 	return host, nil
 }
 
+func (f *RuntimeFactory) GetByExtensionModule(extensionID, moduleID string) (*PluginHost, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var fallback *PluginHost
+	for _, host := range f.hosts {
+		if host.ExtensionID() != extensionID || host.ModuleID() != moduleID {
+			continue
+		}
+		if host.State() == HostStateReady {
+			return host, nil
+		}
+		if fallback == nil {
+			fallback = host
+		}
+	}
+	if fallback != nil {
+		return fallback, nil
+	}
+	return nil, fmt.Errorf("javascript_main: host %s/%s not found", extensionID, moduleID)
+}
+
 func (f *RuntimeFactory) List() []*PluginHost {
 	f.mu.Lock()
 	defer f.mu.Unlock()

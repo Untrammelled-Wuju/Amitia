@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -28,6 +29,14 @@ func DefaultToolFacadeConfig() ToolFacadeConfig {
 		FallbackOnError: false,
 	}
 }
+
+const (
+	contextProviderSlotsMetadataKey    = "amitia.context.provides"
+	contextProviderPriorityMetadataKey = "amitia.context.priority"
+	contextProviderKeyMetadataKey      = "amitia.context.key"
+	messageOutputProviderKey           = "amitia.message.outputs"
+	messageOutputProviderPriority      = "amitia.message.priority"
+)
 
 type ToolFacade struct {
 	toolRegistry          *capability.ToolRegistry
@@ -62,6 +71,176 @@ func NewToolFacade(toolRegistry *capability.ToolRegistry, executionKernel *execu
 
 func (f *ToolFacade) Counters() *ToolFacadeCounters {
 	return f.counters
+}
+
+func (f *ToolFacade) ListContextProviders(ctx context.Context, slot string) []capability.ToolDefinition {
+	if f == nil || f.toolRegistry == nil {
+		return nil
+	}
+	slot = strings.TrimSpace(slot)
+	if slot == "" {
+		return nil
+	}
+	definitions := f.toolRegistry.List(ctx, capability.ToolFilter{Enabled: boolPtr(true), IncludeInternal: true})
+	result := make([]capability.ToolDefinition, 0)
+	for _, definition := range definitions {
+		if !contextProviderProvides(definition, slot) {
+			continue
+		}
+		result = append(result, definition)
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		leftPriority := ContextProviderPriority(result[i])
+		rightPriority := ContextProviderPriority(result[j])
+		if leftPriority != rightPriority {
+			return leftPriority > rightPriority
+		}
+		leftSource := ContextProviderSource(result[i])
+		rightSource := ContextProviderSource(result[j])
+		if leftSource != rightSource {
+			return leftSource < rightSource
+		}
+		return result[i].ID < result[j].ID
+	})
+	return result
+}
+
+func ContextProviderPriority(definition capability.ToolDefinition) int {
+	switch value := definition.Metadata[contextProviderPriorityMetadataKey].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	case json.Number:
+		parsed, _ := value.Int64()
+		return int(parsed)
+	}
+	return 0
+}
+
+func ContextProviderSource(definition capability.ToolDefinition) string {
+	key := strings.TrimSpace(metadataString(definition.Metadata[contextProviderKeyMetadataKey]))
+	switch {
+	case definition.ExtensionID != "" && key != "":
+		return definition.ExtensionID + ":" + key
+	case definition.ExtensionID != "":
+		return definition.ExtensionID
+	case key != "":
+		return key
+	default:
+		return definition.ID
+	}
+}
+
+func contextProviderProvides(definition capability.ToolDefinition, slot string) bool {
+	switch value := definition.Metadata[contextProviderSlotsMetadataKey].(type) {
+	case string:
+		return strings.TrimSpace(value) == slot
+	case []string:
+		for _, candidate := range value {
+			if strings.TrimSpace(candidate) == slot {
+				return true
+			}
+		}
+	case []any:
+		for _, candidate := range value {
+			if strings.TrimSpace(metadataString(candidate)) == slot {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func metadataString(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case json.Number:
+		return typed.String()
+	default:
+		return ""
+	}
+}
+
+func (f *ToolFacade) ListMessageOutputProviders(ctx context.Context) []capability.ToolDefinition {
+	if f == nil || f.toolRegistry == nil {
+		return nil
+	}
+	definitions := f.toolRegistry.List(ctx, capability.ToolFilter{Enabled: boolPtr(true), IncludeInternal: true})
+	result := make([]capability.ToolDefinition, 0)
+	for _, definition := range definitions {
+		if !messageOutputProviderEnabled(definition) {
+			continue
+		}
+		result = append(result, definition)
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		leftPriority := MessageOutputProviderPriority(result[i])
+		rightPriority := MessageOutputProviderPriority(result[j])
+		if leftPriority != rightPriority {
+			return leftPriority > rightPriority
+		}
+		leftSource := ContextProviderSource(result[i])
+		rightSource := ContextProviderSource(result[j])
+		if leftSource != rightSource {
+			return leftSource < rightSource
+		}
+		return result[i].ID < result[j].ID
+	})
+	return result
+}
+
+func MessageOutputProviderPriority(definition capability.ToolDefinition) int {
+	switch value := definition.Metadata[messageOutputProviderPriority].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	case json.Number:
+		parsed, _ := value.Int64()
+		return int(parsed)
+	}
+	return 0
+}
+
+func messageOutputProviderEnabled(definition capability.ToolDefinition) bool {
+	switch value := definition.Metadata[messageOutputProviderKey].(type) {
+	case bool:
+		return value
+	case string:
+		return strings.EqualFold(strings.TrimSpace(value), "true")
+	}
+	return false
+}
+
+type MessageOutputProviderResult struct {
+	Provider capability.ToolDefinition
+	Result   LegacyToolResult
+}
+
+func (f *ToolFacade) ExecuteMessageOutputProviders(ctx context.Context, scope LegacyScope, input json.RawMessage) []MessageOutputProviderResult {
+	providers := f.ListMessageOutputProviders(ctx)
+	results := make([]MessageOutputProviderResult, 0, len(providers))
+	for _, provider := range providers {
+		result, found := f.ExecuteTool(
+			ctx,
+			capability.CapabilityID(provider.ID),
+			input,
+			scope,
+			fmt.Sprintf("message-output-%s-%s", provider.ID, scope.RequestID),
+			fmt.Sprintf("message-output:%s:%s", provider.ID, scope.RequestID),
+		)
+		if !found {
+			continue
+		}
+		results = append(results, MessageOutputProviderResult{Provider: provider, Result: result})
+	}
+	return results
 }
 
 func (f *ToolFacade) SetHookService(svc *hook.Service) {
@@ -475,6 +654,9 @@ func (f *ToolFacade) buildBeforePromptPayload(scope LegacyScope) json.RawMessage
 			"conversationId": scope.ConversationID,
 			"channel":        scope.Channel,
 			"sessionId":      scope.SessionID,
+			"message":        scope.Message,
+			"source":         scope.Source,
+			"internal":       scope.IsInternal,
 		},
 	}
 	b, _ := json.Marshal(payload)

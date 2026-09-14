@@ -44,10 +44,13 @@ type UIActionExecutor struct {
 	operationRepo       sqlite.OperationRepository
 	toolRegistry        *capability.ToolRegistry
 	scopeManager        scope.ScopeManager
+	deriveSnapshots     UIActionSnapshotDeriver
 }
 
-func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository, toolRegistry *capability.ToolRegistry, scopeManager scope.ScopeManager) *UIActionExecutor {
-	return &UIActionExecutor{
+type UIActionSnapshotDeriver func(ctx context.Context, scopeSnapshotID, permissionSnapshotID, targetExtensionID, targetModuleID string) (string, string, func(), error)
+
+func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.WorkflowExecutor, runStore workflow.RunStore, hostCmdRegistry *HostCommandRegistry, opRepo sqlite.OperationRepository, toolRegistry *capability.ToolRegistry, scopeManager scope.ScopeManager, deriver ...UIActionSnapshotDeriver) *UIActionExecutor {
+	executor := &UIActionExecutor{
 		hostAPIGateway:      gateway,
 		workflowExecutor:    wfExecutor,
 		runStore:            runStore,
@@ -56,6 +59,10 @@ func NewUIActionExecutor(gateway *host_api.DefaultGateway, wfExecutor *workflow.
 		toolRegistry:        toolRegistry,
 		scopeManager:        scopeManager,
 	}
+	if len(deriver) > 0 {
+		executor.deriveSnapshots = deriver[0]
+	}
+	return executor
 }
 
 func (e *UIActionExecutor) Execute(ctx context.Context, execCtx UIActionExecContext, action *ui_contribution.UIActionDefinition, input json.RawMessage) (json.RawMessage, error) {
@@ -95,7 +102,23 @@ func (e *UIActionExecutor) executeTool(ctx context.Context, execCtx UIActionExec
 	if err := e.ensureToolScope(ctx, execCtx.ExtensionID, toolID); err != nil {
 		return nil, err
 	}
-	toolInputPayload, err := splitUIActionInput(input)
+	if targetModule := e.resolveToolModule(ctx, execCtx.ExtensionID, toolID, execCtx.ModuleID); targetModule != "" && targetModule != execCtx.ModuleID {
+		if e.deriveSnapshots == nil {
+			return nil, fmt.Errorf("action %s requires a snapshot deriver for module %s", action.ActionID, targetModule)
+		}
+		scopeSnapshotID, permissionSnapshotID, cleanup, err := e.deriveSnapshots(ctx, execCtx.ScopeSnapshotID, execCtx.PermissionSnapshotID, execCtx.ExtensionID, targetModule)
+		if err != nil {
+			return nil, fmt.Errorf("derive execution snapshots for module %s: %w", targetModule, err)
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
+		execCtx.ScopeSnapshotID = scopeSnapshotID
+		execCtx.PermissionSnapshotID = permissionSnapshotID
+		execCtx.ModuleID = targetModule
+		identity.ModuleID = domain.ModuleID(targetModule)
+	}
+	toolInputPayload, err := normalizeUIActionInput(input)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +176,18 @@ func (e *UIActionExecutor) ensureToolScope(ctx context.Context, extensionID, too
 	return nil
 }
 
-func splitUIActionInput(input json.RawMessage) (json.RawMessage, error) {
+func (e *UIActionExecutor) resolveToolModule(ctx context.Context, extensionID, toolID, fallback string) string {
+	if e.toolRegistry == nil || extensionID == "" || toolID == "" {
+		return fallback
+	}
+	definition, ok := e.toolRegistry.Get(ctx, toolID)
+	if !ok || definition.ExtensionID != extensionID || definition.ModuleID == "" {
+		return fallback
+	}
+	return definition.ModuleID
+}
+
+func normalizeUIActionInput(input json.RawMessage) (json.RawMessage, error) {
 	if len(input) == 0 {
 		return json.RawMessage(`{}`), nil
 	}
@@ -161,9 +195,7 @@ func splitUIActionInput(input json.RawMessage) (json.RawMessage, error) {
 	if err := json.Unmarshal(input, &payload); err != nil {
 		return nil, fmt.Errorf("tool action input invalid: %w", err)
 	}
-	delete(payload, "__amitiaApprovalConfirmed")
-	output, _ := json.Marshal(payload)
-	return output, nil
+	return input, nil
 }
 
 func uiActionExecutionContext(ctx context.Context, execCtx UIActionExecContext) permission.PermissionExecutionContext {

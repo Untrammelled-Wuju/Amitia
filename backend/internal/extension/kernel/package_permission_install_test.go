@@ -30,7 +30,7 @@ func TestInstallationPermissionPolicyUsesInstallGrant(t *testing.T) {
 	request := permission.PermissionEvaluationRequest{
 		Subject: subject,
 		Requirements: []permission.PermissionRequirement{{
-			PermissionID: "proactive.dispatch",
+			PermissionID: "message.send",
 			Scope:        permission.ScopeForExtension(string(extID)),
 		}},
 	}
@@ -41,7 +41,7 @@ func TestInstallationPermissionPolicyUsesInstallGrant(t *testing.T) {
 
 	runtime := &Runtime{container: container}
 	if err := runtime.syncInstalledPackagePermissions(ctx, extID, []manifest_v1.PermissionReq{{
-		Name:     "proactive.dispatch",
+		Name:     "message.send",
 		Required: true,
 		Scope:    string(permission.ScopeExtension),
 	}}); err != nil {

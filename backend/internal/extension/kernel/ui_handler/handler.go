@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -49,6 +50,10 @@ type ClipboardResolver interface {
 	FailClipboardRequestWithHost(requestID string, hostClientID string, hostSessionID string, err error) bool
 }
 
+type ResourceLinkResolver interface {
+	ResolveResourceLink(token string) (extensionID string, scope string, fullPath string, err error)
+}
+
 type HTTPHandler struct {
 	uiHost                *ui_contribution.UIHost
 	slotRegistry          *extension_slots.SlotRegistry
@@ -65,6 +70,7 @@ type HTTPHandler struct {
 	clipboardResolver     ClipboardResolver
 	hostRegistry          *host_registry.HostRegistry
 	extRoot               string
+	resourceLinks         ResourceLinkResolver
 }
 
 func NewHTTPHandler(
@@ -132,6 +138,10 @@ func (h *HTTPHandler) SetHostRegistry(registry *host_registry.HostRegistry) {
 	h.hostRegistry = registry
 }
 
+func (h *HTTPHandler) SetResourceLinkResolver(resolver ResourceLinkResolver) {
+	h.resourceLinks = resolver
+}
+
 func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/slots", h.handleSlots)
 	mux.HandleFunc("/api/extensions/ui/contributions", h.handleContributions)
@@ -154,6 +164,7 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extension/webui/preload/", h.handleWebUIPreload)
 	mux.HandleFunc("/api/extension/webui/resource/", h.handleWebUIResource)
 	mux.HandleFunc("/api/extension/webui/stats", h.handleWebUIStats)
+	mux.HandleFunc("/api/extension/resources/", h.handleResourceLink)
 	mux.HandleFunc("/api/extension/action/", h.handleAction)
 	mux.HandleFunc("/api/extension/composer/action/", h.handleComposerAction)
 	mux.HandleFunc("/api/extensions/ui/dialog-response", h.handleDialogResponse)
@@ -164,6 +175,59 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/host-session", h.handleHostSession)
 	mux.HandleFunc("/api/extensions/ui/host-session/heartbeat", h.handleHostSessionHeartbeat)
 	mux.HandleFunc("/api/extensions/ui/host-session/disconnect", h.handleHostSessionDisconnect)
+}
+
+func (h *HTTPHandler) handleResourceLink(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.resourceLinks == nil {
+		writeError(w, http.StatusServiceUnavailable, "resource_links_unavailable", "resource link resolver not configured")
+		return
+	}
+	const prefix = "/api/extension/resources/"
+	token := strings.TrimPrefix(r.URL.Path, prefix)
+	if token == "" || token == r.URL.Path {
+		writeError(w, http.StatusNotFound, "resource_not_found", "resource token required")
+		return
+	}
+	_, _, fullPath, err := h.resourceLinks.ResolveResourceLink(token)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "resource_not_found", err.Error())
+		return
+	}
+	file, err := os.Open(fullPath)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "resource_not_found", err.Error())
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || info.IsDir() {
+		writeError(w, http.StatusNotFound, "resource_not_found", "resource not found")
+		return
+	}
+	contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(fullPath)))
+	if contentType == "" {
+		var header [512]byte
+		n, _ := file.Read(header[:])
+		contentType = http.DetectContentType(header[:n])
+		_, _ = file.Seek(0, 0)
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	if strings.HasPrefix(contentType, "image/") || strings.HasPrefix(contentType, "audio/") || strings.HasPrefix(contentType, "video/") || contentType == "application/pdf" {
+		w.Header().Set("Content-Disposition", "inline")
+	} else {
+		w.Header().Set("Content-Disposition", "attachment")
+	}
+	http.ServeContent(w, r, info.Name(), info.ModTime(), file)
 }
 
 func (h *HTTPHandler) handleSlots(w http.ResponseWriter, r *http.Request) {
@@ -808,6 +872,7 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		Platform       string                      `json:"platform"`
 		CharacterID    string                      `json:"characterId"`
 		ConversationID string                      `json:"conversationId"`
+		UIContext      map[string]any              `json:"uiContext"`
 		Theme          sandbox_webui.ThemeSnapshot `json:"theme"`
 		Locale         string                      `json:"locale"`
 	}
@@ -877,6 +942,7 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		Platform:           req.Platform,
 		CharacterID:        req.CharacterID,
 		ConversationID:     req.ConversationID,
+		UIContext:          req.UIContext,
 		GrantedPerms:       auth.GrantedPerms,
 		GrantedScopes:      auth.GrantedScopes,
 		ScopeSnapshotID:    scopeSnapshotID,

@@ -60,11 +60,16 @@ func (g *HostGateway) OpenSession(ctx context.Context, identity runtime_supervis
 		return "", NewWASMError(ErrCodeHostCallFailed, "host gateway not configured", nil)
 	}
 	allowedVersions := map[host_api.Method]int{
-		host_api.MethodToolExecute:  1,
-		host_api.MethodStateGet:     1,
-		host_api.MethodStateCAS:     1,
-		host_api.MethodResourceRead: 1,
-		host_api.MethodEventEmit:    1,
+		host_api.MethodToolExecute:               1,
+		host_api.MethodStateGet:                  1,
+		host_api.MethodStateCAS:                  1,
+		host_api.MethodResourceRead:              1,
+		host_api.MethodResourceLink:              1,
+		host_api.MethodEventEmit:                 1,
+		host_api.MethodConversationMessageAppend: 1,
+		host_api.MethodVectorUpsert:              1,
+		host_api.MethodVectorSearch:              1,
+		host_api.MethodVectorDelete:              1,
 	}
 	session, err := g.gateway.OpenSession(ctx, identity, allowedVersions)
 	if err != nil {

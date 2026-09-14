@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -203,6 +204,10 @@ type CharacterReader interface {
 	ReadCharacter(ctx context.Context, characterID string) (json.RawMessage, bool, error)
 }
 
+type CharacterLister interface {
+	ListCharacters(ctx context.Context, userID string, includeDisabled bool) ([]json.RawMessage, error)
+}
+
 type ConversationReader interface {
 	ReadConversation(ctx context.Context, conversationID string, limit int, offset int) ([]json.RawMessage, bool, error)
 }
@@ -215,29 +220,89 @@ type RuntimeHealthReader interface {
 	SnapshotByExtension(ctx context.Context, extensionID string, moduleID string) []runtime_supervisor.RuntimeHealthSnapshot
 }
 
-type ProactiveMessageDispatcher interface {
-	DispatchProactiveMessage(ctx context.Context, userID, characterID, conversationID, channel, prompt, requestID string) (string, error)
+type ConversationMessageRequest struct {
+	UserID         string
+	CharacterID    string
+	ConversationID string
+	Channel        string
+	Content        string
+	RequestID      string
+}
+
+type ConversationMessageResult struct {
+	Content   string
+	RequestID string
+}
+
+type ConversationMessageSender interface {
+	SendConversationMessage(ctx context.Context, request ConversationMessageRequest) (ConversationMessageResult, error)
+}
+
+type ConversationMessagePart struct {
+	Type          string         `json:"type"`
+	Content       string         `json:"content,omitempty"`
+	ExtensionType string         `json:"extensionType,omitempty"`
+	MIMEType      string         `json:"mimeType,omitempty"`
+	URL           string         `json:"url,omitempty"`
+	FallbackURL   string         `json:"fallbackUrl,omitempty"`
+	AltText       string         `json:"altText,omitempty"`
+	Width         int            `json:"width,omitempty"`
+	Height        int            `json:"height,omitempty"`
+	IsAnimated    bool           `json:"isAnimated,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
+}
+
+type ConversationMessageAppendRequest struct {
+	UserID           string
+	CharacterID      string
+	ConversationID   string
+	Channel          string
+	Role             string
+	Source           string
+	ReplyToMessageID *string
+	RequestID        string
+	Parts            []ConversationMessagePart
+}
+
+type ConversationMessageAppendResult struct {
+	MessageIDs      []string `json:"messageIds"`
+	Sequences       []int64  `json:"sequences"`
+	ResponseGroupID string   `json:"responseGroupId"`
+	LastSequence    int64    `json:"lastSequence"`
+}
+
+type ConversationMessageAppender interface {
+	AppendConversationMessages(ctx context.Context, request ConversationMessageAppendRequest) (ConversationMessageAppendResult, error)
+}
+
+type ExtensionDataSource interface {
+	Read(ctx context.Context, sourceID string, params json.RawMessage) (json.RawMessage, error)
 }
 
 type HostAPIRouteDeps struct {
-	StateStore          ExtensionStateStore
-	CharacterReader     CharacterReader
-	ConversationReader  ConversationReader
-	MemoryQueryService  MemoryQueryService
-	EventService        *event.Service
-	ScheduleService     *schedule.ScheduleService
-	ToolFacade          *ToolFacade
-	ExecutionKernel     *execution.ExecutionPipeline
-	ToolRegistry        *capability.ToolRegistry
-	OperationRepository sqlite.OperationRepository
-	ExtensionRoot       string
-	UIHostNotifier      UIHostNotifier
-	ClipboardHost       ClipboardHost
-	RuntimeSupervisor   RuntimeHealthReader
-	ScopeSnapshotStore  host_api.ScopeSnapshotStore
-	SecretStore         SecretStore
-	ProviderInvoker     ProviderInvoker
-	ProactiveDispatcher ProactiveMessageDispatcher
+	StateStore                  ExtensionStateStore
+	CharacterReader             CharacterReader
+	CharacterLister             CharacterLister
+	ConversationReader          ConversationReader
+	MemoryQueryService          MemoryQueryService
+	EventService                *event.Service
+	ScheduleService             *schedule.ScheduleService
+	ToolFacade                  *ToolFacade
+	ExecutionKernel             *execution.ExecutionPipeline
+	ToolRegistry                *capability.ToolRegistry
+	OperationRepository         sqlite.OperationRepository
+	ExtensionRoot               string
+	UIHostNotifier              UIHostNotifier
+	ClipboardHost               ClipboardHost
+	RuntimeSupervisor           RuntimeHealthReader
+	ScopeSnapshotStore          host_api.ScopeSnapshotStore
+	SecretStore                 SecretStore
+	ProviderInvoker             ProviderInvoker
+	ConversationMessageSender   ConversationMessageSender
+	ConversationMessageAppender ConversationMessageAppender
+	ExtensionDataSources        ExtensionDataSource
+	ResourceLinks               *ResourceLinkManager
+	VectorStore                 ExtensionVectorStore
 }
 
 type SecretStore interface {
@@ -257,6 +322,25 @@ type ProviderInvokeRequest struct {
 type ProviderInvokeResponse struct {
 	Success bool            `json:"success"`
 	Result  json.RawMessage `json:"result"`
+}
+
+type ExtensionVectorPoint struct {
+	ID      string         `json:"id"`
+	Vector  []float32      `json:"vector,omitempty"`
+	Text    string         `json:"text,omitempty"`
+	Payload map[string]any `json:"payload,omitempty"`
+}
+
+type ExtensionVectorSearchResult struct {
+	ID      string         `json:"id"`
+	Score   float64        `json:"score"`
+	Payload map[string]any `json:"payload,omitempty"`
+}
+
+type ExtensionVectorStore interface {
+	Upsert(ctx context.Context, namespace, collection string, points []ExtensionVectorPoint) error
+	Search(ctx context.Context, namespace, collection, query string, vector []float32, limit int, filter map[string]string) ([]ExtensionVectorSearchResult, error)
+	Delete(ctx context.Context, namespace, collection string, ids []string) error
 }
 
 type resourceHandle struct {
@@ -338,8 +422,305 @@ const resourceHandleTTL = 30 * time.Minute
 const clipboardRouteTimeout = 12 * time.Second
 const maxClipboardPayloadSize = 1 * 1024 * 1024
 
+func conversationMessageRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			UserID         string `json:"userId"`
+			CharacterID    string `json:"characterId"`
+			ConversationID string `json:"conversationId"`
+			Channel        string `json:"channel"`
+			Content        string `json:"content"`
+			RequestID      string `json:"requestId"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+			}, nil
+		}
+		content := strings.TrimSpace(p.Content)
+		if content == "" {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "content is required"},
+			}, nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		if scope.UserID != "" {
+			if p.UserID != "" && p.UserID != scope.UserID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "userId does not match current scope"},
+				}, nil
+			}
+			p.UserID = scope.UserID
+		}
+		if scope.CharacterID != "" {
+			if p.CharacterID != "" && p.CharacterID != scope.CharacterID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"},
+				}, nil
+			}
+			p.CharacterID = scope.CharacterID
+		}
+		if scope.ConversationID != "" {
+			if p.ConversationID != "" && p.ConversationID != scope.ConversationID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "conversationId does not match current scope"},
+				}, nil
+			}
+			p.ConversationID = scope.ConversationID
+		}
+		if deps.ConversationMessageSender == nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "conversation message sender not configured"},
+			}, nil
+		}
+		requestID := strings.TrimSpace(p.RequestID)
+		if requestID == "" {
+			requestID = uuid.NewString()
+		}
+		result, err := deps.ConversationMessageSender.SendConversationMessage(ctx, ConversationMessageRequest{
+			UserID:         p.UserID,
+			CharacterID:    p.CharacterID,
+			ConversationID: p.ConversationID,
+			Channel:        p.Channel,
+			Content:        content,
+			RequestID:      requestID,
+		})
+		if err != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error: &host_api.Error{
+					Code:    host_api.ErrorCodeInternal,
+					Message: err.Error(),
+				},
+			}, nil
+		}
+		if strings.TrimSpace(result.RequestID) == "" {
+			result.RequestID = requestID
+		}
+		output, _ := json.Marshal(map[string]any{
+			"content":   result.Content,
+			"requestId": result.RequestID,
+		})
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func conversationMessageAppendRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		var p struct {
+			UserID           string                    `json:"userId"`
+			CharacterID      string                    `json:"characterId"`
+			ConversationID   string                    `json:"conversationId"`
+			Channel          string                    `json:"channel"`
+			Role             string                    `json:"role"`
+			Source           string                    `json:"source"`
+			ReplyToMessageID *string                   `json:"replyToMessageId"`
+			RequestID        string                    `json:"requestId"`
+			Parts            []ConversationMessagePart `json:"parts"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+			}, nil
+		}
+		if len(p.Parts) == 0 || len(p.Parts) > 16 {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "parts must contain between 1 and 16 items"},
+			}, nil
+		}
+		ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+		scope := GetHostAPIScope(ctx)
+		if scope.UserID != "" {
+			if p.UserID != "" && p.UserID != scope.UserID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "userId does not match current scope"},
+				}, nil
+			}
+			p.UserID = scope.UserID
+		}
+		if scope.CharacterID != "" {
+			if p.CharacterID != "" && p.CharacterID != scope.CharacterID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "characterId does not match current scope"},
+				}, nil
+			}
+			p.CharacterID = scope.CharacterID
+		}
+		if scope.ConversationID != "" {
+			if p.ConversationID != "" && p.ConversationID != scope.ConversationID {
+				return host_api.CallResult{
+					Status: host_api.StatusRejected,
+					Error:  &host_api.Error{Code: host_api.ErrorCodeScopeDenied, Message: "conversationId does not match current scope"},
+				}, nil
+			}
+			p.ConversationID = scope.ConversationID
+		}
+		if deps.ConversationMessageAppender == nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "conversation message appender not configured"},
+			}, nil
+		}
+		requestID := strings.TrimSpace(p.RequestID)
+		if requestID == "" {
+			requestID = uuid.NewString()
+		}
+		result, err := deps.ConversationMessageAppender.AppendConversationMessages(ctx, ConversationMessageAppendRequest{
+			UserID:           p.UserID,
+			CharacterID:      p.CharacterID,
+			ConversationID:   p.ConversationID,
+			Channel:          p.Channel,
+			Role:             p.Role,
+			Source:           p.Source,
+			ReplyToMessageID: p.ReplyToMessageID,
+			RequestID:        requestID,
+			Parts:            append([]ConversationMessagePart(nil), p.Parts...),
+		})
+		if err != nil {
+			return host_api.CallResult{
+				Status: host_api.StatusFailed,
+				Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+			}, nil
+		}
+		output, _ := json.Marshal(result)
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func extensionVectorNamespace(req host_api.CallRequest) string {
+	return string(req.RuntimeIdentity.ExtensionID) + "/" + string(req.RuntimeIdentity.ModuleID)
+}
+
+func validVectorCollection(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for _, char := range value {
+		if char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '_' || char == '-' || char == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func vectorUpsertRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		if deps.VectorStore == nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "vector store not configured"}}, nil
+		}
+		var p struct {
+			Collection string                 `json:"collection"`
+			Points     []ExtensionVectorPoint `json:"points"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()}}, nil
+		}
+		if !validVectorCollection(p.Collection) {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "invalid vector collection"}}, nil
+		}
+		if len(p.Points) == 0 || len(p.Points) > 128 {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "points must contain between 1 and 128 items"}}, nil
+		}
+		for index := range p.Points {
+			p.Points[index].ID = strings.TrimSpace(p.Points[index].ID)
+			p.Points[index].Text = strings.TrimSpace(p.Points[index].Text)
+			if p.Points[index].ID == "" || len(p.Points[index].ID) > 256 {
+				return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: fmt.Sprintf("point %d id is invalid", index)}}, nil
+			}
+			if len(p.Points[index].Vector) > 8192 {
+				return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: fmt.Sprintf("point %d vector is too large", index)}}, nil
+			}
+			if len(p.Points[index].Vector) == 0 && p.Points[index].Text == "" {
+				return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: fmt.Sprintf("point %d requires vector or text", index)}}, nil
+			}
+		}
+		if err := deps.VectorStore.Upsert(ctx, extensionVectorNamespace(req), p.Collection, p.Points); err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+		}
+		output, _ := json.Marshal(map[string]any{"upserted": len(p.Points)})
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func vectorSearchRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		if deps.VectorStore == nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "vector store not configured"}}, nil
+		}
+		var p struct {
+			Collection string            `json:"collection"`
+			Query      string            `json:"query"`
+			Vector     []float32         `json:"vector"`
+			Limit      int               `json:"limit"`
+			Filter     map[string]string `json:"filter"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()}}, nil
+		}
+		if !validVectorCollection(p.Collection) {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "invalid vector collection"}}, nil
+		}
+		if len(p.Vector) == 0 && strings.TrimSpace(p.Query) == "" {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "query or vector is required"}}, nil
+		}
+		if p.Limit <= 0 || p.Limit > 100 {
+			p.Limit = 10
+		}
+		results, err := deps.VectorStore.Search(ctx, extensionVectorNamespace(req), p.Collection, p.Query, p.Vector, p.Limit, p.Filter)
+		if err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+		}
+		output, _ := json.Marshal(map[string]any{"items": results})
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
+func vectorDeleteRouteHandler(deps HostAPIRouteDeps) host_api.Handler {
+	return func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+		if deps.VectorStore == nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "vector store not configured"}}, nil
+		}
+		var p struct {
+			Collection string   `json:"collection"`
+			IDs        []string `json:"ids"`
+		}
+		if err := json.Unmarshal(req.Input, &p); err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()}}, nil
+		}
+		if !validVectorCollection(p.Collection) {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "invalid vector collection"}}, nil
+		}
+		if len(p.IDs) == 0 || len(p.IDs) > 1000 {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "ids must contain between 1 and 1000 items"}}, nil
+		}
+		if err := deps.VectorStore.Delete(ctx, extensionVectorNamespace(req), p.Collection, p.IDs); err != nil {
+			return host_api.CallResult{Status: host_api.StatusFailed, Error: &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()}}, nil
+		}
+		output, _ := json.Marshal(map[string]any{"deleted": len(p.IDs)})
+		return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+	}
+}
+
 func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRouteDeps) error {
 	handleTable := newResourceHandleTable()
+	conversationMessageHandler := conversationMessageRouteHandler(deps)
+	conversationMessageAppendHandler := conversationMessageAppendRouteHandler(deps)
+	vectorUpsertHandler := vectorUpsertRouteHandler(deps)
+	vectorSearchHandler := vectorSearchRouteHandler(deps)
+	vectorDeleteHandler := vectorDeleteRouteHandler(deps)
 
 	type routeDef struct {
 		method          host_api.Method
@@ -516,8 +897,9 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			timeout:         5 * time.Second,
 			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
 				var p struct {
-					Path string `json:"path"`
-					Mode string `json:"mode"`
+					Path  string `json:"path"`
+					Mode  string `json:"mode"`
+					Scope string `json:"scope"`
 				}
 				if err := json.Unmarshal(req.Input, &p); err != nil {
 					return host_api.CallResult{
@@ -532,21 +914,46 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				extID := string(req.RuntimeIdentity.ExtensionID)
-				extDir := filepath.Join(deps.ExtensionRoot, extID)
-				realPath := filepath.Join(extDir, p.Path)
-				if !isPathSafe(extDir, realPath) {
+				readOnly := p.Mode == "r" || p.Mode == "read"
+				var realPath string
+				var err error
+				if strings.EqualFold(strings.TrimSpace(p.Scope), ResourceLinkScopeData) {
+					if deps.ResourceLinks == nil {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "resource link manager not configured"},
+						}, nil
+					}
+					realPath, err = deps.ResourceLinks.DataPath(extID, p.Path, !readOnly)
+				} else {
+					extDir := resolveExtensionBundlePath(deps.ExtensionRoot, extID)
+					if extDir == "" {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: "extension package root not found"},
+						}, nil
+					}
+					realPath = filepath.Join(extDir, p.Path)
+					if !isPathSafe(extDir, realPath) {
+						realPath = ""
+						err = errors.New("path escapes extension directory")
+					}
+				}
+				if err != nil {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "path escapes extension directory"},
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
 					}, nil
 				}
 				var f *os.File
-				var err error
-				readOnly := p.Mode == "r" || p.Mode == "read"
 				if readOnly {
 					f, err = os.Open(realPath)
 				} else {
-					f, err = os.OpenFile(realPath, os.O_RDWR|os.O_CREATE, 0644)
+					flags := os.O_RDWR | os.O_CREATE
+					if strings.EqualFold(strings.TrimSpace(p.Mode), "a") || strings.EqualFold(strings.TrimSpace(p.Mode), "append") {
+						flags |= os.O_APPEND
+					}
+					f, err = os.OpenFile(realPath, flags, 0644)
 				}
 				if err != nil {
 					return host_api.CallResult{
@@ -589,6 +996,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				var p struct {
 					HandleID string `json:"handleId"`
 					Length   int    `json:"length"`
+					Encoding string `json:"encoding"`
 				}
 				if err := json.Unmarshal(req.Input, &p); err != nil {
 					return host_api.CallResult{
@@ -638,9 +1046,15 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				if n < p.Length {
 					eof = true
 				}
+				data := string(buf[:n])
+				encoding := strings.ToLower(strings.TrimSpace(p.Encoding))
+				if encoding == "base64" {
+					data = base64.StdEncoding.EncodeToString(buf[:n])
+				}
 				output, _ := json.Marshal(map[string]any{
-					"data": string(buf[:n]),
-					"eof":  eof,
+					"data":     data,
+					"eof":      eof,
+					"encoding": encoding,
 				})
 				return host_api.CallResult{
 					Status: host_api.StatusSuccess,
@@ -657,6 +1071,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				var p struct {
 					HandleID string `json:"handleId"`
 					Data     string `json:"data"`
+					Encoding string `json:"encoding"`
 				}
 				if err := json.Unmarshal(req.Input, &p); err != nil {
 					return host_api.CallResult{
@@ -683,7 +1098,18 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 						Error:  &host_api.Error{Code: host_api.ErrorCodePermissionDenied, Message: "handle is read-only"},
 					}, nil
 				}
-				n, err := h.file.Write([]byte(p.Data))
+				data := []byte(p.Data)
+				if strings.EqualFold(strings.TrimSpace(p.Encoding), "base64") {
+					decoded, err := base64.StdEncoding.DecodeString(p.Data)
+					if err != nil {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+						}, nil
+					}
+					data = decoded
+				}
+				n, err := h.file.Write(data)
 				if err != nil {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
@@ -744,7 +1170,8 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			timeout:         3 * time.Second,
 			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
 				var p struct {
-					Path string `json:"path"`
+					Path  string `json:"path"`
+					Scope string `json:"scope"`
 				}
 				if err := json.Unmarshal(req.Input, &p); err != nil {
 					return host_api.CallResult{
@@ -759,12 +1186,27 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					}, nil
 				}
 				extID := string(req.RuntimeIdentity.ExtensionID)
-				extDir := filepath.Join(deps.ExtensionRoot, extID)
-				realPath := filepath.Join(extDir, p.Path)
-				if !isPathSafe(extDir, realPath) {
+				var realPath string
+				var err error
+				if strings.EqualFold(strings.TrimSpace(p.Scope), ResourceLinkScopeData) {
+					if deps.ResourceLinks == nil {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "resource link manager not configured"},
+						}, nil
+					}
+					realPath, err = deps.ResourceLinks.DataPath(extID, p.Path, false)
+				} else {
+					extDir := resolveExtensionBundlePath(deps.ExtensionRoot, extID)
+					realPath = filepath.Join(extDir, p.Path)
+					if extDir == "" || !isPathSafe(extDir, realPath) {
+						err = errors.New("path escapes extension directory")
+					}
+				}
+				if err != nil {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "path escapes extension directory"},
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
 					}, nil
 				}
 				info, err := os.Stat(realPath)
@@ -784,6 +1226,96 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					Status: host_api.StatusSuccess,
 					Output: output,
 				}, nil
+			},
+		},
+		{
+			method:          host_api.MethodResourceLink,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectNone,
+			timeout:         3 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.ResourceLinks == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "resource link manager not configured"},
+					}, nil
+				}
+				var p struct {
+					Path  string `json:"path"`
+					Scope string `json:"scope"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				url, err := deps.ResourceLinks.Sign(string(req.RuntimeIdentity.ExtensionID), p.Scope, p.Path)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: err.Error()},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{"url": url})
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+			},
+		},
+		{
+			method:          host_api.MethodResourceDelete,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         5 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.ResourceLinks == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "resource link manager not configured"},
+					}, nil
+				}
+				var p struct {
+					Path  string `json:"path"`
+					Scope string `json:"scope"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if !strings.EqualFold(strings.TrimSpace(p.Scope), ResourceLinkScopeData) {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodePermissionDenied, Message: "only extension data resources can be deleted"},
+					}, nil
+				}
+				realPath, err := deps.ResourceLinks.DataPath(string(req.RuntimeIdentity.ExtensionID), p.Path, false)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				info, err := os.Stat(realPath)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: err.Error()},
+					}, nil
+				}
+				if info.IsDir() {
+					err = os.RemoveAll(realPath)
+				} else {
+					err = os.Remove(realPath)
+				}
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{"deleted": true})
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
 			},
 		},
 		{
@@ -824,6 +1356,42 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					Status: host_api.StatusSuccess,
 					Output: output,
 				}, nil
+			},
+		},
+		{
+			method:          host_api.MethodCharacterList,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         5 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				if deps.CharacterLister == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "character lister not configured"},
+					}, nil
+				}
+				var p struct {
+					IncludeDisabled bool `json:"includeDisabled"`
+				}
+				if len(req.Input) > 0 {
+					if err := json.Unmarshal(req.Input, &p); err != nil {
+						return host_api.CallResult{
+							Status: host_api.StatusFailed,
+							Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+						}, nil
+					}
+				}
+				ctx = resolveHostAPIScope(ctx, deps.ScopeSnapshotStore, req.ScopeSnapshotID)
+				scope := GetHostAPIScope(ctx)
+				items, err := deps.CharacterLister.ListCharacters(ctx, scope.UserID, p.IncludeDisabled)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{"items": items})
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
 			},
 		},
 		{
@@ -1641,18 +2209,49 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 			},
 		},
 		{
-			method:          host_api.MethodProactiveDispatch,
+			method:          host_api.MethodVectorUpsert,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         vectorUpsertHandler,
+		},
+		{
+			method:          host_api.MethodVectorSearch,
+			riskLevel:       host_api.RiskLow,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         30 * time.Second,
+			handler:         vectorSearchHandler,
+		},
+		{
+			method:          host_api.MethodVectorDelete,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         vectorDeleteHandler,
+		},
+		{
+			method:          host_api.MethodConversationMessageSend,
 			riskLevel:       host_api.RiskHigh,
 			sideEffectLevel: host_api.SideEffectExternal,
 			timeout:         2 * time.Minute,
+			handler:         conversationMessageHandler,
+		},
+		{
+			method:          host_api.MethodConversationMessageAppend,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectWrite,
+			timeout:         30 * time.Second,
+			handler:         conversationMessageAppendHandler,
+		},
+		{
+			method:          host_api.MethodExtensionDataRead,
+			riskLevel:       host_api.RiskMedium,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         10 * time.Second,
 			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
 				var p struct {
-					UserID         string `json:"userId"`
-					CharacterID    string `json:"characterId"`
-					ConversationID string `json:"conversationId"`
-					Channel        string `json:"channel"`
-					Message        string `json:"message"`
-					RequestID      string `json:"requestId"`
+					SourceID string          `json:"sourceId"`
+					Params   json.RawMessage `json:"params"`
 				}
 				if err := json.Unmarshal(req.Input, &p); err != nil {
 					return host_api.CallResult{
@@ -1660,35 +2259,26 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
 					}, nil
 				}
-				if deps.ProactiveDispatcher == nil {
+				if strings.TrimSpace(p.SourceID) == "" {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "proactive dispatcher not configured"},
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: "sourceId is required"},
 					}, nil
 				}
-				content, err := deps.ProactiveDispatcher.DispatchProactiveMessage(
-					ctx,
-					p.UserID,
-					p.CharacterID,
-					p.ConversationID,
-					p.Channel,
-					p.Message,
-					p.RequestID,
-				)
+				if deps.ExtensionDataSources == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "extension data source registry not configured"},
+					}, nil
+				}
+				snapshot, err := deps.ExtensionDataSources.Read(ctx, p.SourceID, p.Params)
 				if err != nil {
 					return host_api.CallResult{
 						Status: host_api.StatusFailed,
-						Error: &host_api.Error{
-							Code:    host_api.ErrorCodeInternal,
-							Message: err.Error(),
-						},
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
 					}, nil
 				}
-				output, _ := json.Marshal(map[string]any{
-					"content":   content,
-					"requestId": p.RequestID,
-				})
-				return host_api.CallResult{Status: host_api.StatusSuccess, Output: output}, nil
+				return host_api.CallResult{Status: host_api.StatusSuccess, Output: snapshot}, nil
 			},
 		},
 	}

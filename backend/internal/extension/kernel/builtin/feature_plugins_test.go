@@ -8,7 +8,6 @@ func TestFeaturePluginsAreOptionalWithExpectedDefaults(t *testing.T) {
 		enabled bool
 	}{
 		{def: BuildEmotionExtension("1.0.0")},
-		{def: BuildLifestyleExtension("1.0.0")},
 	}
 	for _, item := range cases {
 		def := item.def

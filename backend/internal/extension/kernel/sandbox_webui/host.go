@@ -144,6 +144,7 @@ type WebSession struct {
 	PermissionSnapshotID string
 	UserID               string
 	DeviceID             string
+	UIContext            map[string]any
 	mu                   sync.Mutex
 	subscriptions        map[string]*DataSubscription
 	resourceHandles      map[string]*ResourceHandle
@@ -362,6 +363,7 @@ type CreateSessionRequest struct {
 	PermissionSnapshotID string
 	UserID               string
 	DeviceID             string
+	UIContext            map[string]any
 }
 
 type CreateSessionResult struct {
@@ -400,6 +402,15 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 		if err := h.verifier.VerifyIntegrity(req.BasePath, cleanPath, req.ExpectedHash); err != nil {
 			h.cspReporter("", "resource_integrity_failed")
 			return nil, err
+		}
+	}
+	if len(req.UIContext) > 0 {
+		uiContext, err := json.Marshal(req.UIContext)
+		if err != nil {
+			return nil, ErrInvalidRequest
+		}
+		if len(uiContext) > 64*1024 {
+			return nil, ErrInvalidRequest
 		}
 	}
 	csp := req.CSP
@@ -479,6 +490,7 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 		GrantedScopes:        req.GrantedScopes,
 		UserID:               req.UserID,
 		DeviceID:             req.DeviceID,
+		UIContext:            req.UIContext,
 		ScopeSnapshotID:      scopeSnapshotID,
 		PermissionSnapshotID: permissionSnapshotID,
 		subscriptions:        make(map[string]*DataSubscription),

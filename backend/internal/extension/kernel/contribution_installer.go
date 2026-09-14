@@ -441,6 +441,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		Scope        json.RawMessage `json:"scope,omitempty"`
 		Internal     bool            `json:"internal,omitempty"`
 		Runtime      map[string]any  `json:"runtime,omitempty"`
+		Metadata     map[string]any  `json:"metadata,omitempty"`
 	}
 	if err := json.Unmarshal(defData, &def); err != nil {
 		return installOp{}, fmt.Errorf("unmarshal tool definition: %w", err)
@@ -515,6 +516,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		Permissions:  perms,
 		Scope:        scopeRule,
 		Runtime:      runtimeBinding,
+		Metadata:     def.Metadata,
 	}
 
 	permIDs := make([]string, 0)
@@ -875,8 +877,8 @@ func (i *TypedContributionInstaller) buildUIContributionOp(ctx context.Context, 
 		if uiDef.Sandbox.Type != ui_contribution.SandboxHostNative {
 			return installOp{}, fmt.Errorf("host runtime ui contribution %s requires host_native sandbox", uiDef.ContributionID)
 		}
-		if !runtimegate.HostRuntimeAllowed(string(uiDef.ExtensionID), hostRuntimeID) {
-			return installOp{}, fmt.Errorf("host runtime %s is not allowed for extension %s", hostRuntimeID, uiDef.ExtensionID)
+		if !runtimegate.HostRuntimeAllowed(hostRuntimeID) {
+			return installOp{}, fmt.Errorf("host runtime %s is not registered", hostRuntimeID)
 		}
 	}
 
@@ -1319,6 +1321,7 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		Scope        json.RawMessage `json:"scope,omitempty"`
 		Internal     bool            `json:"internal,omitempty"`
 		Runtime      map[string]any  `json:"runtime,omitempty"`
+		Metadata     map[string]any  `json:"metadata,omitempty"`
 	}
 	if err := json.Unmarshal(defData, &def); err != nil {
 		return fmt.Errorf("unmarshal tool definition for activate: %w", err)
@@ -1395,6 +1398,7 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		Permissions:  perms,
 		Scope:        scopeRule,
 		Runtime:      runtimeBinding,
+		Metadata:     def.Metadata,
 	}
 	if err := i.container.ToolRegistry.Replace(ctx, toolDef); err != nil {
 		return fmt.Errorf("activate tool %s: %w", toolID, err)

@@ -316,17 +316,18 @@ func makeJSCallFunc(factory *javascript_main.RuntimeFactory) capability.JavaScri
 			return nil, fmt.Errorf("javascript runtime factory not configured")
 		}
 
-		instanceID := fmt.Sprintf("%s/%s", extensionID, moduleID)
-		if moduleID == "" {
-			instanceID = extensionID
-		}
-
-		host, err := factory.Get(instanceID)
+		host, err := factory.GetByExtensionModule(extensionID, moduleID)
 		if err != nil || host == nil {
 			return nil, fmt.Errorf("javascript runtime instance not found for %s/%s (no cross-extension search)", extensionID, moduleID)
 		}
+		var inputValue any
+		if len(input) > 0 {
+			if err := json.Unmarshal(input, &inputValue); err != nil {
+				return nil, fmt.Errorf("decode javascript input: %w", err)
+			}
+		}
 
-		result, err := host.Invoke(ctx, handlerName, string(input))
+		result, err := host.Invoke(ctx, handlerName, inputValue)
 		if err != nil {
 			return nil, err
 		}
@@ -339,12 +340,11 @@ func makeJSHealthFunc(factory *javascript_main.RuntimeFactory) capability.JavaSc
 		if factory == nil {
 			return capability.HealthUnknown
 		}
-		instanceID := fmt.Sprintf("%s/%s", extensionID, moduleID)
-		if moduleID == "" {
-			instanceID = extensionID
-		}
-		host, err := factory.Get(instanceID)
+		host, err := factory.GetByExtensionModule(extensionID, moduleID)
 		if err != nil || host == nil {
+			return capability.HealthUnhealthy
+		}
+		if host.State() != javascript_main.HostStateReady {
 			return capability.HealthUnhealthy
 		}
 		return capability.HealthReady

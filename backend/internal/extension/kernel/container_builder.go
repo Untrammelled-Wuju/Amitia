@@ -103,6 +103,7 @@ type ContainerBuilder struct {
 	scopeRelationDB              *sql.DB
 	characterReader              CharacterReader
 	conversationReader           ConversationReader
+	extensionDataSources         ExtensionDataSource
 	memoryQueryService           MemoryQueryService
 	nodeEnvironmentResolver      script_host.NodeEnvironmentResolver
 	hostArtifactResolver         script_host.ArtifactResolver
@@ -137,9 +138,11 @@ type ContainerBuilder struct {
 
 	workshopModelGenerator WorkshopModelGenerator
 
-	channelStore         capability.ChannelStore
-	agentAdminController AgentAdminToolController
-	proactiveDispatcher  ProactiveMessageDispatcher
+	channelStore                capability.ChannelStore
+	agentAdminController        AgentAdminToolController
+	conversationMessageSender   ConversationMessageSender
+	conversationMessageAppender ConversationMessageAppender
+	vectorStore                 ExtensionVectorStore
 }
 
 type WorkshopModelGenerator interface {
@@ -183,6 +186,11 @@ func (b *ContainerBuilder) WithCharacterReader(r CharacterReader) *ContainerBuil
 
 func (b *ContainerBuilder) WithConversationReader(r ConversationReader) *ContainerBuilder {
 	b.conversationReader = r
+	return b
+}
+
+func (b *ContainerBuilder) WithExtensionDataSources(sources ExtensionDataSource) *ContainerBuilder {
+	b.extensionDataSources = sources
 	return b
 }
 
@@ -320,8 +328,18 @@ func (b *ContainerBuilder) WithAgentAdminController(controller AgentAdminToolCon
 	return b
 }
 
-func (b *ContainerBuilder) WithProactiveDispatcher(dispatcher ProactiveMessageDispatcher) *ContainerBuilder {
-	b.proactiveDispatcher = dispatcher
+func (b *ContainerBuilder) WithConversationMessageSender(sender ConversationMessageSender) *ContainerBuilder {
+	b.conversationMessageSender = sender
+	return b
+}
+
+func (b *ContainerBuilder) WithConversationMessageAppender(appender ConversationMessageAppender) *ContainerBuilder {
+	b.conversationMessageAppender = appender
+	return b
+}
+
+func (b *ContainerBuilder) WithVectorStore(store ExtensionVectorStore) *ContainerBuilder {
+	b.vectorStore = store
 	return b
 }
 
@@ -1090,24 +1108,33 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	bridgeClipboardHost := NewBridgeClipboardHostWithRegistry(sse.Global, deviceRegistry)
+	resourceLinks, err := NewResourceLinkManager(b.extRoot)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: initialize resource links: %w", err)
+	}
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
-		StateStore:          extensionStateStore,
-		CharacterReader:     charReader,
-		ConversationReader:  convReader,
-		MemoryQueryService:  memQuerySvc,
-		UIHostNotifier:      uiHostNotifier,
-		ClipboardHost:       bridgeClipboardHost,
-		RuntimeSupervisor:   supervisor,
-		EventService:        eventSvc,
-		ScheduleService:     scheduleSvc,
-		ExecutionKernel:     executionKernel,
-		ToolRegistry:        toolRegistry,
-		OperationRepository: opRepo,
-		ExtensionRoot:       b.extRoot,
-		ScopeSnapshotStore:  host_api.NewSnapshotStoreAdapter(scopeStore),
-		SecretStore:         nil,
-		ProviderInvoker:     kernelProviderInvoker,
-		ProactiveDispatcher: b.proactiveDispatcher,
+		StateStore:                  extensionStateStore,
+		CharacterReader:             charReader,
+		CharacterLister:             characterListerFromReader(charReader),
+		ConversationReader:          convReader,
+		MemoryQueryService:          memQuerySvc,
+		UIHostNotifier:              uiHostNotifier,
+		ClipboardHost:               bridgeClipboardHost,
+		RuntimeSupervisor:           supervisor,
+		EventService:                eventSvc,
+		ScheduleService:             scheduleSvc,
+		ExecutionKernel:             executionKernel,
+		ToolRegistry:                toolRegistry,
+		OperationRepository:         opRepo,
+		ExtensionRoot:               b.extRoot,
+		ScopeSnapshotStore:          host_api.NewSnapshotStoreAdapter(scopeStore),
+		SecretStore:                 nil,
+		ProviderInvoker:             kernelProviderInvoker,
+		ConversationMessageSender:   b.conversationMessageSender,
+		ConversationMessageAppender: b.conversationMessageAppender,
+		ExtensionDataSources:        b.extensionDataSources,
+		ResourceLinks:               resourceLinks,
+		VectorStore:                 b.vectorStore,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
 	}
@@ -1476,7 +1503,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := SetupDefaultHostCommands(hostCmdRegistry, hostAPIGateway); err != nil {
 		return nil, fmt.Errorf("kernel: setup host commands: %w", err)
 	}
-	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo, toolRegistry, scopeManager)
+	actionExecutor := NewUIActionExecutor(hostAPIGateway, workflowExecutor, workflowExecRepo, hostCmdRegistry, opRepo, toolRegistry, scopeManager, newUIActionSnapshotDeriver(scopeStore, permSnapshotStore, permIDValidator))
 	sandboxDispatcher := buildSandboxActionDispatcher(sandboxActionDispatcherDeps{
 		getSession: sandboxHost.GetSession,
 		getContribution: func(contributionID string) (*ui_contribution.UIContributionDefinition, error) {
@@ -1731,6 +1758,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		OrderingEngine:      orderingEngine,
 		UIProviderRegistry:  uiProviderRegistry,
 		ExtRoot:             b.extRoot,
+		ResourceLinks:       resourceLinks,
 
 		DesktopHost:              desktopHost,
 		UpdateManager:            updateManager,
@@ -2128,6 +2156,13 @@ func buildKernelSecretBroker(extRoot string) (*secret.Broker, error) {
 		return nil, fmt.Errorf("create secret broker: %w", err)
 	}
 	return broker, nil
+}
+
+func characterListerFromReader(reader CharacterReader) CharacterLister {
+	if lister, ok := reader.(CharacterLister); ok {
+		return lister
+	}
+	return nil
 }
 
 func validateExecutionWiring(kernel *execution.ExecutionPipeline, adapters *capability.RuntimeAdapterRegistry, tools *capability.ToolRegistry) error {

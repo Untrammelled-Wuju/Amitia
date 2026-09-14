@@ -475,7 +475,7 @@ func ValidateAgainstSlot(def *UIContributionDefinition, slot *UISlotContract) er
 				break
 			}
 		}
-		if !sandboxAllowed && def.Sandbox.Type == SandboxHostNative && IsAllowedHostRuntime(def.ExtensionID, def.Entry.RuntimeID) {
+		if !sandboxAllowed && def.Sandbox.Type == SandboxHostNative && IsAllowedHostRuntime(def.Entry.RuntimeID) {
 			sandboxAllowed = true
 		}
 		if !sandboxAllowed {
@@ -738,14 +738,16 @@ func allowedSandboxesForKind(kind UIContributionKind) []UISandboxType {
 	case UIContributionWebPage, UIContributionMessageRenderer:
 		return []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted, SandboxWebIsolated}
 	case UIContributionAction, UIContributionMenuItem, UIContributionToolbarItem,
-		UIContributionStatusItem, UIContributionMessageAction, UIContributionComposerAction,
+		UIContributionStatusItem, UIContributionMessageAction,
 		UIContributionDesktopCommand:
 		return []UISandboxType{SandboxHostNative}
+	case UIContributionComposerAction:
+		return []UISandboxType{SandboxHostNative, SandboxWebRestricted, SandboxWebIsolated}
 	default:
 		return []UISandboxType{kind.DefaultSandbox()}
 	}
 }
 
-func IsAllowedHostRuntime(extensionID ExtensionID, runtimeID string) bool {
-	return runtimegate.HostRuntimeAllowed(string(extensionID), runtimeID)
+func IsAllowedHostRuntime(runtimeID string) bool {
+	return runtimegate.HostRuntimeAllowed(runtimeID)
 }

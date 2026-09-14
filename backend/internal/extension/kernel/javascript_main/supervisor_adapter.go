@@ -106,7 +106,7 @@ func (f *SupervisorFactory) Create(ctx context.Context, spec runtime_supervisor.
 		return nil, fmt.Errorf("javascript_main: create host: %w", err)
 	}
 
-	return &managedPluginHost{host: host}, nil
+	return &managedPluginHost{factory: f.factory, host: host}, nil
 }
 
 func resolveExtensionEntryPoint(extensionRoot, extensionID, moduleID, entryPoint string) string {
@@ -130,12 +130,16 @@ func resolveExtensionEntryPoint(extensionRoot, extensionID, moduleID, entryPoint
 }
 
 type managedPluginHost struct {
-	host *PluginHost
+	factory *RuntimeFactory
+	host    *PluginHost
 }
 
 func (m *managedPluginHost) Start(ctx context.Context) error {
 	result := m.host.Start(ctx)
 	if !result.Success {
+		if m.factory != nil {
+			_ = m.factory.Remove(m.host.InstanceID())
+		}
 		return fmt.Errorf("javascript_main: start failed: %s", result.Reason)
 	}
 	return nil

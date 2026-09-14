@@ -16,6 +16,8 @@ type EnableExtensionFunc func(ctx context.Context, extensionID domain.ExtensionI
 
 const LegacyProactiveExtensionID = "com.amitia.builtin.proactive"
 
+const LegacyLifestyleExtensionID = "com.amitia.builtin.lifestyle"
+
 type Bootstrapper struct {
 	catalog            *Catalog
 	definitions        domain.DefinitionRepository
@@ -67,6 +69,9 @@ func (b *Bootstrapper) Reconcile(ctx context.Context) error {
 	if err := b.removeLegacyProactive(ctx); err != nil {
 		return err
 	}
+	if err := b.removeLegacyLifestyle(ctx); err != nil {
+		return err
+	}
 
 	defs := b.catalog.List()
 	for _, def := range defs {
@@ -106,6 +111,37 @@ func (b *Bootstrapper) removeLegacyProactive(ctx context.Context) error {
 		}
 	}
 	runtimegate.Set(LegacyProactiveExtensionID, false)
+	return nil
+}
+
+func (b *Bootstrapper) removeLegacyLifestyle(ctx context.Context) error {
+	extID := domain.ExtensionID(LegacyLifestyleExtensionID)
+	if b.contributions != nil {
+		if err := b.contributions.DeleteContributions(ctx, extID); err != nil {
+			return fmt.Errorf("remove legacy lifestyle contributions: %w", err)
+		}
+	}
+	if b.modules != nil {
+		if err := b.modules.DeleteModules(ctx, extID); err != nil {
+			return fmt.Errorf("remove legacy lifestyle modules: %w", err)
+		}
+	}
+	if err := b.installations.DeleteInstallation(ctx, extID); err != nil {
+		return fmt.Errorf("remove legacy lifestyle installation: %w", err)
+	}
+	defs, err := b.definitions.ListExtensions(ctx)
+	if err != nil {
+		return fmt.Errorf("list legacy lifestyle definitions: %w", err)
+	}
+	for _, def := range defs {
+		if def.ID != extID {
+			continue
+		}
+		if err := b.definitions.DeleteExtension(ctx, extID, def.Version); err != nil {
+			return fmt.Errorf("remove legacy lifestyle definition: %w", err)
+		}
+	}
+	runtimegate.Set(LegacyLifestyleExtensionID, false)
 	return nil
 }
 

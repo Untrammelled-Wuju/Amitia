@@ -41,6 +41,9 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 		container.SandboxHost,
 	)
 	handler.SetExtensionRoot(container.ExtRoot)
+	if container.ResourceLinks != nil {
+		handler.SetResourceLinkResolver(container.ResourceLinks)
+	}
 	handler.SetProviderRegistry(container.UIProviderRegistry)
 	handler.SetHostRegistry(container.DeviceRegistry)
 	handler.SetProviderContextResolver(func(r *http.Request, platform string) ui_provider.ResolveContext {

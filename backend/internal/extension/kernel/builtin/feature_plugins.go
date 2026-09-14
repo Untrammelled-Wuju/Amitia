@@ -20,21 +20,6 @@ func BuildEmotionExtension(version string) Definition {
 	)
 }
 
-func BuildLifestyleExtension(version string) Definition {
-	return buildCharacterFeatureExtension(
-		runtimegate.LifestyleExtensionID,
-		version,
-		"生活系统",
-		"管理角色的日程、生活状态、提醒和运行情况。",
-		"lifestyle-core",
-		"host.character.lifestyle",
-		"生活系统",
-		"life-system",
-		220,
-		[]string{"lifestyle.state.read", "lifestyle.schedule.manage", "lifestyle.debug.read"},
-	)
-}
-
 func buildCharacterFeatureExtension(
 	extensionID string,
 	version string,
