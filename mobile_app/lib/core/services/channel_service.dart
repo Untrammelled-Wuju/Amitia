@@ -101,7 +101,7 @@ class MCPService {
   Future<void> setToolEnabled(String serverId, String toolId, bool enabled) async {
     await _api.put<dynamic>(
       '/api/mcp/servers/$serverId/tools/$toolId/scope',
-      data: {'characterId': '', 'enabled': enabled},
+      data: {'enabled': enabled},
     );
   }
 
@@ -124,7 +124,7 @@ class MCPService {
     return _asMap(
       await _api.post<dynamic>(
         '/api/mcp/servers/$serverId/resources/read',
-        data: {'characterId': '', 'uri': uri},
+        data: {'uri': uri},
       ),
     );
   }
@@ -132,13 +132,12 @@ class MCPService {
   Future<Map<String, dynamic>?> setResourceSubscription(
     String serverId,
     String uri,
-    bool subscribed, {
-    String characterId = '',
-  }) async {
+    bool subscribed,
+  ) async {
     return _asMap(
       await _api.post<dynamic>(
         '/api/mcp/servers/$serverId/resources/${subscribed ? 'subscribe' : 'unsubscribe'}',
-        data: {'characterId': characterId, 'uri': uri},
+        data: {'uri': uri},
       ),
     );
   }
@@ -149,13 +148,11 @@ class MCPService {
     required String argumentName,
     String value = '',
     Map<String, String> contextArguments = const <String, String>{},
-    String characterId = '',
   }) async {
     return _asMap(
       await _api.post<dynamic>(
         '/api/mcp/servers/$serverId/completion',
         data: {
-          'characterId': characterId,
           'ref': {'type': 'ref/prompt', 'name': promptName},
           'argument': {'name': argumentName, 'value': value},
           'contextArguments': contextArguments,
@@ -172,7 +169,7 @@ class MCPService {
     return _asMap(
       await _api.post<dynamic>(
         '/api/mcp/servers/$serverId/prompts/get',
-        data: {'characterId': '', 'name': name, 'arguments': arguments},
+        data: {'name': name, 'arguments': arguments},
       ),
     );
   }
