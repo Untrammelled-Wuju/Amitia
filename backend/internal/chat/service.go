@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/emotionstate"
+	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
@@ -48,6 +49,7 @@ type Service interface {
 	GetStats() (*ChatStatsResponse, error)
 	Chat(req *ChatRequest) (*ChatResponse, error)
 	ProcessMessage(ctx context.Context, req *ProcessMessageRequest) (*ProcessMessageResponse, error)
+	AppendConversationMessages(ctx context.Context, request *AppendConversationMessagesRequest) (*AppendConversationMessagesResult, error)
 	ListModels() ([]ModelConfig, error)
 	CreateModel(cfg *ModelConfig) (*ModelConfig, error)
 	UpdateModel(id int, updates map[string]interface{}) (*ModelConfig, error)
@@ -172,6 +174,7 @@ type service struct {
 	replanner           interaction.Replanner
 	reflectionProcessor interaction.ReflectionProcessor
 	artifactResolver    ArtifactResolver
+	extensionContext    extensioncontext.Provider
 	localModelMu        sync.Mutex
 	localModels         map[string]LocalModelInfer
 	cleanupMu           sync.Mutex
@@ -437,4 +440,8 @@ func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPo
 		r = recorder[0]
 	}
 	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, emotion: emotionstate.NewService(ctx.DB), memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer), cleanupPlans: make(map[string]cleanupPlan)}
+}
+
+func (s *service) SetExtensionContextProvider(provider extensioncontext.Provider) {
+	s.extensionContext = provider
 }

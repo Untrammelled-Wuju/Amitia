@@ -14,7 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/proactive"
+	"github.com/u-ai/backend/internal/outputlease"
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -267,7 +267,7 @@ func (h *Handler) Chat(c *gin.Context) {
 		}
 
 		if req.CharacterID != "" {
-			proactive.CancelLowPriorityOnUserInput(req.CharacterID)
+			outputlease.CancelLowPriorityOnUserInput(req.CharacterID)
 			if h.deliveryStore != nil {
 				_ = h.deliveryStore.PreemptActiveOutputLeases(req.CharacterID)
 			}

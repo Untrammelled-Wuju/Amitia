@@ -246,11 +246,18 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}
 
 	skillScope := extension.ExecutionScope{UserID: req.UserID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: req.SessionID, Trigger: extension.TriggerLLM, TraceID: requestID, RequestID: requestID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID, ExecContext: req.ExecContext}
+	prepareToolScope := func() SkillScope {
+		scope := toolScopeFromExtension(skillScope)
+		scope.Message = req.Message
+		scope.Source = source
+		scope.IsInternal = req.IsInternal
+		return scope
+	}
 	agentSkillContext := ""
 	agentSkillCatalogIncluded := false
 	agentSkillTrace := []promptir.AgentSkillTrace{}
 	if s.toolRuntime != nil {
-		toolScope := toolScopeFromExtension(skillScope)
+		toolScope := prepareToolScope()
 		catalog, activated, activationErrors := s.toolRuntime.PrepareAgentSkillPrompt(ctx, toolScope, req.Message)
 		parts := []string{}
 		if catalog != "" {
@@ -271,7 +278,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	}
 	pluginContributions := []ContextContribution{}
 	if s.toolRuntime != nil {
-		toolScope := toolScopeFromExtension(skillScope)
+		toolScope := prepareToolScope()
 		pluginContributions = s.toolRuntime.BeforePrompt(ctx, toolScope)
 	} else {
 		applog.TraceError(trace.WithStage("tool_runtime_unavailable"), nil, fmt.Errorf("tool runtime is not configured"), "plugin context contributions skipped")
@@ -332,7 +339,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 	})
 	var toolDefs []tool.Tool
 	if s.toolRuntime != nil {
-		toolScope := toolScopeFromExtension(skillScope)
+		toolScope := prepareToolScope()
 		resolved, resolveErr := s.toolRuntime.ModelTools(ctx, toolScope)
 		if resolveErr != nil {
 			applog.TraceError(trace.WithStage("skill_tools_resolve_failed"), nil, resolveErr, "skill tool definitions unavailable")

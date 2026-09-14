@@ -96,8 +96,9 @@ func createDeliveryIntentsInTx(tx *gorm.DB, plan messageCommitPlan, messagePlan 
 			"content":        item.Content,
 		}
 		maxRetries := 5
-		if item.Type == "emote" {
-			payloadData["emoteId"] = item.EmoteID
+		if item.Type == "emote" || item.Type == "image" {
+			payloadData["extensionType"] = item.ExtensionType
+			payloadData["mimeType"] = item.MIMEType
 			payloadData["altText"] = item.AltText
 			payloadData["originalPath"] = item.OriginalAssetReference
 			payloadData["fallbackPath"] = item.FallbackAssetReference

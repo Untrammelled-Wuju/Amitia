@@ -31,7 +31,6 @@ func newTestDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	db.Exec(`CREATE TABLE IF NOT EXISTS conversations (id text, character_id text, title text, channel text, source text, created_at text, updated_at text)`)
-	db.Exec(`CREATE TABLE IF NOT EXISTS proactive_rules (id integer primary key, name text, enabled integer, channel text, character_id text, rule_type text, schedule_cron text, max_per_day integer, prompt_template text, random_minutes integer, created_at text, updated_at text)`)
 	return db
 }
 
@@ -98,7 +97,6 @@ func TestE2ECharacterStorageReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	db.Exec(`CREATE TABLE IF NOT EXISTS conversations (id text, character_id text, title text, channel text, source text, created_at text, updated_at text)`)
-	db.Exec(`CREATE TABLE IF NOT EXISTS proactive_rules (id integer primary key, name text, enabled integer, channel text, character_id text, rule_type text, schedule_cron text, max_per_day integer, prompt_template text, random_minutes integer, created_at text, updated_at text)`)
 	ctx := app.NewAppContext(db, nil)
 	repo := NewRepository(ctx)
 	svc := NewService(repo, ctx)

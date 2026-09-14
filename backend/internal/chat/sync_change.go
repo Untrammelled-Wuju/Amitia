@@ -52,6 +52,7 @@ func (s *service) recordMessageChangeTx(tx *gorm.DB, m *Message, op syncapi.Oper
 		"content":        m.Content,
 		"sequence":       m.Sequence,
 		"msgType":        m.MsgType,
+		"extensionType":  m.ExtensionType,
 		"source":         m.Source,
 	})
 	if err != nil {

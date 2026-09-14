@@ -16,6 +16,9 @@ type SkillScope struct {
 	ConversationID string
 	Channel        string
 	SessionID      string
+	Message        string
+	Source         string
+	IsInternal     bool
 	Trigger        string
 	TraceID        string
 	RequestID      string

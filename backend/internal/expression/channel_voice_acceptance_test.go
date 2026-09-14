@@ -5,12 +5,12 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/interaction"
-	"github.com/u-ai/backend/internal/proactive"
+	"github.com/u-ai/backend/internal/outputlease"
 	"github.com/u-ai/backend/internal/realtime"
 )
 
 func TestAcceptance_TTSVoiceToWeChat_SwitchAndLease(t *testing.T) {
-	proactive.GlobalLeaseManager.Reset()
+	outputlease.GlobalLeaseManager.Reset()
 	plan := interaction.ExpressionPlan{
 		ID: "acc-plan-1",
 		EmotionPresentation: []interaction.EmotionPresentation{
@@ -22,7 +22,7 @@ func TestAcceptance_TTSVoiceToWeChat_SwitchAndLease(t *testing.T) {
 	if vp.EmotionTier != VoiceEmotionPositive {
 		t.Fatalf("expected positive voice tier for joy, got %s", vp.EmotionTier)
 	}
-	lease := realtime.AcquireChannelLease("char-acc-1", "conv-acc-1", "voice", "corr-tts-1", proactive.PriorityNormal, 10*time.Second)
+	lease := realtime.AcquireChannelLease("char-acc-1", "conv-acc-1", "voice", "corr-tts-1", outputlease.PriorityNormal, 10*time.Second)
 	if lease == nil {
 		t.Fatal("expected non-nil voice lease")
 	}
@@ -47,7 +47,7 @@ func TestAcceptance_TTSVoiceToWeChat_SwitchAndLease(t *testing.T) {
 }
 
 func TestAcceptance_VoiceToQQ_FeatureComparison(t *testing.T) {
-	proactive.GlobalLeaseManager.Reset()
+	outputlease.GlobalLeaseManager.Reset()
 	plan1 := interaction.ExpressionPlan{
 		ID: "acc-plan-2",
 		EmotionPresentation: []interaction.EmotionPresentation{
@@ -74,7 +74,7 @@ func TestAcceptance_VoiceToQQ_FeatureComparison(t *testing.T) {
 		t.Fatalf("expected active channel qq, got %s", belief.GetActiveChannel())
 	}
 	qqPolicy := GetChannelPolicy(ChannelQQ)
-	lease := realtime.AcquireChannelLease("char-acc-2", "conv-acc-2", "qq", "corr-qq-1", proactive.PriorityNormal, 10*time.Second)
+	lease := realtime.AcquireChannelLease("char-acc-2", "conv-acc-2", "qq", "corr-qq-1", outputlease.PriorityNormal, 10*time.Second)
 	if lease.ChannelGroup != "text" {
 		t.Fatalf("expected text channel group for qq lease, got %s", lease.ChannelGroup)
 	}
@@ -84,7 +84,7 @@ func TestAcceptance_VoiceToQQ_FeatureComparison(t *testing.T) {
 }
 
 func TestAcceptance_WebToQQ_ScopeAndStateVersion(t *testing.T) {
-	proactive.GlobalLeaseManager.Reset()
+	outputlease.GlobalLeaseManager.Reset()
 	plan := interaction.ExpressionPlan{
 		ID: "acc-plan-4",
 		EmotionPresentation: []interaction.EmotionPresentation{
@@ -111,22 +111,22 @@ func TestAcceptance_WebToQQ_ScopeAndStateVersion(t *testing.T) {
 }
 
 func TestAcceptance_DedupAcrossChannels(t *testing.T) {
-	proactive.GlobalLeaseManager.Reset()
-	proactive.GlobalDedupManager.Reset()
+	outputlease.GlobalLeaseManager.Reset()
+	outputlease.GlobalDedupManager.Reset()
 	corrID := "corr-acc-dedup-1"
-	proactive.GlobalDedupManager.RecordDelivery(corrID, "char-acc-4", "conv-acc-4", "web", "hello")
-	proactive.GlobalDedupManager.MarkSent(corrID, "web")
-	if !proactive.GlobalDedupManager.IsDuplicate(corrID, "web") {
+	outputlease.GlobalDedupManager.RecordDelivery(corrID, "char-acc-4", "conv-acc-4", "web", "hello")
+	outputlease.GlobalDedupManager.MarkSent(corrID, "web")
+	if !outputlease.GlobalDedupManager.IsDuplicate(corrID, "web") {
 		t.Fatal("expected web record to be marked duplicate")
 	}
-	if proactive.GlobalDedupManager.IsDuplicate(corrID, "wechat") {
+	if outputlease.GlobalDedupManager.IsDuplicate(corrID, "wechat") {
 		t.Fatal("expected wechat not to be marked duplicate for different channel")
 	}
-	if !proactive.GlobalDedupManager.HasSentAnyChannel(corrID) {
+	if !outputlease.GlobalDedupManager.HasSentAnyChannel(corrID) {
 		t.Fatal("expected HasSentAnyChannel to return true")
 	}
 	seen := map[string]bool{"web": true}
-	channels := proactive.DeliverableChannels("all", seen)
+	channels := outputlease.DeliverableChannels("all", seen)
 	foundWeb := false
 	for _, ch := range channels {
 		if ch == "web" {
@@ -140,18 +140,18 @@ func TestAcceptance_DedupAcrossChannels(t *testing.T) {
 }
 
 func TestAcceptance_LeaseScopeCoversChannelGroup(t *testing.T) {
-	proactive.GlobalLeaseManager.Reset()
-	lease1 := realtime.AcquireChannelLease("char-acc-5", "conv-acc-5", "web", "corr-scope-1", proactive.PriorityNormal, 10*time.Second)
-	lease2 := realtime.AcquireChannelLease("char-acc-5", "conv-acc-5", "wechat", "corr-scope-2", proactive.PriorityNormal, 10*time.Second)
-	allLeases := proactive.GlobalLeaseManager.GetActiveLeases("char-acc-5")
+	outputlease.GlobalLeaseManager.Reset()
+	lease1 := realtime.AcquireChannelLease("char-acc-5", "conv-acc-5", "web", "corr-scope-1", outputlease.PriorityNormal, 10*time.Second)
+	lease2 := realtime.AcquireChannelLease("char-acc-5", "conv-acc-5", "wechat", "corr-scope-2", outputlease.PriorityNormal, 10*time.Second)
+	allLeases := outputlease.GlobalLeaseManager.GetActiveLeases("char-acc-5")
 	if len(allLeases) < 2 {
 		t.Fatalf("expected at least 2 active leases, got %d", len(allLeases))
 	}
-	groupLeases := proactive.GetActiveLeasesForGroup("char-acc-5", "text")
+	groupLeases := outputlease.GetActiveLeasesForGroup("char-acc-5", "text")
 	if len(groupLeases) < 2 {
 		t.Fatalf("expected at least 2 text group leases, got %d", len(groupLeases))
 	}
-	voiceLeases := proactive.GetActiveLeasesForGroup("char-acc-5", "voice")
+	voiceLeases := outputlease.GetActiveLeasesForGroup("char-acc-5", "voice")
 	if len(voiceLeases) != 0 {
 		t.Fatalf("expected 0 voice group leases, got %d", len(voiceLeases))
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/emotionstate"
+	"github.com/u-ai/backend/internal/extensioncontext"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/relationship"
@@ -272,79 +273,47 @@ type realtimeScheduleDelta struct {
 }
 
 func (s *service) realtimeScheduleContext(ctx context.Context, characterID string, now time.Time) (string, realtimeScheduleDelta) {
-	if s == nil || s.db == nil || characterID == "" {
+	if s == nil || characterID == "" {
 		return "", realtimeScheduleDelta{}
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	var events []struct {
-		Title     string `gorm:"column:title"`
-		StartTime string `gorm:"column:start_time"`
-		EndTime   string `gorm:"column:end_time"`
-		WeekDay   int    `gorm:"column:week_day"`
-		EventType string `gorm:"column:event_type"`
+	if s.extensionContext == nil {
+		return "", realtimeScheduleDelta{}
 	}
-	_ = s.db.WithContext(ctx).Table("fixed_events").
-		Select("title, start_time, end_time, week_day, event_type").
-		Where("character_id = ? AND enabled = 1", characterID).
-		Find(&events).Error
-	for _, event := range events {
-		if event.WeekDay >= 0 && event.WeekDay != int(now.Weekday()) {
+	raw, err := s.extensionContext.Resolve(ctx, "chat.realtime.schedule", extensioncontext.Request{
+		CharacterID: characterID,
+		At:          now,
+	})
+	if err != nil {
+		return "", realtimeScheduleDelta{}
+	}
+	snapshot, err := extensioncontext.Decode(raw)
+	if err != nil {
+		return "", realtimeScheduleDelta{}
+	}
+	contexts := make([]string, 0, len(snapshot.Contributions))
+	delta := realtimeScheduleDelta{}
+	for _, contribution := range snapshot.Contributions {
+		if contribution.Error != "" {
 			continue
 		}
-		start, ok := parseScheduleTime(now, event.StartTime)
-		if !ok {
+		var payload struct {
+			Realtime struct {
+				Context     string  `json:"context"`
+				EnergyDelta float64 `json:"energyDelta"`
+				StressDelta float64 `json:"stressDelta"`
+			} `json:"realtime"`
+		}
+		if err := json.Unmarshal(contribution.Data, &payload); err != nil {
 			continue
 		}
-		end, ok := parseScheduleTime(now, event.EndTime)
-		if !ok || !end.After(start) {
-			continue
+		if strings.TrimSpace(payload.Realtime.Context) != "" {
+			contexts = append(contexts, strings.TrimSpace(payload.Realtime.Context))
 		}
-		if !now.Before(start) && now.Before(end) {
-			return fmt.Sprintf("当前角色日程：正在%s。回复应自然体现忙碌感，不要主动展开新话题。", event.Title), realtimeScheduleDelta{Energy: -0.02, Stress: 0.02}
-		}
-		if now.Before(start) && start.Sub(now) <= 30*time.Minute {
-			return fmt.Sprintf("当前角色日程：即将开始%s。回复可以简短自然，必要时说明稍后要去忙。", event.Title), realtimeScheduleDelta{Energy: -0.01, Stress: 0.01}
-		}
-		if !now.Before(end) && now.Sub(end) <= 15*time.Minute {
-			return fmt.Sprintf("当前角色日程：刚刚结束%s。回复可以自然带一点放松感，不要主动播报计划。", event.Title), realtimeScheduleDelta{Energy: -0.01}
-		}
+		delta.Energy += payload.Realtime.EnergyDelta
+		delta.Stress += payload.Realtime.StressDelta
 	}
-	var sleep struct {
-		BedTime  string `gorm:"column:bed_time"`
-		WakeTime string `gorm:"column:wake_time"`
-		Enabled  int    `gorm:"column:enabled"`
-	}
-	if err := s.db.WithContext(ctx).Table("sleep_settings").
-		Select("bed_time, wake_time, enabled").
-		Where("character_id = ?", characterID).
-		Order("updated_at DESC").
-		Take(&sleep).Error; err == nil && sleep.Enabled == 1 {
-		bed, bedOK := parseScheduleTime(now, sleep.BedTime)
-		wake, wakeOK := parseScheduleTime(now, sleep.WakeTime)
-		if bedOK && wakeOK {
-			sleeping := false
-			if bed.Before(wake) {
-				sleeping = !now.Before(bed) && now.Before(wake)
-			} else {
-				sleeping = !now.Before(bed) || now.Before(wake)
-			}
-			if sleeping {
-				return "当前角色处于休息时段。回复应更轻、更短，不要主动拉长话题。", realtimeScheduleDelta{Energy: 0.01, Stress: -0.02}
-			}
-		}
-	}
-	return "", realtimeScheduleDelta{}
-}
-
-func parseScheduleTime(now time.Time, raw string) (time.Time, bool) {
-	raw = strings.TrimSpace(raw)
-	for _, layout := range []string{"15:04", "15:04:05"} {
-		parsed, err := time.ParseInLocation(layout, raw, now.Location())
-		if err == nil {
-			return time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), parsed.Second(), 0, now.Location()), true
-		}
-	}
-	return time.Time{}, false
+	return strings.Join(contexts, "\n"), delta
 }

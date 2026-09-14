@@ -15,53 +15,13 @@ import (
 )
 
 type MessageCommitHook func(event *MessageCommitEvent)
-type MessagePlanningHook func(event *MessagePlanningEvent) *MessagePlanningDecision
 
 var messageCommitHooks []MessageCommitHook
-var messagePlanningHook MessagePlanningHook
 
 func RegisterMessageCommitHook(hook MessageCommitHook) {
 	if hook != nil {
 		messageCommitHooks = append(messageCommitHooks, hook)
 	}
-}
-
-func RegisterMessagePlanningHook(hook MessagePlanningHook) {
-	messagePlanningHook = hook
-}
-
-type MessagePlanningEvent struct {
-	ConversationID string
-	CharacterID    string
-	Channel        string
-	Source         string
-	UserMessage    string
-	Reply          string
-	Lines          []string
-	UserID         string
-	PeerID         string
-	RequestID      string
-	ForceVoice     bool
-}
-
-type PlannedEmote struct {
-	EmoteID     string
-	Content     string
-	AltText     string
-	IsAnimated  int
-	Width       int
-	Height      int
-	Original    string
-	Fallback    string
-	MimeType    string
-	DeliveryKey string
-}
-
-type MessagePlanningDecision struct {
-	Emote       *PlannedEmote
-	InsertAfter int
-	SendMode    string
-	Persist     func(tx *gorm.DB, message *Message) error
 }
 
 type MessageCommitEvent struct {
@@ -110,7 +70,7 @@ type messageCommitResult struct {
 	MessagePlan       *interaction.MessagePlan
 }
 
-func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResult, error) {
+func (s *service) commitInteraction(ctx context.Context, plan messageCommitPlan) (*messageCommitResult, error) {
 	result := &messageCommitResult{}
 	if plan.Request.SuppressReplyPersistence {
 		plan.Lines = nil
@@ -125,35 +85,13 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 	if responseGroupID == "" {
 		responseGroupID = uuid.New().String()
 	}
-	var planningDecision *MessagePlanningDecision
-	if messagePlanningHook != nil && !plan.Request.SuppressReplyPersistence {
-		planningDecision = messagePlanningHook(&MessagePlanningEvent{
-			ConversationID: plan.Conversation,
-			CharacterID:    plan.Character,
-			Channel:        plan.Request.Channel,
-			Source:         plan.Source,
-			UserMessage:    plan.Request.Message,
-			Reply:          plan.Reply,
-			Lines:          append([]string(nil), plan.Lines...),
-			UserID:         plan.Request.UserID,
-			PeerID:         plan.Request.PeerID,
-			RequestID:      responseGroupID,
-			ForceVoice:     plan.ForceVoice,
-		})
-	}
-	emoteInsertAfter := len(plan.Lines)
-	if planningDecision != nil && planningDecision.Emote != nil {
-		if len(plan.Lines) == 0 {
-			if planningDecision.SendMode == "emote_only" {
-				emoteInsertAfter = 0
-			} else {
-				planningDecision = nil
-			}
-		} else if planningDecision.InsertAfter > 0 && planningDecision.InsertAfter < len(plan.Lines) {
-			emoteInsertAfter = planningDecision.InsertAfter
+	var messageOutputs []MessageOutput
+	if !plan.Request.SuppressReplyPersistence {
+		outputs, outputErr := s.planMessageOutputs(ctx, plan)
+		if outputErr != nil {
+			log.Printf("[commitInteraction] message output planning failed: %v", outputErr)
 		} else {
-			planningDecision.InsertAfter = len(plan.Lines)
-			planningDecision.SendMode = "after_all_text"
+			messageOutputs = outputs
 		}
 	}
 
@@ -173,64 +111,81 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		if err := s.acquireAndValidateCommitTokenTx(tx, &plan); err != nil {
 			return err
 		}
-		items := make([]interaction.MessagePlanItem, 0, len(plan.Lines)+1)
+		items := make([]interaction.MessagePlanItem, 0, len(plan.Lines)+len(messageOutputs)+1)
 		textIndex := 0
-		totalItems := len(plan.Lines)
-		if planningDecision != nil && planningDecision.Emote != nil {
-			totalItems++
-		}
-		var emoteMessage *Message
-		emoteInserted := false
-		for sequence := 1; sequence <= totalItems; sequence++ {
-			insertEmote := planningDecision != nil && planningDecision.Emote != nil && !emoteInserted && textIndex == emoteInsertAfter
-			if insertEmote {
-				planned := planningDecision.Emote
-				status := "sent"
-				if strings.ToLower(plan.Request.Channel) != "web" {
-					status = "sending"
+		totalItems := len(plan.Lines) + len(messageOutputs)
+		if len(messageOutputs) > 0 {
+			outputIndex := 0
+			sequence := 1
+			for outputIndex < len(messageOutputs) || textIndex < len(plan.Lines) {
+				for outputIndex < len(messageOutputs) && messageOutputs[outputIndex].InsertAfter <= textIndex {
+					output := messageOutputs[outputIndex]
+					message := buildMessageFromOutput(plan, responseGroupID, sequence, output)
+					if err := tx.Create(message).Error; err != nil {
+						return err
+					}
+					if err := s.recordMessageChangeTx(tx, message, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
+						return err
+					}
+					messageSequences[message.ID] = message.Sequence
+					result.MessageIDs = append(result.MessageIDs, message.ID)
+					result.LastSequence = message.Sequence
+					items = append(items, interaction.MessagePlanItem{
+						MessageID:              message.ID,
+						Sequence:               sequence,
+						Type:                   output.Part.Type,
+						ExtensionType:          output.Part.ExtensionType,
+						Content:                message.Content,
+						AltText:                output.Part.AltText,
+						MIMEType:               output.Part.MIMEType,
+						IsAnimated:             output.Part.IsAnimated,
+						Width:                  output.Part.Width,
+						Height:                 output.Part.Height,
+						OriginalAssetReference: output.Part.URL,
+						FallbackAssetReference: output.Part.FallbackURL,
+					})
+					outputIndex++
+					sequence++
 				}
-				emoteMessage = &Message{ID: uuid.New().String(), ConversationID: plan.Conversation, Role: "assistant", Content: planned.Content, MsgType: "emote", Source: "ai_random", Status: status, ImageUrl: planned.Original, EmoteID: planned.EmoteID, AltText: planned.AltText, IsAnimated: planned.IsAnimated, MediaWidth: planned.Width, MediaHeight: planned.Height, OriginalAsset: planned.Original, FallbackAsset: planned.Fallback, ResponseGroupID: responseGroupID, DeliverySequence: sequence, EmoteDecisionStatus: "queued", RequestID: plan.Request.RequestID}
-				if status == "sent" {
-					emoteMessage.EmoteDecisionStatus = "sent"
+				if textIndex >= len(plan.Lines) {
+					continue
 				}
-				if err := tx.Create(emoteMessage).Error; err != nil {
+				text := plan.Lines[textIndex]
+				aiMsgID := uuid.New().String()
+				aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID, ResponseGroupID: responseGroupID, DeliverySequence: sequence}
+				if err := tx.Create(aiMsg).Error; err != nil {
 					return err
 				}
-				if err := s.recordMessageChangeTx(tx, emoteMessage, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
+				if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
 					return err
 				}
-				messageSequences[emoteMessage.ID] = emoteMessage.Sequence
-				result.LastSequence = emoteMessage.Sequence
-				items = append(items, interaction.MessagePlanItem{MessageID: emoteMessage.ID, Sequence: sequence, Type: "emote", Content: planned.Content, EmoteID: planned.EmoteID, AltText: planned.AltText, IsAnimated: planned.IsAnimated == 1, Width: planned.Width, Height: planned.Height, OriginalAssetReference: planned.Original, FallbackAssetReference: planned.Fallback})
-				emoteInserted = true
-				continue
+				messageSequences[aiMsgID] = aiMsg.Sequence
+				result.MessageIDs = append(result.MessageIDs, aiMsgID)
+				result.LastSequence = aiMsg.Sequence
+				items = append(items, interaction.MessagePlanItem{MessageID: aiMsgID, Sequence: sequence, Type: "text", Content: text})
+				textIndex++
+				sequence++
 			}
-			text := plan.Lines[textIndex]
-			aiMsgID := uuid.New().String()
-			decisionStatus := "none"
-			if planningDecision != nil && planningDecision.Emote != nil {
-				decisionStatus = "selected"
+		} else {
+			for sequence := 1; sequence <= totalItems; sequence++ {
+				text := plan.Lines[textIndex]
+				aiMsgID := uuid.New().String()
+				aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID, ResponseGroupID: responseGroupID, DeliverySequence: sequence}
+				if err := tx.Create(aiMsg).Error; err != nil {
+					return err
+				}
+				if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
+					return err
+				}
+				messageSequences[aiMsgID] = aiMsg.Sequence
+				result.MessageIDs = append(result.MessageIDs, aiMsgID)
+				result.LastSequence = aiMsg.Sequence
+				items = append(items, interaction.MessagePlanItem{MessageID: aiMsgID, Sequence: sequence, Type: "text", Content: text})
+				textIndex++
 			}
-			aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID, ResponseGroupID: responseGroupID, DeliverySequence: sequence, EmoteDecisionStatus: decisionStatus}
-			if err := tx.Create(aiMsg).Error; err != nil {
-				return err
-			}
-			if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
-				return err
-			}
-			messageSequences[aiMsgID] = aiMsg.Sequence
-			result.MessageIDs = append(result.MessageIDs, aiMsgID)
-			result.LastSequence = aiMsg.Sequence
-			items = append(items, interaction.MessagePlanItem{MessageID: aiMsgID, Sequence: sequence, Type: "text", Content: text})
-			textIndex++
 		}
 		managed := strings.EqualFold(plan.Request.Channel, "web") || !plan.ForceVoice
 		result.MessagePlan = &interaction.MessagePlan{ResponseGroupID: responseGroupID, Managed: managed, Items: items}
-		if planningDecision != nil && planningDecision.Persist != nil {
-			if err := planningDecision.Persist(tx, emoteMessage); err != nil {
-				return err
-			}
-		}
 		now := time.Now().Format("2006-01-02 15:04:05")
 		if plan.UserMessageID != "" {
 			if err := tx.Model(&Message{}).Where("id = ?", plan.UserMessageID).Select("sequence").Scan(&userMessageSequence).Error; err != nil {

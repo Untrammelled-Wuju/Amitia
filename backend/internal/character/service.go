@@ -241,22 +241,6 @@ func (s *service) CreateForUser(req *CreateCharacterRequest, userID string) (*Ch
 		return nil, fmt.Errorf("创建角色失败: %w", err)
 	}
 
-	presetRules := []struct {
-		Name, Channel, RuleType, ScheduleCron, PromptTemplate string
-		MaxPerDay, RandomMinutes                              int
-	}{
-		{"早安问候", "all", "cron", "0 8 * * *", "早上好！新的一天开始了，有什么计划吗？", 20, 30},
-		{"晚安提醒", "all", "cron", "0 22 * * *", "夜深了，早点休息哦。今天过得怎么样？", 20, 30},
-		{"学习打卡", "all", "cron", "0 19 * * *", "今天的学习任务完成了吗？需要我帮你复习一下吗？", 20, 30},
-		{"工作间歇", "all", "cron", "0 15 * * 1-5", "工作累了就起来活动一下，喝杯水休息一会吧。", 20, 30},
-		{"午饭时间", "all", "cron", "0 12 * * *", "到午饭时间啦，别忘了按时吃饭哦！", 20, 15},
-		{"晚间闲聊", "all", "cron", "0 20 * * *", "晚上好！放松一下，想聊点什么吗？", 20, 45},
-	}
-	nowStr := time.Now().Format("2006-01-02 15:04:05")
-	for _, p := range presetRules {
-		s.db.Exec("INSERT INTO proactive_rules (name, enabled, channel, character_id, rule_type, schedule_cron, max_per_day, prompt_template, random_minutes, created_at, updated_at) VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			p.Name, p.Channel, c.ID, p.RuleType, p.ScheduleCron, p.MaxPerDay, p.PromptTemplate, p.RandomMinutes, nowStr, nowStr)
-	}
 	return c, nil
 }
 

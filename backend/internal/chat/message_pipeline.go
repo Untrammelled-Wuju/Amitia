@@ -30,7 +30,7 @@ func (s *service) ProcessMessage(ctx context.Context, req *ProcessMessageRequest
 			RequestID:      computeResult.RequestID,
 		}, nil
 	}
-	commitResult, err := s.commitInteraction(messageCommitPlan{
+	commitResult, err := s.commitInteraction(ctx, messageCommitPlan{
 		Request:       req,
 		Conversation:  computeResult.ConversationID,
 		Character:     computeResult.CharacterID,
@@ -127,7 +127,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 			RequestID:      computeResult.RequestID,
 		}, nil
 	}
-	commitResult, err := s.commitInteraction(messageCommitPlan{
+	commitResult, err := s.commitInteraction(ctx, messageCommitPlan{
 		Request:       chatReq,
 		Conversation:  computeResult.ConversationID,
 		Character:     computeResult.CharacterID,
