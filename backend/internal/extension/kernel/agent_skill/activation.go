@@ -24,18 +24,14 @@ type ActivationCandidate struct {
 	MatchType  string
 }
 
-func (s *ActivationService) EvaluateAuto(ctx context.Context, userInput string, scope AgentSkillScope, scopeID string) []ActivationCandidate {
+func (s *ActivationService) EvaluateAuto(ctx context.Context, userInput string) []ActivationCandidate {
 	all := s.catalog.List(CatalogFilter{
-		Scope:   scope,
 		Enabled: boolPtr(true),
 	})
 
 	var candidates []ActivationCandidate
 	for _, def := range all {
 		if def.Activation.Mode != ActivationAuto && def.Activation.Mode != ActivationManual {
-			continue
-		}
-		if def.Scope == AgentSkillScopeCharacter && def.ScopeID != "" && def.ScopeID != scopeID {
 			continue
 		}
 
@@ -80,7 +76,6 @@ func (s *ActivationService) EvaluateExplicit(ctx context.Context, skillID string
 
 func (s *ActivationService) EvaluateSystem(ctx context.Context) []ActivationCandidate {
 	all := s.catalog.List(CatalogFilter{
-		Scope:   AgentSkillScopeGlobal,
 		Enabled: boolPtr(true),
 	})
 

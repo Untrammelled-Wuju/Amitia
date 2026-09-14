@@ -72,16 +72,6 @@ func (r *Repository) ResolveScopeEnabled(ctx context.Context, extensionID string
 	if !r.hasScopeBindings() {
 		return fallback, PermissionScope{Type: ScopeGlobal}, nil
 	}
-	if characterID := strings.TrimSpace(scope.CharacterID); characterID != "" {
-		var character scopeBindingRecord
-		err := r.db.WithContext(ctx).Where("extension_id = ? AND scope_type = ? AND scope_id = ?", extensionID, ScopeCharacter, characterID).First(&character).Error
-		if err == nil {
-			return character.Enabled == 1, PermissionScope{Type: ScopeCharacter, ID: characterID}, nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, PermissionScope{}, err
-		}
-	}
 	var global scopeBindingRecord
 	err := r.db.WithContext(ctx).Where("extension_id = ? AND scope_type = ? AND scope_id = ''", extensionID, ScopeGlobal).First(&global).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -93,19 +83,9 @@ func (r *Repository) ResolveScopeEnabled(ctx context.Context, extensionID string
 	return global.Enabled == 1, PermissionScope{Type: ScopeGlobal}, nil
 }
 
-func (r *Repository) DeleteScopeBinding(ctx context.Context, extensionID string, scope PermissionScope) error {
-	if !r.hasScopeBindings() {
-		return nil
-	}
-	return r.db.WithContext(ctx).Where("extension_id = ? AND scope_type = ? AND scope_id = ?", extensionID, scope.Type, scope.ID).Delete(&scopeBindingRecord{}).Error
-}
-
 func (r *Repository) SetScopeEnabled(ctx context.Context, extensionID string, scope PermissionScope, enabled bool) error {
-	if scope.Type != ScopeGlobal && scope.Type != ScopeCharacter {
+	if scope.Type != ScopeGlobal {
 		return fmt.Errorf("unsupported extension binding scope: %s", scope.Type)
-	}
-	if err := validateScopeID(scope); err != nil {
-		return err
 	}
 	if !r.hasScopeBindings() {
 		return r.db.WithContext(ctx).Model(&extensionRecord{}).Where("extension_id = ?", extensionID).Update("enabled", boolNumber(enabled)).Error
@@ -126,10 +106,7 @@ func (r *Repository) SetScopeEnabled(ctx context.Context, extensionID string, sc
 		}).Create(&record).Error; err != nil {
 			return err
 		}
-		if scope.Type == ScopeGlobal {
-			return tx.Model(&extensionRecord{}).Where("extension_id = ?", extensionID).Updates(map[string]interface{}{"enabled": boolNumber(enabled), "updated_at": now}).Error
-		}
-		return nil
+		return tx.Model(&extensionRecord{}).Where("extension_id = ?", extensionID).Updates(map[string]interface{}{"enabled": boolNumber(enabled), "updated_at": now}).Error
 	})
 }
 
@@ -150,24 +127,6 @@ func (r *Repository) ValidateConversationScope(ctx context.Context, scope Execut
 	}
 	if conversation.CharacterID != scope.CharacterID || (scope.Channel != "" && conversation.Channel != "" && !strings.EqualFold(conversation.Channel, scope.Channel)) {
 		return NewExtensionError(ErrSkillPermissionDenied, "Conversation scope mismatch", scope.ConversationID, false, nil)
-	}
-	return nil
-}
-
-func (r *Repository) ValidateCharacterScope(ctx context.Context, scope ExecutionScope) error {
-	characterID := strings.TrimSpace(scope.CharacterID)
-	if characterID == "" {
-		return nil
-	}
-	if !r.db.Migrator().HasTable("characters") {
-		return nil
-	}
-	var count int64
-	if err := r.db.WithContext(ctx).Table("characters").Where("id = ?", characterID).Count(&count).Error; err != nil {
-		return fmt.Errorf("validate character scope: %w", err)
-	}
-	if count == 0 {
-		return NewExtensionError(ErrSkillPermissionDenied, "Character scope is unavailable", characterID, false, nil)
 	}
 	return nil
 }

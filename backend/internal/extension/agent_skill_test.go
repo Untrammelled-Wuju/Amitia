@@ -179,7 +179,7 @@ func TestAgentSkillInstallActivateResourceAndRestore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	installed, err := service.Install(ctx, InstallAgentSkillRequest{UserID: "user-1", PreviewID: preview.PreviewID, Scope: AgentSkillScopeGlobal})
+	installed, err := service.Install(ctx, InstallAgentSkillRequest{UserID: "user-1", PreviewID: preview.PreviewID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,38 +193,6 @@ func TestAgentSkillInstallActivateResourceAndRestore(t *testing.T) {
 	catalog, err := service.ResolveCatalog(ctx, scope)
 	if err != nil || len(catalog) != 1 {
 		t.Fatalf("catalog: %+v %v", catalog, err)
-	}
-	characterPreview, err := service.PreviewZIP(ctx, "user-1", raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	characterSkill, err := service.Install(ctx, InstallAgentSkillRequest{UserID: "user-1", PreviewID: characterPreview.PreviewID, Scope: AgentSkillScopeCharacter, CharacterID: "char-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := service.Enable(ctx, scope, characterSkill.ExtensionID); err != nil {
-		t.Fatal(err)
-	}
-	catalog, err = service.ResolveCatalog(ctx, scope)
-	if err != nil || len(catalog) != 1 || catalog[0].ExtensionID != characterSkill.ExtensionID {
-		t.Fatalf("character priority failed: %+v %v", catalog, err)
-	}
-	globalView, _, err := service.Get(ctx, ExecutionScope{UserID: "user-1", CharacterID: "char-2"}, characterSkill.ExtensionID)
-	if err != nil || !globalView.Enabled || globalView.Scope != AgentSkillScopeGlobal {
-		t.Fatalf("global binding not inherited: %+v %v", globalView, err)
-	}
-	if err := service.Disable(ctx, scope, characterSkill.ExtensionID); err != nil {
-		t.Fatal(err)
-	}
-	catalog, err = service.ResolveCatalog(ctx, scope)
-	if err != nil || len(catalog) != 0 {
-		t.Fatalf("character disable did not override global binding: %+v %v", catalog, err)
-	}
-	if err := service.Enable(ctx, scope, characterSkill.ExtensionID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.ResolveCatalog(ctx, scope); err != nil {
-		t.Fatal(err)
 	}
 	activation, err := service.Activate(ctx, ActivateAgentSkillRequest{Scope: scope, NameOrID: "code-review", Explicit: true})
 	if err != nil || !strings.Contains(activation.Prompt, "active_agent_skill") {

@@ -80,14 +80,13 @@ func TestInstallCreatesLinkAndUninstallPreservesServer(t *testing.T) {
 func TestInstallRollsBackCreatedServersAndLinks(t *testing.T) {
 	service, repository := dependencyTestService(t)
 	first := httpDependency("first", true)
-	second := httpDependency("second", true)
-	second.DefaultScope = "character"
+	second := extension.AgentSkillMCPDependency{ID: "bad", Required: true, Transport: "unsupported-transport"}
 	plan, err := service.Preview(context.Background(), PreviewRequest{AgentSkillExtensionID: "skill", Dependencies: []extension.AgentSkillMCPDependency{first, second}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Install(context.Background(), InstallRequest{Plan: plan, ConfirmHTTP: true}); err == nil {
-		t.Fatal("expected character scope failure")
+		t.Fatal("expected unsupported dependency failure")
 	}
 	servers, err := repository.ListServers(context.Background())
 	if err != nil || len(servers) != 0 {

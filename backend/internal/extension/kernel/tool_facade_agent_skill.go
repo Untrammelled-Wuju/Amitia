@@ -16,35 +16,12 @@ func (f *ToolFacade) buildAgentSkillPrompt(ctx context.Context, scope LegacyScop
 		return "", nil, nil
 	}
 
-	agentScope := agent_skill.AgentSkillScopeGlobal
-	if scope.CharacterID != "" {
-		agentScope = agent_skill.AgentSkillScopeCharacter
-	}
-
-	allSkills := f.agentSkillCatalog.List(agent_skill.CatalogFilter{
-		Scope:   agentScope,
+	unique := f.agentSkillCatalog.List(agent_skill.CatalogFilter{
 		Enabled: boolPtr(true),
 	})
 
-	globalSkills := f.agentSkillCatalog.List(agent_skill.CatalogFilter{
-		Scope:   agent_skill.AgentSkillScopeGlobal,
-		Enabled: boolPtr(true),
-	})
-
-	allSkills = append(allSkills, globalSkills...)
-
-	if len(allSkills) == 0 {
+	if len(unique) == 0 {
 		return "", nil, nil
-	}
-
-	seen := make(map[string]bool)
-	unique := make([]agent_skill.AgentSkillDefinition, 0, len(allSkills))
-	for _, s := range allSkills {
-		if seen[s.ExtensionID] {
-			continue
-		}
-		seen[s.ExtensionID] = true
-		unique = append(unique, s)
 	}
 
 	errorsList := []string{}
@@ -66,7 +43,7 @@ func (f *ToolFacade) buildAgentSkillPrompt(ctx context.Context, scope LegacyScop
 	}
 
 	if f.activationService != nil {
-		autoCandidates := f.activationService.EvaluateAuto(ctx, message, agentScope, scope.CharacterID)
+		autoCandidates := f.activationService.EvaluateAuto(ctx, message)
 		for _, c := range autoCandidates {
 			if c.MatchType != "keyword" {
 				continue

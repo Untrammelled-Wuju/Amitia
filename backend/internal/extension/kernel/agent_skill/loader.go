@@ -154,21 +154,6 @@ func (b *SkillDefinitionBuilder) Build(raw []byte, extensionID string) (*AgentSk
 
 	compatibility := b.compat.Validate(fields, b.hostVersion, b.platform)
 
-	scope := AgentSkillScopeGlobal
-	scopeID := ""
-	if scopeRaw, ok := extractField(fields, "scope"); ok {
-		if scopeStr, ok := scopeRaw.(string); ok {
-			scope = mapScopeString(scopeStr)
-		} else if scopeMap, ok := scopeRaw.(map[string]any); ok {
-			if s, ok := scopeMap["type"].(string); ok {
-				scope = mapScopeString(s)
-			}
-			if id, ok := scopeMap["id"].(string); ok {
-				scopeID = id
-			}
-		}
-	}
-
 	author := getStringField(fields, "author", "")
 	license := getStringField(fields, "license", "")
 	displayName := getStringField(fields, "displayName", "")
@@ -207,8 +192,8 @@ func (b *SkillDefinitionBuilder) Build(raw []byte, extensionID string) (*AgentSk
 		TokenPolicy:   tokenPolicy,
 		Compatibility: compatibility,
 		Integrity:     integrity,
-		Scope:         scope,
-		ScopeID:       scopeID,
+		Scope:         AgentSkillScopeGlobal,
+		ScopeID:       "",
 		Enabled:       false,
 		Compatible:    compatibility.Status == "compatible" || compatibility.Status == "legacy",
 		Source:        "agent_skill",
@@ -231,14 +216,5 @@ func parseActivationMode(mode string) ActivationMode {
 		return ActivationExplicit
 	default:
 		return ActivationManual
-	}
-}
-
-func mapScopeString(s string) AgentSkillScope {
-	switch s {
-	case "character", "role":
-		return AgentSkillScopeCharacter
-	default:
-		return AgentSkillScopeGlobal
 	}
 }

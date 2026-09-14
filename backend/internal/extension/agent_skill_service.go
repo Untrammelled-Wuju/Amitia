@@ -134,9 +134,6 @@ func (s *AgentSkillService) storePreview(userID string, parsed parsedAgentSkill)
 }
 
 func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSkillRequest) (AgentSkillDefinition, error) {
-	if err := s.repository.ValidateCharacterScope(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.CharacterID}); err != nil {
-		return AgentSkillDefinition{}, err
-	}
 	s.mu.Lock()
 	preview, ok := s.previews[request.PreviewID]
 	if ok {
@@ -145,12 +142,6 @@ func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSki
 	s.mu.Unlock()
 	if !ok || time.Now().After(preview.expiresAt) || preview.userID != request.UserID {
 		return AgentSkillDefinition{}, NewExtensionError(ErrAgentSkillArtifactInvalid, "import preview is missing or expired", "", false, nil)
-	}
-	if request.Scope != AgentSkillScopeGlobal && request.Scope != AgentSkillScopeCharacter {
-		return AgentSkillDefinition{}, NewExtensionError(ErrAgentSkillScopeForbidden, "invalid Agent Skill scope", string(request.Scope), false, nil)
-	}
-	if request.Scope == AgentSkillScopeCharacter && strings.TrimSpace(request.CharacterID) == "" {
-		return AgentSkillDefinition{}, NewExtensionError(ErrAgentSkillScopeForbidden, "character scope requires a character", "", false, nil)
 	}
 	definition := preview.parsed.Definition
 	definition.UserID = request.UserID
@@ -166,13 +157,13 @@ func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSki
 		if loadErr != nil {
 			return AgentSkillDefinition{}, loadErr
 		}
-		if err := s.setInstalledAgentSkillBinding(ctx, definition.ExtensionID, request, false, false); err != nil {
+		if err := s.repository.SetScopeEnabled(ctx, definition.ExtensionID, PermissionScope{Type: ScopeGlobal}, false); err != nil {
 			return AgentSkillDefinition{}, err
 		}
-		loaded.Scope = request.Scope
-		loaded.ScopeID = request.CharacterID
+		loaded.Scope = AgentSkillScopeGlobal
+		loaded.ScopeID = ""
 		if request.Enable {
-			if err := s.Enable(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.CharacterID}, definition.ExtensionID); err != nil {
+			if err := s.Enable(ctx, ExecutionScope{UserID: request.UserID}, definition.ExtensionID); err != nil {
 				return AgentSkillDefinition{}, err
 			}
 			loaded.Enabled = true
@@ -196,39 +187,19 @@ func (s *AgentSkillService) Install(ctx context.Context, request InstallAgentSki
 		_ = s.repository.RemoveAgentSkill(ctx, definition.ExtensionID)
 		return AgentSkillDefinition{}, err
 	}
-	if err := s.setInstalledAgentSkillBinding(ctx, definition.ExtensionID, request, false, true); err != nil {
+	if err := s.repository.SetScopeEnabled(ctx, definition.ExtensionID, PermissionScope{Type: ScopeGlobal}, false); err != nil {
 		_ = s.repository.RemoveAgentSkill(ctx, definition.ExtensionID)
 		return AgentSkillDefinition{}, err
 	}
 	s.invalidateAgentSkillCaches()
 	if request.Enable {
-		if err := s.Enable(ctx, ExecutionScope{UserID: request.UserID, CharacterID: request.CharacterID}, definition.ExtensionID); err != nil {
+		if err := s.Enable(ctx, ExecutionScope{UserID: request.UserID}, definition.ExtensionID); err != nil {
 			return AgentSkillDefinition{}, err
 		}
 		definition.Enabled = true
 	}
-	definition.Scope = request.Scope
-	if request.Scope == AgentSkillScopeCharacter {
-		definition.ScopeID = request.CharacterID
-	}
+	definition.Scope = AgentSkillScopeGlobal
 	return definition, nil
-}
-
-func (s *AgentSkillService) setInstalledAgentSkillBinding(ctx context.Context, extensionID string, request InstallAgentSkillRequest, enabled, removeGlobal bool) error {
-	scope := ExecutionScope{UserID: request.UserID}
-	if request.Scope == AgentSkillScopeCharacter {
-		scope.CharacterID = request.CharacterID
-		if removeGlobal {
-			if err := s.repository.DeleteScopeBinding(ctx, extensionID, PermissionScope{Type: ScopeGlobal}); err != nil {
-				return err
-			}
-		}
-	}
-	target := PermissionScope{Type: ScopeGlobal}
-	if strings.TrimSpace(scope.CharacterID) != "" {
-		target = PermissionScope{Type: ScopeCharacter, ID: strings.TrimSpace(scope.CharacterID)}
-	}
-	return s.repository.SetScopeEnabled(ctx, extensionID, target, enabled)
 }
 
 func buildAgentSkillManifest(definition AgentSkillDefinition, version string) agentSkillManifest {
@@ -271,9 +242,6 @@ func (s *AgentSkillService) Restore(ctx context.Context) error {
 }
 
 func (s *AgentSkillService) List(ctx context.Context, scope ExecutionScope, filter AgentSkillFilter) (PagedAgentSkills, error) {
-	if err := s.repository.ValidateCharacterScope(ctx, scope); err != nil {
-		return PagedAgentSkills{}, err
-	}
 	rows, err := s.repository.ListAgentSkillRecords(ctx)
 	if err != nil {
 		return PagedAgentSkills{}, err
@@ -291,9 +259,6 @@ func (s *AgentSkillService) List(ctx context.Context, scope ExecutionScope, filt
 		d.Enabled = enabled
 		d.Scope = AgentSkillScope(effectiveScope.Type)
 		d.ScopeID = effectiveScope.ID
-		if filter.Scope != "" && d.Scope != filter.Scope {
-			continue
-		}
 		if filter.Status != "" && d.CompatibilityStatus != filter.Status {
 			continue
 		}
@@ -321,9 +286,6 @@ func (s *AgentSkillService) List(ctx context.Context, scope ExecutionScope, filt
 	return PagedAgentSkills{Items: items[start:end], Total: int64(total), Page: page, PageSize: pageSize}, nil
 }
 func (s *AgentSkillService) Get(ctx context.Context, scope ExecutionScope, id string) (AgentSkillDefinition, AgentSkillCompatibilityReport, error) {
-	if err := s.repository.ValidateCharacterScope(ctx, scope); err != nil {
-		return AgentSkillDefinition{}, AgentSkillCompatibilityReport{}, err
-	}
 	row, err := s.repository.GetAgentSkillRecord(ctx, id)
 	if err != nil {
 		return AgentSkillDefinition{}, AgentSkillCompatibilityReport{}, err
@@ -353,11 +315,7 @@ func (s *AgentSkillService) Enable(ctx context.Context, scope ExecutionScope, id
 	if definition.CompatibilityStatus == AgentSkillBlocked {
 		return NewExtensionError(ErrAgentSkillBlocked, "Blocked Agent Skill cannot be enabled", id, false, nil)
 	}
-	target := PermissionScope{Type: ScopeGlobal}
-	if strings.TrimSpace(scope.CharacterID) != "" {
-		target = PermissionScope{Type: ScopeCharacter, ID: strings.TrimSpace(scope.CharacterID)}
-	}
-	if err := s.repository.SetScopeEnabled(ctx, id, target, true); err != nil {
+	if err := s.repository.SetScopeEnabled(ctx, id, PermissionScope{Type: ScopeGlobal}, true); err != nil {
 		return err
 	}
 	s.invalidateAgentSkillCaches()
@@ -368,11 +326,7 @@ func (s *AgentSkillService) Disable(ctx context.Context, scope ExecutionScope, i
 	if _, _, err := s.Get(ctx, scope, id); err != nil {
 		return err
 	}
-	target := PermissionScope{Type: ScopeGlobal}
-	if strings.TrimSpace(scope.CharacterID) != "" {
-		target = PermissionScope{Type: ScopeCharacter, ID: strings.TrimSpace(scope.CharacterID)}
-	}
-	if err := s.repository.SetScopeEnabled(ctx, id, target, false); err != nil {
+	if err := s.repository.SetScopeEnabled(ctx, id, PermissionScope{Type: ScopeGlobal}, false); err != nil {
 		return err
 	}
 	s.clearExtensionFromRounds(id)
@@ -383,11 +337,7 @@ func (s *AgentSkillService) Remove(ctx context.Context, scope ExecutionScope, id
 	if _, _, err := s.Get(ctx, scope, id); err != nil {
 		return err
 	}
-	target := PermissionScope{Type: ScopeGlobal}
-	if strings.TrimSpace(scope.CharacterID) != "" {
-		target = PermissionScope{Type: ScopeCharacter, ID: strings.TrimSpace(scope.CharacterID)}
-	}
-	_ = s.repository.SetScopeEnabled(ctx, id, target, false)
+	_ = s.repository.SetScopeEnabled(ctx, id, PermissionScope{Type: ScopeGlobal}, false)
 	s.clearExtensionFromRounds(id)
 	if err := s.repository.RemoveAgentSkill(ctx, id); err != nil {
 		return err
@@ -401,13 +351,6 @@ func (s *AgentSkillService) Remove(ctx context.Context, scope ExecutionScope, id
 	s.invalidateAgentSkillCaches()
 	return nil
 }
-func (s *AgentSkillService) visible(scope ExecutionScope, d AgentSkillDefinition) bool {
-	if d.UserID != "" && d.UserID != scope.UserID {
-		return false
-	}
-	return d.Scope == AgentSkillScopeGlobal || (d.Scope == AgentSkillScopeCharacter && d.ScopeID == scope.CharacterID)
-}
-
 func (s *AgentSkillService) ResolveCatalog(ctx context.Context, scope ExecutionScope) ([]AgentSkillCatalogEntry, error) {
 	cacheKey := agentSkillCatalogCacheKey(scope)
 	s.mu.RLock()
@@ -447,9 +390,6 @@ func (s *AgentSkillService) ResolveCatalog(ctx context.Context, scope ExecutionS
 	return result, nil
 }
 func agentSkillPriority(d AgentSkillDefinition) int {
-	if d.Scope == AgentSkillScopeCharacter {
-		return 30
-	}
 	if d.Source != AgentSkillSourceBundled {
 		return 20
 	}

@@ -15,7 +15,6 @@ const (
 	AgentSkillSourceDirectory       AgentSkillSource              = "local-directory"
 	AgentSkillSourceZIP             AgentSkillSource              = "local-zip"
 	AgentSkillScopeGlobal           AgentSkillScope               = "global"
-	AgentSkillScopeCharacter        AgentSkillScope               = "character"
 	AgentSkillResourceSkill         AgentSkillResourceKind        = "skill"
 	AgentSkillResourceReference     AgentSkillResourceKind        = "reference"
 	AgentSkillResourceAsset         AgentSkillResourceKind        = "asset"
@@ -213,7 +212,6 @@ type AgentSkillImportPreview struct {
 type AgentSkillFilter struct {
 	Query    string
 	Status   AgentSkillCompatibilityStatus
-	Scope    AgentSkillScope
 	Page     int
 	PageSize int
 }
@@ -289,9 +287,7 @@ type AgentSkillResourceContent struct {
 	Executable bool                   `json:"executable"`
 }
 type InstallAgentSkillRequest struct {
-	UserID      string
-	CharacterID string
-	PreviewID   string
-	Scope       AgentSkillScope
-	Enable      bool
+	UserID    string
+	PreviewID string
+	Enable    bool
 }

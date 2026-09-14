@@ -204,49 +204,27 @@ func (r *Repository) SetServerStatus(ctx context.Context, id, status, code, mess
 	return r.db.WithContext(ctx).Model(&Server{}).Where("id = ?", id).Updates(updates).Error
 }
 
-func (r *Repository) SetScopeEnabled(ctx context.Context, serverID, scopeType, scopeID string, enabled bool) error {
-	scopeType = strings.ToLower(strings.TrimSpace(scopeType))
-	if scopeType != "global" && scopeType != "character" {
-		return fmt.Errorf("MCP_SERVER_CONFIGURATION_INVALID: scope")
-	}
-	if scopeType == "global" {
-		scopeID = ""
-	} else if strings.TrimSpace(scopeID) == "" {
-		return fmt.Errorf("MCP_SERVER_CONFIGURATION_INVALID: scope id")
-	}
+func (r *Repository) SetScopeEnabled(ctx context.Context, serverID string, enabled bool) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	record := ServerScopeBinding{ID: uuid.NewString(), ServerID: serverID, ScopeType: scopeType, ScopeID: scopeID, Enabled: boolInt(enabled), CreatedAt: now, UpdatedAt: now}
+	record := ServerScopeBinding{ID: uuid.NewString(), ServerID: serverID, ScopeType: "global", ScopeID: "", Enabled: boolInt(enabled), CreatedAt: now, UpdatedAt: now}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "server_id"}, {Name: "scope_type"}, {Name: "scope_id"}}, DoUpdates: clause.Assignments(map[string]any{"enabled": boolInt(enabled), "updated_at": now})}).Create(&record).Error; err != nil {
 			return err
 		}
-		if scopeType == "global" {
-			return tx.Model(&Server{}).Where("id = ?", serverID).Updates(map[string]any{"enabled": boolInt(enabled), "updated_at": now}).Error
-		}
-		return nil
+		return tx.Model(&Server{}).Where("id = ?", serverID).Updates(map[string]any{"enabled": boolInt(enabled), "updated_at": now}).Error
 	})
 }
 
-func (r *Repository) ResolveScopeEnabled(ctx context.Context, serverID, characterID string) (bool, string, error) {
-	if strings.TrimSpace(characterID) != "" {
-		var binding ServerScopeBinding
-		err := r.db.WithContext(ctx).Where("server_id = ? AND scope_type = 'character' AND scope_id = ?", serverID, characterID).First(&binding).Error
-		if err == nil {
-			return binding.Enabled == 1, "character", nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, "", err
-		}
-	}
+func (r *Repository) ResolveScopeEnabled(ctx context.Context, serverID string) (bool, error) {
 	var binding ServerScopeBinding
 	err := r.db.WithContext(ctx).Where("server_id = ? AND scope_type = 'global' AND scope_id = ''", serverID).First(&binding).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return false, "", nil
+		return false, nil
 	}
 	if err != nil {
-		return false, "", err
+		return false, err
 	}
-	return binding.Enabled == 1, "global", nil
+	return binding.Enabled == 1, nil
 }
 
 func (r *Repository) ListServerCapabilities(ctx context.Context, serverID string) ([]ServerCapability, error) {
