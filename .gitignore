@@ -54,4 +54,31 @@ runtime/out/dependencies/surrealdb/2.3.8/linux-arm64/surreal
 mobile_app/android/app/src/main/assets/runtime-package/amitia-runtime-1.0.0.zip
 runtime/out/runtime-package/android-arm64/amitia-runtime-current-android-arm64.zip
 
+# Generated extension candidates, packages and source archives
+backend/testdata/extensions/**/dist-candidate-*/
+/Plugin/
+/testplugins/mock-amitiax-game-plugin/dist-package/
+/testplugins/game-plugin-demo/go/mock-game-plugin.exe
+/testplugins/game-plugin-demo/go/cmd/mock-game-plugin/mock-game-plugin.exe
+/U-Ai-*.tar.gz
+
+# Local diagnostics and runtime data
+/.diag-*
+/.vite/
+/_do_push.ps1
+/_push_test.ps1
+/artifacts/
+/backend/cell7-diagnose.png
+/backend/qdrant/
+/backend/runtime/
+/backend/scripts/__pycache__/
+/backend/server-linux-arm64
+/backend/surrealdb/
+/.baseline-check/desktop/resources/qdrant/
+/.baseline-check/desktop/resources/surrealdb/
+
+# Desktop packaging inputs and local publishing credentials
+/desktop/resources/core/
+/desktop/scripts/.publish-config.json
+
 Plugin/Emote/keys/
