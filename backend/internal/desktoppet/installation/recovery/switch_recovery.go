@@ -24,10 +24,10 @@ type SwitchRecovery struct {
 }
 
 type SwitchRepo interface {
-	ResolveDesiredRevision(ctx context.Context, opID, userID, deviceID string) (int64, error)
-	PublishSwitchDesired(ctx context.Context, opID, userID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error
-	SendSwitchCommand(ctx context.Context, opID, userID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error
-	QuerySwitchApplied(ctx context.Context, userID, deviceID, runtimeID string, newDesiredRevision int64) (bool, error)
+	ResolveDesiredRevision(ctx context.Context, opID, spaceID, deviceID string) (int64, error)
+	PublishSwitchDesired(ctx context.Context, opID, spaceID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error
+	SendSwitchCommand(ctx context.Context, opID, spaceID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error
+	QuerySwitchApplied(ctx context.Context, spaceID, deviceID, runtimeID string, newDesiredRevision int64) (bool, error)
 }
 
 func NewSwitchRecovery(worker *RecoveryWorker, repo RecoveryRepo, switchRepo SwitchRepo) *SwitchRecovery {
@@ -86,7 +86,7 @@ func (r *SwitchRecovery) ensureAuthoritativeDesiredRevision(ctx context.Context,
 		desiredRevision = j.NewDesiredRevision
 	}
 	if desiredRevision <= 0 {
-		resolved, err := r.switchRepo.ResolveDesiredRevision(ctx, op.ID, op.UserID, op.DeviceID)
+		resolved, err := r.switchRepo.ResolveDesiredRevision(ctx, op.ID, op.SpaceID, op.DeviceID)
 		if err != nil {
 			return fmt.Errorf("switchRecovery: resolve desired revision failed op=%s: %w", op.ID, err)
 		}
@@ -125,7 +125,7 @@ func (r *SwitchRecovery) ensureAuthoritativeDesiredRevision(ctx context.Context,
 
 func (r *SwitchRecovery) recoverFromBindingCommitted(ctx context.Context, op *operation.InstallationOperation, j *RecoverySwitchJournal) error {
 	desiredRevision := j.NewDesiredRevision
-	if err := r.switchRepo.PublishSwitchDesired(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, j.NewInstallationID, desiredRevision); err != nil {
+	if err := r.switchRepo.PublishSwitchDesired(ctx, op.ID, op.SpaceID, op.DeviceID, op.RuntimeID, j.NewInstallationID, desiredRevision); err != nil {
 		return fmt.Errorf("switchRecovery: publish desired failed op=%s: %w", op.ID, err)
 	}
 	if _, err := r.repo.CASUpdateSwitchJournalStage(op.ID, SwitchStageBindingCommitted, SwitchStageDesiredCommitted, r.worker.executionID); err != nil {
@@ -137,7 +137,7 @@ func (r *SwitchRecovery) recoverFromBindingCommitted(ctx context.Context, op *op
 }
 
 func (r *SwitchRecovery) recoverFromDesiredCommitted(ctx context.Context, op *operation.InstallationOperation, j *RecoverySwitchJournal) error {
-	if err := r.switchRepo.SendSwitchCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, j.NewInstallationID, j.NewDesiredRevision); err != nil {
+	if err := r.switchRepo.SendSwitchCommand(ctx, op.ID, op.SpaceID, op.DeviceID, op.RuntimeID, j.NewInstallationID, j.NewDesiredRevision); err != nil {
 		return fmt.Errorf("switchRecovery: send switch command failed op=%s: %w", op.ID, err)
 	}
 	if _, err := r.repo.CASUpdateSwitchJournalStage(op.ID, SwitchStageDesiredCommitted, SwitchStageRuntimeApplied, r.worker.executionID); err != nil {
@@ -149,15 +149,15 @@ func (r *SwitchRecovery) recoverFromDesiredCommitted(ctx context.Context, op *op
 }
 
 func (r *SwitchRecovery) recoverFromRuntimeApplied(ctx context.Context, op *operation.InstallationOperation, j *RecoverySwitchJournal) error {
-	applied, err := r.switchRepo.QuerySwitchApplied(ctx, op.UserID, op.DeviceID, op.RuntimeID, j.NewDesiredRevision)
+	applied, err := r.switchRepo.QuerySwitchApplied(ctx, op.SpaceID, op.DeviceID, op.RuntimeID, j.NewDesiredRevision)
 	if err != nil {
-		if reErr := r.switchRepo.SendSwitchCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, j.NewInstallationID, j.NewDesiredRevision); reErr != nil {
+		if reErr := r.switchRepo.SendSwitchCommand(ctx, op.ID, op.SpaceID, op.DeviceID, op.RuntimeID, j.NewInstallationID, j.NewDesiredRevision); reErr != nil {
 			return fmt.Errorf("switchRecovery: re-send switch command failed op=%s: %w", op.ID, reErr)
 		}
 		return nil
 	}
 	if !applied {
-		if reErr := r.switchRepo.SendSwitchCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, j.NewInstallationID, j.NewDesiredRevision); reErr != nil {
+		if reErr := r.switchRepo.SendSwitchCommand(ctx, op.ID, op.SpaceID, op.DeviceID, op.RuntimeID, j.NewInstallationID, j.NewDesiredRevision); reErr != nil {
 			return fmt.Errorf("switchRecovery: re-send switch command failed op=%s: %w", op.ID, reErr)
 		}
 		return nil

@@ -9,7 +9,7 @@
     "messageType",
     "messageName",
     "messageId",
-    "userId",
+    "spaceId",
     "deviceId",
     "runtimeId",
     "runtimeSessionId",
@@ -63,7 +63,7 @@
       "type": "string",
       "description": "因果 ID（标识触发源头）"
     },
-    "userId": {
+    "spaceId": {
       "type": "string",
       "minLength": 1,
       "description": "用户 ID（来自连接上下文）"

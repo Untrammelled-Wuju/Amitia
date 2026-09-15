@@ -63,7 +63,7 @@ func (a *V1RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 		idempotencyKey = "behavior_" + cmd.DecisionID
 	}
 
-	if cmd.UserID == "" || cmd.DeviceID == "" {
+	if cmd.SpaceID == "" || cmd.DeviceID == "" {
 		return &behavior.CommandReceipt{
 			CommandID:  "",
 			Accepted:   false,
@@ -82,7 +82,7 @@ func (a *V1RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 	var targetConn *runtimev1.Connection
 	targetSessionID := ""
 	targetGeneration := int64(0)
-	for _, conn := range a.facade.ListConnections(cmd.UserID) {
+	for _, conn := range a.facade.ListConnections(cmd.SpaceID) {
 		if conn == nil || conn.GetState() != runtimev1.ConnStateConnected {
 			continue
 		}
@@ -132,7 +132,7 @@ func (a *V1RuntimeActionAdapter) SubmitBehaviorCommand(ctx context.Context, cmd 
 	}
 
 	v2Cmd, err := a.facade.Commands().CreateEphemeralCommandForSession(
-		cmd.UserID, cmd.DeviceID, string(targetConn.RuntimeID), targetSessionID, cmd.InstallationID,
+		cmd.SpaceID, cmd.DeviceID, string(targetConn.RuntimeID), targetSessionID, cmd.InstallationID,
 		string(runtimev1.CommandTypePlayAction), idempotencyKey, payloadBytes,
 	)
 	duplicate := errors.Is(err, runtimev1.ErrCommandDuplication)

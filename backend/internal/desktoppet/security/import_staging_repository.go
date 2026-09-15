@@ -12,15 +12,15 @@ import (
 
 type ImportStagingRepository interface {
 	Create(ctx context.Context, s *ImportStaging) error
-	GetForUser(ctx context.Context, stagingID string, userID string) (*ImportStaging, error)
-	ListForUser(ctx context.Context, userID string) ([]*ImportStaging, error)
-	BeginConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error)
-	FailConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64, failureReason string) (bool, error)
-	CompleteConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error)
-	CompleteConsumptionTx(tx *gorm.DB, stagingID string, userID string, expectedRevision int64, consumedAt string) error
-	UpdateQuarantinePath(ctx context.Context, stagingID string, userID string, quarantinePath string) (bool, error)
-	UpdateInventory(ctx context.Context, stagingID string, userID string, inventoryJSON string, inventoryHash string) (bool, error)
-	SetRejected(ctx context.Context, stagingID string, userID string, reason string) (bool, error)
+	GetForSpace(ctx context.Context, stagingID string, spaceID string) (*ImportStaging, error)
+	ListForSpace(ctx context.Context, spaceID string) ([]*ImportStaging, error)
+	BeginConsumptionCAS(ctx context.Context, stagingID string, spaceID string, expectedRevision int64) (bool, error)
+	FailConsumptionCAS(ctx context.Context, stagingID string, spaceID string, expectedRevision int64, failureReason string) (bool, error)
+	CompleteConsumptionCAS(ctx context.Context, stagingID string, spaceID string, expectedRevision int64) (bool, error)
+	CompleteConsumptionTx(tx *gorm.DB, stagingID string, spaceID string, expectedRevision int64, consumedAt string) error
+	UpdateQuarantinePath(ctx context.Context, stagingID string, spaceID string, quarantinePath string) (bool, error)
+	UpdateInventory(ctx context.Context, stagingID string, spaceID string, inventoryJSON string, inventoryHash string) (bool, error)
+	SetRejected(ctx context.Context, stagingID string, spaceID string, reason string) (bool, error)
 	DeleteExpired(ctx context.Context, before string) (int64, error)
 }
 
@@ -49,13 +49,13 @@ func (r *importStagingRepository) Create(ctx context.Context, s *ImportStaging) 
 	return r.db.WithContext(ctx).Create(s).Error
 }
 
-func (r *importStagingRepository) GetForUser(ctx context.Context, stagingID string, userID string) (*ImportStaging, error) {
-	if stagingID == "" || userID == "" {
+func (r *importStagingRepository) GetForSpace(ctx context.Context, stagingID string, spaceID string) (*ImportStaging, error) {
+	if stagingID == "" || spaceID == "" {
 		return nil, ErrNotFound
 	}
 	var s ImportStaging
 	err := r.db.WithContext(ctx).
-		Where("id = ? AND owner_user_id = ?", stagingID, userID).
+		Where("id = ? AND owner_space_id = ?", stagingID, spaceID).
 		Take(&s).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -66,23 +66,23 @@ func (r *importStagingRepository) GetForUser(ctx context.Context, stagingID stri
 	return &s, nil
 }
 
-func (r *importStagingRepository) ListForUser(ctx context.Context, userID string) ([]*ImportStaging, error) {
+func (r *importStagingRepository) ListForSpace(ctx context.Context, spaceID string) ([]*ImportStaging, error) {
 	var stagings []*ImportStaging
 	err := r.db.WithContext(ctx).
-		Where("owner_user_id = ?", userID).
+		Where("owner_space_id = ?", spaceID).
 		Order("created_at DESC").
 		Find(&stagings).Error
 	return stagings, err
 }
 
-func (r *importStagingRepository) BeginConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error) {
-	if stagingID == "" || userID == "" {
+func (r *importStagingRepository) BeginConsumptionCAS(ctx context.Context, stagingID string, spaceID string, expectedRevision int64) (bool, error) {
+	if stagingID == "" || spaceID == "" {
 		return false, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result := r.db.WithContext(ctx).Model(&ImportStaging{}).
-		Where("id = ? AND owner_user_id = ? AND status = ? AND state_revision = ? AND expires_at > ?",
-			stagingID, userID, StagingStatusReady, expectedRevision, now).
+		Where("id = ? AND owner_space_id = ? AND status = ? AND state_revision = ? AND expires_at > ?",
+			stagingID, spaceID, StagingStatusReady, expectedRevision, now).
 		Updates(map[string]interface{}{
 			"status":                 StagingStatusConsuming,
 			"consumption_started_at": now,
@@ -95,14 +95,14 @@ func (r *importStagingRepository) BeginConsumptionCAS(ctx context.Context, stagi
 	return result.RowsAffected > 0, nil
 }
 
-func (r *importStagingRepository) CompleteConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64) (bool, error) {
-	if stagingID == "" || userID == "" {
+func (r *importStagingRepository) CompleteConsumptionCAS(ctx context.Context, stagingID string, spaceID string, expectedRevision int64) (bool, error) {
+	if stagingID == "" || spaceID == "" {
 		return false, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result := r.db.WithContext(ctx).Model(&ImportStaging{}).
-		Where("id = ? AND owner_user_id = ? AND status = ? AND state_revision = ?",
-			stagingID, userID, StagingStatusConsuming, expectedRevision).
+		Where("id = ? AND owner_space_id = ? AND status = ? AND state_revision = ?",
+			stagingID, spaceID, StagingStatusConsuming, expectedRevision).
 		Updates(map[string]interface{}{
 			"status":         StagingStatusConsumed,
 			"consumed_at":    now,
@@ -115,13 +115,13 @@ func (r *importStagingRepository) CompleteConsumptionCAS(ctx context.Context, st
 	return result.RowsAffected > 0, nil
 }
 
-func (r *importStagingRepository) CompleteConsumptionTx(tx *gorm.DB, stagingID string, userID string, expectedRevision int64, consumedAt string) error {
+func (r *importStagingRepository) CompleteConsumptionTx(tx *gorm.DB, stagingID string, spaceID string, expectedRevision int64, consumedAt string) error {
 	if tx == nil {
 		return errors.New("complete consumption tx is nil")
 	}
 	result := tx.Model(&ImportStaging{}).
-		Where("id = ? AND owner_user_id = ? AND status = ? AND state_revision = ?",
-			stagingID, userID, StagingStatusConsuming, expectedRevision).
+		Where("id = ? AND owner_space_id = ? AND status = ? AND state_revision = ?",
+			stagingID, spaceID, StagingStatusConsuming, expectedRevision).
 		Updates(map[string]interface{}{
 			"status":         StagingStatusConsumed,
 			"consumed_at":    consumedAt,
@@ -137,14 +137,14 @@ func (r *importStagingRepository) CompleteConsumptionTx(tx *gorm.DB, stagingID s
 	return nil
 }
 
-func (r *importStagingRepository) FailConsumptionCAS(ctx context.Context, stagingID string, userID string, expectedRevision int64, failureReason string) (bool, error) {
-	if stagingID == "" || userID == "" {
+func (r *importStagingRepository) FailConsumptionCAS(ctx context.Context, stagingID string, spaceID string, expectedRevision int64, failureReason string) (bool, error) {
+	if stagingID == "" || spaceID == "" {
 		return false, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result := r.db.WithContext(ctx).Model(&ImportStaging{}).
-		Where("id = ? AND owner_user_id = ? AND status = ? AND state_revision = ?",
-			stagingID, userID, StagingStatusConsuming, expectedRevision).
+		Where("id = ? AND owner_space_id = ? AND status = ? AND state_revision = ?",
+			stagingID, spaceID, StagingStatusConsuming, expectedRevision).
 		Updates(map[string]interface{}{
 			"status":         StagingStatusFailed,
 			"failed_at":      now,
@@ -158,14 +158,14 @@ func (r *importStagingRepository) FailConsumptionCAS(ctx context.Context, stagin
 	return result.RowsAffected > 0, nil
 }
 
-func (r *importStagingRepository) UpdateQuarantinePath(ctx context.Context, stagingID string, userID string, quarantinePath string) (bool, error) {
-	if stagingID == "" || userID == "" {
+func (r *importStagingRepository) UpdateQuarantinePath(ctx context.Context, stagingID string, spaceID string, quarantinePath string) (bool, error) {
+	if stagingID == "" || spaceID == "" {
 		return false, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result := r.db.WithContext(ctx).Model(&ImportStaging{}).
-		Where("id = ? AND owner_user_id = ? AND status IN (?, ?)",
-			stagingID, userID, StagingStatusUploading, StagingStatusQuarantined).
+		Where("id = ? AND owner_space_id = ? AND status IN (?, ?)",
+			stagingID, spaceID, StagingStatusUploading, StagingStatusQuarantined).
 		Updates(map[string]interface{}{
 			"quarantine_path": quarantinePath,
 			"status":          StagingStatusQuarantined,
@@ -177,14 +177,14 @@ func (r *importStagingRepository) UpdateQuarantinePath(ctx context.Context, stag
 	return result.RowsAffected > 0, nil
 }
 
-func (r *importStagingRepository) UpdateInventory(ctx context.Context, stagingID string, userID string, inventoryJSON string, inventoryHash string) (bool, error) {
-	if stagingID == "" || userID == "" {
+func (r *importStagingRepository) UpdateInventory(ctx context.Context, stagingID string, spaceID string, inventoryJSON string, inventoryHash string) (bool, error) {
+	if stagingID == "" || spaceID == "" {
 		return false, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result := r.db.WithContext(ctx).Model(&ImportStaging{}).
-		Where("id = ? AND owner_user_id = ? AND status IN (?, ?, ?)",
-			stagingID, userID, StagingStatusQuarantined, StagingStatusInspecting, StagingStatusReady).
+		Where("id = ? AND owner_space_id = ? AND status IN (?, ?, ?)",
+			stagingID, spaceID, StagingStatusQuarantined, StagingStatusInspecting, StagingStatusReady).
 		Updates(map[string]interface{}{
 			"inventory_json": inventoryJSON,
 			"inventory_hash": inventoryHash,
@@ -197,14 +197,14 @@ func (r *importStagingRepository) UpdateInventory(ctx context.Context, stagingID
 	return result.RowsAffected > 0, nil
 }
 
-func (r *importStagingRepository) SetRejected(ctx context.Context, stagingID string, userID string, reason string) (bool, error) {
-	if stagingID == "" || userID == "" {
+func (r *importStagingRepository) SetRejected(ctx context.Context, stagingID string, spaceID string, reason string) (bool, error) {
+	if stagingID == "" || spaceID == "" {
 		return false, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result := r.db.WithContext(ctx).Model(&ImportStaging{}).
-		Where("id = ? AND owner_user_id = ? AND status IN (?, ?, ?)",
-			stagingID, userID, StagingStatusUploading, StagingStatusQuarantined, StagingStatusInspecting).
+		Where("id = ? AND owner_space_id = ? AND status IN (?, ?, ?)",
+			stagingID, spaceID, StagingStatusUploading, StagingStatusQuarantined, StagingStatusInspecting).
 		Updates(map[string]interface{}{
 			"status":          StagingStatusRejected,
 			"rejected_reason": reason,

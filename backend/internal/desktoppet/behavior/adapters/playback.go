@@ -23,10 +23,10 @@ func (a *PlaybackAdapter) OnPlaybackFeedback(ctx context.Context, feedback behav
 	if a == nil || a.publisher == nil {
 		return
 	}
-	userID := ""
+	spaceID := ""
 	characterID := ""
 	if a.petInfo != nil {
-		userID, characterID = a.petInfo.ResolvePetInfo(ctx, feedback.PetInstanceID)
+		spaceID, characterID = a.petInfo.ResolvePetInfo(ctx, feedback.PetInstanceID)
 	}
 	now := a.clock.Now()
 	occurredAt := feedback.OccurredAt
@@ -36,7 +36,7 @@ func (a *PlaybackAdapter) OnPlaybackFeedback(ctx context.Context, feedback behav
 
 	eventType := "runtime.playback.action_" + string(feedback.Phase)
 	builder := events.NewEnvelope(eventType, behavior.OriginPlayback).
-		UserID(userID).
+		SpaceID(spaceID).
 		CharacterID(characterID).
 		PetInstanceID(feedback.PetInstanceID).
 		Sequence(feedback.Sequence).

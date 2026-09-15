@@ -8,7 +8,7 @@ import (
 )
 
 type ManifestSourceResolver interface {
-	Resolve(ctx context.Context, manifestID string, userID string) (*ProcessingSourceDescriptor, error)
+	Resolve(ctx context.Context, manifestID string, spaceID string) (*ProcessingSourceDescriptor, error)
 }
 
 type ManifestSourceResolverImpl struct {
@@ -23,7 +23,7 @@ func NewManifestSourceResolver(store ManifestStore, validator UnifiedSourceValid
 	}
 }
 
-func (r *ManifestSourceResolverImpl) Resolve(ctx context.Context, manifestID string, userID string) (*ProcessingSourceDescriptor, error) {
+func (r *ManifestSourceResolverImpl) Resolve(ctx context.Context, manifestID string, spaceID string) (*ProcessingSourceDescriptor, error) {
 	manifest, err := r.store.GetByID(ctx, manifestID)
 	if err != nil {
 		return nil, contracts.NewProcessingError(
@@ -46,7 +46,7 @@ func (r *ManifestSourceResolverImpl) Resolve(ctx context.Context, manifestID str
 		)
 	}
 
-	if err := r.validator.Validate(ctx, manifest, userID); err != nil {
+	if err := r.validator.Validate(ctx, manifest, spaceID); err != nil {
 		return nil, err
 	}
 

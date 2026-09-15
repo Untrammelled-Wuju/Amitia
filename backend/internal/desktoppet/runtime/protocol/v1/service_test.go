@@ -11,7 +11,7 @@ func TestEnvelopeValidate(t *testing.T) {
 		MessageType:          MessageTypeHello,
 		MessageName:          "hello",
 		MessageID:            "test-msg-1",
-		UserID:               "user-1",
+		SpaceID:              "user-1",
 		DeviceID:             "device-1",
 		RuntimeID:            "runtime-1",
 		RuntimeSessionID:     "session-1",

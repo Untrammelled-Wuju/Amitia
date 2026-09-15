@@ -28,8 +28,8 @@ var uninstallerProtectedSubDirs = []string{
 }
 
 type Uninstaller interface {
-	Uninstall(userId, installationId string) error
-	PurgeGenerationData(userId, generationTaskId string, confirmed bool) error
+	Uninstall(spaceId, installationId string) error
+	PurgeGenerationData(spaceId, generationTaskId string, confirmed bool) error
 }
 
 type uninstaller struct {
@@ -44,8 +44,8 @@ func NewUninstaller(repo Repository, dataDir string) Uninstaller {
 	}
 }
 
-func (u *uninstaller) Uninstall(userId, installationId string) error {
-	if userId == "" {
+func (u *uninstaller) Uninstall(spaceId, installationId string) error {
+	if spaceId == "" {
 		return NewInstallationError(ErrCodeInstallationInvalid, "用户 ID 为空", ErrInstallationInvalid)
 	}
 	if installationId == "" {
@@ -64,7 +64,7 @@ func (u *uninstaller) Uninstall(userId, installationId string) error {
 		return NewInstallationError(ErrCodeInstallationFailed, "查询安装记录失败", err)
 	}
 
-	if inst.UserID != userId {
+	if inst.SpaceID != spaceId {
 		return NewInstallationError(ErrCodeInstallationInvalid, "安装记录不属于当前用户", ErrInstallationInvalid)
 	}
 
@@ -109,14 +109,14 @@ func (u *uninstaller) Uninstall(userId, installationId string) error {
 	return nil
 }
 
-func (u *uninstaller) PurgeGenerationData(userId, generationTaskId string, confirmed bool) error {
+func (u *uninstaller) PurgeGenerationData(spaceId, generationTaskId string, confirmed bool) error {
 	if !confirmed {
 		return NewInstallationError(ErrCodePurgeNotConfirmed, "必须确认才能删除生成数据", ErrPurgeNotConfirmed)
 	}
 	if generationTaskId == "" {
 		return NewInstallationError(ErrCodeInstallationFailed, "生成任务 ID 为空", nil)
 	}
-	if userId == "" {
+	if spaceId == "" {
 		return NewInstallationError(ErrCodeInstallationInvalid, "用户 ID 为空", ErrInstallationInvalid)
 	}
 	if err := validateUninstallerPathSegment(generationTaskId); err != nil {

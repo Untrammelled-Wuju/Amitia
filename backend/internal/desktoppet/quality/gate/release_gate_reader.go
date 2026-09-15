@@ -21,12 +21,12 @@ type releaseQualityGateReader struct {
 
 func (r *releaseQualityGateReader) GetValidGateForRelease(
 	ctx context.Context,
-	userID string,
+	spaceID string,
 	processingTaskID string,
 	activeRevisionSetHash string,
 ) (*release.QualityGateResult, error) {
 	result, err := r.svc.GetValidGateForRelease(ctx, quality.GetValidGateForReleaseRequest{
-		UserID:                userID,
+		SpaceID:               spaceID,
 		ProcessingTaskID:      processingTaskID,
 		ActiveRevisionSetHash: activeRevisionSetHash,
 	})

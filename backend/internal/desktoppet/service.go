@@ -41,19 +41,19 @@ func computeSHA256HexLocal(data string) string {
 
 type Service interface {
 	GetActionDefinitions() (*ActionDefinitionsResponse, error)
-	CreateTask(ctx context.Context, userID string, modelConfigID int, name string, prompt string, negativePrompt string, outputWidth int, outputHeight int, selectedActionKeys []string, fileHeader *multipart.FileHeader) (*TaskSummaryResponse, error)
-	CheckTaskOwnership(taskID, userID string) error
+	CreateTask(ctx context.Context, spaceID string, modelConfigID int, name string, prompt string, negativePrompt string, outputWidth int, outputHeight int, selectedActionKeys []string, fileHeader *multipart.FileHeader) (*TaskSummaryResponse, error)
+	CheckTaskOwnership(taskID, spaceID string) error
 	GetTask(taskID string) (*TaskDetailResponse, error)
-	ListTasks(userID, status string, page, pageSize int) (*TaskListResponse, error)
+	ListTasks(spaceID, status string, page, pageSize int) (*TaskListResponse, error)
 	DeleteTask(taskID string) error
 	GetTaskSourceImage(taskID string) (fullPath string, mimeType string, err error)
-	GetTaskSourceImageRef(taskID string, userID string) (security.ArtifactReference, error)
+	GetTaskSourceImageRef(taskID string, spaceID string) (security.ArtifactReference, error)
 	StartTask(taskID string) (*TaskSummaryResponse, error)
 	CancelTask(taskID string) error
 	RetryAction(taskID, actionKey string) (*TaskActionResponse, error)
 	GetFrameImage(taskID, actionKey string, frameIndex int) (fullPath string, mimeType string, err error)
-	GetFrameImageRef(taskID, actionKey string, frameIndex int, userID string) (security.ArtifactReference, error)
-	GetActionImageRef(taskID, actionKey string, userID string) (security.ArtifactReference, error)
+	GetFrameImageRef(taskID, actionKey string, frameIndex int, spaceID string) (security.ArtifactReference, error)
+	GetActionImageRef(taskID, actionKey string, spaceID string) (security.ArtifactReference, error)
 	GetTaskTransitions(taskID string, limit int) ([]taskstate.AuditRecord, error)
 }
 
@@ -154,7 +154,7 @@ func (s *service) GetActionDefinitions() (*ActionDefinitionsResponse, error) {
 	}, nil
 }
 
-func (s *service) CreateTask(ctx context.Context, userID string, modelConfigID int, name string, prompt string, negativePrompt string, outputWidth int, outputHeight int, selectedActionKeys []string, fileHeader *multipart.FileHeader) (*TaskSummaryResponse, error) {
+func (s *service) CreateTask(ctx context.Context, spaceID string, modelConfigID int, name string, prompt string, negativePrompt string, outputWidth int, outputHeight int, selectedActionKeys []string, fileHeader *multipart.FileHeader) (*TaskSummaryResponse, error) {
 	deviceAgent := runtimeprofile.CurrentProcessProfile().IsDeviceAgent()
 
 	if name == "" {
@@ -330,7 +330,7 @@ func (s *service) CreateTask(ctx context.Context, userID string, modelConfigID i
 
 	task := &GenerationTask{
 		ID:                       taskID,
-		UserID:                   userID,
+		SpaceID:                  spaceID,
 		ModelConfigID:            modelConfigID,
 		Name:                     name,
 		SourceImagePath:          imageInfo.Path,
@@ -372,7 +372,7 @@ func (s *service) CreateTask(ctx context.Context, userID string, modelConfigID i
 
 	uploadAbsPath := filepath.Join(config.AppCfg.Storage.DataDir, imageInfo.Path)
 	refAsset, err := s.refAssetService.CreateForGenerationTask(ctx, tx, referenceasset.CreateReferenceAssetRequest{
-		UserID:       userID,
+		SpaceID:      spaceID,
 		TaskID:       taskID,
 		UploadPath:   uploadAbsPath,
 		UploadName:   imageInfo.OriginalName,
@@ -420,7 +420,7 @@ func (s *service) CreateTask(ctx context.Context, userID string, modelConfigID i
 	}, nil
 }
 
-func (s *service) CheckTaskOwnership(taskID, userID string) error {
+func (s *service) CheckTaskOwnership(taskID, spaceID string) error {
 	task, err := s.repo.GetTaskByID(taskID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -428,7 +428,7 @@ func (s *service) CheckTaskOwnership(taskID, userID string) error {
 		}
 		return err
 	}
-	if task.UserID != userID {
+	if task.SpaceID != spaceID {
 		return NewBusinessError(response.Forbidden, ErrCodeTaskNotOwned, "任务不属于当前用户")
 	}
 	return nil
@@ -554,14 +554,14 @@ func computeTaskDurationSeconds(startedAt, completedAt string) int64 {
 	return int64(end.Sub(start).Seconds())
 }
 
-func (s *service) ListTasks(userID, status string, page, pageSize int) (*TaskListResponse, error) {
+func (s *service) ListTasks(spaceID, status string, page, pageSize int) (*TaskListResponse, error) {
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 {
 		pageSize = 20
 	}
-	tasks, total, err := s.repo.ListTasks(userID, status, page, pageSize)
+	tasks, total, err := s.repo.ListTasks(spaceID, status, page, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -645,7 +645,7 @@ func (s *service) GetTaskSourceImage(taskID string) (fullPath string, mimeType s
 	return fullPath, task.SourceImageMimeType, nil
 }
 
-func (s *service) GetTaskSourceImageRef(taskID string, userID string) (security.ArtifactReference, error) {
+func (s *service) GetTaskSourceImageRef(taskID string, spaceID string) (security.ArtifactReference, error) {
 	task, err := s.repo.GetTaskByID(taskID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -662,13 +662,13 @@ func (s *service) GetTaskSourceImageRef(taskID string, userID string) (security.
 	}
 	storageKey := strings.TrimPrefix(task.SourceImagePath, "desktop-pets/")
 	return security.ArtifactReference{
-		ArtifactID:  taskID,
-		OwnerUserID: userID,
-		RootKind:    security.RootDesktopPets,
-		StorageKey:  storageKey,
-		ContentHash: task.SourceImageHash,
-		ByteSize:    int64(task.SourceImageSize),
-		MIME:        task.SourceImageMimeType,
+		ArtifactID:   taskID,
+		OwnerSpaceID: spaceID,
+		RootKind:     security.RootDesktopPets,
+		StorageKey:   storageKey,
+		ContentHash:  task.SourceImageHash,
+		ByteSize:     int64(task.SourceImageSize),
+		MIME:         task.SourceImageMimeType,
 	}, nil
 }
 
@@ -734,7 +734,7 @@ func (s *service) GetFrameImage(taskID, actionKey string, frameIndex int) (fullP
 	return fullPath, mimeType, nil
 }
 
-func (s *service) GetFrameImageRef(taskID, actionKey string, frameIndex int, userID string) (security.ArtifactReference, error) {
+func (s *service) GetFrameImageRef(taskID, actionKey string, frameIndex int, spaceID string) (security.ArtifactReference, error) {
 	if frameIndex < 0 {
 		return security.ArtifactReference{}, NewBusinessError(response.InvalidParams, ErrCodeFrameNotFound, "帧索引无效")
 	}
@@ -782,13 +782,13 @@ func (s *service) GetFrameImageRef(taskID, actionKey string, frameIndex int, use
 	}
 	storageKey := strings.TrimPrefix(target.ResultImagePath, "desktop-pets/")
 	return security.ArtifactReference{
-		ArtifactID:  taskID + ":" + actionKey + ":" + strconv.Itoa(frameIndex),
-		OwnerUserID: userID,
-		RootKind:    security.RootDesktopPets,
-		StorageKey:  storageKey,
-		ContentHash: target.ResultHash,
-		ByteSize:    int64(target.ResultSize),
-		MIME:        target.ResultMimeType,
+		ArtifactID:   taskID + ":" + actionKey + ":" + strconv.Itoa(frameIndex),
+		OwnerSpaceID: spaceID,
+		RootKind:     security.RootDesktopPets,
+		StorageKey:   storageKey,
+		ContentHash:  target.ResultHash,
+		ByteSize:     int64(target.ResultSize),
+		MIME:         target.ResultMimeType,
 	}, nil
 }
 
@@ -840,7 +840,7 @@ func (s *service) StartTask(taskID string) (*TaskSummaryResponse, error) {
 	}
 
 	if task.ReferenceAssetID != "" {
-		_, err := s.refAssetService.ValidateForTask(context.Background(), taskID, task.UserID)
+		_, err := s.refAssetService.ValidateForTask(context.Background(), taskID, task.SpaceID)
 		if err != nil {
 			return nil, NewBusinessError(response.BusinessError, ErrCodeReferenceImageInvalid, "参考资源验证失败")
 		}
@@ -871,7 +871,7 @@ func (s *service) StartTask(taskID string) (*TaskSummaryResponse, error) {
 		Stage:      contracts.StageQueued,
 		Reason:     taskReason,
 		ActorType:  contracts.ActorService,
-		ActorID:    task.UserID,
+		ActorID:    task.SpaceID,
 	})
 	if err != nil {
 		if taskstate.IsConflictError(err) {
@@ -895,7 +895,7 @@ func (s *service) StartTask(taskID string) (*TaskSummaryResponse, error) {
 			Stage:        contracts.StageQueued,
 			Reason:       actionReason,
 			ActorType:    contracts.ActorService,
-			ActorID:      task.UserID,
+			ActorID:      task.SpaceID,
 			ParentTaskID: taskID,
 		})
 		if aErr != nil {
@@ -940,7 +940,7 @@ func (s *service) CancelTask(taskID string) error {
 			Stage:      contracts.StageCancelled,
 			Reason:     contracts.ReasonGenerationTaskCancelBeforeClaim,
 			ActorType:  contracts.ActorService,
-			ActorID:    task.UserID,
+			ActorID:    task.SpaceID,
 		})
 		if err != nil {
 			if taskstate.IsConflictError(err) {
@@ -967,7 +967,7 @@ func (s *service) CancelTask(taskID string) error {
 			Stage:      cancellingStage,
 			Reason:     contracts.ReasonGenerationTaskCancelRequested,
 			ActorType:  contracts.ActorService,
-			ActorID:    task.UserID,
+			ActorID:    task.SpaceID,
 		})
 		if err != nil {
 			if taskstate.IsConflictError(err) {
@@ -1035,7 +1035,7 @@ func (s *service) RetryAction(taskID, actionKey string) (*TaskActionResponse, er
 		Stage:        contracts.StageQueued,
 		Reason:       contracts.ReasonGenerationActionRetry,
 		ActorType:    contracts.ActorService,
-		ActorID:      task.UserID,
+		ActorID:      task.SpaceID,
 		ParentTaskID: taskID,
 	})
 	if aErr != nil {
@@ -1074,7 +1074,7 @@ func (s *service) RetryAction(taskID, actionKey string) (*TaskActionResponse, er
 			Stage:      contracts.StageQueued,
 			Reason:     taskReason,
 			ActorType:  contracts.ActorRetryService,
-			ActorID:    task.UserID,
+			ActorID:    task.SpaceID,
 		})
 		if tErr != nil {
 			if taskstate.IsConflictError(tErr) {
@@ -1433,7 +1433,7 @@ func (s *service) GetTaskTransitions(taskID string, limit int) ([]taskstate.Audi
 	return records, nil
 }
 
-func (s *service) GetActionImageRef(taskID, actionKey string, userID string) (security.ArtifactReference, error) {
+func (s *service) GetActionImageRef(taskID, actionKey string, spaceID string) (security.ArtifactReference, error) {
 	if _, err := s.repo.GetTaskByID(taskID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return security.ArtifactReference{}, NewBusinessError(response.NotFound, ErrCodeGenerationTaskNotFound, "任务不存在")
@@ -1494,12 +1494,12 @@ func (s *service) GetActionImageRef(taskID, actionKey string, userID string) (se
 	}
 	storageKey := strings.TrimPrefix(artifact.RelativePath, "desktop-pets/")
 	return security.ArtifactReference{
-		ArtifactID:  taskID + ":" + actionKey + ":primary",
-		OwnerUserID: userID,
-		RootKind:    security.RootDesktopPets,
-		StorageKey:  storageKey,
-		ContentHash: artifact.Hash,
-		ByteSize:    artifact.Size,
-		MIME:        mime,
+		ArtifactID:   taskID + ":" + actionKey + ":primary",
+		OwnerSpaceID: spaceID,
+		RootKind:     security.RootDesktopPets,
+		StorageKey:   storageKey,
+		ContentHash:  artifact.Hash,
+		ByteSize:     artifact.Size,
+		MIME:         mime,
 	}, nil
 }

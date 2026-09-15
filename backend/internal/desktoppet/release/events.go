@@ -12,7 +12,7 @@ const (
 
 type ReleaseEvent struct {
 	EventType             string `json:"eventType"`
-	UserID                string `json:"userId"`
+	SpaceID               string `json:"spaceId"`
 	PetID                 string `json:"petId"`
 	ReleaseID             string `json:"releaseId"`
 	ProcessingTaskID      string `json:"processingTaskId"`

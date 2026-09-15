@@ -50,7 +50,7 @@ func TestImportRecoveryRejectsReleaseFileCountMismatch(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	op := &release.ReleaseBuildOperation{
 		ID:             opID,
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		PetID:          petID,
 		ReleaseID:      releaseID,
 		State:          release.BuildOpStatePublishing,
@@ -78,7 +78,7 @@ func TestImportRecoveryRejectsReleaseFileCountMismatch(t *testing.T) {
 	if err := repo.CreateRelease(&release.ReleaseData{
 		ID:                  releaseID,
 		PetID:               petID,
-		OwnerUserID:         "user-1",
+		OwnerSpaceID:        "user-1",
 		Lifecycle:           "building",
 		ContentRootHash:     "content-root",
 		ManifestHash:        "manifest-hash",

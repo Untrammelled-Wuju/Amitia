@@ -22,7 +22,7 @@ const (
 type RuntimeSession struct {
 	ID string `gorm:"column:id;primaryKey;type:text" json:"id"`
 
-	UserID    runtimeidentity.UserID    `gorm:"column:user_id;type:text;not null" json:"userId"`
+	SpaceID   runtimeidentity.SpaceID   `gorm:"column:space_id;type:text;not null" json:"spaceId"`
 	DeviceID  runtimeidentity.DeviceID  `gorm:"column:device_id;type:text;not null" json:"deviceId"`
 	RuntimeID runtimeidentity.RuntimeID `gorm:"column:runtime_id;type:text;not null" json:"runtimeId"`
 
@@ -62,7 +62,7 @@ func (s *RuntimeSession) IsTerminal() bool {
 
 func (s *RuntimeSession) RuntimeIdentity() runtimeidentity.Identity {
 	return runtimeidentity.Identity{
-		UserID:           s.UserID,
+		SpaceID:          s.SpaceID,
 		DeviceID:         s.DeviceID,
 		RuntimeID:        s.RuntimeID,
 		RuntimeSessionID: runtimeidentity.ParseRuntimeSessionID(s.ID),
@@ -71,7 +71,7 @@ func (s *RuntimeSession) RuntimeIdentity() runtimeidentity.Identity {
 
 func (s *RuntimeSession) ProtocolSessionIdentity() protocol.SessionIdentity {
 	return protocol.SessionIdentity{
-		UserID:           s.UserID,
+		SpaceID:          s.SpaceID,
 		DeviceID:         s.DeviceID,
 		RuntimeID:        s.RuntimeID,
 		RuntimeSessionID: runtimeidentity.ParseRuntimeSessionID(s.ID),

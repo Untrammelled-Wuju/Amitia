@@ -301,7 +301,7 @@ func (w *ReleaseRecoveryWorker) recoverOperation(ctx context.Context, op *Releas
 			if w.eventPublisher != nil {
 				if err := w.eventPublisher.PublishReleaseEvent(ReleaseEvent{
 					EventType:  EventReleaseBuildFailed,
-					UserID:     op.UserID,
+					SpaceID:    op.SpaceID,
 					PetID:      op.PetID,
 					ReleaseID:  op.ReleaseID,
 					OccurredAt: formatRecoveryTimestamp(time.Now()),
@@ -516,7 +516,7 @@ func (w *ReleaseRecoveryWorker) finalizeRecoveredPublishedImport(
 	if w.stagingRepo == nil || snapshot.ImportStagingID == "" {
 		return w.markImportManualReview(op, journal, "IMPORT_STAGING_MISSING")
 	}
-	staging, err := w.stagingRepo.GetForUser(ctx, snapshot.ImportStagingID, releaseRecord.OwnerUserID)
+	staging, err := w.stagingRepo.GetForSpace(ctx, snapshot.ImportStagingID, releaseRecord.OwnerSpaceID)
 	if err != nil || staging == nil {
 		return w.markImportManualReview(op, journal, "IMPORT_STAGING_NOT_FOUND")
 	}
@@ -555,7 +555,7 @@ func (w *ReleaseRecoveryWorker) finalizeRecoveredPublishedImport(
 			if err := w.stagingRepo.CompleteConsumptionTx(
 				tx,
 				staging.ID,
-				releaseRecord.OwnerUserID,
+				releaseRecord.OwnerSpaceID,
 				staging.StateRevision,
 				now,
 			); err != nil {
@@ -767,19 +767,19 @@ func (w *ReleaseRecoveryWorker) verifyImportConsistency(ctx context.Context, op 
 	if w.stagingRepo == nil || snapshot.ImportStagingID == "" {
 		return errors.New("import staging repository or staging id missing")
 	}
-	staging, err := w.stagingRepo.GetForUser(ctx, snapshot.ImportStagingID, releaseData.OwnerUserID)
+	staging, err := w.stagingRepo.GetForSpace(ctx, snapshot.ImportStagingID, releaseData.OwnerSpaceID)
 	if err != nil {
 		return fmt.Errorf("get import staging: %w", err)
 	}
 	if staging.Status == security.StagingStatusConsuming {
-		completed, err := w.stagingRepo.CompleteConsumptionCAS(ctx, staging.ID, releaseData.OwnerUserID, staging.StateRevision)
+		completed, err := w.stagingRepo.CompleteConsumptionCAS(ctx, staging.ID, releaseData.OwnerSpaceID, staging.StateRevision)
 		if err != nil {
 			return fmt.Errorf("complete import staging consumption: %w", err)
 		}
 		if !completed {
 			return errors.New("complete import staging consumption CAS did not update a row")
 		}
-		staging, err = w.stagingRepo.GetForUser(ctx, snapshot.ImportStagingID, releaseData.OwnerUserID)
+		staging, err = w.stagingRepo.GetForSpace(ctx, snapshot.ImportStagingID, releaseData.OwnerSpaceID)
 		if err != nil {
 			return fmt.Errorf("re-read import staging: %w", err)
 		}

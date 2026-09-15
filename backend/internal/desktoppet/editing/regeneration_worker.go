@@ -201,7 +201,7 @@ func (w *RegenerationWorker) processJob(ctx context.Context, job *RegenerationJo
 		w.failJob(job, "SESSION_FETCH_FAILED", fmt.Sprintf("获取会话失败: %v", err))
 		return
 	}
-	if session == nil || session.UserID != job.UserID {
+	if session == nil || session.SpaceID != job.SpaceID {
 		w.failJob(job, "SESSION_NOT_FOUND", "会话不存在或所有权不匹配")
 		return
 	}
@@ -380,7 +380,7 @@ func (w *RegenerationWorker) processSingleFrameJob(ctx context.Context, job *Reg
 		FrameIndex:       targetIndex,
 		TotalFrames:      len(frames),
 		AdjacentFrames:   adjacentFrames,
-		UserID:           session.UserID,
+		SpaceID:          session.SpaceID,
 		AttemptID:        stableRegenerationAttemptID(job.ID, "single_frame"),
 	})
 	if err != nil {
@@ -428,7 +428,7 @@ func (w *RegenerationWorker) processSingleFrameJob(ctx context.Context, job *Reg
 		ID:                  candidateID,
 		SessionID:           job.SessionID,
 		JobID:               job.ID,
-		UserID:              job.UserID,
+		SpaceID:             job.SpaceID,
 		ActionStreamID:      job.ActionStreamID,
 		CandidateVersion:    snapshot.SessionVersion,
 		DraftSnapshotID:     snapshot.ID,
@@ -473,7 +473,7 @@ func (w *RegenerationWorker) processFullActionJob(ctx context.Context, job *Rege
 		JobID:            job.ID,
 		GenerationTaskID: baseRev.GenerationTaskID,
 		ActionKey:        job.ActionKey,
-		UserID:           session.UserID,
+		SpaceID:          session.SpaceID,
 		AttemptID:        attemptID,
 	})
 	if err != nil {
@@ -558,7 +558,7 @@ func (w *RegenerationWorker) processFullActionJob(ctx context.Context, job *Rege
 	}
 	candidateRev := &ActionRevision{
 		ID:                         candidateRevID,
-		UserID:                     job.UserID,
+		SpaceID:                    job.SpaceID,
 		ProcessingTaskID:           job.ProcessingTaskID,
 		ProcessingActionID:         baseRev.ProcessingActionID,
 		GenerationTaskID:           baseRev.GenerationTaskID,
@@ -575,7 +575,7 @@ func (w *RegenerationWorker) processFullActionJob(ctx context.Context, job *Rege
 		Interruptible:              baseRev.Interruptible,
 		PriorityOverride:           baseRev.PriorityOverride,
 		CooldownMSOverride:         baseRev.CooldownMSOverride,
-		CreatedByUserID:            session.UserID,
+		CreatedBySpaceID:           session.SpaceID,
 		CreatedFromSessionID:       session.ID,
 		ChangeSummary:              "整动作重生成候选",
 		CreatedAt:                  now,
@@ -747,7 +747,7 @@ func (w *RegenerationWorker) ensureFullActionCandidate(ctx context.Context, job 
 			ID:                  candidateID,
 			SessionID:           job.SessionID,
 			JobID:               job.ID,
-			UserID:              job.UserID,
+			SpaceID:             job.SpaceID,
 			ActionStreamID:      job.ActionStreamID,
 			CandidateVersion:    snapshot.SessionVersion,
 			DraftSnapshotID:     snapshot.ID,

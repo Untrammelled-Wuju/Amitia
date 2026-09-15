@@ -29,7 +29,7 @@ var _ Committer = (*ProcessingCommitter)(nil)
 
 type CommitRequest struct {
 	Ctx                        context.Context
-	UserID                     string
+	SpaceID                    string
 	ProcessingTaskID           string
 	ProcessingActionID         string
 	ProcessingAttemptID        string
@@ -284,7 +284,7 @@ func (c *ProcessingCommitter) Commit(req *CommitRequest) (*CommitResult, error) 
 		}
 
 		outboxEvent := events.ProcessingRevisionCommittedEvent{
-			UserID:                     req.UserID,
+			SpaceID:                    req.SpaceID,
 			ProcessingTaskID:           req.ProcessingTaskID,
 			ProcessingActionID:         req.ProcessingActionID,
 			ProcessingAttemptID:        req.ProcessingAttemptID,

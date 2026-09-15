@@ -15,7 +15,7 @@ func reducerTestEvent(eventType string, at time.Time, payload map[string]interfa
 		SchemaVersion: 1,
 		OccurredAt:    at,
 		ReceivedAt:    at,
-		UserID:        "user-1",
+		SpaceID:       "user-1",
 		CharacterID:   "character-1",
 		PetInstanceID: "runtime-1",
 		Origin:        OriginRuntime,

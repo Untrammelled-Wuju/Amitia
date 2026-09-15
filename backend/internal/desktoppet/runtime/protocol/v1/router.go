@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/middleware"
@@ -31,7 +32,7 @@ type BootstrapTicketConsumer func(
 	runtimeID runtimeidentity.RuntimeID,
 	deviceID runtimeidentity.DeviceID,
 ) (
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 	err error,
 )
 
@@ -61,12 +62,12 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
 	runtimeGroup := apiGroup.Group("/desktop-pets/runtime")
 
 	runtimeGroup.GET("/status", func(c *gin.Context) {
-		userID := middleware.GetUserID(c)
-		if userID == "" {
+		spaceID := middleware.GetSpaceID(c)
+		if spaceID == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "认证失败"}})
 			return
 		}
-		conns := facade.ListConnections(userID)
+		conns := facade.ListConnections(spaceID)
 		views := make([]gin.H, 0, len(conns))
 		for _, conn := range conns {
 			if conn == nil {
@@ -85,18 +86,18 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
 	})
 
 	runtimeGroup.GET("/status/:runtimeId", func(c *gin.Context) {
-		userID := middleware.GetUserID(c)
+		spaceID := middleware.GetSpaceID(c)
 		runtimeID := c.Param("runtimeId")
-		if userID == "" {
+		if spaceID == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "认证失败"}})
 			return
 		}
 		deviceID := strings.TrimSpace(c.Query("deviceId"))
 		var conn *Connection
 		if deviceID != "" {
-			conn = facade.GetConnection(userID, deviceID, runtimeID)
+			conn = facade.GetConnection(spaceID, deviceID, runtimeID)
 		} else {
-			for _, candidate := range facade.ListConnections(userID) {
+			for _, candidate := range facade.ListConnections(spaceID) {
 				if candidate == nil || string(candidate.RuntimeID) != runtimeID {
 					continue
 				}
@@ -128,13 +129,13 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
 	})
 
 	runtimeGroup.GET("/metrics", func(c *gin.Context) {
-		userID := middleware.GetUserID(c)
-		if userID == "" {
+		spaceID := middleware.GetSpaceID(c)
+		if spaceID == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": gin.H{"code": "UNAUTHORIZED", "message": "认证失败"}})
 			return
 		}
 		actor, err := middleware.GetActorFromContext(c)
-		if err != nil || !actor.HasRole("admin") {
+		if err != nil || !actor.HasPermission(auth.PermSystemAdmin) {
 			c.JSON(http.StatusForbidden, gin.H{"success": false, "error": gin.H{"code": "FORBIDDEN", "message": "需要管理员权限"}})
 			return
 		}
@@ -236,8 +237,8 @@ func (h *runtimeWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := h.consumeTicket(r.Context(), rawTicket, runtimeID, deviceID)
-	if err != nil || userID == "" {
+	spaceID, err := h.consumeTicket(r.Context(), rawTicket, runtimeID, deviceID)
+	if err != nil || spaceID == "" {
 		_ = wsConn.WriteControl(
 			websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "runtime bootstrap ticket rejected"),
@@ -260,7 +261,7 @@ func (h *runtimeWSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	runtimeHandler := h.facade.Handler()
 
-	conn, err := runtimeHandler.HandleConnect(userID, deviceID, runtimeID)
+	conn, err := runtimeHandler.HandleConnect(spaceID, deviceID, runtimeID)
 	if err != nil {
 		wsConn.Close()
 		return
@@ -433,7 +434,7 @@ func (ctx *wsConnContext) readLoop() {
 			}
 		}
 
-		if env.UserID != ctx.conn.UserID ||
+		if env.SpaceID != ctx.conn.SpaceID ||
 			env.DeviceID != ctx.conn.DeviceID ||
 			env.RuntimeID != ctx.conn.RuntimeID {
 			log.Warn("[runtime-v1-ws] envelope identity mismatch: type=", env.MessageType)
@@ -480,7 +481,7 @@ func (ctx *wsConnContext) readLoop() {
 			if err := ctx.refreshHeartbeatDeadline(); err != nil {
 				return
 			}
-			ackEnv, err := ctx.handler.CreateEnvelope(MessageTypeHelloAck, "hello_ack", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()), ack, ctx.conn.UserID, ctx.conn.DeviceID)
+			ackEnv, err := ctx.handler.CreateEnvelope(MessageTypeHelloAck, "hello_ack", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()), ack, ctx.conn.SpaceID, ctx.conn.DeviceID)
 			if err != nil || ackEnv == nil {
 				log.Warn("[runtime-v1-ws] hello_ack envelope create failed: ", err)
 				return
@@ -504,7 +505,7 @@ func (ctx *wsConnContext) readLoop() {
 			if err := ctx.handler.HandleHeartbeat(ctx.conn); err != nil {
 				return
 			}
-			pongEnv, err := ctx.handler.CreateEnvelope(MessageTypePong, "pong", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()), protocol.PongPayload{Time: time.Now()}, ctx.conn.UserID, ctx.conn.DeviceID)
+			pongEnv, err := ctx.handler.CreateEnvelope(MessageTypePong, "pong", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()), protocol.PongPayload{Time: time.Now()}, ctx.conn.SpaceID, ctx.conn.DeviceID)
 			if err != nil || pongEnv == nil {
 				return
 			}
@@ -530,7 +531,7 @@ func (ctx *wsConnContext) sendCommittedEventAck() error {
 		ctx.conn.RuntimeID,
 		runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()),
 		payload,
-		ctx.conn.UserID,
+		ctx.conn.SpaceID,
 		ctx.conn.DeviceID,
 	)
 	if err != nil || env == nil {

@@ -150,7 +150,7 @@ func TestAssembledEngine_SubmitEvent(t *testing.T) {
 		SchemaVersion: 1,
 		OccurredAt:    time.Now(),
 		ReceivedAt:    time.Now(),
-		UserID:        "test-user-1",
+		SpaceID:       "test-user-1",
 		CharacterID:   "test-char-1",
 		Origin:        behavior.OriginInteraction,
 		DedupKey:      "test:user-1:char-1:001",

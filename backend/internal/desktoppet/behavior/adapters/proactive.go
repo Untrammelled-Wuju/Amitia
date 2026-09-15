@@ -12,7 +12,7 @@ import (
 type ProactiveEvent struct {
 	ProactiveID    string
 	CharacterID    string
-	UserID         string
+	SpaceID        string
 	ConversationID string
 	CorrelationID  string
 	RuleID         string
@@ -48,7 +48,7 @@ func (a *ProactiveAdapter) OnProactiveEvent(ctx context.Context, evt ProactiveEv
 
 	eventType := "proactive.message." + evt.Phase
 	builder := events.NewEnvelope(eventType, behavior.OriginProactive).
-		UserID(evt.UserID).
+		SpaceID(evt.SpaceID).
 		CharacterID(evt.CharacterID).
 		OccurredAt(occurredAt).
 		DedupKey(events.BuildDedupKey(evt.ProactiveID, evt.Phase))

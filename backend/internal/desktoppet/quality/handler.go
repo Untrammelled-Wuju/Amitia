@@ -68,7 +68,7 @@ func (h *Handler) GetEvaluation(c *gin.Context) {
 	result, err := h.svc.GetEvaluation(c.Request.Context(), evaluationID)
 	if err != nil {
 		actor, _ := middleware.GetActorFromContext(c)
-		log.Error("quality: GetEvaluation failed", "error", err, "actor", actor.UserID, "evaluationId", evaluationID)
+		log.Error("quality: GetEvaluation failed", "error", err, "actor", actor.SpaceID, "evaluationId", evaluationID)
 		util.ErrorResponse(c, response.InternalError, "获取评估失败", nil)
 		return
 	}
@@ -105,7 +105,7 @@ func (h *Handler) GetActiveActionQuality(c *gin.Context) {
 	result, err := h.svc.GetActiveActionQuality(c.Request.Context(), processingTaskID, actionKey)
 	if err != nil {
 		actor, _ := middleware.GetActorFromContext(c)
-		log.Error("quality: GetActiveActionQuality failed", "error", err, "actor", actor.UserID)
+		log.Error("quality: GetActiveActionQuality failed", "error", err, "actor", actor.SpaceID)
 		util.ErrorResponse(c, response.InternalError, "获取质量评估失败", nil)
 		return
 	}
@@ -150,7 +150,7 @@ func (h *Handler) Reevaluate(c *gin.Context) {
 	eval, err := h.svc.Reevaluate(c.Request.Context(), req)
 	if err != nil {
 		actor, _ := middleware.GetActorFromContext(c)
-		log.Error("quality: Reevaluate failed", "error", err, "actor", actor.UserID)
+		log.Error("quality: Reevaluate failed", "error", err, "actor", actor.SpaceID)
 		util.ErrorResponse(c, response.OperationFailed, "重新评估失败", nil)
 		return
 	}
@@ -178,7 +178,7 @@ func (h *Handler) GetTaskGate(c *gin.Context) {
 	result, err := h.svc.GetTaskGate(c.Request.Context(), processingTaskID)
 	if err != nil {
 		actor, _ := middleware.GetActorFromContext(c)
-		log.Error("quality: GetTaskGate failed", "error", err, "actor", actor.UserID)
+		log.Error("quality: GetTaskGate failed", "error", err, "actor", actor.SpaceID)
 		util.ErrorResponse(c, response.InternalError, "获取任务门禁失败", nil)
 		return
 	}
@@ -218,7 +218,7 @@ func (h *Handler) ListProblemFrames(c *gin.Context) {
 	frames, total, err := h.svc.ListProblemFrames(c.Request.Context(), evaluationID, page, pageSize)
 	if err != nil {
 		actor, _ := middleware.GetActorFromContext(c)
-		log.Error("quality: ListProblemFrames failed", "error", err, "actor", actor.UserID)
+		log.Error("quality: ListProblemFrames failed", "error", err, "actor", actor.SpaceID)
 		util.ErrorResponse(c, response.InternalError, "获取问题帧失败", nil)
 		return
 	}
@@ -265,7 +265,7 @@ func (h *Handler) ListFindings(c *gin.Context) {
 	findings, total, err := h.svc.ListFindings(c.Request.Context(), evaluationID, severity, dimension, page, pageSize)
 	if err != nil {
 		actor, _ := middleware.GetActorFromContext(c)
-		log.Error("quality: ListFindings failed", "error", err, "actor", actor.UserID)
+		log.Error("quality: ListFindings failed", "error", err, "actor", actor.SpaceID)
 		util.ErrorResponse(c, response.InternalError, "获取发现列表失败", nil)
 		return
 	}

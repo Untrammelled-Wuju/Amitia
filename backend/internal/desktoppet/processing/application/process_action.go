@@ -117,9 +117,9 @@ func (a *RepoLegacyAdapter) GetGenerationTask(taskID string) (source.GenerationT
 		return source.GenerationTaskInfo{}, err
 	}
 	return source.GenerationTaskInfo{
-		ID:     task.ID,
-		UserID: task.UserID,
-		Status: task.Status,
+		ID:      task.ID,
+		SpaceID: task.SpaceID,
+		Status:  task.Status,
 	}, nil
 }
 
@@ -276,12 +276,12 @@ func (a *RepoArtifactSourceAdapter) GetPrimaryArtifact(attemptID string) (*sourc
 	}, nil
 }
 
-func (a *RepoArtifactSourceAdapter) GetTaskUserID(taskID string) (string, error) {
+func (a *RepoArtifactSourceAdapter) GetTaskSpaceID(taskID string) (string, error) {
 	task, err := a.repo.GetGenerationTask(taskID)
 	if err != nil {
 		return "", err
 	}
-	return task.UserID, nil
+	return task.SpaceID, nil
 }
 
 func (a *RepoArtifactSourceAdapter) GetGenerationActionInfo(generationActionID string) (*source.GenerationActionValidationInfo, error) {

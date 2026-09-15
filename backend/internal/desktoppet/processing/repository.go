@@ -66,7 +66,7 @@ type Repository interface {
 	CreatePackage(pkg *Package) error
 	GetPackage(id string) (*Package, error)
 	UpdatePackageStatus(id string, updates map[string]interface{}) error
-	ListPackagesByUser(userID string, page, pageSize int) ([]Package, int64, error)
+	ListPackagesBySpace(spaceID string, page, pageSize int) ([]Package, int64, error)
 	ListPackagesByGenerationTask(generationTaskID string) ([]Package, error)
 	GetPackageByProcessingTaskID(processingTaskID string) (*Package, error)
 
@@ -589,10 +589,10 @@ func (r *repository) UpdatePackageStatus(id string, updates map[string]interface
 	return r.db.Model(&Package{}).Where("id = ?", id).Updates(updates).Error
 }
 
-func (r *repository) ListPackagesByUser(userID string, page, pageSize int) ([]Package, int64, error) {
+func (r *repository) ListPackagesBySpace(spaceID string, page, pageSize int) ([]Package, int64, error) {
 	var packages []Package
 	var total int64
-	q := r.db.Model(&Package{}).Where("user_id = ?", userID)
+	q := r.db.Model(&Package{}).Where("space_id = ?", spaceID)
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -793,28 +793,28 @@ func (r *repository) GetActiveFrameArtifact(processingTaskID, actionKey string, 
 	if err := r.db.Where("processing_task_id = ? AND action_key = ?", processingTaskID, actionKey).First(&action).Error; err != nil {
 		return nil, fmt.Errorf("action not found: %w", err)
 	}
-if action.ActiveRevisionID == "" {
-return nil, fmt.Errorf("no active revision for action %s", actionKey)
-}
-var frame ProcessedFrame
-if err := r.db.Where("processing_action_id = ? AND frame_index = ?", action.ID, frameIndex).First(&frame).Error; err != nil {
-	var rev ProcessingRevision
-	if rerr := r.db.Where("id = ? AND status = ?", action.ActiveRevisionID, "committed").First(&rev).Error; rerr == nil {
-		var art ProcessingArtifactRecord
-		if aerr := r.db.Where("revision_id = ? AND artifact_kind = ? AND stage = ? AND frame_index = ?", action.ActiveRevisionID, "frame", "final", frameIndex).Order("created_at DESC").First(&art).Error; aerr == nil {
-			return &desktoppet_security.ArtifactReference{
-				ArtifactID:  processingTaskID + ":" + actionKey + ":" + strconv.Itoa(frameIndex),
-				OwnerUserID: task.UserID,
-				RootKind:    desktoppet_security.RootDesktopPets,
-				StorageKey:  filepath.ToSlash(filepath.Join(rev.RootRelativePath, art.RelativePath)),
-				ContentHash: art.ContentHash,
-				ByteSize:    art.ByteSize,
-				MIME:        art.MimeType,
-			}, nil
-		}
+	if action.ActiveRevisionID == "" {
+		return nil, fmt.Errorf("no active revision for action %s", actionKey)
 	}
-	return nil, fmt.Errorf("frame not found: %w", err)
-}
+	var frame ProcessedFrame
+	if err := r.db.Where("processing_action_id = ? AND frame_index = ?", action.ID, frameIndex).First(&frame).Error; err != nil {
+		var rev ProcessingRevision
+		if rerr := r.db.Where("id = ? AND status = ?", action.ActiveRevisionID, "committed").First(&rev).Error; rerr == nil {
+			var art ProcessingArtifactRecord
+			if aerr := r.db.Where("revision_id = ? AND artifact_kind = ? AND stage = ? AND frame_index = ?", action.ActiveRevisionID, "frame", "final", frameIndex).Order("created_at DESC").First(&art).Error; aerr == nil {
+				return &desktoppet_security.ArtifactReference{
+					ArtifactID:   processingTaskID + ":" + actionKey + ":" + strconv.Itoa(frameIndex),
+					OwnerSpaceID: task.SpaceID,
+					RootKind:     desktoppet_security.RootDesktopPets,
+					StorageKey:   filepath.ToSlash(filepath.Join(rev.RootRelativePath, art.RelativePath)),
+					ContentHash:  art.ContentHash,
+					ByteSize:     art.ByteSize,
+					MIME:         art.MimeType,
+				}, nil
+			}
+		}
+		return nil, fmt.Errorf("frame not found: %w", err)
+	}
 	if strings.TrimSpace(frame.ContentHash) == "" {
 		return nil, fmt.Errorf("frame content hash empty - fail closed")
 	}
@@ -831,12 +831,12 @@ if err := r.db.Where("processing_action_id = ? AND frame_index = ?", action.ID, 
 	}
 	artifactID := processingTaskID + ":" + actionKey + ":" + strconv.Itoa(frameIndex)
 	return &desktoppet_security.ArtifactReference{
-		ArtifactID:  artifactID,
-		OwnerUserID: task.UserID,
-	RootKind:    desktoppet_security.RootDesktopPets,
-	StorageKey:  frame.ProcessedPath,
-		ContentHash: frame.ContentHash,
-		ByteSize:    0,
-		MIME:        mimeType,
+		ArtifactID:   artifactID,
+		OwnerSpaceID: task.SpaceID,
+		RootKind:     desktoppet_security.RootDesktopPets,
+		StorageKey:   frame.ProcessedPath,
+		ContentHash:  frame.ContentHash,
+		ByteSize:     0,
+		MIME:         mimeType,
 	}, nil
 }

@@ -16,26 +16,26 @@ var (
 type QuotaKey string
 
 const (
-	QuotaKeyUserConcurrentGeneration   QuotaKey = "user_concurrent_generation"
-	QuotaKeyUserConcurrentRegeneration QuotaKey = "user_concurrent_regeneration"
-	QuotaKeyUserConcurrentProcessing   QuotaKey = "user_concurrent_processing"
-	QuotaKeyUserConcurrentQuality      QuotaKey = "user_concurrent_quality"
-	QuotaKeyUserConcurrentReleaseBuild QuotaKey = "user_concurrent_release_build"
-	QuotaKeyUserSSEConnections         QuotaKey = "user_sse_connections"
-	QuotaKeyUserImportBytes            QuotaKey = "user_import_bytes"
-	QuotaKeyUserStorageBytes           QuotaKey = "user_storage_bytes"
+	QuotaKeySpaceConcurrentGeneration   QuotaKey = "space_concurrent_generation"
+	QuotaKeySpaceConcurrentRegeneration QuotaKey = "space_concurrent_regeneration"
+	QuotaKeySpaceConcurrentProcessing   QuotaKey = "space_concurrent_processing"
+	QuotaKeySpaceConcurrentQuality      QuotaKey = "space_concurrent_quality"
+	QuotaKeySpaceConcurrentReleaseBuild QuotaKey = "space_concurrent_release_build"
+	QuotaKeySpaceSSEConnections         QuotaKey = "space_sse_connections"
+	QuotaKeySpaceImportBytes            QuotaKey = "space_import_bytes"
+	QuotaKeySpaceStorageBytes           QuotaKey = "space_storage_bytes"
 )
 
 type QuotaLimits struct {
-	UserConcurrentGeneration   int
-	UserConcurrentRegeneration int
-	UserConcurrentProcessing   int
-	UserConcurrentQuality      int
-	UserConcurrentReleaseBuild int
-	UserSSEConnections         int
-	UserImportBytes            int64
-	UserStorageBytes           int64
-	GlobalStorageBytes         int64
+	SpaceConcurrentGeneration   int
+	SpaceConcurrentRegeneration int
+	SpaceConcurrentProcessing   int
+	SpaceConcurrentQuality      int
+	SpaceConcurrentReleaseBuild int
+	SpaceSSEConnections         int
+	SpaceImportBytes            int64
+	SpaceStorageBytes           int64
+	GlobalStorageBytes          int64
 }
 
 type QuotaUsage struct {
@@ -93,18 +93,18 @@ func (s *QuotaService) CanIncrement(key QuotaKey, owner string, maximum int64) b
 	defer s.mu.RUnlock()
 	var limit int64
 	switch key {
-	case QuotaKeyUserConcurrentGeneration:
-		limit = int64(s.limits.UserConcurrentGeneration)
-	case QuotaKeyUserConcurrentRegeneration:
-		limit = int64(s.limits.UserConcurrentRegeneration)
-	case QuotaKeyUserConcurrentProcessing:
-		limit = int64(s.limits.UserConcurrentProcessing)
-	case QuotaKeyUserConcurrentQuality:
-		limit = int64(s.limits.UserConcurrentQuality)
-	case QuotaKeyUserConcurrentReleaseBuild:
-		limit = int64(s.limits.UserConcurrentReleaseBuild)
-	case QuotaKeyUserSSEConnections:
-		limit = int64(s.limits.UserSSEConnections)
+	case QuotaKeySpaceConcurrentGeneration:
+		limit = int64(s.limits.SpaceConcurrentGeneration)
+	case QuotaKeySpaceConcurrentRegeneration:
+		limit = int64(s.limits.SpaceConcurrentRegeneration)
+	case QuotaKeySpaceConcurrentProcessing:
+		limit = int64(s.limits.SpaceConcurrentProcessing)
+	case QuotaKeySpaceConcurrentQuality:
+		limit = int64(s.limits.SpaceConcurrentQuality)
+	case QuotaKeySpaceConcurrentReleaseBuild:
+		limit = int64(s.limits.SpaceConcurrentReleaseBuild)
+	case QuotaKeySpaceSSEConnections:
+		limit = int64(s.limits.SpaceSSEConnections)
 	default:
 		return true
 	}
@@ -115,29 +115,29 @@ func (s *QuotaService) CanIncrement(key QuotaKey, owner string, maximum int64) b
 	return current < limit
 }
 
-func (s *QuotaService) CheckStorage(userID string, requestedBytes int64) error {
+func (s *QuotaService) CheckStorage(spaceID string, requestedBytes int64) error {
 	if requestedBytes < 0 {
 		return nil
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	current := s.usage[QuotaKeyUserStorageBytes][userID]
-	if requestedBytes > s.limits.UserStorageBytes-current {
+	current := s.usage[QuotaKeySpaceStorageBytes][spaceID]
+	if requestedBytes > s.limits.SpaceStorageBytes-current {
 		return ErrStorageQuotaExceeded
 	}
 	return nil
 }
 
 var DefaultQuotaLimits = QuotaLimits{
-	UserConcurrentGeneration:   3,
-	UserConcurrentRegeneration: 2,
-	UserConcurrentProcessing:   3,
-	UserConcurrentQuality:      3,
-	UserConcurrentReleaseBuild: 1,
-	UserSSEConnections:         5,
-	UserImportBytes:            500 * 1024 * 1024,
-	UserStorageBytes:           20 * 1024 * 1024 * 1024,
-	GlobalStorageBytes:         50 * 1024 * 1024 * 1024,
+	SpaceConcurrentGeneration:   3,
+	SpaceConcurrentRegeneration: 2,
+	SpaceConcurrentProcessing:   3,
+	SpaceConcurrentQuality:      3,
+	SpaceConcurrentReleaseBuild: 1,
+	SpaceSSEConnections:         5,
+	SpaceImportBytes:            500 * 1024 * 1024,
+	SpaceStorageBytes:           20 * 1024 * 1024 * 1024,
+	GlobalStorageBytes:          50 * 1024 * 1024 * 1024,
 }
 
 type DiskUsage struct {

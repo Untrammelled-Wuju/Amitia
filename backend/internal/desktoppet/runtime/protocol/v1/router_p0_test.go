@@ -23,14 +23,14 @@ type oneTimeTicketConsumer struct {
 	used map[string]bool
 }
 
-func (c *oneTimeTicketConsumer) consume(_ context.Context, ticket string, runtimeID runtimeidentity.RuntimeID, deviceID runtimeidentity.DeviceID) (runtimeidentity.UserID, error) {
+func (c *oneTimeTicketConsumer) consume(_ context.Context, ticket string, runtimeID runtimeidentity.RuntimeID, deviceID runtimeidentity.DeviceID) (runtimeidentity.SpaceID, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if ticket == "" || runtimeID != "runtime-ws" || deviceID != "device-ws" || c.used[ticket] {
 		return "", errors.New("ticket rejected")
 	}
 	c.used[ticket] = true
-	return runtimeidentity.ParseUserID("user-ws"), nil
+	return runtimeidentity.ParseSpaceID("user-ws"), nil
 }
 
 func newRuntimeWSTestServer(t *testing.T) (*httptest.Server, *RuntimeFacade) {
@@ -221,7 +221,7 @@ func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 		MessageType:          MessageTypeHello,
 		MessageName:          "hello",
 		MessageID:            "hello-1",
-		UserID:               "user-ws",
+		SpaceID:              "user-ws",
 		DeviceID:             "device-ws",
 		RuntimeID:            "runtime-ws",
 		ConnectionGeneration: 1,
@@ -245,7 +245,7 @@ func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 	if ackEnv.MessageType != MessageTypeHelloAck || ackEnv.RuntimeSessionID == "" {
 		t.Fatalf("unexpected hello ack: type=%s session=%s", ackEnv.MessageType, ackEnv.RuntimeSessionID)
 	}
-	if ackEnv.UserID != "user-ws" || ackEnv.DeviceID != "device-ws" || ackEnv.RuntimeID != "runtime-ws" {
+	if ackEnv.SpaceID != "user-ws" || ackEnv.DeviceID != "device-ws" || ackEnv.RuntimeID != "runtime-ws" {
 		t.Fatalf("hello ack identity mismatch: %+v", ackEnv)
 	}
 
@@ -262,7 +262,7 @@ func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 		MessageType:          MessageTypePing,
 		MessageName:          "ping",
 		MessageID:            "ping-valid",
-		UserID:               "user-ws",
+		SpaceID:              "user-ws",
 		DeviceID:             "device-ws",
 		RuntimeID:            "runtime-ws",
 		RuntimeSessionID:     ackEnv.RuntimeSessionID,
@@ -315,7 +315,7 @@ func TestRuntimeWebSocketTicketHelloAndIdentityHardBinding(t *testing.T) {
 		MessageType:          MessageTypePing,
 		MessageName:          "ping",
 		MessageID:            "ping-forged",
-		UserID:               "evil-user",
+		SpaceID:              "evil-user",
 		DeviceID:             "device-ws",
 		RuntimeID:            "runtime-ws",
 		RuntimeSessionID:     ackEnv.RuntimeSessionID,

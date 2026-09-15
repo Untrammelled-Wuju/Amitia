@@ -1,7 +1,7 @@
 package persistence
 
 type BehaviorContextModel struct {
-	UserID                  string `gorm:"column:user_id;primaryKey"`
+	SpaceID                 string `gorm:"column:space_id;primaryKey"`
 	CharacterID             string `gorm:"column:character_id;primaryKey"`
 	Revision                int64  `gorm:"column:revision"`
 	StableStateJSON         string `gorm:"column:stable_state_json"`
@@ -27,7 +27,7 @@ type BehaviorInboxModel struct {
 	DedupKey          string `gorm:"column:dedup_key;uniqueIndex:ux_desktop_pet_behavior_inbox_dedup,priority:3"`
 	EventType         string `gorm:"column:event_type"`
 	SchemaVersion     int    `gorm:"column:schema_version"`
-	UserID            string `gorm:"column:user_id;uniqueIndex:ux_desktop_pet_behavior_inbox_dedup,priority:1"`
+	SpaceID           string `gorm:"column:space_id;uniqueIndex:ux_desktop_pet_behavior_inbox_dedup,priority:1"`
 	CharacterID       string `gorm:"column:character_id;uniqueIndex:ux_desktop_pet_behavior_inbox_dedup,priority:2"`
 	ConversationID    string `gorm:"column:conversation_id"`
 	InteractionID     string `gorm:"column:interaction_id"`
@@ -64,7 +64,7 @@ func (BehaviorInboxModel) TableName() string {
 type BehaviorDecisionModel struct {
 	DecisionID             string `gorm:"column:decision_id;primaryKey"`
 	EventID                string `gorm:"column:event_id"`
-	UserID                 string `gorm:"column:user_id"`
+	SpaceID                string `gorm:"column:space_id"`
 	CharacterID            string `gorm:"column:character_id"`
 	InstallationID         string `gorm:"column:installation_id"`
 	ContextRevision        int64  `gorm:"column:context_revision"`
@@ -92,7 +92,7 @@ func (BehaviorDecisionModel) TableName() string {
 }
 
 type BehaviorCooldownModel struct {
-	UserID           string `gorm:"column:user_id;primaryKey"`
+	SpaceID          string `gorm:"column:space_id;primaryKey"`
 	CharacterID      string `gorm:"column:character_id;primaryKey"`
 	CooldownKey      string `gorm:"column:cooldown_key;primaryKey"`
 	UntilAt          string `gorm:"column:until_at"`

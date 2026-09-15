@@ -108,7 +108,7 @@ type RuntimeMessage struct {
 	IdempotencyKey  string          `json:"idempotencyKey,omitempty"`
 	RuntimeID       string          `json:"runtimeId,omitempty"`
 	SessionID       string          `json:"sessionId,omitempty"`
-	UserID          string          `json:"userId,omitempty"`
+	SpaceID         string          `json:"spaceId,omitempty"`
 	DeviceID        string          `json:"deviceId,omitempty"`
 	InstallationID  string          `json:"installationId,omitempty"`
 	PetInstanceID   string          `json:"petInstanceId,omitempty"`

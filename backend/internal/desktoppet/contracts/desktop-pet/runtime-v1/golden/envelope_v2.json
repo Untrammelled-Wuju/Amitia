@@ -6,7 +6,7 @@
   "messageId": "msg_01JXYZ1234567890",
   "correlationId": "cmd_01JXYZ1234567890",
   "causationId": "decision_01JXYZ1234567890",
-  "userId": "user_01JXYZ",
+  "spaceId": "user_01JXYZ",
   "deviceId": "device_01JXYZ",
   "runtimeId": "runtime_01JXYZ",
   "runtimeSessionId": "session_01JXYZ",

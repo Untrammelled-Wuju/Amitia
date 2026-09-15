@@ -33,16 +33,16 @@ func newFinalizeTestImporter(t *testing.T) (*PackageImporter, *gorm.DB, release.
 
 func seedFinalizeRecords(t *testing.T, db *gorm.DB) (*release.ReleaseData, *release.ReleaseBuildOperation, *release.ImportPackageSnapshot, *security.ImportStaging, *ImportPackageRequest) {
 	t.Helper()
-	releaseRecord := &release.ReleaseData{ID: "release-1", PetID: "pet-1", OwnerUserID: "user-1", Lifecycle: string(release.ReleaseLifecycleBuilding), IntegrityStatus: string(release.ReleaseIntegrityUnknown)}
-	buildOp := &release.ReleaseBuildOperation{ID: "op-1", UserID: "user-1", PetID: "pet-1", ReleaseID: "release-1", State: release.BuildOpStateBuilding, Stage: release.ImportJournalStageFilesPublished}
-	snapshot := &release.ImportPackageSnapshot{ID: "snapshot-1", ImportStagingID: "staging-1", UserID: "user-1", PetID: "pet-1", ReleaseID: "release-1", OperationID: "op-1", Status: release.ImportSnapshotPublished}
-	staging := &security.ImportStaging{ID: "staging-1", OwnerUserID: "user-1", Status: security.StagingStatusConsuming, StateRevision: 2}
+	releaseRecord := &release.ReleaseData{ID: "release-1", PetID: "pet-1", OwnerSpaceID: "user-1", Lifecycle: string(release.ReleaseLifecycleBuilding), IntegrityStatus: string(release.ReleaseIntegrityUnknown)}
+	buildOp := &release.ReleaseBuildOperation{ID: "op-1", SpaceID: "user-1", PetID: "pet-1", ReleaseID: "release-1", State: release.BuildOpStateBuilding, Stage: release.ImportJournalStageFilesPublished}
+	snapshot := &release.ImportPackageSnapshot{ID: "snapshot-1", ImportStagingID: "staging-1", SpaceID: "user-1", PetID: "pet-1", ReleaseID: "release-1", OperationID: "op-1", Status: release.ImportSnapshotPublished}
+	staging := &security.ImportStaging{ID: "staging-1", OwnerSpaceID: "user-1", Status: security.StagingStatusConsuming, StateRevision: 2}
 	for _, record := range []any{releaseRecord, buildOp, snapshot, staging} {
 		if err := db.Create(record).Error; err != nil {
 			t.Fatalf("seed %T: %v", record, err)
 		}
 	}
-	request := &ImportPackageRequest{UserID: "user-1", ImportStagingID: "staging-1", ExpectedStagingRevision: 2}
+	request := &ImportPackageRequest{SpaceID: "user-1", ImportStagingID: "staging-1", ExpectedStagingRevision: 2}
 	return releaseRecord, buildOp, snapshot, staging, request
 }
 

@@ -2,7 +2,7 @@ package editing
 
 type ActionRevision struct {
 	ID                       string   `gorm:"column:id;primaryKey" json:"id"`
-	UserID                   string   `gorm:"column:user_id;default:''" json:"userId"`
+	SpaceID                  string   `gorm:"column:space_id;default:''" json:"spaceId"`
 	ProcessingTaskID         string   `gorm:"column:processing_task_id" json:"processingTaskId"`
 	ProcessingActionID       string   `gorm:"column:processing_action_id" json:"processingActionId"`
 	GenerationTaskID         string   `gorm:"column:generation_task_id" json:"generationTaskId"`
@@ -29,7 +29,7 @@ type ActionRevision struct {
 	QualityRulesetVersion    string   `gorm:"column:quality_ruleset_version;default:''" json:"qualityRulesetVersion"`
 	QualitySourceContentHash string   `gorm:"column:quality_source_content_hash;default:''" json:"qualitySourceContentHash"`
 	QualityEvaluatedAt       string   `gorm:"column:quality_evaluated_at;default:''" json:"qualityEvaluatedAt"`
-	CreatedByUserID          string   `gorm:"column:created_by_user_id" json:"createdByUserId"`
+	CreatedBySpaceID         string   `gorm:"column:created_by_space_id" json:"createdBySpaceId"`
 	CreatedFromSessionID     string   `gorm:"column:created_from_session_id" json:"createdFromSessionId"`
 	ChangeSummary            string   `gorm:"column:change_summary" json:"changeSummary"`
 	SourceSummaryJSON        string   `gorm:"column:source_summary_json" json:"sourceSummaryJson"`
@@ -72,7 +72,7 @@ type ActiveRevisionBinding struct {
 	Reason                 string `gorm:"column:reason" json:"reason"`
 	CreatedAt              string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt              string `gorm:"column:updated_at" json:"updatedAt"`
-	UserID                 string `gorm:"column:user_id;default:''" json:"userId"`
+	SpaceID                string `gorm:"column:space_id;default:''" json:"spaceId"`
 	ActiveActionRevisionID string `gorm:"column:active_action_revision_id;default:''" json:"activeActionRevisionId"`
 	BindingRevision        int64  `gorm:"column:binding_revision;default:0" json:"bindingRevision"`
 	BoundReason            string `gorm:"column:bound_reason;default:''" json:"boundReason"`
@@ -84,7 +84,7 @@ func (ActiveRevisionBinding) TableName() string { return "desktop_pet_action_act
 
 type FrameAsset struct {
 	ID                         string `gorm:"column:id;primaryKey" json:"id"`
-	UserID                     string `gorm:"column:user_id;default:''" json:"userId"`
+	SpaceID                    string `gorm:"column:space_id;default:''" json:"spaceId"`
 	ContentHash                string `gorm:"column:content_hash" json:"contentHash"`
 	StoragePath                string `gorm:"column:storage_path" json:"storagePath"`
 	StorageKey                 string `gorm:"column:storage_key;default:''" json:"storageKey"`
@@ -137,7 +137,7 @@ func (ActionRevisionFrame) TableName() string { return "desktop_pet_action_revis
 
 type EditSession struct {
 	ID                    string `gorm:"column:id;primaryKey" json:"id"`
-	UserID                string `gorm:"column:user_id" json:"userId"`
+	SpaceID               string `gorm:"column:space_id" json:"spaceId"`
 	ActionStreamID        string `gorm:"column:action_stream_id;default:''" json:"actionStreamId"`
 	ProcessingTaskID      string `gorm:"column:processing_task_id" json:"processingTaskId"`
 	ActionKey             string `gorm:"column:action_key" json:"actionKey"`
@@ -193,7 +193,7 @@ func (EditCheckpoint) TableName() string { return "desktop_pet_edit_checkpoints"
 type RegenerationJob struct {
 	ID                   string `gorm:"column:id;primaryKey" json:"id"`
 	SessionID            string `gorm:"column:session_id" json:"sessionId"`
-	UserID               string `gorm:"column:user_id;default:''" json:"userId"`
+	SpaceID              string `gorm:"column:space_id;default:''" json:"spaceId"`
 	ActionStreamID       string `gorm:"column:action_stream_id;default:''" json:"actionStreamId"`
 	DraftSnapshotID      string `gorm:"column:draft_snapshot_id;default:''" json:"draftSnapshotId"`
 	DraftSnapshotHash    string `gorm:"column:draft_snapshot_hash;default:''" json:"draftSnapshotHash"`
@@ -246,7 +246,7 @@ type EditCandidate struct {
 	ID                  string `gorm:"column:id;primaryKey" json:"id"`
 	SessionID           string `gorm:"column:session_id" json:"sessionId"`
 	JobID               string `gorm:"column:job_id" json:"jobId"`
-	UserID              string `gorm:"column:user_id;default:''" json:"userId"`
+	SpaceID             string `gorm:"column:space_id;default:''" json:"spaceId"`
 	ActionStreamID      string `gorm:"column:action_stream_id;default:''" json:"actionStreamId"`
 	CandidateVersion    int64  `gorm:"column:candidate_version;default:0" json:"candidateVersion"`
 	DraftSnapshotID     string `gorm:"column:draft_snapshot_id;default:''" json:"draftSnapshotId"`
@@ -317,7 +317,7 @@ func (PublishJournal) TableName() string { return "desktop_pet_publish_journal" 
 
 type EditIdempotencyRecord struct {
 	ID             string `gorm:"column:id;primaryKey" json:"id"`
-	UserID         string `gorm:"column:user_id" json:"userId"`
+	SpaceID        string `gorm:"column:space_id" json:"spaceId"`
 	SessionID      string `gorm:"column:session_id" json:"sessionId"`
 	IdempotencyKey string `gorm:"column:idempotency_key" json:"idempotencyKey"`
 	Endpoint       string `gorm:"column:endpoint" json:"endpoint"`
@@ -330,7 +330,7 @@ func (EditIdempotencyRecord) TableName() string { return "desktop_pet_edit_idemp
 
 type ActionStream struct {
 	ID                   string `gorm:"column:id;primaryKey" json:"id"`
-	UserID               string `gorm:"column:user_id" json:"userId"`
+	SpaceID              string `gorm:"column:space_id" json:"spaceId"`
 	ActionKey            string `gorm:"column:action_key" json:"actionKey"`
 	RootProcessingTaskID string `gorm:"column:root_processing_task_id;default:''" json:"rootProcessingTaskId"`
 	StreamKey            string `gorm:"column:stream_key;default:''" json:"streamKey"`
@@ -353,7 +353,7 @@ type RevisionBridgeJournal struct {
 	CreatedAt            string `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt            string `gorm:"column:updated_at" json:"updatedAt"`
 	EventID              string `gorm:"column:event_id;default:''" json:"eventId"`
-	UserID               string `gorm:"column:user_id;default:''" json:"userId"`
+	SpaceID              string `gorm:"column:space_id;default:''" json:"spaceId"`
 	ActionKey            string `gorm:"column:action_key;default:''" json:"actionKey"`
 	PayloadJSON          string `gorm:"column:payload_json;default:''" json:"payloadJson"`
 	PayloadHash          string `gorm:"column:payload_hash;default:''" json:"payloadHash"`
@@ -367,7 +367,7 @@ func (RevisionBridgeJournal) TableName() string { return "desktop_pet_revision_b
 type ActiveActionRevisionBinding struct {
 	ID                     string `gorm:"column:id;primaryKey" json:"id"`
 	ActionStreamID         string `gorm:"column:action_stream_id;default:''" json:"actionStreamId"`
-	UserID                 string `gorm:"column:user_id" json:"userId"`
+	SpaceID                string `gorm:"column:space_id" json:"spaceId"`
 	ActionKey              string `gorm:"column:action_key" json:"actionKey"`
 	ActiveActionRevisionID string `gorm:"column:active_action_revision_id" json:"activeActionRevisionId"`
 	BindingRevision        int64  `gorm:"column:binding_revision" json:"bindingRevision"`
@@ -419,7 +419,7 @@ func (CandidateRevisionMetadata) TableName() string { return "desktop_pet_candid
 type EditAuditLog struct {
 	ID                       string `gorm:"column:id;primaryKey" json:"id"`
 	EventType                string `gorm:"column:event_type" json:"eventType"`
-	UserID                   string `gorm:"column:user_id" json:"userId"`
+	SpaceID                  string `gorm:"column:space_id" json:"spaceId"`
 	ActionKey                string `gorm:"column:action_key" json:"actionKey"`
 	EditSessionID            string `gorm:"column:edit_session_id" json:"editSessionId"`
 	JobID                    string `gorm:"column:job_id" json:"jobId"`
@@ -524,7 +524,7 @@ type EditDraftSnapshot struct {
 	ID                       string `gorm:"column:id;primaryKey" json:"id"`
 	SessionID                string `gorm:"column:session_id" json:"sessionId"`
 	SessionVersion           int64  `gorm:"column:session_version" json:"sessionVersion"`
-	UserID                   string `gorm:"column:user_id" json:"userId"`
+	SpaceID                  string `gorm:"column:space_id" json:"spaceId"`
 	ActionStreamID           string `gorm:"column:action_stream_id" json:"actionStreamId"`
 	ActionKey                string `gorm:"column:action_key" json:"actionKey"`
 	BaseRevisionID           string `gorm:"column:base_revision_id" json:"baseRevisionId"`
@@ -569,7 +569,7 @@ type CandidateAcceptanceOperation struct {
 	ID             string `gorm:"column:id;primaryKey" json:"id"`
 	CandidateID    string `gorm:"column:candidate_id" json:"candidateId"`
 	SessionID      string `gorm:"column:session_id" json:"sessionId"`
-	UserID         string `gorm:"column:user_id" json:"userId"`
+	SpaceID        string `gorm:"column:space_id" json:"spaceId"`
 	Action         string `gorm:"column:action" json:"action"`
 	IdempotencyKey string `gorm:"column:idempotency_key" json:"idempotencyKey"`
 	Status         string `gorm:"column:status" json:"status"`
@@ -589,7 +589,7 @@ type EditingEventOutboxRecord struct {
 	EventType     string `gorm:"column:event_type" json:"eventType"`
 	AggregateType string `gorm:"column:aggregate_type" json:"aggregateType"`
 	AggregateID   string `gorm:"column:aggregate_id" json:"aggregateId"`
-	UserID        string `gorm:"column:user_id" json:"userId"`
+	SpaceID       string `gorm:"column:space_id" json:"spaceId"`
 	PayloadJSON   string `gorm:"column:payload_json" json:"payloadJson"`
 	PayloadHash   string `gorm:"column:payload_hash" json:"payloadHash"`
 	Status        string `gorm:"column:status" json:"status"`

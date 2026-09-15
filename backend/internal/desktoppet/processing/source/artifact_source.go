@@ -17,7 +17,7 @@ type ArtifactSourceRepo interface {
 	GetActiveAttemptInfo(taskActionID string) (*AttemptInfo, error)
 	GetAttemptInfo(taskActionID string, attemptNumber int) (*AttemptInfo, error)
 	GetPrimaryArtifact(attemptID string) (*ArtifactInfo, error)
-	GetTaskUserID(taskID string) (string, error)
+	GetTaskSpaceID(taskID string) (string, error)
 }
 
 type AttemptInfo struct {
@@ -279,15 +279,15 @@ func resolveAttempt(repo ArtifactSourceRepo, taskActionID string, attemptNumber 
 }
 
 func validateOwnership(repo ArtifactSourceRepo, req ResolveRequest) error {
-	if req.UserID == "" {
+	if req.SpaceID == "" {
 		return nil
 	}
-	ownerID, err := repo.GetTaskUserID(req.GenerationTaskID)
+	ownerID, err := repo.GetTaskSpaceID(req.GenerationTaskID)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrSourcePlanNotFound, err)
 	}
-	if ownerID != req.UserID {
-		return fmt.Errorf("%w: expected=%s actual=%s", ErrSourceOwnerMismatch, req.UserID, ownerID)
+	if ownerID != req.SpaceID {
+		return fmt.Errorf("%w: expected=%s actual=%s", ErrSourceOwnerMismatch, req.SpaceID, ownerID)
 	}
 	return nil
 }
@@ -297,30 +297,30 @@ type SegmentedLayoutPayload struct {
 }
 
 type SegmentedSheetSegment struct {
-	SegmentIndex    int                     `json:"segmentIndex"`
-	SheetLayout     SegmentedSheetLayout    `json:"sheetLayout"`
-	FrameStartIndex int                     `json:"frameStartIndex"`
-	FrameEndIndex   int                     `json:"frameEndIndex"`
-	FrameCount      int                     `json:"frameCount"`
+	SegmentIndex    int                  `json:"segmentIndex"`
+	SheetLayout     SegmentedSheetLayout `json:"sheetLayout"`
+	FrameStartIndex int                  `json:"frameStartIndex"`
+	FrameEndIndex   int                  `json:"frameEndIndex"`
+	FrameCount      int                  `json:"frameCount"`
 }
 
 type SegmentedSheetLayout struct {
-	Rows         int              `json:"rows"`
-	Columns      int              `json:"columns"`
-	CellWidth    int              `json:"cellWidth"`
-	CellHeight   int              `json:"cellHeight"`
-	MarginX      int              `json:"marginX"`
-	MarginY      int              `json:"marginY"`
-	GapX         int              `json:"gapX"`
-	GapY         int              `json:"gapY"`
-	SheetWidth   int              `json:"sheetWidth"`
-	SheetHeight  int              `json:"sheetHeight"`
-	ReadingOrder string           `json:"readingOrder"`
-	Cells        []SegmentedCell  `json:"cells"`
-	EmptyCells   []int            `json:"emptyCells"`
-	TotalCells   int              `json:"totalCells"`
-	UsedCells    int              `json:"usedCells"`
-	FrameCount   int              `json:"frameCount"`
+	Rows         int             `json:"rows"`
+	Columns      int             `json:"columns"`
+	CellWidth    int             `json:"cellWidth"`
+	CellHeight   int             `json:"cellHeight"`
+	MarginX      int             `json:"marginX"`
+	MarginY      int             `json:"marginY"`
+	GapX         int             `json:"gapX"`
+	GapY         int             `json:"gapY"`
+	SheetWidth   int             `json:"sheetWidth"`
+	SheetHeight  int             `json:"sheetHeight"`
+	ReadingOrder string          `json:"readingOrder"`
+	Cells        []SegmentedCell `json:"cells"`
+	EmptyCells   []int           `json:"emptyCells"`
+	TotalCells   int             `json:"totalCells"`
+	UsedCells    int             `json:"usedCells"`
+	FrameCount   int             `json:"frameCount"`
 }
 
 type SegmentedCell struct {

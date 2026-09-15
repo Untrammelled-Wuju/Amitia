@@ -30,15 +30,15 @@ func NewV1ActivePetAdapter(installRepo installation.Repository, facade *runtimev
 	}
 }
 
-func (a *V1ActivePetAdapter) ResolveActivePet(ctx context.Context, userID, characterID string) (*behavior.ActivePetSnapshot, error) {
-	return a.resolveActivePet(ctx, userID, characterID, "", "")
+func (a *V1ActivePetAdapter) ResolveActivePet(ctx context.Context, spaceID, characterID string) (*behavior.ActivePetSnapshot, error) {
+	return a.resolveActivePet(ctx, spaceID, characterID, "", "")
 }
 
 func (a *V1ActivePetAdapter) ResolveActivePetForEvent(ctx context.Context, event behavior.BehaviorEventEnvelope) (*behavior.ActivePetSnapshot, error) {
-	return a.resolveActivePet(ctx, event.UserID, event.CharacterID, event.InstallationID, event.PetInstanceID)
+	return a.resolveActivePet(ctx, event.SpaceID, event.CharacterID, event.InstallationID, event.PetInstanceID)
 }
 
-func (a *V1ActivePetAdapter) resolveActivePet(ctx context.Context, userID, characterID, installationHint, petInstanceHint string) (*behavior.ActivePetSnapshot, error) {
+func (a *V1ActivePetAdapter) resolveActivePet(ctx context.Context, spaceID, characterID, installationHint, petInstanceHint string) (*behavior.ActivePetSnapshot, error) {
 	if a.installRepo == nil {
 		return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "installation repository unavailable")
 	}
@@ -54,7 +54,7 @@ func (a *V1ActivePetAdapter) resolveActivePet(ctx context.Context, userID, chara
 		if err != nil {
 			return nil, err
 		}
-		if !v2InstallationMatches(candidate, userID, characterID) {
+		if !v2InstallationMatches(candidate, spaceID, characterID) {
 			return nil, behavior.NewBehaviorError(behavior.ErrCodeNoActiveInstallation, "event installation is not active for character")
 		}
 		selected = candidate
@@ -62,7 +62,7 @@ func (a *V1ActivePetAdapter) resolveActivePet(ctx context.Context, userID, chara
 
 	connections := []*runtimev1.Connection(nil)
 	if a.facade != nil {
-		connections = a.facade.ListConnections(userID)
+		connections = a.facade.ListConnections(spaceID)
 	}
 
 	if selected == nil && petInstanceHint != "" {
@@ -70,13 +70,13 @@ func (a *V1ActivePetAdapter) resolveActivePet(ctx context.Context, userID, chara
 			if conn == nil || conn.GetState() != runtimev1.ConnStateConnected || string(conn.RuntimeID) != petInstanceHint {
 				continue
 			}
-			installations, err := a.installRepo.ListInstallationsForUserDevice(userID, string(conn.DeviceID))
+			installations, err := a.installRepo.ListInstallationsForSpaceDevice(spaceID, string(conn.DeviceID))
 			if err != nil {
 				return nil, err
 			}
 			v2SortInstallations(installations)
 			for _, candidate := range installations {
-				if v2InstallationMatches(candidate, userID, characterID) {
+				if v2InstallationMatches(candidate, spaceID, characterID) {
 					selected = candidate
 					selectedRuntimeID = string(conn.RuntimeID)
 					runtimeOnline = true
@@ -106,12 +106,12 @@ func (a *V1ActivePetAdapter) resolveActivePet(ctx context.Context, userID, chara
 			if conn == nil || conn.GetState() != runtimev1.ConnStateConnected {
 				continue
 			}
-			installations, err := a.installRepo.ListInstallationsForUserDevice(userID, string(conn.DeviceID))
+			installations, err := a.installRepo.ListInstallationsForSpaceDevice(spaceID, string(conn.DeviceID))
 			if err != nil {
 				return nil, err
 			}
 			for _, candidate := range installations {
-				if v2InstallationMatches(candidate, userID, characterID) {
+				if v2InstallationMatches(candidate, spaceID, characterID) {
 					candidates = append(candidates, onlineCandidate{installation: candidate, runtimeID: string(conn.RuntimeID)})
 				}
 			}
@@ -137,13 +137,13 @@ func (a *V1ActivePetAdapter) resolveActivePet(ctx context.Context, userID, chara
 	}
 
 	if selected == nil {
-		installations, err := a.installRepo.ListInstallationsByUser(userID)
+		installations, err := a.installRepo.ListInstallationsBySpace(spaceID)
 		if err != nil {
 			return nil, err
 		}
 		v2SortInstallations(installations)
 		for _, candidate := range installations {
-			if v2InstallationMatches(candidate, userID, characterID) {
+			if v2InstallationMatches(candidate, spaceID, characterID) {
 				selected = candidate
 				break
 			}
@@ -196,7 +196,7 @@ func (a *V1ActivePetAdapter) resolveActivePet(ctx context.Context, userID, chara
 
 	stateRevision := int64(selected.StateRevision)
 	return &behavior.ActivePetSnapshot{
-		UserID:         userID,
+		SpaceID:        spaceID,
 		DeviceID:       selected.DeviceID,
 		RuntimeID:      selectedRuntimeID,
 		InstallationID: selected.ID,
@@ -237,8 +237,8 @@ func v2InstallationActivityKey(candidate *installation.Installation) string {
 	return candidate.UpdatedAt
 }
 
-func v2InstallationMatches(candidate *installation.Installation, userID, characterID string) bool {
-	if candidate == nil || candidate.UserID != userID || candidate.Status != installation.StatusEnabled || candidate.IsActive != 1 {
+func v2InstallationMatches(candidate *installation.Installation, spaceID, characterID string) bool {
+	if candidate == nil || candidate.SpaceID != spaceID || candidate.Status != installation.StatusEnabled || candidate.IsActive != 1 {
 		return false
 	}
 	return true

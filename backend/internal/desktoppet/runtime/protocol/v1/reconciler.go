@@ -35,7 +35,7 @@ func (r *Reconciler) ReconcileSession(ctx context.Context, sessionID string, des
 		return nil
 	}
 
-	conn := r.handler.GetConnection(session.UserID, session.DeviceID, session.RuntimeID)
+	conn := r.handler.GetConnection(session.SpaceID, session.DeviceID, session.RuntimeID)
 	if conn == nil {
 		return errors.New("connection not found")
 	}

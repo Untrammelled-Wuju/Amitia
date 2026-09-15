@@ -203,7 +203,7 @@ func (r *Resolver) generateCandidates(ctx *BehaviorContextSnapshot, event Behavi
 		if evaluate != nil {
 			payload := parsePayload(event.Payload)
 			scope := bindings.EvaluatorScope{
-				UserID:         event.UserID,
+				SpaceID:        event.SpaceID,
 				CharacterID:    event.CharacterID,
 				InstallationID: installationID,
 			}

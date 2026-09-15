@@ -33,7 +33,7 @@ const (
 
 type Connection struct {
 	ID         string
-	UserID     runtimeidentity.UserID
+	SpaceID    runtimeidentity.SpaceID
 	DeviceID   runtimeidentity.DeviceID
 	RuntimeID  runtimeidentity.RuntimeID
 	SessionID  string
@@ -173,7 +173,7 @@ func (c *Connection) NextOutboundSequence() int64 {
 
 func (c *Connection) SessionIdentity() protocol.SessionIdentity {
 	return protocol.SessionIdentity{
-		UserID:           c.UserID,
+		SpaceID:          c.SpaceID,
 		DeviceID:         c.DeviceID,
 		RuntimeID:        c.RuntimeID,
 		RuntimeSessionID: runtimeidentity.ParseRuntimeSessionID(c.SessionID),
@@ -215,23 +215,23 @@ func NewHandlerWithDeviceRuntime(services *Services, deviceRuntimeSessions *devi
 }
 
 func RuntimeConnectionKey(
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 	deviceID runtimeidentity.DeviceID,
 	runtimeID runtimeidentity.RuntimeID,
 ) string {
 	parts := []string{
-		strings.TrimSpace(userID.String()),
+		strings.TrimSpace(spaceID.String()),
 		strings.TrimSpace(deviceID.String()),
 		strings.TrimSpace(runtimeID.String()),
 	}
 	return strings.Join(parts, "\x00")
 }
 
-func (h *Handler) HandleConnect(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*Connection, error) {
+func (h *Handler) HandleConnect(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*Connection, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	key := RuntimeConnectionKey(userID, deviceID, runtimeID)
+	key := RuntimeConnectionKey(spaceID, deviceID, runtimeID)
 	if existing, ok := h.connections[key]; ok && existing != nil {
 		// A reconnect must fence the old websocket before replacing the registry
 		// entry. In-flight mutations finish first; once this exclusive fence is
@@ -241,7 +241,7 @@ func (h *Handler) HandleConnect(userID runtimeidentity.UserID, deviceID runtimei
 		existingSessionID := existing.SessionIDValue()
 		if existingState != ConnStateClosed && existingState != ConnStateClosing {
 			if h.commands != nil {
-				if err := h.commands.SupersedeEphemeralCommands(string(userID), string(deviceID), string(runtimeID), existingSessionID, "runtime connection replaced", time.Now().UTC()); err != nil {
+				if err := h.commands.SupersedeEphemeralCommands(string(spaceID), string(deviceID), string(runtimeID), existingSessionID, "runtime connection replaced", time.Now().UTC()); err != nil {
 					existing.fenceMu.Unlock()
 					return nil, fmt.Errorf("supersede ephemeral runtime commands: %w", err)
 				}
@@ -260,7 +260,7 @@ func (h *Handler) HandleConnect(userID runtimeidentity.UserID, deviceID runtimei
 
 	conn := &Connection{
 		ID:        "conn_" + uuid.NewString(),
-		UserID:    userID,
+		SpaceID:   spaceID,
 		DeviceID:  deviceID,
 		RuntimeID: runtimeID,
 		State:     ConnStateHandshake,
@@ -325,7 +325,7 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 	now := time.Now().UTC()
 
 	if h.deviceRuntimeSessions != nil {
-		acqReq := HelloToAcquireRequest(*payload, conn.UserID, runtimeidentity.PlatformUnknown, now)
+		acqReq := HelloToAcquireRequest(*payload, conn.SpaceID, runtimeidentity.PlatformUnknown, now)
 
 		result, err := h.deviceRuntimeSessions.Acquire(context.Background(), acqReq)
 		if err != nil {
@@ -353,7 +353,7 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 
 		conn.ActivateSession(result.Session.ID.String(), result.Session.ConnectionGeneration, result.Session.LastEventSequence)
 		authoritativeRevision, reconcileErr := h.commands.ReconcileDesiredStateOnHello(
-			string(conn.UserID), string(conn.DeviceID), string(conn.RuntimeID),
+			string(conn.SpaceID), string(conn.DeviceID), string(conn.RuntimeID),
 			payload.LastAppliedDesiredRevision, result.Session.ConnectionGeneration,
 		)
 		if reconcileErr != nil {
@@ -368,7 +368,7 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 
 	newSession, oldSession, err := h.sessions.AcquireSession(
 		nil,
-		conn.UserID, conn.DeviceID, conn.RuntimeID,
+		conn.SpaceID, conn.DeviceID, conn.RuntimeID,
 		payload.Capabilities, payload.RuntimeContractVersion,
 		payload.LastAppliedDesiredRevision,
 		payload.LastProcessedCommandSequence,
@@ -382,7 +382,7 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 
 	conn.ActivateSession(newSession.ID, newSession.ConnectionGeneration, newSession.LastEventSequence)
 	authoritativeRevision, reconcileErr := h.commands.ReconcileDesiredStateOnHello(
-		string(conn.UserID), string(conn.DeviceID), string(conn.RuntimeID),
+		string(conn.SpaceID), string(conn.DeviceID), string(conn.RuntimeID),
 		payload.LastAppliedDesiredRevision, newSession.ConnectionGeneration,
 	)
 	if reconcileErr != nil {
@@ -419,7 +419,7 @@ func validateEstablishedInboundEnvelope(conn *Connection, env *Envelope) (string
 	if sessionID == "" || generation <= 0 {
 		return "", 0, ErrConnectionClosed
 	}
-	if env.UserID != conn.UserID || env.DeviceID != conn.DeviceID || env.RuntimeID != conn.RuntimeID {
+	if env.SpaceID != conn.SpaceID || env.DeviceID != conn.DeviceID || env.RuntimeID != conn.RuntimeID {
 		return "", 0, NewProtocolError(ErrCodeEnvelopeInvalid, "runtime envelope identity mismatch")
 	}
 	if env.RuntimeSessionID != runtimeidentity.ParseRuntimeSessionID(sessionID) {
@@ -439,7 +439,7 @@ func (h *Handler) validateCommandOwnership(conn *Connection, sessionID, commandI
 	if !cmd.HasValidClassification() {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "stored runtime command classification is invalid")
 	}
-	if cmd.UserID != string(conn.UserID) || cmd.DeviceID != string(conn.DeviceID) {
+	if cmd.SpaceID != string(conn.SpaceID) || cmd.DeviceID != string(conn.DeviceID) {
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "command ownership mismatch")
 	}
 	if cmd.RuntimeID != "" && cmd.RuntimeID != string(conn.RuntimeID) {
@@ -944,7 +944,7 @@ func (h *Handler) appendRuntimeDomainEvent(conn *Connection, env *Envelope) erro
 		SessionID      string          `json:"SessionID"`
 		DeviceID       string          `json:"DeviceID"`
 		InstallationID string          `json:"InstallationID"`
-		UserID         string          `json:"UserID"`
+		SpaceID        string          `json:"SpaceID"`
 		Sequence       int64           `json:"Sequence"`
 		Timestamp      time.Time       `json:"Timestamp"`
 		Payload        json.RawMessage `json:"Payload"`
@@ -954,7 +954,7 @@ func (h *Handler) appendRuntimeDomainEvent(conn *Connection, env *Envelope) erro
 		SessionID:      sessionID,
 		DeviceID:       string(conn.DeviceID),
 		InstallationID: meta.InstallationID,
-		UserID:         string(conn.UserID),
+		SpaceID:        string(conn.SpaceID),
 		Sequence:       env.Sequence,
 		Timestamp:      occurredAt,
 		Payload:        json.RawMessage(env.Payload),
@@ -1043,7 +1043,7 @@ func (h *Handler) runtimeActualStateFromSnapshot(conn *Connection, env *Envelope
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "state snapshot visible flag does not match windowStatus")
 	}
 	state := &RuntimeActualState{
-		UserID:                  string(conn.UserID),
+		SpaceID:                 string(conn.SpaceID),
 		DeviceID:                string(conn.DeviceID),
 		RuntimeID:               string(conn.RuntimeID),
 		RuntimeSessionID:        sessionID,
@@ -1205,7 +1205,7 @@ func (h *Handler) HandleDisconnect(conn *Connection) error {
 	sessionID, generation := conn.SessionSnapshot()
 	if sessionID != "" && h.commands != nil {
 		if err := h.commands.SupersedeEphemeralCommands(
-			string(conn.UserID), string(conn.DeviceID), string(conn.RuntimeID), sessionID,
+			string(conn.SpaceID), string(conn.DeviceID), string(conn.RuntimeID), sessionID,
 			"runtime connection disconnected", time.Now().UTC(),
 		); err != nil {
 			log.Warn("[runtime-v1] supersede disconnected ephemeral commands failed: ", err)
@@ -1257,7 +1257,7 @@ func (h *Handler) HandleHeartbeat(conn *Connection) error {
 	return h.sessions.UpdateLastHeartbeat(sessionID)
 }
 
-func (h *Handler) CreateEnvelope(msgType MessageType, msgName string, runtimeID runtimeidentity.RuntimeID, sessionID runtimeidentity.RuntimeSessionID, payload interface{}, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) (*Envelope, error) {
+func (h *Handler) CreateEnvelope(msgType MessageType, msgName string, runtimeID runtimeidentity.RuntimeID, sessionID runtimeidentity.RuntimeSessionID, payload interface{}, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID) (*Envelope, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal payload failed: %v", err)
@@ -1268,7 +1268,7 @@ func (h *Handler) CreateEnvelope(msgType MessageType, msgName string, runtimeID 
 		MessageType:          msgType,
 		MessageName:          msgName,
 		MessageID:            "msg_" + uuid.NewString(),
-		Identity:             protocol.SessionIdentity{UserID: userID, DeviceID: deviceID, RuntimeID: runtimeID, RuntimeSessionID: sessionID},
+		Identity:             protocol.SessionIdentity{SpaceID: spaceID, DeviceID: deviceID, RuntimeID: runtimeID, RuntimeSessionID: sessionID},
 		ConnectionGeneration: 1,
 		Sequence:             0,
 		PayloadSchemaVersion: 1,
@@ -1282,9 +1282,9 @@ func (h *Handler) CreateEnvelope(msgType MessageType, msgName string, runtimeID 
 	return (*Envelope)(coreEnv), nil
 }
 
-func (h *Handler) GetConnection(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) *Connection {
+func (h *Handler) GetConnection(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) *Connection {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	key := RuntimeConnectionKey(userID, deviceID, runtimeID)
+	key := RuntimeConnectionKey(spaceID, deviceID, runtimeID)
 	return h.connections[key]
 }

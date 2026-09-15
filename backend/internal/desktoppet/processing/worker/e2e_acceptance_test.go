@@ -77,8 +77,8 @@ func TestE2EFourActionsAcceptance(t *testing.T) {
 	w := newTestWorkerWithPipeline(t, db, repo, dataDir)
 
 	taskID := "gt-e2e-four-actions"
-	userID := "user-e2e"
-	seedWorkerGenerationTask(t, db, taskID, userID, "succeeded")
+	spaceID := "user-e2e"
+	seedWorkerGenerationTask(t, db, taskID, spaceID, "succeeded")
 
 	actionDefs := []struct {
 		key          string

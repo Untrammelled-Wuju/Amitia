@@ -24,7 +24,7 @@ type Result interface {
 }
 
 type DesiredStatePublisher interface {
-	PublishDesiredState(ctx context.Context, userID, deviceID, runtimeID string, snapshot *desired.DeviceDesiredSnapshot) error
+	PublishDesiredState(ctx context.Context, spaceID, deviceID, runtimeID string, snapshot *desired.DeviceDesiredSnapshot) error
 }
 
 type OutboxProcessor struct {
@@ -63,11 +63,11 @@ func (p *OutboxProcessor) processEvent(ctx context.Context, ev *desired.DesiredS
 		DesiredRevision: ev.DesiredRevision,
 		DesiredHash:     ev.DesiredHash,
 		InstallationID:  ev.InstallationID,
-		UserID:          ev.UserID,
+		SpaceID:         ev.SpaceID,
 		DeviceID:        ev.DeviceID,
 		RuntimeID:       ev.RuntimeID,
 	}
-	if err := p.publisher.PublishDesiredState(ctx, ev.UserID, ev.DeviceID, ev.RuntimeID, snapshot); err != nil {
+	if err := p.publisher.PublishDesiredState(ctx, ev.SpaceID, ev.DeviceID, ev.RuntimeID, snapshot); err != nil {
 		return err
 	}
 	return nil

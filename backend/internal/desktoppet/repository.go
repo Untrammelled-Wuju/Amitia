@@ -20,7 +20,7 @@ type Repository interface {
 	CreateTaskActions(tx *gorm.DB, actions []GenerationTaskAction) error
 	GetTaskByID(id string) (*GenerationTask, error)
 	ListActionsByTaskID(taskID string) ([]GenerationTaskAction, error)
-	ListTasks(userID, status string, page, pageSize int) ([]GenerationTask, int64, error)
+	ListTasks(spaceID, status string, page, pageSize int) ([]GenerationTask, int64, error)
 	DeleteTask(tx *gorm.DB, id string) error
 	DeleteActionsByTaskID(tx *gorm.DB, taskID string) error
 	GetImageGenConfigByID(id int) (*imageGenConfigView, error)
@@ -136,12 +136,12 @@ func (r *repository) ListActionsByTaskID(taskID string) ([]GenerationTaskAction,
 	return actions, err
 }
 
-func (r *repository) ListTasks(userID, status string, page, pageSize int) ([]GenerationTask, int64, error) {
+func (r *repository) ListTasks(spaceID, status string, page, pageSize int) ([]GenerationTask, int64, error) {
 	var tasks []GenerationTask
 	var total int64
 	q := r.db.Model(&GenerationTask{})
-	if userID != "" {
-		q = q.Where("user_id = ?", userID)
+	if spaceID != "" {
+		q = q.Where("space_id = ?", spaceID)
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)

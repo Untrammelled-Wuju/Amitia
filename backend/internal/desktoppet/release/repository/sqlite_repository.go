@@ -60,9 +60,9 @@ func (r *SQLiteRepository) GetBuildOperation(id string) (*release.ReleaseBuildOp
 	return &op, nil
 }
 
-func (r *SQLiteRepository) GetBuildOperationByIdempotencyKey(userID, idempotencyKey string) (*release.ReleaseBuildOperation, error) {
+func (r *SQLiteRepository) GetBuildOperationByIdempotencyKey(spaceID, idempotencyKey string) (*release.ReleaseBuildOperation, error) {
 	var op release.ReleaseBuildOperation
-	if err := r.db.First(&op, "user_id = ? AND idempotency_key = ?", userID, idempotencyKey).Error; err != nil {
+	if err := r.db.First(&op, "space_id = ? AND idempotency_key = ?", spaceID, idempotencyKey).Error; err != nil {
 		return nil, err
 	}
 	return &op, nil
@@ -174,7 +174,7 @@ func (r *SQLiteRepository) GetPetIdentity(petID string) (*release.PetIdentityDat
 func (r *SQLiteRepository) CreatePetIdentity(identity *release.PetIdentityData) error {
 	record := petIdentityRecord{
 		ID:                  identity.ID,
-		OwnerUserID:         identity.OwnerUserID,
+		OwnerSpaceID:        identity.OwnerSpaceID,
 		Name:                identity.Name,
 		Slug:                identity.Slug,
 		UpstreamPetID:       identity.UpstreamPetID,
@@ -189,7 +189,7 @@ func (r *SQLiteRepository) CreatePetIdentity(identity *release.PetIdentityData) 
 func (r *SQLiteRepository) CreatePetIdentityTx(tx *gorm.DB, identity *release.PetIdentityData) error {
 	record := petIdentityRecord{
 		ID:                  identity.ID,
-		OwnerUserID:         identity.OwnerUserID,
+		OwnerSpaceID:        identity.OwnerSpaceID,
 		Name:                identity.Name,
 		Slug:                identity.Slug,
 		UpstreamPetID:       identity.UpstreamPetID,
@@ -204,7 +204,7 @@ func (r *SQLiteRepository) CreatePetIdentityTx(tx *gorm.DB, identity *release.Pe
 func (r *SQLiteRepository) UpdatePetIdentity(identity *release.PetIdentityData) error {
 	record := petIdentityRecord{
 		ID:                  identity.ID,
-		OwnerUserID:         identity.OwnerUserID,
+		OwnerSpaceID:        identity.OwnerSpaceID,
 		Name:                identity.Name,
 		Slug:                identity.Slug,
 		UpstreamPetID:       identity.UpstreamPetID,
@@ -219,7 +219,7 @@ func (r *SQLiteRepository) UpdatePetIdentity(identity *release.PetIdentityData) 
 func (r *SQLiteRepository) UpdatePetIdentityTx(tx *gorm.DB, identity *release.PetIdentityData) error {
 	record := petIdentityRecord{
 		ID:                  identity.ID,
-		OwnerUserID:         identity.OwnerUserID,
+		OwnerSpaceID:        identity.OwnerSpaceID,
 		Name:                identity.Name,
 		Slug:                identity.Slug,
 		UpstreamPetID:       identity.UpstreamPetID,
@@ -263,9 +263,9 @@ func (r *SQLiteRepository) ListReleasesByPet(petID string) ([]*release.ReleaseDa
 	return releases, nil
 }
 
-func (r *SQLiteRepository) ListPublishedReleases(userID string) ([]*release.ReleaseData, error) {
+func (r *SQLiteRepository) ListPublishedReleases(spaceID string) ([]*release.ReleaseData, error) {
 	var releases []*release.ReleaseData
-	if err := r.db.Where("owner_user_id = ?", userID).Find(&releases).Error; err != nil {
+	if err := r.db.Where("owner_space_id = ?", spaceID).Find(&releases).Error; err != nil {
 		return nil, err
 	}
 	return releases, nil
@@ -472,7 +472,7 @@ func (r *SQLiteRepository) UpdateOperationOwned(tx *gorm.DB, op *release.Release
 
 type petIdentityRecord struct {
 	ID                  string `gorm:"column:id;primaryKey;type:text"`
-	OwnerUserID         string `gorm:"column:owner_user_id;type:text"`
+	OwnerSpaceID        string `gorm:"column:owner_space_id;type:text"`
 	Name                string `gorm:"column:name;type:text"`
 	Slug                string `gorm:"column:slug;type:text"`
 	UpstreamPetID       string `gorm:"column:upstream_pet_id;type:text"`
@@ -489,7 +489,7 @@ func (petIdentityRecord) TableName() string {
 func (r *petIdentityRecord) toData() *release.PetIdentityData {
 	return &release.PetIdentityData{
 		ID:                  r.ID,
-		OwnerUserID:         r.OwnerUserID,
+		OwnerSpaceID:        r.OwnerSpaceID,
 		Name:                r.Name,
 		Slug:                r.Slug,
 		UpstreamPetID:       r.UpstreamPetID,

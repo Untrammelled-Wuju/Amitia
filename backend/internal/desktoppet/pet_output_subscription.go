@@ -30,7 +30,7 @@ type PetOutputSubscription struct {
 	sessionID    string
 	runtimeID    string
 	deviceID     string
-	userID       string
+	spaceID      string
 	state        SubscriptionState
 	createdAt    time.Time
 	subscribedAt time.Time
@@ -41,12 +41,12 @@ type SubscriptionConnection interface {
 	Send(msg contracts.RuntimeMessage) error
 }
 
-func NewPetOutputSubscription(sessionID, runtimeID, deviceID, userID string) *PetOutputSubscription {
+func NewPetOutputSubscription(sessionID, runtimeID, deviceID, spaceID string) *PetOutputSubscription {
 	return &PetOutputSubscription{
 		sessionID: sessionID,
 		runtimeID: runtimeID,
 		deviceID:  deviceID,
-		userID:    userID,
+		spaceID:   spaceID,
 		state:     SubscriptionStateNone,
 		createdAt: time.Now(),
 	}
@@ -179,7 +179,7 @@ func (b *PetOutputBus) GetByRuntime(runtimeID string) (*PetOutputSubscription, b
 	return sub, ok
 }
 
-func (b *PetOutputBus) HandleSubscribe(sessionID, runtimeID, deviceID, userID string, conn SubscriptionConnection) error {
+func (b *PetOutputBus) HandleSubscribe(sessionID, runtimeID, deviceID, spaceID string, conn SubscriptionConnection) error {
 	b.mu.Lock()
 	existing, found := b.subscriptions[sessionID]
 	if found {
@@ -188,7 +188,7 @@ func (b *PetOutputBus) HandleSubscribe(sessionID, runtimeID, deviceID, userID st
 		b.mu.Unlock()
 		return existing.SendSubscribeAck()
 	}
-	sub := NewPetOutputSubscription(sessionID, runtimeID, deviceID, userID)
+	sub := NewPetOutputSubscription(sessionID, runtimeID, deviceID, spaceID)
 	sub.SetConnection(conn)
 	_ = sub.MarkSubscribed()
 	b.subscriptions[sessionID] = sub

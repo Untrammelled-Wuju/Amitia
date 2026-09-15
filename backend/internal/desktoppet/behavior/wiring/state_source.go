@@ -48,7 +48,7 @@ func interactionStatusToBehaviorPhase(status string) string {
 	}
 }
 
-func (q *AmitiaStateSourceQuery) QueryActiveInteractions(ctx context.Context, userID, characterID string) ([]behavior.InteractionSnapshot, error) {
+func (q *AmitiaStateSourceQuery) QueryActiveInteractions(ctx context.Context, spaceID, characterID string) ([]behavior.InteractionSnapshot, error) {
 	if q.db == nil {
 		return nil, nil
 	}
@@ -63,7 +63,7 @@ func (q *AmitiaStateSourceQuery) QueryActiveInteractions(ctx context.Context, us
 	var rows []interactionRow
 	err := q.db.WithContext(ctx).Table("interaction_records").
 		Select("id, status, status_version, conversation_id, created_at, updated_at").
-		Where("user_id = ? AND character_id = ? AND status IN ?", userID, characterID, interactionActiveStatuses).
+		Where("space_id = ? AND character_id = ? AND status IN ?", spaceID, characterID, interactionActiveStatuses).
 		Order("created_at DESC, updated_at DESC, status_version DESC").
 		Limit(10).
 		Find(&rows).Error
@@ -89,7 +89,7 @@ func (q *AmitiaStateSourceQuery) QueryActiveInteractions(ctx context.Context, us
 	return snapshots, nil
 }
 
-func (q *AmitiaStateSourceQuery) QueryVoiceSession(ctx context.Context, userID, characterID string) (*behavior.VoiceBehaviorState, error) {
+func (q *AmitiaStateSourceQuery) QueryVoiceSession(ctx context.Context, spaceID, characterID string) (*behavior.VoiceBehaviorState, error) {
 	if q.db == nil {
 		return nil, nil
 	}
@@ -103,7 +103,7 @@ func (q *AmitiaStateSourceQuery) QueryVoiceSession(ctx context.Context, userID, 
 	var row voiceRow
 	err := q.db.WithContext(ctx).Table("interaction_records").
 		Select("id, session_id, status, status_version, updated_at").
-		Where("user_id = ? AND character_id = ? AND source = ? AND status IN ?", userID, characterID, "voice", voiceActiveStatuses).
+		Where("space_id = ? AND character_id = ? AND source = ? AND status IN ?", spaceID, characterID, "voice", voiceActiveStatuses).
 		Order("updated_at DESC").
 		Limit(1).
 		Find(&row).Error
@@ -129,7 +129,7 @@ func (q *AmitiaStateSourceQuery) QueryVoiceSession(ctx context.Context, userID, 
 	}, nil
 }
 
-func (q *AmitiaStateSourceQuery) QueryActiveTools(ctx context.Context, userID, characterID string) (map[string]behavior.ToolOperationState, error) {
+func (q *AmitiaStateSourceQuery) QueryActiveTools(ctx context.Context, spaceID, characterID string) (map[string]behavior.ToolOperationState, error) {
 	if q.db == nil {
 		return nil, nil
 	}
@@ -146,7 +146,7 @@ func (q *AmitiaStateSourceQuery) QueryActiveTools(ctx context.Context, userID, c
 		Select(`tool_call_intents.id, tool_call_intents.tool_name, tool_call_intents.status, tool_call_intents.created_at, tool_call_intents.updated_at,
 			COALESCE((
 				SELECT ir.id FROM interaction_records AS ir
-				WHERE ir.user_id = ?
+				WHERE ir.space_id = ?
 				  AND ir.character_id = tool_call_intents.character_id
 				  AND (
 					(tool_call_intents.request_id <> ''
@@ -161,11 +161,11 @@ func (q *AmitiaStateSourceQuery) QueryActiveTools(ctx context.Context, userID, c
 				  )
 				ORDER BY ir.created_at DESC, ir.updated_at DESC
 				LIMIT 1
-			), '') AS interaction_id`, userID).
+			), '') AS interaction_id`, spaceID).
 		Where("character_id = ? AND status IN ?", characterID, toolActiveStatuses).
 		Where(`EXISTS (
 			SELECT 1 FROM interaction_records AS ir
-			WHERE ir.user_id = ?
+			WHERE ir.space_id = ?
 			  AND ir.character_id = tool_call_intents.character_id
 			  AND (
 				(tool_call_intents.request_id <> ''
@@ -178,10 +178,10 @@ func (q *AmitiaStateSourceQuery) QueryActiveTools(ctx context.Context, userID, c
 				 AND ir.conversation_id = tool_call_intents.conversation_id
 				 AND (tool_call_intents.channel = '' OR ir.channel = tool_call_intents.channel))
 			  )
-		)`, userID).
+		)`, spaceID).
 		Where(`NOT EXISTS (
 			SELECT 1 FROM interaction_records AS other
-			WHERE other.user_id <> ?
+			WHERE other.space_id <> ?
 			  AND other.character_id = tool_call_intents.character_id
 			  AND (
 				(tool_call_intents.request_id <> ''
@@ -194,7 +194,7 @@ func (q *AmitiaStateSourceQuery) QueryActiveTools(ctx context.Context, userID, c
 				 AND other.conversation_id = tool_call_intents.conversation_id
 				 AND (tool_call_intents.channel = '' OR other.channel = tool_call_intents.channel))
 			  )
-		)`, userID).
+		)`, spaceID).
 		Order("updated_at DESC").
 		Limit(20).
 		Find(&rows).Error

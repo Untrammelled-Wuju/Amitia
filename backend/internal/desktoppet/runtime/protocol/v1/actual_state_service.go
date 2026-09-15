@@ -12,7 +12,7 @@ type ActualStateService interface {
 	Upsert(state *RuntimeActualState) error
 	Get(runtimeID, installationID string) (*RuntimeActualState, error)
 	ListByRuntime(runtimeID string) ([]*RuntimeActualState, error)
-	ListByUser(userID string) ([]*RuntimeActualState, error)
+	ListBySpace(spaceID string) ([]*RuntimeActualState, error)
 	Delete(runtimeID, installationID string) error
 	UpdateHealth(runtimeID, health string) error
 	RefreshLease(reconcilerID string, now time.Time) (bool, error)
@@ -41,8 +41,8 @@ func (s *actualStateService) Upsert(state *RuntimeActualState) error {
 
 	var existing RuntimeActualState
 	err := s.db.Where(
-		"user_id = ? AND device_id = ? AND runtime_id = ?",
-		state.UserID, state.DeviceID, state.RuntimeID,
+		"space_id = ? AND device_id = ? AND runtime_id = ?",
+		state.SpaceID, state.DeviceID, state.RuntimeID,
 	).First(&existing).Error
 
 	if err == nil {
@@ -81,9 +81,9 @@ func (s *actualStateService) ListByRuntime(runtimeID string) ([]*RuntimeActualSt
 	return states, nil
 }
 
-func (s *actualStateService) ListByUser(userID string) ([]*RuntimeActualState, error) {
+func (s *actualStateService) ListBySpace(spaceID string) ([]*RuntimeActualState, error) {
 	var states []*RuntimeActualState
-	err := s.db.Where("user_id = ?", userID).
+	err := s.db.Where("space_id = ?", spaceID).
 		Order("updated_at DESC").Find(&states).Error
 	if err != nil {
 		return nil, err

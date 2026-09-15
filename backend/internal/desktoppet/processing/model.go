@@ -5,7 +5,7 @@ package processing
 type ProcessingTask struct {
 	ID                         string  `gorm:"column:id;primaryKey" json:"id"`
 	GenerationTaskID           string  `gorm:"column:generation_task_id" json:"generationTaskId"`
-	UserID                     string  `gorm:"column:user_id;default:''" json:"userId,omitempty"`
+	SpaceID                    string  `gorm:"column:space_id;default:''" json:"spaceId,omitempty"`
 	ProcessingVersion          int     `gorm:"column:processing_version" json:"processingVersion"`
 	Status                     string  `gorm:"column:status" json:"status"`
 	CurrentStage               string  `gorm:"column:current_stage" json:"currentStage"`
@@ -179,7 +179,7 @@ func (ProcessedFrame) TableName() string { return "desktop_pet_processed_frames"
 
 type Package struct {
 	ID               string `gorm:"column:id;primaryKey" json:"id"`
-	UserID           string `gorm:"column:user_id" json:"userId"`
+	SpaceID          string `gorm:"column:space_id" json:"spaceId"`
 	GenerationTaskID string `gorm:"column:generation_task_id" json:"generationTaskId"`
 	ProcessingTaskID string `gorm:"column:processing_task_id" json:"processingTaskId"`
 	Name             string `gorm:"column:name" json:"name"`

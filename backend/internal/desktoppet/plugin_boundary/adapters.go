@@ -79,7 +79,7 @@ type petActionResolver interface {
 type PetActionTarget struct {
 	InstallationID string
 	DeviceID       string
-	UserID         string
+	SpaceID        string
 }
 
 func (a *actionContributionAdapter) Kind() ContributionKind { return KindAction }

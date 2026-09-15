@@ -141,7 +141,7 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 
 	staging := &security.ImportStaging{
 		ID:                stagingID,
-		OwnerUserID:       actorID,
+		OwnerSpaceID:      actorID,
 		SourceFilename:    safeFilename,
 		SourceType:        sourceType,
 		SourceContentHash: contentHash,
@@ -196,7 +196,7 @@ func (h *ImportStagingHandler) List(c *gin.Context) {
 		return
 	}
 
-	stagings, err := h.listForUser(c.Request.Context(), actorID)
+	stagings, err := h.listForSpace(c.Request.Context(), actorID)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "查询失败", gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
@@ -216,7 +216,7 @@ func (h *ImportStagingHandler) Inspect(c *gin.Context) {
 		return
 	}
 
-	s, err := h.repo.GetForUser(c.Request.Context(), stagingID, actorID)
+	s, err := h.repo.GetForSpace(c.Request.Context(), stagingID, actorID)
 	if err != nil {
 		util.ErrorResponse(c, response.NotFound, "暂存不存在", gin.H{"errorCode": "NOT_FOUND"})
 		return
@@ -236,7 +236,7 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 		return
 	}
 
-	s, err := h.repo.GetForUser(c.Request.Context(), payload.StagingID, actorID)
+	s, err := h.repo.GetForSpace(c.Request.Context(), payload.StagingID, actorID)
 	if err != nil {
 		util.ErrorResponse(c, response.NotFound, "暂存不存在", gin.H{"errorCode": "NOT_FOUND"})
 		return
@@ -256,7 +256,7 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 		return
 	}
 
-	locked, err := h.repo.GetForUser(c.Request.Context(), payload.StagingID, actorID)
+	locked, err := h.repo.GetForSpace(c.Request.Context(), payload.StagingID, actorID)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "重新读取暂存失败", gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
@@ -276,7 +276,7 @@ func (h *ImportStagingHandler) Consume(c *gin.Context) {
 	}
 
 	petID, releaseID, operationID, err := h.importer.ImportPackage(c.Request.Context(), map[string]string{
-		"userId":                  actorID,
+		"spaceId":                 actorID,
 		"importStagingId":         locked.ID,
 		"sourceFilePath":          sourcePath,
 		"idempotencyKey":          "import:" + locked.ID,
@@ -326,8 +326,8 @@ func (h *ImportStagingHandler) Reject(c *gin.Context) {
 	util.SuccessMsgResponse(c, "已拒绝", nil)
 }
 
-func (h *ImportStagingHandler) listForUser(ctx context.Context, userID string) ([]*security.ImportStaging, error) {
-	return h.repo.ListForUser(ctx, userID)
+func (h *ImportStagingHandler) listForSpace(ctx context.Context, spaceID string) ([]*security.ImportStaging, error) {
+	return h.repo.ListForSpace(ctx, spaceID)
 }
 
 func classifySourceType(mimeType, filename string) string {

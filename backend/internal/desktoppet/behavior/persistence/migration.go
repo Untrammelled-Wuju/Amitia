@@ -9,7 +9,7 @@ type BehaviorIndexDef struct {
 
 var DesktopPetBehaviorTableSQL = []string{
 	`CREATE TABLE IF NOT EXISTS desktop_pet_behavior_contexts (
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 1,
     stable_state_json TEXT NOT NULL DEFAULT '{}',
@@ -24,14 +24,14 @@ var DesktopPetBehaviorTableSQL = []string{
     desired_state_json TEXT NOT NULL DEFAULT '{}',
     last_source_revisions_json TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL DEFAULT '',
-    PRIMARY KEY(user_id, character_id)
+    PRIMARY KEY(space_id, character_id)
 )`,
 	`CREATE TABLE IF NOT EXISTS desktop_pet_behavior_inbox (
     event_id TEXT PRIMARY KEY,
     dedup_key TEXT NOT NULL DEFAULT '',
     event_type TEXT NOT NULL DEFAULT '',
     schema_version INTEGER NOT NULL DEFAULT 0,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     conversation_id TEXT NOT NULL DEFAULT '',
     interaction_id TEXT NOT NULL DEFAULT '',
@@ -63,7 +63,7 @@ var DesktopPetBehaviorTableSQL = []string{
 	`CREATE TABLE IF NOT EXISTS desktop_pet_behavior_decisions (
     decision_id TEXT PRIMARY KEY,
     event_id TEXT NOT NULL DEFAULT '',
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     installation_id TEXT NOT NULL DEFAULT '',
     context_revision INTEGER NOT NULL DEFAULT 0,
@@ -86,17 +86,17 @@ var DesktopPetBehaviorTableSQL = []string{
     completed_at TEXT NOT NULL DEFAULT ''
 )`,
 	`CREATE TABLE IF NOT EXISTS desktop_pet_behavior_cooldowns (
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     cooldown_key TEXT NOT NULL DEFAULT '',
     until_at TEXT NOT NULL DEFAULT '',
     source_decision_id TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT '',
-    PRIMARY KEY(user_id, character_id, cooldown_key)
+    PRIMARY KEY(space_id, character_id, cooldown_key)
 )`,
 	`CREATE TABLE IF NOT EXISTS desktop_pet_behavior_bindings (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL DEFAULT '',
+    space_id TEXT NOT NULL DEFAULT '',
     character_id TEXT NOT NULL DEFAULT '',
     installation_id TEXT NOT NULL DEFAULT '',
     event_type TEXT NOT NULL DEFAULT '',
@@ -113,11 +113,11 @@ var DesktopPetBehaviorTableSQL = []string{
 }
 
 var DesktopPetBehaviorIndexDefs = []BehaviorIndexDef{
-	{Name: "ux_desktop_pet_behavior_inbox_dedup", Table: "desktop_pet_behavior_inbox", Columns: []string{"user_id", "character_id", "dedup_key"}, Unique: true},
+	{Name: "ux_desktop_pet_behavior_inbox_dedup", Table: "desktop_pet_behavior_inbox", Columns: []string{"space_id", "character_id", "dedup_key"}, Unique: true},
 	{Name: "idx_behavior_inbox_char", Table: "desktop_pet_behavior_inbox", Columns: []string{"character_id", "status"}, Unique: false},
 	{Name: "idx_behavior_inbox_status_available", Table: "desktop_pet_behavior_inbox", Columns: []string{"status", "available_at", "occurred_at"}, Unique: false},
 	{Name: "idx_behavior_inbox_status_lease", Table: "desktop_pet_behavior_inbox", Columns: []string{"status", "lease_expires_at"}, Unique: false},
 	{Name: "idx_behavior_decisions_char", Table: "desktop_pet_behavior_decisions", Columns: []string{"character_id", "created_at"}, Unique: false},
 	{Name: "idx_behavior_decisions_event", Table: "desktop_pet_behavior_decisions", Columns: []string{"event_id", "created_at"}, Unique: false},
-	{Name: "idx_behavior_bindings_user_char", Table: "desktop_pet_behavior_bindings", Columns: []string{"user_id", "character_id"}, Unique: false},
+	{Name: "idx_behavior_bindings_user_char", Table: "desktop_pet_behavior_bindings", Columns: []string{"space_id", "character_id"}, Unique: false},
 }

@@ -31,7 +31,7 @@ func NewLegacyPackageMigrationService(
 
 type MigrateLegacyPackageRequest struct {
 	LegacyPackageID   string
-	UserID            string
+	SpaceID           string
 	SourceContentHash string
 	ManifestJSON      string
 	LegacyVersion     int
@@ -69,7 +69,7 @@ func (s *LegacyPackageMigrationService) Migrate(ctx context.Context, req *Migrat
 	op := &LegacyPackageMigrationOperation{
 		ID:              opID,
 		LegacyPackageID: req.LegacyPackageID,
-		UserID:          req.UserID,
+		SpaceID:         req.SpaceID,
 		State:           LegacyMigrationOpStatePending,
 		StartedAt:       now,
 		UpdatedAt:       now,
@@ -99,7 +99,7 @@ func (s *LegacyPackageMigrationService) resumeMigration(ctx context.Context, map
 	op := &LegacyPackageMigrationOperation{
 		ID:              uuid.NewString(),
 		LegacyPackageID: req.LegacyPackageID,
-		UserID:          req.UserID,
+		SpaceID:         req.SpaceID,
 		State:           LegacyMigrationOpStateValidating,
 		StartedAt:       formatMigrationTimestamp(time.Now()),
 		UpdatedAt:       formatMigrationTimestamp(time.Now()),
@@ -134,12 +134,12 @@ func (s *LegacyPackageMigrationService) executeMigration(ctx context.Context, op
 	if petID == "" {
 		now := formatMigrationTimestamp(time.Now())
 		identity := &PetIdentityData{
-			ID:          uuid.NewString(),
-			OwnerUserID: req.UserID,
-			Name:        req.PackageName,
-			Slug:        makeIdentitySlug(req.PackageName),
-			CreatedAt:   now,
-			UpdatedAt:   now,
+			ID:           uuid.NewString(),
+			OwnerSpaceID: req.SpaceID,
+			Name:         req.PackageName,
+			Slug:         makeIdentitySlug(req.PackageName),
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		}
 		if err := s.repo.CreatePetIdentity(identity); err != nil {
 			s.failMigrationOp(op, "PET_IDENTITY_FAILED", err)
@@ -158,7 +158,7 @@ func (s *LegacyPackageMigrationService) executeMigration(ctx context.Context, op
 	releaseData := &ReleaseData{
 		ID:                  releaseID,
 		PetID:               petID,
-		OwnerUserID:         req.UserID,
+		OwnerSpaceID:        req.SpaceID,
 		Version:             fmt.Sprintf("1.0.%d", req.LegacyVersion),
 		ReleaseSequence:     req.LegacyVersion,
 		SchemaVersion:       1,
@@ -195,7 +195,7 @@ func (s *LegacyPackageMigrationService) executeMigration(ctx context.Context, op
 	if s.eventPublisher != nil {
 		s.eventPublisher.PublishReleaseEvent(ReleaseEvent{
 			EventType:  EventLegacyPackageMigrated,
-			UserID:     req.UserID,
+			SpaceID:    req.SpaceID,
 			PetID:      petID,
 			ReleaseID:  releaseID,
 			OccurredAt: now,

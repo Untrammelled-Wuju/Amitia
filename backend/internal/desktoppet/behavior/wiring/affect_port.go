@@ -19,7 +19,7 @@ func NewAffectAdapter(store psyche.PsycheStore) *AffectAdapter {
 	return &AffectAdapter{store: store}
 }
 
-func (a *AffectAdapter) GetAffectSnapshot(ctx context.Context, userID, characterID string) (*behavior.AffectBehaviorSnapshot, error) {
+func (a *AffectAdapter) GetAffectSnapshot(ctx context.Context, spaceID, characterID string) (*behavior.AffectBehaviorSnapshot, error) {
 	state, err := a.store.LoadState(characterID)
 	if err != nil {
 		if errors.Is(err, psyche.ErrStateNotFound) || strings.Contains(err.Error(), "state not found") {

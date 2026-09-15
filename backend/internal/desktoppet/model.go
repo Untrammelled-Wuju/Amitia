@@ -45,7 +45,7 @@ func (ActionDefinition) TableName() string { return "desktop_pet_action_definiti
 
 type GenerationTask struct {
 	ID                          string `gorm:"column:id;primaryKey" json:"id"`
-	UserID                      string `gorm:"column:user_id" json:"userId"`
+	SpaceID                     string `gorm:"column:space_id" json:"spaceId"`
 	ModelConfigID               int    `gorm:"column:model_config_id" json:"modelConfigId"`
 	Name                        string `gorm:"column:name" json:"name"`
 	SourceImagePath             string `gorm:"column:source_image_path" json:"sourceImagePath"`

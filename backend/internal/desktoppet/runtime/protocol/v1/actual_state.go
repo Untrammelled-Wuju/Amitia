@@ -49,7 +49,7 @@ const (
 )
 
 type RuntimeActualState struct {
-	UserID    string `gorm:"column:user_id;type:text;not null;primaryKey" json:"userId"`
+	SpaceID   string `gorm:"column:space_id;type:text;not null;primaryKey" json:"spaceId"`
 	DeviceID  string `gorm:"column:device_id;type:text;not null;primaryKey" json:"deviceId"`
 	RuntimeID string `gorm:"column:runtime_id;type:text;not null;primaryKey" json:"runtimeId"`
 
@@ -156,7 +156,7 @@ func (CommandResult) TableName() string {
 }
 
 type DeviceCommandSequence struct {
-	UserID         string `gorm:"column:user_id;type:text;not null;primaryKey" json:"userId"`
+	SpaceID        string `gorm:"column:space_id;type:text;not null;primaryKey" json:"spaceId"`
 	DeviceID       string `gorm:"column:device_id;type:text;not null;primaryKey" json:"deviceId"`
 	Sequence       int64  `gorm:"column:sequence;type:integer;not null" json:"sequence"`
 	LastReservedAt string `gorm:"column:last_reserved_at;type:text" json:"lastReservedAt"`
@@ -189,7 +189,7 @@ func (DomainEventOutbox) TableName() string {
 
 type CommandDedup struct {
 	ID             string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	UserID         string `gorm:"column:user_id;type:text;not null;primaryKey" json:"userId"`
+	SpaceID        string `gorm:"column:space_id;type:text;not null;primaryKey" json:"spaceId"`
 	DeviceID       string `gorm:"column:device_id;type:text;not null" json:"deviceId"`
 	IdempotencyKey string `gorm:"column:idempotency_key;type:text;not null" json:"idempotencyKey"`
 	NakCount       int    `gorm:"column:nak_count;type:integer" json:"nakCount"`

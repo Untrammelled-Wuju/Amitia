@@ -34,13 +34,13 @@ func NewGormBehaviorStateRepository(db *gorm.DB) *GormBehaviorStateRepository {
 	return &GormBehaviorStateRepository{db: db}
 }
 
-func (r *GormBehaviorStateRepository) LoadContext(ctx context.Context, userID, characterID string) (*behavior.BehaviorContextSnapshot, error) {
+func (r *GormBehaviorStateRepository) LoadContext(ctx context.Context, spaceID, characterID string) (*behavior.BehaviorContextSnapshot, error) {
 	var model BehaviorContextModel
 	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Where("space_id = ? AND character_id = ?", spaceID, characterID).
 		First(&model).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		initial := behavior.NewDefaultContext(userID, characterID)
+		initial := behavior.NewDefaultContext(spaceID, characterID)
 		return &initial, nil
 	}
 	if err != nil {
@@ -155,7 +155,7 @@ func saveContextCASTx(tx *gorm.DB, currentRevision int64, next behavior.Behavior
 	}
 
 	result := tx.Model(&BehaviorContextModel{}).
-		Where("user_id = ? AND character_id = ? AND revision = ?", next.UserID, next.CharacterID, currentRevision).
+		Where("space_id = ? AND character_id = ? AND revision = ?", next.SpaceID, next.CharacterID, currentRevision).
 		Updates(map[string]interface{}{
 			"revision":                   next.Revision,
 			"stable_state_json":          stableJSON,
@@ -180,7 +180,7 @@ func saveContextCASTx(tx *gorm.DB, currentRevision int64, next behavior.Behavior
 
 	var count int64
 	if err := tx.Model(&BehaviorContextModel{}).
-		Where("user_id = ? AND character_id = ?", next.UserID, next.CharacterID).
+		Where("space_id = ? AND character_id = ?", next.SpaceID, next.CharacterID).
 		Count(&count).Error; err != nil {
 		return false, err
 	}
@@ -189,7 +189,7 @@ func saveContextCASTx(tx *gorm.DB, currentRevision int64, next behavior.Behavior
 	}
 
 	model := BehaviorContextModel{
-		UserID:                  next.UserID,
+		SpaceID:                 next.SpaceID,
 		CharacterID:             next.CharacterID,
 		Revision:                next.Revision,
 		StableStateJSON:         stableJSON,
@@ -239,7 +239,7 @@ func (r *GormBehaviorStateRepository) InsertInboxIfAbsent(ctx context.Context, e
 		DedupKey:          event.DedupKey,
 		EventType:         event.EventType,
 		SchemaVersion:     event.SchemaVersion,
-		UserID:            event.UserID,
+		SpaceID:           event.SpaceID,
 		CharacterID:       event.CharacterID,
 		ConversationID:    event.ConversationID,
 		InteractionID:     event.InteractionID,
@@ -521,7 +521,7 @@ func decisionToModel(decision behavior.BehaviorDecisionAudit) (*BehaviorDecision
 	return &BehaviorDecisionModel{
 		DecisionID:             decision.DecisionID,
 		EventID:                decision.EventID,
-		UserID:                 decision.UserID,
+		SpaceID:                decision.SpaceID,
 		CharacterID:            decision.CharacterID,
 		InstallationID:         decision.InstallationID,
 		ContextRevision:        decision.ContextRevision,
@@ -553,7 +553,7 @@ func decisionModelToAudit(model *BehaviorDecisionModel) (*behavior.BehaviorDecis
 		BehaviorDecision: behavior.BehaviorDecision{
 			DecisionID:       model.DecisionID,
 			EventID:          model.EventID,
-			UserID:           model.UserID,
+			SpaceID:          model.SpaceID,
 			CharacterID:      model.CharacterID,
 			InstallationID:   model.InstallationID,
 			ContextRevision:  model.ContextRevision,
@@ -803,11 +803,11 @@ func decisionTransitionNoopOrNotFound(ctx context.Context, db *gorm.DB, decision
 	return nil
 }
 
-func (r *GormBehaviorStateRepository) LoadCooldowns(ctx context.Context, userID, characterID string) ([]behavior.CooldownRecord, error) {
+func (r *GormBehaviorStateRepository) LoadCooldowns(ctx context.Context, spaceID, characterID string) ([]behavior.CooldownRecord, error) {
 	now := time.Now().Format(time.RFC3339)
 	var models []BehaviorCooldownModel
 	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND character_id = ? AND until_at > ?", userID, characterID, now).
+		Where("space_id = ? AND character_id = ? AND until_at > ?", spaceID, characterID, now).
 		Find(&models).Error
 	if err != nil {
 		return nil, err
@@ -821,7 +821,7 @@ func (r *GormBehaviorStateRepository) LoadCooldowns(ctx context.Context, userID,
 
 func (r *GormBehaviorStateRepository) SaveCooldown(ctx context.Context, record behavior.CooldownRecord) error {
 	model := BehaviorCooldownModel{
-		UserID:           record.UserID,
+		SpaceID:          record.SpaceID,
 		CharacterID:      record.CharacterID,
 		CooldownKey:      record.CooldownKey,
 		UntilAt:          record.UntilAt.Format(time.RFC3339),
@@ -830,7 +830,7 @@ func (r *GormBehaviorStateRepository) SaveCooldown(ctx context.Context, record b
 	}
 	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{
-			{Name: "user_id"},
+			{Name: "space_id"},
 			{Name: "character_id"},
 			{Name: "cooldown_key"},
 		},
@@ -863,35 +863,35 @@ func (r *GormBehaviorStateRepository) CleanupOldRecords(ctx context.Context, bef
 		Delete(&BehaviorDecisionModel{}).Error
 }
 
-func (r *GormBehaviorStateRepository) DeleteCharacterData(ctx context.Context, userID, characterID string) error {
+func (r *GormBehaviorStateRepository) DeleteCharacterData(ctx context.Context, spaceID, characterID string) error {
 	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Where("space_id = ? AND character_id = ?", spaceID, characterID).
 		Delete(&BehaviorContextModel{}).Error; err != nil {
 		return err
 	}
 	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Where("space_id = ? AND character_id = ?", spaceID, characterID).
 		Delete(&BehaviorInboxModel{}).Error; err != nil {
 		return err
 	}
 	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Where("space_id = ? AND character_id = ?", spaceID, characterID).
 		Delete(&BehaviorDecisionModel{}).Error; err != nil {
 		return err
 	}
 	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Where("space_id = ? AND character_id = ?", spaceID, characterID).
 		Delete(&BehaviorCooldownModel{}).Error; err != nil {
 		return err
 	}
 	return r.db.WithContext(ctx).
-		Where("user_id = ? AND character_id = ?", userID, characterID).
+		Where("space_id = ? AND character_id = ?", spaceID, characterID).
 		Delete(&bindings.BehaviorBindingModel{}).Error
 }
 
 func contextModelToSnapshot(m *BehaviorContextModel) (*behavior.BehaviorContextSnapshot, error) {
 	snap := &behavior.BehaviorContextSnapshot{
-		UserID:              m.UserID,
+		SpaceID:             m.SpaceID,
 		CharacterID:         m.CharacterID,
 		Revision:            m.Revision,
 		ActiveTools:         make(map[string]behavior.ToolOperationState),
@@ -970,7 +970,7 @@ func inboxModelToRecord(m *BehaviorInboxModel) behavior.InboxRecord {
 		DedupKey:         m.DedupKey,
 		EventType:        m.EventType,
 		SchemaVersion:    m.SchemaVersion,
-		UserID:           m.UserID,
+		SpaceID:          m.SpaceID,
 		CharacterID:      m.CharacterID,
 		ConversationID:   m.ConversationID,
 		InteractionID:    m.InteractionID,
@@ -1039,7 +1039,7 @@ func inboxModelToRecord(m *BehaviorInboxModel) behavior.InboxRecord {
 
 func cooldownModelToRecord(m *BehaviorCooldownModel) behavior.CooldownRecord {
 	rec := behavior.CooldownRecord{
-		UserID:           m.UserID,
+		SpaceID:          m.SpaceID,
 		CharacterID:      m.CharacterID,
 		CooldownKey:      m.CooldownKey,
 		SourceDecisionID: m.SourceDecisionID,

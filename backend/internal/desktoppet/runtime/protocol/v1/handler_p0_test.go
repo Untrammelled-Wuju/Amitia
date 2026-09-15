@@ -29,7 +29,7 @@ func TestHandleHelloRejectsUnsupportedRuntimeContractBeforeSessionAcquire(t *tes
 	db, _, handler := newHandlerP0DB(t)
 	conn := &Connection{
 		ID:        "conn-version-gate",
-		UserID:    "user-version-gate",
+		SpaceID:   "user-version-gate",
 		DeviceID:  "device-version-gate",
 		RuntimeID: "runtime-version-gate",
 		State:     ConnStateHandshake,
@@ -61,19 +61,19 @@ func TestHandleHelloRejectsUnsupportedRuntimeContractBeforeSessionAcquire(t *tes
 func TestHandlerCommandAckRejectsRendererTerminalAuthority(t *testing.T) {
 	db, services, handler := newHandlerP0DB(t)
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
-	session := &RuntimeSession{ID: "sess-1", UserID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", ConnectionGeneration: 1, Status: string(SessionStatusReady), CreatedAt: now, UpdatedAt: now}
+	session := &RuntimeSession{ID: "sess-1", SpaceID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", ConnectionGeneration: 1, Status: string(SessionStatusReady), CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(session).Error; err != nil {
 		t.Fatal(err)
 	}
-	cmd := &RuntimeCommand{ID: "cmd-1", UserID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", RuntimeSessionID: session.ID, CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRendererAccepted), PlaybackRequestID: "pbi-1", PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now}
+	cmd := &RuntimeCommand{ID: "cmd-1", SpaceID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", RuntimeSessionID: session.ID, CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRendererAccepted), PlaybackRequestID: "pbi-1", PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(cmd).Error; err != nil {
 		t.Fatal(err)
 	}
-	conn := &Connection{ID: "conn-1", UserID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", State: ConnStateConnected}
+	conn := &Connection{ID: "conn-1", SpaceID: "user-1", DeviceID: "device-1", RuntimeID: "runtime-1", State: ConnStateConnected}
 	conn.ActivateSession(session.ID, 1, 3)
 	ack := &CommandAckPayload{CommandID: cmd.ID, CommandSequence: 7, Status: string(CommandStatusCompleted), RuntimeSessionID: session.ID, ReceivedAt: time.Now().UTC()}
 	payload, _ := json.Marshal(ack)
-	env := &Envelope{UserID: conn.UserID, DeviceID: conn.DeviceID, RuntimeID: conn.RuntimeID, RuntimeSessionID: runtimeidentity.ParseRuntimeSessionID(session.ID), ConnectionGeneration: 1, Sequence: 100, Payload: payload, PayloadHash: ComputePayloadHash(payload)}
+	env := &Envelope{SpaceID: conn.SpaceID, DeviceID: conn.DeviceID, RuntimeID: conn.RuntimeID, RuntimeSessionID: runtimeidentity.ParseRuntimeSessionID(session.ID), ConnectionGeneration: 1, Sequence: 100, Payload: payload, PayloadHash: ComputePayloadHash(payload)}
 	if err := handler.HandleCommandAck(conn, env, ack); err == nil {
 		t.Fatal("play_action completed command_ack must be rejected; renderer playback event is canonical")
 	}
@@ -132,7 +132,7 @@ func TestEventServiceAppendIsIdempotentBySessionSequence(t *testing.T) {
 
 func TestPersistActualStateSnapshotProjectsAuthoritativeRuntimeState(t *testing.T) {
 	_, services, handler := newHandlerP0DB(t)
-	conn := &Connection{ID: "conn-state", UserID: "user-state", DeviceID: "device-state", RuntimeID: "runtime-state", State: ConnStateConnected}
+	conn := &Connection{ID: "conn-state", SpaceID: "user-state", DeviceID: "device-state", RuntimeID: "runtime-state", State: ConnStateConnected}
 	conn.ActivateSession("sess-state", 3, 10)
 
 	payload, err := json.Marshal(StateSnapshotPayload{
@@ -194,7 +194,7 @@ func TestPersistActualStateSnapshotProjectsAuthoritativeRuntimeState(t *testing.
 
 func TestPersistActualStateSnapshotRejectsMissingDesiredHash(t *testing.T) {
 	_, _, handler := newHandlerP0DB(t)
-	conn := &Connection{ID: "conn-missing-hash", UserID: "user-missing-hash", DeviceID: "device-missing-hash", RuntimeID: "runtime-missing-hash", State: ConnStateConnected}
+	conn := &Connection{ID: "conn-missing-hash", SpaceID: "user-missing-hash", DeviceID: "device-missing-hash", RuntimeID: "runtime-missing-hash", State: ConnStateConnected}
 	conn.ActivateSession("sess-missing-hash", 1, 0)
 	payload, err := json.Marshal(StateSnapshotPayload{
 		ConnectionGeneration:    1,
@@ -221,7 +221,7 @@ func TestPersistActualStateSnapshotRejectsMissingDesiredHash(t *testing.T) {
 
 func TestPersistActualStateSnapshotRejectsStaleProjection(t *testing.T) {
 	_, services, handler := newHandlerP0DB(t)
-	conn := &Connection{ID: "conn-stale", UserID: "user-stale", DeviceID: "device-stale", RuntimeID: "runtime-stale", State: ConnStateConnected}
+	conn := &Connection{ID: "conn-stale", SpaceID: "user-stale", DeviceID: "device-stale", RuntimeID: "runtime-stale", State: ConnStateConnected}
 	conn.ActivateSession("sess-stale", 2, 0)
 
 	makeEnv := func(sequence int64, action string) *Envelope {
@@ -262,7 +262,7 @@ func TestPersistActualStateSnapshotRejectsStaleProjection(t *testing.T) {
 
 func TestPersistActualStateSnapshotRejectsCursorMismatch(t *testing.T) {
 	_, _, handler := newHandlerP0DB(t)
-	conn := &Connection{ID: "conn-mismatch", UserID: "user-mismatch", DeviceID: "device-mismatch", RuntimeID: "runtime-mismatch", State: ConnStateConnected}
+	conn := &Connection{ID: "conn-mismatch", SpaceID: "user-mismatch", DeviceID: "device-mismatch", RuntimeID: "runtime-mismatch", State: ConnStateConnected}
 	conn.ActivateSession("sess-mismatch", 4, 0)
 	payload, err := json.Marshal(StateSnapshotPayload{
 		ConnectionGeneration:    3,
@@ -289,7 +289,7 @@ func TestHandleEventRejectsInvalidStateSnapshotBeforeConsumingSequence(t *testin
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	session := &RuntimeSession{
 		ID:                   "sess-invalid-state",
-		UserID:               "user-invalid-state",
+		SpaceID:              "user-invalid-state",
 		DeviceID:             "device-invalid-state",
 		RuntimeID:            "runtime-invalid-state",
 		ConnectionGeneration: 5,
@@ -302,7 +302,7 @@ func TestHandleEventRejectsInvalidStateSnapshotBeforeConsumingSequence(t *testin
 	}
 	conn := &Connection{
 		ID:        "conn-invalid-state",
-		UserID:    "user-invalid-state",
+		SpaceID:   "user-invalid-state",
 		DeviceID:  "device-invalid-state",
 		RuntimeID: "runtime-invalid-state",
 		State:     ConnStateConnected,
@@ -325,7 +325,7 @@ func TestHandleEventRejectsInvalidStateSnapshotBeforeConsumingSequence(t *testin
 		t.Fatal(err)
 	}
 	env := &Envelope{
-		UserID:               conn.UserID,
+		SpaceID:              conn.SpaceID,
 		DeviceID:             conn.DeviceID,
 		RuntimeID:            conn.RuntimeID,
 		RuntimeSessionID:     runtimeidentity.ParseRuntimeSessionID(session.ID),
@@ -375,7 +375,7 @@ func TestReconnectFencesSupersededConnectionBeforeCommandAckMutation(t *testing.
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	cmd := &RuntimeCommand{
 		ID:                   "cmd-reconnect-fence",
-		UserID:               string(oldConn.UserID),
+		SpaceID:              string(oldConn.SpaceID),
 		DeviceID:             string(oldConn.DeviceID),
 		RuntimeID:            string(oldConn.RuntimeID),
 		RuntimeSessionID:     string(ack.SessionID),
@@ -393,7 +393,7 @@ func TestReconnectFencesSupersededConnectionBeforeCommandAckMutation(t *testing.
 		t.Fatal(err)
 	}
 
-	newConn, err := handler.HandleConnect(oldConn.UserID, oldConn.DeviceID, oldConn.RuntimeID)
+	newConn, err := handler.HandleConnect(oldConn.SpaceID, oldConn.DeviceID, oldConn.RuntimeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -412,7 +412,7 @@ func TestReconnectFencesSupersededConnectionBeforeCommandAckMutation(t *testing.
 	}
 	_, generation := oldConn.SessionSnapshot()
 	env := &Envelope{
-		UserID:               oldConn.UserID,
+		SpaceID:              oldConn.SpaceID,
 		DeviceID:             oldConn.DeviceID,
 		RuntimeID:            oldConn.RuntimeID,
 		RuntimeSessionID:     ack.SessionID,
@@ -452,7 +452,7 @@ func TestReconnectFencesSupersededHandshakeBeforeSessionAcquire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := handler.HandleConnect(oldConn.UserID, oldConn.DeviceID, oldConn.RuntimeID); err != nil {
+	if _, err := handler.HandleConnect(oldConn.SpaceID, oldConn.DeviceID, oldConn.RuntimeID); err != nil {
 		t.Fatal(err)
 	}
 	if oldConn.GetState() != ConnStateClosing {
@@ -479,22 +479,22 @@ func TestReconnectFencesSupersededHandshakeBeforeSessionAcquire(t *testing.T) {
 func TestHandleCommandAckRejectsWrongGenerationBeforeMutation(t *testing.T) {
 	db, services, handler := newHandlerP0DB(t)
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
-	session := &RuntimeSession{ID: "sess-generation", UserID: "user-generation", DeviceID: "device-generation", RuntimeID: "runtime-generation", ConnectionGeneration: 3, Status: string(SessionStatusReady), CreatedAt: now, UpdatedAt: now}
+	session := &RuntimeSession{ID: "sess-generation", SpaceID: "user-generation", DeviceID: "device-generation", RuntimeID: "runtime-generation", ConnectionGeneration: 3, Status: string(SessionStatusReady), CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(session).Error; err != nil {
 		t.Fatal(err)
 	}
-	cmd := &RuntimeCommand{ID: "cmd-generation", UserID: string(session.UserID), DeviceID: string(session.DeviceID), RuntimeID: string(session.RuntimeID), RuntimeSessionID: session.ID, CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRendererAccepted), PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now}
+	cmd := &RuntimeCommand{ID: "cmd-generation", SpaceID: string(session.SpaceID), DeviceID: string(session.DeviceID), RuntimeID: string(session.RuntimeID), RuntimeSessionID: session.ID, CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRendererAccepted), PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now}
 	if err := db.Create(cmd).Error; err != nil {
 		t.Fatal(err)
 	}
-	conn := &Connection{ID: "conn-generation", UserID: "user-generation", DeviceID: "device-generation", RuntimeID: "runtime-generation", State: ConnStateConnected}
+	conn := &Connection{ID: "conn-generation", SpaceID: "user-generation", DeviceID: "device-generation", RuntimeID: "runtime-generation", State: ConnStateConnected}
 	conn.ActivateSession(session.ID, 3, 0)
 	ack := &CommandAckPayload{CommandID: cmd.ID, Status: string(CommandStatusCompleted), RuntimeSessionID: session.ID, ReceivedAt: time.Now().UTC()}
 	payload, err := json.Marshal(ack)
 	if err != nil {
 		t.Fatal(err)
 	}
-	env := &Envelope{UserID: conn.UserID, DeviceID: conn.DeviceID, RuntimeID: conn.RuntimeID, RuntimeSessionID: runtimeidentity.ParseRuntimeSessionID(session.ID), ConnectionGeneration: 2, Sequence: 1, Payload: payload, PayloadHash: ComputePayloadHash(payload)}
+	env := &Envelope{SpaceID: conn.SpaceID, DeviceID: conn.DeviceID, RuntimeID: conn.RuntimeID, RuntimeSessionID: runtimeidentity.ParseRuntimeSessionID(session.ID), ConnectionGeneration: 2, Sequence: 1, Payload: payload, PayloadHash: ComputePayloadHash(payload)}
 	if err := handler.HandleCommandAck(conn, env, ack); err == nil {
 		t.Fatal("wrong generation must be rejected")
 	}
@@ -598,7 +598,7 @@ func createPolicyCommand(t *testing.T, db *gorm.DB, commandID, policy, playbackI
 	}
 	cmd := &RuntimeCommand{
 		ID:                   commandID,
-		UserID:               "user-policy",
+		SpaceID:              "user-policy",
 		DeviceID:             "device-policy",
 		RuntimeID:            "runtime-policy",
 		CommandType:          string(CommandTypePlayAction),

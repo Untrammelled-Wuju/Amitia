@@ -161,7 +161,7 @@ func (r *productionActionTargetResolver) ResolveActionTarget(ctx context.Context
 	}
 	return ExistingPetActionTarget{
 		InstallationID: install.ID,
-		UserID:         install.UserID,
+		SpaceID:        install.SpaceID,
 	}, nil
 }
 

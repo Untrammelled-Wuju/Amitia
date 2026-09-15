@@ -28,9 +28,9 @@ const (
 )
 
 type CommandService interface {
-	CreateDurableCommand(userID, deviceID, commandType, idempotencyKey, coalesceKey string, deviceSeq int64, payload RevisionPayload) (*RuntimeCommand, error)
-	CreateEphemeralCommand(userID, deviceID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error)
-	CreateEphemeralCommandForSession(userID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error)
+	CreateDurableCommand(spaceID, deviceID, commandType, idempotencyKey, coalesceKey string, deviceSeq int64, payload RevisionPayload) (*RuntimeCommand, error)
+	CreateEphemeralCommand(spaceID, deviceID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error)
+	CreateEphemeralCommandForSession(spaceID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error)
 	GetCommand(commandID string) (*RuntimeCommand, error)
 	GetCommandByIdempotencyKey(idempotencyKey string) (*RuntimeCommand, error)
 	UpdateStatus(commandID string, from, to CommandStatus, t time.Time) error
@@ -47,18 +47,18 @@ type CommandService interface {
 	MarkExpired(commandID string, t time.Time) error
 	MarkCancelled(commandID string, t time.Time) error
 	MarkSuperseded(commandID, reason string, t time.Time) error
-	SupersedeEphemeralCommands(userID, deviceID, runtimeID, sessionID, reason string, t time.Time) error
-	GetLatestCommand(userID, deviceID, commandType string) (*RuntimeCommand, error)
+	SupersedeEphemeralCommands(spaceID, deviceID, runtimeID, sessionID, reason string, t time.Time) error
+	GetLatestCommand(spaceID, deviceID, commandType string) (*RuntimeCommand, error)
 	ListCommandsToDispatch(limit int) ([]*RuntimeCommand, error)
-	ListCommandsToDispatchForConnection(userID, deviceID, runtimeID string, limit int) ([]*RuntimeCommand, error)
-	ReconcileDesiredStateOnHello(userID, deviceID, runtimeID string, clientAppliedRevision, connectionGeneration int64) (int64, error)
-	AllocateDeviceSequence(tx *gorm.DB, userID, deviceID string, t time.Time) (int64, error)
+	ListCommandsToDispatchForConnection(spaceID, deviceID, runtimeID string, limit int) ([]*RuntimeCommand, error)
+	ReconcileDesiredStateOnHello(spaceID, deviceID, runtimeID string, clientAppliedRevision, connectionGeneration int64) (int64, error)
+	AllocateDeviceSequence(tx *gorm.DB, spaceID, deviceID string, t time.Time) (int64, error)
 	GetResult(commandID, runtimeID string) (*CommandResult, error)
 	SaveResult(result *CommandResult) error
 	GetAttempt(attemptID string) (*CommandAttempt, error)
 	SaveAttempt(attempt *CommandAttempt) error
-	NakDedup(userID, deviceID, idempotencyKey string, nakTime time.Time) error
-	QueryDedup(userID, deviceID, idempotencyKey string, since time.Time) (*CommandDedup, error)
+	NakDedup(spaceID, deviceID, idempotencyKey string, nakTime time.Time) error
+	QueryDedup(spaceID, deviceID, idempotencyKey string, since time.Time) (*CommandDedup, error)
 	ListExpiredCommands(batchSize, timeoutSec int) ([]*RuntimeCommand, error)
 	DB() *gorm.DB
 }
@@ -73,7 +73,7 @@ func NewCommandService(db *gorm.DB) CommandService {
 
 func (s *commandService) DB() *gorm.DB { return s.db }
 
-func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, idempotencyKey, coalesceKey string, deviceSeq int64, payload RevisionPayload) (*RuntimeCommand, error) {
+func (s *commandService) CreateDurableCommand(spaceID, deviceID, commandType, idempotencyKey, coalesceKey string, deviceSeq int64, payload RevisionPayload) (*RuntimeCommand, error) {
 	if !CommandType(commandType).IsDurable() {
 		return nil, fmt.Errorf("unsupported durable runtime command type %q", commandType)
 	}
@@ -87,7 +87,7 @@ func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, ide
 
 	cmd := &RuntimeCommand{
 		ID:                   "rtcmdv1_" + uuid.NewString(),
-		UserID:               userID,
+		SpaceID:              spaceID,
 		DeviceID:             deviceID,
 		CommandType:          commandType,
 		Durability:           "durable",
@@ -114,8 +114,8 @@ func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, ide
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var existing RuntimeCommand
 		lookupErr := tx.Where(
-			"user_id = ? AND device_id = ? AND idempotency_key = ?",
-			userID, deviceID, idempotencyKey,
+			"space_id = ? AND device_id = ? AND idempotency_key = ?",
+			spaceID, deviceID, idempotencyKey,
 		).Order("device_sequence DESC").First(&existing).Error
 		if lookupErr == nil {
 			if existing.PayloadHash != hash {
@@ -130,8 +130,8 @@ func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, ide
 				if coalesceKey != "" && existing.DesiredRevision > 0 {
 					var newer RuntimeCommand
 					newerErr := tx.Where(
-						"user_id = ? AND device_id = ? AND coalesce_key = ? AND desired_revision > ?",
-						userID, deviceID, coalesceKey, existing.DesiredRevision,
+						"space_id = ? AND device_id = ? AND coalesce_key = ? AND desired_revision > ?",
+						spaceID, deviceID, coalesceKey, existing.DesiredRevision,
 					).Order("desired_revision DESC, device_sequence DESC").First(&newer).Error
 					if newerErr == nil {
 						if err := tx.Model(&RuntimeCommand{}).Where(
@@ -193,8 +193,8 @@ func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, ide
 				string(CommandStatusCancelled), string(CommandStatusSuperseded),
 			}
 			if err := tx.Model(&RuntimeCommand{}).
-				Where("user_id = ? AND device_id = ? AND coalesce_key = ? AND desired_revision < ? AND status NOT IN ?",
-					userID, deviceID, coalesceKey, cmd.DesiredRevision, terminal).
+				Where("space_id = ? AND device_id = ? AND coalesce_key = ? AND desired_revision < ? AND status NOT IN ?",
+					spaceID, deviceID, coalesceKey, cmd.DesiredRevision, terminal).
 				Updates(map[string]interface{}{
 					"status":                   string(CommandStatusSuperseded),
 					"superseded_by_command_id": cmd.ID,
@@ -220,7 +220,7 @@ func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, ide
 	return result, nil
 }
 
-func (s *commandService) CreateEphemeralCommand(userID, deviceID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error) {
+func (s *commandService) CreateEphemeralCommand(spaceID, deviceID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error) {
 	// Ephemeral commands are physical effects owned by one concrete runtime
 	// websocket session. Creating an unbound command would allow a reconnecting
 	// runtime to inherit stale work, so fail closed and require the session-bound
@@ -228,21 +228,21 @@ func (s *commandService) CreateEphemeralCommand(userID, deviceID, commandType, i
 	return nil, errors.New("unbound ephemeral command creation is disabled; use CreateEphemeralCommandForSession")
 }
 
-func (s *commandService) CreateEphemeralCommandForSession(userID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error) {
+func (s *commandService) CreateEphemeralCommandForSession(spaceID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, payload []byte) (*RuntimeCommand, error) {
 	if !CommandType(commandType).IsEphemeral() {
 		return nil, fmt.Errorf("unsupported ephemeral runtime command type %q", commandType)
 	}
 	if strings.TrimSpace(runtimeID) == "" || strings.TrimSpace(sessionID) == "" {
 		return nil, errors.New("session-bound ephemeral command requires runtime and session ids")
 	}
-	seq, err := s.AllocateDeviceSequence(nil, userID, deviceID, time.Now().UTC())
+	seq, err := s.AllocateDeviceSequence(nil, spaceID, deviceID, time.Now().UTC())
 	if err != nil {
 		return nil, err
 	}
-	return s.createEphemeralCommand(userID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey, seq, payload)
+	return s.createEphemeralCommand(spaceID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey, seq, payload)
 }
 
-func (s *commandService) createEphemeralCommand(userID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, deviceSeq int64, payload []byte) (*RuntimeCommand, error) {
+func (s *commandService) createEphemeralCommand(spaceID, deviceID, runtimeID, sessionID, installationID, commandType, idempotencyKey string, deviceSeq int64, payload []byte) (*RuntimeCommand, error) {
 	nowTime := time.Now().UTC()
 	now := nowTime.Format("2006-01-02 15:04:05")
 	hash := ComputePayloadHash(payload)
@@ -286,7 +286,7 @@ func (s *commandService) createEphemeralCommand(userID, deviceID, runtimeID, ses
 	}
 	cmd := &RuntimeCommand{
 		ID:                   "rtcmdv1_" + uuid.NewString(),
-		UserID:               userID,
+		SpaceID:              spaceID,
 		DeviceID:             deviceID,
 		RuntimeID:            runtimeID,
 		RuntimeSessionID:     sessionID,
@@ -307,8 +307,8 @@ func (s *commandService) createEphemeralCommand(userID, deviceID, runtimeID, ses
 	var existing RuntimeCommand
 	if idempotencyKey != "" {
 		err := s.db.Where(
-			"user_id = ? AND device_id = ? AND idempotency_key = ?",
-			userID, deviceID, idempotencyKey,
+			"space_id = ? AND device_id = ? AND idempotency_key = ?",
+			spaceID, deviceID, idempotencyKey,
 		).Order("created_at DESC").First(&existing).Error
 		if err == nil {
 			if existing.PayloadHash == hash {
@@ -820,11 +820,11 @@ func (s *commandService) MarkSuperseded(commandID, reason string, t time.Time) e
 	}, t)
 }
 
-func (s *commandService) SupersedeEphemeralCommands(userID, deviceID, runtimeID, sessionID, reason string, t time.Time) error {
+func (s *commandService) SupersedeEphemeralCommands(spaceID, deviceID, runtimeID, sessionID, reason string, t time.Time) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		query := tx.Where(
-			"user_id = ? AND device_id = ? AND durability = ? AND status NOT IN (?, ?, ?, ?, ?)",
-			userID, deviceID, "ephemeral",
+			"space_id = ? AND device_id = ? AND durability = ? AND status NOT IN (?, ?, ?, ?, ?)",
+			spaceID, deviceID, "ephemeral",
 			string(CommandStatusCompleted), string(CommandStatusFailedTerminal), string(CommandStatusExpired),
 			string(CommandStatusCancelled), string(CommandStatusSuperseded),
 		)
@@ -872,11 +872,11 @@ func (s *commandService) SupersedeEphemeralCommands(userID, deviceID, runtimeID,
 	})
 }
 
-func (s *commandService) GetLatestCommand(userID, deviceID, commandType string) (*RuntimeCommand, error) {
+func (s *commandService) GetLatestCommand(spaceID, deviceID, commandType string) (*RuntimeCommand, error) {
 	var cmd RuntimeCommand
 	err := s.db.Where(
-		"user_id = ? AND device_id = ? AND command_type = ? AND status IN (?, ?, ?, ?, ?, ?)",
-		userID, deviceID, commandType,
+		"space_id = ? AND device_id = ? AND command_type = ? AND status IN (?, ?, ?, ?, ?, ?)",
+		spaceID, deviceID, commandType,
 		string(CommandStatusCreated), string(CommandStatusQueued),
 		string(CommandStatusDispatching), string(CommandStatusTransportDispatched),
 		string(CommandStatusRuntimeReceived), string(CommandStatusRuntimeAccepted),
@@ -909,7 +909,7 @@ func (s *commandService) ListCommandsToDispatch(limit int) ([]*RuntimeCommand, e
 	return cmds, nil
 }
 
-func (s *commandService) ListCommandsToDispatchForConnection(userID, deviceID, runtimeID string, limit int) ([]*RuntimeCommand, error) {
+func (s *commandService) ListCommandsToDispatchForConnection(spaceID, deviceID, runtimeID string, limit int) ([]*RuntimeCommand, error) {
 	var cmds []*RuntimeCommand
 	if limit <= 0 {
 		limit = 100
@@ -918,8 +918,8 @@ func (s *commandService) ListCommandsToDispatchForConnection(userID, deviceID, r
 	retryBefore := now.Add(-time.Second).Format("2006-01-02 15:04:05")
 	nowRFC3339 := now.Format(runtimeCommandExpiryLayout)
 	query := s.db.Where(
-		"user_id = ? AND device_id = ? AND (status IN (?, ?) OR (status = ? AND datetime(updated_at) <= datetime(?))) AND (expires_at = '' OR expires_at IS NULL OR expires_at > ?)",
-		userID, deviceID,
+		"space_id = ? AND device_id = ? AND (status IN (?, ?) OR (status = ? AND datetime(updated_at) <= datetime(?))) AND (expires_at = '' OR expires_at IS NULL OR expires_at > ?)",
+		spaceID, deviceID,
 		string(CommandStatusCreated), string(CommandStatusQueued),
 		string(CommandStatusFailedRetryable), retryBefore, nowRFC3339,
 	)
@@ -934,7 +934,7 @@ func (s *commandService) ListCommandsToDispatchForConnection(userID, deviceID, r
 }
 
 type authoritativeDesiredStateRow struct {
-	UserID               string `gorm:"column:user_id"`
+	SpaceID              string `gorm:"column:space_id"`
 	DeviceID             string `gorm:"column:device_id"`
 	RuntimeID            string `gorm:"column:runtime_id"`
 	InstallationID       string `gorm:"column:installation_id"`
@@ -949,7 +949,7 @@ type authoritativeDesiredStateRow struct {
 	DesiredHash          string `gorm:"column:desired_hash"`
 }
 
-func (s *commandService) ReconcileDesiredStateOnHello(userID, deviceID, runtimeID string, clientAppliedRevision, connectionGeneration int64) (int64, error) {
+func (s *commandService) ReconcileDesiredStateOnHello(spaceID, deviceID, runtimeID string, clientAppliedRevision, connectionGeneration int64) (int64, error) {
 	const desiredTable = "desktop_pet_runtime_desired_states"
 	// A few isolated protocol unit tests intentionally migrate only the runtime
 	// tables. Production startup migrates the desired-state table before the
@@ -959,7 +959,7 @@ func (s *commandService) ReconcileDesiredStateOnHello(userID, deviceID, runtimeI
 	}
 
 	var state authoritativeDesiredStateRow
-	query := s.db.Table(desiredTable).Where("user_id = ? AND device_id = ?", userID, deviceID)
+	query := s.db.Table(desiredTable).Where("space_id = ? AND device_id = ?", spaceID, deviceID)
 	if err := query.Take(&state).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return 0, nil
@@ -977,8 +977,8 @@ func (s *commandService) ReconcileDesiredStateOnHello(userID, deviceID, runtimeI
 	coalesceKey := fmt.Sprintf("desired:%s", deviceID)
 	var existing RuntimeCommand
 	err := s.db.Where(
-		"user_id = ? AND device_id = ? AND coalesce_key = ? AND desired_revision = ?",
-		userID, deviceID, coalesceKey, state.DesiredRevision,
+		"space_id = ? AND device_id = ? AND coalesce_key = ? AND desired_revision = ?",
+		spaceID, deviceID, coalesceKey, state.DesiredRevision,
 	).Order("device_sequence DESC").First(&existing).Error
 	if err == nil {
 		status := CommandStatus(existing.Status)
@@ -1036,7 +1036,7 @@ func (s *commandService) ReconcileDesiredStateOnHello(userID, deviceID, runtimeI
 	if payload.EnsureAbsent {
 		commandType = CommandTypeEnsureAbsent
 	}
-	seq, err := s.AllocateDeviceSequence(nil, userID, deviceID, time.Now().UTC())
+	seq, err := s.AllocateDeviceSequence(nil, spaceID, deviceID, time.Now().UTC())
 	if err != nil {
 		return 0, err
 	}
@@ -1044,7 +1044,7 @@ func (s *commandService) ReconcileDesiredStateOnHello(userID, deviceID, runtimeI
 		connectionGeneration = 1
 	}
 	idempotencyKey := fmt.Sprintf("reconcile:%s:%d:%d", deviceID, state.DesiredRevision, connectionGeneration)
-	cmd, err := s.CreateDurableCommand(userID, deviceID, string(commandType), idempotencyKey, coalesceKey, seq, payload)
+	cmd, err := s.CreateDurableCommand(spaceID, deviceID, string(commandType), idempotencyKey, coalesceKey, seq, payload)
 	if err != nil && !errors.Is(err, ErrCommandDuplication) {
 		return 0, err
 	}
@@ -1056,7 +1056,7 @@ func (s *commandService) ReconcileDesiredStateOnHello(userID, deviceID, runtimeI
 	return state.DesiredRevision, nil
 }
 
-func (s *commandService) AllocateDeviceSequence(tx *gorm.DB, userID, deviceID string, t time.Time) (int64, error) {
+func (s *commandService) AllocateDeviceSequence(tx *gorm.DB, spaceID, deviceID string, t time.Time) (int64, error) {
 	db := s.db
 	if tx != nil {
 		db = tx
@@ -1064,13 +1064,13 @@ func (s *commandService) AllocateDeviceSequence(tx *gorm.DB, userID, deviceID st
 
 	var seq DeviceCommandSequence
 	err := db.Where(
-		"user_id = ? AND device_id = ?", userID, deviceID,
+		"space_id = ? AND device_id = ?", spaceID, deviceID,
 	).First(&seq).Error
 
 	now := time.Now().Format("2006-01-02 15:04:05")
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		seq = DeviceCommandSequence{
-			UserID:         userID,
+			SpaceID:        spaceID,
 			DeviceID:       deviceID,
 			Sequence:       1,
 			LastReservedAt: now,
@@ -1088,8 +1088,8 @@ func (s *commandService) AllocateDeviceSequence(tx *gorm.DB, userID, deviceID st
 
 	newSeq := seq.Sequence + 1
 	result := db.Model(&DeviceCommandSequence{}).Where(
-		"user_id = ? AND device_id = ? AND sequence = ?",
-		userID, deviceID, seq.Sequence,
+		"space_id = ? AND device_id = ? AND sequence = ?",
+		spaceID, deviceID, seq.Sequence,
 	).Updates(map[string]interface{}{
 		"sequence":         newSeq,
 		"last_reserved_at": now,
@@ -1099,7 +1099,7 @@ func (s *commandService) AllocateDeviceSequence(tx *gorm.DB, userID, deviceID st
 		return 0, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return s.AllocateDeviceSequence(tx, userID, deviceID, t)
+		return s.AllocateDeviceSequence(tx, spaceID, deviceID, t)
 	}
 	return newSeq, nil
 }
@@ -1155,18 +1155,18 @@ func (s *commandService) SaveAttempt(attempt *CommandAttempt) error {
 	return s.db.Create(attempt).Error
 }
 
-func (s *commandService) NakDedup(userID, deviceID, idempotencyKey string, nakTime time.Time) error {
+func (s *commandService) NakDedup(spaceID, deviceID, idempotencyKey string, nakTime time.Time) error {
 	now := nakTime.Format("2006-01-02 15:04:05")
 	var dedup CommandDedup
 	err := s.db.Where(
-		"user_id = ? AND device_id = ? AND idempotency_key = ?",
-		userID, deviceID, idempotencyKey,
+		"space_id = ? AND device_id = ? AND idempotency_key = ?",
+		spaceID, deviceID, idempotencyKey,
 	).First(&dedup).Error
 
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		dedup = CommandDedup{
 			ID:             "dedup_" + uuid.NewString(),
-			UserID:         userID,
+			SpaceID:        spaceID,
 			DeviceID:       deviceID,
 			IdempotencyKey: idempotencyKey,
 			NakCount:       1,
@@ -1187,11 +1187,11 @@ func (s *commandService) NakDedup(userID, deviceID, idempotencyKey string, nakTi
 	}).Error
 }
 
-func (s *commandService) QueryDedup(userID, deviceID, idempotencyKey string, since time.Time) (*CommandDedup, error) {
+func (s *commandService) QueryDedup(spaceID, deviceID, idempotencyKey string, since time.Time) (*CommandDedup, error) {
 	var dedup CommandDedup
 	err := s.db.Where(
-		"user_id = ? AND device_id = ? AND idempotency_key = ? AND last_nak_at >= ?",
-		userID, deviceID, idempotencyKey, since,
+		"space_id = ? AND device_id = ? AND idempotency_key = ? AND last_nak_at >= ?",
+		spaceID, deviceID, idempotencyKey, since,
 	).First(&dedup).Error
 	if err != nil {
 		return nil, err

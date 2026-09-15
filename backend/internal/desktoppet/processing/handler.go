@@ -67,11 +67,11 @@ func (h *Handler) CreateProcessingTask(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	spaceID := actorID
 
 	req := &CreateProcessingTaskRequest{
 		GenerationTaskID:           taskID,
-		UserID:                     userID,
+		SpaceID:                    spaceID,
 		OutputWidth:                outputWidth,
 		OutputHeight:               outputHeight,
 		TargetCharacterHeightRatio: targetCharacterHeightRatio,
@@ -216,7 +216,7 @@ func (h *Handler) CreatePackage(c *gin.Context) {
 
 	req := &CreatePackageRequest{
 		ProcessingTaskID:  processingTaskID,
-		UserID:            string(actor.UserID),
+		SpaceID:           string(actor.SpaceID),
 		DefaultAction:     payload.DefaultAction,
 		IncludedActions:   payload.IncludedActions,
 		UserDefaultAction: payload.UserDefaultAction,
@@ -420,16 +420,16 @@ func (h *Handler) SourceFrameImage(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, frameIndex)
-if err != nil {
-	writeProcessingError(c, err)
-	return
-}
-if err := finalizeArtifactReference(ref, fullPath, mimeType); err != nil {
-	writeProcessingError(c, err)
-	return
-}
-h.safeResponder.ServeArtifact(c, actor, *ref)
+	ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, frameIndex)
+	if err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+	if err := finalizeArtifactReference(ref, fullPath, mimeType); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+	h.safeResponder.ServeArtifact(c, actor, *ref)
 }
 
 func (h *Handler) ActionPreview(c *gin.Context) {
@@ -451,16 +451,16 @@ func (h *Handler) ActionPreview(c *gin.Context) {
 		writeProcessingError(c, err)
 		return
 	}
-ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, 0)
-if err != nil {
-	writeProcessingError(c, err)
-	return
-}
-if err := finalizeArtifactReference(ref, fullPath, mimeType); err != nil {
-	writeProcessingError(c, err)
-	return
-}
-h.safeResponder.ServeArtifact(c, actor, *ref)
+	ref, err := h.repo.GetActiveFrameArtifact(processingTaskID, actionKey, 0)
+	if err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+	if err := finalizeArtifactReference(ref, fullPath, mimeType); err != nil {
+		writeProcessingError(c, err)
+		return
+	}
+	h.safeResponder.ServeArtifact(c, actor, *ref)
 }
 
 func writeProcessingError(c *gin.Context, err error) {
@@ -538,10 +538,10 @@ func (h *Handler) ListPackages(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
+	spaceID := actorID
 	generationTaskID := c.Query("generationTaskId")
 	if generationTaskID != "" {
-		packages, err := h.service.ListPackagesByGenerationTask(userID, generationTaskID)
+		packages, err := h.service.ListPackagesByGenerationTask(spaceID, generationTaskID)
 		if err != nil {
 			util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 			return
@@ -561,7 +561,7 @@ func (h *Handler) ListPackages(c *gin.Context) {
 		pageSize = 100
 	}
 
-	packages, total, err := h.service.ListPackages(userID, page, pageSize)
+	packages, total, err := h.service.ListPackages(spaceID, page, pageSize)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "服务器内部错误", nil)
 		return
@@ -581,8 +581,8 @@ func (h *Handler) DownloadPackage(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	if err := h.service.CheckPackageOwnership(packageID, userID); err != nil {
+	spaceID := actorID
+	if err := h.service.CheckPackageOwnership(packageID, spaceID); err != nil {
 		writeProcessingError(c, err)
 		return
 	}

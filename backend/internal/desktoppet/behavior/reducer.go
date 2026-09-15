@@ -26,8 +26,8 @@ func (r *Reducer) Reduce(current BehaviorContextSnapshot, event BehaviorEventEnv
 		return next, result, NewBehaviorError(ErrCodeEventSchemaInvalid, "event missing characterId")
 	}
 
-	if event.UserID != "" && next.UserID == "" {
-		next.UserID = event.UserID
+	if event.SpaceID != "" && next.SpaceID == "" {
+		next.SpaceID = event.SpaceID
 	}
 
 	now := r.clock.Now()
@@ -1322,9 +1322,9 @@ func (s BehaviorContextSnapshot) Copy() BehaviorContextSnapshot {
 	return c
 }
 
-func NewDefaultContext(userID, characterID string) BehaviorContextSnapshot {
+func NewDefaultContext(spaceID, characterID string) BehaviorContextSnapshot {
 	return BehaviorContextSnapshot{
-		UserID:              userID,
+		SpaceID:             spaceID,
 		CharacterID:         characterID,
 		Revision:            1,
 		ActiveTools:         make(map[string]ToolOperationState),

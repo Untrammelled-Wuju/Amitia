@@ -141,7 +141,7 @@ func (i *ImportInspector) InspectAndMarkReady(
 	updated, err := i.repo.UpdateInventory(
 		ctx,
 		staging.ID,
-		staging.OwnerUserID,
+		staging.OwnerSpaceID,
 		string(raw),
 		hex.EncodeToString(inventoryHash[:]),
 	)

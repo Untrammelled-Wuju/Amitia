@@ -15,14 +15,14 @@ func DesktopPetSessionIDFactory() runtimeidentity.RuntimeSessionID {
 
 func HelloToAcquireRequest(
 	hello HelloPayload,
-	userID runtimeidentity.UserID,
+	spaceID runtimeidentity.SpaceID,
 	platform runtimeidentity.Platform,
 	now time.Time,
 ) deviceruntime.AcquireRequest {
 	caps := hello.Capabilities
 	return deviceruntime.AcquireRequest{
 		Identity: protocol.SessionIdentity{
-			UserID:    userID,
+			SpaceID:   spaceID,
 			DeviceID:  hello.DeviceID,
 			RuntimeID: hello.RuntimeID,
 		},
@@ -58,7 +58,7 @@ func SessionResultToHelloAck(
 
 func PresenceSnapshotFromSession(session deviceruntime.RuntimeSession) protocol.PresenceSnapshot {
 	return protocol.PresenceSnapshot{
-		UserID:               session.UserID,
+		SpaceID:              session.SpaceID,
 		DeviceID:             session.DeviceID,
 		RuntimeID:            session.RuntimeID,
 		RuntimeSessionID:     session.ID,

@@ -33,7 +33,7 @@ func TestBootstrapTicketConsumeWithValidationIsOneTimeAndTicketOwnsIdentity(t *t
 	if err != nil {
 		t.Fatalf("consume ticket: %v", err)
 	}
-	if consumed.UserID != "user-ticket" || consumed.DeviceID != "device-1" || consumed.RuntimeID != "runtime-1" {
+	if consumed.SpaceID != "user-ticket" || consumed.DeviceID != "device-1" || consumed.RuntimeID != "runtime-1" {
 		t.Fatalf("ticket identity changed: %#v", consumed)
 	}
 	if _, err := repo.ConsumeWithValidation(ctx, raw, "runtime-1", "device-1"); !errors.Is(err, ErrTicketConsumed) {

@@ -14,7 +14,7 @@ type LegacyPackageMigrator struct {
 }
 
 type LegacyBuilder interface {
-	BuildFromLegacy(userID, legacyPackageID string, mapping *release.LegacyPackageMapping) (*LegacyBuildResult, error)
+	BuildFromLegacy(spaceID, legacyPackageID string, mapping *release.LegacyPackageMapping) (*LegacyBuildResult, error)
 }
 
 type LegacyBuildResult struct {
@@ -23,7 +23,7 @@ type LegacyBuildResult struct {
 }
 
 type MigrateLegacyRequest struct {
-	UserID          string
+	SpaceID         string
 	LegacyPackageID string
 	IdempotencyKey  string
 }
@@ -46,7 +46,7 @@ func NewLegacyPackageMigrator(
 }
 
 func (m *LegacyPackageMigrator) MigrateLegacy(req *MigrateLegacyRequest) (*MigrateLegacyResult, error) {
-	if req.UserID == "" {
+	if req.SpaceID == "" {
 		return nil, release.NewReleaseError("INVALID_USER", "用户 ID 不能为空", nil)
 	}
 	if req.LegacyPackageID == "" {
@@ -69,7 +69,7 @@ func (m *LegacyPackageMigrator) MigrateLegacy(req *MigrateLegacyRequest) (*Migra
 		return nil, err
 	}
 
-	buildResult, err := m.builder.BuildFromLegacy(req.UserID, req.LegacyPackageID, mapping)
+	buildResult, err := m.builder.BuildFromLegacy(req.SpaceID, req.LegacyPackageID, mapping)
 	if err != nil {
 		m.failMigrationOperation(operation, "BUILD_FAILED", err)
 		m.markMappingFailed(mapping, err)
@@ -103,7 +103,7 @@ func (m *LegacyPackageMigrator) createMigrationOperation(req *MigrateLegacyReque
 	operation := &release.LegacyPackageMigrationOperation{
 		ID:              uuid.NewString(),
 		LegacyPackageID: req.LegacyPackageID,
-		UserID:          req.UserID,
+		SpaceID:         req.SpaceID,
 		State:           release.LegacyMigrationOpStatePending,
 		StartedAt:       formatMigrationTimestamp(),
 		UpdatedAt:       formatMigrationTimestamp(),
@@ -119,7 +119,7 @@ func (m *LegacyPackageMigrator) createLegacyMapping(req *MigrateLegacyRequest) (
 		ID:              uuid.NewString(),
 		LegacyPackageID: req.LegacyPackageID,
 		MigrationStatus: release.LegacyMigrationStatusPending,
-		OwnerUserId:     req.UserID,
+		OwnerSpaceID:    req.SpaceID,
 		CreatedAt:       formatMigrationTimestamp(),
 		UpdatedAt:       formatMigrationTimestamp(),
 	}
@@ -145,7 +145,7 @@ func (m *LegacyPackageMigrator) loadExistingMapping(mapping *release.LegacyPacka
 		operation = &release.LegacyPackageMigrationOperation{
 			ID:              mapping.ID,
 			LegacyPackageID: mapping.LegacyPackageID,
-			UserID:          mapping.OwnerUserId,
+			SpaceID:         mapping.OwnerSpaceID,
 			State:           migrationStatusToOpState(mapping.MigrationStatus),
 		}
 	}
@@ -189,7 +189,7 @@ func formatMigrationTimestamp() string {
 	return time.Now().Format("2006-01-02 15:04:05")
 }
 
-func (m *LegacyPackageMigrator) ListPendingMigrations(userID string) ([]*release.LegacyPackageMapping, error) {
+func (m *LegacyPackageMigrator) ListPendingMigrations(spaceID string) ([]*release.LegacyPackageMapping, error) {
 	return m.repo.ListPendingLegacyMappings()
 }
 
@@ -209,7 +209,7 @@ func (m *LegacyPackageMigrator) RetryMigration(operationID string) (*MigrateLega
 	}
 
 	return m.MigrateLegacy(&MigrateLegacyRequest{
-		UserID:          op.UserID,
+		SpaceID:         op.SpaceID,
 		LegacyPackageID: op.LegacyPackageID,
 	})
 }

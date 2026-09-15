@@ -22,9 +22,9 @@ func setupServiceEnv(t *testing.T) (*service, *gorm.DB, Repository, string) {
 	return svc, db, repo, dataDir
 }
 
-func seedFullGenerationTask(t *testing.T, db *gorm.DB, dataDir, taskID, userID, actionKey string, supportsIdle int) desktoppet.GenerationTaskAction {
+func seedFullGenerationTask(t *testing.T, db *gorm.DB, dataDir, taskID, spaceID, actionKey string, supportsIdle int) desktoppet.GenerationTaskAction {
 	t.Helper()
-	seedValidatorTask(t, db, taskID, userID, "succeeded")
+	seedValidatorTask(t, db, taskID, spaceID, "succeeded")
 	action := desktoppet.GenerationTaskAction{
 		ID:                    "gta-" + taskID,
 		TaskID:                taskID,
@@ -110,7 +110,7 @@ func TestServiceCreateProcessingTask_Normal(t *testing.T) {
 
 	req := &CreateProcessingTaskRequest{
 		GenerationTaskID:           "gt-create-normal",
-		UserID:                     "user-1",
+		SpaceID:                    "user-1",
 		OutputWidth:                512,
 		OutputHeight:               512,
 		TargetCharacterHeightRatio: 0.8,
@@ -163,7 +163,7 @@ func TestServiceCreateProcessingTask_TaskNotFound(t *testing.T) {
 
 	req := &CreateProcessingTaskRequest{
 		GenerationTaskID: "gt-nonexistent",
-		UserID:           "user-1",
+		SpaceID:          "user-1",
 	}
 
 	_, err := svc.CreateProcessingTask(req)
@@ -178,7 +178,7 @@ func TestServiceCreateProcessingTask_NoSuccessfulActions(t *testing.T) {
 
 	req := &CreateProcessingTaskRequest{
 		GenerationTaskID: "gt-no-success",
-		UserID:           "user-1",
+		SpaceID:          "user-1",
 	}
 
 	_, err := svc.CreateProcessingTask(req)
@@ -192,7 +192,7 @@ func TestServiceCreateProcessingTask_WrongOwnerFailsClosed(t *testing.T) {
 
 	req := &CreateProcessingTaskRequest{
 		GenerationTaskID: "gt-wrong-owner",
-		UserID:           "user-attacker",
+		SpaceID:          "user-attacker",
 	}
 
 	_, err := svc.CreateProcessingTask(req)
@@ -214,7 +214,7 @@ func TestServiceCreateProcessingTask_TaskGenerating(t *testing.T) {
 
 	req := &CreateProcessingTaskRequest{
 		GenerationTaskID: "gt-generating",
-		UserID:           "user-1",
+		SpaceID:          "user-1",
 	}
 
 	_, err := svc.CreateProcessingTask(req)
@@ -375,7 +375,7 @@ func TestServiceCreatePackage_Normal(t *testing.T) {
 
 	req := &CreatePackageRequest{
 		ProcessingTaskID: "pt-pkg-svc",
-		UserID:           "user-1",
+		SpaceID:          "user-1",
 	}
 
 	resp, err := svc.CreatePackage(req)
@@ -407,7 +407,7 @@ func TestServiceCreatePackage_DefaultActionMissing(t *testing.T) {
 
 	req := &CreatePackageRequest{
 		ProcessingTaskID: "pt-pkg-no-idle",
-		UserID:           "user-1",
+		SpaceID:          "user-1",
 	}
 
 	_, err := svc.CreatePackage(req)
@@ -449,7 +449,7 @@ func TestServiceCreatePackage_ExcludeDefaultIdleFailed(t *testing.T) {
 
 	req := &CreatePackageRequest{
 		ProcessingTaskID: "pt-pkg-excluded",
-		UserID:           "user-1",
+		SpaceID:          "user-1",
 	}
 
 	_, err := svc.CreatePackage(req)
@@ -654,7 +654,7 @@ func TestServiceCreateProcessingTask_AlreadyRunning(t *testing.T) {
 
 	req := &CreateProcessingTaskRequest{
 		GenerationTaskID: "gt-already-running",
-		UserID:           "user-1",
+		SpaceID:          "user-1",
 	}
 
 	_, err := svc.CreateProcessingTask(req)
@@ -669,7 +669,7 @@ func TestServiceCreateProcessingTask_IncrementVersion(t *testing.T) {
 
 	req := &CreateProcessingTaskRequest{
 		GenerationTaskID: "gt-increment",
-		UserID:           "user-1",
+		SpaceID:          "user-1",
 	}
 
 	task, err := svc.CreateProcessingTask(req)

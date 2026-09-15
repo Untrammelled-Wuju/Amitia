@@ -217,7 +217,7 @@ type ActionQualityResult struct {
 
 type QualityEvaluation struct {
 	ID                     string                    `json:"id"`
-	UserID                 string                    `json:"userId"`
+	SpaceID                string                    `json:"spaceId"`
 	ProcessingTaskID       string                    `json:"processingTaskId"`
 	ProcessingActionID     string                    `json:"processingActionId"`
 	ActionRevisionID       string                    `json:"actionRevisionId"`
@@ -523,7 +523,7 @@ type EvaluateRequest struct {
 	ProcessingTaskID     string                 `json:"processingTaskId"`
 	ProcessingActionID   string                 `json:"processingActionId"`
 	ActionKey            string                 `json:"actionKey"`
-	UserID               string                 `json:"userId"`
+	SpaceID              string                 `json:"spaceId"`
 	Profile              QualityProfileSnapshot `json:"profile"`
 	ExpectedRevisionHash string                 `json:"expectedRevisionHash"`
 	ExecutionID          string                 `json:"executionId"`
@@ -532,7 +532,7 @@ type EvaluateRequest struct {
 }
 
 type CreateEvaluationRequest struct {
-	UserID               string `json:"userId"`
+	SpaceID              string `json:"spaceId"`
 	ProcessingTaskID     string `json:"processingTaskId"`
 	ProcessingActionID   string `json:"processingActionId"`
 	ActionRevisionID     string `json:"actionRevisionId"`
@@ -617,7 +617,7 @@ type CommitEvaluationResult struct {
 }
 
 type EvaluateTaskGateRequest struct {
-	UserID                string
+	SpaceID               string
 	ProcessingTaskID      string
 	ActiveRevisionSetHash string
 	RequiredActionKeys    []string
@@ -635,7 +635,7 @@ type ReviewDecisionRequest struct {
 }
 
 type GetValidGateForReleaseRequest struct {
-	UserID                string
+	SpaceID               string
 	ProcessingTaskID      string
 	ActiveRevisionSetHash string
 }
@@ -643,7 +643,7 @@ type GetValidGateForReleaseRequest struct {
 type QualityOutboxEvent struct {
 	EventType        string `json:"eventType"`
 	ExecutionID      string `json:"executionId"`
-	UserID           string `json:"userId"`
+	SpaceID          string `json:"spaceId"`
 	ProcessingTaskID string `json:"processingTaskId"`
 	ActionKey        string `json:"actionKey"`
 	ActionRevisionID string `json:"actionRevisionId"`

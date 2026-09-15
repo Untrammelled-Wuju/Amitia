@@ -46,7 +46,7 @@ func openStateSourceTestDB(t *testing.T, name string) *gorm.DB {
 	}
 	if err := db.Exec(`CREATE TABLE interaction_records (
 		id TEXT PRIMARY KEY,
-		user_id TEXT,
+		space_id TEXT,
 		character_id TEXT,
 		conversation_id TEXT,
 		channel TEXT,
@@ -73,7 +73,7 @@ func TestQueryActiveInteractionsKeepsNewestCreatedInteractionInsideLimit(t *test
 		created := base.Add(time.Duration(i) * time.Minute)
 		updated := base.Add(2*time.Hour + time.Duration(i)*time.Minute)
 		if err := db.Exec(`INSERT INTO interaction_records
-			(id, user_id, character_id, conversation_id, channel, request_id, status, status_version, created_at, updated_at)
+			(id, space_id, character_id, conversation_id, channel, request_id, status, status_version, created_at, updated_at)
 			VALUES (?, 'user-1', 'character-1', ?, 'web', ?, 'processing', 9, ?, ?)`,
 			fmt.Sprintf("old-%d", i), fmt.Sprintf("old-conv-%d", i), fmt.Sprintf("old-req-%d", i), created, updated).Error; err != nil {
 			t.Fatal(err)
@@ -81,7 +81,7 @@ func TestQueryActiveInteractionsKeepsNewestCreatedInteractionInsideLimit(t *test
 	}
 	newCreated := base.Add(30 * time.Minute)
 	if err := db.Exec(`INSERT INTO interaction_records
-		(id, user_id, character_id, conversation_id, channel, request_id, status, status_version, created_at, updated_at)
+		(id, space_id, character_id, conversation_id, channel, request_id, status, status_version, created_at, updated_at)
 		VALUES ('newest', 'user-1', 'character-1', 'new-conv', 'web', 'new-req', 'received', 1, ?, ?)`, newCreated, newCreated).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -118,11 +118,11 @@ func TestQueryActiveToolsRejectsAmbiguousCrossTenantCorrelation(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
-	for _, userID := range []string{"user-1", "user-2"} {
+	for _, spaceID := range []string{"user-1", "user-2"} {
 		if err := db.Exec(`INSERT INTO interaction_records
-			(id, user_id, character_id, conversation_id, channel, request_id, status, status_version, created_at, updated_at)
+			(id, space_id, character_id, conversation_id, channel, request_id, status, status_version, created_at, updated_at)
 			VALUES (?, ?, 'character-1', 'shared-conv', 'web', 'shared-req', 'processing', 2, ?, ?)`,
-			"interaction-"+userID, userID, now, now).Error; err != nil {
+			"interaction-"+spaceID, spaceID, now, now).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -159,7 +159,7 @@ func TestQueryActiveToolsRestoresUnambiguousInteractionOwnership(t *testing.T) {
 	}
 	now := time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
 	if err := db.Exec(`INSERT INTO interaction_records
-		(id, user_id, character_id, conversation_id, channel, request_id, status, status_version, created_at, updated_at)
+		(id, space_id, character_id, conversation_id, channel, request_id, status, status_version, created_at, updated_at)
 		VALUES ('interaction-1', 'user-1', 'character-1', 'conv-1', 'web', 'req-1', 'processing', 2, ?, ?)`, now, now).Error; err != nil {
 		t.Fatal(err)
 	}

@@ -90,13 +90,13 @@ func workerNowStr() string {
 	return time.Now().Format("2006-01-02 15:04:05")
 }
 
-func seedWorkerGenerationTask(t *testing.T, db *gorm.DB, taskID, userID, status string) *desktoppet.GenerationTask {
+func seedWorkerGenerationTask(t *testing.T, db *gorm.DB, taskID, spaceID, status string) *desktoppet.GenerationTask {
 	t.Helper()
 	task := &desktoppet.GenerationTask{
-		ID:     taskID,
-		UserID: userID,
-		Name:   "处理测试任务",
-		Status: status,
+		ID:      taskID,
+		SpaceID: spaceID,
+		Name:    "处理测试任务",
+		Status:  status,
 	}
 	if err := db.Create(task).Error; err != nil {
 		t.Fatalf("create generation task %s: %v", taskID, err)

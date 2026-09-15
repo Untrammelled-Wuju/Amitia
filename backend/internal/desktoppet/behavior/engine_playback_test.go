@@ -22,7 +22,7 @@ func TestPreparePlaybackEventEnrichesStartedForegroundMetadata(t *testing.T) {
 	repo := &playbackDecisionRepo{decision: &BehaviorDecisionAudit{
 		BehaviorDecision: BehaviorDecision{
 			DecisionID:       "decision-1",
-			UserID:           "user-1",
+			SpaceID:          "user-1",
 			CharacterID:      "character-1",
 			InstallationID:   "install-1",
 			RuntimeCommandID: "command-1",
@@ -41,7 +41,7 @@ func TestPreparePlaybackEventEnrichesStartedForegroundMetadata(t *testing.T) {
 	event := BehaviorEventEnvelope{
 		EventType:      "runtime.playback.action_started",
 		OccurredAt:     now,
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "character-1",
 		InstallationID: "install-1",
 		Payload:        raw,
@@ -70,7 +70,7 @@ func TestPreparePlaybackEventRejectsDecisionIdentityMismatch(t *testing.T) {
 	repo := &playbackDecisionRepo{decision: &BehaviorDecisionAudit{
 		BehaviorDecision: BehaviorDecision{
 			DecisionID:  "decision-1",
-			UserID:      "other-user",
+			SpaceID:     "other-user",
 			CharacterID: "character-1",
 		},
 	}}
@@ -78,7 +78,7 @@ func TestPreparePlaybackEventRejectsDecisionIdentityMismatch(t *testing.T) {
 	raw, _ := json.Marshal(map[string]interface{}{"decisionId": "decision-1"})
 	_, err := engine.preparePlaybackEvent(context.Background(), BehaviorEventEnvelope{
 		EventType:   "runtime.playback.action_completed",
-		UserID:      "user-1",
+		SpaceID:     "user-1",
 		CharacterID: "character-1",
 		Payload:     raw,
 	})

@@ -114,7 +114,7 @@ func (s *qualityService) CreateEvaluation(ctx context.Context, req CreateEvaluat
 
 	eval := &QualityEvaluation{
 		ID:                   evaluationID,
-		UserID:               req.UserID,
+		SpaceID:              req.SpaceID,
 		ProcessingTaskID:     req.ProcessingTaskID,
 		ProcessingActionID:   req.ProcessingActionID,
 		ActionRevisionID:     req.ActionRevisionID,
@@ -201,7 +201,7 @@ func (s *qualityService) Reevaluate(ctx context.Context, req ReevaluateRequest) 
 
 	newEval := &QualityEvaluation{
 		ID:                     uuid.NewString(),
-		UserID:                 oldEval.UserID,
+		SpaceID:                oldEval.SpaceID,
 		ProcessingTaskID:       oldEval.ProcessingTaskID,
 		ProcessingActionID:     oldEval.ProcessingActionID,
 		ActionRevisionID:       oldEval.ActionRevisionID,
@@ -292,7 +292,7 @@ func (s *qualityService) ListFindings(ctx context.Context, evaluationID string, 
 	return findings, total, nil
 }
 
-func (s *qualityService) CheckEvaluationOwnership(ctx context.Context, evaluationID, userID string) error {
+func (s *qualityService) CheckEvaluationOwnership(ctx context.Context, evaluationID, spaceID string) error {
 	eval, err := s.repo.GetEvaluation(ctx, evaluationID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -300,13 +300,13 @@ func (s *qualityService) CheckEvaluationOwnership(ctx context.Context, evaluatio
 		}
 		return err
 	}
-	if eval.UserID != userID {
+	if eval.SpaceID != spaceID {
 		return NewQualityError(ErrCodeQualityNotOwned, "评估不属于当前用户", nil)
 	}
 	return nil
 }
 
-func (s *qualityService) CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, userID string) error {
+func (s *qualityService) CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, spaceID string) error {
 	evals, err := s.repo.ListEvaluationsByTask(ctx, processingTaskID)
 	if err != nil {
 		return NewQualityError(ErrCodeQualityEvaluationNotFound, "处理任务不存在", err)
@@ -314,7 +314,7 @@ func (s *qualityService) CheckProcessingTaskOwnership(ctx context.Context, proce
 	if len(evals) == 0 {
 		return NewQualityError(ErrCodeQualityEvaluationNotFound, "处理任务不存在", nil)
 	}
-	if evals[0].UserID != userID {
+	if evals[0].SpaceID != spaceID {
 		return NewQualityError(ErrCodeQualityNotOwned, "处理任务不属于当前用户", nil)
 	}
 	return nil

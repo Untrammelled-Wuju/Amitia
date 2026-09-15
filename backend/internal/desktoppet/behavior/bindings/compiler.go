@@ -162,7 +162,7 @@ func isSelfReference(parent, child json.RawMessage) bool {
 var envelopeFieldWhitelist = map[string]bool{
 	"origin":         true,
 	"eventType":      true,
-	"userId":         true,
+	"spaceId":        true,
 	"characterId":    true,
 	"eventId":        true,
 	"installationId": true,

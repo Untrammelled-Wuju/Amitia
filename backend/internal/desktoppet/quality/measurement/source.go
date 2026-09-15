@@ -22,8 +22,8 @@ func NewActionRevisionMeasurementSource(inputRepo quality.QualityInputRepository
 	}
 }
 
-func (s *ActionRevisionMeasurementSource) LoadActionMeasurements(ctx context.Context, userID, actionRevisionID string) (*quality.ActionMeasurementSet, error) {
-	input, err := s.inputRepo.LoadActionRevisionInput(ctx, userID, actionRevisionID)
+func (s *ActionRevisionMeasurementSource) LoadActionMeasurements(ctx context.Context, spaceID, actionRevisionID string) (*quality.ActionMeasurementSet, error) {
+	input, err := s.inputRepo.LoadActionRevisionInput(ctx, spaceID, actionRevisionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load action input: %w", err)
 	}
@@ -39,8 +39,8 @@ func (s *ActionRevisionMeasurementSource) LoadActionMeasurements(ctx context.Con
 	return set, nil
 }
 
-func (s *ActionRevisionMeasurementSource) OpenFrame(ctx context.Context, userID, actionRevisionID string, frameIndex int) (image.Image, error) {
-	input, err := s.inputRepo.LoadActionRevisionInput(ctx, userID, actionRevisionID)
+func (s *ActionRevisionMeasurementSource) OpenFrame(ctx context.Context, spaceID, actionRevisionID string, frameIndex int) (image.Image, error) {
+	input, err := s.inputRepo.LoadActionRevisionInput(ctx, spaceID, actionRevisionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load action input: %w", err)
 	}

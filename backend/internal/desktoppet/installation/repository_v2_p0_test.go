@@ -28,14 +28,14 @@ func TestRepositoryV2TransactionReadsItsOwnWritesAndRollsBack(t *testing.T) {
 
 	err := repo.Transaction(context.Background(), func(tx RepositoryV2) error {
 		inst := &Installation{
-			ID: "inst-tx", UserID: "user-1", DeviceID: "device-1", PetID: "pet-1",
+			ID: "inst-tx", SpaceID: "user-1", DeviceID: "device-1", PetID: "pet-1",
 			PackageID: "pkg-1", PackageVersion: "1.0.0", Status: StatusInstalled,
 			LifecycleState: LifecycleInstalled,
 		}
 		if err := tx.CreateInstallationTx(tx.DB(), inst); err != nil {
 			return err
 		}
-		got, err := tx.GetInstallationForUserDevice("user-1", "device-1", "inst-tx")
+		got, err := tx.GetInstallationForSpaceDevice("user-1", "device-1", "inst-tx")
 		if err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ func TestRepositoryV2RuntimeSettingsEnforcesUserDeviceOwnership(t *testing.T) {
 	db := newRepositoryV2TestDB(t)
 	repo := &repository{db: db}
 	inst := &Installation{
-		ID: "inst-owned", UserID: "user-1", DeviceID: "device-1", PetID: "pet-1",
+		ID: "inst-owned", SpaceID: "user-1", DeviceID: "device-1", PetID: "pet-1",
 		PackageID: "pkg-1", PackageVersion: "1.0.0", Status: StatusInstalled,
 		LifecycleState: LifecycleInstalled,
 	}
@@ -90,13 +90,13 @@ func TestRepositoryV2RuntimeSettingsEnforcesUserDeviceOwnership(t *testing.T) {
 		t.Fatalf("seed runtime settings: %v", err)
 	}
 
-	if _, err := repo.GetRuntimeSettingsForUserDevice("user-2", "device-1", inst.ID); !errors.Is(err, ErrInstallationNotFound) {
+	if _, err := repo.GetRuntimeSettingsForSpaceDevice("user-2", "device-1", inst.ID); !errors.Is(err, ErrInstallationNotFound) {
 		t.Fatalf("wrong user must not read settings, got %v", err)
 	}
-	if _, err := repo.GetRuntimeSettingsForUserDevice("user-1", "device-2", inst.ID); !errors.Is(err, ErrInstallationNotFound) {
+	if _, err := repo.GetRuntimeSettingsForSpaceDevice("user-1", "device-2", inst.ID); !errors.Is(err, ErrInstallationNotFound) {
 		t.Fatalf("wrong device must not read settings, got %v", err)
 	}
-	got, err := repo.GetRuntimeSettingsForUserDevice("user-1", "device-1", inst.ID)
+	got, err := repo.GetRuntimeSettingsForSpaceDevice("user-1", "device-1", inst.ID)
 	if err != nil || got == nil || got.ID != settings.ID {
 		t.Fatalf("owner read failed: got=%#v err=%v", got, err)
 	}
@@ -106,7 +106,7 @@ func TestRepositoryV2RuntimeSettingsCASEnforcesOwnership(t *testing.T) {
 	db := newRepositoryV2TestDB(t)
 	repo := &repository{db: db}
 	inst := &Installation{
-		ID: "inst-cas-owned", UserID: "user-1", DeviceID: "device-1", PetID: "pet-1",
+		ID: "inst-cas-owned", SpaceID: "user-1", DeviceID: "device-1", PetID: "pet-1",
 		PackageID: "pkg-1", PackageVersion: "1.0.0", Status: StatusInstalled,
 		LifecycleState: LifecycleInstalled,
 	}

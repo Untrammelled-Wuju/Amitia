@@ -62,7 +62,7 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 	}
 
 	cmds, err := d.commands.ListCommandsToDispatchForConnection(
-		string(conn.UserID),
+		string(conn.SpaceID),
 		string(conn.DeviceID),
 		string(conn.RuntimeID),
 		100,
@@ -184,7 +184,7 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 				ExpiresAt:        cmd.ExpiresAt,
 				Payload:          rawPayload,
 			},
-			conn.UserID,
+			conn.SpaceID,
 			conn.DeviceID,
 		)
 		if err != nil {

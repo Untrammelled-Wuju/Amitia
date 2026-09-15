@@ -107,7 +107,7 @@ func (s *TaskGateService) buildVerdictSummary(ctx context.Context, eval *quality
 }
 
 func (s *TaskGateService) GetValidGateForRelease(ctx context.Context, req quality.GetValidGateForReleaseRequest) (*quality.QualityGateResult, error) {
-	if req.UserID == "" {
+	if req.SpaceID == "" {
 		return nil, quality.NewQualityError(quality.ErrCodeQualityNotOwned, "用户 ID 不能为空", nil)
 	}
 
@@ -119,7 +119,7 @@ func (s *TaskGateService) GetValidGateForRelease(ctx context.Context, req qualit
 		return nil, nil
 	}
 	for _, eval := range evals {
-		if eval.UserID != req.UserID {
+		if eval.SpaceID != req.SpaceID {
 			return nil, quality.NewQualityError(quality.ErrCodeQualityNotOwned, "处理任务不属于当前用户", nil)
 		}
 	}

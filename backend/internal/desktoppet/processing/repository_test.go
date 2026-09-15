@@ -648,7 +648,7 @@ func TestCreateAndGetPackage(t *testing.T) {
 
 	pkg := &Package{
 		ID:               "pkg-1",
-		UserID:           "user-1",
+		SpaceID:          "user-1",
 		GenerationTaskID: "gt-1",
 		ProcessingTaskID: "pt-1",
 		Name:             "测试包",
@@ -684,7 +684,7 @@ func TestUpdatePackageStatus(t *testing.T) {
 	repo := newRepoFromDB(t, db)
 
 	if err := repo.CreatePackage(&Package{
-		ID: "pkg-1", UserID: "user-1", Status: "draft", Version: 1,
+		ID: "pkg-1", SpaceID: "user-1", Status: "draft", Version: 1,
 	}); err != nil {
 		t.Fatalf("CreatePackage: %v", err)
 	}
@@ -712,26 +712,26 @@ func TestUpdatePackageStatus(t *testing.T) {
 	}
 }
 
-func TestListPackagesByUser(t *testing.T) {
+func TestListPackagesBySpace(t *testing.T) {
 	db := setupTestDB(t)
 	repo := newRepoFromDB(t, db)
 
 	for i, id := range []string{"pkg-1", "pkg-2", "pkg-3"} {
 		if err := repo.CreatePackage(&Package{
-			ID: id, UserID: "user-1", ProcessingTaskID: id, Status: "draft", Version: 1,
+			ID: id, SpaceID: "user-1", ProcessingTaskID: id, Status: "draft", Version: 1,
 		}); err != nil {
 			t.Fatalf("CreatePackage[%d]: %v", i, err)
 		}
 	}
 	if err := repo.CreatePackage(&Package{
-		ID: "pkg-other", UserID: "user-2", ProcessingTaskID: "pt-other", Status: "draft", Version: 1,
+		ID: "pkg-other", SpaceID: "user-2", ProcessingTaskID: "pt-other", Status: "draft", Version: 1,
 	}); err != nil {
 		t.Fatalf("CreatePackage other: %v", err)
 	}
 
-	packages, total, err := repo.ListPackagesByUser("user-1", 1, 10)
+	packages, total, err := repo.ListPackagesBySpace("user-1", 1, 10)
 	if err != nil {
-		t.Fatalf("ListPackagesByUser: %v", err)
+		t.Fatalf("ListPackagesBySpace: %v", err)
 	}
 	if total != 3 {
 		t.Fatalf("total = %d, want 3", total)
@@ -740,9 +740,9 @@ func TestListPackagesByUser(t *testing.T) {
 		t.Fatalf("len(packages) = %d, want 3", len(packages))
 	}
 
-	packages2, total2, err := repo.ListPackagesByUser("user-1", 1, 2)
+	packages2, total2, err := repo.ListPackagesBySpace("user-1", 1, 2)
 	if err != nil {
-		t.Fatalf("ListPackagesByUser page: %v", err)
+		t.Fatalf("ListPackagesBySpace page: %v", err)
 	}
 	if total2 != 3 {
 		t.Fatalf("total2 = %d, want 3", total2)
@@ -757,17 +757,17 @@ func TestListPackagesByGenerationTask(t *testing.T) {
 	repo := newRepoFromDB(t, db)
 
 	if err := repo.CreatePackage(&Package{
-		ID: "pkg-1", UserID: "user-1", GenerationTaskID: "gt-1", ProcessingTaskID: "pt-1", Status: "draft", Version: 1,
+		ID: "pkg-1", SpaceID: "user-1", GenerationTaskID: "gt-1", ProcessingTaskID: "pt-1", Status: "draft", Version: 1,
 	}); err != nil {
 		t.Fatalf("CreatePackage: %v", err)
 	}
 	if err := repo.CreatePackage(&Package{
-		ID: "pkg-2", UserID: "user-1", GenerationTaskID: "gt-1", ProcessingTaskID: "pt-2", Status: "draft", Version: 1,
+		ID: "pkg-2", SpaceID: "user-1", GenerationTaskID: "gt-1", ProcessingTaskID: "pt-2", Status: "draft", Version: 1,
 	}); err != nil {
 		t.Fatalf("CreatePackage: %v", err)
 	}
 	if err := repo.CreatePackage(&Package{
-		ID: "pkg-3", UserID: "user-1", GenerationTaskID: "gt-2", ProcessingTaskID: "pt-3", Status: "draft", Version: 1,
+		ID: "pkg-3", SpaceID: "user-1", GenerationTaskID: "gt-2", ProcessingTaskID: "pt-3", Status: "draft", Version: 1,
 	}); err != nil {
 		t.Fatalf("CreatePackage: %v", err)
 	}
@@ -848,7 +848,7 @@ func TestGetGenerationTask(t *testing.T) {
 
 	if err := db.Create(&desktoppet.GenerationTask{
 		ID:           "gt-1",
-		UserID:       "user-1",
+		SpaceID:      "user-1",
 		Name:         "生成任务",
 		Status:       "succeeded",
 		CurrentStage: "completed",

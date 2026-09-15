@@ -22,7 +22,7 @@ const (
 type InstallationRuntimeProjection struct {
 	ID string
 
-	UserID    string
+	SpaceID   string
 	DeviceID  string
 	RuntimeID string
 

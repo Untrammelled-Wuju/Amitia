@@ -134,8 +134,8 @@ func (w *DesiredStateOutboxWorker) processEvent(ctx context.Context, event *desi
 	if err := json.Unmarshal([]byte(event.PayloadJSON), &snapshot); err != nil {
 		return fmt.Errorf("decode desired outbox payload: %w", err)
 	}
-	if snapshot.UserID == "" {
-		snapshot.UserID = event.UserID
+	if snapshot.SpaceID == "" {
+		snapshot.SpaceID = event.SpaceID
 	}
 	if snapshot.DeviceID == "" {
 		snapshot.DeviceID = event.DeviceID
@@ -153,7 +153,7 @@ func (w *DesiredStateOutboxWorker) processEvent(ctx context.Context, event *desi
 		snapshot.DesiredHash = event.DesiredHash
 	}
 	return w.publisher.PublishDesiredState(ctx, device.DeviceContext{
-		UserID: snapshot.UserID, DeviceID: snapshot.DeviceID, RuntimeID: snapshot.RuntimeID, Source: "desired_outbox",
+		SpaceID: snapshot.SpaceID, DeviceID: snapshot.DeviceID, RuntimeID: snapshot.RuntimeID, Source: "desired_outbox",
 	}, &snapshot)
 }
 

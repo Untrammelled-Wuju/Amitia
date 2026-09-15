@@ -59,7 +59,7 @@ func NewProcessingErrorWithErr(code, message string, err error) *ProcessingError
 
 type Service interface {
 	CreateProcessingTask(req *CreateProcessingTaskRequest) (*ProcessingTask, error)
-	CheckProcessingTaskOwnership(processingTaskID, userID string) error
+	CheckProcessingTaskOwnership(processingTaskID, spaceID string) error
 	GetProcessingTask(id string) (*GetProcessingTaskResponse, error)
 	CancelProcessingTask(id string) error
 	RetryProcessingAction(processingTaskID, actionKey string) error
@@ -70,10 +70,10 @@ type Service interface {
 	GetProcessedFrameImage(processingTaskID, actionKey string, frameIndex int) (fullPath, mimeType string, err error)
 	GetSourceFrameImage(processingTaskID, actionKey string, frameIndex int) (fullPath, mimeType string, err error)
 	GetActionPreview(processingTaskID, actionKey string) (fullPath, mimeType string, err error)
-	ListPackages(userID string, page, pageSize int) ([]Package, int64, error)
-	ListPackagesByGenerationTask(userID, generationTaskID string) ([]Package, error)
+	ListPackages(spaceID string, page, pageSize int) ([]Package, int64, error)
+	ListPackagesByGenerationTask(spaceID, generationTaskID string) ([]Package, error)
 	GetPackage(id string) (*Package, error)
-	CheckPackageOwnership(packageID, userID string) error
+	CheckPackageOwnership(packageID, spaceID string) error
 	DownloadPackage(id string) (packageDir string, pkg *Package, err error)
 }
 
@@ -104,7 +104,7 @@ func NewService(repo Repository, db *gorm.DB, ctx *app.AppContext, dataDir strin
 
 type CreateProcessingTaskRequest struct {
 	GenerationTaskID           string
-	UserID                     string
+	SpaceID                    string
 	OutputWidth                int
 	OutputHeight               int
 	TargetCharacterHeightRatio float64
@@ -122,16 +122,16 @@ type GetProcessingTaskResponse struct {
 }
 
 type ActionStatusInfo struct {
-	ActionKey          string   `json:"actionKey"`
-	ActionName         string   `json:"actionName"`
-	Status             string   `json:"status"`
-	Progress           int      `json:"progress"`
-	QualityLevel       string   `json:"qualityLevel"`
-	QualityFlags       []string `json:"qualityFlags"`
-	SourceAttempt      int      `json:"sourceAttempt"`
-	SourceFrameCount   int      `json:"sourceFrameCount"`
-	ProcessedFrameCount int     `json:"processedFrameCount"`
-	Excluded           bool     `json:"excluded"`
+	ActionKey           string   `json:"actionKey"`
+	ActionName          string   `json:"actionName"`
+	Status              string   `json:"status"`
+	Progress            int      `json:"progress"`
+	QualityLevel        string   `json:"qualityLevel"`
+	QualityFlags        []string `json:"qualityFlags"`
+	SourceAttempt       int      `json:"sourceAttempt"`
+	SourceFrameCount    int      `json:"sourceFrameCount"`
+	ProcessedFrameCount int      `json:"processedFrameCount"`
+	Excluded            bool     `json:"excluded"`
 }
 
 type QualitySummary struct {
@@ -143,7 +143,7 @@ type QualitySummary struct {
 
 type CreatePackageRequest struct {
 	ProcessingTaskID  string
-	UserID            string
+	SpaceID           string
 	DefaultAction     string
 	IncludedActions   []string
 	UserDefaultAction string
@@ -175,7 +175,7 @@ func wrapValidationError(err error) error {
 	return err
 }
 
-func (s *service) CheckProcessingTaskOwnership(processingTaskID, userID string) error {
+func (s *service) CheckProcessingTaskOwnership(processingTaskID, spaceID string) error {
 	task, err := s.repo.GetProcessingTask(processingTaskID)
 	if err != nil {
 		return NewProcessingErrorWithErr(ErrCodeProcessingTaskNotFound, "处理任务不存在", err)
@@ -184,18 +184,18 @@ func (s *service) CheckProcessingTaskOwnership(processingTaskID, userID string) 
 	if err != nil {
 		return NewProcessingErrorWithErr(ErrCodeProcessingTaskNotFound, "关联生成任务不存在", err)
 	}
-	if genTask.UserID != userID {
+	if genTask.SpaceID != spaceID {
 		return NewProcessingError(ErrCodeProcessingTaskNotOwned, "处理任务不属于当前用户")
 	}
 	return nil
 }
 
-func (s *service) CheckPackageOwnership(packageID, userID string) error {
+func (s *service) CheckPackageOwnership(packageID, spaceID string) error {
 	pkg, err := s.repo.GetPackage(packageID)
 	if err != nil {
 		return NewProcessingErrorWithErr("PACKAGE_NOT_FOUND", "资源包不存在", err)
 	}
-	if pkg.UserID != userID {
+	if pkg.SpaceID != spaceID {
 		return NewProcessingError(ErrCodePackageNotOwned, "资源包不属于当前用户")
 	}
 	return nil
@@ -206,7 +206,7 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 		return nil, NewProcessingError(ErrCodeGenerationTaskNotReady, "生成任务 ID 为空")
 	}
 
-	validation, valErr := s.validator.ValidateProcessingSources(req.GenerationTaskID, req.UserID)
+	validation, valErr := s.validator.ValidateProcessingSources(req.GenerationTaskID, req.SpaceID)
 	if valErr != nil {
 		return nil, wrapValidationError(valErr)
 	}
@@ -233,7 +233,7 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 	task := &ProcessingTask{
 		ID:                         taskID,
 		GenerationTaskID:           req.GenerationTaskID,
-		UserID:                     req.UserID,
+		SpaceID:                    req.SpaceID,
 		ProcessingVersion:          processingVersion,
 		Status:                     "pending",
 		CurrentStage:               "created",
@@ -330,7 +330,7 @@ func (s *service) CreateProcessingTask(req *CreateProcessingTaskRequest) (*Proce
 		Stage:      contracts.StageQueued,
 		Reason:     contracts.ReasonProcessingTaskSubmit,
 		ActorType:  contracts.ActorService,
-		ActorID:    req.UserID,
+		ActorID:    req.SpaceID,
 	})
 	if err != nil {
 		return nil, NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "处理任务状态转换失败", err)
@@ -522,29 +522,29 @@ func (s *service) RetryProcessingAction(processingTaskID, actionKey string) erro
 		}
 	}()
 
-txStateStore := desktoppet.NewStateStore(s.db).WithTx(tx)
-txEngine := taskstate.NewEngine(txStateStore)
+	txStateStore := desktoppet.NewStateStore(s.db).WithTx(tx)
+	txEngine := taskstate.NewEngine(txStateStore)
 
-actionFrom := contracts.LifecycleStatus(action.Status)
-actionTransition, err := txEngine.Transition(context.Background(), taskstate.TransitionRequest{
-	EntityType: contracts.EntityProcessingAction,
-	EntityID:   action.ID,
-	From:       []contracts.LifecycleStatus{actionFrom},
-	To:         contracts.StatusQueued,
-	Stage:      contracts.StageQueued,
-	Reason:     contracts.ReasonProcessingActionRetry,
-	ActorType:  contracts.ActorRetryService,
-})
-if err != nil {
-	return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "重试动作状态转换失败", err)
-}
+	actionFrom := contracts.LifecycleStatus(action.Status)
+	actionTransition, err := txEngine.Transition(context.Background(), taskstate.TransitionRequest{
+		EntityType: contracts.EntityProcessingAction,
+		EntityID:   action.ID,
+		From:       []contracts.LifecycleStatus{actionFrom},
+		To:         contracts.StatusQueued,
+		Stage:      contracts.StageQueued,
+		Reason:     contracts.ReasonProcessingActionRetry,
+		ActorType:  contracts.ActorRetryService,
+	})
+	if err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "重试动作状态转换失败", err)
+	}
 
-_, err = s.repo.CreateQueuedProcessingActionAttempt(tx, action.ID, actionTransition.CurrentVersion, action.SourceAttemptNumber)
-if err != nil {
-	return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "创建处理尝试失败", err)
-}
+	_, err = s.repo.CreateQueuedProcessingActionAttempt(tx, action.ID, actionTransition.CurrentVersion, action.SourceAttemptNumber)
+	if err != nil {
+		return NewProcessingErrorWithErr(ErrCodeProcessingStorageFailed, "创建处理尝试失败", err)
+	}
 
-taskFrom := contracts.LifecycleStatus(task.Status)
+	taskFrom := contracts.LifecycleStatus(task.Status)
 	_, err = txEngine.Transition(context.Background(), taskstate.TransitionRequest{
 		EntityType: contracts.EntityProcessingTask,
 		EntityID:   processingTaskID,
@@ -668,7 +668,7 @@ func (s *service) preparePackageBuildRequest(req *CreatePackageRequest) (*Packag
 
 	buildReq := &PackageBuildRequest{
 		ProcessingTaskID:  req.ProcessingTaskID,
-		UserID:            req.UserID,
+		SpaceID:           req.SpaceID,
 		GenerationTaskID:  task.GenerationTaskID,
 		PackageName:       genTask.Name,
 		DefaultAction:     defaultAction,
@@ -1080,11 +1080,11 @@ func (s *service) GetActionPreview(processingTaskID, actionKey string) (fullPath
 	return fullPath, "image/png", nil
 }
 
-func (s *service) ListPackages(userID string, page, pageSize int) ([]Package, int64, error) {
-	return s.repo.ListPackagesByUser(userID, page, pageSize)
+func (s *service) ListPackages(spaceID string, page, pageSize int) ([]Package, int64, error) {
+	return s.repo.ListPackagesBySpace(spaceID, page, pageSize)
 }
 
-func (s *service) ListPackagesByGenerationTask(userID, generationTaskID string) ([]Package, error) {
+func (s *service) ListPackagesByGenerationTask(spaceID, generationTaskID string) ([]Package, error) {
 	return s.repo.ListPackagesByGenerationTask(generationTaskID)
 }
 

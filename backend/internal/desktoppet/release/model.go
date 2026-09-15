@@ -4,7 +4,7 @@ import "time"
 
 type ReleaseBuildSnapshot struct {
 	ID                     string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	UserID                 string `gorm:"column:user_id;type:text" json:"userId"`
+	SpaceID                string `gorm:"column:space_id;type:text" json:"spaceId"`
 	PetID                  string `gorm:"column:pet_id;type:text" json:"petId"`
 	ProcessingTaskID       string `gorm:"column:processing_task_id;type:text" json:"processingTaskId"`
 	ActiveRevisionSetHash  string `gorm:"column:active_revision_set_hash;type:text" json:"activeRevisionSetHash"`
@@ -45,7 +45,7 @@ type ReleaseActionSnapshot struct {
 
 type ReleaseBuildOperation struct {
 	ID               string `gorm:"column:id;primaryKey;type:text" json:"id"`
-	UserID           string `gorm:"column:user_id;type:text" json:"userId"`
+	SpaceID          string `gorm:"column:space_id;type:text" json:"spaceId"`
 	PetID            string `gorm:"column:pet_id;type:text" json:"petId"`
 	SnapshotID       string `gorm:"column:snapshot_id;type:text" json:"snapshotId"`
 	ReleaseID        string `gorm:"column:release_id;type:text" json:"releaseId"`
@@ -146,7 +146,7 @@ type LegacyPackageMapping struct {
 	MigratedReleaseID    string `gorm:"column:migrated_release_id;type:text" json:"migratedReleaseId"`
 	MigrationStatus      string `gorm:"column:migration_status;type:text;default:'pending'" json:"migrationStatus"`
 	SourceContentHash    string `gorm:"column:source_content_hash;type:text" json:"sourceContentHash"`
-	OwnerUserId          string `gorm:"column:owner_user_id;type:text" json:"ownerUserId"`
+	OwnerSpaceID         string `gorm:"column:owner_space_id;type:text" json:"ownerSpaceId"`
 	SourceManifestHash   string `gorm:"column:source_manifest_hash;type:text" json:"sourceManifestHash"`
 	MigrationOperationId string `gorm:"column:migration_operation_id;type:text" json:"migrationOperationId"`
 	ErrorMessage         string `gorm:"column:error_message;type:text" json:"errorMessage"`
@@ -167,7 +167,7 @@ const (
 type LegacyPackageMigrationOperation struct {
 	ID              string `gorm:"column:id;primaryKey;type:text" json:"id"`
 	LegacyPackageID string `gorm:"column:legacy_package_id;type:text" json:"legacyPackageId"`
-	UserID          string `gorm:"column:user_id;type:text" json:"userId"`
+	SpaceID         string `gorm:"column:space_id;type:text" json:"spaceId"`
 	State           string `gorm:"column:state;type:text;default:'pending'" json:"state"`
 	StagingPath     string `gorm:"column:staging_path;type:text" json:"stagingPath"`
 	ErrorCode       string `gorm:"column:error_code;type:text" json:"errorCode"`
@@ -266,7 +266,7 @@ func (ReleaseEventOutbox) TableName() string { return "desktop_pet_release_event
 type ReleaseBuildRequestInbox struct {
 	ID             string `gorm:"column:id;primaryKey;type:text" json:"id"`
 	RequestID      string `gorm:"column:request_id;type:text" json:"requestId"`
-	UserID         string `gorm:"column:user_id;type:text" json:"userId"`
+	SpaceID        string `gorm:"column:space_id;type:text" json:"spaceId"`
 	IdempotencyKey string `gorm:"column:idempotency_key;type:text" json:"idempotencyKey"`
 	InputHash      string `gorm:"column:input_hash;type:text" json:"inputHash"`
 	PayloadJSON    string `gorm:"column:payload_json;type:text" json:"payloadJson"`
@@ -291,7 +291,7 @@ type ImportPackageSnapshot struct {
 	BindingDecision       string `gorm:"column:binding_decision;type:text" json:"bindingDecision"`
 	LicenseDecision       string `gorm:"column:license_decision;type:text" json:"licenseDecision"`
 	RuntimeCompatibility  string `gorm:"column:runtime_compatibility;type:text" json:"runtimeCompatibility"`
-	UserID                string `gorm:"column:user_id;type:text" json:"userId"`
+	SpaceID               string `gorm:"column:space_id;type:text" json:"spaceId"`
 	PetID                 string `gorm:"column:pet_id;type:text" json:"petId"`
 	ReleaseID             string `gorm:"column:release_id;type:text" json:"releaseId"`
 	OperationID           string `gorm:"column:operation_id;type:text" json:"operationId"`
@@ -342,7 +342,7 @@ type ReleasePreviewSnapshot struct {
 type ReleaseData struct {
 	ID                    string `json:"id"`
 	PetID                 string `json:"petId"`
-	OwnerUserID           string `json:"ownerUserId"`
+	OwnerSpaceID          string `json:"ownerSpaceId"`
 	Version               string `json:"version"`
 	ReleaseSequence       int    `json:"releaseSequence"`
 	SchemaVersion         int    `json:"schemaVersion"`

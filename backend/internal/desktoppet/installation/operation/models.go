@@ -100,7 +100,7 @@ type InstallationOperation struct {
 
 	OperationType string `json:"operationType"`
 
-	UserID    string `json:"userId"`
+	SpaceID   string `json:"spaceId"`
 	DeviceID  string `json:"deviceId"`
 	RuntimeID string `json:"runtimeId"`
 

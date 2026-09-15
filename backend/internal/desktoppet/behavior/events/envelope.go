@@ -31,8 +31,8 @@ func (b *EnvelopeBuilder) EventID(id string) *EnvelopeBuilder {
 	return b
 }
 
-func (b *EnvelopeBuilder) UserID(id string) *EnvelopeBuilder {
-	b.env.UserID = id
+func (b *EnvelopeBuilder) SpaceID(id string) *EnvelopeBuilder {
+	b.env.SpaceID = id
 	return b
 }
 
@@ -153,7 +153,7 @@ func BuildDedupKey(parts ...string) string {
 
 func EnvelopeFromInteractionEvent(evt behavior.InteractionLifecycleEvent, now time.Time, origin behavior.EventOrigin) behavior.BehaviorEventEnvelope {
 	builder := NewEnvelope("interaction."+evt.Phase, origin).
-		UserID(evt.UserID).
+		SpaceID(evt.SpaceID).
 		CharacterID(evt.CharacterID).
 		InteractionID(evt.InteractionID).
 		OccurredAt(evt.OccurredAt).
@@ -175,7 +175,7 @@ func EnvelopeFromInteractionEvent(evt behavior.InteractionLifecycleEvent, now ti
 func EnvelopeFromChatEvent(evt behavior.ChatLifecycleEvent, now time.Time) behavior.BehaviorEventEnvelope {
 	eventType := "chat." + evt.Phase
 	builder := NewEnvelope(eventType, behavior.OriginChat).
-		UserID(evt.UserID).
+		SpaceID(evt.SpaceID).
 		CharacterID(evt.CharacterID).
 		InteractionID(evt.InteractionID).
 		OccurredAt(evt.OccurredAt).
@@ -203,7 +203,7 @@ func EnvelopeFromChatEvent(evt behavior.ChatLifecycleEvent, now time.Time) behav
 func EnvelopeFromToolEvent(evt behavior.ToolLifecycleEvent, now time.Time) behavior.BehaviorEventEnvelope {
 	eventType := "agent.tool." + evt.Phase
 	builder := NewEnvelope(eventType, behavior.OriginTool).
-		UserID(evt.UserID).
+		SpaceID(evt.SpaceID).
 		CharacterID(evt.CharacterID).
 		InteractionID(evt.InteractionID).
 		OccurredAt(evt.OccurredAt).
@@ -227,7 +227,7 @@ func EnvelopeFromToolEvent(evt behavior.ToolLifecycleEvent, now time.Time) behav
 func EnvelopeFromVoiceEvent(evt behavior.VoiceLifecycleEvent, now time.Time) behavior.BehaviorEventEnvelope {
 	eventType := "voice." + evt.Phase
 	builder := NewEnvelope(eventType, behavior.OriginVoice).
-		UserID(evt.UserID).
+		SpaceID(evt.SpaceID).
 		CharacterID(evt.CharacterID).
 		SessionID(evt.SessionID).
 		OccurredAt(evt.OccurredAt).
@@ -273,7 +273,7 @@ func canonicalDesktopGestureEventType(gestureType string) string {
 func EnvelopeFromDesktopEvent(evt behavior.DesktopGestureEvent, now time.Time) behavior.BehaviorEventEnvelope {
 	eventType := canonicalDesktopGestureEventType(evt.GestureType)
 	builder := NewEnvelope(eventType, behavior.OriginDesktop).
-		UserID(evt.UserID).
+		SpaceID(evt.SpaceID).
 		CharacterID(evt.CharacterID).
 		PetInstanceID(evt.PetInstanceID).
 		Sequence(evt.Sequence).

@@ -9,15 +9,11 @@ import (
 
 var (
 	ErrAuthFailOpen          = errors.New("security: auth fail-open detected")
-	ErrInvalidToken          = errors.New("security: invalid token")
-	ErrTokenExpired          = errors.New("security: token expired")
-	ErrNoSecretConfigured    = errors.New("security: JWT secret not configured")
-	ErrLocalTokenMismatch    = errors.New("security: local token mismatch")
 	ErrSecurityMisconfigured = errors.New("security: security configuration invalid")
 	ErrUnsafePath            = errors.New("security: unsafe file path detected")
 	ErrPathEscape            = errors.New("security: path escape detected")
 	ErrRootDelete            = errors.New("security: root directory cannot be deleted")
-	ErrStagingCrossUser      = errors.New("security: cross-user import staging access")
+	ErrStagingCrossSpace     = errors.New("security: cross-space import staging access")
 	ErrStagingConsumed       = errors.New("security: import staging already consumed")
 	ErrStagingExpired        = errors.New("security: import staging expired")
 	ErrRevisionConflict      = errors.New("security: revision ownership conflict")

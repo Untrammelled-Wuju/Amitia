@@ -10,36 +10,36 @@ import (
 
 var (
 	ErrDeviceNotFound   = errors.New("device: not found")
-	ErrDeviceNotOwned   = errors.New("device: not owned by user")
+	ErrDeviceNotOwned   = errors.New("device: not owned by space")
 	ErrDeviceInactive   = errors.New("device: inactive")
 	ErrRuntimeMismatch  = errors.New("device: runtime mismatch")
 	ErrDeviceResolution = errors.New("device: resolution failed")
 )
 
 type DeviceContext struct {
-	UserID    string
+	SpaceID   string
 	DeviceID  string
 	RuntimeID string
 	Source    string
 }
 
 func (d DeviceContext) IsValid() bool {
-	return d.UserID != "" && d.DeviceID != ""
+	return d.SpaceID != "" && d.DeviceID != ""
 }
 
 type RuntimeResolver interface {
-	ResolveDeviceForRuntime(runtimeID string) (deviceID string, userID string, err error)
+	ResolveDeviceForRuntime(runtimeID string) (deviceID string, spaceID string, err error)
 	VerifyRuntimeDeviceMapping(runtimeID, deviceID string) error
 }
 
 type RuntimeClient struct {
 	RuntimeID string
 	DeviceID  string
-	UserID    string
+	SpaceID   string
 }
 
 type DeviceResolver interface {
-	ResolveCurrentDevice(ctx context.Context, userID string, req RequestContext) (*DeviceContext, error)
+	ResolveCurrentDevice(ctx context.Context, spaceID string, req RequestContext) (*DeviceContext, error)
 }
 
 type RequestContext struct {

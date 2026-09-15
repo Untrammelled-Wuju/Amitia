@@ -212,16 +212,16 @@ func (w *Worker) processTask(ctx context.Context, task *processing.ProcessingTas
 		return
 	}
 
-	processErr := w.runProcessingStages(processingCtx, task, genTask.UserID, executionID)
+	processErr := w.runProcessingStages(processingCtx, task, genTask.SpaceID, executionID)
 
 	w.finalizeTask(task.ID, processErr, executionID)
 }
 
-func (w *Worker) runProcessingStages(ctx context.Context, task *processing.ProcessingTask, userID string, executionID string) error {
+func (w *Worker) runProcessingStages(ctx context.Context, task *processing.ProcessingTask, spaceID string, executionID string) error {
 	if err := w.updateStage(task.ID, executionID, StageValidatingSources, ProgressValidatingSources); err != nil {
 		return err
 	}
-	sourceVal, err := w.validator.ValidateProcessingSources(task.GenerationTaskID, userID)
+	sourceVal, err := w.validator.ValidateProcessingSources(task.GenerationTaskID, spaceID)
 	if err != nil {
 		return fmt.Errorf("validate processing sources failed: %w", err)
 	}
@@ -421,7 +421,7 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 		ProcessingActionID:            action.ID,
 		ActionKey:                     action.ActionKey,
 		GenerationTaskID:              task.GenerationTaskID,
-		UserID:                        sourceVal.Task.UserID,
+		SpaceID:                       sourceVal.Task.SpaceID,
 		SourceAttemptID:               attempt.ID,
 		SourceGenerationAttemptNumber: action.SourceAttemptNumber,
 		CandidateIndex:                0,
@@ -486,7 +486,7 @@ func (w *Worker) processAction(ctx context.Context, task *processing.ProcessingT
 
 	commitReq := &commit.CommitRequest{
 		Ctx:                        ctx,
-		UserID:                     sourceVal.Task.UserID,
+		SpaceID:                    sourceVal.Task.SpaceID,
 		ProcessingTaskID:           task.ID,
 		ProcessingActionID:         action.ID,
 		ProcessingAttemptID:        attempt.ID,

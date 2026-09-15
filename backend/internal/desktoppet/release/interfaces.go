@@ -80,7 +80,7 @@ func (g GateStatus) ErrorCode() string {
 type ReleaseQualityGateReader interface {
 	GetValidGateForRelease(
 		ctx context.Context,
-		userID string,
+		spaceID string,
 		processingTaskID string,
 		activeRevisionSetHash string,
 	) (*QualityGateResult, error)
@@ -131,7 +131,7 @@ type TaskInfo struct {
 	OutputHeight      int
 	DefaultFPS        int
 	PackageName       string
-	UserID            string
+	SpaceID           string
 }
 
 type ActionInfo struct {
@@ -182,7 +182,7 @@ type ReleaseRepository interface {
 
 	CreateBuildOperation(op *ReleaseBuildOperation) error
 	GetBuildOperation(id string) (*ReleaseBuildOperation, error)
-	GetBuildOperationByIdempotencyKey(userID, idempotencyKey string) (*ReleaseBuildOperation, error)
+	GetBuildOperationByIdempotencyKey(spaceID, idempotencyKey string) (*ReleaseBuildOperation, error)
 	UpdateBuildOperation(op *ReleaseBuildOperation) error
 	ListPendingBuildOperations() ([]*ReleaseBuildOperation, error)
 	ListStaleBuildOperations(leaseExpiryBefore string) ([]*ReleaseBuildOperation, error)
@@ -212,7 +212,7 @@ type ReleaseRepository interface {
 	CreateRelease(release *ReleaseData) error
 	UpdateRelease(release *ReleaseData) error
 	ListReleasesByPet(petID string) ([]*ReleaseData, error)
-	ListPublishedReleases(userID string) ([]*ReleaseData, error)
+	ListPublishedReleases(spaceID string) ([]*ReleaseData, error)
 
 	CreateReleaseFiles(files []ReleaseFileData) error
 	GetReleaseFiles(releaseID string) ([]ReleaseFileData, error)
@@ -251,7 +251,7 @@ type ReleaseRepository interface {
 
 type PetIdentityData struct {
 	ID                  string `json:"id"`
-	OwnerUserID         string `json:"ownerUserId"`
+	OwnerSpaceID        string `json:"ownerSpaceId"`
 	Name                string `json:"name"`
 	Slug                string `json:"slug"`
 	UpstreamPetID       string `json:"upstreamPetId,omitempty"`

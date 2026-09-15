@@ -9,8 +9,8 @@ import (
 )
 
 type MeasurementSource interface {
-	LoadActionMeasurements(ctx context.Context, userID, actionRevisionID string) (*ActionMeasurementSet, error)
-	OpenFrame(ctx context.Context, userID, actionRevisionID string, frameIndex int) (image.Image, error)
+	LoadActionMeasurements(ctx context.Context, spaceID, actionRevisionID string) (*ActionMeasurementSet, error)
+	OpenFrame(ctx context.Context, spaceID, actionRevisionID string, frameIndex int) (image.Image, error)
 }
 
 type Detector interface {
@@ -43,8 +43,8 @@ type QualityService interface {
 	GetTaskGate(ctx context.Context, processingTaskID string) (*QualityGateResult, error)
 	ListProblemFrames(ctx context.Context, evaluationID string, page, pageSize int) ([]ProblemFrameSummary, int64, error)
 	ListFindings(ctx context.Context, evaluationID string, severity string, dimension string, page, pageSize int) ([]QualityFinding, int64, error)
-	CheckEvaluationOwnership(ctx context.Context, evaluationID, userID string) error
-	CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, userID string) error
+	CheckEvaluationOwnership(ctx context.Context, evaluationID, spaceID string) error
+	CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, spaceID string) error
 }
 
 type QualityRepository interface {
@@ -95,11 +95,11 @@ type QualityRepository interface {
 }
 
 type QualityInputRepository interface {
-	LoadActionRevisionInput(ctx context.Context, userID string, actionRevisionID string) (*QualityActionInput, error)
+	LoadActionRevisionInput(ctx context.Context, spaceID string, actionRevisionID string) (*QualityActionInput, error)
 }
 
 type QualityActionInput struct {
-	UserID               string
+	SpaceID              string
 	ProcessingTaskID     string
 	ProcessingActionID   string
 	ActionKey            string

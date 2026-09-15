@@ -12,7 +12,7 @@ import (
 type Repository interface {
 	GetActionRevisionBySource(processingRevisionID, sourceType string) (*editing.ActionRevision, error)
 	CreateActionRevision(rev *editing.ActionRevision) error
-	GetActionRevisionForUser(userID, revisionID string) (*editing.ActionRevision, error)
+	GetActionRevisionForSpace(spaceID, revisionID string) (*editing.ActionRevision, error)
 	UpdateActionRevisionStatus(id, status string) error
 	UpdateActionRevisionQuality(id, evaluationID, verdict string) error
 	ListRevisionFrames(revisionID string) ([]editing.ActionRevisionFrame, error)
@@ -46,9 +46,9 @@ func (r *repository) CreateActionRevision(rev *editing.ActionRevision) error {
 	return r.db.Create(rev).Error
 }
 
-func (r *repository) GetActionRevisionForUser(userID, revisionID string) (*editing.ActionRevision, error) {
+func (r *repository) GetActionRevisionForSpace(spaceID, revisionID string) (*editing.ActionRevision, error) {
 	var rev editing.ActionRevision
-	err := r.db.Where("id = ? AND user_id = ?", revisionID, userID).First(&rev).Error
+	err := r.db.Where("id = ? AND space_id = ?", revisionID, spaceID).First(&rev).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, editing.ErrOwnershipDenied

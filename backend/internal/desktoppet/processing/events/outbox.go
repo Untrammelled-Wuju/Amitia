@@ -9,7 +9,7 @@ import (
 )
 
 type ProcessingRevisionCommittedEvent struct {
-	UserID                     string `json:"userId"`
+	SpaceID                    string `json:"spaceId"`
 	ProcessingTaskID           string `json:"processingTaskId"`
 	ProcessingActionID         string `json:"processingActionId"`
 	ProcessingAttemptID        string `json:"processingAttemptId"`

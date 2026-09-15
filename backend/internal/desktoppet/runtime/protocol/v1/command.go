@@ -102,7 +102,7 @@ func (s CommandStatus) CanRetry() bool {
 type RuntimeCommand struct {
 	ID string `gorm:"column:id;primaryKey;type:text" json:"id"`
 
-	UserID    string `gorm:"column:user_id;type:text;not null" json:"userId"`
+	SpaceID   string `gorm:"column:space_id;type:text;not null" json:"spaceId"`
 	DeviceID  string `gorm:"column:device_id;type:text;not null" json:"deviceId"`
 	RuntimeID string `gorm:"column:runtime_id;type:text;not null" json:"runtimeId"`
 

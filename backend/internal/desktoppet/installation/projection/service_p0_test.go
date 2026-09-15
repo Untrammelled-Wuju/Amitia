@@ -29,7 +29,7 @@ func TestProjectionCreatesIdentityAndNeverRegressesAppliedRevision(t *testing.T)
 		t.Fatalf("command result: %v", err)
 	}
 	var got InstallationRuntimeProjection
-	if err := db.Where("user_id = ? AND device_id = ?", "u", "d").Take(&got).Error; err != nil {
+	if err := db.Where("space_id = ? AND device_id = ?", "u", "d").Take(&got).Error; err != nil {
 		t.Fatalf("load projection: %v", err)
 	}
 	if got.ID == "" {

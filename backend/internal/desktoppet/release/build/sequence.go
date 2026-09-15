@@ -61,8 +61,8 @@ func generateVersion(seq int) string {
 	return fmt.Sprintf("1.0.%d", seq)
 }
 
-func computeInputHash(userID, petID, activeRevisionSetHash, qualityGateID, buildConfigHash string) string {
-	data := fmt.Sprintf("%s|%s|%s|%s|%s", userID, petID, activeRevisionSetHash, qualityGateID, buildConfigHash)
+func computeInputHash(spaceID, petID, activeRevisionSetHash, qualityGateID, buildConfigHash string) string {
+	data := fmt.Sprintf("%s|%s|%s|%s|%s", spaceID, petID, activeRevisionSetHash, qualityGateID, buildConfigHash)
 	h := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(h[:])
 }

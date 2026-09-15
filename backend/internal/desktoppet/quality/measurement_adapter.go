@@ -67,8 +67,8 @@ func (a *ProcessingMeasurementAdapter) resolvePath(p string) string {
 	return filepath.Join(a.dataDir, p)
 }
 
-func (a *ProcessingMeasurementAdapter) LoadActionMeasurements(ctx context.Context, userID, processingActionID string) (*ActionMeasurementSet, error) {
-	_ = userID
+func (a *ProcessingMeasurementAdapter) LoadActionMeasurements(ctx context.Context, spaceID, processingActionID string) (*ActionMeasurementSet, error) {
+	_ = spaceID
 	actionRevisionID, err := a.provider.GetActiveActionRevisionID(ctx, processingActionID)
 	if err != nil {
 		return nil, NewQualityError(ErrCodeRevisionNotFound, "failed to resolve action revision id", err)

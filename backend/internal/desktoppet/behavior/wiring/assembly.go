@@ -139,13 +139,13 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 			return fmt.Errorf("preferred action %s not in available actions", preferredAction)
 		}),
 		behavior.WithResetEvaluatorFunc(bindingEvaluator.Clear),
-		behavior.WithReloadEvaluatorFunc(func(ctx context.Context, eng *behavior.BehaviorEngine, repo behavior.BindingRepository, userID, characterID string) error {
-			bindingList, err := repo.ListByScope(ctx, userID, characterID)
+		behavior.WithReloadEvaluatorFunc(func(ctx context.Context, eng *behavior.BehaviorEngine, repo behavior.BindingRepository, spaceID, characterID string) error {
+			bindingList, err := repo.ListByScope(ctx, spaceID, characterID)
 			if err != nil {
 				// Persistence is authoritative. If a post-mutation reload cannot
 				// read it, fail closed instead of continuing to execute a stale
 				// in-memory binding that the user may have disabled or deleted.
-				bindingEvaluator.ReplaceCharacterScopes(userID, characterID, nil)
+				bindingEvaluator.ReplaceCharacterScopes(spaceID, characterID, nil)
 				return err
 			}
 			replacements := make(map[bindings.EvaluatorScope][]bindings.CompiledBinding)
@@ -163,7 +163,7 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 					continue
 				}
 				scope := bindings.EvaluatorScope{
-					UserID:         b.UserID,
+					SpaceID:        b.SpaceID,
 					CharacterID:    b.CharacterID,
 					InstallationID: b.InstallationID,
 				}
@@ -173,7 +173,7 @@ func AssembleBehavior(deps AssemblyDeps) (*AssembledBehavior, error) {
 					CompiledAt: time.Now(),
 				})
 			}
-			bindingEvaluator.ReplaceCharacterScopes(userID, characterID, replacements)
+			bindingEvaluator.ReplaceCharacterScopes(spaceID, characterID, replacements)
 			return nil
 		}),
 	)

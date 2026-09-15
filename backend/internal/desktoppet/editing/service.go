@@ -46,41 +46,41 @@ const (
 )
 
 type Service interface {
-	CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, userID string) error
+	CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, spaceID string) error
 	ListRevisions(ctx context.Context, processingTaskID, actionKey string) ([]RevisionSummary, error)
 	GetRevision(ctx context.Context, revisionID string) (*RevisionDetail, error)
 	GetActiveRevision(ctx context.Context, processingTaskID, actionKey string) (*RevisionDetail, error)
-	ActivateRevision(ctx context.Context, processingTaskID, actionKey, revisionID string, expectedVersion int64, reason, userID string) error
+	ActivateRevision(ctx context.Context, processingTaskID, actionKey, revisionID string, expectedVersion int64, reason, spaceID string) error
 	GetPreviewManifest(ctx context.Context, revisionID string) (*RevisionManifest, error)
 	GetFrameImage(ctx context.Context, revisionID, frameID string) (path, mimeType string, err error)
 	GetFrameThumbnail(ctx context.Context, revisionID, frameID string) (path, mimeType string, err error)
 	GetActionEditSummary(ctx context.Context, processingTaskID, actionKey string) (*ActionEditSummary, error)
 
-	CreateSession(ctx context.Context, processingTaskID, actionKey, userID string, req CreateSessionRequest) (*CreateSessionResponse, error)
+	CreateSession(ctx context.Context, processingTaskID, actionKey, spaceID string, req CreateSessionRequest) (*CreateSessionResponse, error)
 	GetSession(ctx context.Context, sessionID string) (*EditSession, error)
-	ApplyOperation(ctx context.Context, sessionID, userID string, req ApplyOperationRequest) (*ApplyOperationResponse, error)
-	Undo(ctx context.Context, sessionID, userID string, baseVersion int64) (*ApplyOperationResponse, error)
-	Redo(ctx context.Context, sessionID, userID string, baseVersion int64) (*ApplyOperationResponse, error)
+	ApplyOperation(ctx context.Context, sessionID, spaceID string, req ApplyOperationRequest) (*ApplyOperationResponse, error)
+	Undo(ctx context.Context, sessionID, spaceID string, baseVersion int64) (*ApplyOperationResponse, error)
+	Redo(ctx context.Context, sessionID, spaceID string, baseVersion int64) (*ApplyOperationResponse, error)
 	CreateCheckpoint(ctx context.Context, sessionID string) error
-	CommitSession(ctx context.Context, sessionID, userID string, req CommitSessionRequest) (*CommitSessionResponse, error)
-	AbandonSession(ctx context.Context, sessionID, userID string) error
+	CommitSession(ctx context.Context, sessionID, spaceID string, req CommitSessionRequest) (*CommitSessionResponse, error)
+	AbandonSession(ctx context.Context, sessionID, spaceID string) error
 	GetSessionEvents(ctx context.Context, sessionID string) ([]SessionEvent, error)
 
-	CreateRegenerationJob(ctx context.Context, sessionID, userID string, req CreateRegenerationJobRequest) (*CreateRegenerationJobResponse, error)
+	CreateRegenerationJob(ctx context.Context, sessionID, spaceID string, req CreateRegenerationJobRequest) (*CreateRegenerationJobResponse, error)
 	GetRegenerationJob(ctx context.Context, jobID string) (*RegenerationJob, error)
-	ListRegenerationJobs(ctx context.Context, userID string, limit, offset int) ([]RegenerationJob, error)
-	CancelRegenerationJob(ctx context.Context, jobID, userID string) error
-	AcceptCandidate(ctx context.Context, candidateID, userID string, req AcceptCandidateRequest) error
-	RejectCandidate(ctx context.Context, candidateID, userID string, req RejectCandidateRequest) error
+	ListRegenerationJobs(ctx context.Context, spaceID string, limit, offset int) ([]RegenerationJob, error)
+	CancelRegenerationJob(ctx context.Context, jobID, spaceID string) error
+	AcceptCandidate(ctx context.Context, candidateID, spaceID string, req AcceptCandidateRequest) error
+	RejectCandidate(ctx context.Context, candidateID, spaceID string, req RejectCandidateRequest) error
 	ListCandidates(ctx context.Context, sessionID string) ([]EditCandidate, error)
 
-	UploadCandidate(ctx context.Context, sessionID, userID string, data []byte, mimeType string, targetFrameID string) (*UploadCandidateResponse, error)
+	UploadCandidate(ctx context.Context, sessionID, spaceID string, data []byte, mimeType string, targetFrameID string) (*UploadCandidateResponse, error)
 
-	ApplyBackgroundPatch(ctx context.Context, sessionID, frameID, userID string, req BackgroundApplyPatchPayload) error
-	ResetBackgroundPatch(ctx context.Context, sessionID, frameID, userID string) error
-	SetFrameAnchor(ctx context.Context, sessionID, userID string, req AnchorSetFramePayload) error
-	BatchOffsetAnchors(ctx context.Context, sessionID, userID string, req AnchorBatchOffsetPayload) error
-	ResetAnchors(ctx context.Context, sessionID, userID string, req AnchorResetPayload) error
+	ApplyBackgroundPatch(ctx context.Context, sessionID, frameID, spaceID string, req BackgroundApplyPatchPayload) error
+	ResetBackgroundPatch(ctx context.Context, sessionID, frameID, spaceID string) error
+	SetFrameAnchor(ctx context.Context, sessionID, spaceID string, req AnchorSetFramePayload) error
+	BatchOffsetAnchors(ctx context.Context, sessionID, spaceID string, req AnchorBatchOffsetPayload) error
+	ResetAnchors(ctx context.Context, sessionID, spaceID string, req AnchorResetPayload) error
 
 	TriggerQualityEvaluation(ctx context.Context, revisionID string) (string, error)
 	GetLatestQualityEvaluation(ctx context.Context, revisionID string) (*QualityEvaluationInfo, error)
@@ -88,9 +88,9 @@ type Service interface {
 	RecoverPendingJournals(ctx context.Context) error
 	ExpireSessions(ctx context.Context) error
 
-	ListActionStreams(ctx context.Context, userID string) ([]ActionStreamSummary, error)
-	ListRevisionsByStream(ctx context.Context, userID string, streamID string) ([]RevisionSummary, error)
-	GetActiveRevisionByStream(ctx context.Context, userID string, streamID string) (*RevisionDetail, error)
+	ListActionStreams(ctx context.Context, spaceID string) ([]ActionStreamSummary, error)
+	ListRevisionsByStream(ctx context.Context, spaceID string, streamID string) ([]RevisionSummary, error)
+	GetActiveRevisionByStream(ctx context.Context, spaceID string, streamID string) (*RevisionDetail, error)
 }
 
 type service struct {
@@ -803,7 +803,7 @@ func (s *service) validateSession(session *EditSession) error {
 	return nil
 }
 
-func (s *service) applySessionOperation(ctx context.Context, sessionID, userID, opType string, payload any) error {
+func (s *service) applySessionOperation(ctx context.Context, sessionID, spaceID, opType string, payload any) error {
 	session, err := s.repo.GetEditSession(sessionID)
 	if err != nil {
 		return err
@@ -848,7 +848,7 @@ func (s *service) applySessionOperation(ctx context.Context, sessionID, userID, 
 		BaseVersion:   baseVersion,
 		ResultVersion: baseVersion + 1,
 		Status:        OperationStatusApplied,
-		CreatedBy:     userID,
+		CreatedBy:     spaceID,
 		CreatedAt:     now,
 	}
 	if err := s.repo.CreateOperation(op); err != nil {
@@ -861,7 +861,7 @@ func (s *service) applySessionOperation(ctx context.Context, sessionID, userID, 
 	return err
 }
 
-func (s *service) CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, userID string) error {
+func (s *service) CheckProcessingTaskOwnership(ctx context.Context, processingTaskID, spaceID string) error {
 	var genTaskID string
 	err := s.db.Table("desktop_pet_processing_tasks").
 		Where("id = ?", processingTaskID).
@@ -870,15 +870,15 @@ func (s *service) CheckProcessingTaskOwnership(ctx context.Context, processingTa
 	if err != nil {
 		return ErrTaskNotFound
 	}
-	var ownerUserID string
+	var ownerSpaceID string
 	err = s.db.Table("desktop_pet_generation_tasks").
 		Where("id = ?", genTaskID).
-		Select("user_id").
-		Row().Scan(&ownerUserID)
+		Select("space_id").
+		Row().Scan(&ownerSpaceID)
 	if err != nil {
 		return ErrTaskNotFound
 	}
-	if ownerUserID != userID {
+	if ownerSpaceID != spaceID {
 		return ErrPermissionDenied
 	}
 	return nil
@@ -895,7 +895,7 @@ func (s *service) ListRevisions(ctx context.Context, processingTaskID, actionKey
 		activeRevisionID = binding.RevisionID
 	}
 	if binding != nil && binding.Canonical && binding.ActionStreamID != "" {
-		revs, err = s.repo.ListActionRevisionsByStream(binding.UserID, binding.ActionStreamID)
+		revs, err = s.repo.ListActionRevisionsByStream(binding.SpaceID, binding.ActionStreamID)
 	} else {
 		revs, err = s.repo.ListActionRevisions(processingTaskID, actionKey)
 	}
@@ -974,7 +974,7 @@ func (s *service) GetActiveRevision(ctx context.Context, processingTaskID, actio
 	return s.GetRevision(ctx, binding.RevisionID)
 }
 
-func (s *service) ActivateRevision(ctx context.Context, processingTaskID, actionKey, revisionID string, expectedVersion int64, reason, userID string) error {
+func (s *service) ActivateRevision(ctx context.Context, processingTaskID, actionKey, revisionID string, expectedVersion int64, reason, spaceID string) error {
 	rev, err := s.repo.GetActionRevision(revisionID)
 	if err != nil {
 		return err
@@ -998,10 +998,10 @@ func (s *service) ActivateRevision(ctx context.Context, processingTaskID, action
 			return ErrRevisionNotFound
 		}
 	}
-	if rev.UserID != "" && rev.UserID != userID {
+	if rev.SpaceID != "" && rev.SpaceID != spaceID {
 		return ErrPermissionDenied
 	}
-	_, _, err = bindActiveRevision(s.repo, processingTaskID, actionKey, revisionID, expectedVersion, userID, reason)
+	_, _, err = bindActiveRevision(s.repo, processingTaskID, actionKey, revisionID, expectedVersion, spaceID, reason)
 	return err
 }
 
@@ -1106,7 +1106,7 @@ func (s *service) GetActionEditSummary(ctx context.Context, processingTaskID, ac
 	}
 	var allRevs []ActionRevision
 	if binding.Canonical && binding.ActionStreamID != "" {
-		allRevs, err = s.repo.ListActionRevisionsByStream(binding.UserID, binding.ActionStreamID)
+		allRevs, err = s.repo.ListActionRevisionsByStream(binding.SpaceID, binding.ActionStreamID)
 	} else {
 		allRevs, err = s.repo.ListActionRevisions(processingTaskID, actionKey)
 	}
@@ -1127,9 +1127,9 @@ func (s *service) GetActionEditSummary(ctx context.Context, processingTaskID, ac
 	}, nil
 }
 
-func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey, userID string, req CreateSessionRequest) (*CreateSessionResponse, error) {
+func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey, spaceID string, req CreateSessionRequest) (*CreateSessionResponse, error) {
 	if req.IdempotencyKey != "" {
-		existing, err := s.repo.GetIdempotencyRecord(userID, "session_create", req.IdempotencyKey)
+		existing, err := s.repo.GetIdempotencyRecord(spaceID, "session_create", req.IdempotencyKey)
 		if err != nil {
 			return nil, err
 		}
@@ -1148,7 +1148,7 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 	if baseRev.ActionKey != actionKey {
 		return nil, ErrRevisionNotFound
 	}
-	if baseRev.UserID != "" && baseRev.UserID != userID {
+	if baseRev.SpaceID != "" && baseRev.SpaceID != spaceID {
 		return nil, ErrPermissionDenied
 	}
 	binding, err := resolveActiveRevisionBinding(s.repo, processingTaskID, actionKey)
@@ -1165,7 +1165,7 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 	} else if !binding.Canonical || binding.ActionStreamID != baseRev.ActionStreamID {
 		return nil, ErrRevisionNotFound
 	}
-	if binding.UserID != "" && binding.UserID != userID {
+	if binding.SpaceID != "" && binding.SpaceID != spaceID {
 		return nil, ErrPermissionDenied
 	}
 
@@ -1175,7 +1175,7 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 		if err != nil {
 			return nil, err
 		}
-		if stream == nil || (stream.UserID != "" && stream.UserID != userID) {
+		if stream == nil || (stream.SpaceID != "" && stream.SpaceID != spaceID) {
 			return nil, ErrPermissionDenied
 		}
 	}
@@ -1185,7 +1185,7 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 	sessionID := generateID("sess")
 	session := &EditSession{
 		ID:                    sessionID,
-		UserID:                userID,
+		SpaceID:               spaceID,
 		ActionStreamID:        actionStreamID,
 		ProcessingTaskID:      processingTaskID,
 		ActionKey:             actionKey,
@@ -1218,7 +1218,7 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 		resultJSON, _ := json.Marshal(resp)
 		record := &EditIdempotencyRecord{
 			ID:             generateID("idem"),
-			UserID:         userID,
+			SpaceID:        spaceID,
 			SessionID:      "session_create",
 			IdempotencyKey: req.IdempotencyKey,
 			Endpoint:       "create_session",
@@ -1229,7 +1229,7 @@ func (s *service) CreateSession(ctx context.Context, processingTaskID, actionKey
 		if err := s.repo.CreateIdempotencyRecord(record); err != nil {
 			// The session is already durable. A duplicate idempotency insert can
 			// only happen under a concurrent retry; return the persisted result.
-			if existing, readErr := s.repo.GetIdempotencyRecord(userID, "session_create", req.IdempotencyKey); readErr == nil && existing != nil {
+			if existing, readErr := s.repo.GetIdempotencyRecord(spaceID, "session_create", req.IdempotencyKey); readErr == nil && existing != nil {
 				var result CreateSessionResponse
 				if json.Unmarshal([]byte(existing.ResultJSON), &result) == nil {
 					return &result, nil
@@ -1245,7 +1245,7 @@ func (s *service) GetSession(ctx context.Context, sessionID string) (*EditSessio
 	return s.repo.GetEditSession(sessionID)
 }
 
-func (s *service) ApplyOperation(ctx context.Context, sessionID, userID string, req ApplyOperationRequest) (*ApplyOperationResponse, error) {
+func (s *service) ApplyOperation(ctx context.Context, sessionID, spaceID string, req ApplyOperationRequest) (*ApplyOperationResponse, error) {
 	session, err := s.repo.GetEditSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -1309,7 +1309,7 @@ func (s *service) ApplyOperation(ctx context.Context, sessionID, userID string, 
 		BaseVersion:    req.BaseSessionVersion,
 		ResultVersion:  req.BaseSessionVersion + 1,
 		Status:         OperationStatusApplied,
-		CreatedBy:      userID,
+		CreatedBy:      spaceID,
 		CreatedAt:      now,
 	}
 	if err := s.repo.CreateOperation(op); err != nil {
@@ -1335,7 +1335,7 @@ func (s *service) ApplyOperation(ctx context.Context, sessionID, userID string, 
 	}, nil
 }
 
-func (s *service) Undo(ctx context.Context, sessionID, userID string, baseVersion int64) (*ApplyOperationResponse, error) {
+func (s *service) Undo(ctx context.Context, sessionID, spaceID string, baseVersion int64) (*ApplyOperationResponse, error) {
 	session, err := s.repo.GetEditSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -1401,7 +1401,7 @@ func (s *service) Undo(ctx context.Context, sessionID, userID string, baseVersio
 	}, nil
 }
 
-func (s *service) Redo(ctx context.Context, sessionID, userID string, baseVersion int64) (*ApplyOperationResponse, error) {
+func (s *service) Redo(ctx context.Context, sessionID, spaceID string, baseVersion int64) (*ApplyOperationResponse, error) {
 	session, err := s.repo.GetEditSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -1490,7 +1490,7 @@ func (s *service) CreateCheckpoint(ctx context.Context, sessionID string) error 
 	return s.repo.DeleteOldCheckpoints(sessionID, MaxCheckpointKeep)
 }
 
-func (s *service) CommitSession(ctx context.Context, sessionID, userID string, req CommitSessionRequest) (*CommitSessionResponse, error) {
+func (s *service) CommitSession(ctx context.Context, sessionID, spaceID string, req CommitSessionRequest) (*CommitSessionResponse, error) {
 	session, err := s.repo.GetEditSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -1498,7 +1498,7 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 	if session == nil {
 		return nil, ErrSessionNotFound
 	}
-	if session.UserID != userID {
+	if session.SpaceID != spaceID {
 		return nil, ErrPermissionDenied
 	}
 
@@ -1518,7 +1518,7 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 	if effectiveIdempotencyKey == "" {
 		effectiveIdempotencyKey = fmt.Sprintf("commit:%s:%d", session.ID, req.ExpectedSessionVersion)
 	}
-	idem, err := s.repo.GetIdempotencyRecord(userID, sessionID, effectiveIdempotencyKey)
+	idem, err := s.repo.GetIdempotencyRecord(spaceID, sessionID, effectiveIdempotencyKey)
 	if err != nil {
 		return nil, err
 	}
@@ -1544,7 +1544,7 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 		} else {
 			_ = s.repo.CreateIdempotencyRecord(&EditIdempotencyRecord{
 				ID:             generateID("idem"),
-				UserID:         userID,
+				SpaceID:        spaceID,
 				SessionID:      sessionID,
 				IdempotencyKey: effectiveIdempotencyKey,
 				Endpoint:       "commit_session",
@@ -1598,9 +1598,9 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 			resp := &CommitSessionResponse{RevisionID: recovered.ID, QualityJobID: recovered.QualityEvaluationID, Status: SessionStatusCommitted}
 			resultJSON, _ := json.Marshal(resp)
 			if idem == nil {
-				idem = &EditIdempotencyRecord{ID: generateID("idem"), UserID: userID, SessionID: sessionID, IdempotencyKey: effectiveIdempotencyKey, Endpoint: "commit_session", CreatedAt: nowUTC()}
+				idem = &EditIdempotencyRecord{ID: generateID("idem"), SpaceID: spaceID, SessionID: sessionID, IdempotencyKey: effectiveIdempotencyKey, Endpoint: "commit_session", CreatedAt: nowUTC()}
 				if err := s.repo.CreateIdempotencyRecord(idem); err != nil {
-					if existing, e := s.repo.GetIdempotencyRecord(userID, sessionID, effectiveIdempotencyKey); e == nil && existing != nil {
+					if existing, e := s.repo.GetIdempotencyRecord(spaceID, sessionID, effectiveIdempotencyKey); e == nil && existing != nil {
 						idem = existing
 					} else {
 						return nil, err
@@ -1628,7 +1628,7 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 	if idem == nil {
 		idem = &EditIdempotencyRecord{
 			ID:             generateID("idem"),
-			UserID:         userID,
+			SpaceID:        spaceID,
 			SessionID:      sessionID,
 			IdempotencyKey: effectiveIdempotencyKey,
 			Endpoint:       "commit_session",
@@ -1636,7 +1636,7 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 			CreatedAt:      nowUTC(),
 		}
 		if err := s.repo.CreateIdempotencyRecord(idem); err != nil {
-			existing, readErr := s.repo.GetIdempotencyRecord(userID, sessionID, effectiveIdempotencyKey)
+			existing, readErr := s.repo.GetIdempotencyRecord(spaceID, sessionID, effectiveIdempotencyKey)
 			if readErr != nil || existing == nil {
 				return nil, err
 			}
@@ -1702,7 +1702,7 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 	}
 	newRev := &ActionRevision{
 		ID:                         revID,
-		UserID:                     session.UserID,
+		SpaceID:                    session.SpaceID,
 		ProcessingTaskID:           session.ProcessingTaskID,
 		ProcessingActionID:         baseRev.ProcessingActionID,
 		GenerationTaskID:           baseRev.GenerationTaskID,
@@ -1720,7 +1720,7 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 		Interruptible:              interruptible,
 		PriorityOverride:           ds.PriorityOverride,
 		CooldownMSOverride:         ds.CooldownMSOverride,
-		CreatedByUserID:            userID,
+		CreatedBySpaceID:           spaceID,
 		CreatedFromSessionID:       sessionID,
 		ChangeSummary:              req.ChangeSummary,
 		CreatedAt:                  now,
@@ -1806,7 +1806,7 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 	}
 
 	if activationPolicy == ActivationPolicyImmediate {
-		if _, _, err := bindActiveRevision(s.repo, session.ProcessingTaskID, session.ActionKey, revID, session.BaseBindingRevision, userID, "editor.commit"); err != nil {
+		if _, _, err := bindActiveRevision(s.repo, session.ProcessingTaskID, session.ActionKey, revID, session.BaseBindingRevision, spaceID, "editor.commit"); err != nil {
 			_ = s.repo.UpdateSessionStatus(sessionID, SessionStatusConflicted)
 			_ = s.repo.UpdateIdempotencyRecord(idem.ID, "failed", "")
 			return nil, err
@@ -1842,7 +1842,7 @@ func (s *service) CommitSession(ctx context.Context, sessionID, userID string, r
 	return resp, nil
 }
 
-func (s *service) AbandonSession(ctx context.Context, sessionID, userID string) error {
+func (s *service) AbandonSession(ctx context.Context, sessionID, spaceID string) error {
 	session, err := s.repo.GetEditSession(sessionID)
 	if err != nil {
 		return err
@@ -1902,7 +1902,7 @@ func (s *service) GetSessionEvents(ctx context.Context, sessionID string) ([]Ses
 	return events, nil
 }
 
-func (s *service) CreateRegenerationJob(ctx context.Context, sessionID, userID string, req CreateRegenerationJobRequest) (*CreateRegenerationJobResponse, error) {
+func (s *service) CreateRegenerationJob(ctx context.Context, sessionID, spaceID string, req CreateRegenerationJobRequest) (*CreateRegenerationJobResponse, error) {
 	session, err := s.repo.GetEditSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -1910,7 +1910,7 @@ func (s *service) CreateRegenerationJob(ctx context.Context, sessionID, userID s
 	if err := s.validateSession(session); err != nil {
 		return nil, err
 	}
-	if session.UserID != userID {
+	if session.SpaceID != spaceID {
 		return nil, ErrPermissionDenied
 	}
 	if _, err := s.validateSessionBaseBinding(session); err != nil {
@@ -2006,7 +2006,7 @@ func (s *service) CreateRegenerationJob(ctx context.Context, sessionID, userID s
 	job := &RegenerationJob{
 		ID:                   jobID,
 		SessionID:            sessionID,
-		UserID:               session.UserID,
+		SpaceID:              session.SpaceID,
 		ActionStreamID:       session.ActionStreamID,
 		DraftSnapshotID:      draftSnapshot.ID,
 		DraftSnapshotHash:    draftSnapshot.SnapshotHash,
@@ -2098,7 +2098,7 @@ func (s *service) GetRegenerationJob(ctx context.Context, jobID string) (*Regene
 	return job, nil
 }
 
-func (s *service) ListRegenerationJobs(ctx context.Context, userID string, limit, offset int) ([]RegenerationJob, error) {
+func (s *service) ListRegenerationJobs(ctx context.Context, spaceID string, limit, offset int) ([]RegenerationJob, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -2106,13 +2106,13 @@ func (s *service) ListRegenerationJobs(ctx context.Context, userID string, limit
 		offset = 0
 	}
 	var jobs []RegenerationJob
-	if err := s.repo.DB().Where("user_id = ?", userID).Order("created_at DESC").Limit(limit).Offset(offset).Find(&jobs).Error; err != nil {
+	if err := s.repo.DB().Where("space_id = ?", spaceID).Order("created_at DESC").Limit(limit).Offset(offset).Find(&jobs).Error; err != nil {
 		return nil, err
 	}
 	return jobs, nil
 }
 
-func (s *service) CancelRegenerationJob(ctx context.Context, jobID, userID string) error {
+func (s *service) CancelRegenerationJob(ctx context.Context, jobID, spaceID string) error {
 	job, err := s.repo.GetRegenerationJob(jobID)
 	if err != nil {
 		return err
@@ -2120,7 +2120,7 @@ func (s *service) CancelRegenerationJob(ctx context.Context, jobID, userID strin
 	if job == nil {
 		return ErrCandidateNotFound
 	}
-	if job.UserID != "" && job.UserID != userID {
+	if job.SpaceID != "" && job.SpaceID != spaceID {
 		return ErrPermissionDenied
 	}
 	if IsTerminalJobStatus(job.Status) || job.Status == JobStatusCompleted || job.Status == JobStatusFailed {
@@ -2137,12 +2137,12 @@ func (s *service) CancelRegenerationJob(ctx context.Context, jobID, userID strin
 	})
 }
 
-func (s *service) AcceptCandidate(ctx context.Context, candidateID, userID string, req AcceptCandidateRequest) error {
-	return s.candidateAcceptance.AcceptCandidate(ctx, candidateID, userID, req.IdempotencyKey)
+func (s *service) AcceptCandidate(ctx context.Context, candidateID, spaceID string, req AcceptCandidateRequest) error {
+	return s.candidateAcceptance.AcceptCandidate(ctx, candidateID, spaceID, req.IdempotencyKey)
 }
 
-func (s *service) RejectCandidate(ctx context.Context, candidateID, userID string, req RejectCandidateRequest) error {
-	return s.candidateAcceptance.RejectCandidate(ctx, candidateID, userID, "user_rejected", req.IdempotencyKey)
+func (s *service) RejectCandidate(ctx context.Context, candidateID, spaceID string, req RejectCandidateRequest) error {
+	return s.candidateAcceptance.RejectCandidate(ctx, candidateID, spaceID, "user_rejected", req.IdempotencyKey)
 }
 
 func (s *service) ListCandidates(ctx context.Context, sessionID string) ([]EditCandidate, error) {
@@ -2194,7 +2194,7 @@ func (s *service) ListCandidates(ctx context.Context, sessionID string) ([]EditC
 	return candidates, nil
 }
 
-func (s *service) UploadCandidate(ctx context.Context, sessionID, userID string, data []byte, mimeType string, targetFrameID string) (*UploadCandidateResponse, error) {
+func (s *service) UploadCandidate(ctx context.Context, sessionID, spaceID string, data []byte, mimeType string, targetFrameID string) (*UploadCandidateResponse, error) {
 	session, err := s.repo.GetEditSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -2202,7 +2202,7 @@ func (s *service) UploadCandidate(ctx context.Context, sessionID, userID string,
 	if err := s.validateSession(session); err != nil {
 		return nil, err
 	}
-	if session.UserID != userID {
+	if session.SpaceID != spaceID {
 		return nil, ErrPermissionDenied
 	}
 	if _, err := s.validateSessionBaseBinding(session); err != nil {
@@ -2229,7 +2229,7 @@ func (s *service) UploadCandidate(ctx context.Context, sessionID, userID string,
 	if !found {
 		return nil, ErrFrameNotFound
 	}
-	asset, err := s.assetStore.WriteAsset(ctx, data, mimeType, AssetSourceUploaded, userID)
+	asset, err := s.assetStore.WriteAsset(ctx, data, mimeType, AssetSourceUploaded, spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -2238,7 +2238,7 @@ func (s *service) UploadCandidate(ctx context.Context, sessionID, userID string,
 	candidate := &EditCandidate{
 		ID:                  candidateID,
 		SessionID:           sessionID,
-		UserID:              session.UserID,
+		SpaceID:             session.SpaceID,
 		ActionStreamID:      session.ActionStreamID,
 		CandidateVersion:    snapshot.SessionVersion,
 		DraftSnapshotID:     snapshot.ID,
@@ -2260,7 +2260,7 @@ func (s *service) UploadCandidate(ctx context.Context, sessionID, userID string,
 	return &UploadCandidateResponse{CandidateID: candidateID, AssetID: asset.ID, Status: CandidateStatusReadyForReview}, nil
 }
 
-func (s *service) ApplyBackgroundPatch(ctx context.Context, sessionID, frameID, userID string, req BackgroundApplyPatchPayload) error {
+func (s *service) ApplyBackgroundPatch(ctx context.Context, sessionID, frameID, spaceID string, req BackgroundApplyPatchPayload) error {
 	session, err := s.repo.GetEditSession(sessionID)
 	if err != nil {
 		return err
@@ -2309,10 +2309,10 @@ func (s *service) ApplyBackgroundPatch(ctx context.Context, sessionID, frameID, 
 	if err := s.repo.CreateMaskPatch(maskPatch); err != nil {
 		return err
 	}
-	return s.applySessionOperation(ctx, sessionID, userID, OpBackgroundApplyPatch, req)
+	return s.applySessionOperation(ctx, sessionID, spaceID, OpBackgroundApplyPatch, req)
 }
 
-func (s *service) ResetBackgroundPatch(ctx context.Context, sessionID, frameID, userID string) error {
+func (s *service) ResetBackgroundPatch(ctx context.Context, sessionID, frameID, spaceID string) error {
 	session, err := s.repo.GetEditSession(sessionID)
 	if err != nil {
 		return err
@@ -2320,19 +2320,19 @@ func (s *service) ResetBackgroundPatch(ctx context.Context, sessionID, frameID, 
 	if err := s.validateSession(session); err != nil {
 		return err
 	}
-	return s.applySessionOperation(ctx, sessionID, userID, OpBackgroundResetPatch, BackgroundResetPatchPayload{FrameID: frameID})
+	return s.applySessionOperation(ctx, sessionID, spaceID, OpBackgroundResetPatch, BackgroundResetPatchPayload{FrameID: frameID})
 }
 
-func (s *service) SetFrameAnchor(ctx context.Context, sessionID, userID string, req AnchorSetFramePayload) error {
-	return s.applySessionOperation(ctx, sessionID, userID, OpAnchorSetFrame, req)
+func (s *service) SetFrameAnchor(ctx context.Context, sessionID, spaceID string, req AnchorSetFramePayload) error {
+	return s.applySessionOperation(ctx, sessionID, spaceID, OpAnchorSetFrame, req)
 }
 
-func (s *service) BatchOffsetAnchors(ctx context.Context, sessionID, userID string, req AnchorBatchOffsetPayload) error {
-	return s.applySessionOperation(ctx, sessionID, userID, OpAnchorBatchOffset, req)
+func (s *service) BatchOffsetAnchors(ctx context.Context, sessionID, spaceID string, req AnchorBatchOffsetPayload) error {
+	return s.applySessionOperation(ctx, sessionID, spaceID, OpAnchorBatchOffset, req)
 }
 
-func (s *service) ResetAnchors(ctx context.Context, sessionID, userID string, req AnchorResetPayload) error {
-	return s.applySessionOperation(ctx, sessionID, userID, OpAnchorReset, req)
+func (s *service) ResetAnchors(ctx context.Context, sessionID, spaceID string, req AnchorResetPayload) error {
+	return s.applySessionOperation(ctx, sessionID, spaceID, OpAnchorReset, req)
 }
 
 func (s *service) TriggerQualityEvaluation(ctx context.Context, revisionID string) (string, error) {
@@ -2404,8 +2404,8 @@ func (s *service) ExpireSessions(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) ListActionStreams(ctx context.Context, userID string) ([]ActionStreamSummary, error) {
-	streams, err := s.repo.ListAllActionStreams(userID)
+func (s *service) ListActionStreams(ctx context.Context, spaceID string) ([]ActionStreamSummary, error) {
+	streams, err := s.repo.ListAllActionStreams(spaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -2413,7 +2413,7 @@ func (s *service) ListActionStreams(ctx context.Context, userID string) ([]Actio
 	for _, stream := range streams {
 		summary := ActionStreamSummary{
 			ID:                   stream.ID,
-			UserID:               stream.UserID,
+			SpaceID:              stream.SpaceID,
 			ActionKey:            stream.ActionKey,
 			RootProcessingTaskID: stream.RootProcessingTaskID,
 			StreamKey:            stream.StreamKey,
@@ -2422,13 +2422,13 @@ func (s *service) ListActionStreams(ctx context.Context, userID string) ([]Actio
 			UpdatedAt:            stream.UpdatedAt,
 		}
 
-		binding, err := s.repo.GetActiveActionRevisionBindingByStream(stream.UserID, stream.ID)
+		binding, err := s.repo.GetActiveActionRevisionBindingByStream(stream.SpaceID, stream.ID)
 		if err == nil && binding != nil {
 			summary.ActiveRevisionID = binding.ActiveActionRevisionID
 			summary.BindingRevision = binding.BindingRevision
 		}
 
-		revs, err := s.repo.ListActionRevisionsByStream(stream.UserID, stream.ID)
+		revs, err := s.repo.ListActionRevisionsByStream(stream.SpaceID, stream.ID)
 		if err == nil {
 			summary.RevisionCount = len(revs)
 		}
@@ -2438,13 +2438,13 @@ func (s *service) ListActionStreams(ctx context.Context, userID string) ([]Actio
 	return summaries, nil
 }
 
-func (s *service) ListRevisionsByStream(ctx context.Context, userID string, streamID string) ([]RevisionSummary, error) {
-	revs, err := s.repo.ListActionRevisionsByStream(userID, streamID)
+func (s *service) ListRevisionsByStream(ctx context.Context, spaceID string, streamID string) ([]RevisionSummary, error) {
+	revs, err := s.repo.ListActionRevisionsByStream(spaceID, streamID)
 	if err != nil {
 		return nil, err
 	}
 	activeRevisionID := ""
-	if activeBinding, err := s.repo.GetActiveActionRevisionBindingByStream(userID, streamID); err == nil && activeBinding != nil {
+	if activeBinding, err := s.repo.GetActiveActionRevisionBindingByStream(spaceID, streamID); err == nil && activeBinding != nil {
 		activeRevisionID = activeBinding.ActiveActionRevisionID
 	}
 	summaries := make([]RevisionSummary, 0, len(revs))
@@ -2468,8 +2468,8 @@ func (s *service) ListRevisionsByStream(ctx context.Context, userID string, stre
 	return summaries, nil
 }
 
-func (s *service) GetActiveRevisionByStream(ctx context.Context, userID string, streamID string) (*RevisionDetail, error) {
-	binding, err := s.repo.GetActiveActionRevisionBindingByStream(userID, streamID)
+func (s *service) GetActiveRevisionByStream(ctx context.Context, spaceID string, streamID string) (*RevisionDetail, error) {
+	binding, err := s.repo.GetActiveActionRevisionBindingByStream(spaceID, streamID)
 	if err != nil {
 		return nil, err
 	}

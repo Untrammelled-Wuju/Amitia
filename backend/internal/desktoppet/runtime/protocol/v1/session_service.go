@@ -32,10 +32,10 @@ import (
 // Production primary path: SyncFromDeviceRuntimeSession (sync from G12 authoritative session).
 // Deprecated compatibility paths: CreateSession, AcquireSession (retained for legacy callers).
 type SessionService interface {
-	CreateSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, prevGen int64) (*RuntimeSession, error)
+	CreateSession(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, prevGen int64) (*RuntimeSession, error)
 	GetSession(id string) (*RuntimeSession, error)
-	GetActiveSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*RuntimeSession, error)
-	AcquireSession(ctx *gorm.DB, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error)
+	GetActiveSession(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*RuntimeSession, error)
+	AcquireSession(ctx *gorm.DB, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error)
 	SyncFromDeviceRuntimeSession(ctx context.Context, runtimeSession deviceruntime.RuntimeSession, hello HelloPayload) (*RuntimeSession, error)
 	UpdateLastAppliedRevision(id string, revision int64) error
 	UpdateLastProcessedCommandSequence(id string, seq int64) error
@@ -64,11 +64,11 @@ func (s *sessionService) DB() *gorm.DB { return s.db }
 // and then sync the projection row via SyncFromDeviceRuntimeSession.
 //
 // Deprecated: Use SyncFromDeviceRuntimeSession with deviceruntime.Service instead.
-func (s *sessionService) CreateSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, prevGen int64) (*RuntimeSession, error) {
+func (s *sessionService) CreateSession(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, prevGen int64) (*RuntimeSession, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	session := &RuntimeSession{
 		ID:                           string(runtimeidentity.RuntimeSessionID("rtsessv1_" + uuid.NewString())),
-		UserID:                       userID,
+		SpaceID:                      spaceID,
 		DeviceID:                     deviceID,
 		RuntimeID:                    runtimeID,
 		ConnectionGeneration:         prevGen + 1,
@@ -96,11 +96,11 @@ func (s *sessionService) GetSession(id string) (*RuntimeSession, error) {
 	return &session, nil
 }
 
-func (s *sessionService) GetActiveSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*RuntimeSession, error) {
+func (s *sessionService) GetActiveSession(spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*RuntimeSession, error) {
 	var session RuntimeSession
 	err := s.db.Where(
-		"user_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)",
-		userID.String(), deviceID.String(), runtimeID.String(),
+		"space_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)",
+		spaceID.String(), deviceID.String(), runtimeID.String(),
 		SessionStatusRegistering, SessionStatusSyncing, SessionStatusReady, SessionStatusDegraded,
 	).Order("connection_generation DESC").First(&session).Error
 	if err != nil {
@@ -114,7 +114,7 @@ func (s *sessionService) GetActiveSession(userID runtimeidentity.UserID, deviceI
 // and then sync the projection row via SyncFromDeviceRuntimeSession.
 //
 // Deprecated: Use SyncFromDeviceRuntimeSession with deviceruntime.Service instead.
-func (s *sessionService) AcquireSession(ctx *gorm.DB, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error) {
+func (s *sessionService) AcquireSession(ctx *gorm.DB, spaceID runtimeidentity.SpaceID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error) {
 	base := s.db
 	if ctx != nil {
 		base = ctx
@@ -125,8 +125,8 @@ func (s *sessionService) AcquireSession(ctx *gorm.DB, userID runtimeidentity.Use
 	err := base.Transaction(func(tx *gorm.DB) error {
 		var existing RuntimeSession
 		err := tx.Where(
-			"user_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)",
-			userID.String(), deviceID.String(), runtimeID.String(),
+			"space_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)",
+			spaceID.String(), deviceID.String(), runtimeID.String(),
 			SessionStatusRegistering, SessionStatusSyncing, SessionStatusReady, SessionStatusDegraded,
 		).Order("connection_generation DESC").First(&existing).Error
 
@@ -158,7 +158,7 @@ func (s *sessionService) AcquireSession(ctx *gorm.DB, userID runtimeidentity.Use
 		}
 		created := &RuntimeSession{
 			ID:                           string(runtimeidentity.RuntimeSessionID("rtsessv1_" + uuid.NewString())),
-			UserID:                       userID,
+			SpaceID:                      spaceID,
 			DeviceID:                     deviceID,
 			RuntimeID:                    runtimeID,
 			ConnectionGeneration:         prevGen + 1,
@@ -268,7 +268,7 @@ func (s *sessionService) SyncFromDeviceRuntimeSession(ctx context.Context, runti
 	if err == gorm.ErrRecordNotFound {
 		session := &RuntimeSession{
 			ID:                           runtimeSession.ID.String(),
-			UserID:                       runtimeSession.UserID,
+			SpaceID:                      runtimeSession.SpaceID,
 			DeviceID:                     runtimeSession.DeviceID,
 			RuntimeID:                    runtimeSession.RuntimeID,
 			ConnectionGeneration:         runtimeSession.ConnectionGeneration,

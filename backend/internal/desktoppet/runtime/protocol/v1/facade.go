@@ -222,11 +222,11 @@ func (f *RuntimeFacade) runRetentionGC(ctx context.Context) {
 	}
 }
 
-func (f *RuntimeFacade) ListConnections(userID string) []*Connection {
+func (f *RuntimeFacade) ListConnections(spaceID string) []*Connection {
 	f.handler.mu.RLock()
 	result := make([]*Connection, 0, len(f.handler.connections))
 	for _, conn := range f.handler.connections {
-		if conn != nil && string(conn.UserID) == userID {
+		if conn != nil && string(conn.SpaceID) == spaceID {
 			result = append(result, conn)
 		}
 	}
@@ -244,9 +244,9 @@ func (f *RuntimeFacade) ListConnections(userID string) []*Connection {
 	return result
 }
 
-func (f *RuntimeFacade) GetConnection(userID, deviceID, runtimeID string) *Connection {
+func (f *RuntimeFacade) GetConnection(spaceID, deviceID, runtimeID string) *Connection {
 	return f.handler.GetConnection(
-		runtimeidentity.ParseUserID(userID),
+		runtimeidentity.ParseSpaceID(spaceID),
 		runtimeidentity.ParseDeviceID(deviceID),
 		runtimeidentity.ParseRuntimeID(runtimeID),
 	)
@@ -261,29 +261,29 @@ func NewRuntimeNotifier(states ActualStateService, events EventService) *Runtime
 	return &RuntimeNotifier{states: states, events: events}
 }
 
-func (n *RuntimeNotifier) NotifyInstallationEnabled(userId, installationId string, settings *installation.RuntimeSettings) error {
+func (n *RuntimeNotifier) NotifyInstallationEnabled(spaceId, installationId string, settings *installation.RuntimeSettings) error {
 	payload := map[string]interface{}{
 		"type":           "installation.enabled",
-		"userId":         userId,
+		"spaceId":        spaceId,
 		"installationId": installationId,
 		"settings":       settings,
 	}
 	return n.emit("installation.enabled", installationId, payload)
 }
 
-func (n *RuntimeNotifier) NotifyInstallationDisabled(userId, installationId string) error {
+func (n *RuntimeNotifier) NotifyInstallationDisabled(spaceId, installationId string) error {
 	payload := map[string]interface{}{
 		"type":           "installation.disabled",
-		"userId":         userId,
+		"spaceId":        spaceId,
 		"installationId": installationId,
 	}
 	return n.emit("installation.disabled", installationId, payload)
 }
 
-func (n *RuntimeNotifier) NotifyActionPlayed(userId, installationId, actionKey string) error {
+func (n *RuntimeNotifier) NotifyActionPlayed(spaceId, installationId, actionKey string) error {
 	payload := map[string]interface{}{
 		"type":           "action.played",
-		"userId":         userId,
+		"spaceId":        spaceId,
 		"installationId": installationId,
 		"actionKey":      actionKey,
 	}

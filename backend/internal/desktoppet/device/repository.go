@@ -34,7 +34,7 @@ import (
 // For current device/runtime presence, use host_registry.Registry instead.
 type Identity struct {
 	ID                string
-	UserID            runtimeidentity.UserID
+	SpaceID           runtimeidentity.SpaceID
 	DeviceID          runtimeidentity.DeviceID
 	DesktopInstanceID string
 	Platform          runtimeidentity.Platform
@@ -51,7 +51,7 @@ func (Identity) TableName() string {
 
 func (i Identity) RuntimeIdentity() runtimeidentity.Identity {
 	return runtimeidentity.Identity{
-		UserID:   i.UserID,
+		SpaceID:  i.SpaceID,
 		DeviceID: i.DeviceID,
 	}
 }
@@ -84,11 +84,11 @@ func (
 		)
 	}
 
-	identity.UserID = runtimeidentity.ParseUserID(string(identity.UserID))
+	identity.SpaceID = runtimeidentity.ParseSpaceID(string(identity.SpaceID))
 	identity.DeviceID = runtimeidentity.ParseDeviceID(string(identity.DeviceID))
 	identity.DesktopInstanceID = strings.TrimSpace(string(identity.DesktopInstanceID))
 
-	if identity.UserID == "" ||
+	if identity.SpaceID == "" ||
 		identity.DeviceID == "" ||
 		identity.DesktopInstanceID == "" {
 		return errors.New(
@@ -117,7 +117,7 @@ func (
 			clause.OnConflict{
 				Columns: []clause.Column{
 					{
-						Name: "user_id",
+						Name: "space_id",
 					},
 					{
 						Name: "device_id",
@@ -152,7 +152,7 @@ func (
 	r *Repository,
 ) RequireOwned(
 	ctx context.Context,
-	userID string,
+	spaceID string,
 	deviceID string,
 ) error {
 	var count int64
@@ -160,10 +160,10 @@ func (
 	err := r.db.WithContext(ctx).
 		Model(&Identity{}).
 		Where(
-			"user_id = ? AND device_id = ? "+
+			"space_id = ? AND device_id = ? "+
 				"AND status = 'active' "+
 				"AND revoked_at = ''",
-			userID,
+			spaceID,
 			deviceID,
 		).
 		Count(&count).Error

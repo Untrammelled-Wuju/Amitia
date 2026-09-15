@@ -16,8 +16,8 @@ func NewCoordinatorAdapter(service *Service) *CoordinatorAdapter {
 	return &CoordinatorAdapter{service: service}
 }
 
-func (a *CoordinatorAdapter) UpdateProjection(ctx context.Context, userID, deviceID string, updateFn func(*coordinator.Projection) error) error {
-	return a.service.UpdateProjection(ctx, userID, deviceID, func(p *InstallationRuntimeProjection) error {
+func (a *CoordinatorAdapter) UpdateProjection(ctx context.Context, spaceID, deviceID string, updateFn func(*coordinator.Projection) error) error {
+	return a.service.UpdateProjection(ctx, spaceID, deviceID, func(p *InstallationRuntimeProjection) error {
 		view := &coordinator.Projection{
 			InstallationID:         p.InstallationID,
 			PetID:                  p.PetID,
@@ -37,12 +37,12 @@ func (a *CoordinatorAdapter) UpdateProjection(ctx context.Context, userID, devic
 	})
 }
 
-func (a *CoordinatorAdapter) HandleRuntimeHeartbeat(ctx context.Context, userID, deviceID, runtimeID string, heartbeat *coordinator.RuntimeHeartbeat) error {
-	return a.service.HandleRuntimeHeartbeat(ctx, userID, deviceID, runtimeID, heartbeat)
+func (a *CoordinatorAdapter) HandleRuntimeHeartbeat(ctx context.Context, spaceID, deviceID, runtimeID string, heartbeat *coordinator.RuntimeHeartbeat) error {
+	return a.service.HandleRuntimeHeartbeat(ctx, spaceID, deviceID, runtimeID, heartbeat)
 }
 
-func (a *CoordinatorAdapter) HandleCommandResult(ctx context.Context, userID, deviceID string, result *coordinator.CommandResult) error {
-	return a.service.HandleCommandResult(ctx, userID, deviceID, result)
+func (a *CoordinatorAdapter) HandleCommandResult(ctx context.Context, spaceID, deviceID string, result *coordinator.CommandResult) error {
+	return a.service.HandleCommandResult(ctx, spaceID, deviceID, result)
 }
 
 var _ coordinator.ProjectionService = (*CoordinatorAdapter)(nil)

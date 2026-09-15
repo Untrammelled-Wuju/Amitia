@@ -156,14 +156,14 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 		defaultActionKey := presentation.Manifest.DefaultAction
 
 		var inst installation.Installation
-		err = tx.DB().Where("id = ? AND user_id = ? AND device_id = ?", installationID, op.UserID, op.DeviceID).First(&inst).Error
+		err = tx.DB().Where("id = ? AND space_id = ? AND device_id = ?", installationID, op.SpaceID, op.DeviceID).First(&inst).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			inst = installation.Installation{
 				ID:                     installationID,
-				UserID:                 op.UserID,
+				SpaceID:                op.SpaceID,
 				DeviceID:               op.DeviceID,
 				PetID:                  petID,
 				PackageID:              targetReleaseID,
@@ -225,7 +225,7 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 				return err
 			}
 		}
-		if err := tx.DB().Model(&installation.Installation{}).Where("user_id = ? AND device_id = ? AND id <> ? AND is_active = 1", op.UserID, op.DeviceID, installationID).Updates(map[string]interface{}{
+		if err := tx.DB().Model(&installation.Installation{}).Where("space_id = ? AND device_id = ? AND id <> ? AND is_active = 1", op.SpaceID, op.DeviceID, installationID).Updates(map[string]interface{}{
 			"is_active": 0, "status": installation.StatusDisabled, "desired_state": installation.DesiredDisabled, "last_disabled_at": now, "updated_at": now,
 		}).Error; err != nil {
 			return err
@@ -240,7 +240,7 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 			return err
 		}
 
-		existing, err := tx.GetRuntimeDesiredStateTx(tx.DB(), op.UserID, op.DeviceID)
+		existing, err := tx.GetRuntimeDesiredStateTx(tx.DB(), op.SpaceID, op.DeviceID)
 		if err != nil {
 			return err
 		}
@@ -248,22 +248,22 @@ func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, 
 		if existing != nil {
 			expected = existing.DesiredRevision
 		}
-		revision, err := tx.AllocateDeviceDesiredRevisionCAS(tx.DB(), op.UserID, op.DeviceID)
+		revision, err := tx.AllocateDeviceDesiredRevisionCAS(tx.DB(), op.SpaceID, op.DeviceID)
 		if err != nil {
 			return err
 		}
 		state := &desired.RuntimeDesiredState{
-			UserID: op.UserID, DeviceID: op.DeviceID, RuntimeID: op.RuntimeID,
+			SpaceID: op.SpaceID, DeviceID: op.DeviceID, RuntimeID: op.RuntimeID,
 			InstallationID: installationID, PetID: petID, ReleaseID: targetReleaseID,
 			DesiredEnabled: true, DesiredVisible: true, DesiredRevision: revision,
 			DesiredActionKey: defaultActionKey, SettingsRevision: int64(settings.SettingsRevision),
 			SettingsSnapshotJSON: string(settingsJSON), OperationID: op.ID, CreatedAt: now, UpdatedAt: now,
 		}
-		if _, err := tx.UpsertRuntimeDesiredStateCAS(tx.DB(), op.UserID, op.DeviceID, state, expected); err != nil {
+		if _, err := tx.UpsertRuntimeDesiredStateCAS(tx.DB(), op.SpaceID, op.DeviceID, state, expected); err != nil {
 			return err
 		}
 		if err := tx.UpsertActiveBindingTx(tx.DB(), &binding.DeviceActiveInstallationBinding{
-			UserID: op.UserID, DeviceID: op.DeviceID, InstallationID: installationID,
+			SpaceID: op.SpaceID, DeviceID: op.DeviceID, InstallationID: installationID,
 			PetID: petID, ReleaseID: targetReleaseID, BindingRevision: revision,
 			BoundReason: binding.BoundReasonRestore, BoundAt: now, BoundBy: "recovery",
 			CreatedAt: now, UpdatedAt: now,
@@ -344,19 +344,19 @@ func NewProductionRuntimeRepo(db *gorm.DB, facade *runtimev1.RuntimeFacade) *Pro
 	return &ProductionRuntimeRepo{db: db, facade: facade}
 }
 
-func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID, installationID string, desiredRevision int64) error {
+func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, spaceID, deviceID, runtimeID, installationID string, desiredRevision int64) error {
 	if p == nil || p.db == nil || p.facade == nil {
 		return errors.New("production runtime recovery: runtime v2 unavailable")
 	}
 	var op operation.InstallationOperation
-	if err := p.db.WithContext(ctx).Where("id = ? AND user_id = ? AND device_id = ?", opID, userID, deviceID).First(&op).Error; err != nil {
+	if err := p.db.WithContext(ctx).Where("id = ? AND space_id = ? AND device_id = ?", opID, spaceID, deviceID).First(&op).Error; err != nil {
 		return err
 	}
 	if op.OperationType == operation.TypeRecenter {
 		var targetConn *runtimev1.Connection
 		targetSessionID := ""
 		targetGeneration := int64(0)
-		for _, conn := range p.facade.ListConnections(userID) {
+		for _, conn := range p.facade.ListConnections(spaceID) {
 			if conn == nil || conn.GetState() != runtimev1.ConnStateConnected || string(conn.DeviceID) != deviceID {
 				continue
 			}
@@ -376,7 +376,7 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 		payload := []byte(fmt.Sprintf(`{"installationId":%q}`, firstNonEmpty(installationID, op.InstallationID)))
 		key := fmt.Sprintf("recenter:%s:%s", opID, targetSessionID)
 		cmd, err := p.facade.Commands().CreateEphemeralCommandForSession(
-			userID, deviceID, string(targetConn.RuntimeID), targetSessionID, firstNonEmpty(installationID, op.InstallationID),
+			spaceID, deviceID, string(targetConn.RuntimeID), targetSessionID, firstNonEmpty(installationID, op.InstallationID),
 			string(runtimev1.CommandTypeRecenterOnce), key, payload,
 		)
 		if err != nil && !errors.Is(err, runtimev1.ErrCommandDuplication) {
@@ -406,13 +406,13 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 	}
 
 	var state desired.RuntimeDesiredState
-	if err := p.db.WithContext(ctx).Where("user_id = ? AND device_id = ?", userID, deviceID).First(&state).Error; err != nil {
+	if err := p.db.WithContext(ctx).Where("space_id = ? AND device_id = ?", spaceID, deviceID).First(&state).Error; err != nil {
 		return err
 	}
 	if desiredRevision == 0 {
 		desiredRevision = state.DesiredRevision
 	}
-	seq, err := p.facade.Commands().AllocateDeviceSequence(nil, userID, deviceID, time.Now())
+	seq, err := p.facade.Commands().AllocateDeviceSequence(nil, spaceID, deviceID, time.Now())
 	if err != nil {
 		return err
 	}
@@ -432,20 +432,20 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 	if ensureAbsent {
 		commandType = runtimev1.CommandTypeEnsureAbsent
 	}
-	_, err = p.facade.Commands().CreateDurableCommand(userID, deviceID, string(commandType), fmt.Sprintf("desired:%s:%d", deviceID, desiredRevision), fmt.Sprintf("desired:%s", deviceID), seq, payload)
+	_, err = p.facade.Commands().CreateDurableCommand(spaceID, deviceID, string(commandType), fmt.Sprintf("desired:%s:%d", deviceID, desiredRevision), fmt.Sprintf("desired:%s", deviceID), seq, payload)
 	if errors.Is(err, runtimev1.ErrCommandDuplication) {
 		return nil
 	}
 	return err
 }
 
-func (p *ProductionRuntimeRepo) ResolveDesiredRevision(ctx context.Context, opID, userID, deviceID string) (int64, error) {
+func (p *ProductionRuntimeRepo) ResolveDesiredRevision(ctx context.Context, opID, spaceID, deviceID string) (int64, error) {
 	if p == nil || p.db == nil {
 		return 0, errors.New("production runtime recovery: database unavailable")
 	}
 	var outbox desired.DesiredStateOutboxEvent
 	err := p.db.WithContext(ctx).
-		Where("operation_id = ? AND user_id = ? AND device_id = ? AND desired_revision > 0", opID, userID, deviceID).
+		Where("operation_id = ? AND space_id = ? AND device_id = ? AND desired_revision > 0", opID, spaceID, deviceID).
 		Order("created_at DESC").
 		First(&outbox).Error
 	if err == nil && outbox.DesiredRevision > 0 {
@@ -459,7 +459,7 @@ func (p *ProductionRuntimeRepo) ResolveDesiredRevision(ctx context.Context, opID
 	// operation identity on the authoritative desired-state snapshot.
 	var state desired.RuntimeDesiredState
 	err = p.db.WithContext(ctx).
-		Where("operation_id = ? AND user_id = ? AND device_id = ? AND desired_revision > 0", opID, userID, deviceID).
+		Where("operation_id = ? AND space_id = ? AND device_id = ? AND desired_revision > 0", opID, spaceID, deviceID).
 		First(&state).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -470,12 +470,12 @@ func (p *ProductionRuntimeRepo) ResolveDesiredRevision(ctx context.Context, opID
 	return state.DesiredRevision, nil
 }
 
-func (p *ProductionRuntimeRepo) CancelDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID string) error {
+func (p *ProductionRuntimeRepo) CancelDesiredCommand(ctx context.Context, opID, spaceID, deviceID, runtimeID string) error {
 	if p == nil || p.db == nil || p.facade == nil || p.facade.Commands() == nil {
 		return errors.New("production runtime recovery: runtime v2 unavailable")
 	}
 	var op operation.InstallationOperation
-	if err := p.db.WithContext(ctx).Where("id = ? AND user_id = ? AND device_id = ?", opID, userID, deviceID).First(&op).Error; err != nil {
+	if err := p.db.WithContext(ctx).Where("id = ? AND space_id = ? AND device_id = ?", opID, spaceID, deviceID).First(&op).Error; err != nil {
 		return err
 	}
 	idempotencyKey := fmt.Sprintf("desired:%s:%d", deviceID, op.DesiredRevision)
@@ -508,9 +508,9 @@ func (p *ProductionRuntimeRepo) CancelDesiredCommand(ctx context.Context, opID, 
 	return p.facade.Commands().MarkCancelled(command.ID, time.Now())
 }
 
-func (p *ProductionRuntimeRepo) QueryRuntimeAppliedState(ctx context.Context, userID, deviceID, runtimeID string) (int64, string, error) {
+func (p *ProductionRuntimeRepo) QueryRuntimeAppliedState(ctx context.Context, spaceID, deviceID, runtimeID string) (int64, string, error) {
 	var proj projection.InstallationRuntimeProjection
-	query := p.db.WithContext(ctx).Where("user_id = ? AND device_id = ?", userID, deviceID)
+	query := p.db.WithContext(ctx).Where("space_id = ? AND device_id = ?", spaceID, deviceID)
 	if runtimeID != "" {
 		query = query.Where("runtime_id = ?", runtimeID)
 	}
@@ -565,19 +565,19 @@ func NewProductionSwitchRepo(runtime *ProductionRuntimeRepo) *ProductionSwitchRe
 	return &ProductionSwitchRepo{runtime: runtime}
 }
 
-func (p *ProductionSwitchRepo) ResolveDesiredRevision(ctx context.Context, opID, userID, deviceID string) (int64, error) {
+func (p *ProductionSwitchRepo) ResolveDesiredRevision(ctx context.Context, opID, spaceID, deviceID string) (int64, error) {
 	if p == nil || p.runtime == nil {
 		return 0, errors.New("production switch recovery: runtime repository is not configured")
 	}
-	return p.runtime.ResolveDesiredRevision(ctx, opID, userID, deviceID)
+	return p.runtime.ResolveDesiredRevision(ctx, opID, spaceID, deviceID)
 }
 
-func (p *ProductionSwitchRepo) PublishSwitchDesired(ctx context.Context, opID, userID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error {
+func (p *ProductionSwitchRepo) PublishSwitchDesired(ctx context.Context, opID, spaceID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error {
 	if p == nil || p.runtime == nil || p.runtime.db == nil {
 		return errors.New("production switch recovery: runtime repository is not configured")
 	}
 	var state desired.RuntimeDesiredState
-	if err := p.runtime.db.WithContext(ctx).Where("user_id = ? AND device_id = ?", userID, deviceID).First(&state).Error; err != nil {
+	if err := p.runtime.db.WithContext(ctx).Where("space_id = ? AND device_id = ?", spaceID, deviceID).First(&state).Error; err != nil {
 		return fmt.Errorf("production switch recovery: load desired state: %w", err)
 	}
 	if state.InstallationID != newInstallationID {
@@ -588,7 +588,7 @@ func (p *ProductionSwitchRepo) PublishSwitchDesired(ctx context.Context, opID, u
 	}
 	var outboxCount int64
 	if err := p.runtime.db.WithContext(ctx).Table("desktop_pet_runtime_desired_state_outbox").
-		Where("user_id = ? AND device_id = ? AND installation_id = ? AND desired_revision = ?", userID, deviceID, newInstallationID, newDesiredRevision).
+		Where("space_id = ? AND device_id = ? AND installation_id = ? AND desired_revision = ?", spaceID, deviceID, newInstallationID, newDesiredRevision).
 		Count(&outboxCount).Error; err != nil {
 		return fmt.Errorf("production switch recovery: verify desired outbox: %w", err)
 	}
@@ -598,12 +598,12 @@ func (p *ProductionSwitchRepo) PublishSwitchDesired(ctx context.Context, opID, u
 	return nil
 }
 
-func (p *ProductionSwitchRepo) SendSwitchCommand(ctx context.Context, opID, userID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error {
-	return p.runtime.SendDesiredCommand(ctx, opID, userID, deviceID, runtimeID, newInstallationID, newDesiredRevision)
+func (p *ProductionSwitchRepo) SendSwitchCommand(ctx context.Context, opID, spaceID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error {
+	return p.runtime.SendDesiredCommand(ctx, opID, spaceID, deviceID, runtimeID, newInstallationID, newDesiredRevision)
 }
 
-func (p *ProductionSwitchRepo) QuerySwitchApplied(ctx context.Context, userID, deviceID, runtimeID string, newDesiredRevision int64) (bool, error) {
-	rev, _, err := p.runtime.QueryRuntimeAppliedState(ctx, userID, deviceID, runtimeID)
+func (p *ProductionSwitchRepo) QuerySwitchApplied(ctx context.Context, spaceID, deviceID, runtimeID string, newDesiredRevision int64) (bool, error) {
+	rev, _, err := p.runtime.QueryRuntimeAppliedState(ctx, spaceID, deviceID, runtimeID)
 	if err != nil {
 		return false, err
 	}
@@ -635,7 +635,7 @@ func (f *ProductionRuntimeFinalizer) finalizeNonUninstall(ctx context.Context, o
 		return nil
 	}
 	return f.repo.Transaction(ctx, func(tx installation.RepositoryV2) error {
-		inst, err := loadInstallationForRecovery(tx.DB(), op.UserID, op.DeviceID, op.InstallationID)
+		inst, err := loadInstallationForRecovery(tx.DB(), op.SpaceID, op.DeviceID, op.InstallationID)
 		if err != nil {
 			return err
 		}
@@ -659,7 +659,7 @@ func (f *ProductionRuntimeFinalizer) finalizeNonUninstall(ctx context.Context, o
 
 func (f *ProductionRuntimeFinalizer) finalizeUninstall(ctx context.Context, op *operation.InstallationOperation) error {
 	var proj projection.InstallationRuntimeProjection
-	if err := f.db.WithContext(ctx).Where("user_id = ? AND device_id = ?", op.UserID, op.DeviceID).First(&proj).Error; err != nil {
+	if err := f.db.WithContext(ctx).Where("space_id = ? AND device_id = ?", op.SpaceID, op.DeviceID).First(&proj).Error; err != nil {
 		return err
 	}
 	if proj.AppliedDesiredRevision < op.DesiredRevision {
@@ -670,7 +670,7 @@ func (f *ProductionRuntimeFinalizer) finalizeUninstall(ctx context.Context, op *
 	}
 
 	return f.repo.Transaction(ctx, func(tx installation.RepositoryV2) error {
-		inst, err := loadInstallationForRecovery(tx.DB(), op.UserID, op.DeviceID, op.InstallationID)
+		inst, err := loadInstallationForRecovery(tx.DB(), op.SpaceID, op.DeviceID, op.InstallationID)
 		if err != nil {
 			return err
 		}
@@ -717,12 +717,12 @@ func (f *ProductionRuntimeFinalizer) finalizeUninstall(ctx context.Context, op *
 				return err
 			}
 		}
-		bindingEntry, bindErr := tx.GetActiveBindingForUserDeviceTx(tx.DB(), op.UserID, op.DeviceID)
+		bindingEntry, bindErr := tx.GetActiveBindingForSpaceDeviceTx(tx.DB(), op.SpaceID, op.DeviceID)
 		if bindErr != nil && !errors.Is(bindErr, installation.ErrBindingNotFound) {
 			return bindErr
 		}
 		if bindErr == nil && bindingEntry != nil && bindingEntry.InstallationID == inst.ID {
-			if err := tx.DeleteActiveBindingTx(tx.DB(), op.UserID, op.DeviceID); err != nil {
+			if err := tx.DeleteActiveBindingTx(tx.DB(), op.SpaceID, op.DeviceID); err != nil {
 				return err
 			}
 		}
@@ -772,9 +772,9 @@ func findRecoveredTrashPath(registry *security.PathRootRegistry, operationID, in
 	return match, nil
 }
 
-func loadInstallationForRecovery(db *gorm.DB, userID, deviceID, installationID string) (*installation.Installation, error) {
+func loadInstallationForRecovery(db *gorm.DB, spaceID, deviceID, installationID string) (*installation.Installation, error) {
 	var inst installation.Installation
-	if err := db.Where("id = ? AND user_id = ? AND device_id = ?", installationID, userID, deviceID).First(&inst).Error; err != nil {
+	if err := db.Where("id = ? AND space_id = ? AND device_id = ?", installationID, spaceID, deviceID).First(&inst).Error; err != nil {
 		return nil, err
 	}
 	return &inst, nil

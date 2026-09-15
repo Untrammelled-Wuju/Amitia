@@ -53,7 +53,7 @@ var installationExecutableExtensions = map[string]bool{
 }
 
 type Installer interface {
-	InstallPackage(packageId, userId string) (*Installation, error)
+	InstallPackage(packageId, spaceId string) (*Installation, error)
 }
 
 type installer struct {
@@ -71,11 +71,11 @@ func NewInstaller(repo Repository, packageRepo processing.Repository, dataDir st
 	}
 }
 
-func (s *installer) InstallPackage(packageId, userId string) (*Installation, error) {
+func (s *installer) InstallPackage(packageId, spaceId string) (*Installation, error) {
 	if desktoppet.IsLegacyInstallationWriteDisabled() {
 		return nil, NewInstallationError(ErrCodeInstallationFailed, "旧版 Installation 写入已禁用，请使用 InstallationCoordinator", nil)
 	}
-	if packageId == "" || userId == "" {
+	if packageId == "" || spaceId == "" {
 		return nil, NewInstallationError(ErrCodeInstallationFailed, "安装参数为空", nil)
 	}
 
@@ -87,7 +87,7 @@ func (s *installer) InstallPackage(packageId, userId string) (*Installation, err
 		return nil, NewInstallationError(ErrCodeInstallationFailed, "获取资源包失败", err)
 	}
 
-	if err := s.validateBeforeInstall(pkg, userId); err != nil {
+	if err := s.validateBeforeInstall(pkg, spaceId); err != nil {
 		return nil, err
 	}
 
@@ -139,7 +139,7 @@ func (s *installer) InstallPackage(packageId, userId string) (*Installation, err
 	finalRelPath := s.installFinalRelPath(installId)
 	inst := &Installation{
 		ID:               installId,
-		UserID:           userId,
+		SpaceID:          spaceId,
 		PackageID:        pkg.ID,
 		PackageVersion:   packageVersionStr,
 		Name:             pkg.Name,
@@ -186,12 +186,12 @@ type installState struct {
 	finalMoved      bool
 }
 
-func (s *installer) validateBeforeInstall(pkg *processing.Package, userId string) error {
+func (s *installer) validateBeforeInstall(pkg *processing.Package, spaceId string) error {
 	if pkg == nil {
 		return NewInstallationError(ErrCodeInstallationFailed, "资源包为空", nil)
 	}
 
-	if pkg.UserID != userId {
+	if pkg.SpaceID != spaceId {
 		return NewInstallationError(ErrCodeInstallationInvalid, "资源包不属于当前用户", ErrInstallationInvalid)
 	}
 

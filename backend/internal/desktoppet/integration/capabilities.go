@@ -55,7 +55,7 @@ func (h PetActionHandle) String() string { return string(h) }
 type ExistingPetActionTarget struct {
 	InstallationID string
 	DeviceID       string
-	UserID         string
+	SpaceID        string
 }
 
 type ActionTargetResolver interface {

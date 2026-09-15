@@ -27,11 +27,11 @@ type Repository interface {
 	ListActiveBindings(processingTaskID string) ([]ActiveRevisionBinding, error)
 
 	GetActionStreamByID(streamID string) (*ActionStream, error)
-	GetActionStreamByKey(userID, characterID, actionKey string) (*ActionStream, error)
-	GetActiveActionRevisionBindingByStream(userID, streamID string) (*ActiveActionRevisionBinding, error)
+	GetActionStreamByKey(spaceID, characterID, actionKey string) (*ActionStream, error)
+	GetActiveActionRevisionBindingByStream(spaceID, streamID string) (*ActiveActionRevisionBinding, error)
 	GetActiveActionRevisionBindingByTask(processingTaskID, actionKey string) (*ActiveActionRevisionBinding, error)
-	ListActionRevisionsByStream(userID, streamID string) ([]ActionRevision, error)
-	ListAllActionStreams(userID string) ([]ActionStream, error)
+	ListActionRevisionsByStream(spaceID, streamID string) ([]ActionRevision, error)
+	ListAllActionStreams(spaceID string) ([]ActionStream, error)
 
 	CreateFrameAsset(asset *FrameAsset) error
 	GetFrameAsset(id string) (*FrameAsset, error)
@@ -40,7 +40,7 @@ type Repository interface {
 
 	CreateEditSession(session *EditSession) error
 	GetEditSession(id string) (*EditSession, error)
-	ListOpenSessions(userID string) ([]EditSession, error)
+	ListOpenSessions(spaceID string) ([]EditSession, error)
 	ListSessionsByTaskAction(processingTaskID, actionKey string) ([]EditSession, error)
 	UpdateSessionVersion(id string, expectedVersion int64) (int64, error)
 	UpdateSessionStatus(id, status string) error
@@ -87,7 +87,7 @@ type Repository interface {
 	UpdateJournalStatus(id, status, errorMessage string) error
 
 	CreateIdempotencyRecord(record *EditIdempotencyRecord) error
-	GetIdempotencyRecord(userID, sessionID, key string) (*EditIdempotencyRecord, error)
+	GetIdempotencyRecord(spaceID, sessionID, key string) (*EditIdempotencyRecord, error)
 	UpdateIdempotencyRecord(id, status string, resultJSON string) error
 
 	CreateRegenerationJournal(journal *RegenerationJournal) error
@@ -340,9 +340,9 @@ func (r *repository) GetEditSession(id string) (*EditSession, error) {
 	return &session, nil
 }
 
-func (r *repository) ListOpenSessions(userID string) ([]EditSession, error) {
+func (r *repository) ListOpenSessions(spaceID string) ([]EditSession, error) {
 	var sessions []EditSession
-	err := r.db.Where("user_id = ? AND status = ?", userID, SessionStatusOpen).Find(&sessions).Error
+	err := r.db.Where("space_id = ? AND status = ?", spaceID, SessionStatusOpen).Find(&sessions).Error
 	return sessions, err
 }
 
@@ -677,9 +677,9 @@ func (r *repository) CreateIdempotencyRecord(record *EditIdempotencyRecord) erro
 	return r.db.Create(record).Error
 }
 
-func (r *repository) GetIdempotencyRecord(userID, sessionID, key string) (*EditIdempotencyRecord, error) {
+func (r *repository) GetIdempotencyRecord(spaceID, sessionID, key string) (*EditIdempotencyRecord, error) {
 	var record EditIdempotencyRecord
-	err := r.db.Where("user_id = ? AND session_id = ? AND idempotency_key = ?", userID, sessionID, key).First(&record).Error
+	err := r.db.Where("space_id = ? AND session_id = ? AND idempotency_key = ?", spaceID, sessionID, key).First(&record).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -819,8 +819,8 @@ func (r *repository) GetActionStreamByID(streamID string) (*ActionStream, error)
 	return &stream, nil
 }
 
-func (r *repository) GetActionStreamByKey(userID, characterID, actionKey string) (*ActionStream, error) {
-	streamKey := fmt.Sprintf("%s:%s:%s", userID, characterID, actionKey)
+func (r *repository) GetActionStreamByKey(spaceID, characterID, actionKey string) (*ActionStream, error) {
+	streamKey := fmt.Sprintf("%s:%s:%s", spaceID, characterID, actionKey)
 	var stream ActionStream
 	err := r.db.Where("stream_key = ?", streamKey).First(&stream).Error
 	if err != nil {
@@ -832,9 +832,9 @@ func (r *repository) GetActionStreamByKey(userID, characterID, actionKey string)
 	return &stream, nil
 }
 
-func (r *repository) GetActiveActionRevisionBindingByStream(userID, streamID string) (*ActiveActionRevisionBinding, error) {
+func (r *repository) GetActiveActionRevisionBindingByStream(spaceID, streamID string) (*ActiveActionRevisionBinding, error) {
 	var binding ActiveActionRevisionBinding
-	err := r.db.Where("user_id = ? AND action_stream_id = ?", userID, streamID).First(&binding).Error
+	err := r.db.Where("space_id = ? AND action_stream_id = ?", spaceID, streamID).First(&binding).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -865,16 +865,16 @@ func (r *repository) GetActiveActionRevisionBindingByTask(processingTaskID, acti
 	return &binding, nil
 }
 
-func (r *repository) ListActionRevisionsByStream(userID, streamID string) ([]ActionRevision, error) {
+func (r *repository) ListActionRevisionsByStream(spaceID, streamID string) ([]ActionRevision, error) {
 	var revs []ActionRevision
-	err := r.db.Where("user_id = ? AND action_stream_id = ?", userID, streamID).
+	err := r.db.Where("space_id = ? AND action_stream_id = ?", spaceID, streamID).
 		Order("revision_number ASC").Find(&revs).Error
 	return revs, err
 }
 
-func (r *repository) ListAllActionStreams(userID string) ([]ActionStream, error) {
+func (r *repository) ListAllActionStreams(spaceID string) ([]ActionStream, error) {
 	var streams []ActionStream
-	err := r.db.Where("user_id = ?", userID).
+	err := r.db.Where("space_id = ?", spaceID).
 		Order("created_at DESC").Find(&streams).Error
 	return streams, err
 }

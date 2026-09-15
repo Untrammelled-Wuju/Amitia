@@ -221,7 +221,7 @@ func (w *Worker) processEvaluation(ctx context.Context, eval *quality.QualityEva
 		ProcessingTaskID:   eval.ProcessingTaskID,
 		ProcessingActionID: eval.ProcessingActionID,
 		ActionKey:          eval.ActionKey,
-		UserID:             eval.UserID,
+		SpaceID:            eval.SpaceID,
 		Profile:            profile,
 		ExecutionID:        executionID,
 		WorkerID:           qualityWorkerID,

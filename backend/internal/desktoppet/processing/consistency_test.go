@@ -47,10 +47,10 @@ func newConsistencyRepo(t *testing.T, db *gorm.DB) Repository {
 func seedGenTaskForConsistency(t *testing.T, db *gorm.DB, taskID string) {
 	t.Helper()
 	task := &desktoppet.GenerationTask{
-		ID:     taskID,
-		UserID: "u1",
-		Name:   "一致性测试生成任务",
-		Status: "succeeded",
+		ID:      taskID,
+		SpaceID: "u1",
+		Name:    "一致性测试生成任务",
+		Status:  "succeeded",
 	}
 	if err := db.Create(task).Error; err != nil {
 		t.Fatalf("create gen task: %v", err)

@@ -27,7 +27,7 @@ func TestCommandProgressNeverRegressesWhenAckBeatsTransportMark(t *testing.T) {
 	svc := NewCommandService(db)
 	now := time.Now().UTC()
 	cmd := &RuntimeCommand{
-		ID: "cmd-race", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", CommandType: string(CommandTypePlayAction), Durability: "ephemeral",
+		ID: "cmd-race", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1", CommandType: string(CommandTypePlayAction), Durability: "ephemeral",
 		Status: string(CommandStatusQueued), PayloadJSON: `{}`, CreatedAt: now.Format(time.RFC3339), UpdatedAt: now.Format(time.RFC3339),
 	}
 	if err := db.Create(cmd).Error; err != nil {
@@ -57,7 +57,7 @@ func TestCompletedCommandCannotBeOverwrittenByLateFailure(t *testing.T) {
 	svc := NewCommandService(db)
 	now := time.Now().UTC()
 	cmd := &RuntimeCommand{
-		ID: "cmd-terminal", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral",
+		ID: "cmd-terminal", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1", CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral",
 		Status: string(CommandStatusRuntimeAccepted), PayloadJSON: `{}`, CreatedAt: now.Format(time.RFC3339), UpdatedAt: now.Format(time.RFC3339),
 	}
 	if err := db.Create(cmd).Error; err != nil {
@@ -83,7 +83,7 @@ func TestCompletedCommandCannotReenterDispatching(t *testing.T) {
 	svc := NewCommandService(db)
 	now := time.Now().UTC()
 	cmd := &RuntimeCommand{
-		ID: "cmd-no-redispatch", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1",
+		ID: "cmd-no-redispatch", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1",
 		CommandType: string(CommandTypeSyncDesiredState), Durability: "durable", Status: string(CommandStatusCompleted),
 		DeviceSequence: 8, PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1,
 		CreatedAt: now.Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05"), CompletedAt: now.Format("2006-01-02 15:04:05"),
@@ -210,7 +210,7 @@ func TestScopedDispatchDoesNotHeadOfLineBlockAcrossDevices(t *testing.T) {
 
 	for i := 0; i < 150; i++ {
 		cmd := &RuntimeCommand{
-			ID: "offline-" + fmt.Sprint(i), UserID: "u", DeviceID: "offline", RuntimeID: "runtime-1",
+			ID: "offline-" + fmt.Sprint(i), SpaceID: "u", DeviceID: "offline", RuntimeID: "runtime-1",
 			CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral", Status: string(CommandStatusQueued),
 			DeviceSequence: int64(i + 1), PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)),
 			PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now,
@@ -220,7 +220,7 @@ func TestScopedDispatchDoesNotHeadOfLineBlockAcrossDevices(t *testing.T) {
 		}
 	}
 	online := &RuntimeCommand{
-		ID: "online", UserID: "u", DeviceID: "online", RuntimeID: "runtime-1",
+		ID: "online", SpaceID: "u", DeviceID: "online", RuntimeID: "runtime-1",
 		CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral", Status: string(CommandStatusQueued),
 		DeviceSequence: 151, PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)),
 		PayloadSchemaVersion: 1, CreatedAt: now, UpdatedAt: now,
@@ -243,7 +243,7 @@ func TestDurableTransportFailureBecomesRetryableAndDispatchable(t *testing.T) {
 	svc := NewCommandService(db)
 	now := time.Now().UTC()
 	cmd := &RuntimeCommand{
-		ID: "durable-retry", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1",
+		ID: "durable-retry", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1",
 		CommandType: string(CommandTypeSyncDesiredState), Durability: "durable", Status: string(CommandStatusTransportDispatched),
 		DeviceSequence: 7, PayloadJSON: `{}`, PayloadHash: ComputePayloadHash([]byte(`{}`)), PayloadSchemaVersion: 1,
 		RuntimeSessionID: "old-session", CreatedAt: now.Add(-10 * time.Minute).Format("2006-01-02 15:04:05"), UpdatedAt: now.Add(-6 * time.Minute).Format("2006-01-02 15:04:05"),
@@ -270,14 +270,14 @@ func TestHelloReconciliationUsesAuthoritativeDesiredStateAndRequeuesInflight(t *
 	db := newCommandServiceTestDB(t)
 	svc := NewCommandService(db)
 	if err := db.Exec(`CREATE TABLE desktop_pet_runtime_desired_states (
-		user_id TEXT, device_id TEXT, runtime_id TEXT, installation_id TEXT, pet_id TEXT, release_id TEXT,
+		space_id TEXT, device_id TEXT, runtime_id TEXT, installation_id TEXT, pet_id TEXT, release_id TEXT,
 		desired_enabled INTEGER, desired_visible INTEGER, desired_action_key TEXT,
 		settings_snapshot_json TEXT, settings_revision INTEGER, desired_revision INTEGER, desired_hash TEXT
 	)`).Error; err != nil {
 		t.Fatalf("create desired table: %v", err)
 	}
 	if err := db.Exec(`INSERT INTO desktop_pet_runtime_desired_states
-		(user_id, device_id, runtime_id, installation_id, pet_id, release_id, desired_enabled, desired_visible, desired_action_key, settings_snapshot_json, settings_revision, desired_revision, desired_hash)
+		(space_id, device_id, runtime_id, installation_id, pet_id, release_id, desired_enabled, desired_visible, desired_action_key, settings_snapshot_json, settings_revision, desired_revision, desired_hash)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		"u", "d", "runtime-1", "inst-1", "pet-1", "release-1", 1, 1, "idle", `{"scale":1}`, 4, 9, "hash-9").Error; err != nil {
 		t.Fatalf("insert desired state: %v", err)
@@ -318,14 +318,14 @@ func TestHelloReconciliationRequeuesInflightEvenWhenClientClaimsDesiredApplied(t
 	db := newCommandServiceTestDB(t)
 	svc := NewCommandService(db)
 	if err := db.Exec(`CREATE TABLE desktop_pet_runtime_desired_states (
-		user_id TEXT, device_id TEXT, runtime_id TEXT, installation_id TEXT, pet_id TEXT, release_id TEXT,
+		space_id TEXT, device_id TEXT, runtime_id TEXT, installation_id TEXT, pet_id TEXT, release_id TEXT,
 		desired_enabled INTEGER, desired_visible INTEGER, desired_action_key TEXT,
 		settings_snapshot_json TEXT, settings_revision INTEGER, desired_revision INTEGER, desired_hash TEXT
 	)`).Error; err != nil {
 		t.Fatalf("create desired table: %v", err)
 	}
 	if err := db.Exec(`INSERT INTO desktop_pet_runtime_desired_states
-		(user_id, device_id, runtime_id, installation_id, pet_id, release_id, desired_enabled, desired_visible, desired_action_key, settings_snapshot_json, settings_revision, desired_revision, desired_hash)
+		(space_id, device_id, runtime_id, installation_id, pet_id, release_id, desired_enabled, desired_visible, desired_action_key, settings_snapshot_json, settings_revision, desired_revision, desired_hash)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		"u", "d", "runtime-1", "inst-1", "pet-1", "release-1", 1, 1, "idle", `{}`, 1, 9, "hash-9").Error; err != nil {
 		t.Fatalf("insert desired state: %v", err)
@@ -416,14 +416,14 @@ func TestHelloReconciliationRetargetsQueuedDesiredCommandToCurrentRuntime(t *tes
 	db := newCommandServiceTestDB(t)
 	svc := NewCommandService(db)
 	if err := db.Exec(`CREATE TABLE desktop_pet_runtime_desired_states (
-		user_id TEXT, device_id TEXT, runtime_id TEXT, installation_id TEXT, pet_id TEXT, release_id TEXT,
+		space_id TEXT, device_id TEXT, runtime_id TEXT, installation_id TEXT, pet_id TEXT, release_id TEXT,
 		desired_enabled INTEGER, desired_visible INTEGER, desired_action_key TEXT,
 		settings_snapshot_json TEXT, settings_revision INTEGER, desired_revision INTEGER, desired_hash TEXT
 	)`).Error; err != nil {
 		t.Fatalf("create desired table: %v", err)
 	}
 	if err := db.Exec(`INSERT INTO desktop_pet_runtime_desired_states
-		(user_id, device_id, runtime_id, installation_id, pet_id, release_id, desired_enabled, desired_visible, desired_action_key, settings_snapshot_json, settings_revision, desired_revision, desired_hash)
+		(space_id, device_id, runtime_id, installation_id, pet_id, release_id, desired_enabled, desired_visible, desired_action_key, settings_snapshot_json, settings_revision, desired_revision, desired_hash)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		"u", "d", "runtime-old", "inst-1", "pet-1", "release-1", 1, 1, "idle", `{}`, 1, 30, "hash-30").Error; err != nil {
 		t.Fatalf("insert desired state: %v", err)
@@ -505,7 +505,7 @@ func TestExpiryReconcilerAllowsShortEventDeliveryGrace(t *testing.T) {
 	svc := NewCommandService(db)
 	now := time.Now().UTC()
 	cmd := &RuntimeCommand{
-		ID: "cmd-expiry-grace", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		ID: "cmd-expiry-grace", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
 		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRendererAccepted),
 		ExpiresAt:   now.Add(-ephemeralExpiryReconcileGrace / 2).Format(runtimeCommandExpiryLayout),
 		PayloadJSON: `{}`, CreatedAt: now.Add(-time.Minute).Format("2006-01-02 15:04:05"), UpdatedAt: now.Add(-time.Minute).Format("2006-01-02 15:04:05"),
@@ -537,7 +537,7 @@ func TestRendererAcceptanceBindsPlaybackIdentity(t *testing.T) {
 	svc := NewCommandService(db)
 	now := time.Now().UTC()
 	cmd := &RuntimeCommand{
-		ID: "cmd-renderer-bind", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		ID: "cmd-renderer-bind", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
 		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusRuntimeAccepted),
 		PayloadJSON: `{}`, CreatedAt: now.Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05"),
 	}
@@ -572,7 +572,7 @@ func TestExpiryReconcilerIncludesPlaybackStartedEphemeral(t *testing.T) {
 	now := time.Now().UTC()
 	started := now.Add(-defaultPlaybackLivenessCeiling - time.Minute)
 	cmd := &RuntimeCommand{
-		ID: "cmd-started-expired", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		ID: "cmd-started-expired", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
 		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusPlaybackStarted),
 		PlaybackRequestID: "playback-1", ExpiresAt: started.Add(-time.Second).Format(runtimeCommandExpiryLayout),
 		PayloadJSON: `{}`, PlaybackStartedAt: started.Format(time.RFC3339Nano),
@@ -602,7 +602,7 @@ func TestPlaybackStartedUsesLivenessTimeoutNotAdmissionExpiry(t *testing.T) {
 	svc := NewCommandService(db)
 	now := time.Now().UTC()
 	cmd := &RuntimeCommand{
-		ID: "cmd-started-still-live", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		ID: "cmd-started-still-live", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
 		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusPlaybackStarted),
 		PlaybackRequestID: "playback-1", ExpiresAt: now.Add(-time.Minute).Format(runtimeCommandExpiryLayout),
 		PayloadJSON: `{}`, CreatedAt: now.Add(-2 * time.Minute).Format("2006-01-02 15:04:05"), UpdatedAt: now.Add(-2 * time.Minute).Format("2006-01-02 15:04:05"),
@@ -625,8 +625,8 @@ func TestReconnectSupersedeIsScopedToOldSession(t *testing.T) {
 	db := newCommandServiceTestDB(t)
 	svc := NewCommandService(db)
 	now := time.Now().UTC()
-	old := &RuntimeCommand{ID: "old", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-old", CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral", Status: string(CommandStatusQueued), PayloadJSON: `{}`, CreatedAt: now.Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05")}
-	fresh := &RuntimeCommand{ID: "fresh", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-new", CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral", Status: string(CommandStatusQueued), PayloadJSON: `{}`, CreatedAt: now.Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05")}
+	old := &RuntimeCommand{ID: "old", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-old", CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral", Status: string(CommandStatusQueued), PayloadJSON: `{}`, CreatedAt: now.Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05")}
+	fresh := &RuntimeCommand{ID: "fresh", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-new", CommandType: string(CommandTypeRecenterOnce), Durability: "ephemeral", Status: string(CommandStatusQueued), PayloadJSON: `{}`, CreatedAt: now.Format("2006-01-02 15:04:05"), UpdatedAt: now.Format("2006-01-02 15:04:05")}
 	if err := db.Create(old).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -671,7 +671,7 @@ func TestPlaybackStartedUsesCommandMaximumInsteadOfTransportTimeout(t *testing.T
 	now := time.Now().UTC()
 	started := now.Add(-10 * time.Minute)
 	cmd := &RuntimeCommand{
-		ID: "cmd-long-playback", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		ID: "cmd-long-playback", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
 		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusPlaybackStarted),
 		PayloadJSON: `{"maximumPlayMs":3600000}`, PlaybackStartedAt: started.Format(time.RFC3339Nano),
 		CreatedAt: started.Format("2006-01-02 15:04:05"), UpdatedAt: started.Format("2006-01-02 15:04:05"),
@@ -695,7 +695,7 @@ func TestPlaybackStartedExpiresAfterMaximumPlusGrace(t *testing.T) {
 	svc := NewCommandService(db)
 	started := time.Now().UTC().Add(-3 * time.Minute)
 	cmd := &RuntimeCommand{
-		ID: "cmd-stale-playback", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
+		ID: "cmd-stale-playback", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1", RuntimeSessionID: "session-1",
 		CommandType: string(CommandTypePlayAction), Durability: "ephemeral", Status: string(CommandStatusPlaybackStarted),
 		PayloadJSON: `{"maximumPlayMs":1000}`, PlaybackStartedAt: started.Format(time.RFC3339Nano),
 		CreatedAt: started.Format("2006-01-02 15:04:05"), UpdatedAt: started.Format("2006-01-02 15:04:05"),
@@ -724,7 +724,7 @@ func TestDispatchingBindsRuntimeSessionBeforeTransportWrite(t *testing.T) {
 	svc := NewCommandService(db)
 	now := time.Now().UTC()
 	cmd := &RuntimeCommand{
-		ID: "cmd-dispatch-session", UserID: "u", DeviceID: "d", RuntimeID: "runtime-1",
+		ID: "cmd-dispatch-session", SpaceID: "u", DeviceID: "d", RuntimeID: "runtime-1",
 		RuntimeSessionID: "old-session", CommandType: string(CommandTypePlayAction), Durability: "ephemeral",
 		Status: string(CommandStatusQueued), PayloadJSON: `{}`, CreatedAt: now.Format(time.RFC3339), UpdatedAt: now.Format(time.RFC3339),
 	}

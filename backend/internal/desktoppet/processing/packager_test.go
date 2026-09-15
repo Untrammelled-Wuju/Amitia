@@ -41,13 +41,13 @@ func setupPackagePreviewFile(t *testing.T, dataDir, taskID string, version int) 
 	writeValidatorPNG(t, dataDir, filepath.ToSlash(filepath.Join(relDir, "package-preview.png")), 32, 32)
 }
 
-func seedPackagerTask(t *testing.T, db *gorm.DB, taskID, userID, status string) {
+func seedPackagerTask(t *testing.T, db *gorm.DB, taskID, spaceID, status string) {
 	t.Helper()
 	if err := db.Create(&desktoppet.GenerationTask{
-		ID:     taskID,
-		UserID: userID,
-		Name:   "打包测试任务",
-		Status: status,
+		ID:      taskID,
+		SpaceID: spaceID,
+		Name:    "打包测试任务",
+		Status:  status,
 	}).Error; err != nil {
 		t.Fatalf("create generation task %s: %v", taskID, err)
 	}
@@ -136,7 +136,7 @@ func TestPackager_BuildPackage_Success(t *testing.T) {
 	p := NewPackager(repo, dataDir)
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
-		UserID:            "user-1",
+		SpaceID:           "user-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包",
 		DefaultAction:     "idle_normal",
@@ -564,7 +564,7 @@ func TestPackager_BuildPackage_PreviewMissing(t *testing.T) {
 	p := NewPackager(repo, dataDir)
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
-		UserID:            "user-1",
+		SpaceID:           "user-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包",
 		DefaultAction:     "idle_normal",
@@ -598,7 +598,7 @@ func TestPackager_BuildPackage_IncludedActionNotInSucceeded(t *testing.T) {
 	p := NewPackager(repo, dataDir)
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
-		UserID:            "user-1",
+		SpaceID:           "user-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包",
 		DefaultAction:     "idle_normal",
@@ -628,7 +628,7 @@ func TestPackager_BuildPackage_VersionIncrement(t *testing.T) {
 
 	if err := repo.CreatePackage(&Package{
 		ID:               "pkg-existing-1",
-		UserID:           "user-1",
+		SpaceID:          "user-1",
 		GenerationTaskID: taskID,
 		ProcessingTaskID: "pt-old",
 		Name:             "旧包",
@@ -641,7 +641,7 @@ func TestPackager_BuildPackage_VersionIncrement(t *testing.T) {
 	p := NewPackager(repo, dataDir)
 	req := &PackageBuildRequest{
 		ProcessingTaskID:  "pt-1",
-		UserID:            "user-1",
+		SpaceID:           "user-1",
 		GenerationTaskID:  taskID,
 		PackageName:       "测试包v2",
 		DefaultAction:     "idle_normal",

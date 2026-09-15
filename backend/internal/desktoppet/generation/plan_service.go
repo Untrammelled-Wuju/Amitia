@@ -17,7 +17,7 @@ import (
 type PlanFreezeInput struct {
 	Tx                     *gorm.DB
 	TaskID                 string
-	UserID                 string
+	SpaceID                string
 	Provider               string
 	Model                  string
 	ConfigID               int

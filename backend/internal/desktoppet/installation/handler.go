@@ -85,8 +85,8 @@ func (h *Handler) InstallPackage(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	inst, err := h.service.InstallPackage(packageID, userID)
+	spaceID := actorID
+	inst, err := h.service.InstallPackage(packageID, spaceID)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -100,8 +100,8 @@ func (h *Handler) ListInstallations(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	items, err := h.service.ListInstallations(userID)
+	spaceID := actorID
+	items, err := h.service.ListInstallations(spaceID)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -158,7 +158,7 @@ func (h *Handler) EnableInstallation(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.service.EnableInstallation(string(actor.UserID), installationID); err != nil {
+	if err := h.service.EnableInstallation(string(actor.SpaceID), installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -184,7 +184,7 @@ func (h *Handler) DisableInstallation(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.service.DisableInstallation(string(actor.UserID), installationID); err != nil {
+	if err := h.service.DisableInstallation(string(actor.SpaceID), installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -251,7 +251,7 @@ func (h *Handler) UpdateRuntimeSettings(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	settings, err := h.service.UpdateRuntimeSettings(string(actor.UserID), installationID, &payload)
+	settings, err := h.service.UpdateRuntimeSettings(string(actor.SpaceID), installationID, &payload)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -278,7 +278,7 @@ func (h *Handler) Recenter(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.service.Recenter(string(actor.UserID), installationID); err != nil {
+	if err := h.service.Recenter(string(actor.SpaceID), installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -309,7 +309,7 @@ func (h *Handler) PlayAction(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.service.PlayAction(string(actor.UserID), installationID, actionKey); err != nil {
+	if err := h.service.PlayAction(string(actor.SpaceID), installationID, actionKey); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -335,7 +335,7 @@ func (h *Handler) Uninstall(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.service.Uninstall(string(actor.UserID), installationID); err != nil {
+	if err := h.service.Uninstall(string(actor.SpaceID), installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -403,7 +403,7 @@ func NewCoordinatorHandler(coord coordinator.InstallationCoordinator, repo Repos
 func (h *CoordinatorHandler) buildDeviceCtx(c *gin.Context, actorID string) device.DeviceContext {
 	deviceID := strings.TrimSpace(c.GetHeader("X-Amitia-Device-ID"))
 	return device.DeviceContext{
-		UserID:    actorID,
+		SpaceID:   actorID,
 		DeviceID:  deviceID,
 		RuntimeID: strings.TrimSpace(c.GetHeader("X-Amitia-Runtime-ID")),
 	}
@@ -488,7 +488,7 @@ func (h *CoordinatorHandler) ListInstallations(c *gin.Context) {
 	if !ok {
 		return
 	}
-	items, err := h.repo.ListInstallationsForUserDevice(actorID, deviceID)
+	items, err := h.repo.ListInstallationsForSpaceDevice(actorID, deviceID)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -518,19 +518,19 @@ func (h *CoordinatorHandler) GetInstallation(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	inst, err := h.repo.GetInstallationForUserDevice(string(actor.UserID), deviceID, installationID)
+	inst, err := h.repo.GetInstallationForSpaceDevice(string(actor.SpaceID), deviceID, installationID)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
 	}
-	settings, err := h.repo.GetRuntimeSettingsForUserDevice(string(actor.UserID), deviceID, installationID)
+	settings, err := h.repo.GetRuntimeSettingsForSpaceDevice(string(actor.SpaceID), deviceID, installationID)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
 	}
 	var manifest *packageformat.Manifest
 	if strings.TrimSpace(inst.CurrentReleaseID) != "" {
-		manifest, err = h.loadInstallationManifest(c.Request.Context(), string(actor.UserID), inst.CurrentReleaseID)
+		manifest, err = h.loadInstallationManifest(c.Request.Context(), string(actor.SpaceID), inst.CurrentReleaseID)
 		if err != nil {
 			writeInstallationError(c, err)
 			return
@@ -554,7 +554,7 @@ func (h *CoordinatorHandler) GetRuntimeSettings(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	settings, err := h.repo.GetRuntimeSettingsForUserDevice(string(actor.UserID), deviceID, installationID)
+	settings, err := h.repo.GetRuntimeSettingsForSpaceDevice(string(actor.SpaceID), deviceID, installationID)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -583,7 +583,7 @@ func (h *CoordinatorHandler) EnableInstallation(c *gin.Context) {
 	}
 	result, err := h.coordinator.Enable(c.Request.Context(), coordinator.EnableDisableRequest{
 		DeviceCtx: device.DeviceContext{
-			UserID:   string(actor.UserID),
+			SpaceID:  string(actor.SpaceID),
 			DeviceID: deviceID,
 		},
 		InstallationID: installationID,
@@ -617,7 +617,7 @@ func (h *CoordinatorHandler) DisableInstallation(c *gin.Context) {
 	}
 	result, err := h.coordinator.Disable(c.Request.Context(), coordinator.EnableDisableRequest{
 		DeviceCtx: device.DeviceContext{
-			UserID:   string(actor.UserID),
+			SpaceID:  string(actor.SpaceID),
 			DeviceID: deviceID,
 		},
 		InstallationID: installationID,
@@ -661,7 +661,7 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 	}
 	result, err := h.coordinator.ChangeDefaultAction(c.Request.Context(), coordinator.DefaultActionRequest{
 		DeviceCtx: device.DeviceContext{
-			UserID:   string(actor.UserID),
+			SpaceID:  string(actor.SpaceID),
 			DeviceID: deviceID,
 		},
 		InstallationID:   installationID,
@@ -707,7 +707,7 @@ func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
 	if payload.ExpectedRevision != nil {
 		expectedRevision = *payload.ExpectedRevision
 	} else {
-		currentSettings, err := h.repo.GetRuntimeSettingsForUserDevice(string(actor.UserID), deviceID, installationID)
+		currentSettings, err := h.repo.GetRuntimeSettingsForSpaceDevice(string(actor.SpaceID), deviceID, installationID)
 		if err != nil {
 			writeInstallationError(c, err)
 			return
@@ -716,7 +716,7 @@ func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
 	}
 	result, err := h.coordinator.UpdateSettings(c.Request.Context(), coordinator.SettingsRequest{
 		DeviceCtx: device.DeviceContext{
-			UserID:   string(actor.UserID),
+			SpaceID:  string(actor.SpaceID),
 			DeviceID: deviceID,
 		},
 		InstallationID:   installationID,
@@ -728,7 +728,7 @@ func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
 		writeCoordinatorError(c, err)
 		return
 	}
-	updatedSettings, readErr := h.repo.GetRuntimeSettingsForUserDevice(string(actor.UserID), deviceID, installationID)
+	updatedSettings, readErr := h.repo.GetRuntimeSettingsForSpaceDevice(string(actor.SpaceID), deviceID, installationID)
 	if readErr != nil {
 		writeInstallationError(c, readErr)
 		return
@@ -757,7 +757,7 @@ func (h *CoordinatorHandler) Recenter(c *gin.Context) {
 	}
 	result, err := h.coordinator.Recenter(c.Request.Context(), coordinator.RecenterRequest{
 		DeviceCtx: device.DeviceContext{
-			UserID:   string(actor.UserID),
+			SpaceID:  string(actor.SpaceID),
 			DeviceID: deviceID,
 		},
 		InstallationID: installationID,
@@ -794,7 +794,7 @@ func (h *CoordinatorHandler) PlayAction(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	deviceCtx := h.buildDeviceCtx(c, string(actor.UserID))
+	deviceCtx := h.buildDeviceCtx(c, string(actor.SpaceID))
 	deviceCtx.DeviceID = deviceID
 	if err := h.coordinator.PlayAction(c.Request.Context(), deviceCtx, installationID, actionKey); err != nil {
 		writeCoordinatorError(c, err)
@@ -819,7 +819,7 @@ func (h *CoordinatorHandler) Uninstall(c *gin.Context) {
 		return
 	}
 	result, err := h.coordinator.Uninstall(c.Request.Context(), coordinator.UninstallRequest{
-		DeviceCtx:      device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID},
+		DeviceCtx:      device.DeviceContext{SpaceID: string(actor.SpaceID), DeviceID: deviceID},
 		InstallationID: installationID,
 		IdempotencyKey: strings.TrimSpace(c.GetHeader("Idempotency-Key")),
 	})
@@ -851,7 +851,7 @@ func (h *CoordinatorHandler) SwitchRelease(c *gin.Context) {
 		return
 	}
 	result, err := h.coordinator.Switch(c.Request.Context(), coordinator.SwitchRequest{
-		DeviceCtx:            device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID},
+		DeviceCtx:            device.DeviceContext{SpaceID: string(actor.SpaceID), DeviceID: deviceID},
 		SourceInstallationID: installationID,
 		TargetReleaseID:      strings.TrimSpace(payload.TargetReleaseID),
 		IdempotencyKey:       strings.TrimSpace(c.GetHeader("Idempotency-Key")),
@@ -884,7 +884,7 @@ func (h *CoordinatorHandler) Upgrade(c *gin.Context) {
 		return
 	}
 	result, err := h.coordinator.Upgrade(c.Request.Context(), coordinator.UpgradeRequest{
-		DeviceCtx:       device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID},
+		DeviceCtx:       device.DeviceContext{SpaceID: string(actor.SpaceID), DeviceID: deviceID},
 		InstallationID:  installationID,
 		TargetReleaseID: strings.TrimSpace(payload.TargetReleaseID),
 		IdempotencyKey:  strings.TrimSpace(c.GetHeader("Idempotency-Key")),
@@ -917,7 +917,7 @@ func (h *CoordinatorHandler) Downgrade(c *gin.Context) {
 		return
 	}
 	result, err := h.coordinator.Downgrade(c.Request.Context(), coordinator.DowngradeRequest{
-		DeviceCtx:       device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID},
+		DeviceCtx:       device.DeviceContext{SpaceID: string(actor.SpaceID), DeviceID: deviceID},
 		InstallationID:  installationID,
 		TargetReleaseID: strings.TrimSpace(payload.TargetReleaseID),
 		IdempotencyKey:  strings.TrimSpace(c.GetHeader("Idempotency-Key")),
@@ -946,7 +946,7 @@ func (h *CoordinatorHandler) Repair(c *gin.Context) {
 		return
 	}
 	result, err := h.coordinator.Repair(c.Request.Context(), coordinator.RepairRequest{
-		DeviceCtx:      device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID},
+		DeviceCtx:      device.DeviceContext{SpaceID: string(actor.SpaceID), DeviceID: deviceID},
 		InstallationID: installationID,
 		IdempotencyKey: strings.TrimSpace(c.GetHeader("Idempotency-Key")),
 	})
@@ -1000,11 +1000,11 @@ type installationDetailResponse struct {
 	Manifest *packageformat.Manifest `json:"manifest"`
 }
 
-func (h *CoordinatorHandler) loadInstallationManifest(ctx context.Context, userID, releaseID string) (*packageformat.Manifest, error) {
+func (h *CoordinatorHandler) loadInstallationManifest(ctx context.Context, spaceID, releaseID string) (*packageformat.Manifest, error) {
 	var row struct {
 		ManifestJSON string `gorm:"column:manifest_json"`
 	}
-	if err := h.repo.DB().WithContext(ctx).Table("desktop_pet_package_releases").Select("manifest_json").Where("id = ? AND owner_user_id = ?", releaseID, userID).Take(&row).Error; err != nil {
+	if err := h.repo.DB().WithContext(ctx).Table("desktop_pet_package_releases").Select("manifest_json").Where("id = ? AND owner_space_id = ?", releaseID, spaceID).Take(&row).Error; err != nil {
 		return nil, err
 	}
 	var manifest packageformat.Manifest

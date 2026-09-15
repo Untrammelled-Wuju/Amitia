@@ -75,9 +75,9 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := string(actor.UserID)
+	spaceID := string(actor.SpaceID)
 
-	taskSummary, err := h.service.CreateTask(c.Request.Context(), userID, modelConfigID, name, prompt, negativePrompt, outputWidth, outputHeight, selectedActionKeys, fileHeader)
+	taskSummary, err := h.service.CreateTask(c.Request.Context(), spaceID, modelConfigID, name, prompt, negativePrompt, outputWidth, outputHeight, selectedActionKeys, fileHeader)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -110,7 +110,7 @@ func (h *Handler) ListTasks(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := string(actor.UserID)
+	spaceID := string(actor.SpaceID)
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
@@ -123,7 +123,7 @@ func (h *Handler) ListTasks(c *gin.Context) {
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	data, err := h.service.ListTasks(userID, status, page, pageSize)
+	data, err := h.service.ListTasks(spaceID, status, page, pageSize)
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -160,7 +160,7 @@ func (h *Handler) ReferenceImage(c *gin.Context) {
 		writeOwnershipError(c, err)
 		return
 	}
-	ref, err := h.service.GetTaskSourceImageRef(taskID, string(actor.UserID))
+	ref, err := h.service.GetTaskSourceImageRef(taskID, string(actor.SpaceID))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -256,7 +256,7 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "帧索引无效", nil)
 		return
 	}
-	ref, err := h.service.GetFrameImageRef(taskID, actionKey, frameIndex, string(actor.UserID))
+	ref, err := h.service.GetFrameImageRef(taskID, actionKey, frameIndex, string(actor.SpaceID))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -276,7 +276,7 @@ func (h *Handler) ActionImage(c *gin.Context) {
 		writeOwnershipError(c, err)
 		return
 	}
-	ref, err := h.service.GetActionImageRef(taskID, actionKey, string(actor.UserID))
+	ref, err := h.service.GetActionImageRef(taskID, actionKey, string(actor.SpaceID))
 	if err != nil {
 		writeServiceError(c, err)
 		return

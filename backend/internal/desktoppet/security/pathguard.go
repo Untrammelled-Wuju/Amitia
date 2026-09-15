@@ -333,13 +333,13 @@ func checkWritable(dir string) error {
 }
 
 type ArtifactReference struct {
-	ArtifactID  string
-	OwnerUserID string
-	RootKind    StorageRootKind
-	StorageKey  string
-	ContentHash string
-	ByteSize    int64
-	MIME        string
+	ArtifactID   string
+	OwnerSpaceID string
+	RootKind     StorageRootKind
+	StorageKey   string
+	ContentHash  string
+	ByteSize     int64
+	MIME         string
 }
 
 type SafeArtifactResponder struct {
@@ -355,7 +355,7 @@ type SafeTreeDeleter interface {
 }
 
 func (s *SafeArtifactResponder) ServeArtifact(c *gin.Context, actor *auth.ActorContext, ref ArtifactReference) {
-	if actor == nil || ref.OwnerUserID == "" || string(actor.UserID) != ref.OwnerUserID {
+	if actor == nil || ref.OwnerSpaceID == "" || string(actor.SpaceID) != ref.OwnerSpaceID {
 		c.Status(http.StatusNotFound)
 		return
 	}
