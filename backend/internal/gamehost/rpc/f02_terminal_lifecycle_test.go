@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
@@ -421,8 +421,8 @@ func TestF02_HandleResponseCorrelator(t *testing.T) {
 	}
 
 	respEnvelope := &protocol.Envelope{
-		Type:      protocol.MessageTypeResponse,
-		RequestID: "req-1",
+		Type:       protocol.MessageTypeResponse,
+		RequestID:  "req-1",
 		Generation: 1,
 	}
 

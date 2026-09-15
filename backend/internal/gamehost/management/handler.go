@@ -279,9 +279,9 @@ func (h *Handler) BindAgentContext(c *gin.Context) {
 		return
 	}
 	// Ownership is always taken from the authenticated request context. Never
-	// trust a client supplied userId here: this endpoint controls where future
+	// trust a client supplied spaceId here: this endpoint controls where future
 	// plugin-originated events are routed inside the Agent system.
-	req.UserID = requestidentity.NormalizeUserID(requestidentity.ResolveGin(c, ""))
+	req.SpaceID = requestidentity.NormalizeSpaceID(requestidentity.ResolveGin(c))
 	if err := h.service.BindAgentContext(c.Request.Context(), runtimeID, req); err != nil {
 		msg := err.Error()
 		status := http.StatusBadRequest

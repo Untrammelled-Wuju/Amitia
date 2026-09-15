@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/event"
-	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/contracts"
+	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 

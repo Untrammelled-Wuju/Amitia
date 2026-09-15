@@ -104,7 +104,7 @@ func TestRuntimeAdapterForwardsOpaquePluginMethods(t *testing.T) {
 	}
 	binding := capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeGameHost, HandlerName: "vendor.player.move", Metadata: map[string]any{"extensionId": "com.example/game", "serviceId": "main"}}
 	input, _ := json.Marshal(map[string]any{"opaque": true})
-	result := adapter.Execute(ctx, binding, capability.ToolInvocationContext{InvocationID: "invoke-1", UserID: "u", CharacterID: "c", ConversationID: "conv", Channel: "web", SessionID: "host-session"}, input)
+	result := adapter.Execute(ctx, binding, capability.ToolInvocationContext{InvocationID: "invoke-1", SpaceID: "u", CharacterID: "c", ConversationID: "conv", Channel: "web", SessionID: "host-session"}, input)
 	if result.Status != capability.ToolResultStatusSuccess {
 		t.Fatalf("Execute failed: %+v", result.Error)
 	}
@@ -201,7 +201,7 @@ func TestRuntimeAdapterBindAgentContextWithoutToolInvocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding := capability.RuntimeBinding{RuntimeType: capability.RuntimeTypeGameHost, Metadata: map[string]any{"extensionId": "com.example/game", "serviceId": "main"}}
-	invocation := capability.ToolInvocationContext{UserID: "user", CharacterID: "character", ConversationID: "conversation", Channel: "web", SessionID: "host-session"}
+	invocation := capability.ToolInvocationContext{SpaceID: "user", CharacterID: "character", ConversationID: "conversation", Channel: "web", SessionID: "host-session"}
 	if err := adapter.BindAgentContext(ctx, binding, invocation); err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestSessionRegistryDefaultAgentContextEnrichesColdPluginSessions(t *testing
 		RuntimeID:      "runtime-1",
 		ServiceID:      "service-1",
 		Generation:     1,
-		UserID:         "user-1",
+		SpaceID:        "user-1",
 		CharacterID:    "character-1",
 		ConversationID: "conversation-1",
 		Channel:        "web",

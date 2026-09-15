@@ -224,7 +224,7 @@ func (a *RuntimeAdapter) bindInvocationContext(peer ipc.Peer, invocation capabil
 	}
 	a.sessions.Bind(SessionScope{
 		PluginID: peer.PluginID, RuntimeID: peer.RuntimeID, ServiceID: peer.ServiceID, Generation: peer.Generation,
-		UserID: invocation.UserID, CharacterID: invocation.CharacterID,
+		SpaceID: invocation.SpaceID, CharacterID: invocation.CharacterID,
 		ConversationID: invocation.ConversationID, Channel: invocation.Channel,
 		HostSessionID: invocation.SessionID,
 	})

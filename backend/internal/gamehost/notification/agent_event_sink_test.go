@@ -37,7 +37,7 @@ func makePluginEventNotification(t *testing.T, pluginID domain.PluginID, runtime
 }
 func TestAgentEventSinkWakesBoundRuntimeContext(t *testing.T) {
 	sessions := agentbridge.NewSessionRegistry()
-	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1", Generation: 1, UserID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
+	sessions.Bind(agentbridge.SessionScope{PluginID: "plugin-1", RuntimeID: "runtime-1", ServiceID: "service-1", Generation: 1, SpaceID: "user-1", CharacterID: "char-1", ConversationID: "conv-1", Channel: "web"})
 	sink := NewAgentEventSink(sessions)
 	port := &captureAgentWakePort{ch: make(chan AgentWakeRequest, 1)}
 	sink.SetPort(port)

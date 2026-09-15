@@ -28,7 +28,7 @@ type SessionScope struct {
 	RuntimeID       domain.RuntimeInstanceID
 	ServiceID       domain.ServiceID
 	Generation      int64
-	UserID          string
+	SpaceID         string
 	CharacterID     string
 	ConversationID  string
 	Channel         string
@@ -100,7 +100,7 @@ func (r *SessionRegistry) Bind(scope SessionScope) {
 			existing.PluginID = scope.PluginID
 			existing.ServiceID = scope.ServiceID
 			existing.Generation = scope.Generation
-			existing.UserID = scope.UserID
+			existing.SpaceID = scope.SpaceID
 			existing.CharacterID = scope.CharacterID
 			existing.ConversationID = scope.ConversationID
 			existing.Channel = scope.Channel
@@ -115,7 +115,7 @@ func (r *SessionRegistry) Bind(scope SessionScope) {
 }
 
 func hasHostAgentContext(scope SessionScope) bool {
-	return scope.UserID != "" || scope.CharacterID != "" || scope.ConversationID != "" || scope.Channel != "" || scope.HostSessionID != ""
+	return scope.SpaceID != "" || scope.CharacterID != "" || scope.ConversationID != "" || scope.Channel != "" || scope.HostSessionID != ""
 }
 
 // Resolve first checks an exact opaque plugin session and then falls back to

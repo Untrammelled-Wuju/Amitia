@@ -169,7 +169,7 @@ func (f RuntimeFilter) Normalize() RuntimeFilter {
 
 type AgentContextBindRequest struct {
 	ServiceID      string `json:"serviceId"`
-	UserID         string `json:"userId,omitempty"`
+	SpaceID        string `json:"spaceId,omitempty"`
 	CharacterID    string `json:"characterId,omitempty"`
 	ConversationID string `json:"conversationId,omitempty"`
 	Channel        string `json:"channel,omitempty"`

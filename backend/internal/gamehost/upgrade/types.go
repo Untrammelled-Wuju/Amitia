@@ -32,7 +32,7 @@ type UpgradeRequest struct {
 	ExtensionID       string
 	TargetVersion     string
 	SessionID         string
-	UserID            string
+	SpaceID           string
 	ScopeType         string
 	ScopeID           string
 	ConfirmationToken string

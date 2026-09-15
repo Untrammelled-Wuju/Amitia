@@ -245,7 +245,7 @@ func TestFileStore_NoTempFileLeftover(t *testing.T) {
 		t.Fatalf("save failed: %v", err)
 	}
 
-	tmpFiles, _ := filepath.Glob(filepath.Join(dataRoot, "**", ".tmp_*"), )
+	tmpFiles, _ := filepath.Glob(filepath.Join(dataRoot, "**", ".tmp_*"))
 	_ = tmpFiles
 	_ = dataRoot
 }

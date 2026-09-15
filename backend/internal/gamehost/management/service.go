@@ -452,12 +452,12 @@ func (s *GameCenterManagementService) BindAgentContext(ctx context.Context, runt
 	if len(serviceIDs) == 0 {
 		return fmt.Errorf("service not found")
 	}
-	if strings.TrimSpace(req.UserID) == "" && strings.TrimSpace(req.CharacterID) == "" && strings.TrimSpace(req.ConversationID) == "" {
+	if strings.TrimSpace(req.SpaceID) == "" && strings.TrimSpace(req.CharacterID) == "" && strings.TrimSpace(req.ConversationID) == "" {
 		return fmt.Errorf("Agent target required")
 	}
 	invocation := capability.ToolInvocationContext{
 		InvocationID:   "gamehost-context-bind",
-		UserID:         strings.TrimSpace(req.UserID),
+		SpaceID:        strings.TrimSpace(req.SpaceID),
 		CharacterID:    strings.TrimSpace(req.CharacterID),
 		ConversationID: strings.TrimSpace(req.ConversationID),
 		Channel:        strings.TrimSpace(req.Channel),
